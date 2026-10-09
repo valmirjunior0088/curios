@@ -19,7 +19,9 @@ use {
         Answered, Context, Error, Established, GoalSite, Question, Same, Traces, concepts_alike,
         entries_alike, inducts_alike, structs_alike,
     },
-    curios_core::{DefinitionKind, Enter, Extent, Global, Item, Module, Places, Term, Trace},
+    curios_core::{
+        DefinitionKind, Enter, Extent, Global, Item, Module, Nominal, Places, Term, Trace,
+    },
     curios_utilities::recurse,
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -490,21 +492,23 @@ impl<'a> Demand<'a> {
             let Some(place) = over.places.place(name) else {
                 continue;
             };
-            let baseline = over.baseline;
-            let same = Same::of(made, &baseline.items[place.item()], member).keying(
+            let held = &over.baseline.items[place.item()];
+            // The baseline's entry rides in the former that declares it.
+            let entry = held.nominal(name);
+            let same = Same::of(made, held, member).keying(
                 entries_alike(
                     context.induct_decl(name),
-                    baseline.induct_decls.get(name),
+                    entry.and_then(Nominal::inductive),
                     inducts_alike,
                 ),
                 entries_alike(
                     context.struct_decl(name),
-                    baseline.struct_decls.get(name),
+                    entry.and_then(Nominal::record),
                     structs_alike,
                 ),
                 entries_alike(
                     context.concept(name),
-                    baseline.concepts.get(name),
+                    entry.and_then(Nominal::concept),
                     concepts_alike,
                 ),
             );

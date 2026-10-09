@@ -1,10 +1,10 @@
 use {
     curios_core::{
-        Free, Global, Level, Module, StructDecl, StructType, Subterm, Telescope, Term,
+        Free, Global, Level, Module, Nominal, StructDecl, StructType, Subterm, Telescope, Term,
         UniverseContext,
     },
     curios_utilities::Qualifier,
-    xboard::{Date, Part, Proof, Status, Ticket, Witness, false_type, refused},
+    xboard::{Date, Part, Proof, Status, Ticket, Witness, declared, false_type, refused},
 };
 
 /// Is this a type, and at which sort? For every former — Π, Σ, a declared family or record — with its levels, subsumption, `Prop` and positivity, and for what a declaration, an intrinsic or a `foreign` row may state.
@@ -80,7 +80,11 @@ fn a_parameter_named_through_an_instance() -> (Module, Term) {
     };
 
     let module = Module {
-        struct_decls: [(sink, sink_decl), (bad, bad_decl)].into_iter().collect(),
+        items: vec![
+            declared(sink, Nominal::Struct(sink_decl)),
+            declared(bad, Nominal::Struct(bad_decl)),
+        ]
+        .into(),
         ..Module::default()
     };
 

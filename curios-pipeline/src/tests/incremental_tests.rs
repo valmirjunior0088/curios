@@ -282,6 +282,42 @@ pub let unrelated: Nat = 7;
     assert_stored_alike(&unit_of(&sealed), &incremental);
 }
 
+/// A type former elaborated again that comes out as it was moves nothing: `Chain` holds itself through `Wrapped`, which strict positivity unfolds, so respelling `Wrapped`'s body elaborates `Chain` again, to the former and the entry the baseline holds, and `length`, which read its signature, is reused. A former carries its entry, and what it is declared as is compared with the entry left out, an entry being a part of its own.
+///
+/// Mutation-checked: with a former's kind compared entry and all, `length` is elaborated again.
+#[test]
+fn a_type_former_elaborated_again_to_what_it_was_keeps_what_read_it() {
+    let base = "use /std/{Nat, Option};
+
+pub let Same(T: Type) -> Type = T;
+
+pub let Wrapped(T: Type) -> Type = T;
+
+pub struct Chain: pub Type { next: Wrapped(Option(Chain)) }
+
+pub let length(_chain: Chain) -> Nat = 0;
+";
+    let edited = base.replace(
+        "Wrapped(T: Type) -> Type = T",
+        "Wrapped(T: Type) -> Type = Same(T)",
+    );
+    let baseline = unit_of(base);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(!reuses_body(&baseline, &incremental, "Wrapped"));
+    assert!(
+        !reuses_body(&baseline, &incremental, "Chain"),
+        "the control stopped holding: a former that unfolded the edited body was reused"
+    );
+    assert!(
+        reuses_body(&baseline, &incremental, "length"),
+        "a declaration that read a former elaborated again to what it was was elaborated again"
+    );
+    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
 /// A field's mark is part of its declaration: hiding a field changes what a literal of the structure writes and what a position counts. An edit that moves the mark and nothing else therefore recompiles the items that read the structure, against the declaration as it now stands.
 #[test]
 fn an_edit_that_moves_a_fields_mark_alone_recompiles_the_items_that_read_the_struct() {

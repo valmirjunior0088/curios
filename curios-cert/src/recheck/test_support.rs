@@ -9,10 +9,11 @@ use {
     curios_abi::{DeclaredForeign, ForeignFunction, HostOp, WireResults, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
-        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Places, Polarity,
-        Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType, Subterm,
-        Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
+        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Nominal, Places,
+        Polarity, Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType,
+        Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseParam, Variance,
+        test_support::declaring,
     },
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -298,19 +299,21 @@ pub(super) fn forgery() -> Program {
     );
 
     Program {
-        module: Module {
-            mounts: Vec::new(),
-            items: vec![unbox, boxes_equal, types_equal, cast, forged].into(),
-            induct_decls: BTreeMap::from([
+        module: declaring(
+            Module {
+                mounts: Vec::new(),
+                items: vec![unbox, boxes_equal, types_equal, cast, forged].into(),
+                witnesses: BTreeSet::new(),
+                tests: Vec::new(),
+            },
+            BTreeMap::from([
                 (false_name, proposition(Vec::new())),
                 (box_name, box_decl),
                 (equality_name, equality_decl),
             ]),
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
-        },
+            [],
+            [],
+        ),
         // The program as a whole is closed, at type `False`.
         entry: Entrypoint {
             body: Term::free_var(&Free::from(&forged_name)),
@@ -336,20 +339,22 @@ pub(super) fn selection_module(body: Term) -> Program {
     }]);
 
     Program {
-        module: Module {
-            mounts: Vec::new(),
-            items: vec![authored(
-                &Global::Authored(Qualifier::from(["bad"])),
-                absurd.clone(),
-                Term::rec_proj(group, 0),
-            )]
-            .into(),
-            induct_decls: BTreeMap::from([(name, proposition(Vec::new()))]),
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
-        },
+        module: declaring(
+            Module {
+                mounts: Vec::new(),
+                items: vec![authored(
+                    &Global::Authored(Qualifier::from(["bad"])),
+                    absurd.clone(),
+                    Term::rec_proj(group, 0),
+                )]
+                .into(),
+                witnesses: BTreeSet::new(),
+                tests: Vec::new(),
+            },
+            BTreeMap::from([(name, proposition(Vec::new()))]),
+            [],
+            [],
+        ),
         entry: Entrypoint {
             body: Term::free_var(&Free::from(&Global::Authored(Qualifier::from(["bad"])))),
             type_: Some(absurd),
@@ -382,15 +387,17 @@ pub(super) fn indexed_module(target: Term) -> Module {
         variances: Vec::new(),
     };
 
-    Module {
-        mounts: Vec::new(),
-        items: Vec::new().into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: Vec::new().into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// `let held : Type(level) = Nat`, as a whole module.
@@ -410,9 +417,6 @@ pub(super) fn level_definition(level: &Level) -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)].into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -432,15 +436,17 @@ pub(super) fn level_registry(level: &Level) -> Module {
         variances: Vec::new(),
     };
 
-    Module {
-        mounts: Vec::new(),
-        items: Vec::new().into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: Vec::new().into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// A family indexed by the proposition `Held`, whose one constructor states its index either as a diverging `rec` or as `Held/qed()`.
@@ -480,15 +486,17 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Module {
         InductParam::new(Telescope::done(Vec::new()), Vec::new()),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: Vec::new().into(),
-        induct_decls: BTreeMap::from([(held_name, proposition(vec![qed])), (family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: Vec::new().into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(held_name, proposition(vec![qed])), (family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// `Two`, at whatever sort its caller declares it, and `Held(t : Two)` with one constructor targeting `Two/a()`.
@@ -596,15 +604,17 @@ pub(super) fn aliased_sort_forgery() -> Program {
     );
 
     Program {
-        module: Module {
-            mounts: Vec::new(),
-            items: vec![held, forged].into(),
-            induct_decls: decls,
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
-        },
+        module: declaring(
+            Module {
+                mounts: Vec::new(),
+                items: vec![held, forged].into(),
+                witnesses: BTreeSet::new(),
+                tests: Vec::new(),
+            },
+            decls,
+            [],
+            [],
+        ),
         entry: Entrypoint {
             body: Term::free_var(&Free::from(&forged_name)),
             type_: Some(false_type),
@@ -651,15 +661,17 @@ pub(super) fn relevant_index_control() -> Module {
         ),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![vacuous].into(),
-        induct_decls: decls,
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![vacuous].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        decls,
+        [],
+        [],
+    )
 }
 
 /// `Two : Type 0` with constructors `a` and `b`, `Held(t : Two)` whose two constructors both target `Two/a()` under the given tags, and `vacuous : (x : Held(Two/b())) -> False` eliminating with no arms at all.
@@ -726,19 +738,21 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
         ),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![vacuous].into(),
-        induct_decls: BTreeMap::from([
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![vacuous].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([
             (two_name, two_decl),
             (Global::Authored(Qualifier::from(["Held"])), held_decl),
             (false_name, proposition(Vec::new())),
         ]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+        [],
+        [],
+    )
 }
 
 /// [`level_definition`] with a universe scheme of `parameter_count` parameters.
@@ -761,9 +775,6 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Module
     Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)].into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -786,15 +797,17 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
         variances: Vec::new(),
     };
 
-    Module {
-        mounts: Vec::new(),
-        items: Vec::new().into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: Vec::new().into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// `let held : Type.{u} = Levelled.{…}`, where `Levelled` declares two universe parameters and the occurrence supplies `width` of them.
@@ -832,15 +845,17 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         body: Term::induct_type_at(family, levels, Vec::<Term>::new(), Vec::<Term>::new()),
     };
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![Item::Let(definition)].into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![Item::Let(definition)].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// A declared row no store issued, returning one `Nat` — the only kind of row a term can forge, since a builtin is an identity whose row is the roster's.
@@ -871,15 +886,17 @@ pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: 
         body: Term::foreign(row, Vec::new()),
     };
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![Item::Let(definition)].into(),
-        induct_decls: BTreeMap::from([(*false_name, proposition(Vec::new()))]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![Item::Let(definition)].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(*false_name, proposition(Vec::new()))]),
+        [],
+        [],
+    )
 }
 
 /// `Foo`'s registry entry and its type-former definition, declaring `registry` and `definition` universe parameters respectively.
@@ -903,7 +920,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
     // The type-former binding, whose body is the family's own normal form at the registry's width.
     let former = Definition {
         name: family,
-        kind: DefinitionKind::InductiveType,
+        kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: definition,
             constraints: Vec::new(),
@@ -921,15 +938,17 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         ),
     };
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![Item::Let(former)].into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![Item::Let(former)].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// `extract : (p : P(0)) -> Nat`, eliminating the two-constructor proposition `P` under a motive whose inner switch states `sort` while every arm of it is `Nat`.
@@ -1005,15 +1024,17 @@ fn extraction(sort: Term, instance: Option<Level>, tags: &[&str]) -> Module {
         ),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![extract].into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![extract].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// The three motives [`fold_motive`] states over `match n`, for `n : Nat`.
@@ -1085,15 +1106,17 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
         Term::func([(n, nat())], body),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![all_zero].into(),
-        induct_decls: BTreeMap::from([(equality, equality_declaration())]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![all_zero].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(equality, equality_declaration())]),
+        [],
+        [],
+    )
 }
 
 /// The three ways an occurrence of a one-parameter, one-index family can disagree with it.
@@ -1154,15 +1177,17 @@ pub(super) fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module
         Term::induct_type(family, params, indices),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![held].into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![held].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// The four ways a one-parameter nominal value can disagree with its declaration.
@@ -1216,15 +1241,17 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
         ),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![held].into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::from([(name, declaration)]),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![held].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        [],
+        BTreeMap::from([(name, declaration)]),
+        [],
+    )
 }
 
 /// `induct F(A : Type) : Type | mk(x : A) end`, with a constructor application at `params`.
@@ -1269,15 +1296,17 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
         ),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![held].into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![held].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// The two shapes: an application that under-saturates its lambda, and a neutral spine whose `plicities` are shorter than the arguments applied to it.
@@ -1291,9 +1320,6 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     let module_of = |items: Vec<Item>| Module {
         mounts: Vec::new(),
         items: items.into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -1377,20 +1403,22 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
         None,
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![authored(
-            &Global::Authored(Qualifier::from(["held"])),
-            declared,
-            three,
-        )]
-        .into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![authored(
+                &Global::Authored(Qualifier::from(["held"])),
+                declared,
+                three,
+            )]
+            .into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// `f : (a : Nat) -> Type = (a) => Nat` with `held : f(3)`, the argument written under `mark` where its parameter is plain.
@@ -1418,9 +1446,6 @@ pub(super) fn marked_apply_module(mark: Plicity) -> Module {
             ),
         ]
         .into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -1456,9 +1481,6 @@ pub(super) fn rec_apply_module() -> Module {
             three,
         )]
         .into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -1584,30 +1606,34 @@ pub(super) fn stamp_trial_module(reaches: Totality, with_proof: bool) -> Module 
         items.push(held_proof());
     }
 
-    Module {
-        mounts: Vec::new(),
-        items: items.into(),
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: items.into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
         induct_decls,
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+        [],
+        [],
+    )
 }
 
 /// The proof alone, as the compile path shapes it: the library lives in the environment, and only `held` is judged.
 pub(super) fn carried_proof_module() -> Module {
     let (vouched_name, declaration) = vouched_declaration();
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![held_proof()].into(),
-        induct_decls: BTreeMap::from([(vouched_name, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![held_proof()].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(vouched_name, declaration)]),
+        [],
+        [],
+    )
 }
 
 /// What `proof_carrying_unit`'s proof carries at `Io({})`.
@@ -1673,20 +1699,22 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
     let mut induct_decls = BTreeMap::new();
     induct_decls.insert(held_name, declaration);
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![authored(
-            &Global::Authored(Qualifier::from(["bad"])),
-            held,
-            Term::variant(held_name, Vec::<Term>::new(), "qed", [payload]),
-        )]
-        .into(),
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![authored(
+                &Global::Authored(Qualifier::from(["bad"])),
+                held,
+                Term::variant(held_name, Vec::<Term>::new(), "qed", [payload]),
+            )]
+            .into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
         induct_decls,
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+        [],
+        [],
+    )
 }
 
 /// `induct Held : Type | mk(n : Nat)` with one item building `Held/mk` at `payload_count` arguments, the constructor's payload under its honest mark or a lying one.
@@ -1728,20 +1756,22 @@ pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
     let mut induct_decls = BTreeMap::new();
     induct_decls.insert(held_name, declaration);
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![authored(
-            &Global::Authored(Qualifier::from(["value"])),
-            held,
-            Term::variant(held_name, Vec::<Term>::new(), "mk", payload),
-        )]
-        .into(),
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![authored(
+                &Global::Authored(Qualifier::from(["value"])),
+                held,
+                Term::variant(held_name, Vec::<Term>::new(), "mk", payload),
+            )]
+            .into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
         induct_decls,
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+        [],
+        [],
+    )
 }
 
 /// `Held : (n : Nat) -> Type 0 | yes() : (0)`, the family whose two instances the forged equation coerces between.
@@ -1869,20 +1899,22 @@ pub(super) fn index_forgery() -> Module {
         ),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![forged, cast, held_value, boom].into(),
-        induct_decls: BTreeMap::from([
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![forged, cast, held_value, boom].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([
             (true_name, true_decl),
             (false_name, false_decl),
             (equality_name, equality_decl),
             (held_name, held_decl),
         ]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+        [],
+        [],
+    )
 }
 
 /// A stuck `match` on `scrutinee` whose motive claims `Prop` while both arms inhabit `Nat` — the one shape in Core that states its own sort instead of having one derived.
@@ -1919,9 +1951,6 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Module)> {
             body,
         )]
         .into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -2131,22 +2160,24 @@ pub(super) fn computed_field_forgery() -> Module {
         ),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![forged, cast, held_value, boom].into(),
-        induct_decls: BTreeMap::from([
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![forged, cast, held_value, boom].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([
             (false_name, false_decl),
             (equality_name, equality_declaration()),
             (held_name, held_decl),
         ]),
-        struct_decls: BTreeMap::from([(
+        BTreeMap::from([(
             wrap_name,
             computed_field_wrapper(nat_type.clone(), nat_type),
         )]),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+        [],
+    )
 }
 
 /// The scheme both universe-occurrence fixtures below are built on: `def A<u, v | u + 1 <= v> : Type v = Type u`.
@@ -2209,9 +2240,6 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
     Module {
         mounts: Vec::new(),
         items: items.into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -2372,15 +2400,17 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         Term::func(parameters, body),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![f_item, coerce].into(),
-        induct_decls: BTreeMap::from([(e_name, e_decl), (q_name, q_decl)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![f_item, coerce].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(e_name, e_decl), (q_name, q_decl)]),
+        [],
+        [],
+    )
 }
 
 /// A unit a test puts in scope by hand: a module no unit holds, with the places an environment reads it by and the record filed beside it.
@@ -2419,15 +2449,17 @@ pub(super) fn collision_module(
     items: Vec<Item>,
     induct_decls: BTreeMap<Global, InductDecl>,
 ) -> Module {
-    Module {
-        mounts: Vec::new(),
-        items: items.into(),
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: items.into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
         induct_decls,
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+        [],
+        [],
+    )
 }
 
 /// The definition name the environment and the module both declare.
@@ -2643,16 +2675,18 @@ pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
         variances: Vec::new(),
     };
 
-    let mut induct_decls = BTreeMap::from([(absurd_name, proposition(Vec::new()))]);
-    if beside_a_family {
-        induct_decls.insert(
+    // An entry is held by its former, so the family beside the record is a second former under the record's name.
+    let family = beside_a_family.then(|| {
+        Item::Rec(RecItem::new(vec![Definition::former(
             bad,
-            InductDecl {
+            Qualifier::default(),
+            Nominal::Inductive(InductDecl {
                 result_sort: Term::type_ground(),
                 ..proposition(Vec::new())
-            },
-        );
-    }
+            }),
+        )]))
+    });
+    let induct_decls = BTreeMap::from([(absurd_name, proposition(Vec::new()))]);
 
     let subject = Free::local(933, Some("b"));
     let open = Term::func(
@@ -2664,10 +2698,17 @@ pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
     );
 
     Program {
-        module: Module {
-            struct_decls: BTreeMap::from([(bad, record)]),
-            ..collision_module(Vec::new(), induct_decls)
-        },
+        module: collision_module(
+            family
+                .into_iter()
+                .chain([Item::Let(Definition::former(
+                    bad,
+                    Qualifier::default(),
+                    Nominal::Struct(record),
+                ))])
+                .collect(),
+            induct_decls,
+        ),
         entry: Entrypoint {
             body: Term::apply(
                 open.clone(),
@@ -2850,10 +2891,14 @@ pub(super) fn two_registry_entries(varied: Varied) -> Module {
         variances: Vec::new(),
     };
 
-    Module {
-        struct_decls: BTreeMap::from([(kept_record(), record)]),
-        ..collision_module(Vec::new(), BTreeMap::from([(shadowed_family(), family)]))
-    }
+    declaring(
+        Module {
+            ..collision_module(Vec::new(), BTreeMap::from([(shadowed_family(), family)]))
+        },
+        [],
+        BTreeMap::from([(kept_record(), record)]),
+        [],
+    )
 }
 
 /// What a fixture puts to the walk: a unit alone, or a program — a unit and the entry it closes with.
@@ -2948,15 +2993,17 @@ fn module_of(
     induct_decls: BTreeMap<Global, InductDecl>,
     struct_decls: BTreeMap<Global, StructDecl>,
 ) -> Module {
-    Module {
-        mounts: Vec::new(),
-        items: items.into(),
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: items.into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
         induct_decls,
         struct_decls,
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    }
+        [],
+    )
 }
 
 /// `x: from` handed back at `to`: the identity under [`coercion_name`].

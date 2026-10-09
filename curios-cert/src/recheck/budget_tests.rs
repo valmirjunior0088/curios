@@ -5,11 +5,12 @@ use {
     crate::{Error, Globals},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat, RecGroup,
-        RecMemberScopes, ReduceError, Scope, Telescope, Term, UniverseContext,
+        Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Many, Module,
+        Nat, Nominal, RecGroup, RecItem, RecMemberScopes, ReduceError, Scope, Telescope, Term,
+        UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
 
 fn good() -> Global {
@@ -68,11 +69,14 @@ fn spent_item_beside_an_aliased_payload() -> Module {
                 Term::free_var(&Free::from(&spin)),
                 Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             ),
+            // The family's former is the module's last item, so its entry is judged once `spent` has been.
+            Item::Rec(RecItem::new(vec![Definition::former(
+                good(),
+                Qualifier::default(),
+                Nominal::Inductive(declaration),
+            )])),
         ]
         .into(),
-        induct_decls: BTreeMap::from([(good(), declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -80,7 +84,7 @@ fn spent_item_beside_an_aliased_payload() -> Module {
 
 /// Strict positivity is judged on a budget of its own, not on what the item judged before it left.
 ///
-/// `spent` spends everything it has: checking `0` against `Spin` converts forever. `Good`'s payload is `Alias`, which the analysis has to unfold to read the strict occurrence of `Good` behind it. No item declares `Good`, so its entry is accepted once every item has been judged: on `spent`'s leftover the unfold would be refused, the alias read at `Mixed`, and `Good` refused for a budget it never spent.
+/// `spent` spends everything it has: checking `0` against `Spin` converts forever. `Good`'s payload is `Alias`, which the analysis has to unfold to read the strict occurrence of `Good` behind it. `Good`'s former is the module's last item, so its entry is accepted once every other item has been judged: on `spent`'s leftover the unfold would be refused, the alias read at `Mixed`, and `Good` refused for a budget it never spent.
 ///
 /// `spent`'s own exhaustion is the control: without it the leftover would be most of a budget, and the fixture would pass whether or not positivity restores one.
 ///

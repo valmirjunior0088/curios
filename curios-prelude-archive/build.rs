@@ -277,8 +277,9 @@ fn validate_syntax_targets(modules: &[&curios_core::Module]) {
             .iter()
             .find_map(|module| {
                 module
-                    .concepts
+                    .concepts()
                     .get(&Global::Authored(target.concept.qualifier()))
+                    .copied()
             })
             .unwrap_or_else(|| {
                 panic!(

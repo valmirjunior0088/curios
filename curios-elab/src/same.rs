@@ -12,8 +12,8 @@ mod tests;
 use {
     crate::Question,
     curios_core::{
-        Bound, ConceptDecl, Definition, InductDecl, Item, MetaRenaming, RecItem, StructDecl,
-        Telescope, Term,
+        Bound, ConceptDecl, Definition, DefinitionKind, InductDecl, Item, MetaRenaming, RecItem,
+        StructDecl, Telescope, Term,
     },
 };
 
@@ -41,7 +41,9 @@ impl Same {
     }
 
     fn of_definition(made: &Definition, held: &Definition) -> Self {
-        let kind = made.name == held.name && made.kind == held.kind && made.island == held.island;
+        let kind = made.name == held.name
+            && kinds_alike(&made.kind, &held.kind)
+            && made.island == held.island;
         let signature = kind
             && made.universe_context == held.universe_context
             && spelled_alike(&made.type_, &held.type_);
@@ -67,8 +69,9 @@ impl Same {
         else {
             return Self::default();
         };
-        let kind =
-            mine.name == theirs.name && mine.kind == theirs.kind && mine.island == theirs.island;
+        let kind = mine.name == theirs.name
+            && kinds_alike(&mine.kind, &theirs.kind)
+            && mine.island == theirs.island;
         let group = kind && groups_alike(made, held);
         let totality = mine.totality == theirs.totality;
 
@@ -109,6 +112,16 @@ impl Same {
             | Question::Lemmas
             | Question::Erased(_) => false,
         }
+    }
+}
+
+/// Whether two kinds say one thing of a name, the entry a type former carries left out. An entry is a part of its own, compared as the context holds it ([`Same::keying`]): the one a former made again carries is the lowering's until its item leaves the walk, and a former held to it would have moved for every declaration that read its signature.
+fn kinds_alike(this: &DefinitionKind, that: &DefinitionKind) -> bool {
+    match (this, that) {
+        (DefinitionKind::Nominal(_), DefinitionKind::Nominal(_)) => {
+            this.declared() == that.declared()
+        }
+        _ => this == that,
     }
 }
 

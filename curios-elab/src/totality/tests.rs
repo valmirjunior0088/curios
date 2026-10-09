@@ -29,9 +29,6 @@ fn module(items: Vec<Item>) -> Module {
     Module {
         mounts: Vec::new(),
         items: items.into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }

@@ -8,6 +8,7 @@ use {
         InductDecl, InductParam, Intrinsic, Item, Level, Module, Nat, Places, Program, RecItem,
         StructDecl, StructType, Subterm, Telescope, Term, Totality, UniverseContext,
         UniverseMetaId, UniverseParam, Zonkable, Zonked, project_erased_universes,
+        test_support::declaring,
     },
     curios_ersd::{FieldShape, test_support::shape},
     curios_utilities::{Plicity, Qualifier, grown},
@@ -55,9 +56,6 @@ fn module(items: Vec<Item>, body: Term) -> Program {
         module: Module {
             mounts: Vec::new(),
             items: items.into(),
-            induct_decls: BTreeMap::new(),
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },
@@ -854,24 +852,30 @@ fn a_variant_constructs_with_its_registered_schema() {
         [nat_lit(6)],
     );
     let fixture = Program {
-        module: Module {
-            mounts: Vec::new(),
-            items: Vec::new().into(),
+        module: declaring(
+            Module {
+                mounts: Vec::new(),
+                items: Vec::new().into(),
+                witnesses: BTreeSet::new(),
+                tests: Vec::new(),
+            },
             induct_decls,
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
-        },
+            [],
+            [],
+        ),
         entry: Entrypoint { body, type_: None },
     };
     let erased = erase(&fixture, opt_type());
     assert_eq!(
         shape(&erased),
         "\
+items
+  Rec
+    value ~v0$/Opt
+      Return Unit
 entry
-  Let ~v0 = Construct ~t1 [Nat(6)]
-  Return ~v0
+  Let ~v1 = Construct ~t1 [Nat(6)]
+  Return ~v1
 "
     );
     // The family the construction registered against, asked of the arena the header renders from: a nullary `none` and a `some` carrying one `Nat`, with `~t1` — the constructed one — the second.
@@ -907,7 +911,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
     induct_decls.insert(nominal("Opt"), opt_induct());
     let former = Item::Let(Definition {
         name: nominal("Opt"),
-        kind: DefinitionKind::InductiveType,
+        kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
@@ -927,15 +931,17 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
         ),
     );
     let fixture = Program {
-        module: Module {
-            mounts: Vec::new(),
-            items: vec![former, six].into(),
+        module: declaring(
+            Module {
+                mounts: Vec::new(),
+                items: vec![former, six].into(),
+                witnesses: BTreeSet::new(),
+                tests: Vec::new(),
+            },
             induct_decls,
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
-        },
+            [],
+            [],
+        ),
         entry: Entrypoint {
             body: Term::free_var(&global("six")),
             type_: None,
@@ -1213,29 +1219,35 @@ fn a_variant_match_binds_payload_without_projections() {
         ],
     );
     let fixture = Program {
-        module: Module {
-            mounts: Vec::new(),
-            items: Vec::new().into(),
+        module: declaring(
+            Module {
+                mounts: Vec::new(),
+                items: Vec::new().into(),
+                witnesses: BTreeSet::new(),
+                tests: Vec::new(),
+            },
             induct_decls,
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
-        },
+            [],
+            [],
+        ),
         entry: Entrypoint { body, type_: None },
     };
     let erased = erase(&fixture, Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
+items
+  Rec
+    value ~v0$/Opt
+      Return Unit
 entry
-  Let ~v0$scrutinee = Construct ~t1 [Nat(6)]
-  Let ~v2 = MatchVariant ~d0 ~v0$scrutinee
+  Let ~v1$scrutinee = Construct ~t1 [Nat(6)]
+  Let ~v3 = MatchVariant ~d0 ~v1$scrutinee
     arm ~t0()
       Return Nat(0)
-    arm ~t1(~v1$x)
-      Return ~v1$x
-  Return ~v2
+    arm ~t1(~v2$x)
+      Return ~v2$x
+  Return ~v3
 "
     );
 }
@@ -1523,15 +1535,17 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         (e, induct_type("Selfy")),
     ]);
     let fixture = Program {
-        module: Module {
-            mounts: Vec::new(),
-            items: Vec::new().into(),
+        module: declaring(
+            Module {
+                mounts: Vec::new(),
+                items: Vec::new().into(),
+                witnesses: BTreeSet::new(),
+                tests: Vec::new(),
+            },
             induct_decls,
             struct_decls,
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
-        },
+            [],
+        ),
         entry: Entrypoint { body, type_: None },
     };
     let erased = erase(&fixture, expected);
@@ -1583,10 +1597,12 @@ fn an_applied_lambda_with_a_witness_slot_erases() {
         ],
     );
     let mut fixture = module(Vec::new(), call);
-    fixture
-        .module
-        .struct_decls
-        .insert(nominal("Dict"), newtype_struct("held", nat.clone()));
+    fixture.module = declaring(
+        std::mem::take(&mut fixture.module),
+        [],
+        [(nominal("Dict"), newtype_struct("held", nat.clone()))],
+        [],
+    );
 
     let erased = erase(&fixture, nat);
 

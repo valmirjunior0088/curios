@@ -54,9 +54,6 @@ fn reading_module(alias: Term, returned: impl Fn(&Free) -> Term) -> Module {
             ),
         ]
         .into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -239,8 +236,8 @@ fn a_stamp_that_says_total_over_an_adopted_partial_verdict_is_refused() {
 #[test]
 fn a_registry_entry_is_the_baselines_by_what_the_certifier_reads_of_it() {
     let held = two_registry_entries(Varied::Nothing);
-    let family = |module: &Module| module.induct_decls[&shadowed_family()].clone();
-    let record = |module: &Module| module.struct_decls[&kept_record()].clone();
+    let family = |module: &Module| (*module.induct_decls()[&shadowed_family()]).clone();
+    let record = |module: &Module| (*module.struct_decls()[&kept_record()]).clone();
 
     let stamped = two_registry_entries(Varied::Stamps);
     assert!(

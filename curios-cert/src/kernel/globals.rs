@@ -10,7 +10,7 @@
 //!
 //! # What a walk starts from is read where it stands
 //!
-//! [`Globals`] is the units in scope, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, and the certifier's record of its definitions' totality and of its families' polarity vectors. Nothing of a unit is brought in. A name is answered by reference into the unit that holds it, by the places the unit keeps for its names (`curios_core::Places`), so what a walk costs of its scope is what its judgments read. A caller that has units hands them to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges the module it is handed against them. A name is one declaration: a module is refused for a name any namespace here holds, whatever it declares under it (`Globals::in_scope`), and nothing about that question identifies an item by where it sits.
+//! [`Globals`] is the units in scope, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, the entries its type formers carry, and the certifier's record of its definitions' totality and of its families' polarity vectors. Nothing of a unit is brought in. A name is answered by reference into the unit that holds it, by the places the unit keeps for its names (`curios_core::Places`), so what a walk costs of its scope is what its judgments read. A caller that has units hands them to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges the module it is handed against them. A name is one declaration: a module is refused for a name a unit here declares, whatever it declares under it (`Globals::in_scope`), and nothing about that question identifies an item by where it sits.
 //!
 //! # What a walk reads is three layers
 //!
@@ -120,20 +120,14 @@ impl<'s> Mounted<'s> {
         held(self.module, self.places, name)
     }
 
-    /// Whether any namespace of this unit holds `name`.
+    /// Whether this unit declares `name`. An entry is held by its type former, so the names a unit declares are its items'.
     fn holds(&self, name: &Global) -> bool {
         self.places.place(name).is_some()
-            || self.module.induct_decls.contains_key(name)
-            || self.module.struct_decls.contains_key(name)
-            || self.module.concepts.contains_key(name)
     }
 
-    /// How many names this unit holds, across its namespaces: an upper bound, a type former being counted beside its registry entry.
+    /// How many items this unit holds: what says which of two units is the smaller to ask the other of.
     fn size(&self) -> usize {
         self.module.items.len()
-            + self.module.induct_decls.len()
-            + self.module.struct_decls.len()
-            + self.module.concepts.len()
     }
 
     /// Whether this unit and `other` hold a name in common, asked of the smaller of the two.
@@ -143,29 +137,19 @@ impl<'s> Mounted<'s> {
             false => (other, self),
         };
         let items = &smaller.module.items;
-        let defined = (0..items.len()).any(|place| {
+        (0..items.len()).any(|place| {
             items
                 .names(place)
                 .into_iter()
                 .any(|name| larger.holds(name))
-        });
-
-        defined
-            || smaller
-                .module
-                .induct_decls
-                .keys()
-                .chain(smaller.module.struct_decls.keys())
-                .chain(smaller.module.concepts.keys())
-                .any(|name| larger.holds(name))
+        })
     }
 
     /// The polarity vector this unit's record files for the registry entry it holds under `name`.
     fn polarities(&self, name: &Global) -> Option<&'s [Polarity]> {
-        self.certification.polarities(name).filter(|_| {
-            self.module.induct_decls.contains_key(name)
-                || self.module.struct_decls.contains_key(name)
-        })
+        self.certification
+            .polarities(name)
+            .filter(|_| self.module.nominal(self.places, name).is_some())
     }
 }
 
@@ -176,7 +160,7 @@ pub struct Globals<'s> {
 }
 
 impl<'s> Globals<'s> {
-    /// Put the unit `module` in scope — its definitions at their declared types with their real bodies, a proof's withheld, and its nominal registry — read by the `places` its unit keeps for it, with the record the certifier's walk over it filed.
+    /// Put the unit `module` in scope — its definitions at their declared types with their real bodies, a proof's withheld, and the entries its type formers carry — read by the `places` its unit keeps for it, with the record the certifier's walk over it filed.
     ///
     /// Where `certification` covers `module`, its classifications are the environment's; where it does not, `module`'s items are a walk's to classify. Each registry entry answers its polarity from the vector the record files for it, and one it files none for is a walk's to compute. An environment built by hand, with no walk behind it, passes an empty record, which covers nothing a unit declares.
     ///
@@ -231,32 +215,31 @@ impl<'s> Globals<'s> {
         let mut inducts = BTreeMap::new();
         let mut structs = BTreeMap::new();
         for mounted in &self.mounted {
-            let unfiled = |name: &Global| mounted.certification.polarities(name).is_none();
-
-            inducts.extend(
-                mounted
-                    .module
-                    .induct_decls
-                    .iter()
-                    .filter(|(name, _)| unfiled(name))
-                    .map(|(name, declaration)| (*name, declaration.clone())),
-            );
-            structs.extend(
-                mounted
-                    .module
-                    .struct_decls
-                    .iter()
-                    .filter(|(name, _)| unfiled(name))
-                    .map(|(name, declaration)| (*name, declaration.clone())),
-            );
+            // Which names declare a nominal is what each place of the unit says, so the record is asked of each with no entry read, and an entry is read where the record files no vector for it.
+            let unfiled = mounted
+                .module
+                .formers()
+                .into_iter()
+                .filter(|(name, _)| mounted.certification.polarities(name).is_none());
+            for (name, _) in unfiled {
+                let Some(nominal) = mounted.module.nominal(mounted.places, &name) else {
+                    continue;
+                };
+                if let Some(declaration) = nominal.inductive() {
+                    inducts.insert(name, declaration.clone());
+                }
+                if let Some(record) = nominal.record() {
+                    structs.insert(name, record.clone());
+                }
+            }
         }
 
         (inducts, structs)
     }
 
-    /// Whether any namespace here holds `name`.
+    /// Whether a unit here declares `name`.
     ///
-    /// One predicate across four namespaces, because a `Global` names one declaration: a module that declares a name any of them holds is refused for it, whatever it declares there.
+    /// A `Global` names one declaration: a module that declares a name a unit in scope does is refused for it, whatever it declares there.
     pub(crate) fn in_scope(&self, name: &Global) -> bool {
         self.mounted.iter().any(|mounted| mounted.holds(name))
     }
@@ -269,13 +252,13 @@ impl<'s> Globals<'s> {
     fn induct_decl(&self, name: &Global) -> Option<&'s InductDecl> {
         self.mounted
             .iter()
-            .find_map(|mounted| mounted.module.induct_decls.get(name))
+            .find_map(|mounted| mounted.module.induct_decl(mounted.places, name))
     }
 
     fn struct_decl(&self, name: &Global) -> Option<&'s StructDecl> {
         self.mounted
             .iter()
-            .find_map(|mounted| mounted.module.struct_decls.get(name))
+            .find_map(|mounted| mounted.module.struct_decl(mounted.places, name))
     }
 
     /// The polarity vector the record of the unit holding the registry entry `name` files for it.

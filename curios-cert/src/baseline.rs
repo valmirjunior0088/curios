@@ -10,7 +10,10 @@
 
 use {
     super::{held, induct_alike, struct_alike},
-    curios_core::{Certification, Global, Item, Module, Places, Polarity, Reads, Term, Totality},
+    curios_core::{
+        Certification, Global, InductDecl, Item, Module, Nominal, Places, Polarity, Reads, Term,
+        Totality,
+    },
     std::collections::{BTreeMap, HashMap},
 };
 
@@ -23,35 +26,38 @@ pub struct Baseline<'a> {
 }
 
 impl<'a> Baseline<'a> {
-    /// Whether the registry entries `module` holds under `name` are the baseline's: each registry holding the same declaration under it, by everything the certifier reads of one, or holding none on both sides.
-    fn entries_alike(&self, name: &Global, module: &Module) -> bool {
-        let inducts = match (
-            module.induct_decls.get(name),
-            self.module.induct_decls.get(name),
-        ) {
+    /// Whether the entry `item` carries under `name` is the one `held`, the baseline's item, carries under it: the same declaration, by everything the certifier reads of one, or none on both sides.
+    fn entries_alike(name: &Global, item: &Item, held: &Item) -> bool {
+        let (this, that) = (item.nominal(name), held.nominal(name));
+        let alike = |this: Option<&InductDecl>, that: Option<&InductDecl>| match (this, that) {
             (None, None) => true,
             (Some(this), Some(that)) => induct_alike(this, that),
             _ => false,
         };
-        let structs = match (
-            module.struct_decls.get(name),
-            self.module.struct_decls.get(name),
+        let records = match (
+            this.and_then(Nominal::record),
+            that.and_then(Nominal::record),
         ) {
             (None, None) => true,
             (Some(this), Some(that)) => struct_alike(this, that),
             _ => false,
         };
 
-        inducts && structs
+        records
+            && alike(
+                this.and_then(Nominal::inductive),
+                that.and_then(Nominal::inductive),
+            )
     }
 
     /// Whether `item`, of `module`, is the baseline's own: the same names bound to the same terms under the same universe context, a group being its members' one fixed point, each marked a proof or not as the baseline's is, and the same registry entries under each name. Elaboration's other stamps take no part, as they take none where an environment is asked whether a declaration is its own; the proof mark does, being the one an environment reads a name by.
-    pub(crate) fn holds(&self, item: &Item, module: &Module) -> bool {
+    pub(crate) fn holds(&self, item: &Item) -> bool {
         let names = item.declared_names();
         let Some(place) = names.first().and_then(|name| self.places.place(name)) else {
             return false;
         };
-        let terms = match (item, &self.module.items[place.item()]) {
+        let held = &self.module.items[place.item()];
+        let terms = match (item, held) {
             (Item::Let(this), Item::Let(that)) => {
                 this.name == that.name
                     && this.universe_context == that.universe_context
@@ -71,7 +77,10 @@ impl<'a> Baseline<'a> {
             _ => false,
         };
 
-        terms && names.iter().all(|name| self.entries_alike(name, module))
+        terms
+            && names
+                .iter()
+                .all(|name| Self::entries_alike(name, item, held))
     }
 }
 
@@ -108,7 +117,6 @@ impl<'a> Adopting<'a> {
     pub(crate) fn adopts(
         &self,
         item: &Item,
-        module: &Module,
         in_scope: impl Fn(&Global) -> bool,
     ) -> Option<Vec<(Totality, &'a Reads)>> {
         let names = item.declared_names();
@@ -124,9 +132,8 @@ impl<'a> Adopting<'a> {
             .map(|name| {
                 let totality = certification.totality(name)?;
                 let reads = certification.reads(name)?;
-                let vectored = (!module.induct_decls.contains_key(name)
-                    && !module.struct_decls.contains_key(name))
-                    || certification.polarities(name).is_some();
+                let vectored =
+                    item.nominal(name).is_none() || certification.polarities(name).is_some();
 
                 (vectored
                     && reads
@@ -159,7 +166,6 @@ impl<'a> Adopting<'a> {
     pub(crate) fn judged(
         &mut self,
         item: &Item,
-        module: &Module,
         partial: impl Fn(&Global) -> bool,
         polarities: &BTreeMap<Global, Vec<Polarity>>,
     ) {
@@ -194,7 +200,11 @@ impl<'a> Adopting<'a> {
                         signature: same_type
                             && same_universes
                             && verdict
-                            && self.baseline.entries_alike(name, module),
+                            && self.baseline.places.place(name).is_some_and(|place| {
+                                let earlier = &self.baseline.module.items[place.item()];
+
+                                Baseline::entries_alike(name, item, earlier)
+                            }),
                         body: same_body,
                     }
                 }

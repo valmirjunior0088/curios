@@ -433,7 +433,7 @@ pub struct PreparedText {
 struct LoweredAt {
     /// The item, by its place among the unit's.
     item: u32,
-    kind: curios_core::DefinitionKind,
+    declared: curios_core::Declared,
     /// Whether the item is the definition itself, where it would otherwise be a group the name is a member of.
     alone: bool,
 }
@@ -449,7 +449,7 @@ fn declared_in(items: &[curios_core::Item]) -> BTreeMap<curios_core::Global, Low
                     definition.name,
                     LoweredAt {
                         item: item_at,
-                        kind: definition.kind.clone(),
+                        declared: definition.kind.declared(),
                         alone: true,
                     },
                 );
@@ -460,7 +460,7 @@ fn declared_in(items: &[curios_core::Item]) -> BTreeMap<curios_core::Global, Low
                         definition.name,
                         LoweredAt {
                             item: item_at,
-                            kind: definition.kind.clone(),
+                            declared: definition.kind.declared(),
                             alone: false,
                         },
                     );
@@ -545,18 +545,13 @@ impl PreparedText {
         &self.reached
     }
 
-    /// The lowered module of a unit lowered in this process: what its elaboration reads. A restored unit holds its registry entries ([`PreparedText::entries`]) and reads an item where one is asked for ([`PreparedText::lowered_item`]), so asking it for the module whole is a fault.
+    /// The lowered module of a unit lowered in this process: what its elaboration reads. A restored unit reads an item where one is asked for (`lowered_item`), a former with the entry it carries (`nominal`), so asking it for the module whole is a fault.
     pub fn core(&self) -> &curios_core::Module {
         assert!(
             self.items.is_none(),
             "a restored unit's lowered module holds no item"
         );
 
-        &self.core
-    }
-
-    /// The registry entries this unit's lowering wrote, with its mounts, its witnesses and its tests: its lowered module, whatever it holds of its items.
-    pub(crate) fn entries(&self) -> &curios_core::Module {
         &self.core
     }
 
@@ -577,6 +572,19 @@ impl PreparedText {
         item
     }
 
+    /// The entry this unit's lowering wrote for the nominal declaration `name`, read at the former that carries it: the one lowered item, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit declares no nominal under.
+    pub(crate) fn nominal(&self, name: &curios_core::Global) -> Option<&curios_core::Nominal> {
+        let declared = self.declared.get(name)?;
+        if !declared.declared.is_former() {
+            return None;
+        }
+
+        self.lowered_item(declared.item as usize)
+            .nominals()
+            .into_iter()
+            .find_map(|(held, nominal)| (held == name).then_some(nominal))
+    }
+
     /// The item this unit's lowering declares `name` by, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit does not declare.
     pub fn lowered(&self, name: &curios_core::Global) -> Option<&curios_core::Item> {
         self.declared
@@ -590,10 +598,10 @@ impl PreparedText {
     pub(crate) fn written(
         &self,
         name: &curios_core::Global,
-    ) -> Option<(&curios_core::DefinitionKind, Option<&curios_core::Term>)> {
+    ) -> Option<(curios_core::Declared, Option<&curios_core::Term>)> {
         let declared = self.declared.get(name)?;
-        let body = match &declared.kind {
-            curios_core::DefinitionKind::Authored if declared.alone => {
+        let body = match declared.declared {
+            curios_core::Declared::Authored if declared.alone => {
                 match self.lowered_item(declared.item as usize) {
                     curios_core::Item::Let(definition) => Some(&definition.body),
                     curios_core::Item::Rec(_) => None,
@@ -602,7 +610,7 @@ impl PreparedText {
             _ => None,
         };
 
-        Some((&declared.kind, body))
+        Some((declared.declared, body))
     }
 
     /// The `foreign` rows this unit declares.
@@ -1460,7 +1468,11 @@ fn process_items(
                                 )
                             });
                         Ok(FlatLet {
-                            kind: curios_core::DefinitionKind::InductiveType,
+                            kind: curios_core::DefinitionKind::Nominal(Rc::new(
+                                curios_core::Nominal::Inductive(
+                                    lowered.induct_decls[&name].clone(),
+                                ),
+                            )),
                             span: u.label.span().cloned(),
                             name: curios_core::Global::Authored(context.prefixed(&u.label)),
                             island: context.island(),
@@ -1676,7 +1688,9 @@ fn process_items(
                     };
 
                     formers.push(FlatLet {
-                        kind: curios_core::DefinitionKind::StructType,
+                        kind: curios_core::DefinitionKind::Nominal(Rc::new(
+                            curios_core::Nominal::Struct(lowered.struct_decls[&name].clone()),
+                        )),
                         span: s.label.span().cloned(),
                         name: curios_core::Global::Authored(context.prefixed(&s.label)),
                         island: context.island(),
@@ -1811,7 +1825,12 @@ fn process_items(
                         )
                     };
                     formers.push(FlatLet {
-                        kind: curios_core::DefinitionKind::ConceptType,
+                        kind: curios_core::DefinitionKind::Nominal(Rc::new(
+                            curios_core::Nominal::Concept {
+                                concept: lowered.concepts[&name].clone(),
+                                record: lowered.struct_decls[&name].clone(),
+                            },
+                        )),
                         span: concept.label.span().cloned(),
                         name: curios_core::Global::Authored(context.prefixed(&concept.label)),
                         island: context.island(),
@@ -2204,10 +2223,6 @@ fn into_core_unit_within(
         .iter()
         .map(|unit| &unit.public)
         .collect::<Vec<_>>();
-    let predecessor_modules = predecessors
-        .iter()
-        .map(|unit| &unit.core)
-        .collect::<Vec<_>>();
     let predecessor_mounts = predecessors
         .iter()
         .flat_map(|unit| unit.mounts.iter().cloned())
@@ -2437,7 +2452,7 @@ fn into_core_unit_within(
         in_scope,
         &flat_items,
         &facts,
-        NominalScope::new(&predecessor_modules, &induct_decls, &struct_decls),
+        NominalScope::new(predecessors, &induct_decls, &struct_decls),
     )?;
 
     let dead = unused_declarations(&Declarations {
@@ -2473,9 +2488,6 @@ fn into_core_unit_within(
         core: curios_core::Module {
             items: items.into(),
             mounts: own,
-            induct_decls,
-            struct_decls,
-            concepts,
             witnesses,
             tests,
         },

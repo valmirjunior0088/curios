@@ -7,7 +7,7 @@
 //! **Reading it is indexing it.** Every reader that goes by place is written as it would be over a vector, and a reader that walks every item restores every item: slow where a walk was not looked for, and never another answer.
 
 use {
-    crate::{DefinitionKind, Global, Item},
+    crate::{Declared, Global, Item},
     std::{
         cell::OnceCell,
         fmt,
@@ -16,13 +16,13 @@ use {
     },
 };
 
-/// An item's outline: the names it declares, in the order it declares them, the kind it declares each as, and whether it is a group. What is known of a place of a stored module without its item.
+/// An item's outline: the names it declares, in the order it declares them, what it declares each as, and whether it is a group. What is known of a place of a stored module without its item.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Outline {
     pub names: Vec<Global>,
-    /// The kind each of `names` is declared as, in their order.
-    pub kinds: Vec<DefinitionKind>,
+    /// What each of `names` is declared as, in their order: a former by which kind of declaration it is the former of, with nothing of its entry.
+    pub declared: Vec<Declared>,
     pub group: bool,
 }
 
@@ -31,20 +31,20 @@ impl Outline {
     pub fn of(item: &Item) -> Self {
         Self {
             names: item.declared_names().into_iter().copied().collect(),
-            kinds: kinds_of(item).into_iter().cloned().collect(),
+            declared: declared_by(item),
             group: matches!(item, Item::Rec(_)),
         }
     }
 }
 
-/// The kind `item` declares each of its names as, in the order it declares them.
-fn kinds_of(item: &Item) -> Vec<&DefinitionKind> {
+/// What `item` declares each of its names as, in the order it declares them.
+fn declared_by(item: &Item) -> Vec<Declared> {
     match item {
-        Item::Let(definition) => vec![&definition.kind],
+        Item::Let(definition) => vec![definition.kind.declared()],
         Item::Rec(rec) => rec
             .definitions
             .iter()
-            .map(|definition| &definition.kind)
+            .map(|definition| definition.kind.declared())
             .collect(),
     }
 }
@@ -105,11 +105,11 @@ impl Items {
         }
     }
 
-    /// The kind the item at `place` declares each of its names as, in the order of [`Items::names`], with nothing restored.
-    pub fn kinds(&self, place: usize) -> Vec<&DefinitionKind> {
+    /// What the item at `place` declares each of its names as, in the order of [`Items::names`], with nothing restored.
+    pub fn declared(&self, place: usize) -> Vec<Declared> {
         match &self.0 {
-            Held::Made(items) => kinds_of(&items[place]),
-            Held::Stored(stored) => stored.declared[place].kinds.iter().collect(),
+            Held::Made(items) => declared_by(&items[place]),
+            Held::Stored(stored) => stored.declared[place].declared.clone(),
         }
     }
 

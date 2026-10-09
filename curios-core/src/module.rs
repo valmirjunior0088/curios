@@ -1,17 +1,17 @@
-//! The finished program: a flat list of top-level [`Item`]s over the nominal registries they are checked against.
+//! The finished program: a flat list of top-level [`Item`]s, each nominal declaration's entry held by the definition that is its former.
 //!
 //! This is what a checker is handed. Elaboration produces it and erasure consumes it, but the shape itself is representation — a [`Definition`] is a name, a universe context, a type, and a body, and a [`RecItem`] is the same for a recursive group whose members reference each other through one shared [`RecGroup`] binder rather than through free names. Both checkers walk this structure, which is why it lives here rather than beside either of them.
 //!
-//! Items are stored in dependency order, every item after the items it reaches and otherwise by name ([`Module::ordered`]), and every walk reads them as stored. A [`Module`] additionally carries the registries an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]), the witness set, and the binder high-water mark a checker must seed above. The one compilation with an entrypoint holds a [`Program`], the module beside the entry's type and body.
+//! Items are stored in dependency order, every item after the items it reaches and otherwise by name ([`Module::ordered`]), and every walk reads them as stored. The entry an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]) is carried by the type former that declares it ([`Nominal`]), and beside its items a [`Module`] carries its mounts, the witness set and its tests. The one compilation with an entrypoint holds a [`Program`], the module beside the entry's type and body.
 //!
 //! Well-formedness that *judges* rather than describes is not decided here. Whether a universe context is satisfiable is decided by each checker for itself, the elaborator's solver and the certifier's loop check; whether a definition terminates runs the size-change engine in `curios-analysis`, which both checkers drive. [`Totality`] is the classification those judgments record onto a definition, and the enum lives here because the field does.
 
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Items,
-        Lexicon, Many, Outline, Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling,
-        StructDecl, Subterm, Symbols, Telescope, Term, UniverseContext, UniverseError, Variance,
-        WitnessId, WitnessSpelling, build_shorten,
+        Lexicon, Many, Outline, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
+        Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
+        UniverseError, Variance, WitnessId, WitnessSpelling, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -190,13 +190,132 @@ type Located = HashMap<Global, (usize, usize)>;
 #[curios_archive::archived]
 pub enum DefinitionKind {
     Authored,
-    InductiveType,
-    InductiveConstructor { owner: Qualifier, tag: Atom },
-    StructType,
-    ConceptType,
-    ConceptMethod { owner: Qualifier },
+    /// A nominal declaration's former, with the entry it is the former of: what says a definition is one, so no former is spelled without its entry and no entry without its former.
+    Nominal(Rc<Nominal>),
+    InductiveConstructor {
+        owner: Qualifier,
+        tag: Atom,
+    },
+    ConceptMethod {
+        owner: Qualifier,
+    },
     Witness,
     Test,
+}
+
+impl DefinitionKind {
+    /// The entry a former carries.
+    pub fn nominal(&self) -> Option<&Nominal> {
+        match self {
+            DefinitionKind::Nominal(nominal) => Some(nominal),
+            _ => None,
+        }
+    }
+
+    /// What the definition is declared as, with nothing of its entry in it.
+    pub fn declared(&self) -> Declared {
+        match self {
+            DefinitionKind::Authored => Declared::Authored,
+            DefinitionKind::Nominal(nominal) => match &**nominal {
+                Nominal::Inductive(_) => Declared::Inductive,
+                Nominal::Struct(_) => Declared::Struct,
+                Nominal::Concept { .. } => Declared::Concept,
+            },
+            DefinitionKind::InductiveConstructor { .. } => Declared::Constructor,
+            DefinitionKind::ConceptMethod { .. } => Declared::Method,
+            DefinitionKind::Witness => Declared::Witness,
+            DefinitionKind::Test => Declared::Test,
+        }
+    }
+}
+
+/// What a name is declared as: a [`DefinitionKind`] without the entry a former's carries, so it is read and compared with no declaration in hand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Declared {
+    Authored,
+    Inductive,
+    Struct,
+    Concept,
+    Constructor,
+    Method,
+    Witness,
+    Test,
+}
+
+impl Declared {
+    /// Whether the name is a nominal declaration's former.
+    pub fn is_former(self) -> bool {
+        matches!(
+            self,
+            Declared::Inductive | Declared::Struct | Declared::Concept
+        )
+    }
+}
+
+/// A nominal declaration's registry entry, held by the definition that is its former ([`DefinitionKind::Nominal`]).
+///
+/// **One fact, held once.** A former among a module's items and its entry in a registry beside them are two facts under one name with nothing holding one to the other; held by the former, an item's entries are the ones its formers carry, and a name declares at most one. A concept's record is held with it for the same reason: a concept is its resolution metadata and the record a witness is a value of, and neither is declared alone. Why is the crate `README.md`'s "A nominal declaration's entry is held by its type former".
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Nominal {
+    Inductive(InductDecl),
+    Struct(StructDecl),
+    Concept {
+        concept: ConceptDecl,
+        record: StructDecl,
+    },
+}
+
+impl Nominal {
+    /// The inductive family's entry, where the declaration is one.
+    pub fn inductive(&self) -> Option<&InductDecl> {
+        match self {
+            Nominal::Inductive(declaration) => Some(declaration),
+            _ => None,
+        }
+    }
+
+    /// The record's entry: a structure's own, or the record a concept's witnesses are values of.
+    pub fn record(&self) -> Option<&StructDecl> {
+        match self {
+            Nominal::Struct(record) | Nominal::Concept { record, .. } => Some(record),
+            Nominal::Inductive(_) => None,
+        }
+    }
+
+    /// The concept's resolution metadata, where the declaration is one.
+    pub fn concept(&self) -> Option<&ConceptDecl> {
+        match self {
+            Nominal::Concept { concept, .. } => Some(concept),
+            _ => None,
+        }
+    }
+
+    /// Every top-level name the entry's telescopes reach.
+    pub fn reaches(&self) -> BTreeSet<Global> {
+        match self {
+            Nominal::Inductive(declaration) => declaration.reaches(),
+            Nominal::Struct(record) => record.reaches(),
+            Nominal::Concept { concept, record } => {
+                let mut names = record.reaches();
+                names.extend(concept.reaches());
+                names
+            }
+        }
+    }
+
+    /// The entry with every term hash-consed against `sharing` — see [`Module::shared`].
+    pub fn shared(&self, sharing: &Sharing) -> Self {
+        match self {
+            Nominal::Inductive(declaration) => Nominal::Inductive(declaration.shared(sharing)),
+            Nominal::Struct(record) => Nominal::Struct(record.shared(sharing)),
+            Nominal::Concept { concept, record } => Nominal::Concept {
+                concept: concept.shared(sharing),
+                record: record.shared(sharing),
+            },
+        }
+    }
 }
 
 /// A single top-level definition: `name` bound to `body` of declared `type_`.
@@ -340,6 +459,87 @@ impl RecItem {
 }
 
 impl Definition {
+    /// The former of the nominal declaration `name` whose entry is `nominal`, spelled from the entry: declared at its parameters, then for a family its indices, ending in its sort, and unfolding to the nominal type over them at the declaration's own levels.
+    ///
+    /// **The one spelling of a former from an entry.** A former says nothing its entry does not: the lowering writes both from one telescope, and what an elaborated former holds beside its entry is measured against this (`std_former_derivation`).
+    pub fn former(name: Global, island: Qualifier, nominal: Nominal) -> Self {
+        let (universe_context, arity, result_sort) = match &nominal {
+            Nominal::Inductive(declaration) => (
+                &declaration.universe_context,
+                &declaration.arity,
+                &declaration.result_sort,
+            ),
+            Nominal::Struct(record) | Nominal::Concept { record, .. } => {
+                (&record.universe_context, &record.arity, &record.result_sort)
+            }
+        };
+        let universes = universe_context.identity_instance();
+
+        // The entry's telescopes are closed, so any binders open them: counted from zero, under the hints the entry keeps.
+        let mut params = Vec::new();
+        let mut cursor = arity.cursor();
+        while let (Some((hint, domain)), Some(mark)) = (cursor.entry(), cursor.mark()) {
+            let binder = Free::local(params.len() as u32, hint);
+            cursor.advance(Term::free_var(&binder));
+            params.push((mark, binder, domain));
+        }
+        let within = cursor
+            .body()
+            .expect("a cursor past every entry holds its payload");
+        // A family's indices follow its parameters, each explicit; a record's fields are no part of its former.
+        let mut indices = Vec::new();
+        if matches!(nominal, Nominal::Inductive(_)) {
+            let mut cursor = within.cursor();
+            while let Some((hint, domain)) = cursor.entry() {
+                let binder = Free::local((params.len() + indices.len()) as u32, hint);
+                cursor.advance(Term::free_var(&binder));
+                indices.push((Plicity::Explicit, binder, domain));
+            }
+        }
+
+        let variables = |binders: &[(Plicity, Free, Term)]| {
+            binders
+                .iter()
+                .map(|(_, binder, _)| Term::free_var(binder))
+                .collect::<Vec<_>>()
+        };
+        let applied = match &nominal {
+            Nominal::Inductive(_) => {
+                Term::induct_type_at(name, universes, variables(&params), variables(&indices))
+            }
+            Nominal::Struct(_) | Nominal::Concept { .. } => {
+                Term::from(Subterm::StructType(StructType {
+                    name,
+                    universes,
+                    params: variables(&params),
+                }))
+            }
+        };
+        // One call for the parameters and one for the indices, the indices innermost: `Vec : (T : Type) -> (n : Nat) -> Type`.
+        let (type_, body) = [params, indices]
+            .into_iter()
+            .filter(|group| !group.is_empty())
+            .rev()
+            .fold((result_sort.clone(), applied), |(type_, body), group| {
+                (
+                    Term::func_type_marked(group.clone(), type_),
+                    Term::func_marked(group, body),
+                )
+            });
+
+        Self {
+            name,
+            universe_context: universe_context.clone(),
+            kind: DefinitionKind::Nominal(Rc::new(nominal)),
+            island,
+            totality: Totality::default(),
+            variances: Vec::new(),
+            proof: false,
+            type_,
+            body,
+        }
+    }
+
     /// Every top-level name this definition mentions, by free variable.
     pub fn mentions(&self) -> BTreeSet<Global> {
         self.body
@@ -414,6 +614,51 @@ impl Item {
         }
     }
 
+    /// The entries this item's formers carry, each under the name that declares it, in declaration order.
+    pub fn nominals(&self) -> Vec<(&Global, &Nominal)> {
+        match self {
+            Item::Let(definition) => definition
+                .kind
+                .nominal()
+                .map(|nominal| (&definition.name, nominal))
+                .into_iter()
+                .collect(),
+            Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .filter_map(|member| Some((&member.name, member.kind.nominal()?)))
+                .collect(),
+        }
+    }
+
+    /// The entry the former `name` carries, where this item declares a nominal under that name.
+    pub fn nominal(&self, name: &Global) -> Option<&Nominal> {
+        self.nominals()
+            .into_iter()
+            .find_map(|(held, nominal)| (held == name).then_some(nominal))
+    }
+
+    /// This item with the entry each of its formers carries replaced by what `entry` answers for the former's name and the entry it carries now, where it answers one.
+    pub fn with_nominals(mut self, entry: impl Fn(&Global, &Nominal) -> Option<Nominal>) -> Self {
+        let carried = |name: &Global, kind: &mut DefinitionKind| {
+            if let DefinitionKind::Nominal(nominal) = kind
+                && let Some(replaced) = entry(name, nominal)
+            {
+                *nominal = Rc::new(replaced);
+            }
+        };
+        match &mut self {
+            Item::Let(definition) => carried(&definition.name, &mut definition.kind),
+            Item::Rec(rec) => {
+                for member in &mut rec.definitions {
+                    carried(&member.name, &mut member.kind);
+                }
+            }
+        }
+
+        self
+    }
+
     /// The definitions this top-level item declares, in the same order as [`Item::declared_names`] — one for a `let`, one per member for a `rec`.
     ///
     /// Written out at each caller, the fan-out would be one more place a new `Item` variant could be missed. It belongs here beside `declared_names` for the same reason that one does: what an item declares is the item's own question.
@@ -444,11 +689,11 @@ pub struct Program {
     pub entry: Entrypoint,
 }
 
-/// The whole of one unit as a *flat* list of top-level `items`, with the registries they are checked against.
+/// The whole of one unit as a *flat* list of top-level `items`. A nominal declaration's registry entry is held by the definition that is its former ([`Nominal`]), so the registries a stage checks against are read off the items and a module holds none beside them.
 ///
 /// Flat rather than one N-deep nested `Subterm::Let`/`Rec` term: folding a unit into one would make its construction (`Scope::close` over the whole accumulator at each step) and every pass that recursed along its `.tail` spine O(N) in stack, overflowing at prelude depth. `Subterm::Let`/`Rec` remain for genuine *local*, in-expression bindings, which are shallow.
 ///
-/// The default is the empty unit: no item, no mount, no registry entry. Every field is a collection, so it states nothing, and a module built by hand names only what it holds.
+/// The default is the empty unit: no item and no mount. Every field is a collection, so it states nothing, and a module built by hand names only what it holds.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[curios_archive::archived]
 pub struct Module {
@@ -459,12 +704,6 @@ pub struct Module {
     ///
     /// Carried here, once, rather than stamped onto every declaration. Which mount owns a declaration is [`Mount::owning`] over the declaration's own name, so a stamp beside the name would only restate the name's leading segment — and, archived, mean something solely in the compilation that wrote it. A later stage that needs a mount's kind reads it out of this list; nothing derives one from a string.
     pub mounts: Vec<Mount>,
-    /// Inductive declarations' registry entries, keyed by the type's qualified name. Carried on the module — not on a `Context` — because elaboration and erasure each run with their *own* `Context`; both seed their context's flat inductive store from here on entry.
-    pub induct_decls: BTreeMap<Global, InductDecl>,
-    /// Struct declarations' registry entries, keyed by the type's qualified name. Carried on the module like `induct_decls` (and for the same reason): elaboration and erasure each seed their own `Context` from here on entry.
-    pub struct_decls: BTreeMap<Global, StructDecl>,
-    /// Concept declarations' resolution metadata, keyed by the concept's qualified name (each concept's record shape also lives in `struct_decls`). Seeded into the elaboration `Context` on entry; erasure never consults it.
-    pub concepts: BTreeMap<Global, ConceptDecl>,
     /// The definition names that are witness declarations. Elaboration registers each into the witness table when its signature elaborates — carried as names (not keys) because the table key needs the *elaborated* head, which only exists once elaboration runs.
     pub witnesses: BTreeSet<Global>,
     /// The definition names that are `test` declarations, in declaration order — the order the synthesized test tail schedules them and the runner reports them, so a `Vec` rather than a set.
@@ -473,7 +712,7 @@ pub struct Module {
 
 #[cfg(feature = "archive")]
 impl Module {
-    /// The module archived as `bytes`, read by item where the bytes outlive every reader: its registries restored now, since every compilation reads them and they are small, and each item the first time it is read ([`Items`]), all through one pool, so a node an item shares with another, or with a registry entry, is one allocation as it is in a module restored whole. `Err` is bytes that hold no module.
+    /// The module archived as `bytes`, read by item where the bytes outlive every reader: its outline restored now — each item's names, what each is declared as and whether it is a group, which every compilation reads and which is small — and each item the first time it is read ([`Items`]), the entry a former carries with it, all through one pool, so a node an item shares with another is one allocation as it is in a module restored whole. `Err` is bytes that hold no module.
     ///
     /// **By item where the bytes are a constant of the executable, and whole otherwise.** An item is restored out of a view of the archive that was checked whole, and a view borrows its bytes: of a constant it lives as long as the process, and of bytes read for one unit it would have to be held beside what it borrows. So a module read out of a store's slot is restored whole, as every module was.
     pub fn stored(bytes: impl Into<curios_archive::Bytes>) -> Result<Self, String> {
@@ -488,10 +727,23 @@ impl Module {
             .items
             .iter()
             .map(|item| {
-                let (names, kinds) = match item {
+                // What a name is declared as is read off the archive where it lies: an entry a former carries is restored with its item, the first time one is read.
+                let declared = |kind: &ArchivedDefinitionKind| match kind {
+                    ArchivedDefinitionKind::Authored => Declared::Authored,
+                    ArchivedDefinitionKind::Nominal(nominal) => match &**nominal {
+                        ArchivedNominal::Inductive(_) => Declared::Inductive,
+                        ArchivedNominal::Struct(_) => Declared::Struct,
+                        ArchivedNominal::Concept { .. } => Declared::Concept,
+                    },
+                    ArchivedDefinitionKind::InductiveConstructor { .. } => Declared::Constructor,
+                    ArchivedDefinitionKind::ConceptMethod { .. } => Declared::Method,
+                    ArchivedDefinitionKind::Witness => Declared::Witness,
+                    ArchivedDefinitionKind::Test => Declared::Test,
+                };
+                let (names, declared) = match item {
                     ArchivedItem::Let(definition) => (
                         vec![pooled.restore::<Global>(&definition.name)?],
-                        vec![pooled.restore::<DefinitionKind>(&definition.kind)?],
+                        vec![declared(&definition.kind)],
                     ),
                     ArchivedItem::Rec(rec) => (
                         rec.definitions
@@ -500,14 +752,14 @@ impl Module {
                             .collect::<Result<_, _>>()?,
                         rec.definitions
                             .iter()
-                            .map(|definition| pooled.restore::<DefinitionKind>(&definition.kind))
-                            .collect::<Result<_, _>>()?,
+                            .map(|definition| declared(&definition.kind))
+                            .collect(),
                     ),
                 };
 
                 Ok(Outline {
                     names,
-                    kinds,
+                    declared,
                     group: matches!(item, ArchivedItem::Rec(_)),
                 })
             })
@@ -528,9 +780,6 @@ impl Module {
         Ok(Self {
             items,
             mounts: pooled.restore(&archived.mounts)?,
-            induct_decls: pooled.restore(&archived.induct_decls)?,
-            struct_decls: pooled.restore(&archived.struct_decls)?,
-            concepts: pooled.restore(&archived.concepts)?,
             witnesses: pooled.restore(&archived.witnesses)?,
             tests: pooled.restore(&archived.tests)?,
         })
@@ -538,15 +787,88 @@ impl Module {
 }
 
 impl Module {
+    /// The entry the definition `name` carries, read at the place `places` keeps for it: one item read, and of a stored module one item restored.
+    pub fn nominal(&self, places: &Places, name: &Global) -> Option<&Nominal> {
+        match places.place(name)? {
+            Place::Let(item) => match &self.items[item as usize] {
+                Item::Let(definition) => definition.kind.nominal(),
+                Item::Rec(_) => None,
+            },
+            Place::Member { item, member, .. } => match &self.items[item as usize] {
+                Item::Rec(rec) => rec.definitions[member as usize].kind.nominal(),
+                Item::Let(_) => None,
+            },
+        }
+    }
+
+    /// The inductive family `name` declares, read where `places` holds it.
+    pub fn induct_decl(&self, places: &Places, name: &Global) -> Option<&InductDecl> {
+        self.nominal(places, name)?.inductive()
+    }
+
+    /// The record `name` declares, a structure's or the one a concept's witnesses are values of, read where `places` holds it.
+    pub fn struct_decl(&self, places: &Places, name: &Global) -> Option<&StructDecl> {
+        self.nominal(places, name)?.record()
+    }
+
+    /// The concept `name` declares, read where `places` holds it.
+    pub fn concept(&self, places: &Places, name: &Global) -> Option<&ConceptDecl> {
+        self.nominal(places, name)?.concept()
+    }
+
+    /// The names the module declares a nominal under, each with which kind of declaration it is the former of, in the order the module stores them: read off what each place says it declares, with no item read.
+    pub fn formers(&self) -> Vec<(Global, Declared)> {
+        (0..self.items.len())
+            .flat_map(|place| {
+                let names = self.items.names(place).into_iter().copied();
+
+                names.zip(self.items.declared(place))
+            })
+            .filter(|(_, declared)| declared.is_former())
+            .collect()
+    }
+
+    /// Every entry the module's formers carry, each under the name that declares it, in the order the module stores its items. Reads every item: for a module in hand, never for a unit in scope, which is asked by name.
+    pub fn nominals(&self) -> impl Iterator<Item = (&Global, &Nominal)> {
+        self.items.iter().flat_map(Item::nominals)
+    }
+
+    /// Every inductive family the module declares, by name — see [`Module::nominals`].
+    pub fn induct_decls(&self) -> BTreeMap<Global, &InductDecl> {
+        self.nominals()
+            .filter_map(|(name, nominal)| Some((*name, nominal.inductive()?)))
+            .collect()
+    }
+
+    /// Every record the module declares, a structure's or a concept's, by name — see [`Module::nominals`].
+    pub fn struct_decls(&self) -> BTreeMap<Global, &StructDecl> {
+        self.nominals()
+            .filter_map(|(name, nominal)| Some((*name, nominal.record()?)))
+            .collect()
+    }
+
+    /// Every concept the module declares, by name — see [`Module::nominals`].
+    pub fn concepts(&self) -> BTreeMap<Global, &ConceptDecl> {
+        self.nominals()
+            .filter_map(|(name, nominal)| Some((*name, nominal.concept()?)))
+            .collect()
+    }
+
     /// This module with every term hash-consed against `sharing` — one shared allocation for each structure as it is spelled, under no position — and with no universe constraint saying where it was raised.
     ///
     /// Built for an elaborated module about to be archived. Elaboration constructs the same types, telescopes, and proof spines independently in definition after definition, and nothing deduplicates them, because `Rc` sharing only ever arises from *cloning* a value: two definitions that build the same type build it twice. Unshared, the prelude's nodes outnumber its distinct structures several times over (the prelude build reports each root's distinct count), and the archive would store that expansion in full and every restored traversal walk it in full.
     ///
     /// Not for a lowered module, which a lint and a report are located in: a consed term says nothing of where it was written.
     pub fn shared(&self, sharing: &Sharing) -> Module {
+        let kind = |kind: &DefinitionKind| match kind {
+            DefinitionKind::Nominal(nominal) => {
+                DefinitionKind::Nominal(Rc::new(nominal.shared(sharing)))
+            }
+            other => other.clone(),
+        };
         let definition = |definition: &Definition| Definition {
             name: definition.name,
-            kind: definition.kind.clone(),
+            kind: kind(&definition.kind),
             universe_context: definition.universe_context.unplaced(),
             island: definition.island,
             totality: definition.totality,
@@ -568,7 +890,7 @@ impl Module {
                             .iter()
                             .map(|member| RecDefinition {
                                 name: member.name,
-                                kind: member.kind.clone(),
+                                kind: kind(&member.kind),
                                 island: member.island,
                                 totality: member.totality,
                                 proof: member.proof,
@@ -583,21 +905,6 @@ impl Module {
                 })
                 .collect(),
             mounts: self.mounts.clone(),
-            induct_decls: self
-                .induct_decls
-                .iter()
-                .map(|(name, declaration)| (*name, declaration.shared(sharing)))
-                .collect(),
-            struct_decls: self
-                .struct_decls
-                .iter()
-                .map(|(name, declaration)| (*name, declaration.shared(sharing)))
-                .collect(),
-            concepts: self
-                .concepts
-                .iter()
-                .map(|(name, concept)| (*name, concept.shared(sharing)))
-                .collect(),
             witnesses: self.witnesses.clone(),
             tests: self.tests.clone(),
         }
@@ -607,19 +914,12 @@ impl Module {
     ///
     /// Read off the type constructor's own definition, whose declared type is the one or two `FuncType`s lowering nests — the parameters', then an indexed family's indices' — ending in the sort: the parameters keep their declared marks and the indices are always explicit. That type is the marks' one home a checker establishes: `InductType` carries none (for a fixed name they are a function of the name, so storing them per-occurrence would be derived data that conversion must then either compare pointlessly or exclude from `Hash`, and excluding them lets hash-consing collapse differently-marked equal nodes), and the marks a registry entry's arity states for the elaborator ([`InductDecl::arity`], [`StructDecl::arity`]) are checked by no one, so a report does not read them.
     ///
-    /// The formers are the definitions declared as one, which each place of the module says of its names with no item read ([`Items::kinds`]), each then read where the module holds it and no other item with it: a member of a `rec` item for an inductive, which refers to itself, and a plain `let` for a structure or a concept. A nullary declaration has no `FuncType` wrapper at all and contributes nothing.
+    /// The formers are the definitions declared as one, which each place of the module says of its names with no item read ([`Items::declared`]), each then read where the module holds it and no other item with it: a member of a `rec` item for an inductive, which refers to itself, and a plain `let` for a structure or a concept. A nullary declaration has no `FuncType` wrapper at all and contributes nothing.
     fn nominal_plicities(&self, located: &Located) -> BTreeMap<Global, Vec<Plicity>> {
         let mut marks = BTreeMap::new();
 
         // Which definitions are type formers is what each place says it declares, so the formers are read and no other item is.
-        let formers = self.declared_as(|kind| {
-            matches!(
-                kind,
-                DefinitionKind::InductiveType
-                    | DefinitionKind::StructType
-                    | DefinitionKind::ConceptType
-            )
-        });
+        let formers = self.declared_as(Declared::is_former);
         for name in &formers {
             let Some(def) = self.definition_at(located, name) else {
                 continue;
@@ -653,15 +953,15 @@ impl Module {
         located
     }
 
-    /// The names the module declares as a kind `wanted` holds of, in the order it stores them: read off what each place says it declares ([`Items::kinds`]), with no item read.
-    fn declared_as(&self, wanted: impl Fn(&DefinitionKind) -> bool) -> Vec<Global> {
+    /// The names the module declares as a kind `wanted` holds of, in the order it stores them: read off what each place says it declares ([`Items::declared`]), with no item read.
+    fn declared_as(&self, wanted: impl Fn(Declared) -> bool) -> Vec<Global> {
         (0..self.items.len())
             .flat_map(|place| {
-                let declared = self.items.names(place).into_iter();
+                let names = self.items.names(place).into_iter();
 
-                declared.zip(self.items.kinds(place))
+                names.zip(self.items.declared(place))
             })
-            .filter(|(_, kind)| wanted(kind))
+            .filter(|(_, declared)| wanted(*declared))
             .map(|(name, _)| *name)
             .collect()
     }
@@ -689,16 +989,18 @@ impl Module {
     /// What a report spells this unit's witnesses against (axis (h)): each concept's fields — a superclass edge's concept, or a method's wrapper, whether that wrapper takes the method's own parameters in its group, and the operator `syntax` names for it — and each witness's declared type. `syntax` is the registry's because this crate may not spell a prelude declaration.
     fn witness_spelling(&self, located: &Located, syntax: &SyntaxRegistry) -> WitnessSpelling {
         let mut spelling = WitnessSpelling::default();
-        for (name, concept) in &self.concepts {
+        for name in &self.declared_as(|declared| declared == Declared::Concept) {
             let Global::Authored(path) = name else {
                 continue;
             };
+            let Some(former) = self.definition_at(located, name) else {
+                continue;
+            };
+            let Some(Nominal::Concept { concept, record }) = former.kind.nominal() else {
+                continue;
+            };
             let parameters = concept.params.len();
-            let edges = self
-                .struct_decls
-                .get(name)
-                .map(|declaration| concept.edges(declaration.fields()))
-                .unwrap_or_default();
+            let edges = concept.edges(record.fields());
             let fields = concept
                 .fields
                 .iter()
@@ -724,7 +1026,7 @@ impl Module {
         }
 
         // Which definitions are witnesses is what each place says it declares, as which are type formers is.
-        for name in &self.declared_as(|kind| matches!(kind, DefinitionKind::Witness)) {
+        for name in &self.declared_as(|declared| declared == Declared::Witness) {
             if let Some(def) = self.definition_at(located, name) {
                 spelling.witnesses.insert(def.name, def.type_);
             }
@@ -737,16 +1039,8 @@ impl Module {
     pub fn reaches(&self, item: &Item) -> BTreeSet<Global> {
         let mut names = item.reaches();
 
-        for name in item.declared_names() {
-            if let Some(declaration) = self.induct_decls.get(name) {
-                names.extend(declaration.reaches());
-            }
-            if let Some(declaration) = self.struct_decls.get(name) {
-                names.extend(declaration.reaches());
-            }
-            if let Some(concept) = self.concepts.get(name) {
-                names.extend(concept.reaches());
-            }
+        for (_, nominal) in item.nominals() {
+            names.extend(nominal.reaches());
         }
 
         names
@@ -832,8 +1126,6 @@ impl Module {
         for place in 0..self.items.len() {
             symbols.extend(self.items.names(place).into_iter().copied());
         }
-        symbols.extend(self.induct_decls.keys().cloned());
-        symbols.extend(self.struct_decls.keys().cloned());
         symbols
     }
 }
@@ -1099,28 +1391,32 @@ fn module_positions(
     }
 
     for (name, declaration) in module
-        .induct_decls
-        .iter()
+        .induct_decls()
+        .into_iter()
         .filter(|(name, _)| !in_scope(name))
     {
-        visit(Some(name), &declaration.arity);
-        visit(Some(name), &declaration.result_sort);
+        visit(Some(&name), &declaration.arity);
+        visit(Some(&name), &declaration.result_sort);
         for (_, constructor) in &declaration.constructors {
-            visit(Some(name), &constructor.telescope);
+            visit(Some(&name), &constructor.telescope);
         }
     }
 
     for (name, declaration) in module
-        .struct_decls
-        .iter()
+        .struct_decls()
+        .into_iter()
         .filter(|(name, _)| !in_scope(name))
     {
-        visit(Some(name), &declaration.arity);
-        visit(Some(name), &declaration.result_sort);
+        visit(Some(&name), &declaration.arity);
+        visit(Some(&name), &declaration.result_sort);
     }
 
-    for (name, concept) in module.concepts.iter().filter(|(name, _)| !in_scope(name)) {
-        visit(Some(name), &concept.params);
+    for (name, concept) in module
+        .concepts()
+        .into_iter()
+        .filter(|(name, _)| !in_scope(name))
+    {
+        visit(Some(&name), &concept.params);
     }
 }
 
@@ -1344,7 +1640,7 @@ impl fmt::Display for ZonkedRefusal {
     }
 }
 
-/// The term-bearing places of a module elaboration and zonk are answerable for — a definition's type and body and the registries' telescopes — walked with the cached `has_metavar`/`has_transient` bits, first offender wins.
+/// The term-bearing places of a module elaboration and zonk are answerable for — a definition's type and body and the telescopes of the entry a former carries — walked with the cached `has_metavar`/`has_transient` bits, first offender wins.
 fn zonked_refusal(module: &Module) -> Option<String> {
     fn unfinished(term: &Term) -> bool {
         term.has_metavar() || term.has_transient()
@@ -1368,7 +1664,7 @@ fn zonked_refusal(module: &Module) -> Option<String> {
             ));
         }
     }
-    for (name, decl) in &module.induct_decls {
+    for (name, decl) in module.induct_decls() {
         if unfinished_bound(&decl.arity)
             || unfinished(&decl.result_sort)
             || decl
@@ -1381,7 +1677,7 @@ fn zonked_refusal(module: &Module) -> Option<String> {
             ));
         }
     }
-    for (name, decl) in &module.struct_decls {
+    for (name, decl) in module.struct_decls() {
         if unfinished_bound(&decl.arity) || unfinished(&decl.result_sort) {
             return Some(format!(
                 "elaboration-only syntax survives in the registry entry for {name}"

@@ -6,7 +6,10 @@ mod tests;
 use {
     crate::Proof,
     curios_cert::Verdict,
-    curios_core::{Free, Global, Module, Program, Term, Zonked, ZonkedRefusal},
+    curios_core::{
+        Definition, Free, Global, Item, Module, Nominal, Program, RecItem, Term, Zonked,
+        ZonkedRefusal,
+    },
     curios_pipeline::{DEFAULT_STEP_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
     curios_text::{RootSource, SYNTAX},
     std::fmt,
@@ -20,6 +23,21 @@ pub fn false_name() -> Global {
 /// `/std/Bool/False` as an elaborated program mentions it, by [`false_name`]: what a module built by hand is put at, what its terms name `False` by, and the type the pipeline states for a program put as a proof.
 pub fn false_type() -> Term {
     Term::free_var(&Free::from(&false_name()))
+}
+
+/// The item a module built by hand declares the nominal `name` by: the former `entry` spells ([`Definition::former`]), carrying it, a family's in a group of its own as the lowering writes one. An entry is carried by its former and by nothing else, so a witness that wants a declaration and no definition of its own is handed the one its entry spells.
+pub fn declared(name: Global, entry: Nominal) -> Item {
+    let grouped = matches!(entry, Nominal::Inductive(_));
+    let island = name
+        .qualifier()
+        .map(|path| path.without_last())
+        .unwrap_or_default();
+    let former = Definition::former(name, island, entry);
+
+    match grouped {
+        true => Item::Rec(RecItem::new(vec![former])),
+        false => Item::Let(former),
+    }
 }
 
 /// One of the two checkers.

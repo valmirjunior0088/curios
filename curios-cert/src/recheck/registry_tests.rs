@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Definition, DefinitionKind, Global, InductDecl, Intrinsic, Item, Level, Module, Nat,
-        Telescope, Term, Totality, UniverseContext, UniverseParam,
+        Telescope, Term, Totality, UniverseContext, UniverseParam, test_support::declaring,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -169,15 +169,17 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         ),
     };
 
-    let module = Module {
-        mounts: Vec::new(),
-        items: vec![Item::Let(definition)].into(),
-        induct_decls: BTreeMap::from([(family, declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    };
+    let module = declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![Item::Let(definition)].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    );
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 

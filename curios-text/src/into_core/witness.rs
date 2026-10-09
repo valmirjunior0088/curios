@@ -14,23 +14,13 @@ use {
 };
 
 /// A name's declaration as a key reads it: its kind, and its body where it is a `let`'s.
-type Declared<'a> = (
-    &'a curios_core::DefinitionKind,
-    Option<&'a curios_core::Term>,
-);
+type Keyed<'a> = (curios_core::Declared, Option<&'a curios_core::Term>);
 
 /// What a declaration is, as far as a key reads it: a type former, a definition with its body, or anything a key is not read through.
-fn written<'a>(declared: Option<Declared<'a>>) -> curios_core::Written<'a> {
+fn written<'a>(declared: Option<Keyed<'a>>) -> curios_core::Written<'a> {
     match declared {
-        Some((
-            curios_core::DefinitionKind::InductiveType
-            | curios_core::DefinitionKind::StructType
-            | curios_core::DefinitionKind::ConceptType,
-            _,
-        )) => curios_core::Written::Former,
-        Some((curios_core::DefinitionKind::Authored, Some(body))) => {
-            curios_core::Written::Defined(body)
-        }
+        Some((declared, _)) if declared.is_former() => curios_core::Written::Former,
+        Some((curios_core::Declared::Authored, Some(body))) => curios_core::Written::Defined(body),
         _ => curios_core::Written::Opaque,
     }
 }
@@ -53,21 +43,21 @@ fn witness_names(
         return BTreeMap::new();
     }
 
-    let mut unit = BTreeMap::<curios_core::Global, Declared<'_>>::new();
+    let mut unit = BTreeMap::<curios_core::Global, Keyed<'_>>::new();
     for item in items {
         match item {
             FlatItem::Let(let_) => {
-                unit.insert(let_.name, (&let_.kind, Some(&let_.body)));
+                unit.insert(let_.name, (let_.kind.declared(), Some(&let_.body)));
             }
             // A member's body is closed over its group, which a key is not read through.
             FlatItem::Rec(lets) => {
                 for let_ in lets {
-                    unit.insert(let_.name, (&let_.kind, None));
+                    unit.insert(let_.name, (let_.kind.declared(), None));
                 }
             }
             FlatItem::Kept(rec) => {
                 for definition in &rec.definitions {
-                    unit.insert(definition.name, (&definition.kind, None));
+                    unit.insert(definition.name, (definition.kind.declared(), None));
                 }
             }
         }
@@ -83,17 +73,13 @@ fn witness_names(
     };
     // A concept's parameters are its record entry's, whose arity states the mark each is declared under.
     let marks = |name: &curios_core::Global| -> Option<Vec<Plicity>> {
-        let declared = |module: &curios_core::Module| {
-            module.concepts.get(name)?;
-
-            Some(module.struct_decls.get(name)?.arity.marks())
+        let declared = |earlier: &PreparedText| match earlier.nominal(name)? {
+            curios_core::Nominal::Concept { record, .. } => Some(record.arity.marks()),
+            _ => None,
         };
         match concepts.contains_key(name) {
             true => Some(struct_decls.get(name)?.arity.marks()),
-            false => scope
-                .iter()
-                .rev()
-                .find_map(|earlier| declared(earlier.entries())),
+            false => scope.iter().rev().find_map(|earlier| declared(earlier)),
         }
     };
     let spelled = curios_core::Keying {

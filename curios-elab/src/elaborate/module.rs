@@ -25,9 +25,9 @@ use {
     curios_analysis::group_totality,
     curios_core::{
         Advance, Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType,
-        Global, InductDecl, InductParam, Intrinsic, Item, Level, Minted, Module, Places, RecItem,
-        SelfReference, StructDecl, Subterm, Telescope, Term, Totality, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
+        Global, InductDecl, InductParam, Intrinsic, Item, Level, Minted, Module, Nominal, Places,
+        RecItem, SelfReference, StructDecl, Subterm, Telescope, Term, Totality,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
         stamp_declaration_instance, universe_metas,
     },
     curios_utilities::{Plicity, Qualifier, grown},
@@ -1359,11 +1359,8 @@ fn settle_published(
 
     context.restore_budget();
     let alone = Module {
-        items: vec![published.item.clone()].into(),
+        items: vec![carrying(context, published.item.clone())].into(),
         mounts: Vec::new(),
-        induct_decls: published.induct_decls.iter().cloned().collect(),
-        struct_decls: published.struct_decls.iter().cloned().collect(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -1393,28 +1390,26 @@ enum Elaborated {
 
 /// `item` as a module of its own, with the registry entries its names declare as the context holds them: what its goals are found in.
 fn alone(context: &Context, item: &Item) -> Module {
-    let mut module = Module {
-        items: vec![item.clone()].into(),
+    Module {
+        items: vec![carrying(context, item.clone())].into(),
         mounts: Vec::new(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-    };
-    for name in item.declared_names() {
-        if let Some(declaration) = context.induct_decl(name) {
-            module.induct_decls.insert(*name, declaration.clone());
-        }
-        if let Some(declaration) = context.struct_decl(name) {
-            module.struct_decls.insert(*name, declaration.clone());
-        }
-        if let Some(concept) = context.concept(name) {
-            module.concepts.insert(*name, concept.clone());
-        }
     }
+}
 
-    module
+/// `item` with each of its formers carrying the registry entries the context holds under its name: what a finished item is read and assembled as. An entry is elaborated in the context's tables, beside its former and after it, so the one the lowering wrote into the former is replaced here, where the item leaves the elaboration that made it; a former whose name the context holds nothing under keeps the one it has.
+fn carrying(context: &Context, item: Item) -> Item {
+    item.with_nominals(|name, lowered| {
+        Some(match lowered {
+            Nominal::Inductive(_) => Nominal::Inductive(context.induct_decl(name)?.clone()),
+            Nominal::Struct(_) => Nominal::Struct(context.struct_decl(name)?.clone()),
+            Nominal::Concept { .. } => Nominal::Concept {
+                concept: context.concept(name)?.clone(),
+                record: context.struct_decl(name)?.clone(),
+            },
+        })
+    })
 }
 
 /// Each witness `module` declares, under the concept and the key its name states ([`WitnessId`](curios_core::WitnessId)), at the place `order` gives its name. The lowering read both off how the signature is spelled, over every item of the unit, so a whole compile and a recompile hold one key.
@@ -1485,19 +1480,21 @@ fn elaborate_module_suffix<'s>(
     // The unit's own mounts, after its scope's. Mount sets are pairwise disjoint, so the order only fixes which entry a lookup finds first among equals, and there are none.
     context.mount(&module.mounts);
 
-    // Kept so the rebuilt entries can be pulled back out below. `module` declares only its own, prefix or no prefix, so this is every key it has.
-    let induct_keys = module.induct_decls.keys().cloned().collect::<Vec<_>>();
-    let struct_keys = module.struct_decls.keys().cloned().collect::<Vec<_>>();
-
-    for name in &induct_keys {
-        context.register_induct(name, module.induct_decls[name].clone())?;
+    // The entries the lowered formers carry, each registered under its former's name: every family, then every record, then every concept, with the witness markers alongside — witness *table* entries register per item (`elaborate_module_let`), once the elaborated head exists.
+    for (name, nominal) in module.nominals() {
+        if let Some(declaration) = nominal.inductive() {
+            context.register_induct(name, declaration.clone())?;
+        }
     }
-    for name in &struct_keys {
-        context.register_struct(name, module.struct_decls[name].clone())?;
+    for (name, nominal) in module.nominals() {
+        if let Some(record) = nominal.record() {
+            context.register_struct(name, record.clone())?;
+        }
     }
-    // Concept metadata and witness markers, alongside — witness *table* entries register per item (`elaborate_module_let`), once the elaborated head exists. With every concept present, the superclass graph can be validated up front.
-    for (name, concept) in &module.concepts {
-        context.register_concept(name, concept.clone())?;
+    for (name, nominal) in module.nominals() {
+        if let Some(concept) = nominal.concept() {
+            context.register_concept(name, concept.clone())?;
+        }
     }
     for name in &module.witnesses {
         context.mark_witness_declaration(name);
@@ -1631,29 +1628,6 @@ fn elaborate_module_suffix<'s>(
 
     // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `erase` sees elaborated telescopes, zonked where their declarations were published. An entry the context no longer holds was a refused or withheld item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach the kernel and erasure in its lowered form, which nothing zonked.
     let names = survivors.names();
-    // A kept declaration's entries are the baseline's, taken where the unit is assembled.
-    let induct_decls = induct_keys
-        .into_iter()
-        .filter(|name| !kept.contains(name))
-        .filter_map(|name| {
-            let induct_decl = context.induct_decl(&name)?.clone();
-            Some((name, induct_decl))
-        })
-        .collect();
-    let struct_decls = struct_keys
-        .into_iter()
-        .filter(|name| !kept.contains(name))
-        .filter_map(|name| {
-            let struct_decl = context.struct_decl(&name)?.clone();
-            Some((name, struct_decl))
-        })
-        .collect();
-    let concepts = module
-        .concepts
-        .keys()
-        .filter(|name| !kept.contains(*name))
-        .filter_map(|name| Some((*name, context.concept(name)?.clone())))
-        .collect();
     let witnesses = module
         .witnesses
         .iter()
@@ -1673,12 +1647,14 @@ fn elaborate_module_suffix<'s>(
         held,
     } = survivors.into_parts();
 
+    // Each former leaves with the entry the context rebuilt for it: elaborated telescopes, zonked, with the vectors its settling wrote.
+    let items = items
+        .into_iter()
+        .map(|item| carrying(context, item))
+        .collect::<Vec<_>>();
     let module = Module {
         items: items.into(),
         mounts: module.mounts.clone(),
-        induct_decls,
-        struct_decls,
-        concepts,
         witnesses,
         tests,
     };
@@ -1775,9 +1751,6 @@ fn finalize_and_check(
     let nothing = Module {
         items: Vec::new().into(),
         mounts: Vec::new(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -2111,26 +2084,7 @@ fn assembled(
     kept: &BTreeSet<Global>,
     made: Module,
 ) -> (Module, bool) {
-    fn entries<D: Clone>(
-        kept: &BTreeSet<Global>,
-        baseline: &BTreeMap<Global, D>,
-        made: BTreeMap<Global, D>,
-    ) -> BTreeMap<Global, D> {
-        baseline
-            .iter()
-            .filter(|(name, _)| kept.contains(name))
-            .map(|(name, entry)| (*name, entry.clone()))
-            .chain(made)
-            .collect()
-    }
-
-    let Module {
-        mut items,
-        induct_decls,
-        struct_decls,
-        concepts,
-        ..
-    } = made;
+    let Module { mut items, .. } = made;
     let made = items.len();
     items.extend(
         recompile
@@ -2154,9 +2108,6 @@ fn assembled(
     let module = Module {
         items,
         mounts: lowered.mounts.clone(),
-        induct_decls: entries(kept, &recompile.baseline.induct_decls, induct_decls),
-        struct_decls: entries(kept, &recompile.baseline.struct_decls, struct_decls),
-        concepts: entries(kept, &recompile.baseline.concepts, concepts),
         witnesses: lowered
             .witnesses
             .iter()

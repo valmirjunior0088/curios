@@ -30,7 +30,7 @@ pub struct Uncertified {
     text: Rc<PreparedText>,
     /// Elaborated and zonked. This is what the kernel judges and what a successor's elaboration reads where it stands.
     ///
-    /// **Stored apart, and read by item.** A compilation after the unit reads the declarations it names, so the module's archive is kept beside the unit, and a unit restored holds a module whose registries are restored and whose items are each read when something first asks ([`Module::stored`]).
+    /// **Stored apart, and read by item.** A compilation after the unit reads the declarations it names, so the module's archive is kept beside the unit, and a unit restored holds a module whose outline is restored — each item's names and what each is declared as — and whose items are each read when something first asks ([`Module::stored`]).
     #[archived_with(curios_archive::Skip)]
     core: Rc<Module>,
     /// Where `core` holds each name it defines, made the first time the unit is read by name and kept for as long as it is held: no compilation keys the unit again. Never stored, being read off `core`.

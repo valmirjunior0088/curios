@@ -52,7 +52,7 @@ fn a_definition_differing_from_the_environments_is_refused() {
 ///
 /// Declared over the environment's it would be the entry every rule reads, with the clauses that check a declaration passed over: a payload at `Type 5` under a family declared at `Type 0` is refused as `Oversized` standing alone, and by name alone it would be certified against an environment holding a benign `Shadowed`.
 ///
-/// Mutation-checked against the environment's question: with a held registry key never asked after, the entry is refused where the walk writes it and judged all the same, `Oversized` beside the name's refusal.
+/// Mutation-checked against the environment's question: with a held name never asked after, the entry is refused where the walk writes it and judged all the same, `Oversized` beside the name's refusal.
 #[test]
 fn a_registry_entry_differing_from_the_environments_is_refused() {
     let oversized = shadowing_registry(Term::type_at(Level::constant(5)));
@@ -133,7 +133,7 @@ fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
 ///
 /// The module carries the environment's `shadowed` and `Shadowed`, rebuilt so that neither is the environment's allocation, beside `reader : Nat = shadowed`. Each held name is refused once and nothing is judged, `reader` with the rest: the walk's record is empty.
 ///
-/// Mutation-checked against each of the environment's two questions, an item's names and a registry's keys: with either never asked, the module is refused for the other name alone.
+/// Mutation-checked against the environment's question: with a held name never asked after, the module is judged, and each name is refused where the walk writes it, once for each write.
 #[test]
 fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
     let mut module = judged_environment();
@@ -156,7 +156,7 @@ fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
         .collect::<Vec<_>>();
     assert_eq!(
         refused,
-        [shadowed_name(), shadowed_family()].map(|name| (Some(name), Some(Free::from(&name)))),
+        [shadowed_family(), shadowed_name()].map(|name| (Some(name), Some(Free::from(&name)))),
         "a module carrying its environment's own declarations was not refused once for each name",
     );
     assert_eq!(
@@ -166,13 +166,13 @@ fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
     );
 }
 
-/// A name is one declaration across the namespaces: a definition under a name the environment holds as a registry key and under no definition is refused for it.
+/// A name is one declaration whatever it declares: a definition under a name the environment declares a family by is refused for it.
 ///
 /// The definition is well typed, and standing alone it is certified, so the refusal is the name's.
 ///
-/// Mutation-checked against the cross-namespace question: with it removed the definition is judged and the module certified.
+/// Mutation-checked against the environment's question: with a held name never asked after, the definition is judged and refused where the walk writes it.
 #[test]
-fn a_definition_under_a_name_the_environment_holds_as_a_registry_key_is_refused() {
+fn a_definition_under_a_name_the_environment_declares_a_family_by_is_refused() {
     let module = definition_under_the_family();
 
     assert_eq!(
@@ -189,7 +189,7 @@ fn a_definition_under_a_name_the_environment_holds_as_a_registry_key_is_refused(
     );
     assert!(
         redeclares(&verdicts, &shadowed_family()),
-        "a definition under a name held only as a registry key was not refused for the name: {verdicts:?}",
+        "a definition under a family's name was not refused for the name: {verdicts:?}",
     );
 }
 
@@ -222,7 +222,7 @@ fn a_group_the_environment_holds_in_part_is_refused() {
 ///
 /// The walk orders items by what each names, and a name declared twice has two owners: `thm : p` is typed while `p` is `Holds`, the other `p` names `thm` and so is judged after it, and its definition would stand where the first did — the closing `thm` then read at a `p` that reduces to `Absurd`. With `p` declared once the closing term is the `Mismatch` it should be.
 ///
-/// Mutation-checked against the set of names already declared: with it never consulted the program is certified at `Absurd` with no refusal.
+/// Mutation-checked against the set of names already declared: with it never consulted the module is judged, and `p` is refused where the walk writes it again and no sooner.
 #[test]
 fn a_name_declared_by_two_items_is_refused() {
     let once = fixture_verdicts(
@@ -261,13 +261,13 @@ fn a_name_declared_by_two_items_is_refused() {
     );
 }
 
-/// A name is held by one registry of a module: a `struct` and an `induct` under one name are refused.
+/// A name declares one nominal: a `struct` and an `induct` under one name are refused.
 ///
-/// Every analysis over the declaration set files a declaration under its name, so of two under one name one is never analysed: `struct Bad { f : (Bad) -> Absurd }` beside an empty `induct Bad` is read as the family twice, and the record's negative occurrence closes Curry's paradox. With the record alone it is the `NotPositive` it should be.
+/// Every analysis over the declaration set files a declaration under its name, so of two under one name one is never analysed: `struct Bad { f : (Bad) -> Absurd }` beside an empty `induct Bad` read as the family twice lets the record's negative occurrence close Curry's paradox. With the record alone it is the `NotPositive` it should be. An entry is held by its former, so the two are two items under the name, refused as `a_name_declared_by_two_items_is_refused`'s are.
 ///
-/// Mutation-checked against the question of the other registry: with it removed the program is certified at `Absurd` with no refusal.
+/// Mutation-checked against the set of names already declared: with it never consulted the module is judged, `Bad` is refused where the walk writes it again, and the record is analysed with the item that declares it, `NotPositive` beside the name's refusal.
 #[test]
-fn a_name_in_both_registries_is_refused() {
+fn a_name_under_a_family_and_a_record_is_refused() {
     let alone = fixture_verdicts(
         &record_negative_in_itself(false),
         1_000_000,
@@ -289,13 +289,13 @@ fn a_name_in_both_registries_is_refused() {
     );
     assert!(
         redeclares(&both, &negative_record_name()),
-        "a name in both registries was not refused: {both:?}",
+        "a name under a family and a record was not refused: {both:?}",
     );
 }
 
-/// A driver mounts a unit once. Mounting one twice is a construction bug in every namespace, a registry entry as much as a definition.
+/// A driver mounts a unit once. Mounting one twice is a construction bug, a family's unit as much as a definition's.
 ///
-/// Mutation-checked against the registry's assertion: extended over the entry already there, the second mount returns.
+/// Mutation-checked against the assertion: without it the second mount returns.
 #[test]
 #[should_panic(expected = "a mounted unit redeclared a name already in scope")]
 fn a_registry_entry_mounted_twice_is_a_construction_bug() {

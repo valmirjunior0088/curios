@@ -68,7 +68,7 @@ pub(crate) fn type_positions(module: &Module, entry: Option<&Entrypoint>) -> Vec
     }
 
     // A declaration's telescopes are types by construction, and its parameter and field types can name anything.
-    for (name, declaration) in &module.induct_decls {
+    for (name, declaration) in &module.induct_decls() {
         let site: Rc<str> = format!("a parameter of '{name}'").into();
         entries(&declaration.arity, &site, &mut positions);
         for (tag, constructor) in &declaration.constructors {
@@ -76,7 +76,7 @@ pub(crate) fn type_positions(module: &Module, entry: Option<&Entrypoint>) -> Vec
             entries(&constructor.telescope, &site, &mut positions);
         }
     }
-    for (name, declaration) in &module.struct_decls {
+    for (name, declaration) in &module.struct_decls() {
         let site: Rc<str> = format!("a parameter of '{name}'").into();
         entries(&declaration.arity, &site, &mut positions);
         let site: Rc<str> = format!("a field of '{name}'").into();

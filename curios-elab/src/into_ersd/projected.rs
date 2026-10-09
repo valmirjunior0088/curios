@@ -10,8 +10,8 @@ use {
     super::Erasures,
     crate::{Defined, InScope},
     curios_core::{
-        ConceptDecl, Definition, Global, InductDecl, InductParam, Item, Module, Place, Places,
-        RecGroup, StructDecl, Term, WitnessKey, project_erased_universes,
+        ConceptDecl, Declared, Definition, Global, InductDecl, InductParam, Item, Module, Place,
+        Places, RecGroup, StructDecl, Term, WitnessKey, project_erased_universes,
     },
     std::{cell::OnceCell, collections::HashMap},
 };
@@ -119,15 +119,18 @@ impl Projection {
     pub fn of(module: &Module) -> Self {
         Self {
             items: (0..module.items.len()).map(|_| OnceCell::new()).collect(),
+            // Which names declare a nominal is what each place says, so a cell is made for each with no entry read.
             inducts: module
-                .induct_decls
-                .keys()
-                .map(|name| (*name, OnceCell::new()))
+                .formers()
+                .into_iter()
+                .filter(|(_, declared)| *declared == Declared::Inductive)
+                .map(|(name, _)| (name, OnceCell::new()))
                 .collect(),
             structs: module
-                .struct_decls
-                .keys()
-                .map(|name| (*name, OnceCell::new()))
+                .formers()
+                .into_iter()
+                .filter(|(_, declared)| *declared != Declared::Inductive)
+                .map(|(name, _)| (name, OnceCell::new()))
                 .collect(),
         }
     }
@@ -204,13 +207,27 @@ impl<'a> Unit<'a> {
     fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         let slot = self.projection.inducts.get(name)?;
 
-        Some(slot.get_or_init(|| project_induct(&self.module.induct_decls[name])))
+        Some(slot.get_or_init(|| {
+            let declaration = self
+                .module
+                .induct_decl(&self.places, name)
+                .expect("a name declared as an inductive's former carries its entry");
+
+            project_induct(declaration)
+        }))
     }
 
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         let slot = self.projection.structs.get(name)?;
 
-        Some(slot.get_or_init(|| project_struct(&self.module.struct_decls[name])))
+        Some(slot.get_or_init(|| {
+            let declaration = self
+                .module
+                .struct_decl(&self.places, name)
+                .expect("a name declared as a record's former carries its entry");
+
+            project_struct(declaration)
+        }))
     }
 }
 

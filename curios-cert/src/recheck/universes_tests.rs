@@ -10,7 +10,7 @@ use {
         UniverseContext, UniverseMetaId, UniverseParam, Variance,
     },
     curios_utilities::Qualifier,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
 
 /// A declaration's universe context is *assumed* while checking it, so an unsatisfiable one is a hypothesis set that proves anything.
@@ -45,9 +45,6 @@ fn an_unsatisfiable_universe_context_is_refused() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)].into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -88,9 +85,6 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)].into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -322,9 +316,6 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
             ),
         ]
         .into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -400,9 +391,6 @@ fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_
             Term::intrinsic(Intrinsic::Nat(Nat::new(5usize))),
         )]
         .into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };

@@ -257,15 +257,19 @@ impl<'a> Baseline<'a> {
         kind: &curios_core::DefinitionKind,
         lowered: &mut Lowering,
     ) {
-        let core = &self.unit.core;
-        if let Some(entry) = core.induct_decls.get(held) {
-            lowered.induct_decls.insert(name, entry.clone());
-        }
-        if let Some(entry) = core.struct_decls.get(held) {
-            lowered.struct_decls.insert(name, entry.clone());
-        }
-        if let Some(entry) = core.concepts.get(held) {
-            lowered.concepts.insert(name, entry.clone());
+        // A kept former carries the entry the baseline lowered with it.
+        match kind.nominal() {
+            Some(curios_core::Nominal::Inductive(entry)) => {
+                lowered.induct_decls.insert(name, entry.clone());
+            }
+            Some(curios_core::Nominal::Struct(record)) => {
+                lowered.struct_decls.insert(name, record.clone());
+            }
+            Some(curios_core::Nominal::Concept { concept, record }) => {
+                lowered.struct_decls.insert(name, record.clone());
+                lowered.concepts.insert(name, concept.clone());
+            }
+            None => {}
         }
         match kind {
             curios_core::DefinitionKind::Witness => {

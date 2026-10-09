@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{Free, Global, Intrinsic, Module, Nat, Reads, Term},
     curios_utilities::Qualifier,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
 
 fn global(symbol: &str) -> Global {
@@ -44,9 +44,6 @@ fn reading_module() -> Module {
             authored(&global("four"), nat(), literal(4)),
         ]
         .into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }

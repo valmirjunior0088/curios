@@ -248,9 +248,6 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
 
     let mut lowered_prefix = lowered.module.clone();
     lowered_prefix.items = lowered_prefix.items.iter().take(1).cloned().collect();
-    lowered_prefix.induct_decls.clear();
-    lowered_prefix.struct_decls.clear();
-    lowered_prefix.concepts.clear();
     lowered_prefix.witnesses.clear();
     lowered_prefix.tests.clear();
     let prelude = curios_elab::elaborate_and_zonk_module(

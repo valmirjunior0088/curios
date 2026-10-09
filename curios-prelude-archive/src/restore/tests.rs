@@ -189,10 +189,10 @@ fn every_registry_entry_is_keyed_by_a_name_an_item_of_its_root_declares() {
                 .flat_map(Item::declared_names)
                 .collect::<BTreeSet<_>>();
             for name in core
-                .induct_decls
+                .induct_decls()
                 .keys()
-                .chain(core.struct_decls.keys())
-                .chain(core.concepts.keys())
+                .chain(core.struct_decls().keys())
+                .chain(core.concepts().keys())
             {
                 assert!(declared.contains(name), "no item declares {name}");
             }
@@ -225,8 +225,7 @@ fn every_registered_concept_declares_its_method_after_restore() {
                 .iter()
                 .find_map(|root| {
                     root.core()
-                        .concepts
-                        .get(&Global::Authored(target.concept.qualifier()))
+                        .concept(root.places(), &Global::Authored(target.concept.qualifier()))
                 })
                 .unwrap_or_else(|| panic!("missing concept {}", target.concept.symbol()));
             assert!(
@@ -464,13 +463,16 @@ fn stored_prelude_measurements() {
             );
             println!(
                 "  inductives                   {:>10}",
-                core.induct_decls.len()
+                core.induct_decls().len()
             );
             println!(
                 "  structures                   {:>10}",
-                core.struct_decls.len()
+                core.struct_decls().len()
             );
-            println!("  concepts                     {:>10}", core.concepts.len());
+            println!(
+                "  concepts                     {:>10}",
+                core.concepts().len()
+            );
 
             certifications.push(rechecked.certification);
             cores.push(core);
@@ -713,15 +715,15 @@ fn family_variance_inventory() {
             .iter()
             .flat_map(|root| {
                 let core = root.core();
-                let inducts = core.induct_decls.iter().map(|(name, declaration)| {
+                let inducts = core.induct_decls().into_iter().map(|(name, declaration)| {
                     let count = declaration.universe_context.parameter_count;
-                    (*name, (0..count).map(|i| declaration.variance(i)).collect())
+                    (name, (0..count).map(|i| declaration.variance(i)).collect())
                 });
-                let structs = core.struct_decls.iter().map(|(name, declaration)| {
+                let structs = core.struct_decls().into_iter().map(|(name, declaration)| {
                     let count = declaration.universe_context.parameter_count;
-                    (*name, (0..count).map(|i| declaration.variance(i)).collect())
+                    (name, (0..count).map(|i| declaration.variance(i)).collect())
                 });
-                inducts.chain(structs)
+                inducts.chain(structs).collect::<Vec<_>>()
             })
             .collect::<BTreeMap<Global, Vec<Variance>>>();
 

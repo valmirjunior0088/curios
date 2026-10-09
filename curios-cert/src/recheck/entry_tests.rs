@@ -5,7 +5,7 @@ use {
     crate::{Error, Globals},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Entrypoint, Intrinsic, Module, Nat, Program, Term},
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
 
 /// A program of nothing but `entry`.
@@ -14,9 +14,6 @@ fn entry_module(entry: Entrypoint) -> Program {
         module: Module {
             mounts: Vec::new(),
             items: Vec::new().into(),
-            induct_decls: BTreeMap::new(),
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },

@@ -34,7 +34,7 @@ where
 
 pub(crate) type OrderedMap = Via<SortedEntries>;
 
-/// A lowered module archived without its items: what a unit's lowering keeps for every unit lowered after it, which reads the registry entries it wrote. An item is stored on its own, beside the unit, and read by whoever names it.
+/// A lowered module archived without its items: its mounts, its witnesses and its tests, which is what a unit's lowering keeps of it for every unit lowered after it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored on its own, beside the unit, and read by whoever names it.
 pub(crate) struct Itemless;
 
 impl Proxy<curios_core::Module> for Itemless {
@@ -44,9 +44,6 @@ impl Proxy<curios_core::Module> for Itemless {
         curios_core::Module {
             items: Vec::new().into(),
             mounts: module.mounts.clone(),
-            induct_decls: module.induct_decls.clone(),
-            struct_decls: module.struct_decls.clone(),
-            concepts: module.concepts.clone(),
             witnesses: module.witnesses.clone(),
             tests: module.tests.clone(),
         }

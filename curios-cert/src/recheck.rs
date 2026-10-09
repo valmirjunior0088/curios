@@ -12,7 +12,7 @@
 //!
 //! Every compilation calls this. `curios-pipeline` certifies each unit it compiles — [`certify_module`] for a unit, [`certify_module_over`] for one compiled over a baseline, [`certify_program`] for the entry — with the units in scope as its [`Globals`], and fails the build on a refusal, judging the unit's own items while the scope's are taken on the word of the walk that certified each of them: a unit is certified by construction, and the prelude's word is `curios-prelude`'s build script, which runs the same walk over each root, against the roots before it, and fails the build on any refusal. An archive that exists is one whose every item the kernel accepted.
 //!
-//! What is *not* re-judged is the environment, and nothing of it is handed in again. Before anything is judged the walk refuses a module for every name it declares a second time — a name any namespace of the environment holds, whatever the module declares under it; a second item under one name; one name in both registries — whole, as [`Error::Redeclared`], because a name is one declaration and every pass below files by name. So every declaration a module carries is one this walk judges, or one whose verdict it adopts from a baseline. Nothing reads a length, and nothing requires the environment's units to sit anywhere in particular — which is the difference between an environment and a prefix.
+//! What is *not* re-judged is the environment, and nothing of it is handed in again. Before anything is judged the walk refuses a module for every name it declares a second time — a name any namespace of the environment holds, whatever the module declares under it, and a second item under one name — whole, as [`Error::Redeclared`], because a name is one declaration and every pass below files by name. So every declaration a module carries is one this walk judges, or one whose verdict it adopts from a baseline. Nothing reads a length, and nothing requires the environment's units to sit anywhere in particular — which is the difference between an environment and a prefix.
 
 #[cfg(test)]
 mod adoption_tests;
@@ -341,7 +341,7 @@ fn struct_residue(declaration: &StructDecl) -> Option<Error> {
 
 /// Every name `module` declares a second time, each refused once, before anything of the module is judged.
 ///
-/// **A name is one declaration.** The walk defines a name once, the kernel's environment holds one entry under it, and every analysis over the declaration set files a declaration under its name. A second declaration under a name is therefore never one more thing to judge: written over the first it changes what an accepted declaration states, and filed beside it in the other registry it leaves one of the two unanalysed. So a module is refused for a name an earlier item or member declares, for a name both registries hold, and for a name any namespace of `globals` holds.
+/// **A name is one declaration.** The walk defines a name once, the kernel's environment holds one entry under it, and every analysis over the declaration set files a declaration under its name. A second declaration under a name is therefore never one more thing to judge: written over the first it changes what an accepted declaration states, and declaring a second nominal under it leaves one of the two unanalysed. So a module is refused for a name an earlier item or member declares and for a name a unit of `globals` declares; an entry is held by its former, so a name under two entries is a name under two items.
 ///
 /// **Whatever it declares under a held name.** What the environment holds was judged by the walk that built it and is read where it stands, so a module has no reason to carry one of its declarations, and one that does is refused as any other redeclaration is: no comparison decides that two declarations under one name are one.
 ///
@@ -374,22 +374,10 @@ fn redeclarations(module: &Module, globals: &Globals) -> Vec<Verdict> {
         }
     }
 
-    for name in module.induct_decls.keys() {
-        if module.struct_decls.contains_key(name) || globals.in_scope(name) {
-            refuse(name);
-        }
-    }
-    for name in module.struct_decls.keys() {
-        // A name both registries hold is refused once, above.
-        if !module.induct_decls.contains_key(name) && globals.in_scope(name) {
-            refuse(name);
-        }
-    }
-
     redeclared
 }
 
-/// The entries of one of a module's registries under the names `among` holds, in key order.
+/// The entries of one kind a module declares, under the names `among` holds, in key order.
 fn entries_among<'a, D>(
     registry: &'a BTreeMap<Global, D>,
     among: &'a BTreeSet<Global>,
@@ -437,11 +425,13 @@ fn verdicts_within<'s>(
 
     // The declarations whose terms are the baseline's: which of the module's items they are, by place, and the names they declare. The walk that filed the baseline held those terms to every rule a declaration's own terms decide — its universe contexts, the levels and binders it mentions, elaboration's residue — so the boundary passes below judge the rest, whether or not a verdict is adopted.
     let mut adopting = baseline.map(Adopting::over);
+    // The registry entries the module's formers carry, each under the name that declares it: read off the items once, for the walk.
+    let (inducts, structs) = (module.induct_decls(), module.struct_decls());
     let mut kept = vec![false; module.items.len()];
     let mut unchanged: HashSet<Global> = HashSet::new();
     if let Some(baseline) = baseline {
         for (index, item) in module.items.iter().enumerate() {
-            if baseline.holds(item, module) {
+            if baseline.holds(item) {
                 kept[index] = true;
                 unchanged.extend(item.declared_names().into_iter().copied());
             }
@@ -461,8 +451,8 @@ fn verdicts_within<'s>(
             .copied()
             .collect::<BTreeSet<_>>()
     };
-    let changed_inducts = changed_entries(&mut module.induct_decls.keys());
-    let changed_structs = changed_entries(&mut module.struct_decls.keys());
+    let changed_inducts = changed_entries(&mut inducts.keys());
+    let changed_structs = changed_entries(&mut structs.keys());
 
     // The environment is the kernel's starting scope, not something consulted beside it: an item already in scope stands exactly as a refused item does — at its declared type, with its real body — so every judged item downstream sees what a walk that judged everything would have shown it. A baseline is beneath the walk as the scope is, answering for the declarations whose verdict the walk adopts.
     kernel.seed(globals);
@@ -487,10 +477,10 @@ fn verdicts_within<'s>(
     }
 
     // Every universe context this walk will assume, decided before any of it is assumed. An unsatisfiable set makes `entails` answer anything, so a later refusal would be reported against whichever item happened to ask a level question first rather than against the declaration that carries the contradiction.
-    let contexts = entries_among(&module.induct_decls, &changed_inducts)
+    let contexts = entries_among(&inducts, &changed_inducts)
         .map(|(name, declaration)| (*name, &declaration.universe_context))
         .chain(
-            entries_among(&module.struct_decls, &changed_structs)
+            entries_among(&structs, &changed_structs)
                 .map(|(name, declaration)| (*name, &declaration.universe_context)),
         )
         .collect::<Vec<_>>();
@@ -514,7 +504,7 @@ fn verdicts_within<'s>(
     }
 
     // A registry entry is data; what it declares — a literal result sort, sized constructors, and each index target typed against the arity at the constructor's own parameters — is `check_induct_decl`'s to check, below. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
-    for (name, declaration) in entries_among(&module.induct_decls, &changed_inducts) {
+    for (name, declaration) in entries_among(&inducts, &changed_inducts) {
         if let Some(error) = induct_residue(declaration) {
             verdicts.push(Verdict {
                 name: Some(*name),
@@ -522,7 +512,7 @@ fn verdicts_within<'s>(
             });
         }
     }
-    for (name, declaration) in entries_among(&module.struct_decls, &changed_structs) {
+    for (name, declaration) in entries_among(&structs, &changed_structs) {
         if let Some(error) = struct_residue(declaration) {
             verdicts.push(Verdict {
                 name: Some(*name),
@@ -565,7 +555,7 @@ fn verdicts_within<'s>(
     }
 
     // The nominal registry first: a definition's type may name any declaration in the module, including one whose own definitions come later. The environment refuses a name it holds, which the refusal above rules out for every write this walk makes; a refusal is reported all the same, being the one thing a walk makes of a write it cannot perform.
-    for (name, declaration) in &module.induct_decls {
+    for (name, declaration) in &inducts {
         if let Err(error) = kernel.declare_induct(name, declaration) {
             verdicts.push(Verdict {
                 name: Some(*name),
@@ -573,7 +563,7 @@ fn verdicts_within<'s>(
             });
         }
     }
-    for (name, declaration) in &module.struct_decls {
+    for (name, declaration) in &structs {
         if let Err(error) = kernel.declare_struct(name, declaration) {
             verdicts.push(Verdict {
                 name: Some(*name),
@@ -591,11 +581,7 @@ fn verdicts_within<'s>(
     // The definitions not known to terminate, as the walk comes to know them: the environment's, then each item's as it is judged.
     let mut totals = Totals::seeded(kernel, globals);
     let mut local_memo = HashMap::new();
-    // The registry entries no item has been accepted with yet, and the vector the walk filed for each one it accepted.
-    let mut unaccepted = (
-        module.induct_decls.keys().copied().collect::<BTreeSet<_>>(),
-        module.struct_decls.keys().copied().collect::<BTreeSet<_>>(),
-    );
+    // The vector the walk filed for each registry entry it accepted.
     let mut polarities: BTreeMap<Global, Vec<Polarity>> = BTreeMap::new();
 
     // The items as the module stores them, which is every item after the items it reaches where the module was made by the elaborator (`Module::ordered`). The walk sorts nothing: an item that names one stored after it finds the name unbound, and a family it stores in one accepted after it finds no vector filed, each of which refuses.
@@ -605,17 +591,15 @@ fn verdicts_within<'s>(
         // A declaration whose terms are the baseline's and whose every recorded read stands takes the baseline's verdict, and stands as the walk leaves any item it does not judge.
         if let Some(adopting) = &mut adopting
             && kept[index]
-            && let Some(certified) = adopting.adopts(item, module, |name| globals.in_scope(name))
+            && let Some(certified) = adopting.adopts(item, |name| globals.in_scope(name))
         {
-            let adopted = adopt(kernel, adopting.baseline(), item, module, &certified);
+            let adopted = adopt(kernel, adopting.baseline(), item, &certified);
             verdicts.extend(adopted.refusals);
             reads.extend(adopted.reads);
             for name in adopted.partial {
                 totals.adopt(name);
             }
             for (name, vector) in adopted.vectors {
-                unaccepted.0.remove(&name);
-                unaccepted.1.remove(&name);
                 polarities.insert(name, vector);
             }
             adopting.adopted(item);
@@ -724,18 +708,12 @@ fn verdicts_within<'s>(
             });
         }
 
-        // The registry entries the item declares, accepted with it: an item follows every name its entries' telescopes mention, so each is defined by now.
-        let declared = item.declared_names();
-        let inducts = taken(&module.induct_decls, &mut unaccepted.0, |name| {
-            declared.contains(&name)
-        });
-        let structs = taken(&module.struct_decls, &mut unaccepted.1, |name| {
-            declared.contains(&name)
-        });
+        // The registry entries the item's formers carry, accepted with it: an item follows every name its entries' telescopes mention, so each is defined by now.
+        let (carried_inducts, carried_structs) = carried(item);
         accept(
             kernel,
-            &inducts,
-            &structs,
+            &carried_inducts,
+            &carried_structs,
             &mut verdicts,
             &mut reads,
             &mut polarities,
@@ -743,21 +721,9 @@ fn verdicts_within<'s>(
 
         // How the item came out against the baseline's, for the declarations that read it.
         if let Some(adopting) = &mut adopting {
-            adopting.judged(item, module, |name| totals.partial(name), &polarities);
+            adopting.judged(item, |name| totals.partial(name), &polarities);
         }
     }
-
-    // An entry no item declares has no judgment to be accepted with, and is accepted here, with the others like it, once every item has been defined.
-    let inducts = taken(&module.induct_decls, &mut unaccepted.0, |_| true);
-    let structs = taken(&module.struct_decls, &mut unaccepted.1, |_| true);
-    accept(
-        kernel,
-        &inducts,
-        &structs,
-        &mut verdicts,
-        &mut reads,
-        &mut polarities,
-    );
 
     // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it.
     if let Some(entry) = entry {
@@ -818,7 +784,6 @@ fn adopt(
     kernel: &mut Kernel,
     baseline: Baseline<'_>,
     item: &Item,
-    module: &Module,
     certified: &[(Totality, &Reads)],
 ) -> Adopted {
     let names = item.declared_names();
@@ -858,7 +823,7 @@ fn adopt(
                 });
             }
         }
-        if module.induct_decls.contains_key(name) || module.struct_decls.contains_key(name) {
+        if item.nominal(name).is_some() {
             let vector = baseline
                 .certification
                 .polarities(name)
@@ -872,25 +837,20 @@ fn adopt(
     adopted
 }
 
-/// The entries of `registry` among `unaccepted` that `selected` picks, taken out of it.
-fn taken<D: Clone>(
-    registry: &BTreeMap<Global, D>,
-    unaccepted: &mut BTreeSet<Global>,
-    selected: impl Fn(&Global) -> bool,
-) -> BTreeMap<Global, D> {
-    let names = unaccepted
-        .iter()
-        .filter(|name| selected(name))
-        .copied()
-        .collect::<Vec<_>>();
+/// The registry entries `item`'s formers carry, as the two maps a set of declarations is accepted as: a family's, and a record's, a structure's or the one a concept's witnesses are values of.
+fn carried(item: &Item) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
+    let mut inducts = BTreeMap::new();
+    let mut structs = BTreeMap::new();
+    for (name, nominal) in item.nominals() {
+        if let Some(declaration) = nominal.inductive() {
+            inducts.insert(*name, declaration.clone());
+        }
+        if let Some(record) = nominal.record() {
+            structs.insert(*name, record.clone());
+        }
+    }
 
-    names
-        .into_iter()
-        .filter_map(|name| {
-            unaccepted.remove(&name);
-            registry.get(&name).map(|entry| (name, entry.clone()))
-        })
-        .collect()
+    (inducts, structs)
 }
 
 /// The verdict a refused positivity analysis is reported as.

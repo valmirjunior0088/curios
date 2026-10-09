@@ -128,17 +128,23 @@ impl ItemMark {
             context.remove_struct(name);
             context.remove_concept(name);
             context.forget(&Free::from(*name));
-            if let Some(declaration) = module.induct_decls.get(*name) {
+        }
+        // As `module` seeded them: the entry each lowered former carries.
+        let seeded = module
+            .nominals()
+            .filter(|(name, _)| declared.contains(name));
+        for (name, nominal) in seeded {
+            if let Some(declaration) = nominal.inductive() {
                 context
                     .register_induct(name, declaration.clone())
                     .expect("the entry was just taken out");
             }
-            if let Some(declaration) = module.struct_decls.get(*name) {
+            if let Some(record) = nominal.record() {
                 context
-                    .register_struct(name, declaration.clone())
+                    .register_struct(name, record.clone())
                     .expect("the entry was just taken out");
             }
-            if let Some(concept) = module.concepts.get(*name) {
+            if let Some(concept) = nominal.concept() {
                 context
                     .register_concept(name, concept.clone())
                     .expect("the entry was just taken out");

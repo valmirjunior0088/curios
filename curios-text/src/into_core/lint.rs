@@ -159,10 +159,7 @@ fn kept(name: &Qualifier) -> bool {
 fn is_reportable(kind: &curios_core::DefinitionKind) -> bool {
     matches!(
         kind,
-        curios_core::DefinitionKind::Authored
-            | curios_core::DefinitionKind::InductiveType
-            | curios_core::DefinitionKind::StructType
-            | curios_core::DefinitionKind::ConceptType
+        curios_core::DefinitionKind::Authored | curios_core::DefinitionKind::Nominal(_)
     )
 }
 

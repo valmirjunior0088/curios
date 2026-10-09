@@ -110,22 +110,19 @@ impl<'a> Standing<'a> {
 
     fn induct_decl(&self, name: &Global) -> Option<&'a InductDecl> {
         self.module
-            .induct_decls
-            .get(name)
+            .induct_decl(self.places(), name)
             .filter(|_| self.answers(name))
     }
 
     fn struct_decl(&self, name: &Global) -> Option<&'a StructDecl> {
         self.module
-            .struct_decls
-            .get(name)
+            .struct_decl(self.places(), name)
             .filter(|_| self.answers(name))
     }
 
     fn concept(&self, name: &Global) -> Option<&'a ConceptDecl> {
         self.module
-            .concepts
-            .get(name)
+            .concept(self.places(), name)
             .filter(|_| self.answers(name))
     }
 

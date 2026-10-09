@@ -6,7 +6,10 @@ use {
         Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit, compile_unit_over,
         tests::test_support::{assert_stored_alike, compile_with_units},
     },
-    curios_core::{Anchors, Certification, DefinitionKind, Global, Imports, Item, Module, Sharing},
+    curios_core::{
+        Anchors, Certification, Definition, DefinitionKind, Global, Imports, Item, Module, Nominal,
+        Sharing, Totality,
+    },
     curios_elab::{
         Context, ErasedUnit, Error, Established, Recompile, Recompiled, Traces,
         elaborate_and_zonk_unit_over,
@@ -593,9 +596,9 @@ fn differences(whole: &Module, replayed: &Module, names: &BTreeSet<Global>) -> V
         }
     }
     for name in names {
-        if whole.induct_decls.get(name) != replayed.induct_decls.get(name)
-            || whole.struct_decls.get(name) != replayed.struct_decls.get(name)
-            || whole.concepts.get(name) != replayed.concepts.get(name)
+        if whole.induct_decls().get(name) != replayed.induct_decls().get(name)
+            || whole.struct_decls().get(name) != replayed.struct_decls().get(name)
+            || whole.concepts().get(name) != replayed.concepts().get(name)
         {
             differences.push(format!("{}: its registry entry", name.symbol()));
         }
@@ -717,6 +720,98 @@ fn std_replay_census() {
                 "beside {padding} unrelated definitions: {differing} of {} declarations differ, {refused} are refused, {retraced} ask otherwise, {beside} take another declaration with them",
                 declarations.len()
             );
+        }
+    });
+}
+
+/// What a type former of the prelude holds that its entry does not spell: each former of `/sys` and `/std` spelled again from the entry it carries ([`Definition::former`]) and compared, part by part, with the one the archive holds. What elaboration stamps on a definition is compared with what the entry gives for it: a former calls nothing, so it is total, and a former that is no member of a group holds each level as its entry does, a member of one storing no vector. A former is a function of its entry exactly where this reports nothing, and what it reports is what deriving every former would have to account for. A measurement, so it reports rather than asserts; counted.
+#[test]
+#[ignore = "measurement: spells each type former of the prelude from the entry it carries and reports the parts that differ from the stored one"]
+fn std_former_derivation() {
+    /// How much of a differing term a line shows.
+    const SHOWN: usize = 400;
+    /// How many differing formers of one kind are shown in full.
+    const EXAMPLES: usize = 4;
+
+    with_prelude(|prelude| {
+        println!("\n=== each type former of the prelude, spelled from its entry ===");
+        let mut tally: BTreeMap<(&str, &str), usize> = BTreeMap::new();
+        let mut shown: BTreeMap<&str, usize> = BTreeMap::new();
+        for root in prelude {
+            let definitions = root.core().items.iter().flat_map(|item| {
+                let grouped = matches!(item, Item::Rec(_));
+                item.definitions()
+                    .into_iter()
+                    .map(move |stored| (grouped, stored))
+            });
+            for (grouped, stored) in definitions {
+                let Some(nominal) = stored.kind.nominal() else {
+                    continue;
+                };
+                let (kind, variances) = match nominal {
+                    Nominal::Inductive(declaration) => ("induct", &declaration.variances),
+                    Nominal::Struct(record) => ("struct", &record.variances),
+                    Nominal::Concept { record, .. } => ("concept", &record.variances),
+                };
+                let derived = Definition {
+                    totality: Totality::Total,
+                    variances: match grouped {
+                        true => Vec::new(),
+                        false => variances.clone(),
+                    },
+                    ..Definition::former(stored.name, stored.island, nominal.clone())
+                };
+                let parts = [
+                    (
+                        "universe context",
+                        stored.universe_context != derived.universe_context,
+                    ),
+                    ("type", stored.type_ != derived.type_),
+                    ("body", stored.body != derived.body),
+                    ("totality", stored.totality != derived.totality),
+                    ("variances", stored.variances != derived.variances),
+                    ("proof", stored.proof != derived.proof),
+                ]
+                .into_iter()
+                .filter_map(|(part, differs)| differs.then_some(part))
+                .collect::<Vec<_>>();
+
+                *tally.entry((kind, "formers")).or_default() += 1;
+                if parts.is_empty() {
+                    *tally.entry((kind, "alike")).or_default() += 1;
+                    continue;
+                }
+                for part in &parts {
+                    *tally.entry((kind, *part)).or_default() += 1;
+                }
+                let examples = shown.entry(kind).or_default();
+                if *examples < EXAMPLES {
+                    *examples += 1;
+                    let cut = |term: &dyn ToString| {
+                        term.to_string().chars().take(SHOWN).collect::<String>()
+                    };
+                    println!("{kind} {}: {}", stored.name.symbol(), parts.join(", "));
+                    if stored.type_ != derived.type_ {
+                        println!("  stored type   {}", cut(&stored.type_));
+                        println!("  derived type  {}", cut(&derived.type_));
+                    }
+                    if stored.body != derived.body {
+                        println!("  stored body   {}", cut(&stored.body));
+                        println!("  derived body  {}", cut(&derived.body));
+                    }
+                    if stored.totality != derived.totality {
+                        println!("  stored totality   {:?}", stored.totality);
+                        println!("  derived totality  {:?}", derived.totality);
+                    }
+                    if stored.variances != derived.variances {
+                        println!("  stored variances   {:?}", stored.variances);
+                        println!("  derived variances  {:?}", derived.variances);
+                    }
+                }
+            }
+        }
+        for ((kind, part), count) in tally {
+            println!("{kind:<8} {part:<17} {count:>5}");
         }
     });
 }

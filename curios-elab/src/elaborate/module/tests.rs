@@ -6,9 +6,10 @@ use {
     curios_core::{
         Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item, Level, Minted,
         Module, Nat, Telescope, Term, Totality, UniverseContext, UniverseParam,
+        test_support::declaring,
     },
     curios_utilities::Qualifier,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
 
 fn context() -> Context<'static> {
@@ -74,9 +75,6 @@ fn module(items: Vec<Item>) -> Module {
     Module {
         items: items.into(),
         mounts: Vec::new(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -158,30 +156,28 @@ fn a_name_reported_broken_before_elaboration_withholds_its_dependents_from_the_s
 fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
     let mut context = context();
     context.set_broken(BTreeSet::from([nominal("T")]));
-    let mut module = module(vec![let_item(
+    let module = module(vec![let_item(
         "T",
         Term::type_ground(),
         Term::induct_type(nominal("T"), Vec::<Term>::new(), Vec::<Term>::new()),
     )]);
-    module.induct_decls.insert(
-        nominal("T"),
-        InductDecl {
-            universe_context: UniverseContext::empty(),
-            arity: Telescope::Done(Box::new(Telescope::Done(Box::new(())))),
-            constructors: Vec::new(),
-            result_sort: Term::type_ground(),
-            module: Qualifier::empty(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    let entry = InductDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::Done(Box::new(Telescope::Done(Box::new(())))),
+        constructors: Vec::new(),
+        result_sort: Term::type_ground(),
+        module: Qualifier::empty(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let module = declaring(module, [(nominal("T"), entry)], [], []);
 
     let elaborated = elaborate_and_zonk_module(&mut context, &module, &Minted::default())
         .expect("nothing was refused");
 
     assert!(elaborated.items.is_empty());
-    assert!(elaborated.induct_decls.is_empty());
+    assert!(elaborated.induct_decls().is_empty());
     assert!(context.induct_decl(&nominal("T")).is_none());
 }
 

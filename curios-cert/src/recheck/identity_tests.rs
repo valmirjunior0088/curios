@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{Entrypoint, Free, Global, Intrinsic, Module, Nat, Program, Term},
     curios_utilities::Qualifier,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
 
 /// The indices a stray local is tried at: every one the kernel mints first, so a walk that let the local through would open a binder carrying the same identity at one of them.
@@ -33,9 +33,6 @@ fn holding(items: Vec<curios_core::Item>) -> Module {
     Module {
         items: items.into(),
         mounts: Vec::new(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }

@@ -10,7 +10,7 @@ use {
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
         Entrypoint, Extent, Free, Func, FuncType, Global, InductDecl, InductParam, InductType,
         Instance, InstanceHead, Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar,
-        MetavarId, MetavarOrigin, Minted, Module, NodeMemo, Proj, Rec, RecGroup, RecItem,
+        MetavarId, MetavarOrigin, Minted, Module, NodeMemo, Nominal, Proj, Rec, RecGroup, RecItem,
         RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
         TupleType, UniverseContext, UniverseError, UniverseMetaId, Var, Variant, Visit,
         project_erased_universes, rewrite_universe_levels_scoped_shared, shift_universe_params,
@@ -454,7 +454,7 @@ impl Schemes {
             ),
             inducts: Rc::new(
                 module
-                    .induct_decls
+                    .induct_decls()
                     .iter()
                     .map(|(name, declaration)| {
                         (*name, declaration.universe_context.parameter_count)
@@ -463,7 +463,7 @@ impl Schemes {
             ),
             structs: Rc::new(
                 module
-                    .struct_decls
+                    .struct_decls()
                     .iter()
                     .map(|(name, declaration)| {
                         (*name, declaration.universe_context.parameter_count)
@@ -533,7 +533,7 @@ fn validate_module_instance_arities(
             )?;
         }
     }
-    for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| held(name)) {
+    for (name, declaration) in module.induct_decls().iter().filter(|(name, _)| held(name)) {
         validate!(&declaration.arity, &format!("inductive {name} arity"))?;
         validate!(
             &declaration.result_sort,
@@ -546,38 +546,38 @@ fn validate_module_instance_arities(
             )?;
         }
 
-        if let Some((kind, actual)) = definition_schemes.get(name)
-            && (**kind != DefinitionKind::InductiveType || **actual != declaration.universe_context)
+        if let Some((_, actual)) = definition_schemes.get(name)
+            && **actual != declaration.universe_context
         {
             return Err(Error::UniverseInvariant(format!(
                 "inductive {name} and its type-former definition have different universe contexts"
             )));
         }
     }
-    for (name, declaration) in module.struct_decls.iter().filter(|(name, _)| held(name)) {
+    for (name, declaration) in module.struct_decls().iter().filter(|(name, _)| held(name)) {
         validate!(&declaration.arity, &format!("structure {name} arity"))?;
         validate!(
             &declaration.result_sort,
             &format!("structure {name} result sort"),
         )?;
-        if let Some((kind, actual)) = definition_schemes.get(name)
-            && (!matches!(
-                kind,
-                DefinitionKind::StructType | DefinitionKind::ConceptType
-            ) || **actual != declaration.universe_context)
+        if let Some((_, actual)) = definition_schemes.get(name)
+            && **actual != declaration.universe_context
         {
             return Err(Error::UniverseInvariant(format!(
                 "structure {name} and its type-former definition have different universe contexts"
             )));
         }
     }
-    for (name, concept) in module.concepts.iter().filter(|(name, _)| held(name)) {
-        validate!(&concept.params, &format!("concept {name} parameters"))?;
-        let Some(struct_decl) = module.struct_decls.get(name) else {
-            return Err(Error::UniverseInvariant(format!(
-                "concept {name} has no structure registry entry"
-            )));
+    // A concept carries its record, so there is no concept without one to refuse.
+    for (name, nominal) in module.nominals().filter(|(name, _)| held(name)) {
+        let Nominal::Concept {
+            concept,
+            record: struct_decl,
+        } = nominal
+        else {
+            continue;
         };
+        validate!(&concept.params, &format!("concept {name} parameters"))?;
         if concept.universe_context != struct_decl.universe_context {
             return Err(Error::UniverseInvariant(format!(
                 "concept {name} and its structure registry have different universe contexts"
@@ -585,11 +585,12 @@ fn validate_module_instance_arities(
         }
     }
     // Both directions of the generated-member correspondence, read off the definition's own recorded origin. A constructor names the inductive it belongs to *and* which case it is, so this checks the registry entry exists and actually declares that case — without joining an owner and a tag back into a name to look up.
+    let (inducts, concepts) = (module.induct_decls(), module.concepts());
     for (name, (kind, _)) in definition_schemes.iter().filter(|(name, _)| held(name)) {
         match kind {
             DefinitionKind::InductiveConstructor { owner, tag } => {
                 let owner = Global::Authored(*owner);
-                let Some(declaration) = module.induct_decls.get(&owner) else {
+                let Some(declaration) = inducts.get(&owner) else {
                     return Err(Error::UniverseInvariant(format!(
                         "constructor definition {name} names missing owner {owner}"
                     )));
@@ -602,16 +603,14 @@ fn validate_module_instance_arities(
             }
             DefinitionKind::ConceptMethod { owner } => {
                 let owner = Global::Authored(*owner);
-                if !module.concepts.contains_key(&owner) {
+                if !concepts.contains_key(&owner) {
                     return Err(Error::UniverseInvariant(format!(
                         "concept method {name} names missing owner {owner}"
                     )));
                 }
             }
             DefinitionKind::Authored
-            | DefinitionKind::InductiveType
-            | DefinitionKind::StructType
-            | DefinitionKind::ConceptType
+            | DefinitionKind::Nominal(_)
             | DefinitionKind::Witness
             | DefinitionKind::Test => {}
         }
@@ -629,12 +628,8 @@ pub(crate) fn validate_universes_of(
     module: &Module,
     held: &dyn Fn(&Global) -> bool,
 ) -> Result<(), Error> {
-    let mut entries = module
-        .induct_decls
-        .keys()
-        .chain(module.struct_decls.keys())
-        .chain(module.concepts.keys());
-    if !module.items.iter().any(|item| holds(item, held)) && !entries.any(held) {
+    // An entry is declared by the name of the former that carries it, so the items say whether anything is held.
+    if !module.items.iter().any(|item| holds(item, held)) {
         return Ok(());
     }
 
@@ -659,7 +654,7 @@ pub(crate) fn validate_universes_of(
             )?;
         }
     }
-    for (name, induct_decl) in module.induct_decls.iter().filter(|(name, _)| held(name)) {
+    for (name, induct_decl) in module.induct_decls().iter().filter(|(name, _)| held(name)) {
         universe_context_validate(&induct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "inductive {name} has an invalid universe context: {error}"
@@ -684,7 +679,7 @@ pub(crate) fn validate_universes_of(
             )?;
         }
     }
-    for (name, struct_decl) in module.struct_decls.iter().filter(|(name, _)| held(name)) {
+    for (name, struct_decl) in module.struct_decls().iter().filter(|(name, _)| held(name)) {
         universe_context_validate(&struct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "structure {name} has an invalid universe context: {error}"
@@ -701,7 +696,7 @@ pub(crate) fn validate_universes_of(
             parameter_count,
             &format!("structure {name} result sort"),
         )?;
-        if let Some(concept) = module.concepts.get(name)
+        if let Some(concept) = module.concepts().get(name)
             && concept.universe_context != struct_decl.universe_context
         {
             return Err(Error::UniverseInvariant(format!(
@@ -709,7 +704,7 @@ pub(crate) fn validate_universes_of(
             )));
         }
     }
-    for (name, concept) in module.concepts.iter().filter(|(name, _)| held(name)) {
+    for (name, concept) in module.concepts().iter().filter(|(name, _)| held(name)) {
         universe_context_validate(&concept.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "concept {name} has an invalid universe context: {error}"
@@ -760,18 +755,18 @@ pub fn validate_lowered_universe_seeds(module: &Module, minted: &Minted) -> Resu
             }
         }
     }
-    for (name, declaration) in &module.induct_decls {
+    for (name, declaration) in &module.induct_decls() {
         collect!(*name, &declaration.arity);
         collect!(*name, &declaration.result_sort);
         for constructor in declaration.signatures() {
             collect!(*name, &constructor.telescope);
         }
     }
-    for (name, declaration) in &module.struct_decls {
+    for (name, declaration) in &module.struct_decls() {
         collect!(*name, &declaration.arity);
         collect!(*name, &declaration.result_sort);
     }
-    for (name, concept) in &module.concepts {
+    for (name, concept) in &module.concepts() {
         collect!(*name, &concept.params);
     }
 
@@ -886,7 +881,7 @@ pub(crate) fn goal_sites(
             scan(type_, None, &goals, &seen_goals, &referenced);
         }
     }
-    for induct_decl in module.induct_decls.values() {
+    for induct_decl in module.induct_decls().values() {
         scan(&induct_decl.arity, None, &goals, &seen_goals, &referenced);
         for (_, param) in &induct_decl.constructors {
             scan(&param.telescope, None, &goals, &seen_goals, &referenced);
@@ -899,7 +894,7 @@ pub(crate) fn goal_sites(
             &referenced,
         );
     }
-    for struct_decl in module.struct_decls.values() {
+    for struct_decl in module.struct_decls().values() {
         scan(&struct_decl.arity, None, &goals, &seen_goals, &referenced);
         scan(
             &struct_decl.result_sort,
@@ -909,7 +904,7 @@ pub(crate) fn goal_sites(
             &referenced,
         );
     }
-    for concept in module.concepts.values() {
+    for concept in module.concepts().values() {
         scan(&concept.params, None, &goals, &seen_goals, &referenced);
     }
 

@@ -41,7 +41,7 @@ pub(super) fn family_variances(source: &str) -> BTreeMap<String, String> {
 
     program
         .module
-        .induct_decls
+        .induct_decls()
         .iter()
         .map(|(name, declaration)| {
             let spelled = declaration

@@ -1,10 +1,10 @@
 use {
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Level, Module, Telescope, Term,
+        Atom, Free, Global, InductDecl, InductParam, Level, Module, Nominal, Telescope, Term,
         UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
-    xboard::{Date, Part, Proof, Status, Ticket, Witness, false_type, refused},
+    xboard::{Date, Part, Proof, Status, Ticket, Witness, declared, false_type, refused},
 };
 
 /// Does this recursion end, and is what is erased total? The erasure obligations and the descent they rest on.
@@ -119,7 +119,7 @@ fn a_payload_applied_at_its_own_family() -> (Module, Term) {
     };
 
     let module = Module {
-        induct_decls: [(family, declaration)].into_iter().collect(),
+        items: vec![declared(family, Nominal::Inductive(declaration))].into(),
         ..Module::default()
     };
 

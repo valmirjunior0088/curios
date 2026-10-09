@@ -7,7 +7,7 @@ use {
 /// One struct declaration's registry entry: the metadata a `struct` declaration produces alongside its type-former binding.
 ///
 /// A struct is a nominal record — there is no value-constructor function and no tag — so this is an [`InductDecl`](super::InductDecl) minus the indices and the per-constructor map, plus the privacy metadata the representation boundary needs. Elaboration consults it to check a struct literal's fields and to type a projection; `erase` consults it to lower the fields.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct StructDecl {
     pub universe_context: UniverseContext,

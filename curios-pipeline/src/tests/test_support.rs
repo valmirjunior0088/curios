@@ -306,9 +306,9 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
         assert_eq!(expected, actual, "{} differs", expected.describe());
     }
     assert_eq!(whole.mounts, incremental.mounts);
-    assert_eq!(whole.induct_decls, incremental.induct_decls);
-    assert_eq!(whole.struct_decls, incremental.struct_decls);
-    assert_eq!(whole.concepts, incremental.concepts);
+    assert_eq!(whole.induct_decls(), incremental.induct_decls());
+    assert_eq!(whole.struct_decls(), incremental.struct_decls());
+    assert_eq!(whole.concepts(), incremental.concepts());
     assert_eq!(whole.witnesses, incremental.witnesses);
     assert_eq!(whole.tests, incremental.tests);
 }
@@ -424,7 +424,7 @@ pub(super) fn keeps_lowered(baseline: &Unit, unit: &Unit, name: &str) -> bool {
 /// The variance vector `unit` carries for the inductive family named `family`.
 pub(super) fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
     unit.core()
-        .induct_decls
+        .induct_decls()
         .iter()
         .find(|(name, _)| name.symbol().ends_with(&format!("/{family}")))
         .map(|(_, declaration)| declaration.variances.clone())

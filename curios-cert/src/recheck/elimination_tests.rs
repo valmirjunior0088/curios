@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Module, Scope,
-        Subterm, Telescope, Term, UniverseContext,
+        Subterm, Telescope, Term, UniverseContext, test_support::declaring,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
@@ -230,15 +230,17 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         ),
     );
 
-    let module = Module {
-        mounts: Vec::new(),
-        items: vec![vacuous].into(),
-        induct_decls: BTreeMap::from([(two_name, two_decl), (held_name, held_decl)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    };
+    let module = declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![vacuous].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(two_name, two_decl), (held_name, held_decl)]),
+        [],
+        [],
+    );
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 

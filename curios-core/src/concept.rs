@@ -8,7 +8,7 @@ use {
 };
 
 /// One concept declaration's registry entry.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct ConceptDecl {
     pub universe_context: UniverseContext,

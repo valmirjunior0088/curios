@@ -150,9 +150,15 @@ fn inductive_constructor_ownership_is_explicit() {
             curios_core::Item::Rec(rec) => rec.definitions(),
         })
         .map(|definition| {
+            // A former by what it is declared as, its entry being its own; a generated member by its kind, which names its origin.
             (
                 definition.name,
-                definition.kind,
+                definition.kind.declared(),
+                definition
+                    .kind
+                    .nominal()
+                    .is_none()
+                    .then(|| definition.kind.clone()),
                 definition.universe_context.parameter_count,
             )
         })
@@ -164,23 +170,26 @@ fn inductive_constructor_ownership_is_explicit() {
         vec![
             (
                 global_name("/Result"),
-                curios_core::DefinitionKind::InductiveType,
+                curios_core::Declared::Inductive,
+                None,
                 2,
             ),
             (
                 global_name("/Result/failure"),
-                curios_core::DefinitionKind::InductiveConstructor {
+                curios_core::Declared::Constructor,
+                Some(curios_core::DefinitionKind::InductiveConstructor {
                     owner: Qualifier::from(["Result"]),
                     tag: curios_core::Atom::from("failure"),
-                },
+                }),
                 2,
             ),
             (
                 global_name("/Result/success"),
-                curios_core::DefinitionKind::InductiveConstructor {
+                curios_core::Declared::Constructor,
+                Some(curios_core::DefinitionKind::InductiveConstructor {
                     owner: Qualifier::from(["Result"]),
                     tag: curios_core::Atom::from("success"),
-                },
+                }),
                 2,
             ),
         ],

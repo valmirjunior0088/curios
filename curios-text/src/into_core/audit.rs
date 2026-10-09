@@ -4,8 +4,8 @@
 
 use {
     super::{
-        AliasEdge, AudienceScope, Audiences, Entry, FlatItem, LoweredItem, PublicInterface, Scoped,
-        aliases, globals,
+        AliasEdge, AudienceScope, Audiences, Entry, FlatItem, LoweredItem, PreparedText,
+        PublicInterface, Scoped, aliases, globals,
     },
     crate::Error,
     curios_core::Bound,
@@ -43,14 +43,14 @@ fn exposed_nominal<'a>(
 #[derive(Clone, Copy)]
 pub(super) struct NominalScope<'a> {
     /// The units already lowered, in dependency order. Empty when this lowering *is* the first and there is nothing beneath it.
-    predecessors: &'a [&'a curios_core::Module],
+    predecessors: &'a [&'a PreparedText],
     induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
 }
 
 impl<'a> NominalScope<'a> {
     pub(super) fn new(
-        predecessors: &'a [&'a curios_core::Module],
+        predecessors: &'a [&'a PreparedText],
         induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
         struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
     ) -> Self {
@@ -71,7 +71,7 @@ impl<'a> NominalScope<'a> {
             self.predecessors
                 .iter()
                 .rev()
-                .find_map(|base| base.induct_decls.get(name))
+                .find_map(|base| base.nominal(name)?.inductive())
         })
     }
 
@@ -80,7 +80,7 @@ impl<'a> NominalScope<'a> {
             self.predecessors
                 .iter()
                 .rev()
-                .find_map(|base| base.struct_decls.get(name))
+                .find_map(|base| base.nominal(name)?.record())
         })
     }
 }

@@ -7,7 +7,7 @@ use {curios_text::Entrypoint, std::fmt};
 /// The enum is the vocabulary of observation points, not a promise that the pure pipeline emits each: [`Stage::WasmOptm`] observes what Binaryen did to the emitted module, and this crate must not depend on Binaryen, so that one variant is emitted downstream, by the native product where Binaryen runs, and its payload is a rendering Binaryen is asked for rather than a borrowed IR.
 pub enum Stage<'a> {
     Text(&'a Entrypoint),
-    /// Core as `curios_text::into_core` produced it: syntax that nothing has checked. It carries term and universe metavariables — the universes' seeds travel beside it, in what the lowering hands elaboration — and unresolved `Transient` nodes (`Infix`, `NumLit`), and its registries are unelaborated. Useful for debugging the lowering; not a typed program.
+    /// Core as `curios_text::into_core` produced it: syntax that nothing has checked. It carries term and universe metavariables — the universes' seeds travel beside it, in what the lowering hands elaboration — and unresolved `Transient` nodes (`Infix`, `NumLit`), and the entries its type formers carry are unelaborated. Useful for debugging the lowering; not a typed program.
     Core(&'a curios_core::Program),
     /// Core after elaboration and zonking, which is the program every later stage consumes. Metavariable-free by construction — each item is zonked strictly where it is published, which errors on an unsolved hole — with universes validated, positivity checked, totality recorded, and both erasure obligations gated. It carries the entry's own items only; the prelude is scope every later stage is seeded from, not a run of items in front of them.
     ///

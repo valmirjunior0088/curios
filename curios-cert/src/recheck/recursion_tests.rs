@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{Free, Global, Intrinsic, Many, Module, RecGroup, RecMemberScopes, Scope, Term},
     curios_utilities::Qualifier,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
 
 /// `rec f : Absurd = f` reached as a member selection, which must be refused by the same rule the block spelling is refused by.
@@ -83,9 +83,6 @@ fn a_member_of_a_legal_group_is_still_accepted() {
             Term::rec_proj(group, 0),
         )]
         .into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };

@@ -85,9 +85,6 @@ fn every_local_a_term_mentions_is_found() {
     let module = Module {
         items: vec![Item::Let(definition)].into(),
         mounts: Vec::new(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -115,9 +112,6 @@ fn stored(body: Term) -> Module {
         })]
         .into(),
         mounts: Vec::new(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -228,9 +222,6 @@ fn a_meta_free_module_projects_as_zonked() {
     let module = Module {
         items: vec![Item::Let(definition("plain", UniverseContext::empty()))].into(),
         mounts: Vec::new(),
-        induct_decls: Default::default(),
-        struct_decls: Default::default(),
-        concepts: Default::default(),
         witnesses: Default::default(),
         tests: Default::default(),
     };
@@ -245,9 +236,6 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
     let module = Module {
         items: vec![Item::Let(holed)].into(),
         mounts: Vec::new(),
-        induct_decls: Default::default(),
-        struct_decls: Default::default(),
-        concepts: Default::default(),
         witnesses: Default::default(),
         tests: Default::default(),
     };
@@ -266,9 +254,6 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
     let module = Module {
         items: vec![Item::Let(infixed)].into(),
         mounts: Vec::new(),
-        induct_decls: Default::default(),
-        struct_decls: Default::default(),
-        concepts: Default::default(),
         witnesses: Default::default(),
         tests: Default::default(),
     };
@@ -282,9 +267,6 @@ fn over(items: Vec<Item>) -> Module {
     Module {
         items: items.into(),
         mounts: Vec::new(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -308,28 +290,33 @@ fn a_construction_reaches_the_nominal_head_it_never_mentions() {
     assert!(packed.reaches().contains(&authored("Box")));
 }
 
+/// `former` as the former of a record whose one field is a `Payload`: the entry rides in the definition that declares it.
+fn boxed(mut former: Definition) -> Definition {
+    former.kind = DefinitionKind::Nominal(Rc::new(Nominal::Struct(StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::build(
+            [(
+                Free::local(0, Some("value")),
+                Term::free_var(&Free::Global(authored("Payload"))),
+            )],
+            (),
+        )),
+        result_sort: Term::type_ground(),
+        module: Qualifier::empty(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    })));
+    former
+}
+
 /// A struct's field types live only in its registry entry, so the item declaring it reaches them through the entry.
 #[test]
 fn a_struct_declaration_reaches_its_field_types() {
-    let mut module = over(vec![Item::Let(definition("Box", UniverseContext::empty()))]);
-    module.struct_decls.insert(
-        authored("Box"),
-        StructDecl {
-            universe_context: UniverseContext::empty(),
-            arity: Telescope::done(Telescope::build(
-                [(
-                    Free::local(0, Some("value")),
-                    Term::free_var(&Free::Global(authored("Payload"))),
-                )],
-                (),
-            )),
-            result_sort: Term::type_ground(),
-            module: Qualifier::empty(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    let module = over(vec![Item::Let(boxed(definition(
+        "Box",
+        UniverseContext::empty(),
+    )))]);
 
     let reached = module.reaches(&module.items[0]);
 
@@ -339,8 +326,7 @@ fn a_struct_declaration_reaches_its_field_types() {
 /// A unit's nominal marks are read off the definitions it declares as type formers, which each place says of its names: of a stored module the formers are restored, and no other item is.
 #[test]
 fn nominal_marks_read_the_type_formers_and_no_other_item() {
-    let mut former = definition("Box", UniverseContext::empty());
-    former.kind = DefinitionKind::StructType;
+    let former = boxed(definition("Box", UniverseContext::empty()));
     let items = [
         Item::Let(definition("before", UniverseContext::empty())),
         Item::Let(former),
@@ -406,25 +392,10 @@ fn items_are_ordered_by_what_they_reach_and_then_by_name() {
 /// An item follows what the registry entries it declares reach, which no term of its own names.
 #[test]
 fn an_item_follows_what_its_registry_entry_reaches() {
-    let mut module = over(vec![reading("Box", &[]), reading("Payload", &[])]);
-    module.struct_decls.insert(
-        authored("Box"),
-        StructDecl {
-            universe_context: UniverseContext::empty(),
-            arity: Telescope::done(Telescope::build(
-                [(
-                    Free::local(0, Some("value")),
-                    Term::free_var(&Free::Global(authored("Payload"))),
-                )],
-                (),
-            )),
-            result_sort: Term::type_ground(),
-            module: Qualifier::empty(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    let Item::Let(former) = reading("Box", &[]) else {
+        unreachable!("a reading is one definition");
+    };
+    let module = over(vec![Item::Let(boxed(former)), reading("Payload", &[])]);
 
     assert_eq!(names(&module.ordered()), ["/Payload", "/Box"]);
 }

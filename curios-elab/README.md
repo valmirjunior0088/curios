@@ -52,7 +52,7 @@ The Curios elaborator: bidirectional elaboration and typing, unification and met
 
 ### Generated declarations name their owner
 
-**Decision.** Lowering records whether a definition is authored or generated and records a generated definition's owner explicitly; ownership is never inferred from a flattened path's spelling. Registry entries and their type-former definitions share one finalized context. Generated constructor and concept-method wrappers generalize their own universe schemes, since each may use a subset of, or dependencies beyond, its owner's scheme, and their owner metadata validates provenance without conflating a wrapper's binders with the registry's.
+**Decision.** Lowering records whether a definition is authored or generated and records a generated definition's owner explicitly; ownership is never inferred from a flattened path's spelling. An entry and the type former that carries it share one finalized context. Generated constructor and concept-method wrappers generalize their own universe schemes, since each may use a subset of, or dependencies beyond, its owner's scheme, and their owner metadata validates provenance without conflating a wrapper's binders with the entry's.
 
 ### A refinement is keyed on the guard as written and decided at the read
 

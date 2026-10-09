@@ -9,7 +9,7 @@ use {
 /// The telescope is the constructor's *full* signature — the parameter binders first, then the payload binders, terminating in the constructed type. E.g. `success ↦ (A : Type, E : Type, A) -> InductType { Result, [A, E] }`. For an indexed inductive the terminal is *per-case*: its indices are that case's target expressions over the payload binders. Instantiating peels the leading `params.len()` binders by opening each with the corresponding parameter.
 ///
 /// Erasure is sort-driven: `erase` drops a payload field whose type is a proof or a type, by its own reading of the signature. Each binder states besides whether it binds a proof ([`Scope::binds_proof`](crate::Scope::binds_proof)), said when the declaration is published: an arm binds under it and the closed machine reads it, and it decides no layout.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct InductParam {
     /// Each binder under its mark — the value constructor's calling convention: every leading declaration parameter is hidden, `Implicit` where it is plain or `@` at the type constructor (a value constructor infers them) and `Witness` where it is a `use` premise, and each payload keeps its declared mark.
@@ -33,7 +33,7 @@ impl InductParam {
 /// One inductive declaration's registry entry: the metadata an `induct` declaration produces alongside its type-constructor and value-constructor function bindings.
 ///
 /// The elaborator consults this when checking an inductive match: each arm's binders are typed directly from the matching constructor's telescope (instantiated at the scrutinee type's parameters), and the arm's binder count is arity-checked against that telescope statically. `erase` consults it again to type constructor payloads and order runtime tags.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct InductDecl {
     pub universe_context: UniverseContext,

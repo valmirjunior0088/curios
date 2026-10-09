@@ -4,7 +4,7 @@ use {
     curios_core::{
         Anchor, Anchored, Cost, Definition, DefinitionKind, Extent, Free, Global, Intrinsic, Item,
         Level, MetavarId, Minted, Module, Nat, Subterm, Term, Totality, Tuple, UniverseContext,
-        UniverseMetaId, UniverseParam,
+        UniverseMetaId, UniverseParam, test_support::declaring,
     },
     curios_utilities::Qualifier,
 };
@@ -23,26 +23,28 @@ fn nat_lit(n: usize) -> Term {
 
 /// A lowered module holding `body` as its one definition's value.
 fn lowered_module(body: Term) -> Module {
-    Module {
-        mounts: Vec::new(),
-        items: vec![Item::Let(Definition {
-            name: Global::Authored(Qualifier::from(["held"])),
-            kind: DefinitionKind::Authored,
-            universe_context: UniverseContext::empty(),
-            island: Qualifier::empty(),
-            totality: Totality::default(),
-            proof: false,
-            variances: Vec::new(),
-            type_: nat(),
-            body,
-        })]
-        .into(),
-        induct_decls: Default::default(),
-        struct_decls: Default::default(),
-        concepts: Default::default(),
-        witnesses: Default::default(),
-        tests: Default::default(),
-    }
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![Item::Let(Definition {
+                name: Global::Authored(Qualifier::from(["held"])),
+                kind: DefinitionKind::Authored,
+                universe_context: UniverseContext::empty(),
+                island: Qualifier::empty(),
+                totality: Totality::default(),
+                proof: false,
+                variances: Vec::new(),
+                type_: nat(),
+                body,
+            })]
+            .into(),
+            witnesses: Default::default(),
+            tests: Default::default(),
+        },
+        [],
+        [],
+        [],
+    )
 }
 
 #[test]

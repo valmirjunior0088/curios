@@ -4,7 +4,10 @@ use {
     super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::{Erased, test_support::SYNTAX},
-    curios_core::{Atom, Free, Global, InductParam, Intrinsic, Module, Nat, Telescope, Term},
+    curios_core::{
+        Atom, Free, Global, InductParam, Intrinsic, Module, Nat, Telescope, Term,
+        test_support::declaring,
+    },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -137,18 +140,20 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     )]);
 
     let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));
-    let module = Module {
-        mounts: Vec::new(),
-        items: vec![wrapped_at_true(&wrap_name, qed)].into(),
-        induct_decls: BTreeMap::from([(true_name, true_decl)]),
-        struct_decls: BTreeMap::from([(
+    let module = declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![wrapped_at_true(&wrap_name, qed)].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(true_name, true_decl)]),
+        BTreeMap::from([(
             wrap_name,
             computed_field_wrapper(true_type.clone(), true_type),
         )]),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    };
+        [],
+    );
 
     assert_eq!(
         fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),

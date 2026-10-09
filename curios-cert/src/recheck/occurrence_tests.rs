@@ -6,12 +6,14 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductParam, Intrinsic,
-        Item, Module, Nat, StructType, Subterm, Telescope, Term, Totality, UniverseContext,
+        Item, Module, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term, Totality,
+        UniverseContext, test_support::declaring,
     },
     curios_utilities::{Plicity, Qualifier},
     std::{
         collections::{BTreeMap, BTreeSet},
         panic::{AssertUnwindSafe, catch_unwind},
+        rc::Rc,
     },
 };
 
@@ -213,9 +215,6 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![former_def, held].into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -308,15 +307,17 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
         Term::variant(held_name, Vec::<Term>::new(), "yes", Vec::<Term>::new()),
     );
 
-    let module = Module {
-        mounts: Vec::new(),
-        items: vec![held].into(),
-        induct_decls: BTreeMap::from([(held_name, held_decl)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    };
+    let module = declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![held].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(held_name, held_decl)]),
+        [],
+        [],
+    );
 
     assert_eq!(
         fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
@@ -353,15 +354,17 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         Term::tuple([Term::variant(equality_name, [true_type], "refl", [qed])]),
     );
 
-    let module = Module {
-        mounts: Vec::new(),
-        items: vec![wrapped].into(),
-        induct_decls: BTreeMap::from([(true_name, true_decl), (equality_name, equality_decl)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    };
+    let module = declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![wrapped].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(true_name, true_decl), (equality_name, equality_decl)]),
+        [],
+        [],
+    );
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
@@ -384,7 +387,19 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     // `struct Box(@A : Type)`: one implicit parameter, so a use site writes `Box(Nat)` and never supplies it positionally.
     let constructor = Definition {
         name,
-        kind: DefinitionKind::StructType,
+        // The former carries the entry it is the former of: a record of one implicit parameter and no field.
+        kind: DefinitionKind::Nominal(Rc::new(Nominal::Struct(StructDecl {
+            universe_context: UniverseContext::empty(),
+            arity: Telescope::build_marked(
+                [(Plicity::Implicit, parameter, Term::type_ground())],
+                Telescope::done(()),
+            ),
+            result_sort: Term::type_ground(),
+            module: Qualifier::default(),
+            rep_public: true,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+        }))),
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         totality: Totality::Total,
@@ -400,9 +415,6 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![Item::Let(constructor)].into(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };

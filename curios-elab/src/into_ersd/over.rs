@@ -11,7 +11,7 @@ use {
     crate::{
         Answered, Question, Same, concepts_alike, entries_alike, inducts_alike, structs_alike,
     },
-    curios_core::{Global, Item, Module, Places, Trace},
+    curios_core::{Global, Item, Module, Nominal, Places, Trace},
     std::{
         collections::{BTreeSet, HashMap},
         rc::Rc,
@@ -137,20 +137,24 @@ impl<'a> ErasedOver<'a> {
                 return Same::default();
             };
 
-            Same::of(&module.items[item], &baseline.items[place.item()], member).keying(
+            let (made, held) = (&module.items[item], &baseline.items[place.item()]);
+            // An entry rides in the former that declares it, so the two items hold what is compared.
+            let (this, that) = (made.nominal(name), held.nominal(name));
+
+            Same::of(made, held, member).keying(
                 entries_alike(
-                    module.induct_decls.get(name),
-                    baseline.induct_decls.get(name),
+                    this.and_then(Nominal::inductive),
+                    that.and_then(Nominal::inductive),
                     inducts_alike,
                 ),
                 entries_alike(
-                    module.struct_decls.get(name),
-                    baseline.struct_decls.get(name),
+                    this.and_then(Nominal::record),
+                    that.and_then(Nominal::record),
                     structs_alike,
                 ),
                 entries_alike(
-                    module.concepts.get(name),
-                    baseline.concepts.get(name),
+                    this.and_then(Nominal::concept),
+                    that.and_then(Nominal::concept),
                     concepts_alike,
                 ),
             )
