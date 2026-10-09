@@ -6,7 +6,7 @@ It rests on [A declaration is a function of what it reads](../../design/compilat
 
 ## Where it stands
 
-What is in the tree and what is open, each part by where it is written. What is in the tree moves the question that redoes nothing — a program restores neither unit's baseline half, and a question about the library parses the unit's header and no other file, lowers no declaration and elaborates and erases none — and what an edit redoes, which is the declarations that read what it changed, elaborated and erased again and no other. What is open is what a unit still costs to address and link, which *The gap* counts.
+What is in the tree and what is open, each part by where it is written. What is in the tree moves the question that redoes nothing — a program restores neither unit's baseline half, and a question about the library parses the unit's header and no other file, lowers no declaration and elaborates and erases none — and what an edit redoes, which is the declarations that read what it changed, elaborated and erased again and no other. What is open is what a unit still costs to link, which *The gap* counts.
 
 | Part | State | Where it is written |
 | --- | --- | --- |
@@ -17,7 +17,6 @@ What is in the tree and what is open, each part by where it is written. What is 
 | A declaration's lowering is kept where its text and the names it resolved stand | In the tree | [A lowering is kept where its text and the names it resolved stand](../../design/compilation/a-lowering-is-kept-where-its-text-and-the-names-it-resolved-stand.md) |
 | A file is parsed where a declaration of it is lowered | In the tree | [A file is parsed where a declaration of it is lowered](../../design/compilation/a-file-is-parsed-where-a-declaration-of-it-is-lowered.md) |
 | Every read of elaboration and of erasure is recorded, a compile over a baseline redoes what its records say moved, and a build compiles over one as a question does | In the tree | [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md) |
-| Units: a unit addressed by who it is, and believed facet by facet after an edited dependency | Open | [Stage 3](#stages) |
 | Linking: a program links what it reaches and what is observable | Open | [Stage 4](#stages) |
 | Program: the program asked for is compiled as a unit | Open | [Stage 5](#stages) |
 
@@ -56,8 +55,6 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 **A recompile walks the unit it does not redo.** With nothing edited, a unit compiled over a baseline reads every file and compares its text with the one the baseline read, restores the baseline's half whole to keep each declaration's lowering and each file's heads, 0.29 M of the lowering's 0.45 M (`into_core_unit::baseline`), asks again every question of every declaration's trace, 87,802 for the library's 2,223 declarations (`demand::kept`), and of every item's erasure trace, and serializes all of it. Where anything is made again the module is put in its stored order from nothing, 0.36 M whatever was edited (`order_unit_over`, `Module::ordered`), since the order is read off what every item reaches.
 
 **An edit elaborates what read it, each from nothing.** Respelling `/std/Bool/not`'s body elaborates and erases again the 130 declarations that unfolded it and none behind them (`demand::asked`, `erase::asked`), and what they cost is what they cost a whole compile: a declaration is the grain, and one whose trace fails at its last question is elaborated whole.
-
-**A unit is addressed by the units before it, and believed whole or not at all.** A slot names every unit placed ahead of it in the fold and its record vouches for what each contained. Over a package depending on `alpha` and on `beta`, neither naming the other, an edit to `alpha` compiles `/beta` again, whole; under an umbrella one of whose members reaches `beta` after `alpha` and another `beta` alone, `/beta` is compiled once for each and filed in two slots; and a unit compiled against an edited dependency is compiled whole, a baseline being offered only after the units it was compiled after.
 
 **A program links what computes, observable or not.** A program links every declaration in its scope that computes at initialization, with what each reaches, for the optimizer's prune to drop the ones nothing observes: `programs/hello_world.crs` links 576 items, 137 of them because they compute.
 
@@ -109,8 +106,6 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 
 | Component | Treatment | Stage |
 | --- | --- | --- |
-| Verdicts | Its reads compared as facets, another unit's by digest | Units |
-| Addresses | A slot is its unit's own; a read of another unit carries a digest | Units |
 | Observability | A summary facet for each declaration, made where its unit is certified; a program links the observable ones | Linking |
 | The entry | A unit, its final term one more declaration | Program |
 
@@ -118,7 +113,6 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 
 Each lands alone, on its own check, and says what it expects to move; a move outside that is a finding.
 
-3. **Units.** Decision 13, and decisions 5 and 7 across units. Expected to move: every slot's address, and which declarations an edit to a dependency compiles.
 4. **Linking.** Decision 10. Expected to move: a stored unit's bytes, by its summaries, what a program links, and every row of a program's compile behind its erasure.
 5. **Program.** Decision 11. Expected to move: which declarations a question about a program redoes, and what a question files.
 
@@ -129,15 +123,12 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 - **Reproduction.** `std_unit_reproduction` and `std_recompile_reproduction` after every stage that changes what a unit stores: a unit compiled over a baseline is the bytes it is compiled whole.
 - **The trace is complete.** `std_replay_census` compiles `/std` over the archived unit once for each of its declarations, that one alone elaborated again and every other kept by its trace, and reports the ones that come out another way, ask otherwise, or take another declaration with them: none of 2,223, with and without an unrelated definition elaborated beside it, counted at `8f1cb4982`. That a declaration reads nothing its trace does not name is what a measurement at `648d8a850` counted, each declaration elaborated with its baseline answering for the names its trace holds and for no other (`std_trace_census` there, which the walk has since replaced): none differed and none was refused. The same of a lowered form against its lookups is not measured.
 - **Invalidation.** A recompile over a baseline redoes the declarations whose recorded reads changed, held by `curios-pipeline`'s incremental fixtures over a renamed parameter, a body edit that leaves a signature standing, one that reaches a declaration that unfolded it, and a witness declared where a declaration was told none stood; by `std_vocabulary_reach_reproduction` for a declaration moved into what the prover's vocabulary reaches; and by `curios-elab`'s erasure fixtures for a binding that moved and one that did not.
-- **Units.** Over a package depending on two packages that do not name each other, an edit to either leaves the other reused; under an umbrella two members that reach one package after different others file it once; and an edit to a dependency's body that no declaration of its dependent unfolded redoes none of them. Held by tests in `curios/src/tests/packages.rs`.
 - **Linking.** An ignored measurement over the prelude: every declaration the whole-program summary calls observable, the stored one does too, and the count the other way is its precision. `hello_world`'s rows are retaken. Counted.
 - **Program.** A question about a program after one of its declarations' bodies is edited redoes that declaration and what read the edit, held by a fixture; the `walk_mirror_indexed` rows are retaken.
 - **The void attempts.** The `demand::void` samples of the profile the prelude's elaboration files, `curios-prelude-archive/.artifacts/profile.tsv`. Counted.
 
 ## Design decisions this overturns or corrects
 
-- [Cached verdicts](../../design/soundness/cached-verdicts.md): the address's ordered predecessors, a unit believed whole, and a read of a unit in scope standing on a baseline's address. Units.
-- [Reused payloads](../../design/soundness/reused-payloads.md): the ordered slots of a payload's predecessors. Units.
 - [A module is a compilation unit, and the prelude is an environment](../../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): the program as something beside the units. Program.
 - [A command compiles only as far as its answer needs, and a project keeps what it compiled](../../design/tools/a-command-compiles-only-as-far-as-its-answer-needs-and-a-project-keeps-what-it-compiled.md): what a question keeps of a program. Program.
 
