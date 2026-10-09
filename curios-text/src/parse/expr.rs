@@ -12,9 +12,9 @@ use {
         parse_whitespace,
     },
     curios_parse::{
-        Parser, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark, memoize, not_ahead,
-        preceded_by_space, pure, sep_by0_trailing, spanned, take_eof, take_exact, take_n,
-        take_while,
+        Parser, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, many1, mark, memoize,
+        not_ahead, preceded_by_space, pure, sep_by0_trailing, shown, spanned, take_eof, take_exact,
+        take_n, take_while, unseen,
     },
     curios_utilities::{InfixOp, Plicity, Span, is_identifier_char},
     std::iter,
@@ -319,7 +319,7 @@ pub(crate) fn op_precedence(op: InfixOp) -> u8 {
 
 // At least one whitespace character (then any further whitespace/comments). The trailing-space requirement is what distinguishes the operator `-` in `a - 42` from the glued sign of the literal `-42`.
 pub(super) fn require_space<'a>() -> Parser<'a, ()> {
-    take_while(|char| char.is_whitespace())
+    take_while(is_blank)
         .flat_map(|spaces| match spaces.is_empty() {
             true => fail("expected whitespace after operator"),
             false => pure(()),
@@ -375,7 +375,7 @@ fn refuse_asymmetric_operator<'a>() -> Parser<'a, ()> {
             .or(pure(false))
             .and(mark)
             .and(parse_infix_symbol)
-            .and(look_ahead(take_while(|char: char| !char.is_whitespace()))),
+            .and(look_ahead(take_while(|char: char| !is_blank(char)))),
     )
     .map(Some)
     .or(pure(None))
@@ -384,6 +384,10 @@ fn refuse_asymmetric_operator<'a>() -> Parser<'a, ()> {
             return pure(());
         };
         let spaced_after = after.is_empty();
+        // A character its reader cannot see where the blank belongs: the operator reads as spaced and is not, so the refusal stands at the character and names it.
+        if after.chars().next().is_some_and(unseen) {
+            return take_exact(op.symbol()).and_keep(fail("expected whitespace after operator"));
+        }
         let glued_to_operand = after.chars().next().is_some_and(starts_operand);
         // `a /std/print(1)` is a term followed by an absolute path — what a missing `end` looks like — so a `/` opening one is left to the enclosing form, which names the keyword it wanted.
         let opens_a_path = op == InfixOp::Div && spaced_before && !spaced_after;
@@ -427,7 +431,10 @@ pub(super) fn parse_term_inner<'a>() -> Parser<'a, Term> {
 fn refuse_non_term<'a>() -> Parser<'a, Term> {
     mark().and(take_n(1)).flat_map(|(start, text)| {
         // The span reaches back over the consumed character so the caret underlines it; the failure itself stays past it, which is what outranks the alternatives.
-        fail_from(&start, format!("expected a term, obtained '{text}'"))
+        fail_from(
+            &start,
+            format!("expected a term, obtained '{}'", shown(text)),
+        )
     })
 }
 

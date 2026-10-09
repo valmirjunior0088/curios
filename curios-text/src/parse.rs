@@ -21,6 +21,8 @@ mod top_level;
 pub(crate) use top_level::*;
 
 #[cfg(test)]
+mod blank_tests;
+#[cfg(test)]
 mod concept_tests;
 #[cfg(test)]
 mod expr_tests;
@@ -46,8 +48,8 @@ mod tuples_tests;
 use {
     super::{Doc, Label, Name, Term},
     curios_parse::{
-        Parser, commit, fail, fail_from, lazy, look_ahead, many0, mark, not_ahead, pure, spanned,
-        tagging, take_eof, take_exact, take_while,
+        Parser, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, mark, not_ahead, pure,
+        shown, spanned, tagging, take_eof, take_exact, take_while,
     },
     curios_utilities::{Qualifier, Span, is_identifier_char, is_keyword},
     std::{cell::RefCell, collections::BTreeMap, iter},
@@ -122,9 +124,16 @@ pub(crate) fn parse_program_end<'a>() -> Parser<'a, ()> {
     take_eof().or(look_ahead(take_exact("---")).and_keep(commit(fail(DOC_BEFORE_NOTHING))))
 }
 
+/// The head of a file: a byte-order mark where one leads it, then blanks and comments. The mark is no part of the program, so it is passed over where it stands and every span keeps the file's own offsets; nothing writes one back, and a mark anywhere else is a character the grammar does not take.
+pub(crate) fn parse_file_head<'a>() -> Parser<'a, ()> {
+    take_exact("\u{FEFF}")
+        .or(pure(()))
+        .and_keep(parse_whitespace)
+}
+
 pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
     // A `many0` loop over comment-then-whitespace runs, not recursion per comment line: an N-line comment banner would otherwise nest N native frames.
-    take_while(|char| char.is_whitespace())
+    take_while(is_blank)
         .and(many0(|| {
             // The head is recoverable, because the absence of a comment is how the loop ends and a `---` is not a comment but the documentation syntax the caller reads next. Everything after the head is not: a `--` glued to a word is a mistake nothing else can diagnose.
             //
@@ -133,7 +142,7 @@ pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
                 comment_spacing(COMMENT_SPACING).and_drop(take_while(|char| char != '\n')),
             )))
             .map(|(span, _)| record_comment(span))
-            .and_drop(take_while(|char| char.is_whitespace()))
+            .and_drop(take_while(is_blank))
         }))
         .map(|_| ())
 }
@@ -156,10 +165,7 @@ fn parse_doc_line<'a>() -> Parser<'a, String> {
         .flat_map(|(span, ())| {
             let text = &span.source.text;
             let line_start = text[..span.start].rfind('\n').map_or(0, |index| index + 1);
-            match text[line_start..span.start]
-                .chars()
-                .all(char::is_whitespace)
-            {
+            match text[line_start..span.start].chars().all(is_blank) {
                 true => pure(()),
                 false => commit(fail(DOC_TRAILING)),
             }
@@ -327,12 +333,15 @@ fn parse_qualified_name<'a>() -> Parser<'a, Name> {
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
     mark()
         .and(take_while(is_identifier_char))
-        .and(look_ahead(take_while(|char| !char.is_whitespace())))
+        .and(look_ahead(take_while(|char| !is_blank(char))))
         .flat_map(
             move |((start, obtained), rest)| match (obtained, expected == obtained) {
                 (_, true) => pure(()),
                 ("", false) => fail(match rest.chars().next() {
-                    Some(next) => format!("Expected keyword '{expected}', obtained '{next}'"),
+                    Some(next) => format!(
+                        "Expected keyword '{expected}', obtained '{}'",
+                        shown(next.encode_utf8(&mut [0; 4]))
+                    ),
                     None => format!("Expected keyword '{expected}', obtained 'end-of-file'"),
                 }),
                 // The report spans the word, so the caret underlines it rather than standing after it.

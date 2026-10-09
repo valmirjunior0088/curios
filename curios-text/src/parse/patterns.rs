@@ -12,7 +12,7 @@ use {
     },
     curios_num::Grain,
     curios_parse::{
-        Parser, commit, fail, fail_from, lazy, look_ahead, mark, memoize, not_ahead,
+        Parser, commit, fail, fail_from, is_blank, lazy, look_ahead, mark, memoize, not_ahead,
         preceded_by_space, pure, sep_by0_trailing, take_exact, take_while, uncommit,
     },
     curios_utilities::Plicity,
@@ -311,12 +311,12 @@ pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // `p+1` and `p +1` refused by the rule, rather than read as the binder `p` with `+1` left over for the arm grammar to report as the token it did not expect. Tried after the spaced successor form, so reaching a label with a `+` ahead means the spacing is what failed, and before the binder the label would otherwise become; the `+` is consumed so the refusal is past the choice point, and the caret underlines it with its digits.
 fn refuse_glued_successor<'a>() -> Parser<'a, MatchPattern> {
     parse_label().and_drop(look_ahead(
-            take_while(char::is_whitespace).and(take_exact("+")),
+            take_while(is_blank).and(take_exact("+")),
         ))
     .and_keep(mark)
     .flat_map(|start| {
         // The digits are consumed too: the spaced form's own refusal, caught, sits right after the `+`, and a committed refusal that ties it on offset loses [`Parser::or`]'s tie-break.
-        take_while(char::is_whitespace)
+        take_while(is_blank)
             .and_drop(take_exact("+"))
             .and_drop(take_while(|char: char| char.is_ascii_digit()))
             .and_keep(commit(fail_from(

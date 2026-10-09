@@ -82,6 +82,40 @@ pub fn take_eof<'a>() -> Parser<'a, ()> {
     })
 }
 
+/// Whether `char` is a blank: a space, a tab, a newline or a carriage return, the characters that separate tokens and mean nothing else. Unicode calls more characters white space, and a grammar that took them would read a no-break space as a separator its reader cannot see.
+pub fn is_blank(char: char) -> bool {
+    matches!(char, ' ' | '\t' | '\n' | '\r')
+}
+
+/// Whether `char` prints as nothing, or as a blank the grammar does not take: white space other than a blank, a control character, or a format character — a zero-width space, a byte-order mark, a soft hyphen, a direction mark.
+pub fn unseen(char: char) -> bool {
+    !is_blank(char)
+        && (char.is_whitespace()
+            || char.is_control()
+            || matches!(
+                char,
+                '\u{00AD}'
+                    | '\u{200B}'..='\u{200F}'
+                    | '\u{202A}'..='\u{202E}'
+                    | '\u{2060}'..='\u{2064}'
+                    | '\u{2066}'..='\u{2069}'
+                    | '\u{FEFF}'
+            ))
+}
+
+/// `text` as a report quotes it: a character its reader could not see is spelled by its code point, `U+200B`.
+pub fn shown(text: &str) -> String {
+    let mut shown = String::with_capacity(text.len());
+    for char in text.chars() {
+        match unseen(char) {
+            true => shown.push_str(&format!("U+{:04X}", char as u32)),
+            false => shown.push(char),
+        }
+    }
+
+    shown
+}
+
 /// Succeeds (consuming nothing) only when the byte immediately before the current offset is whitespace, or we are at the start of input. The infix operator parser uses it to require a space on the *left* of an operator — the right space is required by consuming whitespace after the symbol — so `a - 42` is subtraction while the glued `-42` stays a literal.
 pub fn preceded_by_space<'a>() -> Parser<'a, ()> {
     Parser::new(|state| {
@@ -89,7 +123,7 @@ pub fn preceded_by_space<'a>() -> Parser<'a, ()> {
             || state.source.text[..state.offset]
                 .chars()
                 .next_back()
-                .is_some_and(char::is_whitespace);
+                .is_some_and(is_blank);
 
         match preceded {
             true => Ok(((), state)),

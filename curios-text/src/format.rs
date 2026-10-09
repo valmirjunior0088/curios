@@ -10,6 +10,7 @@
 
 use {
     super::{FormatInput, TopItem, between_items, parse_for_format, print_term, print_top_item},
+    curios_parse::is_blank,
     curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
     curios_utilities::{Source, Span},
     std::{cell::RefCell, fmt, path::Path, sync::Arc},
@@ -89,9 +90,7 @@ fn classify(source: &str, spans: &[Span]) -> Vec<Owed> {
             Owed {
                 at: span.start,
                 end: span.end,
-                own_line: source[line_start..span.start]
-                    .chars()
-                    .all(char::is_whitespace),
+                own_line: source[line_start..span.start].chars().all(is_blank),
                 text: source[span.start..span.end].trim_end().to_string(),
             }
         })

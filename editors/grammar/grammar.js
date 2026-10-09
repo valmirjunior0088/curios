@@ -25,7 +25,8 @@ module.exports = grammar({
 
   word: ($) => $.identifier,
 
-  extras: ($) => [/\s/, $.comment],
+  // The four blanks the compiler takes, and a byte-order mark, which it takes at a file's head alone: an extra has no position to be held to.
+  extras: ($) => [/[ \t\n\r]/, /\uFEFF/, $.comment],
 
   conflicts: ($) => [
     [$.lambda_parameters, $.unit],

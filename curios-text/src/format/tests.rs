@@ -25,6 +25,15 @@ fn a_module_file_without_a_tail_formats() {
     );
 }
 
+/// A byte-order mark at a file's head is no part of the program and a carriage return is a blank, so the formatter writes neither: `format --check` reports a file that leads with a mark as it reports one whose lines end in a carriage return.
+#[test]
+fn a_leading_byte_order_mark_is_not_written_back() {
+    let source = "use /std/{Nat};\n\nlet one: Nat =\n    1;\n";
+
+    assert_eq!(formatted(&format!("\u{FEFF}{source}")), source);
+    assert_eq!(formatted(&source.replace('\n', "\r\n")), source);
+}
+
 /// A program whose tail is garbled is refused where the tail's own parse stopped, naming what it expected there — as the compiler refuses it — and not at the top of the file expecting its end, which is what the optional tail reported while the term's failure was discarded.
 #[test]
 fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {

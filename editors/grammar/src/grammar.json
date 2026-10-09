@@ -4864,7 +4864,11 @@
   "extras": [
     {
       "type": "PATTERN",
-      "value": "\\s"
+      "value": "[ \\t\\n\\r]"
+    },
+    {
+      "type": "PATTERN",
+      "value": "\\uFEFF"
     },
     {
       "type": "SYMBOL",

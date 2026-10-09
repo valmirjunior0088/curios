@@ -2,13 +2,13 @@ use {
     super::{
         Argument, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature,
         LoadError, Name, RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam,
-        clear_comments, parse_optional_term, parse_program_end, parse_term, parse_top_item,
-        parse_whitespace, print_module_items, print_term, take_comments,
+        clear_comments, parse_file_head, parse_optional_term, parse_program_end, parse_term,
+        parse_top_item, print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
     curios_parse::{
-        Parser, ParserError, Recovered, commit, fail, lazy, many0, raise, recover, run_parser,
-        spanned, take_eof,
+        Parser, ParserError, Recovered, commit, fail, is_blank, lazy, many0, raise, recover,
+        run_parser, spanned, take_eof,
     },
     curios_print::{flat, pure, run_printer},
     curios_utilities::{Plicity, Report, Source, Span},
@@ -329,7 +329,7 @@ fn begins_item(line: &str) -> bool {
             | "let"
     );
 
-    head && line[word.len()..].starts_with(char::is_whitespace)
+    head && line[word.len()..].starts_with(is_blank)
 }
 
 /// The item loop, recovering past a broken item ([`recover`]) or, when `strict`, refusing at the first one with its own error: the whole-or-nothing reading `str::parse` gives.
@@ -453,7 +453,7 @@ impl Module {
         clear_comments();
         curios_profile::profile!("parse", group = "module");
         let module = run_parser(
-            parse_whitespace()
+            parse_file_head()
                 .and_keep(parse_items(strict))
                 .and_drop(parse_items_end)
                 .map(into_module),
@@ -525,7 +525,7 @@ impl Entrypoint {
         clear_comments();
         curios_profile::profile!("parse", group = "entrypoint");
         let entrypoint = run_parser(
-            parse_whitespace()
+            parse_file_head()
                 .and_keep(parse_items(strict))
                 .flat_map(|items| {
                     let swallowed = match first_broken(&items) {
@@ -565,7 +565,7 @@ pub(crate) fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, Pars
     clear_comments();
     curios_profile::profile!("parse", group = "format");
     let (module, item_spans, tail) = run_parser(
-        parse_whitespace()
+        parse_file_head()
             .and_keep(many0(|| spanned(parse_top_item)))
             .and(parse_optional_term)
             .and_drop(parse_program_end)

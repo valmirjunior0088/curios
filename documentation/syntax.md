@@ -27,7 +27,9 @@ Examples use declarations from `/std`, the standard library every program may na
 
 ### Whitespace and comments
 
-Spaces, tabs, and newlines separate tokens but otherwise have no meaning. Some operators require surrounding whitespace, as specified in [Operators](#operators).
+Spaces, tabs, and newlines separate tokens but otherwise have no meaning, and a carriage return is read as one of them. Some operators require surrounding whitespace, as specified in [Operators](#operators).
+
+A byte-order mark at the head of a file is passed over, and `format` writes none. No other character that prints as nothing, or as a blank, separates tokens or stands anywhere outside a literal and a comment — a no-break space, a zero-width space, a mark past the head — and a report that quotes one spells it by its code point, `U+00A0`.
 
 A line comment begins with `-- ` — the two dashes and a space — and continues to the end of the line; a bare `--` ending its line is an empty comment. There are no block comments, and `--` glued to what follows it is refused rather than read as one, except as the opening of the documentation comment below.
 

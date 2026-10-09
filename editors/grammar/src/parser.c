@@ -2730,8 +2730,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '|', 58,
         '}', 53,
       );
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(37);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(37);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(131);
       END_STATE();
     case 1:
@@ -2760,12 +2763,16 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == ' ') ADVANCE(3);
       END_STATE();
     case 4:
-      if (lookahead == '\n') ADVANCE(124);
-      if (lookahead == '"') ADVANCE(123);
-      if (lookahead == '-') ADVANCE(117);
-      if (lookahead == '\\') ADVANCE(2);
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') ADVANCE(116);
+      ADVANCE_MAP(
+        '\n', 124,
+        '"', 123,
+        '-', 117,
+        '\\', 2,
+        '\t', 116,
+        '\r', 116,
+        ' ', 116,
+        0xfeff, 116,
+      );
       if (lookahead != 0) ADVANCE(118);
       END_STATE();
     case 5:
@@ -2775,8 +2782,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       if (lookahead == '"') ADVANCE(111);
       if (lookahead == '-') ADVANCE(107);
       if (lookahead == '\\') ADVANCE(25);
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') ADVANCE(106);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) ADVANCE(106);
       if (lookahead != 0) ADVANCE(108);
       END_STATE();
     case 7:
@@ -2789,8 +2799,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       if (lookahead == '+') ADVANCE(18);
       if (lookahead == '-') ADVANCE(11);
       if (lookahead == '0') ADVANCE(92);
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(9);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(9);
       if (('1' <= lookahead && lookahead <= '9')) ADVANCE(94);
       END_STATE();
     case 10:
@@ -2808,26 +2821,38 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       if (lookahead == '.') ADVANCE(16);
       if (lookahead == '/') ADVANCE(75);
       if (lookahead == '}') ADVANCE(53);
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(12);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(12);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(131);
       END_STATE();
     case 13:
       if (lookahead == '-') ADVANCE(10);
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(13);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(13);
       END_STATE();
     case 14:
       if (lookahead == '-') ADVANCE(10);
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(13);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(13);
       if (('0' <= lookahead && lookahead <= '9')) ADVANCE(79);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(80);
       END_STATE();
     case 15:
       if (lookahead == '-') ADVANCE(10);
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(13);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(13);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(83);
       END_STATE();
     case 16:
@@ -2956,8 +2981,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '|', 58,
         '}', 53,
       );
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(37);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(37);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(131);
       END_STATE();
     case 38:
@@ -2985,8 +3013,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '|', 58,
         '}', 53,
       );
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(39);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(39);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(131);
       END_STATE();
     case 39:
@@ -3013,8 +3044,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '|', 58,
         '}', 53,
       );
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(39);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(39);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(131);
       END_STATE();
     case 40:
@@ -3041,8 +3075,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '|', 58,
         '}', 53,
       );
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(41);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(41);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(131);
       END_STATE();
     case 41:
@@ -3068,8 +3105,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '|', 58,
         '}', 53,
       );
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(41);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(41);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(131);
       END_STATE();
     case 42:
@@ -3093,8 +3133,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '{', 59,
         '}', 53,
       );
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(42);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(42);
       if (('1' <= lookahead && lookahead <= '9')) ADVANCE(93);
       if (set_contains(aux_sym_projection_token1_character_set_1, 840, lookahead)) ADVANCE(131);
       END_STATE();
@@ -3357,8 +3400,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
     case 106:
       ACCEPT_TOKEN(aux_sym_string_token1);
       if (lookahead == '-') ADVANCE(107);
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') ADVANCE(106);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) ADVANCE(106);
       if (lookahead != 0 &&
           lookahead != '"' &&
           lookahead != '\\') ADVANCE(108);
@@ -3414,10 +3460,12 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       ACCEPT_TOKEN(aux_sym_block_string_token2);
       if (lookahead == '-') ADVANCE(117);
       if (lookahead == '\t' ||
-          (0x0b <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') ADVANCE(116);
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) ADVANCE(116);
       if (lookahead != 0 &&
-          (lookahead < '\t' || '\r' < lookahead) &&
+          lookahead != '\t' &&
+          lookahead != '\n' &&
           lookahead != '"' &&
           lookahead != '\\') ADVANCE(118);
       END_STATE();
@@ -3517,8 +3565,11 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
         't', 12,
         'u', 13,
       );
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') SKIP(0);
+      if (lookahead == '\t' ||
+          lookahead == '\n' ||
+          lookahead == '\r' ||
+          lookahead == ' ' ||
+          lookahead == 0xfeff) SKIP(0);
       END_STATE();
     case 1:
       if (lookahead == 'r') ADVANCE(14);

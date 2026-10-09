@@ -1,5 +1,5 @@
 use {
-    super::ParserState,
+    super::{ParserState, is_blank, shown, unseen},
     curios_utilities::{Report, Source, Span},
     std::{borrow::Cow, sync::Arc},
 };
@@ -60,22 +60,38 @@ impl ParserError {
     }
 
     /// What the failure says, rendered — see [`Message`].
+    ///
+    /// A failure whose caret stands at a character its reader cannot see names the character, where what it says does not already: the caret would point at nothing, or at what reads as a blank between two tokens.
     fn message(&self) -> String {
-        match &self.message {
+        let said = match &self.message {
             Message::Said(message) => message.to_string(),
             Message::Unexpected(unexpected) => format!("unexpected '{unexpected}'"),
             Message::Expected(expected) => {
                 let obtained: String = self.source.text[self.offset..]
                     .chars()
                     .take(expected.chars().count())
-                    .take_while(|char| !char.is_whitespace())
+                    .take_while(|char| !is_blank(*char))
                     .collect();
 
                 match obtained.is_empty() {
                     true => format!("Expected '{expected}', obtained 'end-of-file'"),
-                    false => format!("Expected '{expected}', obtained '{obtained}'"),
+                    false => format!("Expected '{expected}', obtained '{}'", shown(&obtained)),
                 }
             }
+        };
+
+        let at = self.from.unwrap_or(self.offset);
+        match self.source.text[at..].chars().next() {
+            Some(char) if unseen(char) => {
+                let code = shown(char.encode_utf8(&mut [0; 4]));
+                match said.contains(&code) {
+                    true => said,
+                    false => {
+                        format!("{said}: {code} stands here, a character the grammar does not take")
+                    }
+                }
+            }
+            _ => said,
         }
     }
 
