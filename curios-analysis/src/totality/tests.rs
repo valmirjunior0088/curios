@@ -306,14 +306,35 @@ fn ring(members: usize) -> Vec<Call> {
         .collect()
 }
 
-// The closure's limit turns a verdict into a refusal and into nothing else: a group whose closure outgrows it is partial whatever it descends on, and the largest ring inside it is judged. Mutation-checked against the limit: answering total past it certifies the larger ring, and refusing at the limit rather than past it refuses the smaller.
+/// A member's eight parameters handed on permuted, the `row`th graded strictly below by the argument at `to[row]`.
+fn permuted(to: [usize; 8]) -> Matrix {
+    let mut permuted = Matrix::unknown(8, 8);
+    for (row, column) in to.into_iter().enumerate() {
+        permuted.set(row, column, LESS);
+    }
+
+    permuted
+}
+
+// The closure's bound turns a verdict into a refusal and into nothing else: a group whose closure outgrows it is partial whatever it descends on. One member that hands its eight parameters on swapped and rotated, each with a strict descent, closes to every permutation of them, 40 320 matrices of which each that repeats descends, and the bound stops the closure short. Mutation-checked both ways: with the bound lifted the group is judged total, and answering total past the bound certifies it unjudged.
 #[test]
 fn a_closure_past_its_limit_claims_nothing() {
-    // A ring of `side` members closes to `side * side` calls, so the largest ring inside the limit has its square root for a side.
+    let swapped = permuted([1, 0, 2, 3, 4, 5, 6, 7]);
+    let rotated = permuted([1, 2, 3, 4, 5, 6, 7, 0]);
+
+    assert_eq!(
+        decide(vec![call(0, 0, swapped), call(0, 0, rotated)]),
+        Totality::Partial
+    );
+}
+
+// Members that all reach each other close to a call for every ordered pair of them, so the bound leaves a ring of any size its closure: the ring one member past what the fixed part alone holds is judged, and so is one of twice its side. Mutation-checked: under the fixed part alone, either ring is partial.
+#[test]
+fn a_ring_is_judged_whatever_its_size() {
     let side = CLOSURE_LIMIT.isqrt();
 
-    assert_eq!(decide(ring(side)), Totality::Total);
-    assert_eq!(decide(ring(side + 1)), Totality::Partial);
+    assert_eq!(decide(ring(side + 1)), Totality::Total);
+    assert_eq!(decide(ring(2 * side)), Totality::Total);
 }
 
 #[test]
