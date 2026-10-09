@@ -51,19 +51,23 @@ impl Places {
         const TWICE: &str = "a module declares one name twice";
         let mut places = HashMap::with_capacity(module.items.len());
         let mut slots = 0;
-        for (item, declared) in module.items.iter().enumerate() {
-            let item = u32::try_from(item).expect("a unit's items are counted in a u32");
-            match declared {
-                Item::Let(definition) => {
-                    let earlier = places.insert(definition.name, Place::Let(item));
-                    assert!(earlier.is_none(), "{TWICE}");
+        // Asked of what each place declares, which a stored module knows without its item: placing a unit's names reads none of its declarations.
+        for place in 0..module.items.len() {
+            let item = u32::try_from(place).expect("a unit's items are counted in a u32");
+            let names = module.items.names(place);
+            match module.items.is_group(place) {
+                false => {
+                    for name in names {
+                        let earlier = places.insert(*name, Place::Let(item));
+                        assert!(earlier.is_none(), "{TWICE}");
+                    }
                 }
-                Item::Rec(rec) => {
-                    for (member, definition) in rec.definitions.iter().enumerate() {
+                true => {
+                    for (member, name) in names.into_iter().enumerate() {
                         let member =
                             u32::try_from(member).expect("a group's members are counted in a u32");
                         let earlier = places.insert(
-                            definition.name,
+                            *name,
                             Place::Member {
                                 item,
                                 member,

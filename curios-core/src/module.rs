@@ -9,9 +9,9 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Items,
-        Many, Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm,
-        Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId, WitnessSpelling,
-        build_shorten,
+        Many, Outline, Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl,
+        Subterm, Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId,
+        WitnessSpelling, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -167,13 +167,7 @@ impl Certification {
     pub fn covers(&self, module: &Module) -> bool {
         let classified = |name: &Global| self.totalities.contains_key(name);
 
-        module.items.iter().all(|item| match item {
-            Item::Let(definition) => classified(&definition.name),
-            Item::Rec(rec) => rec
-                .definitions
-                .iter()
-                .all(|definition| classified(&definition.name)),
-        })
+        (0..module.items.len()).all(|place| module.items.names(place).into_iter().all(classified))
     }
 
     /// Every classification this record holds.
@@ -472,6 +466,65 @@ pub struct Module {
     pub witnesses: BTreeSet<Global>,
     /// The definition names that are `test` declarations, in declaration order — the order the synthesized test tail schedules them and the runner reports them, so a `Vec` rather than a set.
     pub tests: Vec<Global>,
+}
+
+#[cfg(feature = "archive")]
+impl Module {
+    /// The module archived as `bytes`, read by item where the bytes outlive every reader: its registries restored now, since every compilation reads them and they are small, and each item the first time it is read ([`Items`]), all through one pool, so a node an item shares with another, or with a registry entry, is one allocation as it is in a module restored whole. `Err` is bytes that hold no module.
+    ///
+    /// **By item where the bytes are a constant of the executable, and whole otherwise.** An item is restored out of a view of the archive that was checked whole, and a view borrows its bytes: of a constant it lives as long as the process, and of bytes read for one unit it would have to be held beside what it borrows. So a module read out of a store's slot is restored whole, as every module was.
+    pub fn stored(bytes: impl Into<curios_archive::Bytes>) -> Result<Self, String> {
+        let archived = match bytes.into() {
+            curios_archive::Bytes::Constant(bytes) => {
+                curios_archive::access::<ArchivedModule>(bytes)?
+            }
+            read => return curios_archive::from_bytes::<Module>(read.as_slice()),
+        };
+        let pooled = std::rc::Rc::new(curios_archive::Pooled::new());
+        let outlines = archived
+            .items
+            .iter()
+            .map(|item| {
+                let names = match item {
+                    ArchivedItem::Let(definition) => {
+                        vec![pooled.restore::<Global>(&definition.name)?]
+                    }
+                    ArchivedItem::Rec(rec) => rec
+                        .definitions
+                        .iter()
+                        .map(|definition| pooled.restore::<Global>(&definition.name))
+                        .collect::<Result<_, _>>()?,
+                };
+
+                Ok(Outline {
+                    names,
+                    group: matches!(item, ArchivedItem::Rec(_)),
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let items = {
+            let pooled = std::rc::Rc::clone(&pooled);
+
+            Items::stored(outlines, move |place| {
+                curios_profile::sample!("module::restored", place);
+                pooled
+                    .restore::<Item>(&archived.items[place])
+                    .unwrap_or_else(|error| {
+                        panic!("a stored module's item failed to restore: {error}")
+                    })
+            })
+        };
+
+        Ok(Self {
+            items,
+            mounts: pooled.restore(&archived.mounts)?,
+            induct_decls: pooled.restore(&archived.induct_decls)?,
+            struct_decls: pooled.restore(&archived.struct_decls)?,
+            concepts: pooled.restore(&archived.concepts)?,
+            witnesses: pooled.restore(&archived.witnesses)?,
+            tests: pooled.restore(&archived.tests)?,
+        })
+    }
 }
 
 impl Module {

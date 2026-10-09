@@ -142,12 +142,12 @@ impl<'s> Mounted<'s> {
             true => (self, other),
             false => (other, self),
         };
-        let defined = smaller.module.items.iter().any(|item| match item {
-            Item::Let(definition) => larger.holds(&definition.name),
-            Item::Rec(rec) => rec
-                .definitions
-                .iter()
-                .any(|definition| larger.holds(&definition.name)),
+        let items = &smaller.module.items;
+        let defined = (0..items.len()).any(|place| {
+            items
+                .names(place)
+                .into_iter()
+                .any(|name| larger.holds(name))
         });
 
         defined

@@ -29,6 +29,9 @@ use {
 pub struct Uncertified {
     text: Rc<PreparedText>,
     /// Elaborated and zonked. This is what the kernel judges and what a successor's elaboration reads where it stands.
+    ///
+    /// **Stored apart, and read by item.** A compilation after the unit reads the declarations it names, so the module's archive is kept beside the unit, and a unit restored holds a module whose registries are restored and whose items are each read when something first asks ([`Module::stored`]).
+    #[archived_with(curios_archive::Skip)]
     core: Rc<Module>,
     /// Where `core` holds each name it defines, made the first time the unit is read by name and kept for as long as it is held: no compilation keys the unit again. Never stored, being read off `core`.
     #[archived_with(curios_archive::Skip)]
@@ -108,11 +111,12 @@ impl Uncertified {
         traces
     }
 
-    /// The bytes this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it: its lowered items and its erased forms, one on its own for each ([`PreparedText::items_bytes`], [`ErasedUnit::items_bytes`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
+    /// The bytes this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it: its lowered items and its erased forms, one on its own for each ([`PreparedText::items_bytes`], [`ErasedUnit::items_bytes`]), its elaborated module's archive, read by item ([`Module::stored`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
     #[cfg(feature = "archive")]
     pub fn apart_bytes(&self) -> Result<Vec<u8>, String> {
         let items = self.text.items_bytes()?;
         let forms = self.erased.items_bytes()?;
+        let module = curios_archive::to_bytes(&*self.core)?;
         let text = self.text.baseline_bytes()?;
         let traces = self.traces.bytes()?;
         let erased = self.erased.baseline_bytes()?;
@@ -120,6 +124,7 @@ impl Uncertified {
         Ok(joined(&[
             &items[..],
             &forms[..],
+            &module[..],
             &text[..],
             &traces[..],
             &erased[..],
@@ -137,7 +142,7 @@ impl Uncertified {
     /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::apart_bytes`]), each part a run of the buffer they are in and read when something first asks for it — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing.
     #[cfg(feature = "archive")]
     pub fn with_apart(self, bytes: impl Into<Bytes>) -> Result<Self, String> {
-        let [items, forms, text, traces, erased] =
+        let [items, forms, module, text, traces, erased] =
             apart_parts(&bytes.into()).ok_or("not what a unit stores apart from itself")?;
 
         Ok(Self {
@@ -152,7 +157,8 @@ impl Uncertified {
                     .with_items(forms)?,
             ),
             traces: Rc::new(Deferred::stored(traces)),
-            ..self
+            core: Rc::new(Module::stored(module)?),
+            places: Rc::default(),
         })
     }
 
@@ -230,12 +236,13 @@ impl Unit {
     /// Run here and not where a unit is assembled: the pass builds a node for every node of the module, and a unit that is neither filed nor followed — a keystroke's — is never serialized.
     #[cfg(feature = "archive")]
     pub fn stored(&self) -> Result<Vec<u8>, String> {
+        let consed = self.unit.consed();
+        let apart = consed.apart_bytes()?;
         let unit = curios_archive::to_bytes(&Unit {
-            unit: self.unit.consed(),
+            unit: consed,
             certification: Rc::clone(&self.certification),
         })?;
 
-        let apart = self.unit.apart_bytes()?;
         let reads = self.certification.reads_bytes()?;
 
         Ok(halved(&unit, &joined(&[&apart[..], &reads[..]])))

@@ -323,7 +323,7 @@ fn std_image_division() {
                 .and_then(|parts| parts.try_into().ok())
                 .expect("what a certified unit stores apart");
         let reads = reads.as_slice().len();
-        let [lowered, forms, records, asked, erasures] = apart_parts(&apart)
+        let [lowered, forms, module, records, asked, erasures] = apart_parts(&apart)
             .expect("what a unit stores apart")
             .map(|part| part.as_slice().len());
 
@@ -358,11 +358,12 @@ fn std_image_division() {
 
         row(
             "what a reader of a declaration restores",
-            lowered + forms,
+            lowered + forms + module,
             None,
         );
         row("  its lowered items, each stored alone", lowered, None);
         row("  its erased forms, each stored alone", forms, None);
+        row("  its elaborated module, read by item", module, None);
         row(
             "what a recompile alone restores",
             records + asked + erasures + reads,

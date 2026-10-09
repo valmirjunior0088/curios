@@ -115,9 +115,9 @@ struct Unit<'a> {
 impl<'a> Unit<'a> {
     fn of(module: &'a Module) -> Self {
         let mut places = HashMap::with_capacity(module.items.len());
-        for (item, declared) in module.items.iter().enumerate() {
-            let item = u32::try_from(item).expect("a unit's items are counted in a u32");
-            for (member, name) in declared.declared_names().into_iter().enumerate() {
+        for place in 0..module.items.len() {
+            let item = u32::try_from(place).expect("a unit's items are counted in a u32");
+            for (member, name) in module.items.names(place).into_iter().enumerate() {
                 let member = u32::try_from(member).expect("a group's members are counted in a u32");
                 places.insert(*name, (item, member));
             }
@@ -126,7 +126,7 @@ impl<'a> Unit<'a> {
         Self {
             module,
             places,
-            items: module.items.iter().map(|_| OnceCell::new()).collect(),
+            items: (0..module.items.len()).map(|_| OnceCell::new()).collect(),
             inducts: module
                 .induct_decls
                 .keys()

@@ -156,17 +156,21 @@ impl<'a> Standing<'a> {
 
     /// Each group this unit answers for, with its members' names in member order.
     fn groups(&self) -> impl Iterator<Item = (RecGroup, Vec<Global>)> + '_ {
-        self.module.items.iter().filter_map(|item| match item {
-            Item::Rec(rec) => {
-                let names = member_names(rec);
+        let items = &self.module.items;
 
-                names
-                    .iter()
-                    .all(|name| self.answers(name))
-                    .then(|| (rec.group.clone(), names))
-            }
-            Item::Let(_) => None,
-        })
+        (0..items.len())
+            .filter(|place| items.is_group(*place))
+            .filter_map(|place| match &items[place] {
+                Item::Rec(rec) => {
+                    let names = member_names(rec);
+
+                    names
+                        .iter()
+                        .all(|name| self.answers(name))
+                        .then(|| (rec.group.clone(), names))
+                }
+                Item::Let(_) => None,
+            })
     }
 
     fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
