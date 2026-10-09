@@ -1,6 +1,6 @@
 //! Fixtures the intrinsic-fold suites share: the terms they fold and the reducer they fold through.
 //!
-//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
+//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it but [`Folding`], which `term`'s walk harness puts the truth table through.
 
 use {
     super::{Reducer, reduce_intrinsic},
@@ -60,7 +60,7 @@ pub(super) fn occurrences(term: &Term, wanted: &Term) -> usize {
 }
 
 /// A reducer that folds intrinsics all the way down, for the gates that must *evaluate* a rebuilt term rather than inspect its shape. `reduce_intrinsic` already reduces its own operands through this seam, so one pass suffices for the terms below.
-pub(super) struct Folding;
+pub(crate) struct Folding;
 
 impl Reducer for Folding {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {

@@ -256,6 +256,16 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
         )
     };
 
+    // Sixty levels of `(below && y) || below`, which no fold relates, so each level holds the one below twice and stands as written.
+    let formula = || {
+        (0..60).fold(Term::free_var(&x), |below, _| {
+            Term::intrinsic(Intrinsic::BoolOr(
+                Term::intrinsic(Intrinsic::BoolAnd(below.clone(), Term::free_var(&y))),
+                below,
+            ))
+        })
+    };
+
     let rows: Vec<(&str, bool)> = vec![
         ("equality", term == doubled(base.clone(), 60)),
         (
@@ -311,6 +321,10 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
                     &families,
                 )
                 .is_some_and(|found| found.compared.is_empty()),
+        ),
+        (
+            "the truth table",
+            decide_bool(&mut Folding, &formula(), &formula()).is_ok_and(|equal| equal),
         ),
         (
             "the shared level rewrite",

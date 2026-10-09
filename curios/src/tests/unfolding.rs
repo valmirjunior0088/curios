@@ -131,7 +131,7 @@ pub(super) enum Consumed {
     ScrutinizedClosed,
     /// Named in the index of an `Eq` the declaration takes a proof of, and eliminated. No case equation is registered for the web at all — the scrutinee is the proof, a bare variable — and the web is reduced anyway, by `invert_indices` unifying `(top(n), true)` against `refl`'s `(z, z)` through `Judge::convert_at`.
     ///
-    /// The second door onto the same reduction, and the one no refinement key reaches, in both checkers; what keeps it flat is weak-head reduction's and the closed machine's, not the inverter's, as [`scrutinee_refinement_measurements`] states. [`numerics`] is the same door over `Nat`, whose fold laws read both operands.
+    /// The second door onto the same reduction, and the one no refinement key reaches, in both checkers; what keeps it flat is weak-head reduction's, the closed machine's and the truth table's, not the inverter's, as [`scrutinee_refinement_measurements`] states. [`numerics`] is the same door over `Nat`, whose fold laws read both operands.
     Proved,
 }
 
@@ -271,76 +271,119 @@ fn combinator_sharing_measurements() {
     }
 }
 
+/// One door [`scrutinee_refinement_measurements`] times: whether each definition of its web names the one before it once or twice, how the web's value is consumed, and the program at a size.
+struct Door {
+    named: &'static str,
+    consumed: &'static str,
+    program: fn(usize) -> String,
+}
+
 /// What a web of combinator definitions costs to compile, and what consuming its value adds to that.
 ///
 /// # How to take it
 ///
 /// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture scrutinee_refinement_measurements
+/// cargo test --package curios --lib --all-features -- --ignored --nocapture scrutinee_refinement_measurements
 /// ```
 ///
 /// # What it last printed
 ///
-/// **Debug**, `aarch64-apple-darwin`. Debug rather than release deliberately: debug is the canary for exhaustion that release hides, and the 3.3 s every row shares is the debug prelude restore plus a trivial compile — read the columns against each other.
+/// Timed, taken on top of `2cf63dca7` on `x86_64-unknown-linux-gnu`, in the test profile: five rounds, each over every door and size so no row is read on a warmer machine than another. Median of the five, with their span. The 0.18 s every row shares is the prelude's restore and a trivial compile, so the columns are read against each other.
 ///
 /// | definitions | applied | scrutinized | proved | numeric, proved |
 /// | --- | --- | --- | --- | --- |
-/// | 8 | 3.57 s | 3.33 s | 3.36 s | 3.35 s |
-/// | 10 | 3.27 s | 3.33 s | 3.35 s | 3.35 s |
-/// | 12 | 3.30 s | 3.32 s | 3.35 s | 3.37 s |
-/// | 13 | 3.30 s | 3.33 s | 3.37 s | 3.37 s |
+/// | 8 | 0.18 s [0.17–0.21] | 0.18 s [0.17–0.18] | 0.18 s [0.18–0.18] | 0.18 s [0.18–0.18] |
+/// | 10 | 0.18 s [0.17–0.18] | 0.18 s [0.17–0.18] | 0.18 s [0.18–0.18] | 0.18 s [0.18–0.19] |
+/// | 12 | 0.18 s [0.17–0.18] | 0.18 s [0.18–0.18] | 0.18 s [0.18–0.19] | 0.19 s [0.19–0.19] |
+/// | 13 | 0.18 s [0.18–0.18] | 0.18 s [0.18–0.18] | 0.18 s [0.18–0.19] | 0.19 s [0.19–0.19] |
+/// | 14 | 0.18 s [0.18–0.18] | 0.18 s [0.18–0.18] | 0.19 s [0.18–0.19] | 0.19 s [0.19–0.19] |
+/// | 20 | 0.18 s [0.18–0.18] | 0.18 s [0.18–0.18] | 0.19 s [0.19–0.19] | 0.20 s [0.20–0.21] |
 ///
-/// **Every door is flat.** The `once` and `closed` scrutinized columns read the same and are omitted. `a_ten_definition_numeric_web_compiles` and `a_symbolic_web_compares_against_zero_in_linear_units` are the fixtures that refuse a regression.
+/// **Every door is flat.** The `once` and `closed` scrutinized columns read the same and are omitted. `a_ten_definition_numeric_web_compiles`, `a_proved_web_of_twenty_definitions_compiles` and `a_symbolic_web_compares_against_zero_in_linear_units` are the fixtures that refuse a regression.
 ///
-/// Each door stays flat for a reason held where it stands. A case refinement is keyed at the written spelling, so keying never demands the scrutinee's reduction — a web nothing reduces is flat however it fans out, and what makes a reduction unaffordable is a subject that mentions a binder, the term `Memos::storable` may not remember and the closed machine may not take. `&&` and `||` reduce their right operand only behind a literal left, and the closed machine keeps a global argument as a name rather than substituting its value, both in `curios-core`, which the two checkers share. A `Nat` fold must read its right operand for its identity laws, so its web's weak-head form is its normalization: it stays linear because the kernel's `Memos` keeps a local-bearing reduct while the equations in force stand, the elaborator's cache admits a universe metavariable, the kernel's `capture` is memoized on node and depth, `Term::eq` remembers the pairs it has entered, and a product of two symbolic sums is its own weak-head form, distributed only where a value is asked for.
+/// Each door stays flat for a reason held where it stands. A case refinement is keyed at the written spelling, so keying never demands the scrutinee's reduction — a web nothing reduces is flat however it fans out, and what makes a reduction unaffordable is a subject that mentions a binder, the term `Memos::storable` may not remember and the closed machine may not take. `&&` and `||` reduce their right operand only behind a literal left, and the closed machine keeps a global argument as a name rather than substituting its value, both in `curios-core`, which the two checkers share. A comparison of two `Bool` webs is put to the truth table, which reads a term once, so the proved door costs its web's graph. A `Nat` fold must read its right operand for its identity laws, so its web's weak-head form is its normalization: it stays linear because the kernel's `Memos` keeps a local-bearing reduct while the equations in force stand, the elaborator's cache admits a universe metavariable, the kernel's `capture` is memoized on node and depth, `Term::eq` remembers the pairs it has entered, and a product of two symbolic sums is its own weak-head form, distributed only where a value is asked for.
 ///
 /// The programs end in a plain `/std/print("ok")` rather than a runtime-tainted parse, so these wall clocks are the two checkers and nothing downstream of them.
 #[test]
-#[ignore = "measurement: reports what a scrutinee costs rather than asserting"]
+#[ignore = "measurement, timed: reports what a scrutinee costs rather than asserting"]
 fn scrutinee_refinement_measurements() {
-    println!(
-        "{:<12} {:<7} {:<18} {:<9} outcome",
-        "definitions", "named", "consumed", "compile"
-    );
+    const ROUNDS: usize = 5;
+    const SIZES: [usize; 6] = [8, 10, 12, 13, 14, 20];
 
-    for (twice, consumed, label) in [
-        (true, Consumed::Applied, "applied"),
-        (false, Consumed::Scrutinized, "scrutinized"),
-        (true, Consumed::Scrutinized, "scrutinized"),
-        (true, Consumed::ScrutinizedClosed, "scrutinized, closed"),
-        (true, Consumed::Proved, "proved"),
-    ] {
-        let sizes: &[usize] = match consumed {
-            Consumed::Proved => &[8, 10, 12, 13],
-            _ => &[8, 10, 12, 13, 14, 20],
-        };
+    let doors = [
+        Door {
+            named: "twice",
+            consumed: "applied",
+            program: |rules| predicates(rules, Consumed::Applied, true),
+        },
+        Door {
+            named: "once",
+            consumed: "scrutinized",
+            program: |rules| predicates(rules, Consumed::Scrutinized, false),
+        },
+        Door {
+            named: "twice",
+            consumed: "scrutinized",
+            program: |rules| predicates(rules, Consumed::Scrutinized, true),
+        },
+        Door {
+            named: "twice",
+            consumed: "scrutinized, closed",
+            program: |rules| predicates(rules, Consumed::ScrutinizedClosed, true),
+        },
+        Door {
+            named: "twice",
+            consumed: "proved",
+            program: |rules| predicates(rules, Consumed::Proved, true),
+        },
+        // The same web over `Nat`, proved — the shape a `Bool` fold's short-circuit does not reach, because a `Nat` fold must read its right operand for its identity laws where a `Bool` fold behind a stuck left need not.
+        Door {
+            named: "twice",
+            consumed: "numeric, proved",
+            program: numerics,
+        },
+    ];
 
-        for &rules in sizes {
-            let (outcome, elapsed) = compile_only(&predicates(rules, consumed, twice));
-            let verdict = match &outcome {
-                Ok(()) => "compiled".to_string(),
-                Err(error) => error.lines().next().unwrap_or("refused").to_string(),
-            };
-            let named = match twice {
-                true => "twice",
-                false => "once",
-            };
+    let mut taken = vec![vec![Vec::new(); SIZES.len()]; doors.len()];
+    let mut verdicts = vec![vec![String::new(); SIZES.len()]; doors.len()];
+    for _ in 0..ROUNDS {
+        // A round over every door and size, so a disturbance during the sitting reaches each alike.
+        for (door, Door { program, .. }) in doors.iter().enumerate() {
+            for (index, &rules) in SIZES.iter().enumerate() {
+                let (outcome, elapsed) = compile_only(&program(rules));
 
-            println!("{rules:<12} {named:<7} {label:<18} {elapsed:>7.2} s  {verdict}");
+                taken[door][index].push(elapsed);
+                verdicts[door][index] = match &outcome {
+                    Ok(()) => "compiled".to_string(),
+                    Err(error) => error.lines().next().unwrap_or("refused").to_string(),
+                };
+            }
         }
     }
 
-    // The same web over `Nat`, proved — the shape a `Bool` fold's short-circuit does not reach, because a `Nat` fold must read its right operand for its identity laws where a `Bool` fold behind a stuck left need not.
-    for &rules in &[8usize, 10, 12, 13] {
-        let (outcome, elapsed) = compile_only(&numerics(rules));
-        let verdict = match &outcome {
-            Ok(()) => "compiled".to_string(),
-            Err(error) => error.lines().next().unwrap_or("refused").to_string(),
-        };
-        println!(
-            "{rules:<12} {:<7} {:<18} {elapsed:>7.2} s  {verdict}",
-            "twice", "numeric, proved"
-        );
+    println!("{ROUNDS} rounds, interleaved; median and span of each row's rounds");
+    println!(
+        "{:<12} {:<7} {:<20} {:<24} outcome",
+        "definitions", "named", "consumed", "compile"
+    );
+    for (
+        door,
+        Door {
+            named, consumed, ..
+        },
+    ) in doors.iter().enumerate()
+    {
+        for (index, rules) in SIZES.iter().enumerate() {
+            let mut times = taken[door][index].clone();
+            times.sort_by(f64::total_cmp);
+            let middle = times[times.len() / 2];
+            let (least, most) = (times[0], times[times.len() - 1]);
+
+            println!(
+                "{rules:<12} {named:<7} {consumed:<20} {middle:.2} s [{least:.2}-{most:.2}]    {}",
+                verdicts[door][index]
+            );
+        }
     }
 }
 
@@ -412,6 +455,18 @@ fn a_ten_definition_numeric_web_compiles() {
     let (outcome, _) = compile_only(&numerics(10));
 
     assert_eq!(outcome, Ok(()), "the ten-definition numeric web compiles");
+}
+
+/// The proved door at twenty definitions, each naming the one before it twice: the `&&` and `||` web its comparison against `true` reads is a graph of a few dozen nodes and a tree of millions. It compiles because the truth table reads a term once; read once per path, the comparison runs the declaration out of its budget well short of this size. Not a measurement — a refusal to regress to not compiling.
+#[test]
+fn a_proved_web_of_twenty_definitions_compiles() {
+    let (outcome, _) = compile_only(&predicates(20, Consumed::Proved, true));
+
+    assert_eq!(
+        outcome,
+        Ok(()),
+        "the proved web of twenty definitions compiles"
+    );
 }
 
 /// **The guard [`combinator_sharing_measurements`] cannot be**, because a probe is ignored and nothing runs it.

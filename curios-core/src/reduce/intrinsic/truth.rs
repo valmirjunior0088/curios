@@ -6,6 +6,8 @@
 //!
 //! **Agreement everywhere is equality; anything else is nothing.** Treating the atoms as independent *over*-approximates the values they can take together: `x < y` and `x < y + 1` are two atoms that are not independent at all, and the table still visits every combination the real values can reach, so two formulas that agree at every assignment agree at the real ones. For the same reason a disagreement proves nothing — the assignment it happens at may be one no value reaches — so this never answers a disequality, and inversion is handed no impossibility.
 //!
+//! **A term is read once.** The two sides are graphs, a reduct naming one node many times over, so the table remembers where each term it has read stands and a term met again is that node: what is forced, read and charged is the graph, never its tree (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`). The memory changes no answer, since a term read again adds no atom and stands for the value it stood for.
+//!
 //! **The cap is the theory's.** A table doubles with every atom, so past `curios-algebra`'s `BOOL_ATOM_CAP` the question is declined rather than priced out of the budget by accident, and what is evaluated is charged before the first assignment. The cap is a constant of the language, not of the host: the same two terms are decided, or not, on every target.
 
 use {
@@ -13,13 +15,16 @@ use {
     crate::{Cost, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term},
     curios_algebra::{Formula, Node},
     curios_utilities::recurse,
+    std::collections::HashMap,
 };
 
-/// Two formulas being read, over one shared list of atoms: the terms each atom stands for, and the formula `curios-algebra` evaluates.
+/// Two formulas being read, over one shared list of atoms: the terms each atom stands for, the formula `curios-algebra` evaluates, and where each term read so far stands in it.
 #[derive(Default)]
 struct Table {
     atoms: Vec<Term>,
     formula: Formula,
+    /// The position of every term read, as written and as forced. A term met again is the node it was read into, so the formula is its terms' graph and never their tree: a shared operand is forced once, read once and charged once.
+    positions: HashMap<Term, usize>,
 }
 
 impl Table {
@@ -29,11 +34,20 @@ impl Table {
         reducer: &mut impl Reducer,
         term: Term,
     ) -> Result<Option<usize>, ReduceError> {
+        if let Some(&position) = self.positions.get(&term) {
+            return Ok(Some(position));
+        }
+
         recurse(|| {
             let forced = reducer
                 .reduce_forced(term.clone())
                 .probed()?
-                .unwrap_or(term);
+                .unwrap_or_else(|| term.clone());
+            if let Some(&position) = self.positions.get(&forced) {
+                self.positions.insert(term, position);
+                return Ok(Some(position));
+            }
+
             let node = match &*forced {
                 Subterm::Intrinsic(Intrinsic::Bool(value)) => Node::Literal(*value),
                 Subterm::Intrinsic(
@@ -62,7 +76,10 @@ impl Table {
                     None => return Ok(None),
                 },
             };
-            Ok(Some(self.formula.push(node)))
+            let position = self.formula.push(node);
+            self.positions.insert(term, position);
+            self.positions.insert(forced, position);
+            Ok(Some(position))
         })
     }
 
