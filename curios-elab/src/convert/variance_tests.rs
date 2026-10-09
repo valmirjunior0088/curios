@@ -3,12 +3,13 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Definition, DefinitionKind, Free, InductDecl, Level, Telescope, Term, Totality,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
-        UniverseParam, UniverseRole, Variance,
+        Atom, Definition, DefinitionKind, Free, InductDecl, InductParam, Level, Telescope, Term,
+        Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseMetaId, UniverseParam, UniverseRole, Variance,
     },
-    curios_utilities::Qualifier,
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// `induct Wrap.{u}(A: Type u): Type u` with no constructor, registered carrying `variance` for its one level.
@@ -31,6 +32,49 @@ fn declare_wrap(context: &mut Context, variance: Variance) {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: vec![variance],
+            },
+        )
+        .unwrap();
+}
+
+/// `induct Held.{u}: Type u | hold(Drop.{u}(Nat))` over `let Drop.{u}(X: Type u) -> Type = Nat`: the payload holds `u` as it is written and no level once `Drop` is unfolded, which the walk does to read it.
+fn declare_held(context: &mut Context) {
+    let level = || Level::param(UniverseParam(0));
+    let scheme = UniverseContext {
+        parameter_count: 1,
+        constraints: Vec::new(),
+    };
+
+    let drop = Free::from(&nominal("Drop"));
+    let dropped = context.fresh(Some("X"));
+    context.define_assuming(
+        &drop,
+        &Term::func_type([(dropped, Term::type_at(level()))], Term::type_ground()),
+        &Term::func([(dropped, Term::type_at(level()))], nat_type()),
+        Some(&DefinitionKind::Authored),
+    );
+    context.set_assumption_universe_context(&drop, scheme.clone());
+
+    let held = context.fresh(Some("held"));
+    let payload = Term::apply(Term::instance_of(&drop, vec![level()]), [nat_type()]);
+    context
+        .register_induct(
+            &nominal("Held"),
+            InductDecl {
+                universe_context: scheme,
+                arity: Telescope::done(Telescope::done(())),
+                constructors: vec![(
+                    Atom::from("hold"),
+                    InductParam::new(
+                        Telescope::build([(held, payload)], Vec::new()),
+                        vec![Plicity::Explicit],
+                    ),
+                )],
+                result_sort: Term::type_at(level()),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
             },
         )
         .unwrap();
@@ -309,5 +353,29 @@ fn a_definition_passed_bare_is_left_to_its_function_type() {
             required,
             "{variance:?}"
         );
+    }
+}
+
+// A group whose walk the budget cuts short is refused for the budget and files no vector: a reduction the budget refuses reads its term as holding every level it carries, so the vector left claims less than the family's own, and on record it would refuse two instances a later item compares, with no word of the budget.
+#[test]
+fn a_family_whose_walk_the_budget_cuts_short_files_no_vector() {
+    for budget in [0, 100_000] {
+        let mut context = Context::new(budget, SYNTAX);
+        declare_held(&mut context);
+
+        let recorded = record_variances(&mut context, &[nominal("Held")]);
+        let filed = context
+            .induct_decl(&nominal("Held"))
+            .map(|declaration| declaration.variances.clone());
+        match budget {
+            0 => {
+                assert!(recorded.is_err(), "with no budget the group is refused");
+                assert_eq!(filed, Some(Vec::new()), "and its entry keeps no vector");
+            }
+            _ => {
+                recorded.expect("with the budget to unfold `Drop` the group is read whole");
+                assert_eq!(filed, Some(vec![Variance::Irrelevant]));
+            }
+        }
     }
 }

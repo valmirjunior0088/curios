@@ -52,13 +52,16 @@ impl Families for Structural<'_> {
 
 /// Record each of `names`' variance vectors on its registry entry: the families of one group, analyzed together as that group finalizes, so a later item that compares two of their instances reads them.
 ///
-/// Every earlier family's vector answers from the registry. A solved metavariable is spliced in first; one still unsolved is read as mentioning every level, its solution being free to. A reduction the budget refuses reads the same way, and is no error here: the vector it leaves claims less.
-pub(crate) fn record_variances(context: &mut Context, names: &[Global]) {
+/// Every earlier family's vector answers from the registry. A solved metavariable is spliced in first; one still unsolved is read as mentioning every level, its solution being free to. A reduction the budget refuses reads the same way, and the group is refused for the budget: the vector it leaves claims less than the families' own, and on record it would refuse two instances a later item compares, with no word of the budget.
+pub(crate) fn record_variances(context: &mut Context, names: &[Global]) -> Result<(), Error> {
     curios_profile::profile!("record_variances");
     let (inducts, structs) = spliced(context, names);
 
-    let VarianceVectors { vectors, .. } =
+    let VarianceVectors { vectors, exhausted } =
         variance_vectors(context, Declarations::of(&inducts, &structs));
+    if let Some((walked, error)) = exhausted {
+        return Err(error.in_declaration(&walked.symbol(), Some(&walked)));
+    }
     for (name, vector) in vectors {
         if let Some(declaration) = context.induct_decl(&name).cloned() {
             context.update_induct(
@@ -78,6 +81,8 @@ pub(crate) fn record_variances(context: &mut Context, names: &[Global]) {
             );
         }
     }
+
+    Ok(())
 }
 
 /// The levels still open that the families among `names` hold, the group they close with: what an instance of one holds in its index types, payloads, fields and targets, read by the walk their vectors are computed by once their levels have closed ([`record_variances`]). `None` where a telescope may hold any level, a metavariable in it being still unsolved.

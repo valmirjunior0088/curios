@@ -847,7 +847,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
         context.update_witness_scheme(&def.name, universe_context.clone(), type_.clone());
     }
     // A lone `struct` lowers to this `let`: its variance is settled as a group's is, for the later items that compare two of its instances. A name with no registry entry records nothing.
-    record_variances(context, &[def.name]);
+    record_variances(context, &[def.name])?;
     // After a struct's own vector, which its former's body is read by. A witness that names itself becomes a group of one below, and a member carries none.
     let variances = match recursive_witness {
         true => Vec::new(),
@@ -1244,7 +1244,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .iter()
         .map(|definition| definition.name)
         .collect::<Vec<_>>();
-    record_variances(context, &declared);
+    record_variances(context, &declared)?;
 
     // Classify the whole group at once: its members may mention each other, so no member's verdict is settled until the group's descent is.
     let group = group_totality(context, &rec.group)?;
