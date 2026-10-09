@@ -3,7 +3,7 @@
 //! 1. **Local scope, direct** — the `use` binders in Γ, innermost-first; first match wins (shadowing, like names).
 //! 2. **Local scope, superclass projection** — projections of local `use` binders through the (acyclic) superclass graph, breadth-first by depth; two matches at the same minimal depth are ambiguous.
 //! 3. **Global table** — pure lookup by `(concept, tuple of the rigid heads of every parameter)`; a hit instantiates the witness's telescope (fresh metavariables for `@` binders, recursive goals for `use` premises) and unifies its result type against the goal. No projections here.
-//! 4. **Flex head** — any parameter still headed by a metavariable parks the goal, woken when a watched metavariable solves.
+//! 4. **Flex head** — any parameter still headed by a metavariable, or reduced as far as one lets it be, parks the goal, woken when a watched metavariable solves.
 //!
 //! A rigid, keyable head with no table entry is asked of the witnesses the unit declares, each known before it elaborates by the key its signature is spelled at ([`Keying`](curios_core::Keying)): where one is spelled there and has not elaborated, the attempt needs it and is void ([`Context::need`]); where none is, the goal has no witness, and says so where it stands.
 //!
@@ -17,7 +17,7 @@ use {
         ShapeDiagnosis, Witness, attempt_discharge, convert_outcome, reduce_with,
         resolved_for_display,
     },
-    crate::{SlotPositions, is_prop, premise_label},
+    crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
     curios_core::{
         Advance, CalleeId, ConceptDecl, Enter, Extent, Field, Free, Global, HeadKey,
         ImplicitOrigin, Instance, InstanceHead, Level, Metavar, MetavarId, StructType, Subterm,
@@ -389,11 +389,11 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
 
     let concept_app = as_concept_app(context, &goal_whnf);
 
-    // Step 4 gates steps 1–3 for concept goals: a flex parameter must park rather than match eagerly, or an in-scope binder of the same concept would overcommit the hole (`Show(?T)` grabbing a local `Show(Nat)` while `?T` was headed for `Bin`). Every parameter gates — a first-param-only gate would let `Into(Nat, ?B)` reach the table with an incomplete key and wrongly defer.
+    // Step 4 gates steps 1–3 for concept goals: a flex parameter must park rather than match eagerly, or an in-scope binder of the same concept would overcommit the hole (`Show(?T)` grabbing a local `Show(Nat)` while `?T` was headed for `Bin`). Every parameter gates — a first-param-only gate would let `Into(Nat, ?B)` reach the table with an incomplete key and wrongly defer. A parameter stuck on a metavariable gates as one headed by it does: `Key(Pick(?b))`, over a `Pick` that matches on `?b`, has no head to key by until the argument that gives `b` is read, and going on to the table would refuse the goal one argument early.
     if let Some((_, _, params)) = &concept_app {
         for param in params {
             let head = reduce_with(context, param)?;
-            if flex_head(context, &head) {
+            if flex_head(context, &head) || stuck_on_metavar(context, &head) {
                 return Ok(Resolution::Flex);
             }
         }

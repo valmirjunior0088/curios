@@ -40,10 +40,10 @@ use {
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Exhaustion, Extent, Families,
         Free, Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic,
-        Level, Lockstep, Many, Match, MatchResult, Metavar, Probe, Proj, Rec, ReduceError, Scope,
-        Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variance, Variant,
-        past_bool_cap,
+        Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarOrigin, Probe, Proj, Rec,
+        ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
+        TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variance,
+        Variant, past_bool_cap,
     },
     curios_utilities::{Plicity, recurse},
     std::{
@@ -697,6 +697,8 @@ impl Convert {
 
     /// The first-order approximation for two applications of one global definition, taken on the raw spellings before either side is reduced. Reduction would unfold a `let`-defined head into its body on both sides — `trim(?t)` becomes a `match` stuck on `?t` — and lose the equation the spines state outright, `?t := X`. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds; this is the same rule for a head that does not survive, so what a program's unification does cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and the corpus fixture's `/big_nat/trim` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value. The attempt is bracketed: a solution it committed on the way to a verdict it did not reach is rolled back, so the fallthrough starts where the attempt did.
     ///
+    /// A `use` slot still open on either side is passed over, and the pair then goes on to reduction with what its other positions solved. A slot is resolution's to fill (`documentation/design/surface/concepts-resolve-with-global-coherence.md`): solved here it would take whatever dictionary the other spine names, and under a definition that drops its premise — `let Shelf(b: Bool, use Key(Pick(b))) -> Type = List(Pick(b));` — that is a dictionary the same call takes no notice of where its implicit is written, so one call would run under two dictionaries in two spellings. Left open, the slot is resolved as every other is; and where the definition keeps its dictionary the reduced types hold it, and comparing them solves the slot there.
+    ///
     /// Nor may accepting a pair depend on whether the definition is universe-polymorphic, which one mentioning `Eq` is: its occurrences are instances of one global at levels minted per occurrence. So an instance head qualifies too, on two conditions that keep it an acceptance rather than a new way to solve. Nothing in either spine may be flexible: the solving this rule exists for stays with monomorphic heads, where it was measured, because extending it to every polymorphic function and type former changes what `/std` elaborates to. And the heads are identified *after* the spines, because identifying two instances commits their levels equal — a commitment made only once the spines have earned it, never on the strength of an attempt that falls through, which is the reading `documentation/design/soundness/case-equations-and-their-key.md` gives a speculative match. The kernel compares the same pair the same way, before it unfolds either side.
     fn compare_same_global_apply(
         context: &mut Context,
@@ -757,16 +759,24 @@ impl Convert {
                 )?,
                 Outcome::Converts
             );
-        for (index, (a, b)) in this.params().zip(that.params()).enumerate() {
+        let open_slot = |context: &Context, term: &Term| matches!(&**term, Subterm::Metavar(metavar) if matches!(metavar.origin, MetavarOrigin::Witness(_)) && context.metavar_solution(metavar.id).is_none());
+        let mut passed_over = false;
+        for (index, (a, b)) in this.arguments.iter().zip(&that.arguments).enumerate() {
             if !converts {
                 break;
+            }
+            if a.plicity == Plicity::Witness
+                && (open_slot(context, &a.term) || open_slot(context, &b.term))
+            {
+                passed_over = true;
+                continue;
             }
             let param_type = param_types
                 .as_ref()
                 .and_then(|types| types.get(index).cloned())
                 .unwrap_or_else(Term::type_ground);
             converts = matches!(
-                convert_under(context, binders, &param_type, a, b)?,
+                convert_under(context, binders, &param_type, &a.term, &b.term)?,
                 Outcome::Converts
             );
         }
@@ -792,7 +802,8 @@ impl Convert {
             false => context.rollback_solutions(mark),
         }
 
-        Ok(converts)
+        // Past an open slot the spines have decided nothing of the pair, and what they solved elsewhere stands for the reduced comparison.
+        Ok(converts && !passed_over)
     }
 
     /// Compare applications of the same structural recursive member without assuming that member is injective. Convertible spines establish the result by congruence. A genuinely different spine instead triggers one symmetric delta step: distinct arguments may still produce equal results for a recursive function.

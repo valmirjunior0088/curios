@@ -326,6 +326,40 @@ fn two_dictionaries_in_one_call_are_refused() {
     );
 }
 
+// A premise whose key is a reduction waiting on an implicit waits for the argument that gives it, as one whose key is the implicit itself does: `Pick(b)` is stuck on `b` where the walk reaches the premise, and `at` gives `b` one argument later, whichever of the two is declared first. And a slot left open that long is still resolution's: where an argument's type names another dictionary under a definition that drops its premise, the call runs under the registered one, with its implicit written or left out.
+#[test]
+fn a_premise_over_a_stuck_key_waits_for_the_argument_that_gives_it() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, List, print};
+        pub concept Key(K: Type): pub Type {
+            same(K, K) -> Bool
+        }
+        satisfy Key(Nat) {
+            same(a, b) = a == b
+        }
+        let never: Key(Nat) = Key { same(a, b) = false };
+        let Pick(b: Bool) -> Type = match b | true => Nat | false => Str end;
+        induct Flag: (Bool) -> Type | flag(b: Bool): (b) end
+        let same_at(@b: Bool, use Key(Pick(b)), at: Flag(b), key: Pick(b)) -> Bool =
+            Key/same(key, key);
+        let same_after(@b: Bool, at: Flag(b), use Key(Pick(b)), key: Pick(b)) -> Bool =
+            Key/same(key, key);
+        let Shelf(b: Bool, use Key(Pick(b))) -> Type = List(Pick(b));
+        let on_shelf(@b: Bool, use Key(Pick(b)), at: Shelf(b), key: Pick(b)) -> Bool =
+            Key/same(key, key);
+        let shelved: Shelf(true, use never) = [1, 2];
+        print(Str/join(" ", [
+            Bool/to_str(same_at(Flag/flag(true), 2)),
+            Bool/to_str(same_at(@true, Flag/flag(true), 2)),
+            Bool/to_str(same_after(Flag/flag(true), 2)),
+            Bool/to_str(on_shelf(shelved, 2)),
+            Bool/to_str(on_shelf(@true, shelved, 2)),
+        ]))
+        "#;
+
+    assert_eq!(run(source), b"true true true true true");
+}
+
 // A slot is resolved where it stands. With the key type written ahead of the premise, the goal is closed when the walk reaches it and takes the registered dictionary, so a value under another is a mismatch the elaborator reports — and the same call with the dictionary written is accepted.
 #[test]
 fn a_key_type_fixed_before_the_slot_takes_the_registered_dictionary() {
