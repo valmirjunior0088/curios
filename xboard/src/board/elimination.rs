@@ -45,7 +45,7 @@ pub(super) const ELIMINATION: Part = Part {
             ],
         },
         Ticket {
-            title: "A guard's reduced spelling is settled under one case of a split inside its arm, and answers under the next",
+            title: "A guard's reduced spelling is settled under one case of a split inside its arm, and answers outside that case",
             found_on: Date::new(2026, 10, 9),
             status: Status::Open,
             witnesses: &[
@@ -57,6 +57,16 @@ pub(super) const ELIMINATION: Part = Part {
                 Witness {
                     what: "the same guard settled in the false arm of a split and answered in the true one, as a term",
                     proof: Proof::Module(a_guard_settled_under_one_case_of_a_split),
+                    expect: refused![kernel],
+                },
+                Witness {
+                    what: "a guard decided by proof irrelevance under one case of a split, and answered after the split",
+                    proof: Proof::Program(A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS),
+                    expect: refused![elaborator],
+                },
+                Witness {
+                    what: "the same guard settled where its operands are proofs and answered where they are not, as a term",
+                    proof: Proof::Module(a_guard_settled_where_its_operands_are_proofs),
                     expect: refused![kernel],
                 },
             ],
@@ -135,6 +145,31 @@ const A_GUARD_SETTLED_AT_ZERO_ANSWERS_AT_A_SUCCESSOR: &str = r#"
             end
         end;
     f((m: Nat) => m != 0, 1, Eq/refl(), True/qed(), True/qed())
+    "#;
+
+/// `F(c)` is a proposition at `true` and `Nat` at `false`, so `p` and `q` are proofs only under the `true` case of the split, where conversion holds `h(p)` and `h(q)` one term without reading either. The guard is the match on `h(p) == h(q)`, which stands while `c` is open, and its reduced spelling is settled inside that arm, where the comparison is `true` and the match is `k(0)`. The spelling is kept with the guard's equation, which outlives the split: after it, with `c` open again, `k(0)` is answered `true`, and at `false`, where the guard says `k(1)`, that is `Holds(false)`. No match here fires on the type its scrutinee stands at: what the settlement read of the split is whether two locals are proofs.
+const A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS: &str = r#"
+    use /std/{Nat, Bool};
+    use /std/Bool/{True, False, Holds};
+    induct Two: Prop | a() | b() end
+    let F(c: Bool) -> Type = match c | true => Two | false => Nat end;
+    let f(
+        c: Bool,
+        h: (F(c)) -> Nat,
+        k: (Nat) -> Bool,
+        p: F(c),
+        q: F(c),
+        guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> Holds(k(0)) =
+        match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+        | false => match guard end
+        | true =>
+            let split: {} = match c
+                | false => ()
+                | true => (let settled: Holds(k(0)) = True/qed(); ())
+                end;
+            True/qed()
+        end;
+    f(false, (n: Nat) => n, (n: Nat) => n == 1, 0, 1, True/qed())
     "#;
 
 /// `((n, h : Holds(n == 2)) => match n : (_) => False | 0 => h | pred + 1; ih => ih end)(2, qed)`.
@@ -286,6 +321,139 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
                 qed(),
                 qed(),
             ],
+        ),
+    )
+}
+
+/// `induct Two : Prop | a | b end`, and over `c : Bool`, `h : (F(c)) -> Nat`, `k : (Nat) -> Bool`, `p, q : F(c)` and `guard : Holds(read)`, with `F(c)` standing for `match c : (_) => Type | false => Nat | true => Two end` and `read` for `match h(p) == h(q) : (_) => Bool | false => k(1) | true => k(0) end`: `match read : (_) => Holds(k(0)) | false => match guard end | true => let w : True = match c : (_) => True | false => qed | true => let u : Holds(k(0)) = qed; qed end; qed end`, closed at `false`, the identity, `(n) => n == 1`, `0`, `1` and `qed`.
+///
+/// The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`, which names `h`, `p`, `q` and `k` and not `c`. The `true` arm of the split re-types `h`, `p` and `q` at `Two`, where conversion holds `h(p)` and `h(q)` one term, the comparison folds to `true` and `read` is `k(0)`: the `qed` that arm binds at `Holds(k(0))` settles the equation's reduced spelling there, as `k(0)`. The settled spelling stays with the equation when the split is left, so the `qed` after it, typed with `c` open, is checked at a `Holds(k(0))` that still answers `True`, and at `false`, where `read` is `k(1)`, what it proves is `Holds(false)`. With the `true` arm of the split a bare `qed`, the spelling is settled with `c` open, as `read` stands there, and the kernel refuses the term.
+fn a_guard_settled_where_its_operands_are_proofs() -> (Module, Term) {
+    let two = Global::Authored(Qualifier::from(["Two"]));
+    let two_type = || Term::induct_type(two, Vec::<Term>::new(), Vec::<Term>::new());
+    let bool_type = || Term::intrinsic(Intrinsic::BoolType);
+    let nat_type = || Term::intrinsic(Intrinsic::NatType);
+    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: ["a", "b"]
+            .iter()
+            .map(|tag| {
+                (
+                    Atom::from(*tag),
+                    InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+                )
+            })
+            .collect(),
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    let module = Module {
+        items: vec![declared(two, Nominal::Inductive(declaration))].into(),
+        ..Module::default()
+    };
+
+    let truth = Global::Authored(SYNTAX.proof.true_type.qualifier());
+    let true_type = || Term::induct_type(truth, Vec::<Term>::new(), Vec::<Term>::new());
+    let qed = || Term::variant(truth, Vec::<Term>::new(), "qed", Vec::<Term>::new());
+    let holds = |decision: Term| {
+        Term::apply(
+            Term::free_var(&Free::global(SYNTAX.proof.holds.qualifier())),
+            [decision],
+        )
+    };
+
+    let decided = Free::local(970, Some("c"));
+    let measure = Free::local(971, Some("h"));
+    let test = Free::local(972, Some("k"));
+    let left = Free::local(973, Some("p"));
+    let right = Free::local(974, Some("q"));
+    let guard = Free::local(975, Some("guard"));
+
+    // match c : (_) => Type | false => Nat | true => Two end
+    let carried = || {
+        Term::bool_match(
+            Term::free_var(&decided),
+            None,
+            Term::type_ground(),
+            nat_type(),
+            two_type(),
+        )
+    };
+    let measured =
+        |operand: &Free| Term::apply(Term::free_var(&measure), [Term::free_var(operand)]);
+    let tested = |at: usize| Term::apply(Term::free_var(&test), [nat(at)]);
+
+    // match h(p) == h(q) : (_) => Bool | false => k(1) | true => k(0) end
+    let read = Term::bool_match(
+        Term::intrinsic(Intrinsic::NatEql(measured(&left), measured(&right))),
+        None,
+        bool_type(),
+        tested(1),
+        tested(0),
+    );
+    let claim = || holds(tested(0));
+
+    // match c : (_) => True | false => qed | true => let u : Holds(k(0)) = qed; qed end
+    let split = Term::bool_match(
+        Term::free_var(&decided),
+        None,
+        true_type(),
+        qed(),
+        Term::let_(&Free::local(976, Some("u")), claim(), qed(), qed()),
+    );
+
+    // let w : True = split; qed
+    let after = Term::let_(&Free::local(977, Some("w")), true_type(), split, qed());
+
+    let forged = Term::func(
+        [
+            (decided, bool_type()),
+            (
+                measure,
+                Term::func_type([(Free::local(978, Some("x")), carried())], nat_type()),
+            ),
+            (
+                test,
+                Term::func_type([(Free::local(979, Some("n")), nat_type())], bool_type()),
+            ),
+            (left, carried()),
+            (right, carried()),
+            (guard, holds(read.clone())),
+        ],
+        Term::bool_match(
+            read,
+            None,
+            claim(),
+            Term::induct_match(
+                Term::free_var(&guard),
+                None,
+                claim(),
+                Vec::<(&str, Vec<Free>, Term)>::new(),
+            ),
+            after,
+        ),
+    );
+
+    let counted = Free::local(980, Some("n"));
+    let identity = Term::func([(counted, nat_type())], Term::free_var(&counted));
+    let is_one = Term::func(
+        [(counted, nat_type())],
+        Term::intrinsic(Intrinsic::NatEql(Term::free_var(&counted), nat(1))),
+    );
+
+    (
+        module,
+        Term::apply(
+            forged,
+            [literal(false), identity, is_one, nat(0), nat(1), qed()],
         ),
     )
 }
