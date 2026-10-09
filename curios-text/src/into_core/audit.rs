@@ -10,13 +10,13 @@ use {
     crate::Error,
     curios_core::Bound,
     curios_utilities::Qualifier,
-    std::collections::{BTreeMap, HashMap, HashSet},
+    std::collections::{BTreeMap, BTreeSet, HashSet},
 };
 
 /// Follow a directly attached representation provenance or a chain of bare, transparent type aliases to the underlying nominal registry entry.
 fn exposed_nominal<'a>(
     entry: &Entry,
-    aliases: &HashMap<curios_core::Global, &'a AliasEdge>,
+    aliases: &BTreeMap<curios_core::Global, &'a AliasEdge>,
     scope: NominalScope<'_>,
 ) -> Option<(curios_core::Global, Vec<&'a AliasEdge>)> {
     let mut current =
@@ -87,9 +87,9 @@ impl<'a> NominalScope<'a> {
 
 /// Invert the alias map to its transitive closure: for each canonical name, the bare transparent aliases that reach it. A name is as visible as the widest alias that stands for it, so an exported alias carries its target's audience even when the target itself is never exported.
 fn alias_sources(
-    aliases: &HashMap<curios_core::Global, &AliasEdge>,
-) -> HashMap<curios_core::Global, HashSet<curios_core::Global>> {
-    let mut sources: HashMap<curios_core::Global, HashSet<curios_core::Global>> = HashMap::new();
+    aliases: &BTreeMap<curios_core::Global, &AliasEdge>,
+) -> BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>> {
+    let mut sources: BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>> = BTreeMap::new();
 
     for (name, edge) in aliases {
         sources.entry(edge.target).or_default().insert(*name);
@@ -125,7 +125,7 @@ fn alias_sources(
 /// Everyone who can see `referent`, whether by its own name or through a transparent alias that stands for it.
 fn referent_audience(
     audiences: AudienceScope<'_>,
-    sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
+    sources: &BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
     referent: &curios_core::Global,
 ) -> Vec<Qualifier> {
     let Some(qualifier) = referent.qualifier() else {
@@ -147,7 +147,7 @@ fn referent_audience(
 /// Every consumer of `item` — an item exposed to `exposure` — must be able to see everything `item`'s signature names. Checked against audiences rather than the declaration path, so an item re-exported out of a private module counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
     audiences: AudienceScope<'_>,
-    sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
+    sources: &BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
     exposure: &[Qualifier],
     item: &str,
     dependencies: impl IntoIterator<Item = curios_core::Global>,
@@ -204,8 +204,13 @@ pub(super) fn audit_public_exposures(
         )?;
     }
 
-    for (module, interface) in public.own() {
-        for (label, entry) in &interface.bindings {
+    // By module and by label, so the exposure reported is the first the names give and not the first a hash's order does.
+    let mut modules = public.own().iter().collect::<Vec<_>>();
+    modules.sort_by(|left, right| left.0.cmp(right.0));
+    for (module, interface) in modules {
+        let mut bindings = interface.bindings.iter().collect::<Vec<_>>();
+        bindings.sort_by(|left, right| left.0.cmp(right.0));
+        for (label, entry) in bindings {
             let Some((nominal, traversed)) = exposed_nominal(entry, &aliases, scope) else {
                 continue;
             };

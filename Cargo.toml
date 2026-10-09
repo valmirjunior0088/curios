@@ -48,6 +48,7 @@ license = "Apache-2.0"
 unreachable_pub = "warn"
 
 [workspace.lints.clippy]
+iter_over_hash_type = "warn"
 unused_self = "warn"
 
 [workspace.lints.rustdoc]

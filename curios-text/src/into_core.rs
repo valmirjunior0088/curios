@@ -178,6 +178,10 @@ fn writable_paths(
         }
     }
     for (module, interface) in public {
+        #[expect(
+            clippy::iter_over_hash_type,
+            reason = "each global's paths are sorted below"
+        )]
         for (label, entry) in &interface.bindings {
             let path = module.with(label);
             if path != entry.target {

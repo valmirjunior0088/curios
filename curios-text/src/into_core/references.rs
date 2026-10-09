@@ -219,7 +219,7 @@ fn alias_of(let_: &FlatLet) -> Option<AliasEdge> {
 pub(super) fn aliases<'a>(
     items: &[FlatItem],
     facts: &[&'a LoweredItem],
-) -> HashMap<curios_core::Global, &'a AliasEdge> {
+) -> BTreeMap<curios_core::Global, &'a AliasEdge> {
     items
         .iter()
         .zip(facts)

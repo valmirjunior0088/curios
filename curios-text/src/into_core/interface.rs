@@ -544,10 +544,15 @@ fn resolvable(
 
     match &use_.group {
         UseGroup::Glob => {
-            for (label, entry) in &interface.children {
+            // By label, so the selector a round refuses first is the first the names give.
+            let mut children = interface.children.iter().collect::<Vec<_>>();
+            children.sort_by(|left, right| left.0.cmp(right.0));
+            for (label, entry) in children {
                 out.push((Ns::Module, label.clone(), entry.target, None));
             }
-            for (label, entry) in &interface.bindings {
+            let mut bindings = interface.bindings.iter().collect::<Vec<_>>();
+            bindings.sort_by(|left, right| left.0.cmp(right.0));
+            for (label, entry) in bindings {
                 out.push((
                     Ns::Binding,
                     label.clone(),

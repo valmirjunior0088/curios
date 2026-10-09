@@ -309,9 +309,8 @@ impl ReifyScope {
     ///
     /// **For a group that turned out not to be bindable at item level.** The position is chosen before reification, because [`ReifyScope::record`] needs it; whether the group it produces is *closed* at item level can only be read off the group afterwards. A replacement that loses that bet keeps its copies — they are spliced into its own block — but must take back the claim that a later candidate can name them, which is what `local` holds the keys for.
     pub(super) fn withdraw_replacement(&mut self) {
-        for specialization in self.local.keys() {
-            self.shared.remove(specialization);
-        }
+        self.shared
+            .retain(|specialization, _| !self.local.contains_key(specialization));
     }
 
     /// Record a copy for reuse: within this replacement always, and module-wide when the candidate is item-level.
