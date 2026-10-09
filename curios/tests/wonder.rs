@@ -201,6 +201,32 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     );
 }
 
+/// A file written as a module whose stem is no name a module can take is mounted nowhere, so it is checked item by item by nothing: the answer says so, where the program's grammar refused its last line for a term it was never meant to hold. The same text under a stem that is a name is checked as a module and reports nothing.
+#[test]
+fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
+    let root = temporary("stemless");
+    fs::create_dir_all(&root).unwrap();
+    let module = "use /std/{Nat};\n\npub let double(n: Nat) -> Nat = n * 2;\n";
+    write(&root, "my-file.crs", module);
+    write(&root, "myfile.crs", module);
+
+    let refused = stdout(&curios(
+        &root,
+        &["wonder", "diagnostics", "my-file.crs"],
+        "",
+    ));
+    assert!(
+        refused.contains(
+            "my-file.crs is written as a module, with no final term, and its stem `my-file` is no name a module can take"
+        ),
+        "{refused}"
+    );
+    assert!(!refused.contains("expected a term"), "{refused}");
+
+    let named = stdout(&curios(&root, &["wonder", "diagnostics", "myfile.crs"], ""));
+    assert_eq!(named, "");
+}
+
 /// A stage that the program does not reach is not an answer: diagnostics on stderr, exit 1, stdout empty.
 #[test]
 fn an_unreached_stage_leaves_stdout_empty() {

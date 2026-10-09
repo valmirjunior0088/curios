@@ -4,11 +4,11 @@ use {
     crate::{Diagnosis, STDIN_MOUNT, Severity},
     curios_package::Unlinked,
     curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold},
-    curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
+    curios_text::{Entrypoint, Form, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
-    curios_utilities::{Qualifier, Report, Source, Span},
+    curios_utilities::{Qualifier, Report, Source, Span, is_identifier},
     curios_verdicts::Verdicts,
-    std::{collections::BTreeSet, path::PathBuf},
+    std::{collections::BTreeSet, fs, path::PathBuf},
 };
 
 /// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios lint` reads a package's unused dependencies off.
@@ -68,6 +68,41 @@ impl Subject {
         Some(Diagnosis {
             severity: Severity::Note,
             report,
+        })
+    }
+
+    /// The refusal of a loose file written as a module whose stem is no name a module can take: it can be mounted nowhere to be checked item by item, and checked as a program it would be refused at its last line for a term it was never meant to hold.
+    fn unnameable(&self, overlay: &Overlay) -> Option<Diagnosis> {
+        let Subject::Entry {
+            units,
+            origin: Origin::File(path),
+            declares: None,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        if !units.is_empty() {
+            return None;
+        }
+
+        let text = match overlay.get(path) {
+            Some(text) => text.to_string(),
+            None => fs::read_to_string(path).ok()?,
+        };
+        let stem = path.file_stem()?.to_str()?;
+        if Form::of(path, &text) != Form::Module || is_identifier(stem) {
+            return None;
+        }
+
+        let message = format!(
+            "{} is written as a module, with no final term, and its stem `{stem}` is no name a module can take: rename the file to an identifier, or end it in a term to check it as a program",
+            path.display()
+        );
+
+        Some(Diagnosis {
+            severity: Severity::Error,
+            report: Report::at(Span::new(Source::held(path, &text), 0, 0), message),
         })
     }
 
@@ -142,6 +177,13 @@ pub fn diagnosed(
 
     // Taken before the subject is formed, since it is the one fact about the file asked that no compilation of it says.
     let note = subject.note(overlay);
+    if let Some(refusal) = subject.unnameable(overlay) {
+        return Diagnosed {
+            diagnostics: note.into_iter().chain([refusal]).collect(),
+            reached: BTreeSet::new(),
+            unfiled: None,
+        };
+    }
 
     let mut diagnosed = match subject.formed(overlay) {
         Subject::Unit { units } => {
