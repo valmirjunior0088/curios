@@ -9,7 +9,7 @@ use {
         Free, FreeMonoid, Intrinsic, Layer, Nat, Probe, Struct, Subterm, Term, Tuple, Variant,
     },
     curios_num::Natural,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 
 /// Whether shape reading may force `term`.
@@ -70,7 +70,7 @@ impl SizeContext {
     ) -> Result<(), E::Error> {
         let refine = match refine {
             Some((binder, value)) => {
-                let shape = Grader { env, context: self }.shape_of(value)?;
+                let shape = Grader::new(env, self).shape_of(value)?;
                 Some((binder, shape))
             }
             None => None,
@@ -158,7 +158,7 @@ pub fn grade<E: Env>(
     arguments: &[Term],
 ) -> Result<Call, E::Error> {
     curios_profile::profile!("grade");
-    let mut grader = Grader { env, context };
+    let mut grader = Grader::new(env, context);
     let mut matrix = Matrix::unknown(params.len(), callee_arity);
 
     let expanded = params
@@ -183,23 +183,30 @@ pub fn grade<E: Env>(
 /// The binder a boolean arm taken `taken` rules zero out for, when `head` compares a binder against a literal in a way that does.
 pub fn nonzero_by<E: Env>(env: &mut E, head: &Term, taken: bool) -> Result<Option<Free>, E::Error> {
     let context = SizeContext::default();
-    let guard = Grader {
-        env,
-        context: &context,
-    }
-    .guard(head)?;
+    let guard = Grader::new(env, &context).guard(head)?;
     Ok(guard
         .filter(|guard| guard.establishes_nonzero(taken))
         .map(|guard| guard.atom))
 }
 
-/// The reader of terms as sizes: a checker to force through, and the context the arms established.
+/// The reader of terms as sizes: a checker to force through, the context the arms established, and what it has read.
 pub(super) struct Grader<'a, E: Env> {
     pub(super) env: &'a mut E,
     pub(super) context: &'a SizeContext,
+    /// The shape of each term read so far. The context stands for as long as the reader does, so a term reads as one shape however often it is met: an argument that holds a subterm twice — sixty `let`s each pairing the one before it with itself, handed whole to the member — is read in its size, where a reading per occurrence builds every path through it.
+    read: HashMap<Term, Shape>,
 }
 
-impl<E: Env> Grader<'_, E> {
+impl<'a, E: Env> Grader<'a, E> {
+    /// A reader under `context` that has read nothing.
+    pub(super) fn new(env: &'a mut E, context: &'a SizeContext) -> Self {
+        Self {
+            env,
+            context,
+            read: HashMap::new(),
+        }
+    }
+
     /// The value a binder currently stands for, following the refinements the enclosing arms established.
     pub(super) fn expand(&self, var: &Free, fuel: usize) -> Shape {
         if fuel == 0 {
@@ -217,11 +224,9 @@ impl<E: Env> Grader<'_, E> {
             // Already relative to a binder; expanding that binder would only lose the identity the claim is stated against.
             Shape::Smaller(below) => Shape::Smaller(*below),
             Shape::Opaque => Shape::Opaque,
-            Shape::Node(tag, kids) => Shape::Node(
+            Shape::Node(tag, kids) => Shape::node(
                 tag.clone(),
-                kids.iter()
-                    .map(|kid| self.expand_shape(kid, fuel))
-                    .collect(),
+                kids.iter().map(|kid| self.expand_shape(kid, fuel)),
             ),
             // Rebuilt through the constructors so a tail that expands into a run of the same carrier merges back into one canonical run.
             Shape::UnaryRun { count, tail } => {
@@ -245,33 +250,43 @@ impl<E: Env> Grader<'_, E> {
     /// Read a term as a constructor tree.
     ///
     /// A constructor, a free-monoid layer, and a recognised arithmetic decrease read directly; everything else goes to [`Grader::unfolded_shape`], which sees through the definitions standing between a term and its shape. That fallback carries most of what the size order knows — an operator resolves a witness, so even `n - 1` reaches here as a projection — and it is not bounded by a step count; see [`readable`] for what bounds it instead.
+    ///
+    /// Each term is read once ([`Grader::read`]): a binder is looked up as it stands, and anything else is remembered.
     pub(super) fn shape_of(&mut self, term: &Term) -> Result<Shape, E::Error> {
-        Ok(match &**term {
-            Subterm::Var(var) => {
-                if let Some(free) = var.as_free() {
-                    return Ok(self.expand(free, EXPAND_FUEL));
-                }
-                Shape::Opaque
-            }
+        if let Subterm::Var(var) = &**term {
+            return Ok(match var.as_free() {
+                Some(free) => self.expand(free, EXPAND_FUEL),
+                None => Shape::Opaque,
+            });
+        }
+        if let Some(read) = self.read.get(term) {
+            return Ok(read.clone());
+        }
+        let shape = self.shape_read(term)?;
+        self.read.insert(term.clone(), shape.clone());
 
+        Ok(shape)
+    }
+
+    /// [`Grader::shape_of`] for a term that is no binder and has not been read.
+    fn shape_read(&mut self, term: &Term) -> Result<Shape, E::Error> {
+        Ok(match &**term {
             Subterm::Variant(Variant { tag, payload, .. }) => {
                 let kids = self.shapes_of(payload)?;
-                Shape::Node(Tag::Variant(tag.clone()), kids)
+                Shape::node(Tag::Variant(tag.clone()), kids)
             }
 
             Subterm::Struct(Struct { name, fields, .. }) => {
                 let kids = self.shapes_of(fields)?;
-                Shape::Node(Tag::Struct(*name), kids)
+                Shape::node(Tag::Struct(*name), kids)
             }
 
             Subterm::Tuple(Tuple { fields, .. }) => {
                 let kids = self.shapes_of(fields)?;
-                Shape::Node(Tag::Tuple, kids)
+                Shape::node(Tag::Tuple, kids)
             }
 
-            Subterm::Intrinsic(Intrinsic::Bool(value)) => {
-                Shape::Node(Tag::Bool(*value), Vec::new())
-            }
+            Subterm::Intrinsic(Intrinsic::Bool(value)) => Shape::node(Tag::Bool(*value), []),
 
             Subterm::Intrinsic(Intrinsic::Nat(_)) => self.monoid_shape(FreeMonoid::Unary, term)?,
 
@@ -353,7 +368,7 @@ impl<E: Env> Grader<'_, E> {
             FreeMonoid::Unary => {
                 return match &**term {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
-                        Ok(Shape::Node(Tag::Empty(Carriers::Unary), Vec::new()))
+                        Ok(Shape::node(Tag::Empty(Carriers::Unary), []))
                     }
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(spine, inner))) => {
                         Ok(Shape::unary_run(spine.clone(), self.shape_of(inner)?))
@@ -373,7 +388,7 @@ impl<E: Env> Grader<'_, E> {
                     break Ok(Shape::elem_run(
                         carriers,
                         heads,
-                        Shape::Node(Tag::Empty(carriers), Vec::new()),
+                        Shape::node(Tag::Empty(carriers), []),
                     ));
                 }
                 Layer::Cons { head, tail } => {

@@ -137,7 +137,7 @@ fn a_rebuilt_constructor_is_smaller_than_the_binder_it_rebuilds() {
 #[test]
 fn a_literal_is_one_packed_run_however_large_its_value() {
     // The size order on literals is decided by count arithmetic on the packed spine — never by expanding the value into a unary chain, whose depth for a `u64`-sized switch literal or call argument is a stack overflow.
-    let empty = || Shape::Node(Tag::Empty(Carriers::Unary), Vec::new());
+    let empty = || Shape::node(Tag::Empty(Carriers::Unary), []);
     let huge = Shape::unary_run(Natural::from(u64::MAX), empty());
     let smaller = Shape::unary_run(Natural::from(u64::MAX - 1), empty());
 
@@ -150,7 +150,7 @@ fn a_literal_is_one_packed_run_however_large_its_value() {
 #[test]
 fn runs_merge_so_a_refined_tail_stays_one_chain() {
     // `match n` refines `n` to a 1-run over `pred`; a nested arm refining `pred` to a 4-run must expand to the single 5-run the chain denotes, or a literal argument could never grade against it.
-    let empty = || Shape::Node(Tag::Empty(Carriers::Unary), Vec::new());
+    let empty = || Shape::node(Tag::Empty(Carriers::Unary), []);
     let merged = Shape::unary_run(
         Natural::from(1usize),
         Shape::unary_run(Natural::from(4usize), empty()),
@@ -182,7 +182,7 @@ fn an_arithmetic_decrease_is_inert_in_the_constructor_order() {
     // It is a claim about a binder, not a value, so it can never be found equal to or inside a tree. Anything else would manufacture a decrease out of a term the walk never read.
     let n = Free::local(1, None);
     let smaller = Shape::Smaller(n);
-    let tree = Shape::Node(Tag::Tuple, vec![smaller.clone(), Shape::Atom(n)]);
+    let tree = Shape::node(Tag::Tuple, [smaller.clone(), Shape::Atom(n)]);
     let run = Shape::elem_run(Carriers::List, vec![smaller.clone()], Shape::Atom(n));
 
     assert!(!smaller.same_as(&smaller));
@@ -323,10 +323,7 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
     let h = Free::local(2, Some("h"));
     let t = Free::local(3, Some("t"));
     let context = SizeContext::default();
-    let mut grader = Grader {
-        env: &mut kernel,
-        context: &context,
-    };
+    let mut grader = Grader::new(&mut kernel, &context);
 
     let single = Term::intrinsic(Intrinsic::BinAppend {
         grain: Grain::X,
@@ -402,9 +399,9 @@ fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
     let below = Free::local(4, Some("below"));
     let y = Free::local(5, Some("y"));
     let r = Free::local(6, Some("r"));
-    let intro = Shape::Node(
+    let intro = Shape::node(
         Tag::Variant(Atom::from("intro")),
-        vec![Shape::Atom(w), Shape::Atom(below)],
+        [Shape::Atom(w), Shape::Atom(below)],
     );
     let mut context = SizeContext::default();
     context.open(Some((a, intro)), None, vec![below]);
@@ -413,19 +410,13 @@ fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
         [Term::free_var(&y), Term::free_var(&r)],
     );
 
-    let mut grader = Grader {
-        env: &mut kernel,
-        context: &context,
-    };
+    let mut grader = Grader::new(&mut kernel, &context);
     let parameter = grader.expand(&a, EXPAND_FUEL);
     let Ok(shape) = grader.shape_of(&applied);
     assert_eq!(shape.against(&parameter), LESS);
 
     context.payloads.clear();
-    let mut grader = Grader {
-        env: &mut kernel,
-        context: &context,
-    };
+    let mut grader = Grader::new(&mut kernel, &context);
     let Ok(shape) = grader.shape_of(&applied);
     assert_eq!(shape.against(&parameter), Size::Unknown);
 }
@@ -520,6 +511,26 @@ fn a_value_walked_where_it_is_bound_is_passed_over_in_the_tail() {
     );
 
     assert_eq!(calls_in(&group, n, &body), 61);
+}
+
+/// A tower handed whole to the member is read in its size. The call's argument is graded as a shape, and sixty lines each pairing the one before with itself are a graph of sixty nodes whose tree has 2⁶⁰ leaves: a reader that remembers each term's shape, and a shape that shares what it holds, read a line for a line.
+///
+/// Mutation-checked: with a term's shape read again wherever the term is met, the walk does not return.
+#[test]
+fn a_tower_handed_to_the_member_is_read_in_its_size() {
+    let n = Free::local(2, Some("n"));
+    let (group, call) = member(Term::free_var(&n));
+    let Subterm::Apply(apply) = &*call else {
+        panic!("the fixture changed shape");
+    };
+    let head = apply.head.clone();
+    let body = tower(
+        Term::free_var(&n),
+        |before| Term::tuple([before.clone(), before]),
+        |last| Term::apply(head.clone(), [last]),
+    );
+
+    assert_eq!(calls_in(&group, n, &body), 1);
 }
 
 /// A walked value is passed over in its own `let`'s tail and nowhere else: a sibling position holds the same call under another context, which the value's walk did not grade it under.

@@ -40,6 +40,8 @@ enum Shape {
     Guards(Stands),
     /// `g(x, x) + tower(g, p)`, in a recursive member's body: every line calls the member, so no line's type is remembered and each is typed where it stands.
     Recursions,
+    /// `(x, x)`, in a recursive member's body, the last line handed to the member as its argument: a call's argument is read as a size, so the tower is what the totality grading reads.
+    Handed,
     /// `{T, T}`, a top-level alias of the alias before it.
     Aliases,
     /// `(T) -> T`, a top-level alias of the alias before it.
@@ -177,6 +179,15 @@ fn tower(shape: Shape, lines: usize) -> String {
                 },
             },
         ),
+        Shape::Handed => {
+            source.push_str("use /std/{Nat};\n\n");
+            source.push_str("let tower(@A: Type, _: A, n: Nat) -> Nat =\n");
+            source.push_str("    match n\n    | 0 => 0\n    | p + 1; _ =>\n");
+            chain(&mut source, "        ", "x", lines, "(p, p)", |x| {
+                format!("({x}, {x})")
+            });
+            let _ = writeln!(source, "        tower(x{lines}, p)\n    end;");
+        }
         Shape::Aliases => {
             source.push_str("use /std/{Nat};\n\n");
             chain(&mut source, "", "T", lines, "Nat", |t| {
@@ -293,7 +304,7 @@ fn a_sixty_line_chain_compiles() {
     }
 }
 
-/// The towers both checkers walk in their size, at sixty lines: calls, pairs, lists, arms on a variable and arms on an expression in a function's body and in a recursive member's, lines that each call their member, both aliases, the two towers claimed equal, and the two chains of calls built apart.
+/// The towers both checkers walk in their size, at sixty lines: calls, pairs, lists, arms on a variable and arms on an expression in a function's body and in a recursive member's, lines that each call their member, pairs handed to their member, both aliases, the two towers claimed equal, and the two chains of calls built apart.
 #[test]
 fn a_sixty_line_tower_compiles() {
     for shape in [
@@ -308,6 +319,7 @@ fn a_sixty_line_tower_compiles() {
         Shape::Guards(Stands::Function),
         Shape::Guards(Stands::Member),
         Shape::Recursions,
+        Shape::Handed,
         Shape::Aliases,
         Shape::Arrows,
         Shape::TwoTowers,

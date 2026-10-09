@@ -161,10 +161,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// The reader of terms as sizes, under the context this walk has built so far.
     fn grader(&mut self) -> Grader<'_, E> {
-        Grader {
-            env: self.env,
-            context: &self.context,
-        }
+        Grader::new(self.env, &self.context)
     }
 
     /// One fresh binder per position of a scope, carrying the written hints so a shape reads in the user's own names.
@@ -320,7 +317,7 @@ impl<E: Env> Walk<'_, E> {
                         .guard(head)?
                         .filter(|guard| guard.establishes_nonzero(taken))
                         .map(|guard| guard.atom);
-                    let shape = Shape::Node(Tag::Bool(taken), Vec::new());
+                    let shape = Shape::node(Tag::Bool(taken), []);
                     self.scoped(refine(scrutinee, shape), atom, Vec::new(), body)?;
                 }
             }
@@ -340,9 +337,9 @@ impl<E: Env> Walk<'_, E> {
             Cases::Induct { cases, default } => {
                 for (tag, case) in cases {
                     let (binders, body) = self.open_many(&case.body);
-                    let shape = Shape::Node(
+                    let shape = Shape::node(
                         Tag::Variant(tag.clone()),
-                        binders.iter().map(|b| Shape::Atom(*b)).collect(),
+                        binders.iter().map(|b| Shape::Atom(*b)),
                     );
                     self.scoped(refine(scrutinee, shape), None, binders, &body)?;
                 }
@@ -391,7 +388,7 @@ impl<E: Env> Walk<'_, E> {
         carriers: Carriers,
         empty_case: &Term,
     ) -> Result<(), E::Error> {
-        let shape = Shape::Node(Tag::Empty(carriers), Vec::new());
+        let shape = Shape::node(Tag::Empty(carriers), []);
         self.scoped(refine(*scrutinee, shape), None, Vec::new(), empty_case)
     }
 

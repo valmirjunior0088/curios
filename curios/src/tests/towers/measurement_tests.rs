@@ -137,6 +137,7 @@ fn tower_measurements() {
         ("guards", Shape::Guards(Stands::Function)),
         ("guards, in a member", Shape::Guards(Stands::Member)),
         ("recursions", Shape::Recursions),
+        ("handed", Shape::Handed),
         ("aliases", Shape::Aliases),
         ("arrows", Shape::Arrows),
         ("two towers", Shape::TwoTowers),

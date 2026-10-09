@@ -8,6 +8,7 @@ use {
     super::Size,
     curios_core::{Atom, Free, Global},
     curios_num::Natural,
+    std::rc::Rc,
 };
 
 /// The constructor a [`Shape`] node stands for.
@@ -38,19 +39,21 @@ pub(super) enum Carriers {
 }
 
 /// A call argument or a parameter, read as a constructor tree over binder atoms — the term on which the size order is a proper-subterm order.
+///
+/// A node shares what it holds, so a shape is copied in one step and the shape of a term that holds one subterm twice holds that subterm's shape once: a reading costs the term's graph, where a tree owned outright costs every path through it ([`Grader::shape_of`](super::Grader::shape_of)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Shape {
     /// A binder the analysis tracks but cannot see inside.
     Atom(Free),
     /// A constructor applied to its arguments.
-    Node(Tag, Vec<Shape>),
+    Node(Tag, Rc<[Shape]>),
     /// A packed run of `Nat` successors: `count` unary layers over `tail`, the shape-level mirror of `Nat::Succ`'s packed spine. Canonical by construction — built only through [`Shape::unary_run`], so the count is nonzero and the tail is never itself a unary run.
-    UnaryRun { count: Natural, tail: Box<Shape> },
+    UnaryRun { count: Natural, tail: Rc<Shape> },
     /// A packed run of `Bin`/`List` elements over `tail`, front first — one head shape per element, held breadth-wise. The carrier is [`Carriers::Bin`] or [`Carriers::List`]; `Nat`'s payload-less layers are [`Shape::UnaryRun`]. Canonical by construction — built only through [`Shape::elem_run`], so the heads are nonempty and the tail is never an elem run of the same carrier.
     ElemRun {
         carrier: Carriers,
-        heads: Vec<Shape>,
-        tail: Box<Shape>,
+        heads: Rc<[Shape]>,
+        tail: Rc<Shape>,
     },
     /// A `Nat` strictly below the binder it names, established arithmetically rather than structurally: `n / k` for a literal `k >= 2`, or `n - k` for a literal `k >= 1`, at a point where `n` is known nonzero.
     ///
@@ -61,6 +64,11 @@ pub(super) enum Shape {
 }
 
 impl Shape {
+    /// `tag` applied to `kids`.
+    pub(super) fn node(tag: Tag, kids: impl IntoIterator<Item = Shape>) -> Shape {
+        Shape::Node(tag, kids.into_iter().collect())
+    }
+
     /// `count` successors over `tail`. Zero successors are the tail itself, and a run landing on another run merges, so the canonicity the comparisons assume is established here rather than at every builder.
     pub(super) fn unary_run(count: Natural, tail: Shape) -> Shape {
         if count == Natural::from(0usize) {
@@ -73,7 +81,7 @@ impl Shape {
             },
             tail => Shape::UnaryRun {
                 count,
-                tail: Box::new(tail),
+                tail: Rc::new(tail),
             },
         }
     }
@@ -90,17 +98,17 @@ impl Shape {
                 tail,
             } if inner == carrier => {
                 let mut heads = heads;
-                heads.extend(rest);
+                heads.extend(rest.iter().cloned());
                 Shape::ElemRun {
                     carrier,
-                    heads,
+                    heads: heads.into(),
                     tail,
                 }
             }
             tail => Shape::ElemRun {
                 carrier,
-                heads,
-                tail: Box::new(tail),
+                heads: heads.into(),
+                tail: Rc::new(tail),
             },
         }
     }
@@ -114,7 +122,7 @@ impl Shape {
                     && left_kids.len() == right_kids.len()
                     && left_kids
                         .iter()
-                        .zip(right_kids)
+                        .zip(right_kids.iter())
                         .all(|(left, right)| left.same_as(right))
             }
             (
@@ -143,7 +151,7 @@ impl Shape {
                     && left_heads.len() == right_heads.len()
                     && left_heads
                         .iter()
-                        .zip(right_heads)
+                        .zip(right_heads.iter())
                         .all(|(left, right)| left.same_as(right))
                     && left_tail.same_as(right_tail)
             }
