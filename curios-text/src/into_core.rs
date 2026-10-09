@@ -684,7 +684,7 @@ impl PreparedText {
             return Err("a unit's lowered items hold fewer than it declares".to_string());
         }
 
-        self.core.items = Vec::new();
+        self.core.items = Vec::new().into();
         self.items = Some(
             items
                 .into_iter()
@@ -2372,7 +2372,7 @@ fn into_core_unit_within(
         declared: declared_in(&items),
         items: None,
         core: curios_core::Module {
-            items,
+            items: items.into(),
             mounts: own,
             induct_decls,
             struct_decls,

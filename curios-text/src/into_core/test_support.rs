@@ -247,7 +247,7 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
     assert!(lowered.module.items.len() >= 2);
 
     let mut lowered_prefix = lowered.module.clone();
-    lowered_prefix.items.truncate(1);
+    lowered_prefix.items = lowered_prefix.items.iter().take(1).cloned().collect();
     lowered_prefix.induct_decls.clear();
     lowered_prefix.struct_decls.clear();
     lowered_prefix.concepts.clear();

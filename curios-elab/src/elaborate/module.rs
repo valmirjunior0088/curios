@@ -1359,7 +1359,7 @@ fn settle_published(
 
     context.restore_budget();
     let alone = Module {
-        items: vec![published.item.clone()],
+        items: vec![published.item.clone()].into(),
         mounts: Vec::new(),
         induct_decls: published.induct_decls.iter().cloned().collect(),
         struct_decls: published.struct_decls.iter().cloned().collect(),
@@ -1394,7 +1394,7 @@ enum Elaborated {
 /// `item` as a module of its own, with the registry entries its names declare as the context holds them: what its goals are found in.
 fn alone(context: &Context, item: &Item) -> Module {
     let mut module = Module {
-        items: vec![item.clone()],
+        items: vec![item.clone()].into(),
         mounts: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
@@ -1674,7 +1674,7 @@ fn elaborate_module_suffix<'s>(
     } = survivors.into_parts();
 
     let module = Module {
-        items,
+        items: items.into(),
         mounts: module.mounts.clone(),
         induct_decls,
         struct_decls,
@@ -1773,7 +1773,7 @@ fn finalize_and_check(
     });
 
     let nothing = Module {
-        items: Vec::new(),
+        items: Vec::new().into(),
         mounts: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
@@ -1838,7 +1838,7 @@ fn report_written_goals(
             .and_then(|name| context.written_at(name))
     }
 
-    let mut written = module.items.clone();
+    let mut written = module.items.to_vec();
     written.extend(
         held.iter()
             .flat_map(|holding| holding.items.iter().map(|(item, _)| item.clone())),

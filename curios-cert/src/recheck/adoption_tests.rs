@@ -52,7 +52,8 @@ fn reading_module(alias: Term, returned: impl Fn(&Free) -> Term) -> Module {
                     [literal(5)],
                 ),
             ),
-        ],
+        ]
+        .into(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

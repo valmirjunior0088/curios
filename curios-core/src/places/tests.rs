@@ -22,7 +22,7 @@ fn definition(name: &str) -> Definition {
 
 fn module(items: Vec<Item>) -> Module {
     Module {
-        items,
+        items: items.into(),
         ..Module::default()
     }
 }

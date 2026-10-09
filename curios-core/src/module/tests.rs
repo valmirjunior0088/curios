@@ -82,7 +82,7 @@ fn every_local_a_term_mentions_is_found() {
     };
 
     let module = Module {
-        items: vec![Item::Let(definition)],
+        items: vec![Item::Let(definition)].into(),
         mounts: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
@@ -111,7 +111,8 @@ fn stored(body: Term) -> Module {
             variances: Vec::new(),
             type_: Term::intrinsic(crate::Intrinsic::NatType),
             body,
-        })],
+        })]
+        .into(),
         mounts: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
@@ -224,7 +225,7 @@ fn a_stored_unit_may_carry_a_global_it_names() {
 #[test]
 fn a_meta_free_module_projects_as_zonked() {
     let module = Module {
-        items: vec![Item::Let(definition("plain", UniverseContext::empty()))],
+        items: vec![Item::Let(definition("plain", UniverseContext::empty()))].into(),
         mounts: Vec::new(),
         induct_decls: Default::default(),
         struct_decls: Default::default(),
@@ -241,7 +242,7 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
     let mut holed = definition("holed", UniverseContext::empty());
     holed.body = Term::hole(0);
     let module = Module {
-        items: vec![Item::Let(holed)],
+        items: vec![Item::Let(holed)].into(),
         mounts: Vec::new(),
         induct_decls: Default::default(),
         struct_decls: Default::default(),
@@ -262,7 +263,7 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
         sign: Sign::Unmarked,
     })));
     let module = Module {
-        items: vec![Item::Let(infixed)],
+        items: vec![Item::Let(infixed)].into(),
         mounts: Vec::new(),
         induct_decls: Default::default(),
         struct_decls: Default::default(),
@@ -278,7 +279,7 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
 /// A module with no registry and no entry, over `items`.
 fn over(items: Vec<Item>) -> Module {
     Module {
-        items,
+        items: items.into(),
         mounts: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),

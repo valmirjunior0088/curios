@@ -291,8 +291,8 @@ fn std_image_division() {
         macro_rules! items {
             ($name:expr, $module:expr) => {{
                 let module: &Module = $module;
-                let whole =
-                    curios_archive::to_bytes(&module.items).expect("a module's items serialize");
+                let whole = curios_archive::to_bytes(&module.items.to_vec())
+                    .expect("a module's items serialize");
                 let alone = module
                     .items
                     .iter()
@@ -396,7 +396,7 @@ fn std_image_division() {
             .map(|item| {
                 let sharing = Sharing::new();
                 let module = Module {
-                    items: vec![item.clone()],
+                    items: vec![item.clone()].into(),
                     ..Module::default()
                 };
                 module.shared(&sharing);
@@ -657,8 +657,10 @@ fn std_replay_census() {
                 let mut again = names.clone();
                 let reach = lowered_core.reaches(own);
                 again.extend(
-                    lowered_core.items[..first]
+                    lowered_core
+                        .items
                         .iter()
+                        .take(first)
                         .rev()
                         .filter_map(|item| match item {
                             Item::Let(definition)

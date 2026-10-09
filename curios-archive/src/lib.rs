@@ -41,6 +41,11 @@ mod deferred;
 pub use deferred::*;
 
 #[cfg(feature = "enabled")]
+mod pooled;
+#[cfg(feature = "enabled")]
+pub use pooled::*;
+
+#[cfg(feature = "enabled")]
 mod proxy;
 #[cfg(feature = "enabled")]
 pub use proxy::*;

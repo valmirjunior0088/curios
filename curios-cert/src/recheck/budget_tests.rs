@@ -68,7 +68,8 @@ fn spent_item_beside_an_aliased_payload() -> Module {
                 Term::free_var(&Free::from(&spin)),
                 Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             ),
-        ],
+        ]
+        .into(),
         induct_decls: BTreeMap::from([(good(), declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

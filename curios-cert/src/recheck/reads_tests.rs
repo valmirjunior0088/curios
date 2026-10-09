@@ -42,7 +42,8 @@ fn reading_module() -> Module {
                 ),
             ),
             authored(&global("four"), nat(), literal(4)),
-        ],
+        ]
+        .into(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

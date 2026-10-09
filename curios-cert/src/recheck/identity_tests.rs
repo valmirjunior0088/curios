@@ -31,7 +31,7 @@ fn held() -> Global {
 /// A module holding `items` and nothing else.
 fn holding(items: Vec<curios_core::Item>) -> Module {
     Module {
-        items,
+        items: items.into(),
         mounts: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),

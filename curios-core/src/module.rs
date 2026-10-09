@@ -8,8 +8,8 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Many,
-        Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm,
+        Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Items,
+        Many, Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm,
         Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId, WitnessSpelling,
         build_shorten,
     },
@@ -455,7 +455,9 @@ pub struct Program {
 #[derive(Debug, Clone, Default, PartialEq)]
 #[curios_archive::archived]
 pub struct Module {
-    pub items: Vec<Item>,
+    /// The module's items, in the order it stores them: every one in hand where the module was made in this process, and each restored the first time it is read where the module was stored ([`Items`]).
+    #[archived_with(crate::AsVector)]
+    pub items: Items,
     /// The prefixes this module's compilation unit claims, each with whether it is a root only the compiler supplies.
     ///
     /// Carried here, once, rather than stamped onto every declaration. Which mount owns a declaration is [`Mount::owning`] over the declaration's own name, so a stamp beside the name would only restate the name's leading segment — and, archived, mean something solely in the compilation that wrote it. A later stage that needs a mount's kind reads it out of this list; nothing derives one from a string.

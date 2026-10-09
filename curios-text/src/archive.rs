@@ -42,7 +42,7 @@ impl Proxy<curios_core::Module> for Itemless {
 
     fn to_archivable(module: &curios_core::Module) -> impl Borrow<curios_core::Module> {
         curios_core::Module {
-            items: Vec::new(),
+            items: Vec::new().into(),
             mounts: module.mounts.clone(),
             induct_decls: module.induct_decls.clone(),
             struct_decls: module.struct_decls.clone(),

@@ -54,7 +54,7 @@ fn module(items: Vec<Item>, body: Term) -> Program {
     Program {
         module: Module {
             mounts: Vec::new(),
-            items,
+            items: items.into(),
             induct_decls: BTreeMap::new(),
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -856,7 +856,7 @@ fn a_variant_constructs_with_its_registered_schema() {
     let fixture = Program {
         module: Module {
             mounts: Vec::new(),
-            items: Vec::new(),
+            items: Vec::new().into(),
             induct_decls,
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -929,7 +929,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
     let fixture = Program {
         module: Module {
             mounts: Vec::new(),
-            items: vec![former, six],
+            items: vec![former, six].into(),
             induct_decls,
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -1215,7 +1215,7 @@ fn a_variant_match_binds_payload_without_projections() {
     let fixture = Program {
         module: Module {
             mounts: Vec::new(),
-            items: Vec::new(),
+            items: Vec::new().into(),
             induct_decls,
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -1525,7 +1525,7 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     let fixture = Program {
         module: Module {
             mounts: Vec::new(),
-            items: Vec::new(),
+            items: Vec::new().into(),
             induct_decls,
             struct_decls,
             concepts: BTreeMap::new(),

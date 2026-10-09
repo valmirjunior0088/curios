@@ -341,7 +341,7 @@ pub fn declared_test_paths(module: &curios_core::Module) -> Vec<String> {
 
 /// The definition a registered test names, among the unit's items.
 fn test_definition<'a>(
-    items: &'a [curios_core::Item],
+    items: &'a curios_core::Items,
     test: &curios_core::Global,
 ) -> Option<&'a curios_core::Definition> {
     items.iter().find_map(|item| match item {
@@ -353,7 +353,7 @@ fn test_definition<'a>(
 /// Each registered test as the tail schedules it, read off the lowered definition that carries it: the plicity vector of the lambda its declaration lowered to, and the extent of the authored body — the lambda's interior, since the wrapper node is synthesized and was written nowhere. One lookup serves the tail and the runner's records, so the two cannot disagree about what the tests are.
 fn scheduled_tests(
     tests: &[curios_core::Global],
-    items: &[curios_core::Item],
+    items: &curios_core::Items,
 ) -> Vec<curios_elab::ScheduledTest> {
     tests
         .iter()

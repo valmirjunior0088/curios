@@ -28,7 +28,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
 fn module(items: Vec<Item>) -> Module {
     Module {
         mounts: Vec::new(),
-        items,
+        items: items.into(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

@@ -81,7 +81,8 @@ fn a_member_of_a_legal_group_is_still_accepted() {
             &Global::Authored(Qualifier::from(["ok"])),
             Term::func_type([(n, nat.clone())], nat),
             Term::rec_proj(group, 0),
-        )],
+        )]
+        .into(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

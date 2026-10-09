@@ -13,7 +13,7 @@ fn entry_module(entry: Entrypoint) -> Program {
     Program {
         module: Module {
             mounts: Vec::new(),
-            items: Vec::new(),
+            items: Vec::new().into(),
             induct_decls: BTreeMap::new(),
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),

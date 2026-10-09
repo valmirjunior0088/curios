@@ -117,7 +117,8 @@ fn a_statement_declared_twice() -> (Module, Term) {
                 Term::variant(holds, Vec::<Term>::new(), "qed", Vec::<Term>::new()),
             ),
             authored(&statement, Term::prop(), holds_type),
-        ],
+        ]
+        .into(),
         induct_decls: [(holds, family(Term::prop(), &["qed"]))]
             .into_iter()
             .collect(),

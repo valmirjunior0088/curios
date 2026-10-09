@@ -35,7 +35,8 @@ fn lowered_module(body: Term) -> Module {
             variances: Vec::new(),
             type_: nat(),
             body,
-        })],
+        })]
+        .into(),
         induct_decls: Default::default(),
         struct_decls: Default::default(),
         concepts: Default::default(),

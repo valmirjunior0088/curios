@@ -72,7 +72,7 @@ fn let_item(path: &str, type_: Term, body: Term) -> Item {
 
 fn module(items: Vec<Item>) -> Module {
     Module {
-        items,
+        items: items.into(),
         mounts: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
