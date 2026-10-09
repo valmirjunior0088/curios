@@ -1,13 +1,5 @@
 use /std/{Io, Async, Handle};
-
---- One end of a pipe to the child, read and written as a stream.
-pub struct Pipe: Type {
-    Handle,
-}
-
---- The end the host handed over as `handle`.
-pub let of_handle(handle: Handle) -> Pipe =
-    Pipe { handle };
+use /std/Command/{Pipe};
 
 --- Close this end.
 pub let close(p: Pipe) -> Io({}) =

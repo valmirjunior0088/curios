@@ -1,4 +1,4 @@
-use /std/{Bool, Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async};
+use /std/{Bool, Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async, Handle};
 
 --- How a child's standard stream is wired: shared with this process, piped to the parent, or attached to the null device.
 pub induct Stdio: pub Type
@@ -14,13 +14,25 @@ end
 pub mod Exit;
 pub use Exit/{let Exit};
 
+-- `Pipe` and `Child` are declared here and not in their modules, so that `spawn` builds them and nothing outside this subtree does.
+--- One end of a pipe to the child, read and written as a stream.
+pub struct Pipe: Type {
+    Handle,
+}
+
 --- A pipe to one of a child's streams: reading it, writing it and closing it.
 pub mod Pipe;
-pub use Pipe/{let Pipe};
+
+--- A running child, and whichever of its streams were piped.
+pub struct Child: Type {
+    handle: Handle,
+    stdin: Option(Pipe),
+    stdout: Option(Pipe),
+    stderr: Option(Pipe),
+}
 
 --- A running child: its pipes, waiting for it and ending it.
 pub mod Child;
-pub use Child/{let Child};
 
 --- A program to run, and how to run it.
 pub struct Command: pub Type {
@@ -67,6 +79,9 @@ let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =
     | false => Result/failure(Io/Error/other(/sys/errno/inval))
     end;
 
+let piped(handle: Handle) -> Pipe =
+    Pipe { handle };
+
 --- Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends. The child arrives with a pipe for each stream `cmd` piped, in the one call that starts it. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
 pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
     let _ = env_checked(cmd.env)!;
@@ -80,11 +95,11 @@ pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
                 stdio_of(cmd.stdout),
                 stdio_of(cmd.stderr))!)!;
     Try/pure(
-        Child/of_handle(
-            spawned.child,
-            Option/map(spawned.stdin, Pipe/of_handle),
-            Option/map(spawned.stdout, Pipe/of_handle),
-            Option/map(spawned.stderr, Pipe/of_handle)));
+        Child {
+            handle = spawned.child,
+            stdin = Option/map(spawned.stdin, piped),
+            stdout = Option/map(spawned.stdout, piped),
+            stderr = Option/map(spawned.stderr, piped) });
 
 let drain(p: Option(Pipe)) -> Async(Result(Io/Error, Bytes)) =
     match p | some(p) => Async/read_all(p) | none() => Async/pure(Result/success(x[])) end;

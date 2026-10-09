@@ -1,23 +1,6 @@
 use /std/{Option, Try, Async, Io, Handle};
-use /std/Command/{Pipe, Exit};
+use /std/Command/{Pipe, Exit, Child};
 use /std/Handle/{Interest};
-
---- A running child, and whichever of its streams were piped.
-pub struct Child: Type {
-    handle: Handle,
-    stdin: Option(Pipe),
-    stdout: Option(Pipe),
-    stderr: Option(Pipe),
-}
-
---- The child the host started under `handle`, with the pipes it handed over.
-pub let of_handle(
-    handle: Handle,
-    stdin: Option(Pipe),
-    stdout: Option(Pipe),
-    stderr: Option(Pipe),
-) -> Child =
-    Child { handle = handle, stdin = stdin, stdout = stdout, stderr = stderr };
 
 --- The pipe to the child's standard input, when it was piped.
 pub let stdin(c: Child) -> Option(Pipe) =

@@ -1,7 +1,7 @@
 //! The `/std` surfaces a program reaches at runtime: randomness, parsing, the clock, and cells.
 
 use {
-    crate::tests::{run, run_text},
+    crate::tests::{error, run, run_text},
     curios_runtime::MockHost,
 };
 
@@ -191,4 +191,33 @@ fn filling_one_cell_leaves_another_empty() {
         "#),
         b"empty",
     );
+}
+
+// A handle wrapper is built beneath the module that declares it and nowhere else, so a `Socket`, a `Pipe` or a `Child` a program holds came from a connection or a spawn: none is made of a file's handle or a terminal's, by its literal or by a builder its module publishes.
+#[test]
+fn a_handle_wrapper_is_built_only_beneath_its_module() {
+    let wrappers = [
+        ("use /std/tcp/{Socket};", "Socket", "Socket { h }"),
+        ("use /std/Command/{Pipe};", "Pipe", "Pipe { h }"),
+        (
+            "use /std/{Option};\nuse /std/Command/{Child};",
+            "Child",
+            "Child { handle = h, stdin = Option/none(), stdout = Option/none(), stderr = Option/none() }",
+        ),
+    ];
+    for (imports, wrapper, literal) in wrappers {
+        let forged = |built: &str| {
+            error(&format!(
+                "use /std/{{Handle}};\n{imports}\nlet forged(h: Handle) -> {wrapper} = {built};\n/std/print(\"unreachable\")\n"
+            ))
+        };
+
+        let written = forged(literal);
+        assert!(
+            written.contains("is private to its declaring module"),
+            "{written}"
+        );
+        let named = forged(&format!("{wrapper}/of_handle(h)"));
+        assert!(named.contains("binding not found: of_handle"), "{named}");
+    }
 }
