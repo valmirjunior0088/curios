@@ -53,7 +53,8 @@ fn build() {
     let std = archive(
         "std",
         std_text,
-        &Established::over(&std_predecessors),
+        // Every root before this one is the compiler's own, of which no read is recorded.
+        &Established::over(&std_predecessors).fixed(&[true]),
         &std_predecessors,
         &[sys.erased()],
     );
@@ -169,7 +170,7 @@ fn archive(
     let ersd = erase_unit(
         DEFAULT_STEP_BUDGET,
         SYNTAX,
-        Erasures::of(predecessors, erased),
+        Erasures::of(predecessors, erased).fixed(&vec![true; predecessors.len()]),
         &zonked,
     )
     .unwrap_or_else(|error| {

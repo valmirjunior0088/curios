@@ -9,13 +9,17 @@
 use {
     crate::{Answered, Question},
     curios_core::{Global, Trace},
-    std::{collections::BTreeMap, rc::Rc},
+    std::{
+        cell::OnceCell,
+        collections::{BTreeMap, HashMap},
+        rc::Rc,
+    },
 };
 
 #[cfg(feature = "archive")]
 use {
     curios_core::WitnessKey,
-    std::{borrow::Borrow, collections::HashMap, convert::Infallible, hash::Hash},
+    std::{borrow::Borrow, convert::Infallible, hash::Hash},
 };
 
 /// Each declaration's trace, by the name it is written as. See the module documentation.
@@ -24,6 +28,56 @@ use {
 pub struct Traces {
     #[archived_with(TraceTabled)]
     declarations: BTreeMap<Global, Rc<Trace<Question, Answered>>>,
+    /// What the declarations read of declarations the unit does not hold. See [`Foreign`].
+    foreign: Rc<Foreign>,
+}
+
+/// What a unit's declarations read of declarations the unit does not hold, another unit's or no one's: each part asked of one, with the digest it had (`part_digest`), none where the name declared no such part.
+///
+/// **What a read of another unit stands on.** A trace's question holds no answer for a part, the declaration being the one to hold it; of a declaration in the unit that is the baseline's own, and of one in another unit it is this digest. A unit compiled over a baseline asks nothing of a unit that is the one the baseline was compiled after, and of any other asks each part again by what it digests to now.
+///
+/// **One table for a unit**, every declaration of one compile having read one scope: a part is digested once however many declarations asked it, in the order the declarations, by name, first asked.
+#[derive(Debug, Clone, Default)]
+#[curios_archive::archived]
+pub struct Foreign {
+    read: Vec<(Question, Option<String>)>,
+    /// Where `read` holds each subject's parts, made the first time one is asked for.
+    #[archived_with(curios_archive::Skip)]
+    places: OnceCell<HashMap<Global, Vec<u32>>>,
+}
+
+impl Foreign {
+    /// The digest recorded of the part `question` asks: `None` where nothing asked it, `Some(None)` where the name declared no such part.
+    pub(crate) fn digest(&self, question: &Question) -> Option<&Option<String>> {
+        let places = self.places.get_or_init(|| {
+            let mut places = HashMap::<Global, Vec<u32>>::new();
+            for (place, (asked, _)) in self.read.iter().enumerate() {
+                if let Some(subject) = asked.subject() {
+                    places.entry(*subject).or_default().push(place as u32);
+                }
+            }
+
+            places
+        });
+
+        places
+            .get(question.subject()?)?
+            .iter()
+            .map(|place| &self.read[*place as usize])
+            .find(|(asked, _)| asked == question)
+            .map(|(_, digest)| digest)
+    }
+
+    /// Record `digest` as what the part `question` asks had. The table's places are made after its last record.
+    #[cfg(feature = "archive")]
+    pub(crate) fn record(&mut self, question: Question, digest: Option<String>) {
+        self.read.push((question, digest));
+    }
+
+    /// The name each part recorded here was asked of.
+    pub fn subjects(&self) -> impl Iterator<Item = &Global> {
+        self.read.iter().filter_map(|(asked, _)| asked.subject())
+    }
 }
 
 impl Traces {
@@ -45,6 +99,29 @@ impl Traces {
     /// The trace of the declaration written as `name`, as the unit holds it.
     pub(crate) fn held(&self, name: &Global) -> Option<&Rc<Trace<Question, Answered>>> {
         self.declarations.get(name)
+    }
+
+    /// What the declarations read of declarations the unit does not hold.
+    pub fn foreign(&self) -> &Rc<Foreign> {
+        &self.foreign
+    }
+
+    /// Hold `foreign` as what the declarations read of declarations the unit does not hold.
+    #[cfg(feature = "archive")]
+    pub(crate) fn read(&mut self, foreign: Rc<Foreign>) {
+        self.foreign = foreign;
+    }
+
+    /// Every declaration's trace, in the order of the names the declarations are written as.
+    #[cfg(feature = "archive")]
+    pub(crate) fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
+        self.declarations.values().map(Rc::as_ref)
+    }
+
+    /// How many declarations hold a trace.
+    #[cfg(feature = "archive")]
+    pub(crate) fn len(&self) -> usize {
+        self.declarations.len()
     }
 
     /// The declarations holding a trace, by the name each is written as, with how many questions each asked.

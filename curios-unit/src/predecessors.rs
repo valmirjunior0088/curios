@@ -83,6 +83,11 @@ impl<'a> Predecessors<'a> {
         foreigns
     }
 
+    /// Whether each predecessor is the compiler's own ([`Unit::fixed`]), in dependency order: what each stage is told beside its view of them, so that nothing records a read of one.
+    pub fn fixed(&self) -> Vec<bool> {
+        self.units.iter().map(|unit| unit.fixed()).collect()
+    }
+
     /// The erased forms of each predecessor's items, for `curios-elab`'s `Erasures`: one per unit, beside [`Predecessors::cores`], which they were erased from.
     pub fn erased(&self) -> Vec<&'a ErasedUnit> {
         self.units.iter().map(|unit| unit.erased()).collect()

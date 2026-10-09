@@ -4,7 +4,7 @@
 //!
 //! **In the order a module is stored.** A declaration follows what it reads, so every name its record holds is settled, adopted or judged, before the declaration is asked about. A read of a name not settled by then is one the order does not account for, and the declaration is judged.
 //!
-//! **A read of a unit in scope stands on the baseline's address.** A record names what a judgment read and not what the name held, so a read of this unit is compared, the baseline's declaration against the one in hand, and a read of a unit in scope cannot be: it stands wherever the name is in scope. That the scope is the one the earlier walk judged in is what a baseline's address says — a unit is offered as a baseline only after the units it was compiled after — and it is the one claim a caller makes of a baseline.
+//! **A read of a unit in scope stands where the unit is the one that was read, or the part read digests as it did.** A record names what a judgment read, so a read of this unit is compared, the baseline's declaration against the one in hand. Of a unit in scope there is no earlier declaration in hand, so a walk records the digest of each part it read of one (`read_digest`) and a later walk digests the part again, unless whoever mounted the unit says it is the one the baseline's walk read (`Globals::standing`). That the scope is the one the earlier walk judged in is what a baseline's address says — a unit is offered as a baseline only after the units it was compiled after — and it is the one claim a caller makes of a baseline.
 //!
 //! **What a declaration's own terms decide is decided of its terms.** Its universe contexts, the levels and binders it mentions and what it spells of elaboration's own syntax are held to their rules by the walk that first met those terms, so a declaration whose terms are the baseline's is passed over by every such check whether or not its verdict is adopted.
 
@@ -15,6 +15,13 @@ use {
         Totality,
     },
     std::collections::{BTreeMap, HashMap},
+};
+
+#[cfg(feature = "archive")]
+use {
+    super::Globals,
+    curios_core::{Sharing, StructDecl},
+    curios_utilities::{Qualifier, digest},
 };
 
 /// An earlier walk over another text of the unit a walk judges: the module it judged, where that module holds each name, and the record it filed.
@@ -84,6 +91,50 @@ impl<'a> Baseline<'a> {
     }
 }
 
+/// The digest of what a read reads of `name`, a declaration a unit in `globals` holds: of its body, what it unfolds to, where `body`, and otherwise of its signature, which is its type, its universe context, the registry entry it carries as [`induct_alike`] and [`struct_alike`] read one, and the certifier's verdict on it, its totality and its entry's polarity vector. `Ok(None)` where no unit holds the name.
+///
+/// **The certifier's own, of what [`Stood`] says of a declaration of the walk's unit.** A walk records it of each part it read of another unit, and a walk over that walk's unit as a baseline digests the part again where the unit it reads is not the one that was read: the terms are the ones in its scope and the function is this one, so a verdict adopted across units rests on nothing another component computed. Each term is consed alone (`Sharing`), so it is digested under no position and under its binders' names: two parts that digest alike are one to every judgment, and two that differ in a name alone are judged again, which costs a judgment and admits nothing.
+#[cfg(feature = "archive")]
+pub(crate) fn read_digest(
+    globals: &Globals<'_>,
+    name: &Global,
+    body: bool,
+) -> Result<Option<String>, String> {
+    let Some(held) = globals.held(name) else {
+        return Ok(None);
+    };
+    let sharing = Sharing::new();
+    if body {
+        let unfolds = held.value.map(|value| sharing.share(value));
+
+        return curios_archive::to_bytes(&unfolds).map(|bytes| Some(digest(&bytes)));
+    }
+
+    // An entry as the certifier reads one: what elaboration alone records is left out.
+    let family = globals.induct_decl(name).map(|declaration| InductDecl {
+        module: Qualifier::default(),
+        rep_public: false,
+        polarities: Vec::new(),
+        ..declaration.shared(&sharing)
+    });
+    let record = globals.struct_decl(name).map(|declaration| StructDecl {
+        module: Qualifier::default(),
+        rep_public: false,
+        polarities: Vec::new(),
+        ..declaration.shared(&sharing)
+    });
+    let part = (
+        sharing.share(held.type_),
+        held.universes.clone(),
+        family,
+        record,
+        globals.partial(name),
+        globals.polarities(name).map(<[Polarity]>::to_vec),
+    );
+
+    curios_archive::to_bytes(&part).map(|bytes| Some(digest(&bytes)))
+}
+
 /// How a declaration a walk has settled came out against the baseline's under its name: whether everything a signature read reads of it is the baseline's — its type, its universe context, its registry entries and the certifier's verdict on it — and whether what it unfolds to is. A proof unfolds to nothing whatever its body, so an edit to one moves no read of it.
 #[derive(Clone, Copy)]
 struct Stood {
@@ -113,18 +164,19 @@ impl<'a> Adopting<'a> {
 
     /// The baseline's record of each name `item` declares, in the order the item declares them, where its verdict on `item` stands; `None` where it does not, and the walk judges the item.
     ///
-    /// `item`'s terms are the baseline's ([`Baseline::holds`]). The verdict stands where the record covers each name `item` declares and files a vector for each registry entry `module` holds under one, and every name that record read — of this unit, settled before it, or of a unit in scope, which `in_scope` answers for — stands in the part read.
+    /// `item`'s terms are the baseline's ([`Baseline::holds`]). The verdict stands where the record covers each name `item` declares and files a vector for each registry entry `module` holds under one, and every name that record read — of this unit, settled before it, or of a unit in scope, which `abroad` answers for, told whether the read was of the name's body — stands in the part read.
     pub(crate) fn adopts(
         &self,
         item: &Item,
-        in_scope: impl Fn(&Global) -> bool,
+        abroad: impl Fn(&Global, bool) -> bool,
     ) -> Option<Vec<(Totality, &'a Reads)>> {
         let names = item.declared_names();
         let certification = self.baseline.certification;
-        let stands = |read: &Global, part: fn(&Stood) -> bool| match self.stood.get(read) {
-            Some(stood) => part(stood),
-            // A unit in scope is the one the baseline's walk read: a baseline is offered after the same units.
-            None => in_scope(read),
+        let stands = |read: &Global, body: bool| match self.stood.get(read) {
+            Some(stood) if body => stood.body,
+            Some(stood) => stood.signature,
+            // Another unit's, or no one's.
+            None => abroad(read, body),
         };
 
         names
@@ -139,11 +191,11 @@ impl<'a> Adopting<'a> {
                     && reads
                         .signatures
                         .iter()
-                        .all(|read| names.contains(&read) || stands(read, |stood| stood.signature))
+                        .all(|read| names.contains(&read) || stands(read, false))
                     && reads
                         .bodies
                         .iter()
-                        .all(|read| names.contains(&read) || stands(read, |stood| stood.body)))
+                        .all(|read| names.contains(&read) || stands(read, true)))
                 .then_some((totality, reads))
             })
             .collect()

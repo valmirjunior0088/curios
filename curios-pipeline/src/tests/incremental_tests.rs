@@ -5,8 +5,8 @@
 use {
     super::test_support::{
         assert_modules_agree, assert_stored_alike, carried_variances, compile_modules,
-        keeps_lowered, mounted, read_from, recompile_modules, recompile_over, reuses_body, unit_of,
-        unused_binders, written, written_files,
+        keeps_lowered, mounted, read_from, recompile_after, recompile_modules, recompile_over,
+        reuses_body, unit_after, unit_of, unused_binders, written, written_files,
     },
     curios_core::{Enter, Item, Variance},
     curios_unit::Unit,
@@ -794,6 +794,95 @@ fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_
         [directory.join("a.crs")],
         "the import nothing reads is reported in the file it is written in"
     );
+    assert_modules_agree(whole.core(), incremental.core());
+    assert_stored_alike(&whole, &incremental);
+}
+
+/// A unit `/dep` and a unit `/lib` after it: `twice` and `bound` read a signature of `/dep`, `two` unfolds `double`, and `unrelated` reads nothing of it.
+const DEPENDENCY: &str = "use /std/{Nat};
+
+pub let double(n: Nat) -> Nat = n + n;
+
+pub let limit: Nat = 4;
+";
+
+const DEPENDENT: &str = "use /std/{Nat, Eq};
+use /dep/{double, limit};
+
+pub let twice: Nat = double(2);
+
+pub let two: Eq()(double(1), 2) = Eq/refl();
+
+pub let bound: Nat = limit;
+
+pub let unrelated: Nat = 7;
+";
+
+/// `/lib` compiled over its baseline after `/dep` was edited to `edited`, beside the baseline and a whole compile after the same `/dep`.
+fn after_an_edited_dependency(edited: &str) -> (Unit, Unit, Unit) {
+    let dependency = unit_after("dep", DEPENDENCY, &[]);
+    let baseline = unit_after("lib", DEPENDENT, &[&dependency]);
+    let moved = unit_after("dep", edited, &[]);
+
+    let incremental = recompile_after("lib", DEPENDENT, &baseline, &[&moved], &[true]);
+    let whole = unit_after("lib", DEPENDENT, &[&moved]);
+
+    (baseline, incremental, whole)
+}
+
+/// A read of another unit stands where the part read is the part that was read, whatever else of the unit moved. `/dep`'s `double` is respelled under its signature, so `twice`, which read the signature, is reused; `two`, which unfolded the body, is elaborated again; and `bound` and `unrelated`, which read nothing that moved, are reused. The unit is the one a whole compile after the edited `/dep` stores, what each stage recorded of `/dep` with it.
+///
+/// Mutation-checked both ways: with every read of a unit that moved taken to stand, `two` is reused over a body that is gone; with none taken to stand, `twice` is elaborated again.
+#[test]
+fn a_dependency_respelled_under_its_signature_redoes_what_unfolded_it_and_no_other() {
+    let (baseline, incremental, whole) =
+        after_an_edited_dependency(&DEPENDENCY.replace("n + n", "n + n + 0"));
+
+    assert!(
+        reuses_body(&baseline, &incremental, "twice"),
+        "a declaration that read a signature that stands was elaborated again"
+    );
+    assert!(
+        !reuses_body(&baseline, &incremental, "two"),
+        "a declaration that unfolded a body that moved was reused"
+    );
+    assert!(reuses_body(&baseline, &incremental, "bound"));
+    assert!(reuses_body(&baseline, &incremental, "unrelated"));
+    assert_modules_agree(whole.core(), incremental.core());
+    assert_stored_alike(&whole, &incremental);
+}
+
+/// A signature of another unit that moved reaches what read it: `double`'s parameter is renamed, a binder's name being in what a dependent is handed, so `twice` and `two` are elaborated again, and `bound`, which read `limit` alone, is reused.
+#[test]
+fn a_dependency_whose_signature_moved_redoes_what_read_it() {
+    let (baseline, incremental, whole) = after_an_edited_dependency(&DEPENDENCY.replace(
+        "double(n: Nat) -> Nat = n + n",
+        "double(m: Nat) -> Nat = m + m",
+    ));
+
+    assert!(
+        !reuses_body(&baseline, &incremental, "twice"),
+        "a declaration that read a signature that moved was reused"
+    );
+    assert!(!reuses_body(&baseline, &incremental, "two"));
+    assert!(reuses_body(&baseline, &incremental, "bound"));
+    assert!(reuses_body(&baseline, &incremental, "unrelated"));
+    assert_modules_agree(whole.core(), incremental.core());
+    assert_stored_alike(&whole, &incremental);
+}
+
+/// A unit that moved in nothing its dependent read moves nothing of the dependent: `/dep` gains a declaration, and every declaration of `/lib` is reused.
+#[test]
+fn a_dependency_that_gained_a_declaration_redoes_nothing_of_its_dependent() {
+    let (baseline, incremental, whole) =
+        after_an_edited_dependency(&format!("{DEPENDENCY}\npub let spare: Nat = 9;\n"));
+
+    for name in ["twice", "two", "bound", "unrelated"] {
+        assert!(
+            reuses_body(&baseline, &incremental, name),
+            "{name} was elaborated again"
+        );
+    }
     assert_modules_agree(whole.core(), incremental.core());
     assert_stored_alike(&whole, &incremental);
 }

@@ -24,11 +24,15 @@ use {
     },
     curios_utilities::recurse,
     std::{
+        cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         ops::ControlFlow,
         rc::Rc,
     },
 };
+
+#[cfg(feature = "archive")]
+use crate::Foreign;
 
 /// Where one declaration stands in the walk.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -85,6 +89,26 @@ pub(super) struct Demand<'a> {
     kept: Vec<bool>,
     /// What each name elaborated again over a baseline left as the baseline holds it.
     same: HashMap<Global, Same>,
+    /// Whether each part a kept declaration asked of a declaration the unit does not hold, in a scope that moved, is the part the baseline read: asked again once, a part being asked by every declaration that read it.
+    read: RefCell<HashMap<Global, Vec<(Question, bool)>>>,
+}
+
+/// Whether the part `question` asks, of a declaration the unit does not hold, digests now to what the baseline recorded of it. A part the baseline recorded nothing of does not stand, and neither does one that will not digest.
+#[cfg(feature = "archive")]
+fn read_again(over: Over<'_>, question: &Question) -> bool {
+    match (
+        over.traces.foreign().digest(question),
+        over.established.part_digest(question),
+    ) {
+        (Some(then), Ok(now)) => *then == now,
+        _ => false,
+    }
+}
+
+/// Nothing digests where nothing is archived, so no read of a unit that moved stands.
+#[cfg(not(feature = "archive"))]
+fn read_again(_: Over<'_>, _: &Question) -> bool {
+    false
 }
 
 /// The first position written anywhere in `term`, outermost first, each node of its graph visited once.
@@ -181,7 +205,89 @@ impl<'a> Demand<'a> {
             traces: Traces::default(),
             over,
             same: HashMap::new(),
+            read: RefCell::new(HashMap::new()),
         }
+    }
+
+    /// Record what the unit's declarations read of the declarations it does not hold, each part by the digest it has in `scope`: what a later compile over this unit asks a read of another unit again by ([`Foreign`]).
+    ///
+    /// Taken where the walk ends, off the traces that stood. A part a kept declaration read of a unit that did not move is the baseline's, digest and all, so nothing of that unit is read to record it; and a walk that kept every declaration of its baseline in a scope that did not move holds the baseline's table.
+    #[cfg(feature = "archive")]
+    pub(super) fn note_foreign(&mut self, scope: &Established<'_>) {
+        let earlier = self.over.map(|over| over.traces);
+        if let Some(earlier) = earlier
+            && scope.settled()
+            && self.kept.iter().all(|kept| *kept)
+            && self.traces.len() == earlier.len()
+        {
+            self.traces.read(Rc::clone(earlier.foreign()));
+            return;
+        }
+
+        let mut read = Foreign::default();
+        let mut noted = HashMap::<Global, Vec<Question>>::new();
+        for trace in self.traces.each() {
+            for (question, answered) in trace.asked() {
+                // A witness found is read by its signature, which its own question does not ask.
+                let part = match (question, answered) {
+                    (Question::Witness(..), Answered::Witness(Some(witness))) => {
+                        Question::Signature(*witness)
+                    }
+                    (part, Answered::Part) => *part,
+                    _ => continue,
+                };
+                let Some(name) = part.subject() else {
+                    continue;
+                };
+                if self.owner.contains_key(name) || !scope.recorded(name) {
+                    continue;
+                }
+                let asked = noted.entry(*name).or_default();
+                if asked.contains(&part) {
+                    continue;
+                }
+                asked.push(part);
+
+                let kept = earlier
+                    .and_then(|earlier| earlier.foreign().digest(&part))
+                    .filter(|_| scope.unmoved(name));
+                let digest = match kept {
+                    Some(digest) => digest.clone(),
+                    None => match scope.part_digest(&part) {
+                        Ok(digest) => digest,
+                        // A part that will not digest is recorded nowhere, and a read with no record does not stand.
+                        Err(_) => continue,
+                    },
+                };
+                read.record(part, digest);
+            }
+        }
+        self.traces.read(Rc::new(read));
+    }
+
+    /// Whether the part `question` asks of `name`, a declaration the unit does not hold, is the part the baseline read: the unit that holds it is the one the baseline was compiled after, or the part digests now to what the baseline recorded of it.
+    fn read_stands(&self, over: Over<'_>, name: &Global, question: &Question) -> bool {
+        if over.established.unmoved(name) {
+            return true;
+        }
+        let asked = self
+            .read
+            .borrow()
+            .get(name)
+            .and_then(|asked| asked.iter().find(|(asked, _)| asked == question))
+            .map(|(_, stands)| *stands);
+        if let Some(stands) = asked {
+            return stands;
+        }
+
+        let stands = read_again(over, question);
+        self.read
+            .borrow_mut()
+            .entry(*name)
+            .or_default()
+            .push((*question, stands));
+
+        stands
     }
 
     /// Every name of a declaration the walk kept as the baseline holds it.
@@ -447,7 +553,7 @@ impl<'a> Demand<'a> {
         }
     }
 
-    /// Whether the part of a declaration that `question` asks is as the baseline holds it: a kept declaration's is, one elaborated again where it came out equal, and one neither the unit nor the baseline declares is another unit's or no one's, which the baseline was compiled after as this unit is.
+    /// Whether the part of a declaration that `question` asks is as the baseline holds it: a kept declaration's is, one elaborated again where it came out equal, and one neither the unit nor the baseline declares is another unit's or no one's, which stands where the baseline read what is read now ([`Self::read_stands`]).
     fn held(&self, question: &Question) -> bool {
         let over = self.over.expect("a trace is asked again over a baseline");
         let Some(name) = question.subject() else {
@@ -455,7 +561,7 @@ impl<'a> Demand<'a> {
         };
 
         match self.owner.get(name) {
-            None => over.places.place(name).is_none(),
+            None => over.places.place(name).is_none() && self.read_stands(over, name, question),
             Some(&owner) if self.kept[owner] => true,
             Some(_) => self
                 .same

@@ -54,7 +54,25 @@ pub struct Certification {
     ///
     /// **Of the unit's baseline half**, as its traces are: skipped where the record is stored, stored beside it ([`Certification::reads_bytes`]), handed back as bytes where it is restored ([`Certification::with_reads`]), and read out of them when a walk over the unit first asks.
     #[archived_with(curios_archive::Skip)]
-    reads: curios_archive::Deferred<BTreeMap<Global, Reads>>,
+    reads: curios_archive::Deferred<Read>,
+}
+
+/// What a walk's judgments read, held apart from what they concluded: of the items of its own unit, by name, and of the declarations of other units, each by the digest of the part read.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Read {
+    /// What judging each definition read of other items.
+    by: BTreeMap<Global, Reads>,
+    /// What the walk read of each declaration its unit does not hold, another unit's. See [`Abroad`].
+    abroad: BTreeMap<Global, Abroad>,
+}
+
+/// What a walk read of one declaration of another unit: the digest of what a signature read reads of it, and of what a body read does, each where some judgment read it. The certifier makes both, from the terms in its scope and its own verdict on them, and compares them where a walk over a baseline meets a unit that is not the one the baseline's walk read.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Abroad {
+    pub signature: Option<String>,
+    pub body: Option<String>,
 }
 
 /// Two records are one where they conclude the same of every definition and every entry and judging each read the same: a record's reads are part of what it says, wherever they are held.
@@ -101,26 +119,30 @@ impl Reads {
 }
 
 impl Certification {
-    /// A record of each of `definitions`, and of the vector of each entry in `polarities`.
+    /// A record of each of `definitions`, of the vector of each entry in `polarities`, and of what the walk read of each declaration of another unit, `abroad`.
     pub fn of(
         definitions: impl IntoIterator<Item = (Global, Certified)>,
         polarities: impl IntoIterator<Item = (Global, Vec<Polarity>)>,
+        abroad: impl IntoIterator<Item = (Global, Abroad)>,
     ) -> Self {
-        let (mut totalities, mut reads) = (BTreeMap::new(), BTreeMap::new());
+        let (mut totalities, mut by) = (BTreeMap::new(), BTreeMap::new());
         for (name, certified) in definitions {
             totalities.insert(name, certified.totality);
-            reads.insert(name, certified.reads);
+            by.insert(name, certified.reads);
         }
 
         Self {
             totalities,
             polarities: polarities.into_iter().collect(),
-            reads: curios_archive::Deferred::held(reads),
+            reads: curios_archive::Deferred::held(Read {
+                by,
+                abroad: abroad.into_iter().collect(),
+            }),
         }
     }
 
-    /// What judging each definition read, read out of its bytes now where the record was restored and no walk has asked before.
-    fn read(&self) -> &BTreeMap<Global, Reads> {
+    /// What the walk's judgments read, read out of its bytes now where the record was restored and no walk has asked before.
+    fn read(&self) -> &Read {
         #[cfg(feature = "archive")]
         let reads = self
             .reads
@@ -160,7 +182,17 @@ impl Certification {
 
     /// What judging `name` read of other items, when this record covers it.
     pub fn reads(&self, name: &Global) -> Option<&Reads> {
-        self.read().get(name)
+        self.read().by.get(name)
+    }
+
+    /// What the walk read of `name`, a declaration of another unit, where it read it and recorded so.
+    pub fn abroad(&self, name: &Global) -> Option<&Abroad> {
+        self.read().abroad.get(name)
+    }
+
+    /// The declarations of other units the walk recorded a read of.
+    pub fn read_abroad(&self) -> impl Iterator<Item = &Global> {
+        self.read().abroad.keys()
     }
 
     /// Whether this record classifies every definition `module` holds.

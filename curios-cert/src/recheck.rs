@@ -56,13 +56,19 @@ use {
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
-        Bound, Certification, Certified, Entrypoint, Free, Global, InductDecl, Item, Level,
+        Abroad, Bound, Certification, Certified, Entrypoint, Free, Global, InductDecl, Item, Level,
         MetavarId, Module, Polarity, Program, Reads, StructDecl, Term, Totality, UniverseContext,
         Variance, Zonked,
     },
     curios_utilities::{SyntaxRegistry, grown},
-    std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    },
 };
+
+#[cfg(feature = "archive")]
+use super::read_digest;
 
 /// One refusal the kernel reached.
 ///
@@ -575,6 +581,8 @@ fn verdicts_within<'s>(
     // A unit in scope whose record files no vector for an entry of its own: this walk's to compute, before any judgment composes through one.
     file_scope_polarities(kernel, &mut verdicts);
 
+    // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
+    let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
     // What each judged definition read of other items, taken at each judgment's end so it holds that judgment's reads alone.
     let mut reads: BTreeMap<Global, Reads> = BTreeMap::new();
     kernel.take_reads();
@@ -591,7 +599,9 @@ fn verdicts_within<'s>(
         // A declaration whose terms are the baseline's and whose every recorded read stands takes the baseline's verdict, and stands as the walk leaves any item it does not judge.
         if let Some(adopting) = &mut adopting
             && kept[index]
-            && let Some(certified) = adopting.adopts(item, |name| globals.in_scope(name))
+            && let Some(certified) = adopting.adopts(item, |name, body| {
+                read_stands(globals, adopting.baseline(), &abroad, name, body)
+            })
         {
             let adopted = adopt(kernel, adopting.baseline(), item, &certified);
             verdicts.extend(adopted.refusals);
@@ -746,6 +756,41 @@ fn verdicts_within<'s>(
         verdicts.push(Verdict { name: None, error });
     }
 
+    // What the walk read of each declaration of another unit, by the digest of the part read: the baseline's own where the unit is the one its walk read, and digested here otherwise.
+    #[cfg(feature = "archive")]
+    let read_abroad = {
+        let mut read_abroad = BTreeMap::<Global, Abroad>::new();
+        for read in reads.values() {
+            for (names, body) in [(&read.signatures, false), (&read.bodies, true)] {
+                for name in names {
+                    if !globals.in_scope(name) || !globals.recorded(name) {
+                        continue;
+                    }
+                    let entry = read_abroad.entry(*name).or_default();
+                    let part = match body {
+                        true => &mut entry.body,
+                        false => &mut entry.signature,
+                    };
+                    if part.is_some() {
+                        continue;
+                    }
+                    let kept = baseline
+                        .and_then(|baseline| baseline.certification.abroad(name))
+                        .filter(|_| globals.unmoved(name))
+                        .and_then(|kept| match body {
+                            true => kept.body.clone(),
+                            false => kept.signature.clone(),
+                        });
+                    *part = kept.or_else(|| read_digest(globals, name, body).ok().flatten());
+                }
+            }
+        }
+
+        read_abroad
+    };
+    #[cfg(not(feature = "archive"))]
+    let read_abroad = BTreeMap::<Global, Abroad>::new();
+
     // The record of what this walk concluded: every judged definition's totality, from the set each was classified into, with what its judgment read, and every accepted entry's polarity vector — so a later walk reading it needs nothing of this one's.
     let certification = Certification::of(
         module
@@ -761,12 +806,57 @@ fn verdicts_within<'s>(
                 (*name, Certified { totality, reads })
             }),
         polarities,
+        read_abroad,
     );
 
     Rechecked {
         verdicts,
         certification,
     }
+}
+
+/// Whether what the baseline's walk read of `name`, which the unit being judged does not declare, stands: a unit in scope declares it, and that unit is the one the walk read, or the part read, its body where `body` and its signature otherwise, digests now to what the baseline's record holds of it (`read_digest`). Nothing digests where nothing is archived, so there a read of a unit that moved does not stand. `asked` keeps each answer for the walk.
+fn read_stands(
+    globals: &Globals,
+    baseline: Baseline<'_>,
+    asked: &RefCell<HashMap<(Global, bool), bool>>,
+    name: &Global,
+    body: bool,
+) -> bool {
+    if !globals.in_scope(name) {
+        return false;
+    }
+    if globals.unmoved(name) {
+        return true;
+    }
+    if let Some(stands) = asked.borrow().get(&(*name, body)) {
+        return *stands;
+    }
+
+    #[cfg(feature = "archive")]
+    let stands = {
+        let then = baseline
+            .certification
+            .abroad(name)
+            .and_then(|read| match body {
+                true => read.body.as_ref(),
+                false => read.signature.as_ref(),
+            });
+
+        matches!(
+            (then, read_digest(globals, name, body)),
+            (Some(then), Ok(Some(now))) if *then == now
+        )
+    };
+    #[cfg(not(feature = "archive"))]
+    let stands = {
+        let _ = baseline;
+
+        false
+    };
+    asked.borrow_mut().insert((*name, body), stands);
+
+    stands
 }
 
 /// What adopting one item's verdict files: the refusals met on the way, each name's reads as the baseline's record holds them, the names that record calls partial, and the polarity vector of each registry entry the item declares.

@@ -22,6 +22,9 @@ use {
     },
 };
 
+#[cfg(feature = "archive")]
+use crate::{Answered, Foreign, Question};
+
 /// What one expression erased to. See the module documentation.
 #[derive(Debug)]
 pub(super) enum Outcome {
@@ -489,7 +492,7 @@ pub fn erase_unit_over(
             &view,
             scope,
             module,
-            Some(ErasedOver::new(baseline, module)),
+            Some(ErasedOver::new(baseline, module, scope)),
         )
     })
 }
@@ -583,8 +586,63 @@ pub(super) fn erase_items<'s>(
             asked.share(**name, trace);
         }
     }
+    #[cfg(feature = "archive")]
+    note_foreign(&mut asked, &unit, scope, over.as_ref());
 
     Ok(unit.asking(asked))
+}
+
+/// Record what erasing `unit`'s items read of declarations the unit does not hold, each part and each binding by the digest it has in `scope`: what a later erasure over this unit asks a read of another unit again by (`Foreign`).
+///
+/// Taken where the walk ends, off the traces that stood, as elaboration takes its own. What a kept form's erasure read of a unit that did not move is the baseline's, digest and all, and an erasure that kept every form of its baseline in a scope that did not move holds the baseline's table.
+#[cfg(feature = "archive")]
+fn note_foreign(
+    asked: &mut Traces,
+    unit: &ErasedUnit,
+    scope: Erasures<'_>,
+    over: Option<&ErasedOver<'_>>,
+) {
+    let earlier = over.map(|over| over.earlier().foreign());
+    if let (Some(earlier), Some(over)) = (earlier, over)
+        && scope.settled()
+        && over.kept_all()
+        && asked.len() == over.earlier().asked_len()
+    {
+        asked.read(Rc::clone(earlier));
+        return;
+    }
+
+    let mut read = Foreign::default();
+    let mut noted = HashMap::<Global, Vec<Question>>::new();
+    for trace in asked.each() {
+        for (question, answered) in trace.asked() {
+            let (Some(name), Answered::Part) = (question.subject(), answered) else {
+                continue;
+            };
+            if unit.place(name).is_some() || !scope.recorded(name) {
+                continue;
+            }
+            let seen = noted.entry(*name).or_default();
+            if seen.contains(question) {
+                continue;
+            }
+            seen.push(*question);
+
+            let kept = earlier
+                .and_then(|earlier| earlier.digest(question))
+                .filter(|_| scope.unmoved(name));
+            let digest = match kept {
+                Some(digest) => digest.clone(),
+                None => match scope.part_digest(question) {
+                    Ok(digest) => digest,
+                    // What will not digest is recorded nowhere, and a read with no record does not stand.
+                    Err(_) => continue,
+                },
+            };
+            read.record(*question, digest);
+        }
+    }
+    asked.read(Rc::new(read));
 }
 
 /// Erase one item into a fragment of its own, on a budget restored for it.

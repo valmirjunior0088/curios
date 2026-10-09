@@ -4,10 +4,10 @@
 //!
 //! **Asked in the order the items are stored in, which is the order they are read in.** A module's items stand each after the items it reaches, and erasing one reads the erased form of another only where the other is already erased, so what a question is about is decided by the time it is asked: no item waits for another, and none is asked for.
 //!
-//! **A part is the elaborated declaration's, a binding the erased item's.** A question about a name's type, body or registry entry is answered as it was where the elaborator kept the declaration, and for one elaborated again where that part came out equal as it is stored ([`Same`]). A question about how a name is bound is answered as it was where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). A name neither the unit nor its baseline declares is another unit's, which the baseline was erased after as this unit is.
+//! **A part is the elaborated declaration's, a binding the erased item's.** A question about a name's type, body or registry entry is answered as it was where the elaborator kept the declaration, and for one elaborated again where that part came out equal as it is stored ([`Same`]). A question about how a name is bound is answered as it was where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). A name neither the unit nor its baseline declares is another unit's or no one's, and what was read of it stands where the unit that holds it is the one the baseline was erased after, or where it digests now to what the baseline recorded (`Foreign`).
 
 use {
-    super::{ErasedUnit, Held},
+    super::{ErasedUnit, Erasures, Held},
     crate::{
         Answered, Question, Same, concepts_alike, entries_alike, inducts_alike, structs_alike,
     },
@@ -40,10 +40,18 @@ pub(super) struct ErasedOver<'a> {
     kept: Vec<bool>,
     /// What each name elaborated again left as the baseline holds it, compared the first time a trace asks.
     same: HashMap<Global, Same>,
+    /// The units in scope, which say whether each is the one the baseline was erased after.
+    scope: Erasures<'a>,
+    /// Whether each part or binding a kept form's erasure read of a declaration the unit does not hold, in a scope that moved, is the one the baseline read: asked again once.
+    read: HashMap<Global, Vec<(Question, bool)>>,
 }
 
 impl<'a> ErasedOver<'a> {
-    pub(super) fn new(baseline: ErasedBaseline<'a>, module: &'a Module) -> Self {
+    pub(super) fn new(
+        baseline: ErasedBaseline<'a>,
+        module: &'a Module,
+        scope: Erasures<'a>,
+    ) -> Self {
         let declared = module
             .items
             .iter()
@@ -63,7 +71,54 @@ impl<'a> ErasedOver<'a> {
             declared,
             kept: Vec::with_capacity(module.items.len()),
             same: HashMap::new(),
+            scope,
+            read: HashMap::new(),
         }
+    }
+
+    /// Whether every item walked so far holds the baseline's own erased form.
+    #[cfg(feature = "archive")]
+    pub(super) fn kept_all(&self) -> bool {
+        self.kept.iter().all(|kept| *kept)
+    }
+
+    /// What the baseline's erasure read of declarations its unit did not hold.
+    #[cfg(feature = "archive")]
+    pub(super) fn earlier(&self) -> &'a ErasedUnit {
+        self.baseline.erased
+    }
+
+    /// Whether what `question` asks of `name`, a declaration the unit does not hold, is what the baseline's erasure read: the unit that holds it is the one the baseline was erased after, or it digests now to what the baseline recorded of it. A read the baseline recorded nothing of does not stand.
+    fn read_stands(&mut self, name: &Global, question: &Question) -> bool {
+        if self.scope.unmoved(name) {
+            return true;
+        }
+        let asked = self
+            .read
+            .get(name)
+            .and_then(|asked| asked.iter().find(|(asked, _)| asked == question))
+            .map(|(_, stands)| *stands);
+        if let Some(stands) = asked {
+            return stands;
+        }
+
+        #[cfg(feature = "archive")]
+        let stands = match (
+            self.baseline.erased.foreign().digest(question),
+            self.scope.part_digest(question),
+        ) {
+            (Some(then), Ok(now)) => *then == now,
+            _ => false,
+        };
+        // Nothing digests where nothing is archived, so no read of a unit that moved stands.
+        #[cfg(not(feature = "archive"))]
+        let stands = false;
+        self.read
+            .entry(*name)
+            .or_default()
+            .push((*question, stands));
+
+        stands
     }
 
     /// The baseline's erased form of `item`, the next of the unit's, with what erasing it asked, where the unit keeps them: `unit` holds the erased forms of the items before it. What is answered is noted for the items after it.
@@ -104,9 +159,12 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// Whether an item naming `name` reads the erased form of the item declaring it as it did.
-    fn read_alike(&self, name: &Global, unit: &ErasedUnit) -> bool {
+    fn read_alike(&mut self, name: &Global, unit: &ErasedUnit) -> bool {
         match self.declared.get(name) {
-            None => self.baseline.erased.place(name).is_none(),
+            None => {
+                self.baseline.erased.place(name).is_none()
+                    && self.read_stands(name, &Question::Erased(*name))
+            }
             Some(&(item, _)) => match self.kept.get(item) {
                 Some(true) => true,
                 Some(false) => match (unit.find(name), self.baseline.erased.find(name)) {
@@ -125,7 +183,7 @@ impl<'a> ErasedOver<'a> {
             return false;
         };
         let Some(&(item, member)) = self.declared.get(name) else {
-            return self.baseline.places.place(name).is_none();
+            return self.baseline.places.place(name).is_none() && self.read_stands(name, question);
         };
         if self.baseline.kept.contains(name) {
             return true;

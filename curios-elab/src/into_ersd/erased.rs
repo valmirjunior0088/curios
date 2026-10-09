@@ -10,7 +10,7 @@
 
 use {
     super::{Binding, Environment, Projection},
-    crate::{Answered, Question, Traces},
+    crate::{Answered, Foreign, Question, Traces},
     curios_archive::{Bytes, Deferred},
     curios_core::{Extent, Free, Global, Item, Module, Places, Trace},
     std::{collections::BTreeMap, rc::Rc},
@@ -18,7 +18,9 @@ use {
 
 #[cfg(feature = "archive")]
 use {
+    crate::part_digest,
     curios_archive::{joined, parted},
+    curios_utilities::digest,
     std::borrow::Cow,
 };
 
@@ -120,6 +122,42 @@ impl ErasedItem {
         self.export(name) == other.export(name)
             && self.struct_row_read(name) == other.struct_row_read(name)
             && self.induct_row_read(name) == other.induct_row_read(name)
+    }
+
+    /// The digest of what an item that names `name` reads of this erased form: what [`ErasedItem::read_alike`] compares, archived. What a unit records of a binding it read in another unit's erased form, and what the binding is asked again by.
+    #[cfg(feature = "archive")]
+    pub(super) fn read_digest(&self, name: &Global) -> Result<String, String> {
+        let export = self.export(name).map(|export| match export {
+            Export::Dropped => (0u8, None, None, None),
+            Export::Constant(constant) => (1, Some(constant.clone()), None, None),
+            Export::Value => (2, None, None, None),
+            Export::Unforced { member, extent } => {
+                (3, None, Some((member.to_string(), extent.cloned())), None)
+            }
+            Export::Function { arity, interface } => {
+                (4, None, None, Some((arity as u64, interface)))
+            }
+        });
+        let record = self.struct_row_read(name).map(|(schema, mask)| {
+            (
+                schema
+                    .map(|(name, width, shared)| (name.map(str::to_string), width as u64, shared)),
+                mask.clone(),
+            )
+        });
+        let family = self.induct_row_read(name).map(|(name, constructors)| {
+            (
+                name.map(str::to_string),
+                constructors
+                    .into_iter()
+                    .map(|(name, width, mask)| {
+                        (name.map(str::to_string), width as u64, mask.clone())
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        });
+
+        curios_archive::to_bytes(&(export, record, family)).map(|bytes| digest(&bytes))
     }
 
     /// What an item importing the structure `name` reads of the row this item declares for it: its mask, and of its schema the name, the width and whether it is shared.
@@ -300,8 +338,8 @@ impl ErasedUnit {
         self
     }
 
-    /// What erasing the item declaring `name` first asked, as the unit holds it. Read out of the unit's baseline half now, where the unit was restored and no erasure over it has asked before.
-    pub(super) fn asked(&self, name: &Global) -> Option<&Rc<Trace<Question, Answered>>> {
+    /// What erasing each item asked, read out of the unit's baseline half now, where the unit was restored and no erasure over it has asked before.
+    fn traces(&self) -> &Traces {
         #[cfg(feature = "archive")]
         let asked = self
             .asked
@@ -313,7 +351,23 @@ impl ErasedUnit {
             .peek()
             .expect("an erased unit that was never stored holds its traces");
 
-        asked.held(name)
+        asked
+    }
+
+    /// What erasing the item declaring `name` first asked, as the unit holds it.
+    pub(super) fn asked(&self, name: &Global) -> Option<&Rc<Trace<Question, Answered>>> {
+        self.traces().held(name)
+    }
+
+    /// What erasing the unit's items read of declarations the unit does not hold, each part and each binding by the digest it had.
+    pub fn foreign(&self) -> &Rc<Foreign> {
+        self.traces().foreign()
+    }
+
+    /// How many items' erasures hold a trace.
+    #[cfg(feature = "archive")]
+    pub(super) fn asked_len(&self) -> usize {
+        self.traces().len()
     }
 
     /// The bytes of this unit's baseline half: what erasing each of its items asked, stored apart from what the unit is for its successors.
@@ -374,6 +428,10 @@ pub struct Erasures<'a> {
     /// What each unit keeps for erasure, where the caller holds the units and not their modules alone: where it holds each name, and what has been read of it out of its universes. `None` keys each module for this erasure.
     kept: Option<&'a [(&'a Places, &'a Projection)]>,
     erased: &'a [&'a ErasedUnit],
+    /// Which units are other than the ones the baseline was erased after ([`Erasures::after`]): none where nothing says.
+    moved: Option<&'a [bool]>,
+    /// Which units are the compiler's own ([`Erasures::fixed`]): none where nothing says.
+    fixed: Option<&'a [bool]>,
 }
 
 impl<'a> Erasures<'a> {
@@ -394,6 +452,78 @@ impl<'a> Erasures<'a> {
             cores,
             kept: None,
             erased,
+            moved: None,
+            fixed: None,
+        }
+    }
+
+    /// These units with `moved` saying of each, in the same order, whether it is other than the one the baseline was erased after: what `Established::after` says of elaboration's scope.
+    pub fn after(self, moved: &'a [bool]) -> Self {
+        assert_eq!(
+            self.cores.len(),
+            moved.len(),
+            "what moved is said of each unit in scope",
+        );
+
+        Self {
+            moved: Some(moved),
+            ..self
+        }
+    }
+
+    /// These units with `fixed` saying of each, in the same order, whether it is the compiler's own, of which no read is recorded: what `Established::fixed` says of elaboration's scope.
+    pub fn fixed(self, fixed: &'a [bool]) -> Self {
+        assert_eq!(
+            self.cores.len(),
+            fixed.len(),
+            "what is fixed is said of each unit in scope",
+        );
+
+        Self {
+            fixed: Some(fixed),
+            ..self
+        }
+    }
+
+    /// Whether every unit in scope is the one the baseline was erased after.
+    pub(super) fn settled(&self) -> bool {
+        !self.moved.is_some_and(|moved| moved.contains(&true))
+    }
+
+    /// Whether what a baseline's erasure read of `name`, which the unit being erased does not declare, stands unasked: every unit in scope is the one the baseline was erased after, or the one that declares `name` is.
+    pub(super) fn unmoved(&self, name: &Global) -> bool {
+        let Some(moved) = self.moved.filter(|moved| moved.contains(&true)) else {
+            return true;
+        };
+
+        self.place(name).is_some_and(|(unit, _)| !moved[unit])
+    }
+
+    /// Whether a read of `name`, which the unit being erased does not declare, is one to record: every one but a read of a fixed unit's declaration.
+    #[cfg(feature = "archive")]
+    pub(super) fn recorded(&self, name: &Global) -> bool {
+        match (self.fixed, self.place(name)) {
+            (Some(fixed), Some((unit, _))) => !fixed[unit],
+            _ => true,
+        }
+    }
+
+    /// The digest of what `question` asks of the declaration a unit in scope holds under its name: a part of its elaborated declaration ([`part_digest`]), or how an item naming it reads its erased form ([`ErasedItem::read_digest`]). `Ok(None)` where no unit declares the name or the one that does holds no such part; `Err` where a part is asked of a scope read without its units' places.
+    #[cfg(feature = "archive")]
+    pub(super) fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
+        let Some(name) = question.subject() else {
+            return Ok(None);
+        };
+        let Some((unit, place)) = self.place(name) else {
+            return Ok(None);
+        };
+
+        match question {
+            Question::Erased(_) => self.erased[unit].item(place).read_digest(name).map(Some),
+            part => match self.kept(unit) {
+                Some((places, _)) => part_digest(self.cores[unit], places, part),
+                None => Err("a scope read without its units' places digests no part".to_string()),
+            },
         }
     }
 

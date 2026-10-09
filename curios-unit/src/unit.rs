@@ -49,6 +49,11 @@ pub struct Uncertified {
     /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_bytes`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors and read out of its bytes when a compile over the unit first asks.
     #[archived_with(curios_archive::Skip)]
     traces: Rc<Deferred<Traces>>,
+    /// Whether the unit is the compiler's own: restored out of bytes that are a constant of the executable, so one thing under one compiler. Never stored, being where the unit came from.
+    ///
+    /// **Nothing records a read of a fixed unit.** A baseline is offered by the compiler that made it — a slot's address names the compiler, and a session lives in one process — so a fixed unit is the one every baseline was compiled after, and what a unit read of it is never asked again (`curios_elab::Established::fixed`).
+    #[archived_with(curios_archive::Skip)]
+    fixed: bool,
 }
 
 impl Uncertified {
@@ -62,7 +67,13 @@ impl Uncertified {
             lexicon: Rc::default(),
             erased: Rc::new(erased),
             traces: Rc::new(Deferred::held(traces)),
+            fixed: false,
         }
+    }
+
+    /// Whether the unit is the compiler's own. See the field.
+    pub fn fixed(&self) -> bool {
+        self.fixed
     }
 
     /// This unit with the record the certifier's walk over it left — the only way a [`Unit`] is made.
@@ -164,10 +175,13 @@ impl Uncertified {
     /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::apart_bytes`]), each part a run of the buffer they are in and read when something first asks for it — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing.
     #[cfg(feature = "archive")]
     pub fn with_apart(self, bytes: impl Into<Bytes>) -> Result<Self, String> {
+        let bytes = bytes.into();
+        let fixed = matches!(bytes, Bytes::Constant(_));
         let [items, forms, module, anchors, imports, text, traces, erased] =
-            apart_parts(&bytes.into()).ok_or("not what a unit stores apart from itself")?;
+            apart_parts(&bytes).ok_or("not what a unit stores apart from itself")?;
 
         Ok(Self {
+            fixed,
             text: Rc::new(
                 Rc::unwrap_or_clone(self.text)
                     .with_baseline(text)
@@ -198,6 +212,7 @@ impl Uncertified {
             lexicon: Rc::default(),
             erased: Rc::clone(&self.erased),
             traces: Rc::clone(&self.traces),
+            fixed: self.fixed,
         }
     }
 }
@@ -264,6 +279,11 @@ impl Unit {
     /// See [`Uncertified::traces`].
     pub fn traces(&self) -> &Traces {
         self.unit.traces()
+    }
+
+    /// See [`Uncertified::fixed`].
+    pub fn fixed(&self) -> bool {
+        self.unit.fixed()
     }
 
     /// The bytes this unit is stored as: itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then what it stores apart from itself ([`Uncertified::apart_bytes`]) and what the certifier's record does, what judging each definition read ([`Certification::reads_bytes`]), each behind its length.

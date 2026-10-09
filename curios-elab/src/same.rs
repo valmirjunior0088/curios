@@ -17,6 +17,12 @@ use {
     },
 };
 
+#[cfg(feature = "archive")]
+use {
+    curios_core::{Module, Nominal, Place, Places, Sharing, Variance},
+    curios_utilities::digest,
+};
+
 /// Which parts of one name elaborated again came out as the baseline holds them: what a kept declaration's question about the name is answered by.
 #[derive(Clone, Copy, Default)]
 pub(crate) struct Same {
@@ -113,6 +119,132 @@ impl Same {
             | Question::Erased(_) => false,
         }
     }
+}
+
+/// The digest of the part of a declaration `question` asks, where `module` holds the declaration at the place `places` keeps for it: what a unit records of a part it read of another unit, and what the part is asked again by, once the unit it was read from is no longer the one in scope. `Ok(None)` where the name declares no such part, which is an answer as any other is; `Err` where the part will not archive.
+///
+/// **Two parts digest alike exactly where [`Same`] calls them one.** A part is consed alone ([`Sharing`]), which leaves one node for each structure under its binders' names and no position on any, then archived and digested, so what [`spelled_alike`] compares is what the bytes spell. Each part holds what [`Same`] reads of it and nothing else: a signature its kind, a body its signature, and a group's member the group whole.
+#[cfg(feature = "archive")]
+pub(crate) fn part_digest(
+    module: &Module,
+    places: &Places,
+    question: &Question,
+) -> Result<Option<String>, String> {
+    let Some(name) = question.subject() else {
+        return Ok(None);
+    };
+    let Some(place) = places.place(name) else {
+        return Ok(None);
+    };
+    let sharing = Sharing::new();
+    // A definition of its own, or a group's member with the group it is read through.
+    let (name, held, island, totality, proof, group, plain) =
+        match (&module.items[place.item()], place) {
+            (Item::Let(definition), Place::Let(_)) => (
+                definition.name,
+                &definition.kind,
+                definition.island,
+                definition.totality,
+                definition.proof,
+                None,
+                Some(definition),
+            ),
+            (Item::Rec(rec), Place::Member { member, .. }) => {
+                let definition = &rec.definitions[member as usize];
+
+                (
+                    definition.name,
+                    &definition.kind,
+                    definition.island,
+                    definition.totality,
+                    definition.proof,
+                    Some(rec),
+                    None,
+                )
+            }
+            _ => unreachable!("a name's place is its item's"),
+        };
+
+    // What the name is declared as, the entry a former carries left out: the entry is a part of its own.
+    let origin = (!matches!(held, DefinitionKind::Nominal(_))).then(|| held.clone());
+    let kind = (name, held.declared(), origin, island);
+    let signature = || match (plain, group) {
+        (Some(definition), _) => {
+            let type_ = sharing.share(&definition.type_);
+
+            sealed(curios_archive::to_bytes(&(
+                kind.clone(),
+                definition.universe_context.clone(),
+                type_,
+            )))
+        }
+        (None, Some(rec)) => {
+            let members = rec
+                .group
+                .iter()
+                .map(|member| {
+                    (
+                        member.type_.arity() as u64,
+                        sharing.share(member.type_.body()),
+                        member.body.arity() as u64,
+                        sharing.share(member.body.body()),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            sealed(curios_archive::to_bytes(&(
+                kind.clone(),
+                rec.group.universe_context().clone(),
+                members,
+            )))
+        }
+        (None, None) => unreachable!("a name is a definition's or a member's"),
+    };
+    let entry = held.nominal();
+
+    match question {
+        Question::Kind(_) => sealed(curios_archive::to_bytes(&kind)).map(Some),
+        Question::Signature(_) => signature().map(Some),
+        Question::Body(_) => {
+            // A proof unfolds to nothing, and a group's member to its group, which its signature holds.
+            let body = plain
+                .filter(|_| !proof)
+                .map(|definition| sharing.share(&definition.body));
+            let part = (signature()?, totality, proof, body);
+
+            sealed(curios_archive::to_bytes(&part)).map(Some)
+        }
+        Question::Totality(_) => sealed(curios_archive::to_bytes(&totality)).map(Some),
+        Question::Variances(_) => {
+            // A group's member files no vector.
+            let variances: Vec<Variance> =
+                plain.map_or_else(Vec::new, |definition| definition.variances.clone());
+
+            sealed(curios_archive::to_bytes(&variances)).map(Some)
+        }
+        Question::Induct(_) => entry
+            .and_then(Nominal::inductive)
+            .map(|declaration| sealed(curios_archive::to_bytes(&declaration.shared(&sharing))))
+            .transpose(),
+        Question::Struct(_) => entry
+            .and_then(Nominal::record)
+            .map(|record| sealed(curios_archive::to_bytes(&record.shared(&sharing))))
+            .transpose(),
+        Question::Concept(_) => entry
+            .and_then(Nominal::concept)
+            .map(|concept| sealed(curios_archive::to_bytes(&concept.shared(&sharing))))
+            .transpose(),
+        Question::Witness(..)
+        | Question::WitnessDeclared(..)
+        | Question::Lemmas
+        | Question::Erased(_) => Ok(None),
+    }
+}
+
+/// The digest of a part, of the bytes it archived as.
+#[cfg(feature = "archive")]
+fn sealed(archived: Result<curios_archive::Serialized, String>) -> Result<String, String> {
+    archived.map(|bytes| digest(&bytes))
 }
 
 /// Whether two kinds say one thing of a name, the entry a type former carries left out. An entry is a part of its own, compared as the context holds it ([`Same::keying`]): the one a former made again carries is the lowering's until its item leaves the walk, and a former held to it would have moved for every declaration that read its signature.

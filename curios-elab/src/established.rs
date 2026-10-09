@@ -8,6 +8,9 @@
 //!
 //! **A witness in scope is found by its name**, which states its concept and its key (`curios_core::WitnessId`): a unit's witnesses are an ordered set of names, so the witnesses at a concept and a key are the names from there on.
 
+#[cfg(feature = "archive")]
+use super::{Question, part_digest};
+
 use {
     super::{Defined, Error, InScope},
     curios_core::{
@@ -32,6 +35,10 @@ struct Standing<'a> {
     places: Placed<'a>,
     /// Which of its items this unit answers for, by each one's place among them: the items of a baseline that a walk has kept so far. `None` for a unit in scope, which answers for every name it holds.
     kept: Option<RefCell<Vec<bool>>>,
+    /// Whether this unit is other than the one the baseline was compiled after ([`Established::after`]).
+    moved: bool,
+    /// Whether this unit is the compiler's own ([`Established::fixed`]).
+    fixed: bool,
 }
 
 impl<'a> Standing<'a> {
@@ -200,6 +207,8 @@ pub struct Established<'a> {
     units: Vec<Standing<'a>>,
     /// The units in scope, in dependency order: never the baseline, which is the unit being compiled.
     modules: Vec<&'a Module>,
+    /// Whether any unit in scope is other than the one the baseline was compiled after.
+    moved: bool,
 }
 
 impl<'a> Established<'a> {
@@ -217,9 +226,12 @@ impl<'a> Established<'a> {
                     module,
                     places: Placed::Made(Places::of(module)),
                     kept: None,
+                    moved: false,
+                    fixed: false,
                 })
                 .collect(),
             modules: modules.to_vec(),
+            moved: false,
         }
     }
 
@@ -232,10 +244,46 @@ impl<'a> Established<'a> {
                     module,
                     places: Placed::Kept(places),
                     kept: None,
+                    moved: false,
+                    fixed: false,
                 })
                 .collect(),
             modules: units.iter().map(|(module, _)| *module).collect(),
+            moved: false,
         }
+    }
+
+    /// This scope with `fixed` saying of each unit, in the order they stand, whether it is the compiler's own: a constant of the executable, which is one thing under one compiler. Asked before a baseline is laid over the scope.
+    ///
+    /// **Nothing is recorded of a read of a fixed unit.** A baseline is offered by the compiler that made it, a store's slot and a session's entry naming it alike, so a fixed unit is the one every baseline was compiled after and no read of it is asked again.
+    pub fn fixed(mut self, fixed: &[bool]) -> Self {
+        assert_eq!(
+            fixed.len(),
+            self.units.len(),
+            "what is fixed is said of each unit in scope, before a baseline is laid over them"
+        );
+        for (unit, fixed) in self.units.iter_mut().zip(fixed) {
+            unit.fixed = *fixed;
+        }
+
+        self
+    }
+
+    /// This scope as one a baseline was not compiled after, unit for unit: `moved` says of each unit, in the order they stand, whether it is other than the one the baseline was compiled after — one whose contents changed since, or one the baseline's compile was never handed. Asked before the baseline is laid over the scope ([`Established::keeping`]).
+    ///
+    /// **A unit that did not move answers for every read of it.** What a kept declaration asked of one stands unasked. What it asked of a unit that moved, or of a name no unit in scope declares where one moved, is asked again by its digest (`Foreign`).
+    pub fn after(mut self, moved: &[bool]) -> Self {
+        assert_eq!(
+            moved.len(),
+            self.units.len(),
+            "what moved is said of each unit in scope, before a baseline is laid over them"
+        );
+        for (unit, moved) in self.units.iter_mut().zip(moved) {
+            unit.moved = *moved;
+        }
+        self.moved = moved.contains(&true);
+
+        self
     }
 
     /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for the declarations a walk keeps of it and for none until it keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
@@ -244,6 +292,8 @@ impl<'a> Established<'a> {
             module: baseline,
             places: Placed::Kept(places),
             kept: Some(RefCell::new(vec![false; baseline.items.len()])),
+            moved: false,
+            fixed: false,
         });
 
         self
@@ -261,6 +311,40 @@ impl<'a> Established<'a> {
     /// The modules in scope, in dependency order.
     pub fn modules(&self) -> &[&'a Module] {
         &self.modules
+    }
+
+    /// The unit in scope that declares `name`: never the baseline, which is the unit being compiled.
+    fn declaring(&self, name: &Global) -> Option<&Standing<'a>> {
+        self.units
+            .iter()
+            .filter(|unit| unit.kept.is_none())
+            .find(|unit| unit.places().place(name).is_some())
+    }
+
+    /// Whether every unit in scope is the one the baseline was compiled after.
+    pub(crate) fn settled(&self) -> bool {
+        !self.moved
+    }
+
+    /// Whether what a baseline read of `name`, which the unit being compiled does not declare, stands unasked: every unit in scope is the one the baseline was compiled after, or the one that declares `name` is. A name no unit declares stands only in the first case, since a unit that moved may have declared it.
+    pub(crate) fn unmoved(&self, name: &Global) -> bool {
+        !self.moved || self.declaring(name).is_some_and(|unit| !unit.moved)
+    }
+
+    /// Whether a read of `name`, which the unit being compiled does not declare, is one to record: every one but a read of a fixed unit's declaration.
+    #[cfg(feature = "archive")]
+    pub(crate) fn recorded(&self, name: &Global) -> bool {
+        self.declaring(name).is_none_or(|unit| !unit.fixed)
+    }
+
+    /// The digest of the part `question` asks, of the declaration a unit in scope holds under its name ([`part_digest`]): `Ok(None)` where no unit declares the name, or the one that does holds no such part.
+    #[cfg(feature = "archive")]
+    pub(crate) fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
+        let Some(unit) = question.subject().and_then(|name| self.declaring(name)) else {
+            return Ok(None);
+        };
+
+        part_digest(unit.module, unit.places(), question)
     }
 
     /// Refuse a scope two of whose units declare a witness at one concept and one key.

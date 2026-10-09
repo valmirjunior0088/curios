@@ -43,6 +43,11 @@ fn certify() {
                 for (earlier, certification) in prelude.iter().zip(&certifications) {
                     globals.mount(earlier.core(), earlier.places(), certification);
                 }
+                // Each is the compiler's own, of which no read is recorded.
+                globals.standing(
+                    &vec![true; certifications.len()],
+                    &vec![false; certifications.len()],
+                );
 
                 certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX)
             };

@@ -5,7 +5,7 @@
 //! **A declaration lowered again is elaborated again.** Nothing compares two lowerings: an edit that leaves a declaration's meaning alone costs that declaration's elaboration, and what it comes to is compared part by part with what the baseline holds, by whatever read it.
 
 use {
-    crate::{CompileError, anchors_of, globals, kernel_refusal, with_broken},
+    crate::{CompileError, anchors_of, globals_after, kernel_refusal, with_broken},
     curios_cert::{Baseline, Rechecked, certify_module_over},
     curios_core::{Module, Zonked},
     curios_elab::{
@@ -21,12 +21,15 @@ use {
 /// Compile one unit against `predecessors` over `baseline`: lower whole, then elaborate, judge and erase what does not stand.
 ///
 /// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the order a module is stored in, an erased form for each — differing in which items were elaborated, judged and erased now and which were taken from the baseline. An item's erased form is its own, in identities of its own, so one taken from the baseline is the one a whole compile makes.
+///
+/// **`moved` says which predecessors the baseline was not compiled after**, one for each in their order: a unit whose contents changed since, or one the baseline's compile was never handed. What the baseline read of a unit that did not move stands unasked, at every stage; what it read of one that moved is asked again by the digest each stage recorded of the part read (`curios_elab::Foreign`, `curios_core::Abroad`). Whoever offers the baseline says which is which, and where it cannot say, every one moved.
 pub fn compile_unit_over(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
     baseline: &Unit,
+    moved: &[bool],
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit_over");
     let text = predecessors.text();
@@ -42,8 +45,11 @@ pub fn compile_unit_over(
     };
 
     // The baseline is the scope's last layer, answering for each declaration from where the walk keeps it.
-    let established =
-        Established::placed(&predecessors.placed()).keeping(baseline.core(), baseline.places());
+    let fixed = predecessors.fixed();
+    let established = Established::placed(&predecessors.placed())
+        .fixed(&fixed)
+        .after(moved)
+        .keeping(baseline.core(), baseline.places());
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
@@ -87,7 +93,7 @@ pub fn compile_unit_over(
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
     // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
-    let rechecked = recheck_over(&core, budget, predecessors, baseline, syntax);
+    let rechecked = recheck_over(&core, budget, predecessors, baseline, moved, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
         return Err(kernel_refusal(
             verdict,
@@ -104,7 +110,10 @@ pub fn compile_unit_over(
     let ersd = erase_unit_over(
         budget,
         *syntax,
-        Erasures::of(&cores, &erased).keeping(&views),
+        Erasures::of(&cores, &erased)
+            .keeping(&views)
+            .fixed(&fixed)
+            .after(moved),
         &core,
         ErasedBaseline {
             core: baseline.core(),
@@ -127,18 +136,19 @@ pub fn compile_unit_over(
 
 /// [`recheck`](crate::recheck) for a unit compiled over `baseline`: the walk is handed the units in scope as its environment and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
 ///
-/// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the kernel's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, that `baseline` was compiled after these `predecessors`, which is what a cache offers one by ([`Cache::baseline`](crate::Cache::baseline)).
+/// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the kernel's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, which of these `predecessors` are the units `baseline` was compiled after, `moved` naming the others ([`Cache::baseline`](crate::Cache::baseline)).
 pub(crate) fn recheck_over(
     module: &Zonked<Module>,
     budget: u64,
     predecessors: Predecessors<'_>,
     baseline: &Unit,
+    moved: &[bool],
     syntax: &SyntaxRegistry,
 ) -> Rechecked {
     certify_module_over(
         module,
         budget,
-        &globals(predecessors),
+        &globals_after(predecessors, moved),
         Baseline {
             module: baseline.core(),
             places: baseline.places(),

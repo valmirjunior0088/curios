@@ -113,6 +113,10 @@ struct Mounted<'s> {
     certification: &'s Certification,
     /// Whether `certification` covers `module`. Where it does, its classifications are the environment's; where it does not — one naming fewer definitions than the unit holds, an empty one included — a walk classifies the unit's items for itself, from their terms.
     covered: bool,
+    /// Whether the unit is the compiler's own, of which no read is recorded ([`Globals::standing`]).
+    fixed: bool,
+    /// Whether the unit is other than the one a baseline's walk read ([`Globals::standing`]).
+    moved: bool,
 }
 
 impl<'s> Mounted<'s> {
@@ -178,6 +182,8 @@ impl<'s> Globals<'s> {
             places,
             certification,
             covered: certification.covers(module),
+            fixed: false,
+            moved: false,
         };
         assert!(
             !self
@@ -187,6 +193,37 @@ impl<'s> Globals<'s> {
             "a mounted unit redeclared a name already in scope"
         );
         self.mounted.push(mounted);
+    }
+
+    /// Say of each unit mounted so far, in the order they were mounted, whether it is the compiler's own (`fixed`), and whether it is other than the unit the walk of a baseline read (`moved`): one whose contents changed since, or one that walk was never handed.
+    ///
+    /// **What a walk over a baseline does with each.** A read of a unit that did not move stands as the baseline's record has it. A read of one that moved stands where the part read digests now to what that record holds of it, by the certifier's own digest of the terms in its scope and of its verdict on them (`Baseline`). Nothing is recorded of a fixed unit: a baseline is offered by the compiler that made it, so a constant of the compiler is the one every baseline's walk read.
+    pub fn standing(&mut self, fixed: &[bool], moved: &[bool]) {
+        assert!(
+            fixed.len() == self.mounted.len() && moved.len() == self.mounted.len(),
+            "what is fixed and what moved are said of each unit mounted"
+        );
+        for (mounted, (fixed, moved)) in self.mounted.iter_mut().zip(fixed.iter().zip(moved)) {
+            mounted.fixed = *fixed;
+            mounted.moved = *moved;
+        }
+    }
+
+    /// Whether what a baseline's walk read of `name`, which a unit here declares, stands unasked: the unit is the one that walk read.
+    pub(crate) fn unmoved(&self, name: &Global) -> bool {
+        self.mounted
+            .iter()
+            .find(|mounted| mounted.holds(name))
+            .is_some_and(|mounted| !mounted.moved)
+    }
+
+    /// Whether a read of `name`, which a unit here declares, is one a walk records: every one but a read of a fixed unit.
+    #[cfg(feature = "archive")]
+    pub(crate) fn recorded(&self, name: &Global) -> bool {
+        self.mounted
+            .iter()
+            .find(|mounted| mounted.holds(name))
+            .is_some_and(|mounted| !mounted.fixed)
     }
 
     /// Whether `name` is a definition in scope here that is *not* known to terminate, closed transitively already, as the certifier's record of the unit that holds it classifies it.
@@ -245,24 +282,24 @@ impl<'s> Globals<'s> {
     }
 
     /// What the unit that defines `name` holds it at.
-    fn held(&self, name: &Global) -> Option<Held<'s>> {
+    pub(crate) fn held(&self, name: &Global) -> Option<Held<'s>> {
         self.mounted.iter().find_map(|mounted| mounted.held(name))
     }
 
-    fn induct_decl(&self, name: &Global) -> Option<&'s InductDecl> {
+    pub(crate) fn induct_decl(&self, name: &Global) -> Option<&'s InductDecl> {
         self.mounted
             .iter()
             .find_map(|mounted| mounted.module.induct_decl(mounted.places, name))
     }
 
-    fn struct_decl(&self, name: &Global) -> Option<&'s StructDecl> {
+    pub(crate) fn struct_decl(&self, name: &Global) -> Option<&'s StructDecl> {
         self.mounted
             .iter()
             .find_map(|mounted| mounted.module.struct_decl(mounted.places, name))
     }
 
     /// The polarity vector the record of the unit holding the registry entry `name` files for it.
-    fn polarities(&self, name: &Global) -> Option<&'s [Polarity]> {
+    pub(crate) fn polarities(&self, name: &Global) -> Option<&'s [Polarity]> {
         self.mounted
             .iter()
             .find_map(|mounted| mounted.polarities(name))

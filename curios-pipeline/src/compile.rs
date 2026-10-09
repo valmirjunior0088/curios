@@ -218,10 +218,16 @@ pub(crate) fn anchors_of<'a>(
 
 /// The kernel's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
 pub(crate) fn globals(predecessors: Predecessors<'_>) -> Globals<'_> {
+    globals_after(predecessors, &vec![false; predecessors.units().len()])
+}
+
+/// [`globals`] for a walk over a baseline: `moved` says of each predecessor whether it is other than the unit the baseline's walk read.
+pub(crate) fn globals_after<'a>(predecessors: Predecessors<'a>, moved: &[bool]) -> Globals<'a> {
     let mut globals = Globals::default();
     for unit in predecessors.units() {
         globals.mount(unit.core(), unit.places(), unit.certification());
     }
+    globals.standing(&predecessors.fixed(), moved);
 
     globals
 }
@@ -925,7 +931,8 @@ pub fn compile_unit(
     let mut lowered = into_core_unit(source, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
-    let established = Established::placed(&predecessors.placed());
+    let fixed = predecessors.fixed();
+    let established = Established::placed(&predecessors.placed()).fixed(&fixed);
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
@@ -963,7 +970,7 @@ pub fn compile_unit(
 
     let kept = predecessors.projected();
     let erased = predecessors.erased();
-    let scope = Erasures::of(&cores, &erased).keeping(&kept);
+    let scope = Erasures::of(&cores, &erased).keeping(&kept).fixed(&fixed);
     let ersd = erase_unit(budget, *syntax, scope, &core).map_err(|error| {
         CompileError::Failure(error.reports_with(
             core.as_module(),
@@ -1057,6 +1064,7 @@ where
                 syntax,
                 source,
                 baseline,
+                &vec![false; predecessors.len()],
             )?,
             None => compile_unit(budget, Predecessors::over(&predecessors), syntax, source)?,
         };

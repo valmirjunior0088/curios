@@ -237,6 +237,55 @@ pub(super) fn recompile_over(source: &str, baseline: &Unit) -> Result<Unit, Stri
     recompile_modules(&mounted("lib", source), baseline)
 }
 
+/// `source` compiled whole as the unit at `prefix`, against the prelude and then `units`, each of which it may name.
+pub(super) fn unit_after(prefix: &str, source: &str, units: &[&Unit]) -> Unit {
+    let modules = mounted(prefix, source);
+
+    with_prelude(|prelude| {
+        let scope = prelude.iter().chain(units).copied().collect::<Vec<_>>();
+
+        compile_unit(
+            DEFAULT_STEP_BUDGET,
+            Predecessors::over(&scope),
+            &SYNTAX,
+            &UnitSource::mounted(&modules),
+        )
+    })
+    .map_err(String::from)
+    .expect("the unit compiles")
+}
+
+/// `source` compiled as the unit at `prefix` over `baseline`, against the prelude and then `units`, where `moved` says of each of `units` whether it is other than the one `baseline` was compiled after. The prelude's units are the compiler's own, which no baseline is compiled after another of.
+pub(super) fn recompile_after(
+    prefix: &str,
+    source: &str,
+    baseline: &Unit,
+    units: &[&Unit],
+    moved: &[bool],
+) -> Unit {
+    let modules = mounted(prefix, source);
+
+    with_prelude(|prelude| {
+        let scope = prelude.iter().chain(units).copied().collect::<Vec<_>>();
+        let moved = prelude
+            .iter()
+            .map(|_| false)
+            .chain(moved.iter().copied())
+            .collect::<Vec<_>>();
+
+        compile_unit_over(
+            DEFAULT_STEP_BUDGET,
+            Predecessors::over(&scope),
+            &SYNTAX,
+            &UnitSource::mounted(&modules),
+            baseline,
+            &moved,
+        )
+    })
+    .map_err(String::from)
+    .expect("the unit compiles over its baseline")
+}
+
 /// A whole compile of modules already supplied, handing back what it said rather than expecting it to compile — which is what a fixture written *not* to compile needs, and what lets its answer be held against the recompile's.
 pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
     with_prelude(|prelude| {
@@ -285,6 +334,7 @@ pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result
             &SYNTAX,
             &UnitSource::mounted(modules),
             baseline,
+            &vec![false; prelude.len()],
         )
     })
     .map_err(String::from)

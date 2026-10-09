@@ -133,8 +133,15 @@ fn std_recompile_census() {
                 .unwrap_or_else(|error| panic!("the edited library elaborates: {error}"));
             let elaborated_in = start.elapsed();
             let start = Instant::now();
-            compile_unit_over(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit, std)
-                .expect("the edited library recompiles");
+            compile_unit_over(
+                DEFAULT_STEP_BUDGET,
+                predecessors,
+                &SYNTAX,
+                &unit,
+                std,
+                &[false],
+            )
+            .expect("the edited library recompiles");
             let recompiled_in = start.elapsed();
 
             let names = lowered
@@ -247,8 +254,15 @@ fn std_recompile_reproduction() {
 
             let whole = compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit)
                 .expect("the edited library compiles");
-            let over = compile_unit_over(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit, std)
-                .expect("the edited library recompiles");
+            let over = compile_unit_over(
+                DEFAULT_STEP_BUDGET,
+                predecessors,
+                &SYNTAX,
+                &unit,
+                std,
+                &[false],
+            )
+            .expect("the edited library recompiles");
 
             println!("{label}");
             assert_stored_alike(&whole, &over);
@@ -481,7 +495,14 @@ fn std_vocabulary_reach_reproduction() {
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
         let whole = compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit);
-        let over = compile_unit_over(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit, std);
+        let over = compile_unit_over(
+            DEFAULT_STEP_BUDGET,
+            predecessors,
+            &SYNTAX,
+            &unit,
+            std,
+            &[false],
+        );
 
         println!("\n=== /std with a lemma of the vocabulary reading /std/Str/At/skip ===");
         match (whole, over) {
