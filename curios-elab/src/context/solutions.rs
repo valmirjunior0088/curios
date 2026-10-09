@@ -332,11 +332,13 @@ impl Solutions {
     /// Park work under its frozen frame, recomputing the watch set from the work's currently unsolved metavariables.
     pub(crate) fn park(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
         let watching: BTreeSet<MetavarId> = match &work {
+            // Its type as well as its sides: a goal postponed because the type it is compared at is unsolved wakes when that type is.
             ParkedWork::Conversion(goal) => goal
                 .this
                 .metavars()
                 .into_iter()
                 .chain(goal.that.metavars())
+                .chain(goal.type_.metavars())
                 .filter(|id| self.solution(*id).is_none())
                 .collect(),
             ParkedWork::Checking { expected, .. } => expected

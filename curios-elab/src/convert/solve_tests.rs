@@ -828,6 +828,28 @@ fn parked_goals_retry_under_their_frozen_refinements() {
     assert!(context.drain_parked().is_ok());
 }
 
+// A parked conversion watches the type it is compared at as it watches its two sides: postponed because that type is unsolved, it is woken where the type's metavariable is solved and does not wait for the drain's last sweep.
+#[test]
+fn a_parked_goal_is_woken_by_its_types_solution() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+    context.park(
+        ParkedWork::Conversion(Problem {
+            type_: Term::hole(0),
+            this: nat(1),
+            that: nat(1),
+            binders: Binders::default(),
+            relation: Relation::Equal,
+        }),
+        nat(1),
+    );
+    assert!(context.wake_parked().is_empty());
+
+    context.solve_metavar(MetavarId(0), nat_type());
+
+    assert_eq!(context.wake_parked().len(), 1);
+}
+
 #[test]
 fn parked_goals_without_their_refinement_mismatch() {
     let mut context = context();
