@@ -3,7 +3,7 @@
 use {
     super::test_support::{mounted, mounted_project, write},
     crate::{Overlaid, Severity, Subject, diagnosed, diagnostics},
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold, Progress},
+    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, Progress},
     curios_text::{Overlay, UnitSource},
     curios_unit::Unit,
     curios_verdicts::{Session, Verdicts},
@@ -115,7 +115,7 @@ fn a_miss_does_not_refuse_the_units_after_it() {
 
 /// A unit compiled after one from unsaved text is not filed, and its slot holds the bytes it held.
 ///
-/// An edited predecessor recompiles the units after it: a unit's scope is the whole prefix, so its record vouches for the bytes every unit before it contained, and a predecessor that no longer contains them is a disagreement whether or not anything is imported from it. `/beta` is then compiled whole from text the disk holds — and filed, it would take the place of the slot a build filed, chained after an `/alpha` nothing on disk reproduces.
+/// An edited unit recompiles the units that could have read it: a unit's record vouches for what each unit it may name contained, and one that no longer contains it is a disagreement whether or not anything was read of it. `/beta` is then compiled over its slot from text the disk holds — and filed, it would take the place of the slot a build filed, under a record naming an `/alpha` nothing on disk reproduces.
 #[test]
 fn a_unit_after_one_compiled_from_unsaved_text_is_not_filed() {
     let root = mounted_project("unsaved-before");
@@ -124,8 +124,8 @@ fn a_unit_after_one_compiled_from_unsaved_text_is_not_filed() {
 
     assert_eq!(
         folded(&root, &edited(&root, "a/lib.crs")),
-        ["recompiling /alpha", "compiling /beta"],
-        "the overlay edits /alpha alone, which is compiled over its slot; /beta's record vouched for the /alpha it was compiled after, and its slot was filed after a chain that has moved, so it is neither a hit nor a baseline"
+        ["recompiling /alpha", "recompiling /beta"],
+        "the overlay edits /alpha alone, which is compiled over its slot; /beta's record vouched for the /alpha it was compiled after, so its slot is no hit, and is the baseline it is compiled over"
     );
     assert!(
         slots(&root) == before,
@@ -155,7 +155,7 @@ fn a_unit_compiled_over_a_baseline_is_filed_as_a_build_files_it() {
 
     assert_eq!(
         folded(&root, &Overlay::default()),
-        ["recompiling /alpha", "compiling /beta"]
+        ["recompiling /alpha", "recompiling /beta"]
     );
     let asked = slots(&root);
     assert!(asked != before, "a question filed nothing for a saved text");
@@ -231,11 +231,11 @@ fn a_file_rewritten_while_its_unit_compiles_leaves_the_store_as_it_was() {
             self.reached.get(source)
         }
 
-        fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
+        fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
             self.reached.baseline(source, offered)
         }
 
-        fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool) {
+        fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
             if !self.rewritten.replace(true) {
                 fs::write(
                     &self.file,
@@ -243,7 +243,7 @@ fn a_file_rewritten_while_its_unit_compiles_leaves_the_store_as_it_was() {
                 )
                 .expect("a rewritten module");
             }
-            self.reached.put(source, unit, followed);
+            self.reached.put(source, unit);
         }
     }
 
@@ -292,9 +292,9 @@ fn a_session_recompiles_what_the_store_could_not_take() {
     );
 }
 
-/// A unit after an edited one is offered what the session kept for it, once the edited one is back to what it held when that unit was kept. The store cannot do this: its slot for the second unit was filed after the first unit's disk text, which the edit has moved away from for as long as the edit stands.
+/// A unit after an edited one is compiled over a baseline at every check: over the store's slot at the first, though that was filed after the first unit's disk text, each stage asking again what it read of the unit that moved, and over what the session kept from then on, which was compiled after the text the edit still holds.
 #[test]
-fn a_session_offers_a_unit_downstream_of_an_edit_the_store_cannot() {
+fn a_unit_downstream_of_an_edit_is_compiled_over_a_baseline_from_the_first_check() {
     let root = mounted_project("session-downstream");
     built(&root);
     let session = Session::default();
@@ -302,8 +302,8 @@ fn a_session_offers_a_unit_downstream_of_an_edit_the_store_cannot() {
 
     assert_eq!(
         folded_reusing(&root, &overlay, &session),
-        ["recompiling /alpha", "compiling /beta"],
-        "the first check has only the store, whose slot for /beta vouches for the /alpha on disk"
+        ["recompiling /alpha", "recompiling /beta"],
+        "the first check has only the store, whose slot for /beta is a baseline though it vouches for the /alpha on disk"
     );
     assert_eq!(
         folded_reusing(&root, &overlay, &session),

@@ -999,15 +999,47 @@ pub trait Cache {
     /// **Offered rather than imposed, and lent rather than handed over.** The cache decides whether the unit is compiled over the offer, and a cache holding something nearer copies nothing. Whatever tree the package is, the offer is a correct baseline: an item is reused only where its lowered form matches the offered one and nothing it reaches changed, so a tree far from the archive's is simply a larger closure.
     ///
     /// **What came of a baseline is handed to `put` like any other unit**, and is one: a unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so a cache that answers may file it where it would file the other. The store's own cache answers, for a build and for a question alike; a cache that keeps the default compiles whole.
-    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
         let _ = (source, offered);
         None
     }
 
     /// Record what `source` compiled to. Best effort — a store that cannot be written costs the next compilation the work, and nothing else.
-    ///
-    /// `followed` is whether another unit follows this one in the fold, which is the one reader a placement has *within* it: the next unit's slot is addressed after this one's. A cache that files, or whose chain is read after the fold — a payload is filed under the whole chain — places either way; one that does not file a unit has no use for its placement where nothing follows, and a placement serializes the unit whole.
-    fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool);
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit);
+}
+
+/// A unit to compile another text of its sources over, with what it was compiled after: what a cache offers the fold on a miss.
+pub struct Earlier {
+    pub unit: Unit,
+    pub after: After,
+}
+
+/// Which units in scope a baseline was compiled after, as whoever offers it can say.
+///
+/// What a baseline read of a unit it was compiled after stands, and what it read of any other is asked again, by each stage of its own record ([`compile_unit_over`]). So the answer decides how much is asked and nothing of what is concluded: an offer that names fewer units than it could asks more.
+pub enum After {
+    /// Every unit in scope: the baseline is an image of the unit as it stands among them.
+    Scope,
+    /// The units in scope claiming these prefixes, each as its unit claims them, and no other.
+    Units(Vec<Vec<Qualifier>>),
+}
+
+impl After {
+    /// Whether `unit`, in scope, is other than the one the baseline was compiled after. The compiler's own never is: a baseline is offered by the compiler that made it ([`Unit::fixed`]).
+    pub fn moved(&self, unit: &Unit) -> bool {
+        match self {
+            After::Scope => false,
+            After::Units(units) => {
+                !unit.fixed()
+                    && !units.iter().any(|prefixes| {
+                        unit.mounts()
+                            .iter()
+                            .map(|mount| &mount.prefix)
+                            .eq(prefixes.iter())
+                    })
+            }
+        }
+    }
 }
 
 /// Compile `sources` in dependency order, each against `base` and everything before it — the fold this whole design is named for.
@@ -1030,7 +1062,7 @@ where
 {
     let mut produced: Vec<Unit> = Vec::new();
 
-    for (index, (source, offered)) in sources.iter().enumerate() {
+    for (source, offered) in sources {
         // Announced *after* the cache is consulted and *before* the work, so a reported operation is one that is actually about to happen and its timing starts where it does.
         let hit =
             curios_profile::profile!("cache::get" => cache.and_then(|cache| cache.get(source)));
@@ -1058,22 +1090,26 @@ where
             .collect::<Vec<_>>();
 
         let unit = match &baseline {
-            Some(baseline) => compile_unit_over(
+            Some(Earlier {
+                unit: baseline,
+                after,
+            }) => compile_unit_over(
                 budget,
                 Predecessors::over(&predecessors),
                 syntax,
                 source,
                 baseline,
-                &vec![false; predecessors.len()],
+                &predecessors
+                    .iter()
+                    .map(|unit| after.moved(unit))
+                    .collect::<Vec<_>>(),
             )?,
             None => compile_unit(budget, Predecessors::over(&predecessors), syntax, source)?,
         };
         progress(Progress::Compiled);
 
         if let Some(cache) = cache {
-            curios_profile::profile!(
-                "cache::put" => cache.put(source, &unit, index + 1 < sources.len())
-            );
+            curios_profile::profile!("cache::put" => cache.put(source, &unit));
         }
 
         produced.push(unit);

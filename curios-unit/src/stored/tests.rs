@@ -8,7 +8,7 @@ fn of_reads(reads: &[&str]) -> Record {
             .iter()
             .map(|path| (path.to_string(), "digest".to_string()))
             .collect(),
-        predecessors: Vec::new(),
+        after: Vec::new(),
         unit: "unit".to_string(),
     }
 }

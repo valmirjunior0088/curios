@@ -10,8 +10,8 @@
 //!   documentation/  json/           what `curios document` emits
 //!   sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
 //!   foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
-//!   verdicts/       <slot>          judged units, one file per mount, compiler and predecessor chain
-//!   payloads/       <slot>          precompiled payloads, one file per executable, chain and engine
+//!   verdicts/       <slot>          judged units, one file per unit and compiler
+//!   payloads/       <slot>          precompiled payloads, one file per executable, compiler and engine
 //! ```
 //!
 //! One transient entry passes through beside them: `pinning.<pid>`, where `curios pin` stages a delivery whose digest it has yet to compute, before renaming it into the family it belongs to. See [`Store::staging`].
@@ -100,12 +100,12 @@ impl Store {
         self.shared.join("foreign").join(scheme).join(digest)
     }
 
-    /// Where a judged unit is filed, under the address its mounts, its predecessors and the certifier decide: one file, holding the record of what it was compiled *from* ahead of the unit, verified when the slot is opened rather than spelled here.
+    /// Where a judged unit is filed, under the address its mounts, what it declared and the certifier decide: one file, holding the record of what it was compiled *from* ahead of the unit, verified when the slot is opened rather than spelled here.
     pub fn verdict(&self, slot: &str) -> PathBuf {
         self.shared.join("verdicts").join(slot)
     }
 
-    /// Where an executable's precompiled payload is filed, under the address its predecessor chain, its own identity and the engine decide: one file, laid out as a unit's is, with what it was compiled *from* verified when the slot is opened.
+    /// Where an executable's precompiled payload is filed, under the address its own identity, the compiler and the engine decide: one file, laid out as a unit's is, with what it was compiled *from* verified when the slot is opened.
     ///
     /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. `executables/` stays local because a built executable's identity *is* project-relative; the payload inside it is not.
     pub fn payload(&self, slot: &str) -> PathBuf {
@@ -130,34 +130,23 @@ fn shared() -> Option<PathBuf> {
 /// What version of the verdict family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
-const SCHEMA: &str = "u47";
+const SCHEMA: &str = "u48";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
-const PAYLOAD_SCHEMA: &str = "p6";
+const PAYLOAD_SCHEMA: &str = "p7";
 
-/// The slot a unit compiled by `compiler`, after `predecessors`, claiming `mounts` and declaring `declared`, is filed under.
+/// The slot a unit compiled by `compiler`, claiming `mounts` and declaring `declared`, is filed under.
 ///
-/// **No file contents here, deliberately.** This names a *place*, not a version of what lives in it: "the unit for these mounts, by this compiler, after this chain". What was compiled is checked when the slot is opened, against the record of what was read, so a source edit changes the verification and not the address. That is what bounds the store — a project has as many slots as it has units, forever, rather than one per compile, as an address hashed over the unit's source directory, which contains this store, would give.
+/// **No file contents here, deliberately.** This names a *place*, not a version of what lives in it: "the unit for these mounts, declaring these dependencies, by this compiler". What was compiled is checked when the slot is opened, against the record of what was read, so a source edit changes the verification and not the address. That is what bounds the store — a project has as many slots as it has units, forever, rather than one per compile, as an address hashed over the unit's source directory, which contains this store, would give.
 ///
-/// **Four parts, and each is load-bearing.** The compiler is who judged it — see [`compiler`](crate::compiler()), and note that a key naming no compiler would be believed on behalf of any. The mounts are how the unit's names are spelled, which the lowering depends on and no read of its files reveals. The predecessors are the part easiest to leave out and the reason this takes a list at all: each stage is seeded from every unit placed before it, and a unit stores the spellings it may write for its scope's names, so the same source compiled after a different prefix is a different unit. What a predecessor *contains* is verified rather than keyed, for the same reason the unit's own source is.
+/// **Three parts, and each is load-bearing.** The compiler is who judged it — see [`compiler`](crate::compiler()), and note that a key naming no compiler would be believed on behalf of any. The mounts are how the unit's names are spelled, which the lowering depends on and no read of its files reveals. The third is what the unit declared it could see: a declared dependency answers "may these names reach that root" per unit, and it is the answer the lowering consults — the same source declaring different prefixes resolves different names and is a different unit. `None` is its own value, not an empty list: it means the caller declared nothing, which is every open prefix in scope, where an empty list means a unit that asked for none of them.
 ///
-/// The fourth is what the unit declared it could see: a declared dependency answers "may these names reach that root" per unit, and it is the answer the lowering consults — the same source over the same scope, declaring different prefixes, resolves different names and is a different unit. `None` is its own value, not an empty list: it means the caller declared nothing, which is every open prefix in scope, where an empty list means a unit that asked for none of them.
-///
-/// Ordered, not a set: the predecessors are a fold order, and two orders of one set are two different lowerings.
-pub fn unit_slot(
-    compiler: &str,
-    predecessors: &[String],
-    mounts: &[Mount],
-    declared: Option<&[Qualifier]>,
-) -> String {
+/// **No unit before it.** What a unit read of the units before it is verified, as its own source is: its record names what each unit it could have read contained, and a slot whose record no longer agrees is the baseline its unit is compiled over. So a unit two folds reach after different others is filed once, and an edit to a unit it cannot read moves neither its address nor its record.
+pub fn unit_slot(compiler: &str, mounts: &[Mount], declared: Option<&[Qualifier]>) -> String {
     let mut fingerprint = Fingerprint::new();
 
     fingerprint.feed(SCHEMA);
     fingerprint.feed(compiler);
-    fingerprint.feed(predecessors.len().to_string());
-    for predecessor in predecessors {
-        fingerprint.feed(predecessor);
-    }
     fingerprint.feed(mounts.len().to_string());
     for mount in mounts {
         fingerprint.feed(mount.prefix.join());
@@ -176,28 +165,18 @@ pub fn unit_slot(
     fingerprint.hex()
 }
 
-/// The slot the precompiled payload of `package`'s `executable`, built by `compiler` after `predecessors` and run by the engine `engine` fingerprints, is filed under.
+/// The slot the precompiled payload of `package`'s `executable`, built by `compiler` and run by the engine `engine` fingerprints, is filed under.
 ///
-/// **The same address-and-record split [`unit_slot`] states, one level up.** This names a place — "the payload for this executable, by this compiler, after this chain, for this engine" — and carries no file contents, so an edit changes what the slot is verified against rather than where it is looked for. Predecessor slots are themselves stable across source edits, so this is too: one slot per executable per chain per compiler per engine, overwritten in place, bounded exactly as the unit family is.
+/// **The same address-and-record split [`unit_slot`] states, one level up.** This names a place — "the payload for this executable, by this compiler, for this engine" — and carries no file contents and no unit, so an edit changes what the slot is verified against rather than where it is looked for: one slot per executable per compiler per engine, overwritten in place, bounded exactly as the unit family is. What every unit of the compilation was filed as is in the payload's record.
 ///
 /// **The executable's identity is its package's name and its own**, never a path. That pair is the one identity in a compilation that cannot collide (law 2), which is why two executables of one package occupy two slots and why nothing has to refuse an umbrella whose members both declare `serve`. A path here would key the payload on where a project sits rather than on what it builds.
 ///
 /// **The engine fingerprint is the part [`unit_slot`] has no counterpart for.** A unit is a judgment and travels anywhere the compiler binary does; a payload is machine code, and Cranelift compiled it for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. It rides here as an opaque string because deciding what makes two engines compatible is `curios-runtime`'s to answer, this crate's only job being to keep the answer in the address.
-pub fn payload_slot(
-    compiler: &str,
-    predecessors: &[String],
-    package: &str,
-    executable: &str,
-    engine: &str,
-) -> String {
+pub fn payload_slot(compiler: &str, package: &str, executable: &str, engine: &str) -> String {
     let mut fingerprint = Fingerprint::new();
 
     fingerprint.feed(PAYLOAD_SCHEMA);
     fingerprint.feed(compiler);
-    fingerprint.feed(predecessors.len().to_string());
-    for predecessor in predecessors {
-        fingerprint.feed(predecessor);
-    }
     fingerprint.feed(package);
     fingerprint.feed(executable);
     fingerprint.feed(engine);

@@ -10,7 +10,7 @@ use {
         PreparedText, RootSource, SYNTAX, UnitSource, document_unit, prepare_prelude, sys_source,
     },
     curios_unit::{Record, Uncertified, framed},
-    curios_utilities::{Report, Source, digest},
+    curios_utilities::{Qualifier, Report, Source, digest},
     std::{
         collections::BTreeSet,
         env, fs,
@@ -65,7 +65,14 @@ fn build() {
     );
     // Each image carries the record a slot carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
     let sys_digest = write_image(&out, "sys", &sys, sys_modules.reads(), Vec::new());
-    write_image(&out, "std", &std, std_modules.reads(), vec![sys_digest]);
+    let sys_prefix = Qualifier::from(["sys"]).join();
+    write_image(
+        &out,
+        "std",
+        &std,
+        std_modules.reads(),
+        vec![(sys_prefix, sys_digest)],
+    );
     write_documentation(&out, &vec![sys_record, std_record]);
 }
 
@@ -199,7 +206,7 @@ fn archive(
     Uncertified::new(prepared, core, ersd, traces)
 }
 
-/// Serialize one uncertified unit to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and `predecessors`, ahead of it — serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the unit's digest, which is what the next root's record names it by.
+/// Serialize one uncertified unit to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of it — serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the unit's digest, which is what the next root's record names it by.
 ///
 /// The image carries no version and is no stable interchange format: Cargo regenerates it whenever its inputs change — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare a build against itself.
 ///
@@ -209,7 +216,7 @@ fn write_image(
     root: &str,
     image: &Uncertified,
     reads: Vec<(PathBuf, Arc<Source>)>,
-    predecessors: Vec<String>,
+    after: Vec<(String, String)>,
 ) -> String {
     let first = image
         .stored()
@@ -219,7 +226,7 @@ fn write_image(
         .unwrap_or_else(|error| panic!("/{root} archive repeat serialization failed: {error}"));
     assert_eq!(first, second, "/{root} archive is not deterministic");
 
-    let record = Record::of(reads, predecessors, digest(&first));
+    let record = Record::of(reads, after, digest(&first));
     let recorded = curios_archive::to_bytes(&record)
         .unwrap_or_else(|error| panic!("/{root} record serialization failed: {error}"));
 

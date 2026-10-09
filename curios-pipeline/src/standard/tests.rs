@@ -3,7 +3,7 @@
 use {
     super::{granted, withheld},
     crate::{
-        Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit, compile_unit_over,
+        Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over,
         tests::test_support::{assert_stored_alike, compile_with_units},
     },
     curios_core::{
@@ -923,12 +923,12 @@ fn the_withheld_root_is_offered_to_the_unit_taking_its_place() {
             None
         }
 
-        fn baseline(&self, _: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
+        fn baseline(&self, _: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
             self.0.borrow_mut().push(offered.is_some());
             None
         }
 
-        fn put(&self, _: &UnitSource<'_>, _: &Unit, _: bool) {}
+        fn put(&self, _: &UnitSource<'_>, _: &Unit) {}
     }
 
     for (claim, offered) in [("std", true), ("other", false)] {

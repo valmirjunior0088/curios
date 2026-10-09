@@ -80,44 +80,28 @@ fn the_families_do_not_share_a_namespace() {
     );
 }
 
-/// A slot is a function of all three parts, and of the *order* of the third: the same source compiled after a different prefix is a different unit.
+/// A slot is a function of each of its parts, and of nothing else: no unit before its own is in it, so what those hold is verified where the slot is opened.
 #[test]
 fn every_part_of_a_slot_changes_it() {
     let mounts = [Mount::new(Qualifier::from(["json"]), RootKind::Ordinary)];
     let other = [Mount::new(Qualifier::from(["yaml"]), RootKind::Ordinary)];
-    let before = ["one".to_string(), "two".to_string()];
 
-    let slot = unit_slot("compiler", &before, &mounts, None);
+    let slot = unit_slot("compiler", &mounts, None);
 
     assert_eq!(
         slot,
-        unit_slot("compiler", &before, &mounts, None),
+        unit_slot("compiler", &mounts, None),
         "and it is a function"
     );
     assert_ne!(
         slot,
-        unit_slot("another", &before, &mounts, None),
+        unit_slot("another", &mounts, None),
         "the compiler is in it"
     );
     assert_ne!(
         slot,
-        unit_slot("compiler", &before, &other, None),
+        unit_slot("compiler", &other, None),
         "the mounts are in it"
-    );
-    assert_ne!(
-        slot,
-        unit_slot("compiler", &["one".to_string()], &mounts, None),
-        "the predecessors are in it"
-    );
-    assert_ne!(
-        slot,
-        unit_slot(
-            "compiler",
-            &["two".to_string(), "one".to_string()],
-            &mounts,
-            None
-        ),
-        "and their order is, because two orders of one set are two lowerings"
     );
 }
 
@@ -127,9 +111,9 @@ fn a_units_declared_dependencies_are_part_of_its_slot() {
     let mounts = [Mount::new(Qualifier::from(["app"]), RootKind::Ordinary)];
     let json = [Qualifier::from(["json"])];
 
-    let undeclared = unit_slot("compiler", &[], &mounts, None);
-    let none = unit_slot("compiler", &[], &mounts, Some(&[]));
-    let one = unit_slot("compiler", &[], &mounts, Some(&json));
+    let undeclared = unit_slot("compiler", &mounts, None);
+    let none = unit_slot("compiler", &mounts, Some(&[]));
+    let one = unit_slot("compiler", &mounts, Some(&json));
 
     assert_ne!(undeclared, none);
     assert_ne!(none, one);
@@ -142,8 +126,8 @@ fn a_slot_does_not_move_when_its_source_changes() {
     let mounts = [Mount::new(Qualifier::from(["json"]), RootKind::Ordinary)];
 
     assert_eq!(
-        unit_slot("compiler", &[], &mounts, None),
-        unit_slot("compiler", &[], &mounts, None)
+        unit_slot("compiler", &mounts, None),
+        unit_slot("compiler", &mounts, None)
     );
     assert_ne!(
         digest(b"one"),
@@ -158,64 +142,47 @@ fn a_moved_boundary_is_a_different_slot() {
     let mounts = [Mount::new(Qualifier::from(["c"]), RootKind::Ordinary)];
 
     assert_ne!(
-        unit_slot("ab", &["c".to_string()], &mounts, None),
-        unit_slot("a", &["bc".to_string()], &mounts, None)
+        unit_slot("1", &mounts, None),
+        unit_slot("", &mounts, Some(&[])),
+        "a length ahead of each part, so no part's bytes are read as another's"
     );
     assert_ne!(
-        payload_slot("c", &[], "ab", "c", "e"),
-        payload_slot("c", &[], "a", "bc", "e"),
+        payload_slot("c", "ab", "c", "e"),
+        payload_slot("c", "a", "bc", "e"),
         "and the payload address frames its own parts for the same reason"
     );
 }
 
-/// A payload's address is a function of every part, and of the order of the chain — the same argument [`unit_slot`]'s makes, plus the two this one adds.
+/// A payload's address is a function of every part — the same argument [`unit_slot`]'s makes, with the two this one adds in place of the mounts.
 #[test]
 fn every_part_of_a_payload_slot_changes_it() {
-    let before = ["one".to_string(), "two".to_string()];
-
-    let slot = payload_slot("compiler", &before, "app", "serve", "engine");
+    let slot = payload_slot("compiler", "app", "serve", "engine");
 
     assert_eq!(
         slot,
-        payload_slot("compiler", &before, "app", "serve", "engine"),
+        payload_slot("compiler", "app", "serve", "engine"),
         "and it is a function"
     );
     assert_ne!(
         slot,
-        payload_slot("another", &before, "app", "serve", "engine"),
+        payload_slot("another", "app", "serve", "engine"),
         "the compiler is in it"
-    );
-    assert_ne!(
-        slot,
-        payload_slot("compiler", &["one".to_string()], "app", "serve", "engine"),
-        "the predecessors are in it"
-    );
-    assert_ne!(
-        slot,
-        payload_slot(
-            "compiler",
-            &["two".to_string(), "one".to_string()],
-            "app",
-            "serve",
-            "engine"
-        ),
-        "and their order is"
     );
 }
 
 /// The executable's identity is the pair, so neither half alone decides a slot: two executables of one package are two, and one name declared by two packages is two.
 #[test]
 fn an_executables_identity_is_its_package_and_its_name() {
-    let slot = payload_slot("compiler", &[], "app", "serve", "engine");
+    let slot = payload_slot("compiler", "app", "serve", "engine");
 
     assert_ne!(
         slot,
-        payload_slot("compiler", &[], "app", "worker", "engine"),
+        payload_slot("compiler", "app", "worker", "engine"),
         "two executables of one package occupy two slots"
     );
     assert_ne!(
         slot,
-        payload_slot("compiler", &[], "other", "serve", "engine"),
+        payload_slot("compiler", "other", "serve", "engine"),
         "and two packages declaring one name do too"
     );
 }
@@ -224,17 +191,17 @@ fn an_executables_identity_is_its_package_and_its_name() {
 #[test]
 fn two_engines_address_two_slots() {
     assert_ne!(
-        payload_slot("compiler", &[], "app", "serve", "one"),
-        payload_slot("compiler", &[], "app", "serve", "another")
+        payload_slot("compiler", "app", "serve", "one"),
+        payload_slot("compiler", "app", "serve", "another")
     );
 }
 
-/// What a payload was compiled *from* is verified rather than addressed, exactly as a unit's source is — which is what bounds the family at one slot per executable per chain rather than one per compile.
+/// What a payload was compiled *from* is verified rather than addressed, exactly as a unit's source is — which is what bounds the family at one slot per executable rather than one per compile.
 #[test]
 fn a_payload_slot_does_not_move_when_its_source_changes() {
     assert_eq!(
-        payload_slot("compiler", &["chain".to_string()], "app", "serve", "engine"),
-        payload_slot("compiler", &["chain".to_string()], "app", "serve", "engine")
+        payload_slot("compiler", "app", "serve", "engine"),
+        payload_slot("compiler", "app", "serve", "engine")
     );
 }
 

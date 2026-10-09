@@ -12,7 +12,7 @@ use {
     curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_unit},
     curios_text::SYNTAX,
     curios_unit::{Record, Uncertified, segments},
-    curios_utilities::digest,
+    curios_utilities::{Qualifier, digest},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -122,7 +122,7 @@ fn the_sys_image_records_no_reads_and_no_predecessor() {
     let [sys, _] = restore_archives();
 
     assert!(sys.record.reads.is_empty());
-    assert!(sys.record.predecessors.is_empty());
+    assert!(sys.record.after.is_empty());
 }
 
 /// The digest a record names its predecessor by is the one that predecessor's own record names itself by: the chain is checkable from the records alone.
@@ -130,7 +130,10 @@ fn the_sys_image_records_no_reads_and_no_predecessor() {
 fn the_std_image_records_the_sys_image_as_its_predecessor() {
     let [sys, std] = restore_archives();
 
-    assert_eq!(std.record.predecessors, [sys.record.unit]);
+    assert_eq!(
+        std.record.after,
+        [(Qualifier::from(["sys"]).join(), sys.record.unit)]
+    );
 }
 
 /// The read set is closed and every authored module is registered, so the record and the tree agree exactly: the record is the compiler's own account of which sources the image came from.

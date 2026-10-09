@@ -74,7 +74,7 @@ pub(crate) fn payload_of(
             )
         });
 
-    // Built once and handed to both halves of the payload family, which is what keeps them agreeing about what the chain is: the probe refuses a unit the fold could not place, and the write must refuse the same one.
+    // Built once and handed to both halves of the payload family, which is what keeps them agreeing about which units the compilation holds: the probe refuses a unit the store may not file, and the write must refuse the same one.
     let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
 
     if let Some((cache, program)) = &filed

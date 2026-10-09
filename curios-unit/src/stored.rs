@@ -1,6 +1,6 @@
 //! The stored unit: a record of what a unit was compiled from, framed ahead of the unit in one file.
 //!
-//! Two producers write this format and neither may depend on the other. The store files a [`Unit`](crate::Unit) this way under a slot, from `curios-verdicts` above the pipeline; the fixed prelude is imaged this way by `curios-prelude-archive`'s build script, which sits below every store and below the certifier, so what its images hold is an [`Uncertified`] unit. So the format is stated once, here, below both: what a record holds, how it is framed ahead of the artifact, and how the two are read back apart. What *verifies* a record — whether the files it names still hold their text, whether the chain still agrees — is the store's business and stays there. This crate says what a record is, never whether one may be believed.
+//! Two producers write this format and neither may depend on the other. The store files a [`Unit`](crate::Unit) this way under a slot, from `curios-verdicts` above the pipeline; the fixed prelude is imaged this way by `curios-prelude-archive`'s build script, which sits below every store and below the certifier, so what its images hold is an [`Uncertified`] unit. So the format is stated once, here, below both: what a record holds, how it is framed ahead of the artifact, and how the two are read back apart. What *verifies* a record — whether the files it names still hold their text, whether the units it names still contain what they did — is the store's business and stays there. This crate says what a record is, never whether one may be believed.
 
 #[cfg(test)]
 mod tests;
@@ -23,18 +23,22 @@ use {
 pub struct Record {
     /// Each file the compilation read, by canonical path, with the digest of the text that was parsed from it. Sorted, because `RootSource::reads` collects its vector out of a `BTreeMap`.
     pub reads: Vec<(String, String)>,
-    /// What each predecessor contained, in fold order — the digest of the bytes its own slot holds. Ordered for the same reason the address orders their slots: two orders of one set are two lowerings.
-    pub predecessors: Vec<String>,
+    /// What each unit the compilation could have read contained: the units it may name and the ones those may name in turn, each by the prefixes it claims and the digest of the bytes its own slot holds, in the order of those prefixes. A unit outside them is not named, so what it holds decides nothing here.
+    pub after: Vec<(String, String)>,
     /// The stored unit's own digest, so a damaged unit that still deserializes is a miss rather than a belief, as the payload family's own digest makes a damaged artifact. Bytecheck confirms a unit's structure and nothing about its contents: a flipped byte inside a string reads back as a different string. Concurrent filing is not its concern: a slot is one file renamed into place, so no write can leave a record beside a unit it was not made from.
     pub unit: String,
 }
 
 impl Record {
-    /// The record of a unit compiled from `reads` after predecessors containing `predecessors`, whose own bytes digest to `unit`.
-    pub fn of(reads: Vec<(PathBuf, Arc<Source>)>, predecessors: Vec<String>, unit: String) -> Self {
+    /// The record of a unit compiled from `reads` after units containing `after`, whose own bytes digest to `unit`.
+    pub fn of(
+        reads: Vec<(PathBuf, Arc<Source>)>,
+        after: Vec<(String, String)>,
+        unit: String,
+    ) -> Self {
         Self {
             reads: digested(reads),
-            predecessors,
+            after,
             unit,
         }
     }

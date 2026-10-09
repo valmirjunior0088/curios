@@ -286,6 +286,11 @@ impl Unit {
         self.unit.fixed()
     }
 
+    /// Whether this and `other` are one unit in hand: handles of one compilation's result, or of one restoration's. Two units restored apart from the same bytes are two, which whoever asks tells by their bytes.
+    pub fn same(&self, other: &Unit) -> bool {
+        Rc::ptr_eq(&self.unit.core, &other.unit.core)
+    }
+
     /// The bytes this unit is stored as: itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then what it stores apart from itself ([`Uncertified::apart_bytes`]) and what the certifier's record does, what judging each definition read ([`Certification::reads_bytes`]), each behind its length.
     ///
     /// **A stored unit says what its items mean, not where they were written or how they were come by.** A consed module is one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are the same nodes, and one moved by an edit above it is stored as it was. The fixed prelude's images are consed by the same pass, where they are built.

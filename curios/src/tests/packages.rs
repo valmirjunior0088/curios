@@ -5,7 +5,7 @@
 use {
     crate::run_wasm,
     curios_package::{Entry, Selection, Spelling},
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold},
+    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold, Progress},
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, Overlay, RootSource},
     curios_utilities::test_support::Temporary,
@@ -67,6 +67,31 @@ fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> 
     run_wasm(&module, system, ForeignBindings::empty()).expect("the program runs");
 
     io.output().to_vec()
+}
+
+/// What the fold did to each unit `target` resolves to, standing in `directory`, through `cache`: read off its progress, one line a unit, in fold order.
+fn folded(directory: &Path, target: Option<&str>, cache: &dyn Cache) -> Vec<String> {
+    let (entry, units) = resolved(directory, target);
+
+    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
+    let mut events = Vec::new();
+    Fold::new(DEFAULT_STEP_BUDGET, &units, Some(cache))
+        .compile(
+            &entrypoint,
+            &loader,
+            |_| {},
+            |progress| match progress {
+                Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
+                Progress::Recompiling(prefix) => {
+                    events.push(format!("recompiling {}", prefix.join()));
+                }
+                Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
+                _ => {}
+            },
+        )
+        .expect("the package compiles");
+
+    events
 }
 
 /// A bare `run` means the sole executable, and that executable reaches its own package's library.
@@ -360,5 +385,106 @@ fn a_library_test_declaration_rides_through_the_store() {
     assert_eq!(
         cached(&app, None, Some(&Verdicts::at(root.to_path_buf()))),
         b"42"
+    );
+}
+
+/// An umbrella of three libraries and a program: `app` depends on `alpha` and on `beta`, which do not name each other, and its library reads a declaration of each.
+fn siblings(name: &str) -> Temporary {
+    tree(
+        name,
+        &[
+            ("curios.toml", "members = [\"app\", \"alpha\", \"beta\"]\n"),
+            ("alpha/curios.toml", "name = \"alpha\"\n"),
+            ("alpha/lib.crs", "pub let one : /std/Nat = 1;\n"),
+            ("beta/curios.toml", "name = \"beta\"\n"),
+            ("beta/lib.crs", "pub let two : /std/Nat = 2;\n"),
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nalpha = { source = \"member\" }\nbeta = { source = \"member\" }\n\n[[executables]]\nname = \"app\"\n",
+            ),
+            (
+                "app/lib.crs",
+                "pub let sum : /std/Nat = /std/Nat/add(/alpha/one, /beta/two);\n",
+            ),
+            ("app/app.crs", "/std/print(/std/Nat/to_str(/app/sum))\n"),
+        ],
+    )
+}
+
+/// A unit is addressed by who it is, and believed on the units it could have read: an edit to one of two packages that do not name each other leaves the other's unit reused, and the unit that depends on both is compiled over the one it filed, each stage asking again what it read of the package that moved.
+///
+/// Mutation-checked against the record: with a unit's record naming every unit the fold took before it, `/beta` is compiled over its baseline for an edit to `/alpha` it cannot read.
+#[test]
+fn an_edit_to_one_package_leaves_a_sibling_it_cannot_read_reused() {
+    let root = siblings("e2e-siblings");
+    let app = root.join("app");
+    let store = || Verdicts::at(root.to_path_buf());
+
+    assert_eq!(
+        folded(&app, None, &store()),
+        ["compiling /alpha", "compiling /beta", "compiling /app"]
+    );
+    assert_eq!(
+        folded(&app, None, &store()),
+        ["reused /alpha", "reused /beta", "reused /app"]
+    );
+
+    fs::write(root.join("alpha/lib.crs"), "pub let one : /std/Nat = 3;\n").unwrap();
+    assert_eq!(
+        folded(&app, None, &store()),
+        ["recompiling /alpha", "reused /beta", "recompiling /app"],
+        "a sibling was compiled again, or a dependent compiled whole after a dependency it had a baseline for"
+    );
+    assert_eq!(cached(&app, None, Some(&store())), b"5");
+}
+
+/// A unit two folds reach after different others is filed once: `left` depends on `alpha` and `beta`, `right` on `beta` alone, and the `/beta` the first fold filed is the one the second is handed, though the first took `/alpha` ahead of it.
+///
+/// Mutation-checked against the record: naming every unit the fold took before its own, the `/beta` filed after `/alpha` is a baseline to the second fold and no hit.
+#[test]
+fn a_unit_reached_after_different_others_is_filed_once() {
+    let root = tree(
+        "e2e-shared",
+        &[
+            (
+                "curios.toml",
+                "members = [\"left\", \"right\", \"alpha\", \"beta\"]\n",
+            ),
+            ("alpha/curios.toml", "name = \"alpha\"\n"),
+            ("alpha/lib.crs", "pub let one : /std/Nat = 1;\n"),
+            ("beta/curios.toml", "name = \"beta\"\n"),
+            ("beta/lib.crs", "pub let two : /std/Nat = 2;\n"),
+            (
+                "left/curios.toml",
+                "name = \"left\"\n\n[dependencies]\nalpha = { source = \"member\" }\nbeta = { source = \"member\" }\n\n[[executables]]\nname = \"left\"\n",
+            ),
+            (
+                "left/left.crs",
+                "/std/print(/std/Nat/to_str(/std/Nat/add(/alpha/one, /beta/two)))\n",
+            ),
+            (
+                "right/curios.toml",
+                "name = \"right\"\n\n[dependencies]\nbeta = { source = \"member\" }\n\n[[executables]]\nname = \"right\"\n",
+            ),
+            (
+                "right/right.crs",
+                "/std/print(/std/Nat/to_str(/beta/two))\n",
+            ),
+        ],
+    );
+    let store = || Verdicts::at(root.to_path_buf());
+
+    assert_eq!(
+        folded(&root.join("left"), None, &store()),
+        ["compiling /alpha", "compiling /beta"]
+    );
+    assert_eq!(
+        folded(&root.join("right"), None, &store()),
+        ["reused /beta"],
+        "a unit filed after another it cannot read was not the one a fold without that other is handed"
+    );
+    assert_eq!(
+        folded(&root.join("left"), None, &store()),
+        ["reused /alpha", "reused /beta"]
     );
 }

@@ -34,7 +34,7 @@ fn reused_overlaid(root: &Path, overlay: &Overlay) -> bool {
     reused_through(root, &root.join("shape"), &Overlaid(&verdicts, overlay))
 }
 
-/// A question's reading of the store, as far as the store's own pieces go: verified through an overlay, taking a disagreeing slot as a baseline, and placing what it compiled without filing it, as the `wonder` engine does with a unit the disk does not answer for.
+/// A question's reading of the store, as far as the store's own pieces go: verified through an overlay, taking a disagreeing slot as a baseline, and keeping what it compiled without filing it, as the `wonder` engine does with a unit the disk does not answer for.
 struct Overlaid<'a>(&'a Verdicts, &'a Overlay);
 
 impl Cache for Overlaid<'_> {
@@ -42,12 +42,17 @@ impl Cache for Overlaid<'_> {
         self.0.get_overlaid(source, self.1)
     }
 
-    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
-        self.0.earlier(source).or_else(|| offered.cloned())
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
+        self.0.earlier(source).or_else(|| {
+            offered.cloned().map(|unit| Earlier {
+                unit,
+                after: After::Scope,
+            })
+        })
     }
 
-    fn put(&self, source: &UnitSource<'_>, unit: &Unit, _followed: bool) {
-        self.0.place(source, unit);
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+        self.0.keep(source, unit);
     }
 }
 
@@ -152,9 +157,9 @@ impl Cache for Recorded<'_> {
         Some(unit)
     }
 
-    fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool) {
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
         self.filed.borrow_mut().push(unit.certification().clone());
-        Cache::put(self.store, source, unit, followed);
+        Cache::put(self.store, source, unit);
     }
 }
 
@@ -384,9 +389,9 @@ fn an_edited_slot_is_a_baseline_for_a_query_and_for_a_build() {
     assert_eq!(folded(&root), ["recompiling /shape"]);
 }
 
-/// A unit placed without being filed leaves its slot holding what it held; a build files what it compiled.
+/// A unit kept without being filed leaves its slot holding what it held; a build files what it compiled.
 #[test]
-fn a_unit_placed_without_being_filed_leaves_the_slot_as_it_was() {
+fn a_unit_kept_without_being_filed_leaves_the_slot_as_it_was() {
     let root = project("baseline-unfiled");
     reused(&root);
     let before = slots(&root);
@@ -397,7 +402,7 @@ fn a_unit_placed_without_being_filed_leaves_the_slot_as_it_was() {
         folded_overlaid(&root, &Overlay::default()),
         ["recompiling /shape"]
     );
-    assert_eq!(slots(&root), before, "placing a unit moved its slot");
+    assert_eq!(slots(&root), before, "keeping a unit moved its slot");
 
     assert_eq!(folded(&root), ["recompiling /shape"]);
     assert_ne!(slots(&root), before, "a build files what it compiled");

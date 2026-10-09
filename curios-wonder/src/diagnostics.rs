@@ -3,7 +3,7 @@
 use {
     crate::{Diagnosis, STDIN_MOUNT, Severity},
     curios_package::Unlinked,
-    curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, Fold},
+    curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
     curios_utilities::{Qualifier, Report, Source, Span},
@@ -314,24 +314,22 @@ impl Cache for Overlaid<'_> {
     }
 
     /// The store's own answer ([`Verdicts`]' `Cache::baseline`): the session's last unit, then the slot this tree filed, then what the scope offered. A build run in another terminal mid-session can leave the store nearer than the session, and then the recompile redoes more than it had to and answers the same.
-    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
         Cache::baseline(self.cache, source, offered)
     }
 
-    /// Kept, then filed where the disk holds every text the fold has read, and otherwise placed where something follows. This is why the store itself is held rather than a `dyn Cache`, which cannot place a unit without filing it.
+    /// Kept, then filed where the disk holds every text the fold has read. This is why the store itself is held rather than a `dyn Cache`, which cannot keep a unit without filing it.
     ///
-    /// **Every unit is kept, filed or not.** Keeping hands the session its next baseline and adds the unit's reads to the log a kept unit is guarded by, and a filed unit left out of that log would let a kept unit after it be offered once its predecessor had changed. Kept first: a kept unit is addressed after the units placed ahead of it, which is exactly the chain the next question will have built when it asks.
+    /// **Every unit is kept, filed or not.** Keeping hands the session its next baseline, with the units it was compiled after, and takes the unit into the fold, so a unit after it is checked against it whether or not it was filed.
     ///
     /// **The disk is asked as the unit is handed over**, of everything the fold has read so far, which is what catches a file rewritten while its unit compiled.
     ///
-    /// **A unit neither filed nor followed is not placed.** A slot is addressed after the units placed before it, so a unit missing from that chain shifts every later address by one, and one declined hit becomes a miss for every unit after it; a unit nothing follows addresses no slot, and a question files no payload that would read the chain after the fold. Placing it would buy a serialization of the whole unit and a digest of the bytes, which on the standard library is most of what this cache costs a keystroke.
-    fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool) {
+    /// **A unit that is not filed has no place in the store.** No slot is addressed after another, so a unit that cannot read it is restored as though it were not there, and one that can is compiled over its baseline, each stage asking again what it read of the unit that moved. Saying what an unfiled unit's slot would hold costs a serialization of the whole unit, which on the standard library is most of what a cache would cost a keystroke, and nothing reads it.
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
         self.cache.keep(source, unit);
 
-        match self.cache.taken_on_disk() {
-            true => Cache::put(self.cache, source, unit, followed),
-            false if followed => self.cache.place(source, unit),
-            false => {}
+        if self.cache.taken_on_disk() {
+            Cache::put(self.cache, source, unit);
         }
     }
 }

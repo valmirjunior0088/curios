@@ -244,9 +244,9 @@ fn an_edited_dependency_is_not_reused() {
     assert!(run(&root).reused, "the recompile refiles");
 }
 
-/// Changing what a program is compiled *against* moves the address rather than invalidating a record — which is what lets the payload for the old configuration survive and answer again when it comes back.
+/// Changing what a program is compiled *against* invalidates the record and leaves the address where it was: a payload's slot names its executable, its compiler and its engine, and what every unit of the compilation contained is what its record vouches for. So an executable has one slot whatever it has been compiled against, and each configuration files over the last.
 #[test]
-fn a_changed_dependency_set_moves_the_address() {
+fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
     let shape = temporary("addressed-shape");
     write(&shape, "curios.toml", "name = \"shape\"\n");
     write(&shape, "lib.crs", "pub let side : /std/Nat = 4;\n");
@@ -265,18 +265,17 @@ fn a_changed_dependency_set_moves_the_address() {
     write(&root, "curios.toml", &with_shape);
     assert!(
         !run(&root).reused,
-        "declaring another unit is a different compilation, so it is a different address"
+        "declaring another unit is a different compilation, which the record of the first does not vouch for"
     );
-    assert_eq!(slots(&root), 2, "and the first slot is still there");
+    assert_eq!(slots(&root), 1, "filed over the first, at the one address");
+    assert!(run(&root).reused, "and found there");
 
     write(&root, "curios.toml", &plain);
     assert!(
-        run(&root).reused,
-        "which is why dropping the dependency again finds the original payload rather than a mismatched record"
+        !run(&root).reused,
+        "dropping the dependency again is a compilation the slot no longer holds"
     );
-    write(&root, "curios.toml", &with_shape);
-    assert!(run(&root).reused, "and so does keeping it");
-    assert_eq!(slots(&root), 2, "two configurations, two slots, forever");
+    assert_eq!(slots(&root), 1, "two configurations, one slot");
 }
 
 /// Two executables of one package are two programs, so they occupy two slots and neither answers for the other.

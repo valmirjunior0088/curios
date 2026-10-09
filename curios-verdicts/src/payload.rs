@@ -1,6 +1,6 @@
 //! What an invocation consults before compiling a program it has already compiled.
 //!
-//! **The same address-and-record split the unit family states for itself, one level up.** A slot names a place — this executable, by this compiler, after this chain, for this engine — and carries no file contents, so a source edit changes what the slot is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] ahead of it in the slot's one file: the entry file, every file the entry's loader read, what each predecessor contained, and the payload's own digest.
+//! **The same address-and-record split the unit family states for itself, one level up.** A slot names a place — this executable, by this compiler, for this engine — and carries no file contents and no unit, so a source edit changes what the slot is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] ahead of it in the slot's one file: the entry file, every file the entry's loader read, what each predecessor contained, and the payload's own digest.
 //!
 //! **Taking a payload from here is believing a whole compilation, judgment included.** The entry's kernel recheck is skipped on the strength of the record exactly as a reused unit's is, and the argument for that is [Reused payloads](../../documentation/design/soundness/reused-payloads.md), which extends [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md) rather than restating it.
 //!
@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{Placed, Verdicts, chained, replace, unchanged},
+    crate::{Verdicts, chained, replace, unchanged},
     curios_abi::ForeignStore,
     curios_package::payload_slot,
     curios_text::{RootSource, UnitSource},
@@ -49,7 +49,7 @@ struct Record {
     entry: (String, String),
     /// Each file the entry's loader read, by canonical path, with the digest of the text that was parsed from it.
     reads: Vec<(String, String)>,
-    /// What each predecessor contained, in fold order — the digest of the bytes its own unit slot holds.
+    /// What each unit of the compilation contained, in fold order — the digest of the bytes its own unit slot holds.
     predecessors: Vec<String>,
     /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the slot is exactly the byte string a bundled executable carries and `curios_runtime::run_bytes` deserializes.
     payload: String,
@@ -71,24 +71,24 @@ impl Verdicts {
         units: &[UnitSource<'_>],
         engine: &str,
     ) -> Option<(Vec<u8>, ForeignStore)> {
-        let placed = self.chain(units)?;
+        let units = self.chain(units)?;
 
         // A file that is not a slot, or a stored record that will not read back, is a store to ignore, never a compile to fail.
-        let filed = fs::read(self.store.payload(&slot(self, program, &placed, engine)?)).ok()?;
+        let filed = fs::read(self.store.payload(&slot(self, program, engine)?)).ok()?;
         let (recorded, bytes) = segments(&filed)?;
         let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
-        match agrees(program, &record, &placed, bytes) {
+        match agrees(program, &record, &units, bytes) {
             true => Some((bytes.to_vec(), record.foreigns)),
             false => None,
         }
     }
 
-    /// File `bytes` as `program`'s payload, against the chain the fold just placed over `units`.
+    /// File `bytes` as `program`'s payload, against what the fold just filed each of `units` as.
     ///
-    /// Called after the fold, which is what makes `Verdicts::placed` the right chain to record: it holds what every unit of *this* compilation was filed as, whether it was reused or compiled. Best effort, exactly as a unit's write is — a store that cannot be written costs the next invocation the work it would have saved and nothing else, and the refusal is kept for a caller to report rather than raised here.
+    /// Called after the fold, which is what makes the units it took the right ones to record: each with what it was filed as in *this* compilation, whether it was reused or compiled. Best effort, exactly as a unit's write is — a store that cannot be written costs the next invocation the work it would have saved and nothing else, and the refusal is kept for a caller to report rather than raised here.
     ///
-    /// **`units` is taken so this can refuse a chain with a gap in it, and it is the same slice [`Verdicts::payload_get`] probes with.** The probe builds its chain with `Verdicts::chain`, which refuses any unit `Verdicts::slot` declines, while the chain the fold placed simply lacks a unit the fold could not place. Filing under that shorter chain would write a slot addressed by a prefix no probe will ever compute: not a stale answer, but a directory the store grows and nothing reads, forever. Withholding the record is free, since the compilation it came from is correct either way.
+    /// **`units` is taken so this can refuse a compilation one of whose units has no place, and it is the same slice [`Verdicts::payload_get`] probes with.** The probe verifies each unit through `Verdicts::chain`, which refuses any unit `Verdicts::slot` declines, so a record naming fewer units than the compilation held is one no probe agrees with: not a stale answer, but a slot rewritten by every build and found by none. Withholding the record is free, since the compilation it came from is correct either way.
     pub fn payload_put(
         &self,
         program: &Program<'_>,
@@ -97,23 +97,19 @@ impl Verdicts {
         foreigns: &ForeignStore,
         engine: &str,
     ) {
-        let placed = self.placed.borrow();
-
-        if placed.len() != units.len() {
+        // What every unit of the compilation was filed as: a payload vouches for the whole of it, so a unit with no place leaves nothing to file.
+        let Some(filed) = self.filed().filter(|filed| filed.len() == units.len()) else {
             return;
-        }
+        };
 
-        let Some(slot) = slot(self, program, &placed, engine) else {
+        let Some(slot) = slot(self, program, engine) else {
             return;
         };
 
         let record = Record {
             entry: (canonical(program.entry), digest(program.text.as_bytes())),
             reads: digested(program.loader.reads()),
-            predecessors: placed
-                .iter()
-                .map(|placed| placed.contained.clone())
-                .collect(),
+            predecessors: filed,
             payload: digest(bytes),
             foreigns: foreigns.clone(),
         };
@@ -128,34 +124,24 @@ impl Verdicts {
     }
 }
 
-/// The slot `program` is filed in after `placed` for `engine`, or `None` when it may not be filed at all — which is when the compiler cannot identify itself, and for the reason `Verdicts::compiler` gives.
-fn slot(
-    verdicts: &Verdicts,
-    program: &Program<'_>,
-    placed: &[Placed],
-    engine: &str,
-) -> Option<String> {
+/// The slot `program` is filed in for `engine`, or `None` when it may not be filed at all — which is when the compiler cannot identify itself, and for the reason `Verdicts::compiler` gives.
+fn slot(verdicts: &Verdicts, program: &Program<'_>, engine: &str) -> Option<String> {
     let compiler = verdicts.compiler()?;
-    let predecessors = placed
-        .iter()
-        .map(|placed| placed.slot.clone())
-        .collect::<Vec<_>>();
 
     Some(payload_slot(
         compiler,
-        &predecessors,
         program.package,
         program.executable,
         engine,
     ))
 }
 
-/// Whether `record` still describes the world: the payload is intact, the chain is what it was, the entry is the same file holding the same text, and every file its loader read still holds the text it was read as.
+/// Whether `record` still describes the world: the payload is intact, each unit of the compilation is filed as what it was, the entry is the same file holding the same text, and every file its loader read still holds the text it was read as.
 ///
 /// All of it or nothing, and in cheapest-first order — the two digests decide most misses before any file is opened.
-fn agrees(program: &Program<'_>, record: &Record, placed: &[Placed], bytes: &[u8]) -> bool {
+fn agrees(program: &Program<'_>, record: &Record, units: &[String], bytes: &[u8]) -> bool {
     record.payload == digest(bytes)
-        && chained(&record.predecessors, placed)
+        && chained(&record.predecessors, units)
         && record.entry == (canonical(program.entry), digest(program.text.as_bytes()))
         && read_within(&program.loader.directories(), &record.reads)
         && unchanged(&record.reads, None)
