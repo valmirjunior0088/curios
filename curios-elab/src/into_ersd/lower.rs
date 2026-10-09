@@ -6,7 +6,7 @@ use {
     super::{
         Binding, Bound, Environment, ErasedBaseline, ErasedItem, ErasedOver, ErasedUnit, Erasures,
         Error, Export, Intrinsic, Let, Projected, Retyping, Subterm, Telescope, Term, emitted,
-        intrinsic, link,
+        evaluate, intrinsic, link,
     },
     crate::{Traces, validate_entry_universes, validate_universes, validate_universes_of},
     curios_core::{
@@ -403,40 +403,37 @@ impl<'s> Lowering<'s> {
     }
 }
 
-/// A program erased and linked: one module holding what its entry reaches, and where each name linked into it landed.
+/// A program erased and linked: one module holding what its entry reaches, and where the function each linked declaration defines landed.
 #[derive(Debug)]
 pub struct ErasedProgram {
     module: curios_ersd::Module,
-    bound: BTreeMap<Global, curios_ersd::Atom>,
+    /// The function each name that defines one is bound to. A function an item computed is bound under a name and defined by none, so it is not among them.
+    defined: BTreeMap<Global, curios_ersd::FunctionId>,
 }
 
 impl ErasedProgram {
     pub(super) fn new(
         module: curios_ersd::Module,
-        bound: BTreeMap<Global, curios_ersd::Atom>,
+        defined: BTreeMap<Global, curios_ersd::FunctionId>,
     ) -> Self {
-        Self { module, bound }
+        Self { module, defined }
     }
 
-    /// Mark every function a definition `certification` classifies `Total` erased to as total — see [`curios_ersd::Function::total`]. Each is found through where its name was linked, so a definition that erased to anything but a function, or that the program does not reach, has nothing to mark, and a function no record names keeps the conservative `false`.
+    /// Mark every function a definition `certification` classifies `Total` erased to as total — see [`curios_ersd::Function::total`]. Each is found through where its name was linked, so a definition that erased to anything but a function, or that the program does not reach, has nothing to mark, and a function no record names keeps the conservative `false`: a closure a top-level value was computed to among them, which its name is bound to and no declaration defines.
     ///
     /// Run on the linked program, once per record of what it was erased from: every unit's in scope and the entry's own. Nothing reads the flag before the back half lowers what this leaves.
     ///
     /// **Asked by the names the program linked, never walked.** A record classifies every definition of its unit and a program links a few of them, so each linked name is asked of the record, and the record is read for what the program took of its unit.
     pub fn mark_total(&mut self, certification: &Certification) {
         let total = self
-            .bound
+            .defined
             .iter()
-            .filter_map(|(name, atom)| match atom {
-                curios_ersd::Atom::Function(id)
-                    if certification
-                        .totality(name)
-                        .is_some_and(|totality| totality.is_total()) =>
-                {
-                    Some(*id)
-                }
-                _ => None,
+            .filter(|(name, _)| {
+                certification
+                    .totality(name)
+                    .is_some_and(|totality| totality.is_total())
             })
+            .map(|(_, function)| *function)
             .collect::<Vec<_>>();
         for id in total {
             self.module.mark_total(id);
@@ -543,7 +540,7 @@ pub(super) fn projected<'a>(
     Ok(Projected::over(scope, module))
 }
 
-/// Erase `module`'s items in the order it stores them, each into a fragment of its own and each read out of its universes through `view`, but for those `over` keeps the baseline's erased form of, which are never projected. What erasing each item asked is kept with the unit: of the declarations around it, through the reader's doors, and of each erased form it read how a name is bound in.
+/// Erase `module`'s items in the order it stores them, each into a fragment of its own and each read out of its universes through `view`, but for those `over` keeps the baseline's erased form of, which are never projected. What erasing each item asked is kept with the unit: of the declarations around it, through the reader's doors, of each erased form it read how a name is bound in, and of each erased form its evaluation ran, the form whole.
 pub(super) fn erase_items<'s>(
     context: &mut Retyping<'s>,
     view: &'s Projected<'_>,
@@ -573,6 +570,25 @@ pub(super) fn erase_items<'s>(
                 for name in read.take() {
                     context.asks_erased(&name);
                 }
+                // What the item's top-level statements compute is computed here, and its trace says what that ran whether or not it could be finished.
+                let erased = match evaluate(scope, &unit, &erased) {
+                    Some(evaluation) => {
+                        for name in &evaluation.ran {
+                            context.asks_ran(name);
+                        }
+                        match evaluation.erased {
+                            Some(evaluated) => {
+                                for name in evaluated.environment().imported_rows() {
+                                    context.asks_erased(name);
+                                }
+
+                                evaluated
+                            }
+                            None => erased,
+                        }
+                    }
+                    None => erased,
+                };
                 let trace = context.take_trace();
                 // One sample for each item erased, with how much its erasure asked.
                 curios_profile::sample!("erase::asked", trace.len());

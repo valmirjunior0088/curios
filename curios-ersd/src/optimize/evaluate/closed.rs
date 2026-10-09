@@ -47,7 +47,12 @@ enum Kind {
 pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::profile!("evaluate_closed_terms");
     let owners = index_owners(module);
-    let plans = plan(module, &owners);
+    let candidates = (0..module.statements().len()).filter_map(|index| {
+        let statement = StatementId(index as u32);
+
+        Some((statement, *owners.get(&statement)?))
+    });
+    let plans = plan(module, candidates);
     curios_profile::sample!("evaluate::candidates", plans.len());
     curios_profile::sample!("evaluate::bail::effect", bailed(&plans, Bail::Effect));
     curios_profile::sample!("evaluate::bail::fuel", bailed(&plans, Bail::Fuel));
@@ -67,6 +72,22 @@ pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     installed.0 > 0
 }
 
+/// [`evaluate_closed_terms`] over the top-level items at `from` and after, and no other statement: one round of [`evaluate_since`](crate::evaluate_since).
+pub(crate) fn evaluate_closed_items(module: &mut Module, from: usize) -> bool {
+    curios_profile::profile!("evaluate_closed_items");
+    let candidates = module.items()[from..]
+        .iter()
+        .map(|&item| (item, Owner::Items));
+    let plans = plan(module, candidates);
+    curios_profile::sample!("evaluate::item::candidates", plans.len());
+    curios_profile::sample!(
+        "evaluate::item::bailed",
+        plans.iter().filter(|plan| plan.is_err()).count()
+    );
+
+    apply(module, plans).0 > 0
+}
+
 /// How many plans bailed for `reason`.
 #[cfg(feature = "profile")]
 fn bailed(plans: &[Result<Planned, Bail>], reason: Bail) -> usize {
@@ -76,16 +97,19 @@ fn bailed(plans: &[Result<Planned, Bail>], reason: Bail) -> usize {
         .count()
 }
 
-/// Every closed candidate's plan: its replacement, or the reason it has none.
-fn plan(module: &Module, owners: &BTreeMap<StatementId, Owner>) -> Vec<Result<Planned, Bail>> {
+/// The plan of every closed application among `candidates`, each a statement with where it lives: its replacement, or the reason it has none.
+fn plan(
+    module: &Module,
+    candidates: impl Iterator<Item = (StatementId, Owner)>,
+) -> Vec<Result<Planned, Bail>> {
     // Every top-level function a reified closure names was bound — by dominance-order erasure — before the statement that first uses the folded call, so it stays in lexical scope even for a candidate nested in a match arm.
     let mut evaluator = Evaluator::new(module);
     let mut planned = Vec::new();
-    for (index, slot) in module.statements().iter().enumerate() {
+    for (statement, owner) in candidates {
         let Some(Statement::Let {
             result,
             rhs: Rhs::Apply { callee, arguments },
-        }) = slot
+        }) = module.statement(statement)
         else {
             continue;
         };
@@ -94,10 +118,6 @@ fn plan(module: &Module, owners: &BTreeMap<StatementId, Owner>) -> Vec<Result<Pl
         {
             continue;
         }
-        let statement = StatementId(index as u32);
-        let Some(&owner) = owners.get(&statement) else {
-            continue;
-        };
         let kind = match evaluator.evaluate(*callee, arguments) {
             Outcome::Done(value) => Kind::Value(value),
             Outcome::Stuck(Residual::Foreign(foreign, operands)) => {
@@ -135,9 +155,16 @@ fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usiz
     let mut reify_pool = PASS_REIFY_BUDGET;
     // Stable for the whole pass: reification only appends, and the item list is rebuilt after this loop.
     let mut scope = ReifyScope::new();
-    // Which item hosts each block, so a candidate inside one binds its group ahead of that item, and what an item binds — the two together decide whether a group *can* be lifted. Stable for the same reason.
-    let block_items = index_block_items(module);
-    let (item_functions, item_values) = item_binding_positions(module);
+    // Which item hosts each block, so a candidate inside one binds its group ahead of that item, and what an item binds — the two together decide whether a group *can* be lifted. Stable for the same reason, and read for a candidate inside a block alone.
+    let nested = planned.iter().any(|plan| plan.owner != Owner::Items);
+    let block_items = match nested {
+        true => index_block_items(module),
+        false => BTreeMap::new(),
+    };
+    let (item_functions, item_values) = match nested {
+        true => item_binding_positions(module),
+        false => Default::default(),
+    };
     // Where each item stands, so a shared copy is reused only by a candidate its splice point precedes. Stable for the same reason.
     let item_positions: BTreeMap<StatementId, usize> = module
         .items()

@@ -56,6 +56,14 @@ impl<'s> Retyping<'s> {
             .note(Question::Erased(*name), Answered::Part);
     }
 
+    /// Note that the erasure under way evaluated its item after the erased form of the item declaring `name`, whole.
+    pub(crate) fn asks_ran(&self, name: &Global) {
+        self.context
+            .typing
+            .traced
+            .note(Question::Ran(*name), Answered::Part);
+    }
+
     /// What the erasure under way asked, taken ([`Context::take_trace`]).
     pub(crate) fn take_trace(&mut self) -> Trace<Question, Answered> {
         self.context.take_trace()

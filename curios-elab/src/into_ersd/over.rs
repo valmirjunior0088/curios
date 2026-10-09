@@ -4,7 +4,7 @@
 //!
 //! **Asked in the order the items are stored in, which is the order they are read in.** A module's items stand each after the items it reaches, and erasing one reads the erased form of another only where the other is already erased, so what a question is about is decided by the time it is asked: no item waits for another, and none is asked for.
 //!
-//! **A part is the elaborated declaration's, a binding the erased item's.** A question about a name's type, body or registry entry is answered as it was where the elaborator kept the declaration, and for one elaborated again where that part came out equal as it is stored ([`Same`]). A question about how a name is bound is answered as it was where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). A name neither the unit nor its baseline declares is another unit's or no one's, and what was read of it stands where the unit that holds it is the one the baseline was erased after, or where it digests now to what the baseline recorded (`Foreign`).
+//! **A part is the elaborated declaration's, a binding the erased item's.** A question about a name's type, body or registry entry is answered as it was where the elaborator kept the declaration, and for one elaborated again where that part came out equal as it is stored ([`Same`]). A question about how a name is bound is answered as it was where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). A question about an erased form whole, which an item evaluated where it is erased asks of each item it ran (`evaluate`), is answered as it was where the item kept its erased form, and for one erased again where the two forms are stored as the same bytes. A name neither the unit nor its baseline declares is another unit's or no one's, and what was read of it stands where the unit that holds it is the one the baseline was erased after, or where it digests now to what the baseline recorded (`Foreign`).
 
 use {
     super::{ErasedUnit, Erasures, Held},
@@ -154,7 +154,24 @@ impl<'a> ErasedOver<'a> {
         }
         match question {
             Question::Erased(name) => self.read_alike(name, unit),
+            Question::Ran(name) => self.ran_alike(name, unit),
             part => self.held(part),
+        }
+    }
+
+    /// Whether the erased form of the item declaring `name` is, whole, the one an evaluation ran.
+    fn ran_alike(&mut self, name: &Global, unit: &ErasedUnit) -> bool {
+        match self.declared.get(name) {
+            None => {
+                self.baseline.erased.place(name).is_none()
+                    && self.read_stands(name, &Question::Ran(*name))
+            }
+            Some(&(item, _)) => match self.kept.get(item) {
+                Some(true) => true,
+                Some(false) => unit.form_alike(self.baseline.erased, name),
+                // An item after this one, which nothing before it reads.
+                None => false,
+            },
         }
     }
 

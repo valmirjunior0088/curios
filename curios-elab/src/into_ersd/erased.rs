@@ -13,7 +13,10 @@ use {
     crate::{Answered, Foreign, Question, Traces},
     curios_archive::{Bytes, Deferred},
     curios_core::{Extent, Free, Global, Item, Module, Places, Trace},
-    std::{collections::BTreeMap, rc::Rc},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
 #[cfg(feature = "archive")]
@@ -40,6 +43,8 @@ pub struct ErasedItem {
     interfaces: BTreeMap<curios_ersd::FunctionId, curios_ersd::Interface>,
     /// The values whose initializers read themselves while nothing else of the fragment reads them ([`curios_ersd::Module::unforced`]), each with the name a refusal calls it by and where its initializer is written. Nothing here forces one; an item that reads one would, and is refused.
     unforced: BTreeMap<curios_ersd::ValueId, (String, Option<Extent>)>,
+    /// The names bound to what an evaluation of the item computed, where that is another atom than the one the item bound them to. A function one of them is bound to is a closure the item computed and no definition's own, so what a record says of the definition is not said of it.
+    computed: BTreeSet<Global>,
 }
 
 /// How a name is bound, as an item that uses it reads it.
@@ -94,7 +99,19 @@ impl ErasedItem {
             functions,
             interfaces,
             unforced,
+            computed: BTreeSet::new(),
         }
+    }
+
+    /// This erased form with `names` as the names bound to what an evaluation of the item computed.
+    pub(super) fn computing(mut self, names: BTreeSet<Global>) -> Self {
+        self.computed = names;
+        self
+    }
+
+    /// Whether `name` is bound to what an evaluation of the item computed.
+    pub(super) fn computed(&self, name: &Global) -> bool {
+        self.computed.contains(name)
     }
 
     /// The fragment.
@@ -115,6 +132,13 @@ impl ErasedItem {
     /// The name each imported function of the fragment stands for, in the fragment's order.
     pub(super) fn functions(&self) -> &[Global] {
         &self.functions
+    }
+
+    /// Where the initializer of each value that reads itself is written, where it is written anywhere, by the value's identity in the fragment.
+    pub(super) fn extents(&self) -> impl Iterator<Item = (curios_ersd::ValueId, &Extent)> {
+        self.unforced
+            .iter()
+            .filter_map(|(value, (_, extent))| Some((*value, extent.as_ref()?)))
     }
 
     /// Whether an item that names `name` reads this erased form and `other` alike: the name bound the same way, and the row it declares, where it declares one, of the same shape under the same mask. What an importing item holds of a row is no more ([`ErasedItem::struct_row_read`], [`ErasedItem::induct_row_read`]).
@@ -327,6 +351,30 @@ impl ErasedUnit {
         })
     }
 
+    /// Whether the item declaring `name` holds one erased form in this unit and in `other`: the one handle, or two forms stored as the same bytes. Nothing is stored where nothing is archived, and two forms made apart are then not known to be one.
+    pub(super) fn form_alike(&self, other: &ErasedUnit, name: &Global) -> bool {
+        let (Some(this), Some(that)) = (self.place(name), other.place(name)) else {
+            return false;
+        };
+        let (this, that) = (&self.items[this], &other.items[that]);
+        if Rc::ptr_eq(this, that) {
+            return true;
+        }
+
+        #[cfg(feature = "archive")]
+        let alike = matches!((this.bytes(), that.bytes()), (Ok(this), Ok(that)) if this == that);
+        #[cfg(not(feature = "archive"))]
+        let alike = false;
+
+        alike
+    }
+
+    /// The digest of the erased form of the item at `place`, whole, as it is stored.
+    #[cfg(feature = "archive")]
+    fn form_digest(&self, place: usize) -> Result<String, String> {
+        self.items[place].bytes().map(|bytes| digest(&bytes))
+    }
+
     /// The places of the items that compute at initialization, ascending.
     pub(super) fn computing(&self) -> impl Iterator<Item = usize> {
         self.computing.iter().map(|place| *place as usize)
@@ -499,16 +547,19 @@ impl<'a> Erasures<'a> {
         self.place(name).is_some_and(|(unit, _)| !moved[unit])
     }
 
+    /// Whether the unit at `place` is the compiler's own, of which no read is recorded.
+    pub(super) fn is_fixed(&self, place: usize) -> bool {
+        self.fixed.is_some_and(|fixed| fixed[place])
+    }
+
     /// Whether a read of `name`, which the unit being erased does not declare, is one to record: every one but a read of a fixed unit's declaration.
     #[cfg(feature = "archive")]
     pub(super) fn recorded(&self, name: &Global) -> bool {
-        match (self.fixed, self.place(name)) {
-            (Some(fixed), Some((unit, _))) => !fixed[unit],
-            _ => true,
-        }
+        self.place(name)
+            .is_none_or(|(unit, _)| !self.is_fixed(unit))
     }
 
-    /// The digest of what `question` asks of the declaration a unit in scope holds under its name: a part of its elaborated declaration ([`part_digest`]), or how an item naming it reads its erased form ([`ErasedItem::read_digest`]). `Ok(None)` where no unit declares the name or the one that does holds no such part; `Err` where a part is asked of a scope read without its units' places.
+    /// The digest of what `question` asks of the declaration a unit in scope holds under its name: a part of its elaborated declaration ([`part_digest`]), how an item naming it reads its erased form ([`ErasedItem::read_digest`]), or that form whole. `Ok(None)` where no unit declares the name or the one that does holds no such part; `Err` where a part is asked of a scope read without its units' places.
     #[cfg(feature = "archive")]
     pub(super) fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
         let Some(name) = question.subject() else {
@@ -520,6 +571,7 @@ impl<'a> Erasures<'a> {
 
         match question {
             Question::Erased(_) => self.erased[unit].item(place).read_digest(name).map(Some),
+            Question::Ran(_) => self.erased[unit].form_digest(place).map(Some),
             part => match self.kept(unit) {
                 Some((places, _)) => part_digest(self.cores[unit], places, part),
                 None => Err("a scope read without its units' places digests no part".to_string()),

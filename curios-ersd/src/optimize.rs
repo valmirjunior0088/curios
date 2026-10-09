@@ -11,7 +11,10 @@ use evaluate::*;
 mod rebase;
 use rebase::*;
 
-use super::{Analysis, Module};
+use super::{Analysis, Mark, Module};
+
+/// The rounds a fold of closed applications runs at most. A curried chain folds one application per round. A cap the loop reaches, not a bound it stays under: every program in `programs/` installs replacements in all of them, because each reified closure copy carries closed applications of its own into the next round.
+const ROUNDS: usize = 8;
 
 /// Run the Ersd transformations in place: prune, evaluate, specialize, rebase, and prune again (evaluation and specialization strand the code they collapse). The module must verify on entry; the compaction after the final prune re-verifies on exit. Taking a match arm during specialization orphans the untaken arms' values until that final prune tombstones them, so no intermediate verify runs after specialization.
 ///
@@ -32,8 +35,8 @@ pub fn optimize_verified(module: &mut Module) {
     let analysis = Analysis::analyze(module);
     prune_unreachable(module, &analysis);
     compact(module);
-    // A curried chain folds one application per round. Eight is a cap the loop reaches, not a bound it stays under: every program in `programs/` installs replacements in all eight rounds, because each reified closure copy carries closed applications of its own into the next round. What keeps that from multiplying the module is each round's reification drawing on one shared node pool, and the prune after the loop drops the copies nothing kept.
-    for _ in 0..8 {
+    // What keeps the rounds from multiplying the module is each round's reification drawing on one shared node pool, and the prune after the loop drops the copies nothing kept.
+    for _ in 0..ROUNDS {
         if !evaluate_closed_terms(module) {
             break;
         }
@@ -47,6 +50,21 @@ pub fn optimize_verified(module: &mut Module) {
     let analysis = Analysis::analyze(module);
     prune_unreachable(module, &analysis);
     compact(module);
+}
+
+/// Fold the closed applications among the items `module` gained since `mark`, a round at a time until one installs nothing, and say whether any round installed anything.
+///
+/// What a fragment's top-level statements compute, computed where the fragment is: linked last into a module of what it reaches, so that everything at or past `mark` is its own, and taken back out with what the rounds appended for it ([`Module::taken`]). No statement before `mark` is a candidate and none is rewritten, and each round draws on a pool of its own, as a round over a whole program does.
+pub fn evaluate_since(module: &mut Module, mark: &Mark) -> bool {
+    let mut installed = false;
+    for _ in 0..ROUNDS {
+        if !evaluate_closed_items(module, mark.items) {
+            break;
+        }
+        installed = true;
+    }
+
+    installed
 }
 
 /// Compact after a prune, and check the result.

@@ -417,11 +417,124 @@ fn a_bound_type_is_not_computed() {
 
 #[test]
 fn a_bound_value_is_computed_where_it_is_written() {
-    // The control: the same binding at a `Nat` is evaluated under call-by-value, used or not.
-    for binder in [Binder::Let, Binder::Item] {
-        let erased = a_bound_call(binder, false);
-        assert_eq!(calls(&erased), 1, "{}", shape(&erased));
-    }
+    // The control: the same binding at a `Nat` is evaluated under call-by-value, used or not. A local one is the call it was written as; a top-level one is what the call computes, computed where its item is erased.
+    let erased = a_bound_call(Binder::Let, false);
+    assert_eq!(calls(&erased), 1, "{}", shape(&erased));
+
+    let erased = a_bound_call(Binder::Item, false);
+    assert_eq!(calls(&erased), 0, "{}", shape(&erased));
+    assert!(
+        bound(&erased).any(|rhs| matches!(rhs, curios_ersd::Rhs::Alias(_))),
+        "{}",
+        shape(&erased)
+    );
+}
+
+/// A unit of `step`, a function adding `by` to its argument, and `stepped`, which is `step(4)`, with the unit erased whole.
+fn stepping(by: usize) -> (Zonked<Module>, ErasedUnit) {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let unit = zonked(
+        &module(
+            vec![
+                definition(
+                    "step",
+                    Term::func_type([(n, nat.clone())], nat.clone()),
+                    Term::func(
+                        [(n, nat.clone())],
+                        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat_lit(by))),
+                    ),
+                ),
+                definition(
+                    "stepped",
+                    nat,
+                    Term::apply(Term::free_var(&global("step")), [nat_lit(4)]),
+                ),
+            ],
+            nat_lit(0),
+        )
+        .module,
+    );
+    let erased = erase_unit(DEFAULT_STEP_BUDGET, SYNTAX, Erasures::nothing(), &unit)
+        .expect("the unit erases whole");
+
+    (unit, erased)
+}
+
+/// A top-level value is computed where its unit is erased: `stepped` is `step(4)`, and its erased form is the `5` that comes to, naming nothing of `step`. So the unit holds no item that computes when a program starts, and a program links `stepped` where it names it and `step` where it applies it.
+#[test]
+fn a_top_level_value_is_computed_where_its_unit_is_erased() {
+    let (_, unit) = stepping(1);
+    let stepped = unit
+        .find(&nominal("stepped"))
+        .expect("the unit declares it");
+
+    assert_eq!(unit.computing().count(), 0);
+    assert!(stepped.functions().is_empty() && stepped.values().is_empty());
+    assert_eq!(
+        shape(stepped.module()),
+        "\
+items
+  Let ~v0$/stepped = Alias Nat(5)
+no entry
+"
+    );
+}
+
+/// A value computed where it is erased ran the erased form of what it applied, whole, so it is computed again where that form is another: `step` is elaborated again to add `2`, under the signature and the interface `stepped` read it by, and `stepped`, whose declaration is the baseline's, holds the `6` a whole erasure computes.
+///
+/// Mutation-checked against the question about a form whole: with every form an evaluation ran taken to stand, `stepped` keeps the baseline's `5`.
+#[test]
+fn a_value_is_computed_again_where_a_form_its_evaluation_ran_is_another() {
+    let (before, baseline) = stepping(1);
+    let (edited, whole) = stepping(2);
+
+    let over = erase_unit_over(
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
+        Erasures::nothing(),
+        &edited,
+        ErasedBaseline {
+            core: before.as_module(),
+            places: &Places::of(before.as_module()),
+            erased: &baseline,
+            kept: &BTreeSet::from([nominal("stepped")]),
+        },
+    )
+    .expect("the unit erases over its baseline");
+
+    assert_ne!(form(&whole, "stepped"), form(&baseline, "stepped"));
+    assert_eq!(form(&over, "stepped"), form(&whole, "stepped"));
+}
+
+/// A value computed where it is erased is kept where every form its evaluation ran is the one it ran: `step` is elaborated again to what it was, so its erased form is stored as the bytes it was, and `stepped` holds the baseline's own erased form.
+#[test]
+fn a_computed_value_is_kept_where_what_it_ran_was_erased_again_to_what_it_was() {
+    let (before, baseline) = stepping(1);
+    let (edited, _) = stepping(1);
+
+    let over = erase_unit_over(
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
+        Erasures::nothing(),
+        &edited,
+        ErasedBaseline {
+            core: before.as_module(),
+            places: &Places::of(before.as_module()),
+            erased: &baseline,
+            kept: &BTreeSet::from([nominal("stepped")]),
+        },
+    )
+    .expect("the unit erases over its baseline");
+    let held = |unit: &ErasedUnit| {
+        std::ptr::from_ref(
+            unit.find(&nominal("stepped"))
+                .expect("the unit declares it"),
+        )
+    };
+
+    assert_eq!(held(&over), held(&baseline), "`stepped` was erased again");
 }
 
 #[test]

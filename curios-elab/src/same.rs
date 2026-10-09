@@ -116,7 +116,8 @@ impl Same {
             Question::Witness(..)
             | Question::WitnessDeclared(..)
             | Question::Lemmas
-            | Question::Erased(_) => false,
+            | Question::Erased(_)
+            | Question::Ran(_) => false,
         }
     }
 }
@@ -237,7 +238,8 @@ pub(crate) fn part_digest(
         Question::Witness(..)
         | Question::WitnessDeclared(..)
         | Question::Lemmas
-        | Question::Erased(_) => Ok(None),
+        | Question::Erased(_)
+        | Question::Ran(_) => Ok(None),
     }
 }
 

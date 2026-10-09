@@ -2,7 +2,7 @@
 //!
 //! **A program links what it reaches.** Its own items, its entry, and of its scope the items those import, transitively. An item of the scope the program never names is no part of the module the back half lowers, so a program is not handed a library to drop.
 //!
-//! **And what computes at initialization, whether or not it is named.** A top-level value whose evaluation is observable runs before the entry in every program its unit is in scope of, which is the language's meaning and not this pass's to change. Whether one is observable is read off the linked program by the optimizer's prune, which holds the summaries; here every item whose top-level statement computes at all is linked with what it reaches, and the prune keeps or drops each exactly as it does an item of the program's own.
+//! **And what computes at initialization, whether or not it is named.** A top-level value whose evaluation is observable runs before the entry in every program its unit is in scope of, which is the language's meaning and not this pass's to change. What one computes was computed where its unit was erased, wherever that could be finished (`evaluate`), and an item it was finished for computes nothing; here every item whose top-level statement still computes is linked with what it reaches, and the optimizer's prune, which holds the summaries, keeps or drops each exactly as it does an item of the program's own.
 //!
 //! **The order is the scope's.** Units in dependency order, each one's items in the order it stores them, then the program's own and its entry: every item after the items it imports from, which is the order their statements evaluate in.
 //!
@@ -17,17 +17,37 @@ use {
 
 /// A program under construction: the module, and where each name and each schema linked so far landed.
 #[derive(Default)]
-struct Linking {
-    module: curios_ersd::Module,
+pub(super) struct Linking {
+    pub(super) module: curios_ersd::Module,
     bound: BTreeMap<Global, curios_ersd::Atom>,
-    structs: BTreeMap<Global, curios_ersd::ProductId>,
-    families: BTreeMap<Global, curios_ersd::FamilyId>,
-    tuples: BTreeMap<usize, curios_ersd::ProductId>,
+    /// The name each value and each function a linked item bound is declared under: the first to bind it, which is the item that defines it, since an item that hands another's name on is linked after it.
+    pub(super) values: BTreeMap<curios_ersd::ValueId, Global>,
+    pub(super) functions: BTreeMap<curios_ersd::FunctionId, Global>,
+    /// The functions a linked item bound a name to as what its evaluation computed: closures, each bound under a name and defined by no declaration.
+    computed: BTreeSet<curios_ersd::FunctionId>,
+    pub(super) structs: BTreeMap<Global, curios_ersd::ProductId>,
+    pub(super) families: BTreeMap<Global, curios_ersd::FamilyId>,
+    pub(super) tuples: BTreeMap<usize, curios_ersd::ProductId>,
 }
 
 impl Linking {
-    /// Append one item's fragment, its imports standing for where the items that bind them landed.
-    fn add(&mut self, erased: &ErasedItem) {
+    /// Append what `reached` takes of `units`, in the order of the units and, of each, in the order it stores its items, which puts a declaration ahead of whatever imports its rows.
+    pub(super) fn add_reached(&mut self, units: &[&ErasedUnit], reached: &Reached) {
+        for (unit, (items, rows)) in units.iter().zip(reached.items.iter().zip(&reached.rows)) {
+            for &place in items.union(rows) {
+                let erased = unit.item(place);
+                match items.contains(&place) {
+                    true => {
+                        self.add(erased);
+                    }
+                    false => self.add_rows(erased),
+                }
+            }
+        }
+    }
+
+    /// Append one item's fragment, its imports standing for where the items that bind them landed, and hand back where its identities landed.
+    pub(super) fn add(&mut self, erased: &ErasedItem) -> curios_ersd::Linked {
         let bound = |name: &Global| {
             *self.bound.get(name).unwrap_or_else(|| {
                 panic!("{name} is imported before the item that binds it is linked")
@@ -51,9 +71,24 @@ impl Linking {
         self.hold(erased, &linked);
         for (name, binding) in erased.environment().bindings() {
             if let Binding::Atom(atom) = binding {
-                self.bound.insert(*name, linked.atom(atom));
+                let atom = linked.atom(atom);
+                self.bound.insert(*name, atom);
+                match atom {
+                    curios_ersd::Atom::Value(value) => {
+                        self.values.entry(value).or_insert(*name);
+                    }
+                    curios_ersd::Atom::Function(function) => {
+                        self.functions.entry(function).or_insert(*name);
+                        if erased.computed(name) {
+                            self.computed.insert(function);
+                        }
+                    }
+                    curios_ersd::Atom::Constant(_) => {}
+                }
             }
         }
+
+        linked
     }
 
     /// Register one item's schemas and nothing else of its fragment: the rows a linked fragment imports from a declaration the program never reaches.
@@ -114,22 +149,35 @@ impl Linking {
     }
 }
 
-/// What a program takes of each unit in scope, as the places of its items, ascending.
-struct Reached {
+/// What a program takes of each unit it is linked from, as the places of its items, ascending.
+pub(super) struct Reached {
     /// The items it links.
-    items: Vec<BTreeSet<usize>>,
+    pub(super) items: Vec<BTreeSet<usize>>,
     /// The items whose rows it links: the declarations of the rows a linked item imports, with theirs.
     rows: Vec<BTreeSet<usize>>,
 }
 
-/// The unit and the place of the item declaring each of `names` that a unit in scope declares. A name none declares is the program's own, and every item of the program is linked.
-fn places<'n>(scope: Erasures<'_>, names: impl Iterator<Item = &'n Global>) -> Vec<(usize, usize)> {
-    names.filter_map(|name| scope.place(name)).collect()
+/// The unit and the place of the item declaring each of `names` that one of `units` declares. A name none declares is the program's own, and every item of the program is linked.
+fn places<'n>(
+    units: &[&ErasedUnit],
+    names: impl Iterator<Item = &'n Global>,
+) -> Vec<(usize, usize)> {
+    names
+        .filter_map(|name| {
+            units
+                .iter()
+                .enumerate()
+                .find_map(|(unit, erased)| Some((unit, erased.place(name)?)))
+        })
+        .collect()
 }
 
-/// What a program takes of each unit in scope: the items `roots` import, transitively, and every item that computes at initialization with what it imports; and, of the declarations whose rows any of those import, the rows.
-fn reached<'a>(scope: Erasures<'_>, roots: impl Iterator<Item = &'a ErasedItem>) -> Reached {
-    let units = scope.units();
+/// What `roots` take of each of `units`: the items they import, transitively, and, where `computing`, every item that computes at initialization with what it imports; and, of the declarations whose rows any of those import, the rows.
+pub(super) fn reached<'a>(
+    units: &[&ErasedUnit],
+    roots: impl Iterator<Item = &'a ErasedItem>,
+    computing: bool,
+) -> Reached {
     let mut reached = Reached {
         items: vec![BTreeSet::new(); units.len()],
         rows: vec![BTreeSet::new(); units.len()],
@@ -138,27 +186,29 @@ fn reached<'a>(scope: Erasures<'_>, roots: impl Iterator<Item = &'a ErasedItem>)
     let mut rows = Vec::new();
 
     for root in roots {
-        items.extend(places(scope, root.values().iter().chain(root.functions())));
-        rows.extend(places(scope, root.environment().imported_rows()));
+        items.extend(places(units, root.values().iter().chain(root.functions())));
+        rows.extend(places(units, root.environment().imported_rows()));
     }
-    for (unit, erased) in units.iter().enumerate() {
-        items.extend(erased.computing().map(|place| (unit, place)));
+    if computing {
+        for (unit, erased) in units.iter().enumerate() {
+            items.extend(erased.computing().map(|place| (unit, place)));
+        }
     }
     while let Some((unit, place)) = items.pop() {
         if reached.items[unit].insert(place) {
             let erased = units[unit].item(place);
             items.extend(places(
-                scope,
+                units,
                 erased.values().iter().chain(erased.functions()),
             ));
-            rows.extend(places(scope, erased.environment().imported_rows()));
+            rows.extend(places(units, erased.environment().imported_rows()));
         }
     }
     // A row's fields name other rows, which the declaring fragment imports in its turn.
     while let Some((unit, place)) = rows.pop() {
         if reached.rows[unit].insert(place) {
             let erased = units[unit].item(place);
-            rows.extend(places(scope, erased.environment().imported_rows()));
+            rows.extend(places(units, erased.environment().imported_rows()));
         }
     }
 
@@ -172,7 +222,7 @@ pub(super) fn link(
     entry: &ErasedItem,
 ) -> Result<ErasedProgram, Error> {
     curios_profile::profile!("link_program");
-    let reached = reached(scope, own.forms().chain([entry]));
+    let reached = reached(scope.units(), own.forms().chain([entry]), true);
     curios_profile::sample!(
         "link::computing",
         scope
@@ -187,30 +237,28 @@ pub(super) fn link(
     );
 
     let mut linking = Linking::default();
-    for (unit, (items, rows)) in scope
-        .units()
-        .iter()
-        .zip(reached.items.iter().zip(&reached.rows))
-    {
-        // In the order the unit stores its items, which puts a declaration ahead of whatever imports its rows.
-        for &place in items.union(rows) {
-            let erased = unit.item(place);
-            match items.contains(&place) {
-                true => linking.add(erased),
-                false => linking.add_rows(erased),
-            }
-        }
-    }
+    linking.add_reached(scope.units(), &reached);
     for erased in own.forms() {
         linking.add(erased);
     }
     linking.add(entry);
 
-    let Linking { module, bound, .. } = linking;
+    let Linking {
+        module,
+        functions,
+        computed,
+        ..
+    } = linking;
+    // A function is its definition's where a declaration defines it: the first name bound to it, and none where an item computed it.
+    let defined = functions
+        .into_iter()
+        .filter(|(function, _)| !computed.contains(function))
+        .map(|(function, name)| (name, function))
+        .collect();
     // Every fragment was held to the recursion rules where it was erased: its own groups by its verification, what it applies of another through that function's interface, and a read of a value whose initializer reads itself where the read was erased. So nothing here is expected to be refused, and a refusal would name nothing an extent was kept for.
     module
         .verify()
         .map_err(|error| Error::refused_by_verifier(error, &BTreeMap::new()))?;
 
-    Ok(ErasedProgram::new(module, bound))
+    Ok(ErasedProgram::new(module, defined))
 }

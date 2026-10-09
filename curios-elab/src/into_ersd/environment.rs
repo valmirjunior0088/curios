@@ -148,6 +148,14 @@ impl Environment {
             .filter(|_| !self.imported.contains(name))
     }
 
+    /// Whether this fragment's item declares a row.
+    pub(super) fn declares_rows(&self) -> bool {
+        self.struct_decls
+            .keys()
+            .chain(self.induct_decls.keys())
+            .any(|name| !self.imported.contains(name))
+    }
+
     /// The declarations whose rows this fragment holds as imports: the items a program links before it.
     pub(super) fn imported_rows(&self) -> impl Iterator<Item = &Global> {
         self.imported.iter()

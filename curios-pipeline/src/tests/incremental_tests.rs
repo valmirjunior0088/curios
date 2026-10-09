@@ -57,6 +57,23 @@ fn an_edited_body_is_elaborated_again_and_what_read_its_signature_alone_is_reuse
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
+/// An edited body reaches the value computed over it. `twice` is elaborated from `double`'s signature alone and stays the declaration it was; what it erased to is `double(2)` computed where the unit was erased, over the erased form of `double` whole, so it is computed again, and the unit is the one a whole compile of the edited text stores.
+///
+/// Mutation-checked: with an erased form an evaluation ran taken to stand whatever it is now, `twice` is stored as the `4` it computed over a body that is gone.
+#[test]
+fn an_edited_body_reaches_the_value_computed_over_it() {
+    let edited = BASE.replace("n + n", "n + n + 1");
+    let baseline = unit_of(BASE);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(
+        reuses_body(&baseline, &incremental, "twice"),
+        "a declaration that read the signature alone was elaborated again"
+    );
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
 /// An edited body reaches the declaration that unfolded it: `two` is checked by computing `double(1)`, so what it asked of `double`'s body is answered another way, and it is elaborated again. `four` reads `two` by its signature, which came out as it was, and is reused: the edit stops where what it changed was read.
 #[test]
 fn an_edited_body_reaches_the_declaration_that_unfolded_it_and_stops_there() {
@@ -885,4 +902,24 @@ fn a_dependency_that_gained_a_declaration_redoes_nothing_of_its_dependent() {
     }
     assert_modules_agree(whole.core(), incremental.core());
     assert_stored_alike(&whole, &incremental);
+}
+
+/// A value computed where its unit is erased ran the erased forms of what it reaches in other units too, each recorded by the digest it had. `/dep`'s `double` is given another body under its signature, so `/lib`'s `twice` is elaborated once and what it erased to is computed again over the `double` that is there now: the unit is the one a whole compile after the edited `/dep` stores.
+///
+/// Mutation-checked: with every erased form of a unit that moved taken to be the one an evaluation ran, `twice` is stored as the `4` it computed over the `/dep` that is gone.
+#[test]
+fn a_dependency_given_another_body_reaches_the_value_computed_over_it() {
+    let dependency = "use /std/{Nat};\n\npub let double(n: Nat) -> Nat = n + n;\n";
+    let dependent = "use /std/{Nat};\nuse /dep/{double};\n\npub let twice: Nat = double(2);\n";
+    let before = unit_after("dep", dependency, &[]);
+    let baseline = unit_after("lib", dependent, &[&before]);
+    let moved = unit_after("dep", &dependency.replace("n + n", "n + n + 1"), &[]);
+
+    let incremental = recompile_after("lib", dependent, &baseline, &[&moved], &[true]);
+
+    assert!(
+        reuses_body(&baseline, &incremental, "twice"),
+        "a declaration that read a signature that stands was elaborated again"
+    );
+    assert_stored_alike(&unit_after("lib", dependent, &[&moved]), &incremental);
 }

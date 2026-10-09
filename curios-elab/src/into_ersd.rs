@@ -36,6 +36,9 @@ pub use over::*;
 mod link;
 use link::*;
 
+mod evaluated;
+use evaluated::*;
+
 mod projected;
 pub use projected::Projection;
 use projected::*;

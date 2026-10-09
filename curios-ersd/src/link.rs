@@ -7,14 +7,20 @@
 //! **An imported function's stub is not linked.** Its parameters and its body exist so that the fragment verifies alone; in a program the identity is the function it stands for.
 //!
 //! **A fragment's schemas can be linked without it** ([`Module::link_rows`]): a program that constructs or matches a declaration's values holds the declaration's row, and has no use for what the declaration's own item computes unless something reaches it.
+//!
+//! **The fragment linked last can be taken back out** ([`Module::taken`]): a program's arenas only grow, so what stands past the place it was linked at ([`Mark`]) is its own, with whatever was appended for it since.
 
 #[cfg(test)]
 mod tests;
 
+mod taken;
+pub use taken::*;
+
 use {
     crate::{
         Atom, BlockId, ConstantId, ConstructorId, FamilyId, Field, FieldShape, ForeignId,
-        FunctionId, Module, ProductId, ProductSchema, Remap, StatementId, Tables, ValueId, lookup,
+        FunctionId, Module, ProductId, ProductSchema, RecGroupId, Remap, StatementId, Tables,
+        ValueId, lookup,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -74,9 +80,115 @@ impl Linked {
     pub fn family(&self, family: FamilyId) -> FamilyId {
         lookup(&self.families, family)
     }
+
+    /// Each product schema of the fragment with where it landed.
+    pub fn products(&self) -> impl Iterator<Item = (ProductId, ProductId)> {
+        self.products.iter().map(|(&held, &landed)| (held, landed))
+    }
+
+    /// Each variant family of the fragment with where it landed.
+    pub fn families(&self) -> impl Iterator<Item = (FamilyId, FamilyId)> {
+        self.families.iter().map(|(&held, &landed)| (held, landed))
+    }
+}
+
+/// Where a module's arenas and its item list stood: what is at or past it was added since. The default is where an empty module stands, which every module is past.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Mark {
+    pub(crate) values: usize,
+    pub(crate) functions: usize,
+    pub(crate) blocks: usize,
+    pub(crate) statements: usize,
+    pub(crate) rec_groups: usize,
+    pub(crate) items: usize,
+}
+
+/// Where the identities of a module go in the one its contents are written into: its values, blocks and functions each by a place of its own, the values that stand for an atom of the other, and its tables.
+struct Landing<'a> {
+    values: &'a BTreeMap<ValueId, ValueId>,
+    blocks: &'a BTreeMap<BlockId, BlockId>,
+    functions: &'a BTreeMap<FunctionId, FunctionId>,
+    substitution: &'a BTreeMap<ValueId, Atom>,
+    tables: &'a Tables,
 }
 
 impl Module {
+    /// Where this module stands now.
+    pub fn mark(&self) -> Mark {
+        Mark {
+            values: self.values().len(),
+            functions: self.functions().len(),
+            blocks: self.blocks().len(),
+            statements: self.statements().len(),
+            rec_groups: self.rec_groups().len(),
+            items: self.items().len(),
+        }
+    }
+
+    /// Write what `source` holds at or past `mark` into this module through `landing`: its recursive groups, statements, blocks and functions, and its items after this module's own. A block and a function are written where `landing` gives the block a place, which leaves out an imported function's stub.
+    fn write(&mut self, source: &Module, mark: &Mark, landing: &Landing<'_>) {
+        // A group names functions, values and blocks, a statement names groups besides, and a block names statements: each arena is written once the ones its nodes name are mapped.
+        let mut rec_groups = BTreeMap::new();
+        let mut statements = BTreeMap::new();
+        for (index, slot) in source.rec_groups().iter().enumerate().skip(mark.rec_groups) {
+            let Some(group) = slot else { continue };
+            let remap = Remap {
+                values: landing.values,
+                blocks: landing.blocks,
+                functions: landing.functions,
+                rec_groups: &rec_groups,
+                statements: &statements,
+                substitution: landing.substitution,
+                redirect: None,
+                tables: Some(landing.tables),
+            };
+            let written = self.add_rec_group(remap.rec_group(group));
+            rec_groups.insert(RecGroupId(index as u32), written);
+        }
+        for (index, slot) in source.statements().iter().enumerate().skip(mark.statements) {
+            let Some(statement) = slot else { continue };
+            let remap = Remap {
+                values: landing.values,
+                blocks: landing.blocks,
+                functions: landing.functions,
+                rec_groups: &rec_groups,
+                statements: &statements,
+                substitution: landing.substitution,
+                redirect: None,
+                tables: Some(landing.tables),
+            };
+            let written = self.add_statement(remap.statement(statement));
+            statements.insert(StatementId(index as u32), written);
+        }
+
+        let remap = Remap {
+            values: landing.values,
+            blocks: landing.blocks,
+            functions: landing.functions,
+            rec_groups: &rec_groups,
+            statements: &statements,
+            substitution: landing.substitution,
+            redirect: None,
+            tables: Some(landing.tables),
+        };
+        for (index, slot) in source.blocks().iter().enumerate().skip(mark.blocks) {
+            let id = BlockId(index as u32);
+            if let (Some(block), Some(&written)) = (slot, landing.blocks.get(&id)) {
+                self.define_block(written, remap.block_body(block));
+            }
+        }
+        for (index, slot) in source.functions().iter().enumerate().skip(mark.functions) {
+            let id = FunctionId(index as u32);
+            let Some(function) = slot else { continue };
+            if landing.blocks.contains_key(&function.body) {
+                self.define_function(landing.functions[&id], remap.function(function));
+            }
+        }
+        for &item in &source.items()[mark.items..] {
+            self.push_item(remap.statement_id(item));
+        }
+    }
+
     /// Append `fragment` to this module under fresh identities, every import of it standing for what `resolution` gives, and hand back where its identities landed.
     ///
     /// Its items follow this module's, in their order, and its entry block, where it has one, becomes this module's. The result is what a producer that had erased both into one module would have built, up to the numbering of identities: nothing is verified here, since a program is verified once, whole, when the last fragment is in.
@@ -133,68 +245,19 @@ impl Module {
             }
         }
 
-        // A group names functions, values and blocks, a statement names groups besides, and a block names statements: each arena is written once the ones its nodes name are mapped.
-        let mut rec_groups = BTreeMap::new();
-        let mut statements = BTreeMap::new();
-        for (index, slot) in fragment.rec_groups().iter().enumerate() {
-            let Some(group) = slot else { continue };
-            let remap = Remap {
+        self.write(
+            fragment,
+            &Mark::default(),
+            &Landing {
                 values: &values,
                 blocks: &blocks,
                 functions: &functions,
-                rec_groups: &rec_groups,
-                statements: &statements,
                 substitution: &substitution,
-                redirect: None,
-                tables: Some(&tables),
-            };
-            let linked = self.add_rec_group(remap.rec_group(group));
-            rec_groups.insert(crate::RecGroupId(index as u32), linked);
-        }
-        for (index, slot) in fragment.statements().iter().enumerate() {
-            let Some(statement) = slot else { continue };
-            let remap = Remap {
-                values: &values,
-                blocks: &blocks,
-                functions: &functions,
-                rec_groups: &rec_groups,
-                statements: &statements,
-                substitution: &substitution,
-                redirect: None,
-                tables: Some(&tables),
-            };
-            let linked = self.add_statement(remap.statement(statement));
-            statements.insert(StatementId(index as u32), linked);
-        }
-
-        let remap = Remap {
-            values: &values,
-            blocks: &blocks,
-            functions: &functions,
-            rec_groups: &rec_groups,
-            statements: &statements,
-            substitution: &substitution,
-            redirect: None,
-            tables: Some(&tables),
-        };
-        for (index, slot) in fragment.blocks().iter().enumerate() {
-            let id = BlockId(index as u32);
-            if let (Some(block), Some(&linked)) = (slot, blocks.get(&id)) {
-                self.define_block(linked, remap.block_body(block));
-            }
-        }
-        for (index, slot) in fragment.functions().iter().enumerate() {
-            let id = FunctionId(index as u32);
-            let Some(function) = slot else { continue };
-            if fragment.imported(id).is_none() {
-                self.define_function(functions[&id], remap.function(function));
-            }
-        }
-        for &item in fragment.items() {
-            self.push_item(remap.statement_id(item));
-        }
+                tables: &tables,
+            },
+        );
         if let Some(entry) = fragment.entry() {
-            self.set_entry(remap.block(entry));
+            self.set_entry(lookup(&blocks, entry));
         }
 
         let Tables {

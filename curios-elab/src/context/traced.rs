@@ -48,6 +48,8 @@ pub enum Question<N = Global, K = WitnessKey> {
     Lemmas,
     /// The erased form of the item declaring a name, as an item that names it reads it: how the name is bound where it is erased, and the row it declares. Erasure's alone.
     Erased(N),
+    /// The erased form of the item declaring a name, whole: what an item evaluated where it is erased read of each item it was linked after, since evaluating it runs what they define. Erasure's alone.
+    Ran(N),
 }
 
 impl<N, K> Question<N, K> {
@@ -64,7 +66,8 @@ impl<N, K> Question<N, K> {
             | Question::Concept(name)
             | Question::Witness(name, _)
             | Question::WitnessDeclared(name, _)
-            | Question::Erased(name) => Some(name),
+            | Question::Erased(name)
+            | Question::Ran(name) => Some(name),
             Question::Lemmas => None,
         }
     }
@@ -91,6 +94,7 @@ impl<N, K> Question<N, K> {
             }
             Question::Lemmas => Question::Lemmas,
             Question::Erased(subject) => Question::Erased(name(subject)?),
+            Question::Ran(subject) => Question::Ran(name(subject)?),
         })
     }
 }
