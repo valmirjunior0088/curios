@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Cli, Elaboration, ManifestFlag, Mode, Pinned, Query},
+    crate::{Elaboration, ManifestFlag, Mode, Pinned, Query},
     curios_package::{Entire, Entry, Library, Program, Selection, Spelling},
     curios_text::Overlay,
     curios_verdicts::Verdicts,
@@ -329,33 +329,6 @@ impl Mode {
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
         }
-    }
-}
-
-impl Cli {
-    /// The refusal `--budget` or `--manifest` earns written before the command rather than after the one that reads it: the spelling that works, or why the command takes no such flag.
-    pub(crate) fn misplaced(&self) -> Option<String> {
-        let command = self.mode.contract().command;
-
-        if let Some(budget) = &self.misplaced_budget {
-            return Some(match self.mode.elaboration() {
-                Some(_) => format!(
-                    "`--budget` belongs to the command, so it follows it: `curios {command} --budget {}`",
-                    budget.to_string_lossy()
-                ),
-                None => format!("`{command}` elaborates nothing, so it takes no `--budget`"),
-            });
-        }
-
-        let manifest = self.misplaced_manifest.as_ref()?;
-
-        Some(match self.mode.manifest_flag() {
-            Some(_) => format!(
-                "`--manifest` belongs to the command, so it follows it: `curios {command} --manifest {}`",
-                manifest.to_string_lossy()
-            ),
-            None => format!("`{command}` reads no manifest, so it takes no `--manifest`"),
-        })
     }
 }
 

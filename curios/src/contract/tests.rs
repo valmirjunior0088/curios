@@ -596,38 +596,27 @@ fn every_command_admits_what_the_table_says() {
     assert!(table == expected(), "the table now reads:\n{table}");
 }
 
-/// A flag a command reads follows the command, and written before it is refused with the spelling that works — or, for a command that takes no such flag, with why.
+/// A flag a command reads follows the command. Written before it, it is no flag of the command line's, and is refused as any argument nothing reads is.
 #[test]
-fn a_flag_written_before_its_command_is_refused_with_where_it_goes() {
-    let refusal = |words: &[&str]| {
-        Cli::try_parse_from(iter::once("curios").chain(words.iter().copied()))
-            .unwrap_or_else(|error| panic!("{}: {error}", words.join(" ")))
-            .misplaced()
-    };
+fn a_flag_written_before_its_command_is_an_argument_nothing_reads() {
+    let parsed =
+        |words: &[&str]| Cli::try_parse_from(iter::once("curios").chain(words.iter().copied()));
 
-    assert_eq!(
-        refusal(&["wonder", "diagnostics", "--manifest", "curios.toml"]),
-        None
-    );
-    assert_eq!(refusal(&["run", "--budget", "5", "serve"]), None);
-    assert_eq!(
-        refusal(&["--manifest", "curios.toml", "wonder", "diagnostics"]).as_deref(),
-        Some(
-            "`--manifest` belongs to the command, so it follows it: `curios wonder diagnostics --manifest curios.toml`"
-        )
-    );
-    assert_eq!(
-        refusal(&["--budget", "5", "run", "serve"]).as_deref(),
-        Some("`--budget` belongs to the command, so it follows it: `curios run --budget 5`")
-    );
-    assert_eq!(
-        refusal(&["--budget", "5", "new", "fresh"]).as_deref(),
-        Some("`new` elaborates nothing, so it takes no `--budget`")
-    );
-    assert_eq!(
-        refusal(&["--manifest", "curios.toml", "new", "fresh"]).as_deref(),
-        Some("`new` reads no manifest, so it takes no `--manifest`")
-    );
+    assert!(parsed(&["wonder", "diagnostics", "--manifest", "curios.toml"]).is_ok());
+    assert!(parsed(&["run", "--budget", "5", "serve"]).is_ok());
+    for words in [
+        &["--manifest", "curios.toml", "wonder", "diagnostics"][..],
+        &["--budget", "5", "run", "serve"],
+        &["--budget", "5", "new", "fresh"],
+    ] {
+        let refused = parsed(words).expect_err("a flag ahead of its command is no flag");
+        assert_eq!(
+            refused.kind(),
+            clap::error::ErrorKind::UnknownArgument,
+            "{}",
+            words.join(" ")
+        );
+    }
 }
 
 /// Every command the parser knows has a line in the table, so a command added without one fails here rather than going unexamined.

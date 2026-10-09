@@ -209,11 +209,6 @@ fn bindings_of(root: Option<&Path>, foreigns: ForeignStore) -> Result<ForeignBin
 fn dispatch() -> Result<(), Failure> {
     let cli = Cli::parse();
 
-    // Before anything is measured or resolved: a flag written before the command that reads it is refused with the spelling that works.
-    if let Some(refusal) = cli.misplaced() {
-        return Err(Failure::Error(refusal));
-    }
-
     // After parsing, because the destination is one of the arguments; before dispatch, because everything worth measuring is downstream of it.
     #[cfg(feature = "profile")]
     if let Some(path) = cli.profile.clone() {

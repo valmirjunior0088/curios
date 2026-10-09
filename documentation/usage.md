@@ -393,7 +393,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 
 ## Flags
 
-`--budget` and `--manifest` belong to the commands that read them, so they follow the command: `curios run --budget 200000000 serve`, `curios wonder diagnostics --manifest ../app/curios.toml`. Written before the command, either is refused with the spelling that works.
+`--budget` and `--manifest` belong to the commands that read them, so they follow the command: `curios run --budget 200000000 serve`, `curios wonder diagnostics --manifest ../app/curios.toml`.
 
 | Flag | Taken by | Effect |
 | --- | --- | --- |
