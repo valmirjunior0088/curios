@@ -472,7 +472,7 @@ impl Scope {
         }
     }
 
-    /// Close every binder opened — and drop every case equation assumed — since `mark`, answering whether the equations in force changed: one was dropped, or one an arm inside had restated answers as recorded again.
+    /// Close every binder opened — and drop every case equation assumed — since `mark`, answering whether what a term naming a local reduces to changed: an equation was dropped, one an arm inside had restated answers as recorded again, or a local an arm inside had re-typed stands at the type it had before.
     ///
     /// Where equations are withheld — for a settlement, or for a question asked under the view one was made in ([`Scope::hide_refinements_from`]) — only a scope opened inside the withholding closes here. That is structural rather than checked by discipline: `Kernel::scoped` is this method's only caller and a withholding is a bracket as well, so the two nest. A settlement runs reduction, which opens no binder scope; a question runs conversion, which opens them and assumes no equation in them.
     pub(super) fn retract(&mut self, mark: Mark) -> bool {
@@ -482,10 +482,15 @@ impl Scope {
         );
 
         // Innermost first, so a name opened twice inside the bracket ends at the binder that stood before it.
+        let mut retyped = false;
         for local in self.locals.drain(mark.locals..).rev() {
             self.bound -= usize::from(local.value.is_some());
             match local.shadowed {
-                Some(at) => self.innermost.insert(local.name, at),
+                Some(at) => {
+                    // The shadow of a binder that stands for nothing is an arm's re-typing of it ([`Scope::assume`]), and a `let` bound again is read by value, so its type is read by no reduct.
+                    retyped |= local.value.is_none();
+                    self.innermost.insert(local.name, at)
+                }
                 None => self.innermost.remove(&local.name),
             };
         }
@@ -504,7 +509,7 @@ impl Scope {
             }
         }
 
-        dropped || revived
+        dropped || revived || retyped
     }
 
     /// How many equations are in force: all of them, unless a settlement is withholding the inner ones.

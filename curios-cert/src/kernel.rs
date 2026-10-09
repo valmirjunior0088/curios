@@ -858,7 +858,7 @@ impl<'s> Kernel<'s> {
         if let Some(index) = name.local_index() {
             self.spend.reserve(index);
         }
-        // A re-typed local is what a remembered sort of a type naming it was read off.
+        // A re-typed local is what a remembered sort of a type naming it was read off, and the reduct of a match its type decides.
         if self.scope.assume(name, type_) {
             self.memos.begin_equations();
         }
@@ -944,7 +944,7 @@ impl<'s> Kernel<'s> {
         let calls = self.calls.mark();
         let outcome = walk(self);
         let established = self.calls.retract(calls);
-        // Retracting an equation changes what a local-bearing term reduces to, so what was read off the scope under it goes with it; retracting what an arm established for the call recorder changes how a group typed under it closes, so the typings do. A bracket that assumed neither leaves the tables alone — most do, and what they remembered is still true; an answer read under a binder closed here is refused by its `Prefix` instead.
+        // Retracting an equation, or an arm's re-typing of a local, changes what a local-bearing term reduces to, so what was read off the scope under it goes with it; retracting what an arm established for the call recorder changes how a group typed under it closes, so the typings do. A bracket that assumed none of them leaves the tables alone — most do, and what they remembered is still true; an answer read under a binder closed here is refused by its `Prefix` instead.
         if self.scope.retract(mark) {
             self.memos.begin_equations();
         } else if established {

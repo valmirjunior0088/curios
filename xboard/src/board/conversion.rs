@@ -14,18 +14,18 @@ pub(super) const CONVERSION: Part = Part {
     tickets: &[Ticket {
         title: "A reduct read off a local's type outlives the arm that re-typed the local",
         found_on: Date::new(2026, 10, 9),
-        status: Status::Open,
+        status: Status::Fixed,
         witnesses: &[Witness {
             what: "a match on a proof fired inside an arm at the payload the arm's case states, and answered again after the arm",
             proof: Proof::Module(a_reduct_read_under_an_arms_retyping),
-            expect: refused![kernel],
+            expect: refused![kernel: curios_cert::Error::Mismatch { .. }],
         }],
     }],
 };
 
 /// `induct Read : (Bool) -> Prop | mk(x : Bool) : (x) end`, and over `b : Bool` and `p : Read(b)`, with `read` standing for `match p : (_, _) => Bool | mk(x) => x end`: `((w : True) => (k : Holds(read)) => k)(match b : (_) => True | false => qed | true => ((h : Holds(read)) => qed)(qed) end)(qed)`, closed at `false` and `Read/mk(false)`.
 ///
-/// A match on a proposition whose indices pin its payload fires on the type its scrutinee stands at, so `read` is `b` wherever `p : Read(b)`. The `true` arm of the match on `b` re-types `p` at `Read(true)`, where `read` is `true` and `Holds(read)` is `True`, and the kernel remembers that reduct under `read`, which names `p` and not `b`. Leaving the arm puts `p` back at `Read(b)` and drops no case equation, and the reducts remembered of terms naming a local are cleared on the way out only where one is dropped. So the `qed` after the match is checked at a `Holds(read)` that still answers `True`, for every `b`, and at `false` what it proves is `Holds(false)`. With the `true` arm a bare `qed`, nothing reduces `read` inside it and the kernel refuses the term.
+/// A match on a proposition whose indices pin its payload fires on the type its scrutinee stands at, so `read` is `b` wherever `p : Read(b)`. The `true` arm of the match on `b` re-types `p` at `Read(true)`, where `read` is `true` and `Holds(read)` is `True`, and the kernel remembers that reduct under `read`, which names `p` and not `b`. Leaving the arm puts `p` back at `Read(b)` and drops no case equation, and the reducts remembered of terms naming a local were cleared on the way out only where one was dropped. So the `qed` after the match was checked at a `Holds(read)` that still answered `True`, for every `b`, and at `false` what it proved is `Holds(false)`. A bracket that closes an arm's re-typing now clears them as the re-typing does, and after the arm `Holds(read)` is `Holds(b)`, which `qed` does not inhabit.
 fn a_reduct_read_under_an_arms_retyping() -> (Module, Term) {
     let family = Global::Authored(Qualifier::from(["Read"]));
     let bool_type = || Term::intrinsic(Intrinsic::BoolType);
