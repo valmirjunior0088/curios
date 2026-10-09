@@ -24,6 +24,27 @@ A program the elaborator admits and the kernel refuses is refused: a compilation
 
 `xboard/README.md` states what a part, a ticket and a witness are, and `documentation/design/soundness/the-soundness-board.md` the claim, the trusted base, and the boundaries no rule covers. The part's board file holds every flaw already found in it, each with its witnesses, and a rule's decision — under `documentation/design/soundness/` or `documentation/design/theory/`, or in its crate's README — states what the rule assumes. `curios-cert`'s README and `curios-analysis`'s crate documentation are the roster of what the kernel decides and what both checkers share. Read those there. This file restates none of them.
 
+## Probing
+
+Before there is a ticket to write, `cargo xboard probe <PROGRAM>` asks the board's question of a candidate route to `False`: one program over the standard library whose final term is the proof, put to the checkers by the function a ticket filed from it is put by. The program is read from standard input for `-`, or from a file named in its place:
+
+```sh
+cargo xboard probe - <<'CRS'
+use /std/{Nat};
+use /std/Bool/{True, False, Holds};
+
+let f(n: Nat, h: Holds(n == 2)) -> False =
+    match n: (m) => False
+    | 0 => h
+    | k + 1; ih => ih
+    end;
+
+f(2, True/qed())
+CRS
+```
+
+It prints what each checker made of the program, and exits 0 where it was admitted, 1 where it was refused and 2 where it could not be put. What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. A rule no program reaches has no probe: its witness is a module built by hand.
+
 ## Recording
 
 A find is two commits, and the first is the find alone.
