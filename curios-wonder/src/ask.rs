@@ -78,10 +78,11 @@ impl Asked {
         }
     }
 
-    /// Compile over what `session` already compiled, where this question has a store to consult — see [`Session`]. A question with no store has nothing to address a kept unit by, and is unchanged.
+    /// Compile over what `session` already compiled — see [`Session`]. A question with no store, about a file no package declares, files nothing and keeps what it compiles in the session all the same (`Verdicts::kept_by`): the next keystroke compiles over it.
     pub fn reusing(mut self, session: &Session) -> Self {
-        if let Some(store) = &mut self.store {
-            store.reuse(session.clone());
+        match &mut self.store {
+            Some(store) => store.reuse(session.clone()),
+            None => self.store = Some(Verdicts::kept_by(session.clone())),
         }
 
         self

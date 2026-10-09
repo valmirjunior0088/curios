@@ -141,7 +141,8 @@ fn contents(reach: &BTreeSet<String>, taken: &[Taken]) -> Option<Vec<(String, St
 ///
 /// One handle for both because they are one store: the same compiler identity decides both addresses, the units the fold takes *are* what a payload was made from, and a directory nobody can write refuses both for one reason, which [`Verdicts::refused`] reports once.
 pub struct Verdicts {
-    pub(crate) store: Store,
+    /// `None` for a handle with no store behind it ([`Verdicts::kept_by`]): nothing is read and nothing is filed, and the handle is what its session keeps a unit through.
+    pub(crate) store: Option<Store>,
     /// The identity of the compiler running now, asked for on the first slot that needs it and not before. `None` when the compiler cannot identify itself — in which case nothing is read and nothing is written, because a verdict recorded under an identity nobody can reproduce would later be believed on behalf of a different compiler.
     ///
     /// Lazy because identifying the compiler writes its memo beside the store, and opening a store is not yet a decision to file anything in it: a compilation that is refused before its first unit is addressed — a package claiming a prefix the prelude mounts — would otherwise leave a `.curios/` holding that memo and nothing else.
@@ -164,11 +165,25 @@ impl Verdicts {
         let store = Store::at(root);
 
         Self {
-            store,
+            store: Some(store),
             compiler: OnceCell::new(),
             taken: RefCell::new(Vec::new()),
             refused: RefCell::new(None),
             session: None,
+            executable: None,
+        }
+    }
+
+    /// A handle with no store behind it, keeping in `session` what its fold compiles: what a question about a file no package declares is compiled through. Such a file has no project and so nowhere to file a unit, and the session that asks about it again at the next keystroke still has the last unit it compiled of it to compile over.
+    ///
+    /// Nothing is addressed, since nothing is filed: a kept unit is told from another by which unit it is, the prefixes it claims and where it reads from ([`Session`]).
+    pub fn kept_by(session: Session) -> Self {
+        Self {
+            store: None,
+            compiler: OnceCell::new(),
+            taken: RefCell::new(Vec::new()),
+            refused: RefCell::new(None),
+            session: Some(session),
             executable: None,
         }
     }
@@ -321,7 +336,9 @@ impl Verdicts {
 
     /// The compiler's identity, memoized on first use — see the field.
     pub(crate) fn compiler(&self) -> Option<&String> {
-        self.compiler.get_or_init(|| compiler(&self.store)).as_ref()
+        self.compiler
+            .get_or_init(|| compiler(self.store.as_ref()?))
+            .as_ref()
     }
 
     /// Why nothing was filed, for a caller with somewhere to say it.
@@ -335,11 +352,14 @@ impl Verdicts {
     ///
     /// A source with nothing on disk has no reads to verify against, so a record of it would confirm nothing. That is the fixed prelude, which has an archive of its own. And an entry is filed as the executable this handle was told it is, so one it was told nothing of has no slot.
     fn slot(&self, source: &UnitSource<'_>) -> Option<String> {
-        let compiler = self.compiler()?;
-
         if source.directories().is_empty() {
             return None;
         }
+        // A handle with no store files nothing, so it addresses nothing: every unit its session keeps stands at the one slot, and is told from another by which unit it is.
+        if self.store.is_none() {
+            return Some(String::new());
+        }
+        let compiler = self.compiler()?;
         if source.is_entry() {
             let (package, executable) = self.executable.as_ref()?;
 
@@ -360,7 +380,7 @@ impl Verdicts {
         for source in sources {
             let slot = self.slot(source)?;
 
-            let filed = fs::read(self.store.verdict(&slot)).ok()?;
+            let filed = fs::read(self.store.as_ref()?.verdict(&slot)).ok()?;
             let (recorded, bytes) = segments(&filed)?;
             let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
@@ -406,7 +426,7 @@ impl Verdicts {
         let slot = self.slot(source)?;
 
         // The record is judged before the unit is decoded: a slot whose record disagrees is not worth the decode, and a file that is not a slot is a store to ignore.
-        let filed = fs::read(self.store.verdict(&slot)).ok()?;
+        let filed = fs::read(self.store.as_ref()?.verdict(&slot)).ok()?;
         let (recorded, bytes) = segments(&filed)?;
 
         // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
@@ -453,7 +473,7 @@ impl Verdicts {
     pub fn earlier(&self, source: &UnitSource<'_>) -> Option<Earlier> {
         let slot = self.slot(source)?;
 
-        let filed = fs::read(self.store.verdict(&slot)).ok()?;
+        let filed = fs::read(self.store.as_ref()?.verdict(&slot)).ok()?;
         let (recorded, bytes) = segments(&filed)?;
         let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
@@ -485,6 +505,7 @@ impl Verdicts {
     /// A unit this refuses has no place, and neither has a unit that could have read it: a record would vouch for a unit nothing here can produce again.
     fn placement(&self, source: &UnitSource<'_>, unit: &Unit) -> Option<Placement> {
         curios_profile::profile!("verdicts::placement");
+        let store = self.store.as_ref()?;
         let slot = self.slot(source)?;
         let after = {
             let taken = self.taken.borrow();
@@ -507,7 +528,7 @@ impl Verdicts {
         let bytes = unit.stored().ok()?;
 
         Some(Placement {
-            slot,
+            path: store.verdict(&slot),
             after,
             contained: digest(&bytes),
             bytes,
@@ -517,7 +538,7 @@ impl Verdicts {
 
 /// Where a unit would be filed and as what: see [`Verdicts::placement`].
 struct Placement {
-    slot: String,
+    path: PathBuf,
     after: Vec<(String, String)>,
     contained: String,
     bytes: Vec<u8>,
@@ -568,13 +589,7 @@ impl Cache for Verdicts {
         let record = Record::of(source.reads(), placement.after, placement.contained.clone());
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
-            .and_then(|record| {
-                replace(
-                    &self.store.verdict(&placement.slot),
-                    &record,
-                    &placement.bytes,
-                )
-            });
+            .and_then(|record| replace(&placement.path, &record, &placement.bytes));
 
         // Best effort: a store that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit takes its place below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
         if let Err(error) = filed {

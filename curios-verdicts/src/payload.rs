@@ -74,7 +74,8 @@ impl Verdicts {
         let units = self.chain(units)?;
 
         // A file that is not a slot, or a stored record that will not read back, is a store to ignore, never a compile to fail.
-        let filed = fs::read(self.store.payload(&slot(self, program, engine)?)).ok()?;
+        let store = self.store.as_ref()?;
+        let filed = fs::read(store.payload(&slot(self, program, engine)?)).ok()?;
         let (recorded, bytes) = segments(&filed)?;
         let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
@@ -102,7 +103,7 @@ impl Verdicts {
             return;
         };
 
-        let Some(slot) = slot(self, program, engine) else {
+        let (Some(store), Some(slot)) = (&self.store, slot(self, program, engine)) else {
             return;
         };
 
@@ -116,7 +117,7 @@ impl Verdicts {
 
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
-            .and_then(|record| replace(&self.store.payload(&slot), &record, bytes));
+            .and_then(|record| replace(&store.payload(&slot), &record, bytes));
 
         if let Err(error) = filed {
             self.refused.borrow_mut().get_or_insert(error.to_string());

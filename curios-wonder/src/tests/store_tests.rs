@@ -2,13 +2,14 @@
 
 use {
     super::test_support::{mounted, mounted_project, write},
-    crate::{Overlaid, Severity, Subject, diagnosed, diagnostics},
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, Progress},
-    curios_text::{Overlay, UnitSource},
+    crate::{Origin, Overlaid, Severity, Subject, diagnosed, diagnostics},
+    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Earlier, EntryTail, Fold, Progress},
+    curios_text::{Overlay, RootSource, UnitSource},
     curios_unit::Unit,
+    curios_utilities::test_support::Temporary,
     curios_verdicts::{Session, Verdicts},
     std::{
-        cell::Cell,
+        cell::{Cell, RefCell},
         collections::BTreeMap,
         fs,
         path::{Path, PathBuf},
@@ -650,4 +651,104 @@ fn edited(root: &Path, path: &str) -> Overlay {
     let text = fs::read_to_string(&path).expect("a written module");
 
     Overlay::of(BTreeMap::from([(path, format!("{text}\n-- edited\n"))]))
+}
+
+/// A cache read through, noting what it offered the entry's own unit: `recompiling` where it offered a baseline, `compiling` where it offered none.
+struct Noting<'a> {
+    cache: &'a dyn Cache,
+    entry: RefCell<Vec<&'static str>>,
+}
+
+impl Cache for Noting<'_> {
+    fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
+        self.cache.get(source)
+    }
+
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
+        let earlier = self.cache.baseline(source, offered);
+        if source.is_entry() {
+            self.entry.borrow_mut().push(match earlier {
+                Some(_) => "recompiling",
+                None => "compiling",
+            });
+        }
+
+        earlier
+    }
+
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+        self.cache.put(source, unit);
+    }
+}
+
+/// A file no package declares has no store, and the session that asks about it keeps what it compiled of it all the same. A module is compiled whole at the first check and over what the session kept at the next, with the text an editor holds; and nothing is filed, there being nowhere to file it.
+///
+/// Mutation-checked: with a handle that has no store given no slot to keep a unit at, the second check compiles the module whole.
+#[test]
+fn a_file_no_package_declares_is_compiled_over_what_its_session_kept() {
+    let root = Temporary::new("wonder", "loose-module");
+    let file = root.join("Loose.crs");
+    let text = "use /std/{Nat};\n\npub let one: Nat = 1;\n\npub let two: Nat = 2;\n";
+    write(&root, "Loose.crs", text);
+    let session = Session::default();
+    let folded = |overlay: &Overlay| {
+        let store = Verdicts::kept_by(session.clone());
+        let unit = RootSource::loose_module(&file, overlay).expect("written as a module");
+        let units = crate::overlaid(vec![unit], overlay);
+
+        let mut events = Vec::new();
+        Fold::new(
+            DEFAULT_STEP_BUDGET,
+            &units,
+            Some(&Overlaid::over(&store, overlay)),
+        )
+        .check_units(|progress| match progress {
+            Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
+            Progress::Recompiling(prefix) => events.push(format!("recompiling {}", prefix.join())),
+            Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
+            _ => {}
+        })
+        .expect("a compiling module");
+
+        events
+    };
+
+    assert_eq!(folded(&Overlay::default()), ["compiling /Loose"]);
+    let held = Overlay::of(BTreeMap::from([(file.clone(), text.replace("= 2", "= 3"))]));
+    assert_eq!(folded(&held), ["recompiling /Loose"]);
+    assert!(
+        !root.join(".curios").exists(),
+        "a file with no project was filed"
+    );
+}
+
+/// The same of a program no package declares: its declarations are a unit the session keeps, and the next question about it compiles them over that unit.
+#[test]
+fn a_program_no_package_declares_is_compiled_over_what_its_session_kept() {
+    let root = Temporary::new("wonder", "loose-program");
+    let file = root.join("loose.crs");
+    let text = "use /std/{Nat};\n\nlet one: Nat = 1;\n\n/std/print(/std/Nat/to_str(one))\n";
+    write(&root, "loose.crs", text);
+    let session = Session::default();
+    let asked = |overlay: &Overlay| {
+        let store = Verdicts::kept_by(session.clone());
+        let reached = Overlaid::over(&store, overlay);
+        let noting = Noting {
+            cache: &reached,
+            entry: RefCell::new(Vec::new()),
+        };
+        let (entrypoint, loader) =
+            crate::open(Origin::File(file.clone()), None, overlay).expect("the program parses");
+        Fold::new(DEFAULT_STEP_BUDGET, &[], Some(&noting))
+            .check(&entrypoint, &loader, EntryTail::Authored, |_| {})
+            .expect("the program lowers")
+            .verdict
+            .expect("the program checks");
+
+        noting.entry.take()
+    };
+
+    assert_eq!(asked(&Overlay::default()), ["compiling"]);
+    let held = Overlay::of(BTreeMap::from([(file.clone(), text.replace("= 1", "= 2"))]));
+    assert_eq!(asked(&held), ["recompiling"]);
 }
