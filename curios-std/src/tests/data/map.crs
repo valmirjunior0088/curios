@@ -21,6 +21,13 @@ test integer_keys_keep_their_signs_apart =
     let at(k: Int) -> Str = Option/unwrap_or(Map/get(m, k), "?");
     Test/equal(Str/join(",", [at(-2), at(+0), at(+2), at(-1)]), "minus two,zero,two,?");
 
+-- A digest's eight bytes at the empty run, whose three lanes each stand at their seed, at a short text and at eight bytes of ones. Pinned, and not stable: a digest may change between compiler versions, and this is where a change shows.
+test a_digest_is_eight_bytes_of_its_three_lanes =
+    Test/equal([Hash/digest(x[]), Hash/digest(Str/to_bytes("curios")), Hash/digest(x[0xFF, 0xFF,
+                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])], [x[0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01,
+                0x00], x[0x92, 0xFE, 0x2C, 0x0A, 0xB2, 0x2F, 0x89, 0x23], x[0x2E, 0x53, 0x52, 0x90,
+                0x8B, 0x42, 0xD9, 0x43]]);
+
 -- A natural's first byte holds how many bytes follow it and its top four bits, so a number below sixteen is one byte, one below 4 096 two, and one below `2^20` three.
 test a_natural_encodes_its_length_and_its_top_in_its_first_byte =
     Test/equal(

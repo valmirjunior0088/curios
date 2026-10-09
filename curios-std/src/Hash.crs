@@ -45,12 +45,12 @@ let lane(b: Bytes, base: Nat, prime: Nat, @ok: Holds(0 < prime)) -> Nat =
 ---
 --- **Not stable across compiler versions: do not persist or transmit one.** Three polynomial lanes at distinct primes, which is enough for dedup, cache keys and bloom filters and is not adversarially resistant — anyone who chooses the input can collide it. Encode with `Hash/hash` where the bytes must keep meaning.
 ---
---- Every intermediate stays below `2^31`: an accumulator is below its prime, so a product is below `prime · base`, and each pair below is chosen to keep it there. `Nat` has no wrapping arithmetic, so the modulus is what bounds a lane.
+--- Every intermediate stays below `2^30`, so a lane never leaves the range a `Nat` is held unboxed in: an accumulator is below its prime, so a step is below `prime · base + 257`, and each pair below is chosen to keep it there. `Nat` has no wrapping arithmetic, so the modulus is what bounds a lane.
 pub let digest(b: Bytes) -> Bytes =
     Bytes/flatten([
-        padded(Bytes/of_nat(lane(b, 131, 8388593)), 3),
-        padded(Bytes/of_nat(lane(b, 137, 8388581)), 3),
-        padded(Bytes/of_nat(lane(b, 139, 8388571) % 65536), 2)]);
+        padded(Bytes/of_nat(lane(b, 127, 8388593)), 3),
+        padded(Bytes/of_nat(lane(b, 113, 8388581)), 3),
+        padded(Bytes/of_nat(lane(b, 109, 8388571) % 65536), 2)]);
 
 --- The digest of `v`'s encoding.
 pub let of(@T: Type, use Hash(T), v: T) -> Bytes =
