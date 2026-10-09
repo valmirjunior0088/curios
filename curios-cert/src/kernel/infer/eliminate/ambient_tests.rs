@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Carrier, Cases, Free, Global, InductArm, Intrinsic, Many, ReduceError, Scope, Term,
-        Two, UniverseContext,
+        Two, UniverseContext, test_support::match_ambient,
     },
     curios_utilities::Plicity,
 };
@@ -99,7 +99,7 @@ fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
     );
     kernel.assume(&w, &goal);
 
-    let ambient = Term::match_ambient(Term::free_var(&x), goal.clone(), arms(&Term::free_var(&w)));
+    let ambient = match_ambient(Term::free_var(&x), goal.clone(), arms(&Term::free_var(&w)));
     assert_eq!(
         infer(&mut kernel, &ambient).expect("the ambient goal is inhabited by each arm"),
         goal,
@@ -152,7 +152,7 @@ fn a_lying_ambient_goal_is_refused() {
     );
     let goal = Term::apply(p, [Term::free_var(&n), Term::free_var(&x)]);
 
-    let lying = Term::match_ambient(Term::free_var(&x), goal, arms(&nat(0)));
+    let lying = match_ambient(Term::free_var(&x), goal, arms(&nat(0)));
     assert!(matches!(
         infer(&mut kernel, &lying),
         Err(Error::Mismatch { .. })
@@ -184,14 +184,14 @@ fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     kernel.assume(&h, &goal);
 
     // The goal names the expression, so the `a` arm is checked at `P(0, a())`, and the elimination's type is the goal as written.
-    let naming = Term::match_ambient(expression.clone(), goal.clone(), arms(&Term::free_var(&h)));
+    let naming = match_ambient(expression.clone(), goal.clone(), arms(&Term::free_var(&h)));
     assert_eq!(
         infer(&mut kernel, &naming).expect("the occurrence stands for the case"),
         goal
     );
 
     // A goal that never names the expression is the same goal in every arm, and the elimination's type is that goal.
-    let constant = Term::match_ambient(expression, nat_type(), arms(&nat(0)));
+    let constant = match_ambient(expression, nat_type(), arms(&nat(0)));
     assert_eq!(
         infer(&mut kernel, &constant).expect("a constant goal is inhabited by each arm"),
         nat_type()
@@ -206,7 +206,7 @@ fn an_ambient_fold_that_reads_its_hypothesis_is_refused() {
     kernel.assume(&k, &nat_type());
 
     let ih = binder(82, "ih");
-    let fold = Term::match_ambient(
+    let fold = match_ambient(
         Term::free_var(&k),
         nat_type(),
         Cases::FreeMonoid {
@@ -229,7 +229,7 @@ fn an_ambient_case_split_is_checked_at_each_case() {
     let k = binder(80, "k");
     kernel.assume(&k, &nat_type());
 
-    let split = Term::match_ambient(
+    let split = match_ambient(
         Term::free_var(&k),
         nat_type(),
         Cases::FreeMonoid {
@@ -256,7 +256,7 @@ fn an_ambient_case_split_whose_arm_misses_the_goal_is_refused() {
     let k = binder(80, "k");
     kernel.assume(&k, &nat_type());
 
-    let split = Term::match_ambient(
+    let split = match_ambient(
         Term::free_var(&k),
         Term::intrinsic(Intrinsic::BoolType),
         Cases::FreeMonoid {
@@ -297,7 +297,7 @@ fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
         kernel.assume(&x, &Term::free_var(&t));
 
         let elimination = match ambient {
-            true => Term::match_ambient(
+            true => match_ambient(
                 Term::free_var(&b),
                 Term::free_var(&t),
                 Cases::Bool {

@@ -7,7 +7,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Subterm, Telescope, Term,
-        Two, UniverseContext,
+        Two, UniverseContext, test_support::match_ambient,
     },
     curios_utilities::Qualifier,
 };
@@ -55,7 +55,7 @@ fn split(n: &Free, cons: impl FnOnce(&Free) -> Term) -> Term {
     let ih = binder(3, "ih");
     let body = cons(&pred);
 
-    Term::match_ambient(
+    match_ambient(
         Term::free_var(n),
         Term::type_ground(),
         Cases::FreeMonoid {
@@ -136,7 +136,7 @@ fn a_guard_behind_a_definition_establishes_what_its_arm_descends_on() {
 
     let (f, signature) = member();
     let n = binder(1, "n");
-    let body = Term::match_ambient(
+    let body = match_ambient(
         Term::apply(Term::free_var(&is_zero), [Term::free_var(&n)]),
         Term::type_ground(),
         Cases::Bool {

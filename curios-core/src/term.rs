@@ -1090,19 +1090,6 @@ impl Term {
         }))
     }
 
-    /// Build a match node at an ambient goal — the expected type as it stands where the match is written, inhabited by each arm under that case's specialization, over any scrutinee; see [`MatchResult::Ambient`].
-    pub fn match_ambient<H, G>(head: H, goal: G, cases: Cases) -> Self
-    where
-        H: Into<Term>,
-        G: Into<Term>,
-    {
-        Self::from(Subterm::Match(Match {
-            head: head.into(),
-            result: MatchResult::Ambient(goal.into()),
-            cases,
-        }))
-    }
-
     /// Build the dependent `Bool` eliminator ([`Cases::Bool`]): a false arm and a true arm, neither binding anything — the motive alone sees the scrutinee.
     pub fn bool_match<H, M, F, T>(
         head: H,

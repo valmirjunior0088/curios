@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        ConceptDecl, Definition, DefinitionKind, Free, Global, InductDecl, Item, Module, Nominal,
-        Program, RecItem, StructDecl, Term,
+        Cases, ConceptDecl, Definition, DefinitionKind, Free, Global, InductDecl, Item, Match,
+        MatchResult, Module, Nominal, Program, RecItem, StructDecl, Subterm, Term,
     },
     curios_utilities::Qualifier,
     std::{collections::BTreeMap, rc::Rc},
@@ -31,6 +31,15 @@ pub fn into_nested_term(program: Program) -> Term {
                 acc,
             ),
         })
+}
+
+/// A match node at an ambient goal — the expected type as it stands where the match is written, inhabited by each arm under that case's specialization, over any scrutinee; see [`MatchResult::Ambient`]. The elaborator builds one where it decides the result, so the node whole is a fixture's to ask for.
+pub fn match_ambient(head: impl Into<Term>, goal: impl Into<Term>, cases: Cases) -> Term {
+    Term::from(Subterm::Match(Match {
+        head: head.into(),
+        result: MatchResult::Ambient(goal.into()),
+        cases,
+    }))
 }
 
 /// `module` declaring each of `inducts`, `structs` and `concepts`: carried by the definition of its name where the module holds one, and where it holds none by the former spelled from it ([`Definition::former`]), a family's in a group of its own as the lowering writes one, stored as a module stores an item ([`Module::ordered`]): after the items its entry names, so ahead of the module's own or just past the last of them it reaches. A concept takes the record `structs` holds under its name.
