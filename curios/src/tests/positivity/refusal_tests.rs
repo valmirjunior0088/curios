@@ -2,7 +2,7 @@
 //!
 //! Each row names the rule that must do the rejecting rather than asserting a bare failure, which would pass on a typo in the fixture — worth the words wherever a future relaxation of `occurrences` could plausibly start admitting the shape.
 
-use super::test_support::*;
+use {super::test_support::*, crate::tests::typecheck_within};
 
 // A declaration reaching itself through a *type-former parameter* is refused, and this pins that it is refused rather than assumed.
 //
@@ -292,4 +292,27 @@ fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
         "#,
         "a position the checker cannot see through",
     );
+}
+
+// A family the analysis cannot finish reading is refused for the budget, and so is nothing declared after it. `Wrap` stores its parameter under twelve doubling aliases, strictly, and `Outer` stores itself in that parameter. A checker short of the budget to unfold the aliases read the parameter at `Mixed`, and with that vector filed `Outer` was refused as not strictly positive, by an analysis that ran out of nothing. At no budget of the ladder is that the report: each accepts the program or names the budget.
+#[test]
+fn a_family_read_under_a_short_budget_is_never_refused_as_not_positive() {
+    let aliases = (1..=12)
+        .map(|k| format!("let W{k}(A: Type) -> Type = W{}(W{}(A));\n", k - 1, k - 1))
+        .collect::<String>();
+    let source = format!(
+        "struct Box(A: Type): pub Type {{ held: A }}\nlet W0(A: Type) -> Type = A;\n{aliases}induct Wrap(A: Type): Type | wrap(Box(W12(A))) end\ninduct Outer: Type | leaf() | node(Wrap(Outer)) end\n/std/print(\"ok\")\n"
+    );
+
+    let mut short = 0;
+    for budget in (4..=20).map(|step| step * 2_000) {
+        if let Err(report) = typecheck_within(budget, &source) {
+            assert!(
+                !report.contains("not strictly positive") && report.contains("ran out"),
+                "at a budget of {budget}:\n{report}"
+            );
+            short += 1;
+        }
+    }
+    assert!(short > 0, "no budget of the ladder is short of the program");
 }

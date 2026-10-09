@@ -14,7 +14,7 @@
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run *this* analysis, through [`Env`]. It is a total function of post-zonk declarations, so a second implementation would be a second run of the same function on the same input rather than a second opinion; what each side supplies for itself is reduction, unfolding, and the registry fallback for declarations outside the analyzed set. A reduction the driver refuses does not stop the walk — the term is read as opaque, which is the conservative direction — but it is kept: a set refused after one is reported as the driver's refusal, since reading the term at `Mixed` may be all that refused it. So the analysis fails in exactly two ways, the refusal it exists to produce and a budget that ran out before it could decide.
+//! Both checkers run *this* analysis, through [`Env`]. It is a total function of post-zonk declarations, so a second implementation would be a second run of the same function on the same input rather than a second opinion; what each side supplies for itself is reduction, unfolding, and the registry fallback for declarations outside the analyzed set. A reduction the driver refuses does not stop the walk — the term is read as opaque, which is the conservative direction — but it is kept, and the set is refused for it: reading the term at `Mixed` may be all that refuses a declaration, and all that puts a `Mixed` in a vector the analysis would hand back, which a family declared later would then be refused by with no word of the budget. So the analysis fails in exactly two ways, the refusal it exists to produce and a budget that ran out before it could decide.
 //!
 //! Two obligations are deliberately out of scope. A declaration that takes a *type-former* parameter — `induct Mu(F : (Type) -> Type) | fix(F(Mu(F))) end` — cannot be checked from its own body, because `F` is a binder with no known polarity; discharging that needs an inferred per-binder obligation in a side store, never a field on `FuncType`, and nothing in the corpus takes such a parameter. And whether a `rec` terminates is size-change totality's question (`totality`), a separate mechanism rather than a refinement of this one.
 
@@ -35,9 +35,9 @@ use {
 pub enum PositivityRefusal<E> {
     /// A declaration reaches itself through a non-strict path.
     NotPositive(NotPositive),
-    /// The driver refused a reduction while `name` was being walked — its budget ran out — and the set was then refused.
+    /// The driver refused a reduction while `name` was being walked — its budget ran out — and the set is refused for it.
     ///
-    /// Reported instead of the positivity verdict, which may be the refusal's own doing: the term the driver could not reduce was read at `Mixed`, and a recursion through it that would have read `Strict` reads as a non-strict path back. `name` is where the budget went, not necessarily the declaration the verdict fell on, since a `Mixed` vector reaches every declaration that composes through it.
+    /// Reported instead of what the analysis computed past it, which may be the refusal's own doing: the term the driver could not reduce was read at `Mixed`, so a recursion through it that would have read `Strict` reads as a non-strict path back, and a vector that would have read `Strict` holds a `Mixed` no declaration put there. `name` is where the budget went, not necessarily a declaration a verdict would have fallen on, since a `Mixed` vector reaches every declaration that composes through it.
     Exhausted { name: Global, error: E },
 }
 
@@ -92,7 +92,7 @@ impl<'a> Declarations<'a> {
     }
 }
 
-/// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order — reported as [`PositivityRefusal::Exhausted`] when the driver refused a reduction on the way to it.
+/// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order — and [`PositivityRefusal::Exhausted`] wherever the driver refused a reduction, so that a vector handed back is the declarations' own.
 ///
 /// The set is exactly what to analyze: the entries one declaration declares, in either checker. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was judged — sound because a declaration is judged after every declaration it mentions, and one judged before it cannot mention it, so every out-of-set declaration is a sink of the occurrence relation.
 pub fn positivity_vectors<E: Env>(
@@ -113,6 +113,14 @@ pub fn positivity_vectors<E: Env>(
 
     let (vectors, closed, exhausted) = fixpoint(env, &split);
 
+    // Nothing computed past a refused reduction is handed back: an acceptance would file a vector that may hold the budget's `Mixed`, and a refusal may be that reading's alone.
+    if let Some((walked, error)) = exhausted {
+        return Err(PositivityRefusal::Exhausted {
+            name: walked,
+            error,
+        });
+    }
+
     for name in &names {
         let diagonal = closed
             .get(name)
@@ -123,16 +131,9 @@ pub fn positivity_vectors<E: Env>(
             continue;
         }
 
-        // An acceptance survives a refused reduction, because reading the term at `Mixed` only ever refuses more. A refusal does not: it may be that reading's alone, so the budget is what is reported.
-        return Err(match exhausted {
-            Some((walked, error)) => PositivityRefusal::Exhausted {
-                name: walked,
-                error,
-            },
-            None => PositivityRefusal::NotPositive(refusal(
-                env, &split, &vectors, &closed, name, diagonal,
-            )),
-        });
+        return Err(PositivityRefusal::NotPositive(refusal(
+            env, &split, &vectors, &closed, name, diagonal,
+        )));
     }
 
     Ok(vectors.computed)

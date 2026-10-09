@@ -407,6 +407,52 @@ fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
     }
 }
 
+/// A set the driver cannot finish reading is refused for the budget though nothing read reaches back: `Wrap`'s constructor takes `D`, an alias of `Nat` the kernel has no budget to unfold, so the walk follows the alias at `Mixed` and finds no path to `Wrap`. Accepted, the set would file a vector computed past that reading, and one of a parameter standing under the alias holds a `Mixed` no declaration put there, which a family declared later and stored in that parameter is refused by with no word of the budget.
+#[test]
+fn a_set_the_driver_cannot_finish_reading_is_refused_for_the_budget() {
+    let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));
+
+    for budget in [0, 100_000] {
+        let mut kernel = Kernel::new(budget, SYNTAX);
+
+        let alias = Free::local(1, Some("D"));
+        kernel
+            .define(
+                &alias,
+                &Term::type_ground(),
+                &Term::intrinsic(Intrinsic::NatType),
+                &UniverseContext::default(),
+            )
+            .expect("a name is declared once");
+
+        let mut inducts = BTreeMap::new();
+        inducts.insert(
+            wrap_name,
+            single_payload(Term::free_var(&alias), Term::type_ground()),
+        );
+        for (name, entry) in &inducts {
+            kernel
+                .declare_induct(name, entry)
+                .expect("a name is declared once");
+        }
+
+        let verdict = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()));
+        match budget {
+            0 => assert!(
+                matches!(&verdict, Err(PositivityRefusal::Exhausted { name, .. }) if *name == wrap_name),
+                "with no budget, the set is refused for it and files no vector: {verdict:?}",
+            ),
+            _ => assert_eq!(
+                verdict
+                    .ok()
+                    .and_then(|vectors| vectors.get(&wrap_name).cloned()),
+                Some(Vec::new()),
+                "with the budget to unfold the alias, `Wrap` is accepted",
+            ),
+        }
+    }
+}
+
 /// A strictly positive self-occurrence — the payload *is* the family — is the ordinary recursive datatype and is admitted.
 #[test]
 fn a_strict_self_occurrence_is_admitted() {
