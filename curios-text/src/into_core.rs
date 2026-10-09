@@ -401,7 +401,10 @@ pub struct PreparedText {
     /// Every bare name that resolved to nothing, by the binder it lowered to, with what it could have meant — see `Context::unbound_binder`. Empty for any unit that compiles, the prelude included.
     unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
     /// Every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and half of what a report spells a name by ([`PreparedText::spellings`]).
-    imports: curios_core::Imports,
+    ///
+    /// **Stored apart from the unit** ([`PreparedText::imports_bytes`]): they are read by the unit's own reports and its documentation, and by nothing compiled after it.
+    #[archived_with(curios_archive::Skip)]
+    imports: curios_archive::Deferred<curios_core::Imports>,
     /// The mounts this unit may name: the ones it declared a dependency on, or every open one in scope where it declared none, and its own. What its references were guarded by, and what drops a path it may not write from the table a report spells by.
     visible: Vec<Mount>,
     /// Every lint the lowering found, in reading order, less each `unused-binder` lint elaboration credited — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its predecessors' interfaces.
@@ -413,7 +416,10 @@ pub struct PreparedText {
     /// Every item the parser could not read, in reading order — see [`BrokenItem`]. Empty for any unit that compiles.
     broken: Vec<BrokenItem>,
     /// Where each source declaration this unit was lowered from lies: what a position in one of its terms is resolved against where a report is made — see `curios_core::Anchors`.
-    anchors: curios_core::Anchors,
+    ///
+    /// **Stored apart from the unit** ([`PreparedText::anchors_bytes`]): a report placed in one of the unit's declarations reads them, and a lowering over the unit, and no compilation that reports nothing.
+    #[archived_with(curios_archive::Skip)]
+    anchors: curios_archive::Deferred<curios_core::Anchors>,
     /// What each source declaration lowered to beside its items, with what it asked of its scope, held by pointer since a unit lowered over this one keeps the ones that stand, and what each of the unit's files declared — see `lowered`.
     ///
     /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that ([`PreparedText::baseline_bytes`]), handed back as bytes where the unit is restored ([`PreparedText::with_baseline`]), and read out of them when a lowering first asks.
@@ -481,7 +487,18 @@ impl PreparedText {
 
     /// Where each source declaration of this unit lies. See the field.
     pub fn anchors(&self) -> &curios_core::Anchors {
-        &self.anchors
+        #[cfg(feature = "archive")]
+        let anchors = self
+            .anchors
+            .get()
+            .unwrap_or_else(|error| panic!("a unit's anchors failed to restore: {error}"));
+        #[cfg(not(feature = "archive"))]
+        let anchors = self
+            .anchors
+            .peek()
+            .expect("a unit that was never stored holds its anchors");
+
+        anchors
     }
 
     /// Drop the `unused-binder` lint of every binder in `credited`: read by a proof the elaborator wrote, which no written name reaches, so used. Called once the unit has elaborated, since only elaboration writes such a proof.
@@ -642,6 +659,26 @@ impl PreparedText {
         self
     }
 
+    /// The bytes of this unit's import scopes, stored apart from what the unit is for its successors: the ones they were restored from, or their archive, made now.
+    #[cfg(feature = "archive")]
+    pub fn imports_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
+        self.imports.bytes()
+    }
+
+    /// The bytes of where this unit's declarations lie, stored apart as its import scopes are.
+    #[cfg(feature = "archive")]
+    pub fn anchors_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
+        self.anchors.bytes()
+    }
+
+    /// This unit with `imports` as its import scopes and `anchors` as where its declarations lie ([`PreparedText::imports_bytes`], [`PreparedText::anchors_bytes`]), each read when something first asks: what a restored unit is given, since restoring it leaves it with neither.
+    #[cfg(feature = "archive")]
+    pub fn with_reported(mut self, imports: impl Into<Bytes>, anchors: impl Into<Bytes>) -> Self {
+        self.imports = curios_archive::Deferred::stored(imports);
+        self.anchors = curios_archive::Deferred::stored(anchors);
+        self
+    }
+
     /// The bytes of this unit's lowered items, each stored on its own behind how many they are and how long each is ([`joined`]): the ones an item was restored from where the unit was, and its archive, made now, where it was lowered here.
     #[cfg(feature = "archive")]
     pub fn items_bytes(&self) -> Result<Vec<u8>, String> {
@@ -754,7 +791,18 @@ impl PreparedText {
 
     /// What each `use` brought into scope, where, and under which spelling — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
     pub fn imports(&self) -> &curios_core::Imports {
-        &self.imports
+        #[cfg(feature = "archive")]
+        let imports = self
+            .imports
+            .get()
+            .unwrap_or_else(|error| panic!("a unit's import scopes failed to restore: {error}"));
+        #[cfg(not(feature = "archive"))]
+        let imports = self
+            .imports
+            .peek()
+            .expect("a unit that was never stored holds its import scopes");
+
+        imports
     }
 
     /// Who can see each declaration of this unit. See the field.
@@ -777,7 +825,7 @@ impl PreparedText {
     /// **A unit's paths are made where a report first asks, once for the unit, and stored by none.** They are a function of the direct interface and export view the unit already stores, and a report is their one reader: a compilation that reports nothing makes none, and one that reports makes only the ones no report before it asked for.
     pub fn spellings(&self, predecessors: &[&PreparedText]) -> curios_core::Spellings {
         spellings_over(
-            &self.imports,
+            self.imports(),
             self.paths(),
             &self.mounts,
             &self.visible,
@@ -2436,7 +2484,7 @@ fn into_core_unit_within(
             ..minted.into_inner()
         },
         unbound: unbound.into_inner(),
-        imports: imports.into_inner(),
+        imports: curios_archive::Deferred::held(imports.into_inner()),
         visible: visible_mounts,
         broken,
         lints: ordered(
@@ -2448,7 +2496,7 @@ fn into_core_unit_within(
         ),
         credited: BTreeSet::new(),
         reached: reached.into_inner(),
-        anchors: anchoring.into_anchors(),
+        anchors: curios_archive::Deferred::held(anchoring.into_anchors()),
         baseline: curios_archive::Deferred::held(BaselineHalf {
             declarations,
             scans,
@@ -2540,7 +2588,7 @@ pub fn document_unit(
         &modules,
         &Scoped::over(&tables),
         &Scoped::over(&exports),
-        &unit.imports,
+        unit.imports(),
         &prefix,
         &unit.visible,
         records,
@@ -2679,7 +2727,10 @@ pub fn into_core_with_prelude(
         foreigns: unit.foreigns,
         unbound: unit.unbound,
         names: EntryNames {
-            imports: unit.imports,
+            imports: unit
+                .imports
+                .into_held()
+                .expect("a unit lowered in this process holds its import scopes"),
             table: unit.table,
             public: unit.public,
             audiences: unit.audiences,
@@ -2689,6 +2740,9 @@ pub fn into_core_with_prelude(
         lints: unit.lints,
         reached: unit.reached,
         broken: unit.broken,
-        anchors: unit.anchors,
+        anchors: unit
+            .anchors
+            .into_held()
+            .expect("a unit lowered in this process holds its anchors"),
     })
 }

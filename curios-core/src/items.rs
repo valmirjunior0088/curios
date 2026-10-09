@@ -7,7 +7,7 @@
 //! **Reading it is indexing it.** Every reader that goes by place is written as it would be over a vector, and a reader that walks every item restores every item: slow where a walk was not looked for, and never another answer.
 
 use {
-    crate::{Global, Item},
+    crate::{DefinitionKind, Global, Item},
     std::{
         cell::OnceCell,
         fmt,
@@ -16,11 +16,13 @@ use {
     },
 };
 
-/// An item's outline: the names it declares, in the order it declares them, and whether it is a group. What is known of a place of a stored module without its item.
+/// An item's outline: the names it declares, in the order it declares them, the kind it declares each as, and whether it is a group. What is known of a place of a stored module without its item.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Outline {
     pub names: Vec<Global>,
+    /// The kind each of `names` is declared as, in their order.
+    pub kinds: Vec<DefinitionKind>,
     pub group: bool,
 }
 
@@ -29,8 +31,21 @@ impl Outline {
     pub fn of(item: &Item) -> Self {
         Self {
             names: item.declared_names().into_iter().copied().collect(),
+            kinds: kinds_of(item).into_iter().cloned().collect(),
             group: matches!(item, Item::Rec(_)),
         }
+    }
+}
+
+/// The kind `item` declares each of its names as, in the order it declares them.
+fn kinds_of(item: &Item) -> Vec<&DefinitionKind> {
+    match item {
+        Item::Let(definition) => vec![&definition.kind],
+        Item::Rec(rec) => rec
+            .definitions
+            .iter()
+            .map(|definition| &definition.kind)
+            .collect(),
     }
 }
 
@@ -87,6 +102,14 @@ impl Items {
         match &self.0 {
             Held::Made(items) => items[place].declared_names(),
             Held::Stored(stored) => stored.declared[place].names.iter().collect(),
+        }
+    }
+
+    /// The kind the item at `place` declares each of its names as, in the order of [`Items::names`], with nothing restored.
+    pub fn kinds(&self, place: usize) -> Vec<&DefinitionKind> {
+        match &self.0 {
+            Held::Made(items) => kinds_of(&items[place]),
+            Held::Stored(stored) => stored.declared[place].kinds.iter().collect(),
         }
     }
 

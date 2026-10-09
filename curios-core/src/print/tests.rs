@@ -4,7 +4,7 @@ use super::*;
 fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
     let global = Global::Authored(Qualifier::from(["main", "helper"]));
     let shorten = build_shorten(std::slice::from_ref(&global));
-    assert_eq!(shorten.get(&global).map(String::as_str), Some("helper"));
+    assert_eq!(shorten.get(&global).as_deref(), Some("helper"));
 
     let binder = Free::local(0, Some("helper"));
     let names = DisplayNames {
@@ -46,8 +46,34 @@ fn a_readers_own_declaration_claims_the_bare_name_before_its_environment() {
 
     let shorten = build_shorten_layered(std::slice::from_ref(&own), std::slice::from_ref(&nested));
 
-    assert_eq!(shorten.get(&own).map(String::as_str), Some("Holds"));
-    assert_eq!(shorten.get(&nested).map(String::as_str), Some("Bool/Holds"));
+    assert_eq!(shorten.get(&own).as_deref(), Some("Holds"));
+    assert_eq!(shorten.get(&nested).as_deref(), Some("Bool/Holds"));
+}
+
+/// A suffix is counted over every unit of the scope, each unit having counted its own: two units that each declare a `T` under one module name leave neither `T` nor `Vec/T` naming one of them, and a name only one unit carries a suffix of still shortens to it.
+#[test]
+fn a_suffix_is_counted_across_the_units_of_a_scope() {
+    let one = Global::Authored(Qualifier::from(["one", "Vec", "T"]));
+    let two = Global::Authored(Qualifier::from(["two", "Vec", "T"]));
+    let lone = Global::Authored(Qualifier::from(["two", "Map", "empty"]));
+
+    let shorten = Shorten::over(
+        Rc::default(),
+        [
+            Rc::new(Symbols::of([one])),
+            Rc::new(Symbols::of([two, lone])),
+        ],
+    );
+
+    for shared in [&one, &two] {
+        let spelled = shorten.get(shared);
+
+        assert!(
+            !matches!(spelled.as_deref(), Some("T" | "Vec/T")),
+            "{shared} took a suffix the other unit's global carries: {spelled:?}"
+        );
+    }
+    assert_eq!(shorten.get(&lone).as_deref(), Some("empty"));
 }
 
 /// A *nested* own declaration gets no such claim. Reaching `/Vec/nil` needs `Vec/nil` or an import, exactly as reaching `/std/Vec/nil` does, so its bare label is no more writable than the environment's and it stays in the shared contest — where a genuine tie leaves both spelled in full.
@@ -63,7 +89,7 @@ fn a_nested_own_declaration_does_not_claim_its_bare_label() {
     let shorten = build_shorten_layered(&own, std::slice::from_ref(&outer));
 
     // The type itself does sit at the unit root, so it takes its label and the environment's twin gives way.
-    assert_eq!(shorten.get(&own_type).map(String::as_str), Some("Vec"));
+    assert_eq!(shorten.get(&own_type).as_deref(), Some("Vec"));
     assert_eq!(shorten.get(&own_ctor), None);
 }
 

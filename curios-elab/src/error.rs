@@ -8,9 +8,9 @@ use {
     super::{Erased, Refusal},
     curios_core::{
         Anchors, Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Extent, Free, Global,
-        Item, Level, Module, Polarity, ReaderNames, ReaderPosition, ReduceError, Rename, Spelling,
-        Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError, WitnessKey,
-        build_rename, build_shorten_layered,
+        Item, Level, Lexicon, Module, Polarity, ReaderNames, ReaderPosition, ReduceError, Rename,
+        Spelling, Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError, WitnessKey,
+        build_rename,
     },
     curios_num::{Grain, Integer, Natural},
     curios_utilities::{InfixOp, Plicity, Qualifier, Report, SyntaxRegistry},
@@ -1464,29 +1464,29 @@ impl Error {
         Rc::new(build_rename(&names, spelling))
     }
 
-    /// Render this error with source-style names, shortening global names against `module`'s symbols together with `predecessors`' (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here or [`Error::format_with_hints`], so every axis is set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
+    /// Render this error with source-style names, shortening global names against `module`'s symbols together with those of `scope`, the lexicon each unit in scope keeps (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here or [`Error::format_with_hints`], so every axis is set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     ///
     /// `anchors` are where the declarations an error's positions lie in were written, the unit's own first and then its scope's: an error holds extents of declarations ([`curios_core::Extent`]), and this is where one becomes a line of a file.
     pub fn format_with(
         &self,
         module: &Module,
-        predecessors: &[&Module],
+        scope: &[&Lexicon],
         syntax: &SyntaxRegistry,
         anchors: &[&Anchors],
     ) -> String {
-        Report::render_all(&self.reports_with(module, predecessors, syntax, anchors))
+        Report::render_all(&self.reports_with(module, scope, syntax, anchors))
     }
 
     /// [`Error::format_with`] as data: one [`Report`] per thing said, located. See [`Error::reports_with_hints`].
     pub fn reports_with(
         &self,
         module: &Module,
-        predecessors: &[&Module],
+        scope: &[&Lexicon],
         syntax: &SyntaxRegistry,
         anchors: &[&Anchors],
     ) -> Vec<Report> {
         self.reports(
-            &Rc::new(report_spelling(module, predecessors, syntax)),
+            &Rc::new(report_spelling(module, scope, syntax)),
             &BTreeMap::new(),
             anchors,
         )
@@ -1496,27 +1496,22 @@ impl Error {
     pub fn format_with_hints(
         &self,
         module: &Module,
-        predecessors: &[&Module],
+        scope: &[&Lexicon],
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
         spellings: &Rc<Spellings>,
         anchors: &[&Anchors],
     ) -> String {
-        Report::render_all(&self.reports_with_hints(
-            module,
-            predecessors,
-            syntax,
-            unbound,
-            spellings,
-            anchors,
-        ))
+        Report::render_all(
+            &self.reports_with_hints(module, scope, syntax, unbound, spellings, anchors),
+        )
     }
 
     /// [`Error::format_with_hints`] as data, and the primitive it renders: every error is one report at its innermost extent, except a goal batch, which is one report *per goal* at that goal's own occurrence — a goal's identity is its source location, and a consumer placing each where it was written needs them apart. Rendering the list is exactly the text the compile path prints, so the located form and the printed form cannot drift.
     pub fn reports_with_hints(
         &self,
         module: &Module,
-        predecessors: &[&Module],
+        scope: &[&Lexicon],
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
         spellings: &Rc<Spellings>,
@@ -1530,8 +1525,7 @@ impl Error {
             .map(|definition| (definition.name, definition.island))
             .collect();
         let names = ReaderNames::new(Rc::clone(spellings), islands);
-        let spelling =
-            report_spelling(module, predecessors, syntax).with_reader_names(Rc::new(names));
+        let spelling = report_spelling(module, scope, syntax).with_reader_names(Rc::new(names));
         self.reports(&Rc::new(spelling), unbound, anchors)
     }
 
@@ -1861,28 +1855,17 @@ impl From<UniverseError> for Error {
     }
 }
 
-/// The spelling every report of `module`'s shares before a reader stands anywhere: everything a reader could see — `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so every table has to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, the plicity marks to know `Eq`'s first parameter is implicit, the witness table to know `Show`'s method.
+/// The spelling every report of `module`'s shares before a reader stands anywhere: everything a reader could see — `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so every table has to be told the prelude exists — the shortening to know `Vec` is an unambiguous suffix, the plicity marks to know `Eq`'s first parameter is implicit, the witness table to know `Show`'s method.
 ///
-/// Taking each predecessor as a `Module` rather than as one of its projections is deliberate: a name slice would repair the shortening and leave the plicities reading a module that does not hold the prelude, and a second projection is a second thing to forget.
+/// **Each unit in scope is read by the lexicon it keeps** ([`Lexicon`]), made once for the unit, and only `module`'s own is made here. So a report costs what its own unit holds and what it prints, however much is in scope, and it reads no declaration of a unit in scope it does not print.
 ///
-/// The two halves stay apart for the shortening, which is what `build_shorten_layered` wants: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities and witnesses merge, having no such contest — a name resolves to one declaration and reads its marks off that one.
-fn report_spelling(module: &Module, predecessors: &[&Module], syntax: &SyntaxRegistry) -> Spelling {
-    let own = module.module_symbols();
-    let mut symbols = Vec::new();
-    let mut plicities = module.nominal_plicities();
-    let mut witnesses = module.witness_spelling(syntax);
-    for unit in predecessors {
-        symbols.extend(unit.module_symbols());
-        for (name, marks) in unit.nominal_plicities() {
-            plicities.entry(name).or_insert(marks);
-        }
-        witnesses.merge(unit.witness_spelling(syntax));
-    }
+/// The reader's own unit stays a tier apart for the shortening: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities and witnesses have no such contest — a name resolves to one declaration and reads its marks off that one.
+fn report_spelling(module: &Module, scope: &[&Lexicon], syntax: &SyntaxRegistry) -> Spelling {
+    let own = module.lexicon(syntax);
 
     Spelling::default()
-        .with_short_names(Rc::new(build_shorten_layered(&own, &symbols)))
-        .with_nominal_plicities(Rc::new(plicities))
-        .with_witness_spelling(Rc::new(witnesses))
+        .with_lexicons(&own, scope)
+        .with_witnesses(&own, scope)
         .with_erased_universes()
         .with_anonymous_metavars()
         .with_string_literals(Global::Authored(syntax.string.string.qualifier()))

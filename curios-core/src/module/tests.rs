@@ -2,6 +2,7 @@ use {
     super::*,
     crate::{HeadKey, NumLit, Subterm, Transient, WitnessId, WitnessKey},
     curios_utilities::{RootKind, Sign},
+    std::cell::RefCell,
 };
 
 fn definition(name: &str, universe_context: UniverseContext) -> Definition {
@@ -333,6 +334,34 @@ fn a_struct_declaration_reaches_its_field_types() {
     let reached = module.reaches(&module.items[0]);
 
     assert!(reached.contains(&authored("Payload")));
+}
+
+/// A unit's nominal marks are read off the definitions it declares as type formers, which each place says of its names: of a stored module the formers are restored, and no other item is.
+#[test]
+fn nominal_marks_read_the_type_formers_and_no_other_item() {
+    let mut former = definition("Box", UniverseContext::empty());
+    former.kind = DefinitionKind::StructType;
+    let items = [
+        Item::Let(definition("before", UniverseContext::empty())),
+        Item::Let(former),
+        Item::Let(definition("after", UniverseContext::empty())),
+    ];
+    let restored = Rc::new(RefCell::new(Vec::new()));
+    let reading = Rc::clone(&restored);
+
+    let mut module = over(Vec::new());
+    module.items = Items::stored(items.iter().map(Outline::of).collect(), move |place| {
+        reading.borrow_mut().push(place);
+        items[place].clone()
+    });
+
+    let marks = module.nominal_plicities(&module.located());
+
+    assert!(
+        marks.is_empty(),
+        "a nullary former has no parameter to mark"
+    );
+    assert_eq!(*restored.borrow(), [1]);
 }
 
 /// `name`, whose body mentions each of `mentioned`.

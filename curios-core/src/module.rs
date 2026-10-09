@@ -9,13 +9,13 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Items,
-        Many, Outline, Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl,
-        Subterm, Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId,
-        WitnessSpelling, build_shorten,
+        Lexicon, Many, Outline, Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling,
+        StructDecl, Subterm, Symbols, Telescope, Term, UniverseContext, UniverseError, Variance,
+        WitnessId, WitnessSpelling, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
-        collections::{BTreeMap, BTreeSet, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         fmt, mem,
         rc::Rc,
     },
@@ -177,6 +177,9 @@ impl Certification {
             .map(|(name, totality)| (name, *totality))
     }
 }
+
+/// Where a module holds each name it declares, as [`Module::lexicon`] finds one: the item's place, and the member's within it.
+type Located = HashMap<Global, (usize, usize)>;
 
 /// How a lowered definition was introduced.
 ///
@@ -485,19 +488,26 @@ impl Module {
             .items
             .iter()
             .map(|item| {
-                let names = match item {
-                    ArchivedItem::Let(definition) => {
-                        vec![pooled.restore::<Global>(&definition.name)?]
-                    }
-                    ArchivedItem::Rec(rec) => rec
-                        .definitions
-                        .iter()
-                        .map(|definition| pooled.restore::<Global>(&definition.name))
-                        .collect::<Result<_, _>>()?,
+                let (names, kinds) = match item {
+                    ArchivedItem::Let(definition) => (
+                        vec![pooled.restore::<Global>(&definition.name)?],
+                        vec![pooled.restore::<DefinitionKind>(&definition.kind)?],
+                    ),
+                    ArchivedItem::Rec(rec) => (
+                        rec.definitions
+                            .iter()
+                            .map(|definition| pooled.restore::<Global>(&definition.name))
+                            .collect::<Result<_, _>>()?,
+                        rec.definitions
+                            .iter()
+                            .map(|definition| pooled.restore::<DefinitionKind>(&definition.kind))
+                            .collect::<Result<_, _>>()?,
+                    ),
                 };
 
                 Ok(Outline {
                     names,
+                    kinds,
                     group: matches!(item, ArchivedItem::Rec(_)),
                 })
             })
@@ -597,19 +607,23 @@ impl Module {
     ///
     /// Read off the type constructor's own definition, whose declared type is the one or two `FuncType`s lowering nests — the parameters', then an indexed family's indices' — ending in the sort: the parameters keep their declared marks and the indices are always explicit. That type is the marks' one home a checker establishes: `InductType` carries none (for a fixed name they are a function of the name, so storing them per-occurrence would be derived data that conversion must then either compare pointlessly or exclude from `Hash`, and excluding them lets hash-consing collapse differently-marked equal nodes), and the marks a registry entry's arity states for the elaborator ([`InductDecl::arity`], [`StructDecl::arity`]) are checked by no one, so a report does not read them.
     ///
-    /// Both item arms are walked: an inductive's type constructor is a `rec` item, since it refers to itself, while structs and concepts are plain `let`s. A nullary declaration has no `FuncType` wrapper at all and contributes nothing.
-    pub fn nominal_plicities(&self) -> BTreeMap<Global, Vec<Plicity>> {
+    /// The formers are the definitions declared as one, which each place of the module says of its names with no item read ([`Items::kinds`]), each then read where the module holds it and no other item with it: a member of a `rec` item for an inductive, which refers to itself, and a plain `let` for a structure or a concept. A nullary declaration has no `FuncType` wrapper at all and contributes nothing.
+    fn nominal_plicities(&self, located: &Located) -> BTreeMap<Global, Vec<Plicity>> {
         let mut marks = BTreeMap::new();
 
-        let mut record = |def: &Definition| {
-            if !matches!(
-                def.kind,
+        // Which definitions are type formers is what each place says it declares, so the formers are read and no other item is.
+        let formers = self.declared_as(|kind| {
+            matches!(
+                kind,
                 DefinitionKind::InductiveType
                     | DefinitionKind::StructType
                     | DefinitionKind::ConceptType
-            ) {
-                return;
-            }
+            )
+        });
+        for name in &formers {
+            let Some(def) = self.definition_at(located, name) else {
+                continue;
+            };
             // A type former's result is a sort, so the walk ends at the first node that is not a function type.
             let mut collected = Vec::new();
             let mut type_ = &def.type_;
@@ -620,30 +634,60 @@ impl Module {
             if !collected.is_empty() {
                 marks.insert(def.name, collected);
             }
-        };
-
-        for item in &self.items {
-            match item {
-                Item::Let(def) => record(def),
-                Item::Rec(rec) => rec.definitions().iter().for_each(&mut record),
-            }
         }
 
         marks
     }
 
-    /// What a report spells this unit's witnesses against (axis (h)): each concept's fields — a superclass edge's concept, or a method's wrapper, whether that wrapper takes the method's own parameters in its group, and the operator `syntax` names for it — and each witness's declared type. `syntax` is the registry's because this crate may not spell a prelude declaration.
-    pub fn witness_spelling(&self, syntax: &SyntaxRegistry) -> WitnessSpelling {
-        let definitions = self
-            .items
-            .iter()
-            .flat_map(|item| match item {
-                Item::Let(def) => vec![def.clone()],
-                Item::Rec(rec) => rec.definitions(),
-            })
-            .map(|def| (def.name, def))
-            .collect::<BTreeMap<_, _>>();
+    /// Where the module holds each name it declares, read off what each place declares with no item read: what lets a lexicon be made of the declarations it is about and no other.
+    ///
+    /// **Its own index, where [`Places`] would be the table.** A table of places is made of no module that declares a name twice, and such a module is refused in words that still have to be spelled; here the later declaration answers, as it does for every reader of a report.
+    fn located(&self) -> Located {
+        let mut located = HashMap::new();
+        for place in 0..self.items.len() {
+            for (member, name) in self.items.names(place).into_iter().enumerate() {
+                located.insert(*name, (place, member));
+            }
+        }
 
+        located
+    }
+
+    /// The names the module declares as a kind `wanted` holds of, in the order it stores them: read off what each place says it declares ([`Items::kinds`]), with no item read.
+    fn declared_as(&self, wanted: impl Fn(&DefinitionKind) -> bool) -> Vec<Global> {
+        (0..self.items.len())
+            .flat_map(|place| {
+                let declared = self.items.names(place).into_iter();
+
+                declared.zip(self.items.kinds(place))
+            })
+            .filter(|(_, kind)| wanted(kind))
+            .map(|(name, _)| *name)
+            .collect()
+    }
+
+    /// The definition `name` names, read where `located` holds it, a group's member as [`RecItem::definitions`] materializes it: the one item is read, and where the module was stored the one item is restored.
+    fn definition_at(&self, located: &Located, name: &Global) -> Option<Definition> {
+        let &(place, member) = located.get(name)?;
+        match &self.items[place] {
+            Item::Let(definition) => Some(definition.clone()),
+            Item::Rec(rec) => rec.definitions().into_iter().nth(member),
+        }
+    }
+
+    /// What a report spells this unit's names by — see [`Lexicon`].
+    pub fn lexicon(&self, syntax: &SyntaxRegistry) -> Lexicon {
+        let located = self.located();
+
+        Lexicon {
+            symbols: Rc::new(Symbols::of(self.module_symbols())),
+            plicities: Rc::new(self.nominal_plicities(&located)),
+            witnesses: Rc::new(self.witness_spelling(&located, syntax)),
+        }
+    }
+
+    /// What a report spells this unit's witnesses against (axis (h)): each concept's fields — a superclass edge's concept, or a method's wrapper, whether that wrapper takes the method's own parameters in its group, and the operator `syntax` names for it — and each witness's declared type. `syntax` is the registry's because this crate may not spell a prelude declaration.
+    fn witness_spelling(&self, located: &Located, syntax: &SyntaxRegistry) -> WitnessSpelling {
         let mut spelling = WitnessSpelling::default();
         for (name, concept) in &self.concepts {
             let Global::Authored(path) = name else {
@@ -666,7 +710,7 @@ impl Module {
                     }
                     let wrapper = Global::Authored(path.with(label));
                     // A method's wrapper takes the method's parameters beside the concept's and its witness; any other field's takes those alone.
-                    let merged = definitions.get(&wrapper).is_some_and(|def| {
+                    let merged = self.definition_at(located, &wrapper).is_some_and(|def| {
                         matches!(&*def.type_, Subterm::FuncType(function) if function.plicities().len() > parameters + 1)
                     });
                     FieldSpelling::Method {
@@ -679,8 +723,9 @@ impl Module {
             spelling.concepts.insert(*name, fields);
         }
 
-        for def in definitions.into_values() {
-            if matches!(def.kind, DefinitionKind::Witness) {
+        // Which definitions are witnesses is what each place says it declares, as which are type formers is.
+        for name in &self.declared_as(|kind| matches!(kind, DefinitionKind::Witness)) {
+            if let Some(def) = self.definition_at(located, name) {
                 spelling.witnesses.insert(def.name, def.type_);
             }
         }
@@ -783,13 +828,9 @@ impl Module {
     /// Every global qualified name in `self`: each definition (`let`/`rec`), each inductive type, each struct type. The universe a global is shortened *against*.
     pub fn module_symbols(&self) -> Vec<Global> {
         let mut symbols = Vec::new();
-        for item in &self.items {
-            match item {
-                Item::Let(def) => symbols.push(def.name),
-                Item::Rec(rec) => {
-                    symbols.extend(rec.definitions.iter().map(|definition| definition.name))
-                }
-            }
+        // Asked of what each place declares, which a stored module knows without its item.
+        for place in 0..self.items.len() {
+            symbols.extend(self.items.names(place).into_iter().copied());
         }
         symbols.extend(self.induct_decls.keys().cloned());
         symbols.extend(self.struct_decls.keys().cloned());

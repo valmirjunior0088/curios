@@ -18,9 +18,9 @@ pub(crate) use {
         struct_reaches_itself, variance_vectors, wholly_pinned, yields_a_sort,
     },
     curios_core::{
-        accelerable, atoms_within, build_shorten_layered, classable, foreign_signature,
-        free_locals_outside, instantiate_universe_levels_scoped, probe_spellings, reduce_closed,
-        reduce_intrinsic, refold, rewrite_universe_levels_scoped_shared, universe_metas,
+        accelerable, atoms_within, classable, foreign_signature, free_locals_outside,
+        instantiate_universe_levels_scoped, probe_spellings, reduce_closed, reduce_intrinsic,
+        refold, rewrite_universe_levels_scoped_shared, universe_metas,
     },
 };
 

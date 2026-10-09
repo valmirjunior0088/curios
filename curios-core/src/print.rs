@@ -62,11 +62,11 @@ pub struct Spelling {
     /// axis (a) — local binders to their source-style names.
     pretty: Option<Rc<Rename>>,
     /// axis (b) without a reader — global qualified names to their shortest unambiguous suffix.
-    shorten: Option<Rc<HashMap<Global, String>>>,
+    shorten: Option<Rc<Shorten>>,
     /// axis (c) — whether to suppress universe instances and metavariable-headed levels.
     erase_universes: bool,
-    /// axis (d) — a nominal declaration's parameter plicities, so an applied family is marked the way a use site would write it.
-    nominal_plicities: Option<Rc<BTreeMap<Global, Vec<Plicity>>>>,
+    /// axis (d) — each unit's nominal declarations' parameter plicities, the reader's own unit first, so an applied family is marked the way a use site would write it. A name resolves to one declaration, so the first unit to list it answers.
+    nominal_plicities: Vec<Rc<BTreeMap<Global, Vec<Plicity>>>>,
     /// axis (e) — whether every metavariable spells as a bare `?`.
     anonymous_metavars: bool,
     /// axis (f) — the certified-string declaration, so a `Str` literal spells as its own text.
@@ -124,11 +124,23 @@ impl ReaderNames {
     }
 }
 
-/// What axis (h) spells a witness against: each concept's fields — a method's wrapper and the operator dispatching to it, or the concept a superclass edge reaches — and each global witness's declared type, whose terminal is the concept application it answers. Built per unit by [`Module::witness_spelling`](crate::Module::witness_spelling) and merged across a render's scope, as the plicity marks are.
+/// What a report spells one unit's names by: the globals it declares (axis (b)), its nominal families' parameter marks (axis (d)), and its concepts' fields and its witnesses' declared types (axis (h)).
+///
+/// **Made once for a unit and kept with it** ([`Module::lexicon`](crate::Module::lexicon)). A report reads each unit of its scope where it stands ([`Spelling::with_lexicons`], [`Spelling::with_witnesses`]) and builds no table over them, so what a report costs does not follow how much is in scope, and it reads no declaration it does not print.
+#[derive(Clone, Default)]
+pub struct Lexicon {
+    pub(crate) symbols: Rc<Symbols>,
+    pub(crate) plicities: Rc<BTreeMap<Global, Vec<Plicity>>>,
+    pub(crate) witnesses: Rc<WitnessSpelling>,
+}
+
+/// What axis (h) spells a witness against: each concept's fields — a method's wrapper and the operator dispatching to it, or the concept a superclass edge reaches — and each global witness's declared type, whose terminal is the concept application it answers. Built per unit by [`Module::lexicon`](crate::Module::lexicon) and merged across a render's scope, as the plicity marks are.
 #[derive(Default)]
 pub struct WitnessSpelling {
     pub(crate) concepts: BTreeMap<Global, Vec<FieldSpelling>>,
     pub(crate) witnesses: BTreeMap<Global, Term>,
+    /// The tables of the units of a reader's scope, where this is the table a render reads ([`WitnessSpelling::over`]): each where its unit keeps it, read after this one's own entries.
+    units: Vec<Rc<WitnessSpelling>>,
 }
 
 /// One field of a concept, by position.
@@ -145,19 +157,30 @@ pub(crate) enum FieldSpelling {
 }
 
 impl WitnessSpelling {
-    /// Add another unit's entries. A name resolves to one declaration, so the first unit to list it wins.
-    pub fn merge(&mut self, other: WitnessSpelling) {
-        for (name, fields) in other.concepts {
-            self.concepts.entry(name).or_insert(fields);
-        }
-        for (name, type_) in other.witnesses {
-            self.witnesses.entry(name).or_insert(type_);
+    /// The table a reader's scope spells against: `units`, each unit's own where the unit keeps it, the reader's first. Nothing is copied out of any: a name resolves to one declaration, so the first unit to list it answers.
+    pub fn over(units: impl IntoIterator<Item = Rc<WitnessSpelling>>) -> Self {
+        Self {
+            units: units.into_iter().collect(),
+            ..Self::default()
         }
     }
 
-    fn supers(&self, concept: &Global) -> impl Iterator<Item = (usize, &Global)> {
+    /// The fields of `concept`, by position, where a unit of the table declares it.
+    fn fields(&self, concept: &Global) -> Option<&Vec<FieldSpelling>> {
         self.concepts
             .get(concept)
+            .or_else(|| self.units.iter().find_map(|unit| unit.fields(concept)))
+    }
+
+    /// The declared type of the global witness `witness`, where a unit of the table declares it.
+    fn declared(&self, witness: &Global) -> Option<&Term> {
+        self.witnesses
+            .get(witness)
+            .or_else(|| self.units.iter().find_map(|unit| unit.declared(witness)))
+    }
+
+    fn supers(&self, concept: &Global) -> impl Iterator<Item = (usize, &Global)> {
+        self.fields(concept)
             .into_iter()
             .flatten()
             .enumerate()
@@ -179,14 +202,12 @@ impl WitnessSpelling {
             }
             _ => return None,
         };
-        self.concepts
-            .contains_key(&name)
-            .then_some((name, arguments))
+        self.fields(&name).is_some().then_some((name, arguments))
     }
 
     /// The concept application a global witness answers, its declared telescope opened at `arguments` — a premised witness is applied to its own hidden arguments. Without them the concept alone is known.
     fn answers(&self, witness: &Global, arguments: &[Term]) -> Option<(Global, Vec<Term>)> {
-        let type_ = self.witnesses.get(witness)?;
+        let type_ = self.declared(witness)?;
         match &**type_ {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 if telescope.len() == arguments.len() {
@@ -220,8 +241,8 @@ impl Spelling {
         self
     }
 
-    /// Shorten global names against a module's symbol table (axis (b)).
-    pub fn with_short_names(mut self, shorten: Rc<HashMap<Global, String>>) -> Self {
+    /// Shorten global names against the symbols of a scope (axis (b)).
+    pub fn with_short_names(mut self, shorten: Rc<Shorten>) -> Self {
         self.shorten = Some(shorten);
         self
     }
@@ -254,7 +275,7 @@ impl Spelling {
         self
     }
 
-    /// Spell every witness as resolution would restore it (axis (h)), against `witnesses` — the table [`Module::witness_spelling`](crate::Module::witness_spelling) builds.
+    /// Spell every witness as resolution would restore it (axis (h)), against `witnesses` — the table [`Module::lexicon`](crate::Module::lexicon) builds.
     pub fn with_witness_spelling(mut self, witnesses: Rc<WitnessSpelling>) -> Self {
         self.witnesses = Some(witnesses);
         self
@@ -297,10 +318,30 @@ impl Spelling {
         self
     }
 
-    /// Mark a nominal family's implicit parameters (axis (d)), from `Module::nominal_plicities`.
+    /// Mark a nominal family's implicit parameters (axis (d)), from one unit's table of them ([`Lexicon`]): a table for each call, the reader's own unit's first.
     pub fn with_nominal_plicities(mut self, plicities: Rc<BTreeMap<Global, Vec<Plicity>>>) -> Self {
-        self.nominal_plicities = Some(plicities);
+        self.nominal_plicities.push(plicities);
         self
+    }
+
+    /// Shorten globals and mark nominal families against the lexicons of a reader's scope (axes (b) and (d)): `own`, the reader's unit's, over `scope`, each where its unit keeps it. Nothing is built over the scope: a name is looked up in each unit's own tables when a render asks.
+    pub fn with_lexicons(mut self, own: &Lexicon, scope: &[&Lexicon]) -> Self {
+        let around = scope.iter().map(|unit| Rc::clone(&unit.symbols));
+        self.shorten = Some(Rc::new(Shorten::over(Rc::clone(&own.symbols), around)));
+        self.nominal_plicities = std::iter::once(own)
+            .chain(scope.iter().copied())
+            .map(|unit| Rc::clone(&unit.plicities))
+            .collect();
+        self
+    }
+
+    /// Spell every witness as resolution would restore it (axis (h)), against the lexicons of a reader's scope — see [`Spelling::with_lexicons`].
+    pub fn with_witnesses(self, own: &Lexicon, scope: &[&Lexicon]) -> Self {
+        let units = std::iter::once(own)
+            .chain(scope.iter().copied())
+            .map(|unit| Rc::clone(&unit.witnesses));
+
+        self.with_witness_spelling(Rc::new(WitnessSpelling::over(units)))
     }
 
     /// The display spelling of a global (axis (b)) — for a reader, as resolution would find it from where they stand, and in full where it cannot, since a suffix nothing resolves is a different program; without one, shortened against the module's other symbols when that is unambiguous, and in full otherwise. Globals never take axis (a)'s rename: their spelling is a path a programmer wrote, not a minted hint.
@@ -312,7 +353,7 @@ impl Spelling {
         }
         self.shorten
             .as_ref()
-            .and_then(|map| map.get(name).cloned())
+            .and_then(|shorten| shorten.get(name))
             .unwrap_or_else(|| name.to_string())
     }
 
@@ -332,7 +373,10 @@ impl Spelling {
 
     /// The declared plicities of `name`'s arguments — parameters then indices, in the order a use site supplies them — or `None` when the declaration is not in this spelling's table, in which case an applied family renders unmarked.
     fn nominal_marks(&self, name: &Global, arity: usize) -> Option<&[Plicity]> {
-        let marks = self.nominal_plicities.as_ref()?.get(name)?;
+        let marks = self
+            .nominal_plicities
+            .iter()
+            .find_map(|unit| unit.get(name))?;
         // A declaration whose vector does not match the occurrence is not one this can speak about: render flat rather than mark the wrong argument.
         (marks.len() == arity).then_some(marks.as_slice())
     }
@@ -538,72 +582,111 @@ fn assign(
     Rename { spellings }
 }
 
-/// Map each global to the shortest `/`-suffix of its path that no other global shares — the name it has in scope, since Curios has no `use … as` aliasing, so an in-scope name is always a suffix. Only entries that actually shorten are recorded; an ambiguous (or single-segment) name keeps its full path.
-pub fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
+/// The globals one unit declares, with how many of them carry each segment-suffix: what a global is shortened against (axis (b) without a reader). Made once for a unit and read where it stands ([`Lexicon`]).
+#[derive(Debug, Default)]
+pub struct Symbols {
+    names: BTreeSet<Global>,
+    suffixes: HashMap<String, usize>,
+}
+
+impl Symbols {
+    /// `names`, each counted once: one global can be listed twice, an inductive being both an `induct_decls` registry key and an `items` type-constructor definition, and such a name would otherwise look ambiguous with itself and never shorten.
+    pub fn of(names: impl IntoIterator<Item = Global>) -> Self {
+        let names = names.into_iter().collect::<BTreeSet<_>>();
+        let mut suffixes = HashMap::new();
+        for name in &names {
+            for suffix in suffixes_of(name) {
+                *suffixes.entry(suffix).or_insert(0) += 1;
+            }
+        }
+
+        Self { names, suffixes }
+    }
+}
+
+/// Every segment-suffix of a global's path, shortest first. Taken over the *segments* a name is made of, never over its rendered text: `/Foobar` is not a suffix of `/Foo/bar`, and only the structure says so.
+fn suffixes_of(name: &Global) -> Vec<String> {
+    let Some(segments) = name.qualifier().map(Qualifier::segments) else {
+        return Vec::new();
+    };
+
+    (1..=segments.len())
+        .map(|k| segments[segments.len() - k..].join("/"))
+        .collect()
+}
+
+/// Each global's shortest `/`-suffix that no other global in scope shares — the name it has in scope, since Curios has no `use … as` aliasing, so an in-scope name is always a suffix. Only a name that actually shortens has one; an ambiguous (or single-segment) name keeps its full path.
+///
+/// **Answered when a render asks, from the symbols each unit keeps.** A scope's units declare disjoint names, so how many globals carry a suffix is the sum of what each unit counted for itself, and nothing is made for a scope.
+///
+/// **A reader's own unit is a tier of its own**: a declaration sitting directly in it takes its bare label before anything around it may compete for the suffix. The tier exists because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, which only a reader's spelling ([`ReaderNames`]) can see. Counting the suffix it cannot claim against a reader's own root-declared `Holds` would tie the two, so *neither* would shorten, and the name the reader had just written would be reported in full.
+///
+/// Only a single-segment name gets the claim, because only its bare label is writable: reaching a reader's own `/Vec/nil` needs `Vec/nil` or an import just as the environment's does, so a nested own name has no better title to `nil` than the shared contest gives it. Handing it one would spell a goal candidate — `? ≈ nil()` — that the reader could not paste.
+#[derive(Debug, Default)]
+pub struct Shorten {
+    own: Rc<Symbols>,
+    scope: Vec<Rc<Symbols>>,
+}
+
+impl Shorten {
+    /// Over `own`, the symbols of the unit a reader stands in, and `scope`, those of each unit around it.
+    pub fn over(own: Rc<Symbols>, scope: impl IntoIterator<Item = Rc<Symbols>>) -> Self {
+        Self {
+            own,
+            scope: scope.into_iter().collect(),
+        }
+    }
+
+    /// The spelling `name` shortens to, where it shortens.
+    pub fn get(&self, name: &Global) -> Option<String> {
+        let own = self.own.names.contains(name);
+        if !own && !self.scope.iter().any(|unit| unit.names.contains(name)) {
+            return None;
+        }
+        // Two single-segment names cannot collide — one label, one declaration — so this needs no ambiguity test of its own.
+        if own && let Some([label]) = name.qualifier().map(Qualifier::segments) {
+            return Some(label.clone());
+        }
+
+        // How many distinct globals carry a segment-suffix.
+        let carried = |suffix: &str| {
+            let counted = |unit: &Rc<Symbols>| unit.suffixes.get(suffix).copied().unwrap_or(0);
+
+            counted(&self.own) + self.scope.iter().map(counted).sum::<usize>()
+        };
+        // A bare label a declaration at the root of the reader's own unit has taken.
+        let claimed = |suffix: &str| {
+            !suffix.contains('/')
+                && self
+                    .own
+                    .names
+                    .contains(&Global::Authored(Qualifier::from([suffix])))
+        };
+        let rendered = name.to_string();
+
+        suffixes_of(name)
+            .into_iter()
+            .find(|suffix| carried(suffix) == 1 && !claimed(suffix))
+            .filter(|shortest| shortest.len() < rendered.len())
+    }
+}
+
+/// [`Shorten`] over `symbols` alone, with no reader's tier.
+pub fn build_shorten(symbols: &[Global]) -> Shorten {
     build_shorten_layered(&[], symbols)
 }
 
-/// [`build_shorten`] for a render a reader looks at from inside `own`'s unit: a declaration sitting directly in that unit takes its bare label before anything around it may compete for the suffix.
-///
-/// The tier exists because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, which only a reader's spelling ([`ReaderNames`]) can see. Counting the suffix it cannot claim against a reader's own root-declared `Holds` would tie the two, so *neither* would shorten, and the name the reader had just written would report as `/Holds` while the one they could not reach reported as `Bool/Holds`.
-///
-/// Only a single-segment name gets the claim, because only its bare label is writable: reaching a reader's own `/Vec/nil` needs `Vec/nil` or an import just as the environment's does, so a nested own name has no better title to `nil` than the shared contest below gives it. Handing it one would spell a goal candidate — `? ≈ nil()` — that the reader could not paste.
-pub fn build_shorten_layered(own: &[Global], predecessors: &[Global]) -> HashMap<Global, String> {
-    // One global can be listed twice (an inductive is both an `induct_decls` registry key and an `items` type-constructor definition), and a unit listed in both tiers lists it in both; count distinct names, or such a name would look ambiguous with itself and never shorten.
-    let own = own.iter().collect::<BTreeSet<_>>();
-    let predecessors = predecessors
-        .iter()
-        .collect::<BTreeSet<_>>()
-        .difference(&own)
-        .copied()
-        .collect::<BTreeSet<_>>();
+/// [`Shorten`] for a render a reader looks at from inside `own`'s unit, over `predecessors`, the globals around it; a global listed in both is the reader's.
+pub fn build_shorten_layered(own: &[Global], predecessors: &[Global]) -> Shorten {
+    let own = Symbols::of(own.iter().copied());
+    let around = Symbols::of(
+        predecessors
+            .iter()
+            .copied()
+            .filter(|name| !own.names.contains(name)),
+    );
 
-    // Suffixes are taken over the *segments* a name is made of, never over its rendered text: `/Foobar` is not a suffix of `/Foo/bar`, and only the structure says so.
-    let suffixes = |name: &Global| -> Vec<String> {
-        let Some(segments) = name.qualifier().map(Qualifier::segments) else {
-            return Vec::new();
-        };
-        (1..=segments.len())
-            .map(|k| segments[segments.len() - k..].join("/"))
-            .collect()
-    };
-
-    // How many distinct globals carry each segment-suffix.
-    let mut count: HashMap<String, usize> = HashMap::new();
-    for name in own.iter().chain(predecessors.iter()) {
-        for suffix in suffixes(name) {
-            *count.entry(suffix).or_insert(0) += 1;
-        }
-    }
-
-    let mut map = HashMap::new();
-    let mut claimed = BTreeSet::new();
-
-    // Two single-segment names cannot collide — one label, one declaration — so this needs no ambiguity test of its own.
-    for name in &own {
-        let Some([label]) = name.qualifier().map(Qualifier::segments) else {
-            continue;
-        };
-
-        claimed.insert(label.clone());
-        map.insert(*(*name), label.clone());
-    }
-
-    for name in own.iter().chain(predecessors.iter()) {
-        if map.contains_key(*name) {
-            continue;
-        }
-
-        let rendered = name.to_string();
-        if let Some(shortest) = suffixes(name)
-            .into_iter()
-            .find(|suffix| count.get(suffix) == Some(&1) && !claimed.contains(suffix))
-            && shortest.len() < rendered.len()
-        {
-            map.insert(*(*name), shortest);
-        }
-    }
-    map
+    Shorten::over(Rc::new(own), [Rc::new(around)])
 }
 
 /// Where the identities a render mints for the binders it opens begin: above every index a compilation mints, which counts up from zero and would exhaust its binder space long before reaching here.
@@ -932,7 +1015,7 @@ fn method_operator(
         }
         WitnessForm::Local { concept, .. } | WitnessForm::Global { concept, .. } => concept,
     };
-    match table.concepts.get(&concept)?.get(index)? {
+    match table.fields(&concept)?.get(index)? {
         FieldSpelling::Method { operator, .. } => *operator,
         _ => None,
     }
@@ -979,7 +1062,7 @@ fn method_doc(
 
     let FieldSpelling::Method {
         wrapper, merged, ..
-    } = table.concepts.get(&concept)?.get(index)?.clone()
+    } = table.fields(&concept)?.get(index)?.clone()
     else {
         return None;
     };

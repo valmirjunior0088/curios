@@ -152,6 +152,11 @@ impl<T> Deferred<T> {
         self.value.get()
     }
 
+    /// The value where it is in hand, taken: one made here, or already read out of its bytes.
+    pub fn into_held(self) -> Option<T> {
+        self.value.into_inner()
+    }
+
     /// The bytes the value was restored from, where it was: what it is stored as again, by whoever holds it or keeps it of another.
     pub fn as_stored(&self) -> Option<&Bytes> {
         self.stored.as_ref()

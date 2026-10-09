@@ -323,7 +323,16 @@ fn std_image_division() {
                 .and_then(|parts| parts.try_into().ok())
                 .expect("what a certified unit stores apart");
         let reads = reads.as_slice().len();
-        let [lowered, forms, module, records, asked, erasures] = apart_parts(&apart)
+        let [
+            lowered,
+            forms,
+            module,
+            anchors,
+            imports,
+            records,
+            asked,
+            erasures,
+        ] = apart_parts(&apart)
             .expect("what a unit stores apart")
             .map(|part| part.as_slice().len());
 
@@ -334,18 +343,7 @@ fn std_image_division() {
             unit.len(),
             Some(restored!(Unit, unit)),
         );
-        let text = part!("  the lowering's state", PreparedText, std.text());
-        let imports = part!("    its import scopes", Imports, std.text().imports());
-        let anchors = part!(
-            "    where its declarations lie",
-            Anchors,
-            std.text().anchors()
-        );
-        row(
-            "    its registry entries, tables and lints",
-            text - imports - anchors,
-            None,
-        );
+        part!("  the lowering's state", PreparedText, std.text());
         let consed = std.core().shared(&Sharing::new());
         part!("  the elaborated module, consed", Module, &consed);
         items!("    its items", &consed);
@@ -364,11 +362,18 @@ fn std_image_division() {
         row("  its lowered items, each stored alone", lowered, None);
         row("  its erased forms, each stored alone", forms, None);
         row("  its elaborated module, read by item", module, None);
+        row("what a report restores", anchors, None);
+        part!(
+            "  where its declarations lie",
+            Anchors,
+            std.text().anchors()
+        );
         row(
             "what a recompile alone restores",
-            records + asked + erasures + reads,
+            imports + records + asked + erasures + reads,
             None,
         );
+        part!("  its import scopes", Imports, std.text().imports());
         row("  what its verdicts stand on", reads, None);
         row(
             "  the lowering's records and scans",

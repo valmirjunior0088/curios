@@ -1,5 +1,5 @@
 use {
-    curios_core::{Global, Item, Sharing, Zonked, validate_stored_identities},
+    curios_core::{Anchors, Global, Item, Module, Sharing, Zonked, validate_stored_identities},
     curios_document::Documentation,
     curios_elab::{
         Context, DEFAULT_STEP_BUDGET, ErasedUnit, Erasures, Established, elaborate_and_zonk_unit,
@@ -92,6 +92,26 @@ fn documented(
         .unwrap_or_else(|| panic!("/{root} marks no mount as documented"))
 }
 
+/// What `error` says of `module`, a root's lowered or elaborated module, spelled against the roots before it: each one's lexicon is made here, where a root is refused, since a build that refuses stops.
+fn reported(
+    error: &curios_elab::Error,
+    module: &Module,
+    predecessors: &[&Module],
+    anchors: &Anchors,
+) -> String {
+    let lexicons = predecessors
+        .iter()
+        .map(|unit| unit.lexicon(&SYNTAX))
+        .collect::<Vec<_>>();
+
+    error.format_with(
+        module,
+        &lexicons.iter().collect::<Vec<_>>(),
+        &SYNTAX,
+        &[anchors],
+    )
+}
+
 /// Elaborate, validate, erase and hash-cons one lowered root into the unit its image is, against what the roots before it established.
 ///
 /// `erased` are the erased forms of the roots before it, beside `predecessors`, the Core they were erased from: an item of this root reads there how a name of an earlier one is bound, and its own erased form holds nothing of theirs.
@@ -119,14 +139,14 @@ fn archive(
         );
         let elaboration = match &elaborated {
             Ok(_) => String::new(),
-            Err(error) => error.format_with(&lowered, predecessors, &SYNTAX, &[prepared.anchors()]),
+            Err(error) => reported(error, &lowered, predecessors, prepared.anchors()),
         };
         panic!("/{root} failed to parse: {parsed}{elaboration}");
     }
     let (core, traces) = elaborated.unwrap_or_else(|error| {
         panic!(
             "/{root} failed to elaborate: {}",
-            error.format_with(&lowered, predecessors, &SYNTAX, &[prepared.anchors()])
+            reported(&error, &lowered, predecessors, prepared.anchors())
         )
     });
     // The pipeline's crediting, for the one caller that elaborates a unit itself: a binder a proof the elaborator wrote reads is used, and the image's lints say so.
@@ -155,7 +175,7 @@ fn archive(
     .unwrap_or_else(|error| {
         panic!(
             "/{root} failed to erase: {}",
-            error.format_with(&core, predecessors, &SYNTAX, &[prepared.anchors()])
+            reported(&error, &core, predecessors, prepared.anchors())
         )
     });
 

@@ -3,9 +3,10 @@
 use {
     crate::Unit,
     curios_abi::ForeignStore,
-    curios_core::{Anchors, Module, Places},
+    curios_core::{Anchors, Lexicon, Module, Places},
     curios_elab::{ErasedUnit, Projection},
     curios_text::PreparedText,
+    curios_utilities::SyntaxRegistry,
 };
 
 /// The units already compiled, in dependency order.
@@ -49,6 +50,11 @@ impl<'a> Predecessors<'a> {
             .iter()
             .map(|unit| (unit.core(), unit.places()))
             .collect()
+    }
+
+    /// What a report spells each predecessor's names by, beside [`Predecessors::cores`]: the lexicon each keeps, made the first time a report is made over it.
+    pub fn lexicons(&self, syntax: &SyntaxRegistry) -> Vec<&'a Lexicon> {
+        self.units.iter().map(|unit| unit.lexicon(syntax)).collect()
     }
 
     /// What each predecessor keeps for erasure, beside [`Predecessors::cores`]: where it holds each name, and what has been read of it out of its universes. For `curios-elab`'s `Erasures`: a scope erased over, with nothing keyed for the compile.

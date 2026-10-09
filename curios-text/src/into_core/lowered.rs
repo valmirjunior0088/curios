@@ -156,7 +156,7 @@ impl<'a> Baseline<'a> {
         let index = context.sited(|key, text| {
             let index = *self.by_text.get(&key)?;
 
-            (self.unit.anchors.text(key.0, key.1) == Some(text)).then_some(index)
+            (self.unit.anchors().text(key.0, key.1) == Some(text)).then_some(index)
         })??;
 
         let stands = self.unit.lowerings()[index]

@@ -50,11 +50,11 @@ mod whnf;
 pub(crate) use whnf::*;
 
 use {
-    crate::{Baseline, build_shorten_layered, entails, erased_half},
+    crate::{Baseline, entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
         Advance, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level, LevelHead,
-        Module, Polarity, Probe, Reads, ReduceError, Reducer, Spelling, StructDecl, Term,
+        Lexicon, Module, Polarity, Probe, Reads, ReduceError, Reducer, Spelling, StructDecl, Term,
         UniverseConstraint, UniverseContext, UniverseError, Variance,
     },
     curios_utilities::{Plicity, SyntaxRegistry},
@@ -219,24 +219,14 @@ impl Error {
     pub fn format_with(
         &self,
         module: &Module,
-        predecessors: &[&Module],
+        scope: &[&Lexicon],
         syntax: &SyntaxRegistry,
     ) -> String {
-        // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope — the shortening table and the plicity marks alike. The shortening keeps the two apart as that one does, so `module`'s own declarations settle their spelling before the environment competes for it.
-        let own = module.module_symbols();
-        let mut symbols = Vec::new();
-        let mut plicities = module.nominal_plicities();
-        for unit in predecessors {
-            symbols.extend(unit.module_symbols());
-            for (name, marks) in unit.nominal_plicities() {
-                plicities.entry(name).or_insert(marks);
-            }
-        }
-
+        // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope, which each unit in scope says by the lexicon it keeps.
+        let own = module.lexicon(syntax);
         let spelling = Rc::new(
             Spelling::default()
-                .with_short_names(Rc::new(build_shorten_layered(&own, &symbols)))
-                .with_nominal_plicities(Rc::new(plicities))
+                .with_lexicons(&own, scope)
                 .with_string_literals(Global::Authored(syntax.string.string.qualifier())),
         );
         Displayed(self, spelling).to_string()

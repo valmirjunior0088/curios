@@ -70,7 +70,7 @@ pub fn compile_unit_over(
             CompileError::of(&error, |member| {
                 member.reports_with_hints(
                     lowered.core(),
-                    &cores,
+                    &predecessors.lexicons(syntax),
                     syntax,
                     lowered.unbound(),
                     &spellings,
@@ -89,7 +89,12 @@ pub fn compile_unit_over(
     // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
     let rechecked = recheck_over(&core, budget, predecessors, baseline, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
-        return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
+        return Err(kernel_refusal(
+            verdict,
+            core.as_module(),
+            &predecessors.lexicons(syntax),
+            syntax,
+        ));
     }
     let certification = rechecked.certification;
 
@@ -111,7 +116,7 @@ pub fn compile_unit_over(
     .map_err(|error| {
         CompileError::Failure(error.reports_with(
             core.as_module(),
-            &cores,
+            &predecessors.lexicons(syntax),
             syntax,
             &anchors_of(&lowered, predecessors),
         ))

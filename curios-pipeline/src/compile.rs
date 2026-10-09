@@ -230,10 +230,10 @@ pub(crate) fn globals(predecessors: Predecessors<'_>) -> Globals<'_> {
 pub(crate) fn kernel_refusal(
     verdict: &Verdict,
     module: &curios_core::Module,
-    predecessors: &[&curios_core::Module],
+    scope: &[&curios_core::Lexicon],
     syntax: &SyntaxRegistry,
 ) -> CompileError {
-    let refusal = verdict.error.format_with(module, predecessors, syntax);
+    let refusal = verdict.error.format_with(module, scope, syntax);
 
     CompileError::failure(match &verdict.name {
         Some(name) => format!("the kernel refused {name}: {refusal}"),
@@ -297,7 +297,7 @@ pub fn typecheck_entrypoint(
     let ((program, _, _, _), obligations) = elaborate_entry(
         &mut context,
         &established,
-        &predecessors.text(),
+        predecessors,
         lowered,
         EntryTail::Authored,
         Obligations::Reported,
@@ -460,7 +460,7 @@ where
     let verdict = elaborate_entry(
         &mut context,
         &established,
-        &predecessors.text(),
+        predecessors,
         lowered,
         tail,
         obligations,
@@ -479,11 +479,11 @@ enum Obligations {
 
 /// The one elaboration of an entry, in `context`, which the caller reads its credits and its consumption from however this ends: the compile path's and the type-checking path's alike, so the entry's contract is stated once. Beside the program come the obligations it reported, none where they are raised.
 ///
-/// `scope` is the text part of each unit in scope: where its declarations lie, which a report placed in one of them is resolved against, after the entry's own, and the tables the path table a report spells a name by is made from.
+/// `predecessors` are the units in scope, read where a report is made: where each one's declarations lie, which a report placed in one of them is resolved against, after the entry's own, the paths each gives its names, and the lexicon each keeps, which a report spells a name by.
 fn elaborate_entry<'s, O>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    scope: &[&PreparedText],
+    predecessors: Predecessors<'_>,
     lowered: LoweredEntry,
     tail: EntryTail,
     obligations: Obligations,
@@ -493,8 +493,11 @@ where
     O: FnMut(Stage<'_>),
 {
     let cores = established.modules();
+    let scope = predecessors.text();
     // The registry the context was made with, which is the one its elaboration synthesizes names from.
     let syntax = &context.syntax();
+    // Read by the first report, each unit's where the unit keeps it, and by no elaboration that reports nothing.
+    let lexicons = LazyCell::new(|| predecessors.lexicons(syntax));
     let LoweredEntry {
         program: mut lowered,
         minted,
@@ -506,11 +509,14 @@ where
         broken,
         anchors: own,
     } = lowered;
-    let anchors = std::iter::once(&own)
-        .chain(scope.iter().map(|text| text.anchors()))
-        .collect::<Vec<_>>();
+    // Read by the first report placed in a declaration, and by a test program for its tests' text: an elaboration that needs neither restores where no unit's declarations lie.
+    let anchors = LazyCell::new(|| {
+        std::iter::once(&own)
+            .chain(scope.iter().map(|text| text.anchors()))
+            .collect::<Vec<_>>()
+    });
     // Made by the first report that spells a name, and by no elaboration that reports nothing.
-    let spellings = LazyCell::new(|| Rc::new(names.spellings(scope)));
+    let spellings = LazyCell::new(|| Rc::new(names.spellings(&scope)));
 
     // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; the elaborator states the synthesized entry's `Io({})` type, as this stage states an authored entry's below. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let scheduled = match tail {
@@ -521,7 +527,10 @@ where
             None => Vec::new(),
         },
     };
-    let records = test_records(&scheduled, &anchors);
+    let records = match scheduled.is_empty() {
+        true => Vec::new(),
+        false => test_records(&scheduled, &anchors),
+    };
 
     observe(Stage::Core(&lowered));
 
@@ -573,7 +582,7 @@ where
             let reported = CompileError::of(&error, |member| {
                 member.reports_with_hints(
                     &lowered.module,
-                    cores,
+                    &lexicons,
                     syntax,
                     &unbound,
                     &spellings,
@@ -592,7 +601,7 @@ where
         .map(|error| Obligation {
             reported: error.format_with_hints(
                 &lowered.module,
-                cores,
+                &lexicons,
                 syntax,
                 &unbound,
                 &spellings,
@@ -676,7 +685,7 @@ fn erase_checked(
 
         CompileError::Failure(error.reports_with(
             &judged.program.as_program().module,
-            &cores,
+            &predecessors.lexicons(syntax),
             syntax,
             &anchors,
         ))
@@ -759,7 +768,7 @@ impl Put {
         if let Some(verdict) = self.verdicts.first() {
             let refusal = verdict.error.format_with(
                 &self.program.as_program().module,
-                &predecessors.cores(),
+                &predecessors.lexicons(syntax),
                 syntax,
             );
             return Err(CompileError::failure(match &verdict.name {
@@ -928,7 +937,7 @@ pub fn compile_unit(
                 CompileError::of(&error, |member| {
                     member.reports_with_hints(
                         lowered.core(),
-                        &cores,
+                        &predecessors.lexicons(syntax),
                         syntax,
                         lowered.unbound(),
                         &spellings,
@@ -944,7 +953,12 @@ pub fn compile_unit(
 
     let rechecked = certify(&core, budget, predecessors, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
-        return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
+        return Err(kernel_refusal(
+            verdict,
+            core.as_module(),
+            &predecessors.lexicons(syntax),
+            syntax,
+        ));
     }
 
     let kept = predecessors.projected();
@@ -953,7 +967,7 @@ pub fn compile_unit(
     let ersd = erase_unit(budget, *syntax, scope, &core).map_err(|error| {
         CompileError::Failure(error.reports_with(
             core.as_module(),
-            &cores,
+            &predecessors.lexicons(syntax),
             syntax,
             &anchors_of(&lowered, predecessors),
         ))

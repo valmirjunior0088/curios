@@ -3,10 +3,10 @@
 use {
     curios_abi::ForeignStore,
     curios_archive::Deferred,
-    curios_core::{Certification, Module, Places},
+    curios_core::{Certification, Lexicon, Module, Places},
     curios_elab::{ErasedUnit, Projection, Traces},
     curios_text::PreparedText,
-    curios_utilities::Mount,
+    curios_utilities::{Mount, SyntaxRegistry},
     std::{cell::OnceCell, rc::Rc},
 };
 
@@ -39,6 +39,9 @@ pub struct Uncertified {
     /// What erasure has read of `core` out of its universes, made the first time an erasure reads the unit and kept beside its places: no erasure keys the unit again, and a declaration one projected the next finds. Never stored, being read off `core`.
     #[archived_with(curios_archive::Skip)]
     projection: Rc<OnceCell<Projection>>,
+    /// What a report spells this unit's names by, made the first time a report is made over the unit and kept beside its places: no report builds a table over the unit again. Never stored, being read off `core`.
+    #[archived_with(curios_archive::Skip)]
+    lexicon: Rc<OnceCell<Lexicon>>,
     /// What each of the unit's items erased to, in identities of its own and naming what another item binds by its name: this unit's alone, saying nothing of the units before it. Why is the crate `README.md`'s "An erased form is its item's".
     erased: Rc<ErasedUnit>,
     /// What each of the unit's declarations asked of the declarations around it as it elaborated: what a later compile of the same sources keeps a declaration's elaboration by.
@@ -56,6 +59,7 @@ impl Uncertified {
             core: Rc::new(core),
             places: Rc::default(),
             projection: Rc::default(),
+            lexicon: Rc::default(),
             erased: Rc::new(erased),
             traces: Rc::new(Deferred::held(traces)),
         }
@@ -87,6 +91,11 @@ impl Uncertified {
     /// Where this unit's elaborated module holds each name it defines. See the field.
     pub fn places(&self) -> &Places {
         self.places.get_or_init(|| Places::of(&self.core))
+    }
+
+    /// What a report spells this unit's names by. See the field. `syntax` is the compilation's one registry, which names the operator a concept's method is dispatched by.
+    pub fn lexicon(&self, syntax: &SyntaxRegistry) -> &Lexicon {
+        self.lexicon.get_or_init(|| self.core.lexicon(syntax))
     }
 
     /// What erasure has read of this unit's elaborated module out of its universes. See the field.
@@ -126,6 +135,8 @@ impl Uncertified {
         let items = self.text.items_bytes()?;
         let forms = self.erased.items_bytes()?;
         let module = curios_archive::to_bytes(&*self.core)?;
+        let anchors = self.text.anchors_bytes()?;
+        let imports = self.text.imports_bytes()?;
         let text = self.text.baseline_bytes()?;
         let traces = self.traces.bytes()?;
         let erased = self.erased.baseline_bytes()?;
@@ -134,6 +145,8 @@ impl Uncertified {
             &items[..],
             &forms[..],
             &module[..],
+            &anchors[..],
+            &imports[..],
             &text[..],
             &traces[..],
             &erased[..],
@@ -151,13 +164,14 @@ impl Uncertified {
     /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::apart_bytes`]), each part a run of the buffer they are in and read when something first asks for it — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing.
     #[cfg(feature = "archive")]
     pub fn with_apart(self, bytes: impl Into<Bytes>) -> Result<Self, String> {
-        let [items, forms, module, text, traces, erased] =
+        let [items, forms, module, anchors, imports, text, traces, erased] =
             apart_parts(&bytes.into()).ok_or("not what a unit stores apart from itself")?;
 
         Ok(Self {
             text: Rc::new(
                 Rc::unwrap_or_clone(self.text)
                     .with_baseline(text)
+                    .with_reported(imports, anchors)
                     .with_items(items)?,
             ),
             erased: Rc::new(
@@ -169,6 +183,7 @@ impl Uncertified {
             core: Rc::new(Module::stored(module)?),
             places: Rc::default(),
             projection: Rc::default(),
+            lexicon: Rc::default(),
         })
     }
 
@@ -180,6 +195,7 @@ impl Uncertified {
             core: Rc::new(self.core.shared(&Sharing::new())),
             places: Rc::default(),
             projection: Rc::default(),
+            lexicon: Rc::default(),
             erased: Rc::clone(&self.erased),
             traces: Rc::clone(&self.traces),
         }
@@ -223,6 +239,11 @@ impl Unit {
     /// See [`Uncertified::places`].
     pub fn places(&self) -> &Places {
         self.unit.places()
+    }
+
+    /// See [`Uncertified::lexicon`].
+    pub fn lexicon(&self, syntax: &SyntaxRegistry) -> &Lexicon {
+        self.unit.lexicon(syntax)
     }
 
     /// See [`Uncertified::projection`].
