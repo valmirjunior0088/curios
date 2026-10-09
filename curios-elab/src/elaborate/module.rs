@@ -1595,10 +1595,25 @@ fn elaborate_module_suffix<'s>(
     let withheld = entry.is_some_and(|entry| poison.reaches_entry(entry));
     let mark = ItemMark::begin(context);
     context.attempt(&[]);
-    let mut entry = match withheld {
+    // Elaborated, drained of what it parked and reduced to the type it states, as one attempt: a refusal at any of the three undoes what the entry recorded, so the passes over the terms left recorded read nothing of a refused entry.
+    let attempted = |context: &mut Context| {
+        let elaborated = elaborate_entry(context, entry)?;
+        context.drain_parked()?;
+        let Some(Entrypoint { body, type_ }) = elaborated else {
+            return Ok(None);
+        };
+        // The type the entry states from here on is its judged type reduced through the unit's definitions, the spelling every later stage reads it in.
+        let type_ = type_.expect("elaboration states the type the entry was judged at");
+        let type_ = reduce_with(context, &type_)?;
+        Ok::<_, Error>(Some(Entrypoint {
+            body,
+            type_: Some(type_),
+        }))
+    };
+    let entry = match withheld {
         true => None,
-        false => match elaborate_entry(context, entry) {
-            Ok(elaborated) => elaborated,
+        false => match attempted(context) {
+            Ok(entry) => entry,
             Err(error) => {
                 mark.undo(context, &[]);
                 survivors.refuse(entry_stamp, error);
@@ -1606,33 +1621,11 @@ fn elaborate_module_suffix<'s>(
             }
         },
     };
-    if let Err(error) = context.drain_parked() {
-        survivors.refuse(entry_stamp, error);
-        entry = None;
-    }
     // Every item has finished, so nothing the entry read was unfinished: its one attempt stands.
     assert!(
         context.take_needs().is_empty(),
         "the entry read a declaration no item finished"
     );
-    // The type the entry states from here on is its judged type reduced through the unit's definitions, the spelling every later stage reads it in.
-    let entry = match entry
-        .map(|Entrypoint { body, type_ }| {
-            let type_ = type_.expect("elaboration states the type the entry was judged at");
-            let type_ = reduce_with(context, &type_)?;
-            Ok::<_, Error>(Entrypoint {
-                body,
-                type_: Some(type_),
-            })
-        })
-        .transpose()
-    {
-        Ok(entry) => entry,
-        Err(error) => {
-            survivors.refuse(entry_stamp, error);
-            None
-        }
-    };
 
     // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `erase` sees elaborated telescopes, zonked where their declarations were published. An entry the context no longer holds was a refused or withheld item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach the kernel and erasure in its lowered form, which nothing zonked.
     let names = survivors.names();

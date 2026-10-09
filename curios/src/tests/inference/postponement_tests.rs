@@ -385,6 +385,24 @@ fn a_comparison_that_fails_at_the_drain_names_its_declaration_and_what_was_compa
     );
 }
 
+// A refusal raised where the entry is drained undoes what the entry recorded, as one raised at an item's drain does. The passes over the recorded terms then read nothing of a refused entry, so the implicit its call leaves open is reported once, at the call, and not again from its callee's declaration by each of those passes.
+#[test]
+fn a_refusal_at_the_entrys_drain_is_reported_once() {
+    let report = error(
+        r#"
+        use /std/{proc};
+        let _ = proc/exit(1)!;
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("never solved: ")
+            && report.contains("the implicit argument 'A' of '/std/proc/exit'"),
+        "{report}"
+    );
+    assert!(!report.contains("was not inferred"), "{report}");
+}
+
 // A written argument is checked as written, and then held to its call's type. A list or a tuple at a slot whose type is still a metavariable waits behind a placeholder, and the call's expected type states the slot's value before the argument is checked. Conversion waits on the placeholder as it waits on a recursive group's slot, so nothing but the argument's own check fills it, and the value the type states meets the argument that was written. Mutation-checked: letting conversion solve a placeholder accepts both, with the type's list standing where the argument was written.
 #[test]
 fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
