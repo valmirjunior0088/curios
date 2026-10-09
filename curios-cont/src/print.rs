@@ -8,7 +8,7 @@
 //!
 //! **Two deliberate spellings.** Every function owns a bodyless return continuation, and that sentinel is not printed: an edge to it is `return x` and a call whose `return_to` is it is `return ~f7(x)`, which is what makes a tail call legible where `-> ~k11` against a header forty lines away is not. And hints repeat at every reference, not only at definition sites — the scheme in `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md` requires them at definitions and does not forbid more, and a dump nobody scrolls back through is better off self-describing.
 //!
-//! Equal modules print byte-identically. The renderer walks with an explicit job stack, so a deep module prints on the default test-thread stack; indentation saturates at a fixed depth so output stays linear in module size rather than quadratic in nesting.
+//! Equal modules print byte-identically. The renderer follows a chain of bindings in a loop and recurses, under `recurse`, into what a node binds, so a deep module is printed on a stack that grows for it; indentation saturates at a fixed depth so output stays linear in module size rather than quadratic in nesting.
 
 #[cfg(test)]
 mod tests;
@@ -19,6 +19,7 @@ use {
         IntrinsicCall, Literal, Module, Node, NodeId, RowId, Slot, ValueExpr, ValueId,
     },
     curios_num::{Grain, Rounding},
+    curios_utilities::{grown, recurse},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -29,13 +30,15 @@ impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let reach = Reach::of(self);
         let uses = self.value_use_counts();
-        Printer {
-            module: self,
-            reach: &reach,
-            uses: &uses,
-            out: f,
-        }
-        .print()
+        grown(|| {
+            Printer {
+                module: self,
+                reach: &reach,
+                uses: &uses,
+                out: f,
+            }
+            .print()
+        })
     }
 }
 
@@ -111,19 +114,6 @@ struct Seen {
     continuations: BTreeSet<ContinuationId>,
 }
 
-enum Job {
-    /// An indented line of text.
-    Line(String),
-    /// A node and the region under it. `ret` is the enclosing function's return sentinel, which is what tells a return from a jump and a tail call from a call; it is absent only where the walk entered a region no function owns, which is a malformed module's doing. `suffix` closes the region's last line — `;` where a binding owns it, nothing where the enclosing region does.
-    Node {
-        id: NodeId,
-        ret: Option<ContinuationId>,
-        suffix: &'static str,
-    },
-    Indent,
-    Dedent,
-}
-
 struct Printer<'m, 'a, 'f, 'o> {
     module: &'m Module,
     reach: &'a Reach,
@@ -140,8 +130,7 @@ impl Printer<'_, '_, '_, '_> {
             if declared {
                 writeln!(self.out)?;
             }
-            let jobs = self.binding("entry", entry, ";", &mut seen);
-            self.run(jobs, &mut seen, 0)?;
+            self.binding("entry", entry, ";", &mut seen, 0)?;
         }
 
         self.unreached(&mut seen)
@@ -168,25 +157,32 @@ impl Printer<'_, '_, '_, '_> {
 
     /// Whatever the lexical walk did not reach, so a malformed module still dumps whole. Printing an orphan reaches further orphans, so the sweep repeats until it finds none.
     fn unreached(&mut self, seen: &mut Seen) -> fmt::Result {
+        let module = self.module;
         let mut announced = false;
 
         loop {
-            let function = self
-                .module
+            let function = module
                 .live_functions()
                 .map(|(id, _)| id)
                 .find(|id| !seen.functions.contains(id));
-            let continuation = self
-                .module
+            let continuation = module
                 .live_continuations()
                 .map(|(id, _)| id)
                 .find(|id| !seen.continuations.contains(id));
+            if function.is_none() && continuation.is_none() {
+                break;
+            }
 
-            let jobs = match (function, continuation) {
-                (Some(id), _) => self.binding("let", id, ";", seen),
+            if !announced {
+                writeln!(self.out)?;
+                writeln!(self.out, "unreached")?;
+                announced = true;
+            }
+            match (function, continuation) {
+                (Some(id), _) => self.binding("let", id, ";", seen, 1)?,
                 (None, Some(id)) => {
                     seen.continuations.insert(id);
-                    let definition = self.module.continuation(id).expect("a live continuation");
+                    let definition = module.continuation(id).expect("a live continuation");
                     let head = format!(
                         "cont {}{}{}",
                         id,
@@ -194,262 +190,236 @@ impl Printer<'_, '_, '_, '_> {
                         self.params(Some(id), &definition.params)
                     );
                     // An orphan continuation belongs to no function the walk entered, so no sentinel is in hand and every transfer prints as the jump it is.
-                    vec![
-                        Job::Line(format!("{head} =")),
-                        Job::Indent,
-                        Job::Node {
-                            id: definition.body,
-                            ret: None,
-                            suffix: ";",
-                        },
-                        Job::Dedent,
-                    ]
+                    self.line(1, format!("{head} ="))?;
+                    self.node(seen, definition.body, None, ";", 2)?;
                 }
                 (None, None) => break,
-            };
-
-            if !announced {
-                writeln!(self.out)?;
-                writeln!(self.out, "unreached")?;
-                announced = true;
-            }
-            self.run(jobs, seen, 1)?;
-        }
-
-        Ok(())
-    }
-
-    fn run(&mut self, jobs: Vec<Job>, seen: &mut Seen, base: usize) -> fmt::Result {
-        let mut stack = jobs;
-        stack.reverse();
-        let mut indent = base;
-
-        while let Some(job) = stack.pop() {
-            match job {
-                Job::Line(line) => {
-                    for _ in 0..indent.min(INDENT_SATURATION) {
-                        self.out.write_str("    ")?;
-                    }
-                    self.out.write_str(&line)?;
-                    self.out.write_str("\n")?;
-                }
-                Job::Indent => indent += 1,
-                Job::Dedent => indent -= 1,
-                Job::Node { id, ret, suffix } => self.expand(&mut stack, seen, id, ret, suffix),
             }
         }
 
         Ok(())
     }
 
-    /// One function's definition, headed by `keyword` — `entry` for the module's own, `let` everywhere else.
+    /// One line of text at `indent`.
+    fn line(&mut self, indent: usize, text: impl AsRef<str>) -> fmt::Result {
+        for _ in 0..indent.min(INDENT_SATURATION) {
+            self.out.write_str("    ")?;
+        }
+        self.out.write_str(text.as_ref())?;
+        self.out.write_str("\n")
+    }
+
+    /// One function's definition at `indent`, headed by `keyword` — `entry` for the module's own, `let` everywhere else.
     fn binding(
-        &self,
+        &mut self,
         keyword: &str,
         id: FunctionId,
         suffix: &'static str,
         seen: &mut Seen,
-    ) -> Vec<Job> {
+        indent: usize,
+    ) -> fmt::Result {
         seen.functions.insert(id);
-        let Some(definition) = self.module.function(id) else {
-            return vec![Job::Line(format!("{keyword} <missing {id}>{suffix}"))];
+        let module = self.module;
+        let Some(definition) = module.function(id) else {
+            return self.line(indent, format!("{keyword} <missing {id}>{suffix}"));
         };
-        vec![
-            Job::Line(format!(
-                "{keyword} {}{}{} =",
-                id,
-                hint(&definition.debug_name),
-                self.params(None, &definition.params)
-            )),
-            Job::Indent,
-            Job::Node {
-                id: definition.body,
-                ret: Some(definition.return_cont),
-                suffix,
-            },
-            Job::Dedent,
-        ]
+        let head = format!(
+            "{keyword} {}{}{} =",
+            id,
+            hint(&definition.debug_name),
+            self.params(None, &definition.params)
+        );
+        self.line(indent, head)?;
+
+        self.node(
+            seen,
+            definition.body,
+            Some(definition.return_cont),
+            suffix,
+            indent + 1,
+        )
     }
 
-    /// Expand one node into lines and the regions below it, pushing in reverse so the stack pops them in order.
-    fn expand(
-        &self,
-        stack: &mut Vec<Job>,
+    /// A node and the region under it, at `indent`. `ret` is the enclosing function's return sentinel, which is what tells a return from a jump and a tail call from a call; it is absent only where the walk entered a continuation no function owns.
+    fn node(
+        &mut self,
         seen: &mut Seen,
         id: NodeId,
         ret: Option<ContinuationId>,
         suffix: &'static str,
-    ) {
-        // The node graph is a tree in every module the verifier admits — `verify_function_body` refuses a second parent — but this printer also reads modules that do not verify, so a second visit is reported instead of silently duplicating the subtree under it.
-        if !seen.nodes.insert(id) {
-            stack.push(Job::Line(format!("<{id} again>{suffix}")));
-            return;
-        }
-        let Some(node) = self.module.node(id) else {
-            stack.push(Job::Line(format!("<missing {id}>{suffix}")));
-            return;
-        };
+        indent: usize,
+    ) -> fmt::Result {
+        recurse(|| self.chain(seen, id, ret, suffix, indent))
+    }
 
-        let mut jobs = Vec::new();
-        match node {
-            Node::LetValue {
-                result,
-                value,
-                next,
-            } => {
-                jobs.push(Job::Line(format!(
-                    "let {} = {};",
-                    self.binder(*result),
-                    self.value_expr(value)
-                )));
-                jobs.push(Job::Node {
-                    id: *next,
-                    ret,
-                    suffix,
-                });
+    /// The chain of bindings from `id` to the transfer that closes it: each binding is a line and the walk goes on to the node after it, and the functions and continuations a node binds are printed under it, each a region of its own.
+    fn chain(
+        &mut self,
+        seen: &mut Seen,
+        mut id: NodeId,
+        ret: Option<ContinuationId>,
+        suffix: &'static str,
+        indent: usize,
+    ) -> fmt::Result {
+        let module = self.module;
+
+        loop {
+            // The node graph is a tree in every module the verifier admits — `verify_function_body` refuses a second parent — but this printer also reads modules that do not verify, so a second visit is marked rather than followed.
+            if !seen.nodes.insert(id) {
+                return self.line(indent, format!("<{id} again>{suffix}"));
             }
-            Node::LetIntrinsic {
-                result,
-                op,
-                args,
-                next,
-            } => {
-                jobs.push(Job::Line(format!(
-                    "let {} = {};",
-                    self.binder(*result),
-                    self.intrinsic(op, args)
-                )));
-                jobs.push(Job::Node {
-                    id: *next,
-                    ret,
-                    suffix,
-                });
-            }
-            Node::LetFun { functions, body } => {
-                for (index, &function) in functions.iter().enumerate() {
-                    let keyword = if index == 0 { "let" } else { "and" };
-                    let last = index + 1 == functions.len();
-                    jobs.extend(self.binding(keyword, function, if last { ";" } else { "" }, seen));
+            let Some(node) = module.node(id) else {
+                return self.line(indent, format!("<missing {id}>{suffix}"));
+            };
+
+            id = match node {
+                Node::LetValue {
+                    result,
+                    value,
+                    next,
+                } => {
+                    let binding =
+                        format!("let {} = {};", self.binder(*result), self.value_expr(value));
+                    self.line(indent, binding)?;
+                    *next
                 }
-                jobs.push(Job::Node {
-                    id: *body,
-                    ret,
-                    suffix,
-                });
-            }
-            Node::LetCont {
-                continuations,
-                body,
-            } => {
-                for (index, &continuation) in continuations.iter().enumerate() {
-                    let keyword = if index == 0 { "cont" } else { "and" };
-                    let last = index + 1 == continuations.len();
-                    let closing = if last { ";" } else { "" };
-                    seen.continuations.insert(continuation);
-                    match self.module.continuation(continuation) {
-                        Some(definition) => {
-                            jobs.push(Job::Line(format!(
-                                "{keyword} {}{}{} =",
-                                continuation,
-                                hint(&definition.debug_name),
-                                self.params(Some(continuation), &definition.params)
-                            )));
-                            jobs.push(Job::Indent);
-                            jobs.push(Job::Node {
-                                id: definition.body,
-                                ret,
-                                suffix: closing,
-                            });
-                            jobs.push(Job::Dedent);
-                        }
-                        None => jobs.push(Job::Line(format!(
-                            "{keyword} <missing {continuation}>{closing}"
-                        ))),
+                Node::LetIntrinsic {
+                    result,
+                    op,
+                    args,
+                    next,
+                } => {
+                    let binding = format!(
+                        "let {} = {};",
+                        self.binder(*result),
+                        self.intrinsic(op, args)
+                    );
+                    self.line(indent, binding)?;
+                    *next
+                }
+                Node::LetFun { functions, body } => {
+                    for (index, &function) in functions.iter().enumerate() {
+                        let keyword = if index == 0 { "let" } else { "and" };
+                        let last = index + 1 == functions.len();
+                        self.binding(keyword, function, if last { ";" } else { "" }, seen, indent)?;
                     }
+                    *body
                 }
-                jobs.push(Job::Node {
-                    id: *body,
-                    ret,
-                    suffix,
-                });
-            }
-            Node::ApplyFun {
-                callee,
-                args,
-                return_to,
-            } => {
-                let call = format!("{}({})", self.callee(callee), self.operands(args));
-                jobs.push(Job::Line(self.transfer(call, *return_to, ret, suffix)));
-            }
-            Node::Foreign {
-                function,
-                args,
-                return_to,
-            } => {
-                let call = format!(
-                    "{}/{}({})",
-                    function.namespace(),
-                    function.name(),
-                    self.operands(args)
-                );
-                jobs.push(Job::Line(self.transfer(call, *return_to, ret, suffix)));
-            }
-            Node::Cell {
-                op,
-                args,
-                return_to,
-            } => {
-                let call = format!("{}({})", cell_name(*op), self.operands(args));
-                jobs.push(Job::Line(self.transfer(call, *return_to, ret, suffix)));
-            }
-            Node::Channel {
-                op,
-                args,
-                return_to,
-            } => {
-                let call = format!("{}({})", channel_name(*op), self.operands(args));
-                jobs.push(Job::Line(self.transfer(call, *return_to, ret, suffix)));
-            }
-            Node::Intrinsic {
-                op,
-                args,
-                return_to,
-            } => {
-                let call = format!("{}({})", intrinsic_call_name(*op), self.operands(args));
-                jobs.push(Job::Line(self.transfer(call, *return_to, ret, suffix)));
-            }
-            Node::ApplyCont(edge) => {
-                let transfer = self
-                    .returning(edge, ret)
-                    .unwrap_or_else(|| format!("jump {}", self.edge(edge)));
-                jobs.push(Job::Line(format!("{transfer}{suffix}")));
-            }
-            Node::Switch {
-                scrutinee,
-                cases,
-                default,
-            } => {
-                jobs.push(Job::Line(format!("switch {}", self.atom(scrutinee))));
-                for (value, edge) in cases {
-                    jobs.push(Job::Line(format!("| {value} => {}", self.arm(edge, ret))));
+                Node::LetCont {
+                    continuations,
+                    body,
+                } => {
+                    for (index, &continuation) in continuations.iter().enumerate() {
+                        let keyword = if index == 0 { "cont" } else { "and" };
+                        let last = index + 1 == continuations.len();
+                        let closing = if last { ";" } else { "" };
+                        seen.continuations.insert(continuation);
+                        match module.continuation(continuation) {
+                            Some(definition) => {
+                                let head = format!(
+                                    "{keyword} {}{}{} =",
+                                    continuation,
+                                    hint(&definition.debug_name),
+                                    self.params(Some(continuation), &definition.params)
+                                );
+                                self.line(indent, head)?;
+                                self.node(seen, definition.body, ret, closing, indent + 1)?;
+                            }
+                            None => self.line(
+                                indent,
+                                format!("{keyword} <missing {continuation}>{closing}"),
+                            )?,
+                        }
+                    }
+                    *body
                 }
-                if let Some(edge) = default {
-                    jobs.push(Job::Line(format!("| _ => {}", self.arm(edge, ret))));
+                Node::ApplyFun {
+                    callee,
+                    args,
+                    return_to,
+                } => {
+                    let call = format!("{}({})", self.callee(callee), self.operands(args));
+                    let transfer = self.transfer(call, *return_to, ret, suffix);
+                    return self.line(indent, transfer);
                 }
-                jobs.push(Job::Line(format!("end{suffix}")));
-            }
-            Node::Halt { function, args } => jobs.push(Job::Line(format!(
-                "halt {}/{}({}){suffix}",
-                function.namespace(),
-                function.name(),
-                self.operands(args)
-            ))),
-            Node::Panic(panic) => jobs.push(Job::Line(format!("panic {panic}{suffix}"))),
-            Node::Unreachable => jobs.push(Job::Line(format!("unreachable{suffix}"))),
-        }
+                Node::Foreign {
+                    function,
+                    args,
+                    return_to,
+                } => {
+                    let call = format!(
+                        "{}/{}({})",
+                        function.namespace(),
+                        function.name(),
+                        self.operands(args)
+                    );
+                    let transfer = self.transfer(call, *return_to, ret, suffix);
+                    return self.line(indent, transfer);
+                }
+                Node::Cell {
+                    op,
+                    args,
+                    return_to,
+                } => {
+                    let call = format!("{}({})", cell_name(*op), self.operands(args));
+                    let transfer = self.transfer(call, *return_to, ret, suffix);
+                    return self.line(indent, transfer);
+                }
+                Node::Channel {
+                    op,
+                    args,
+                    return_to,
+                } => {
+                    let call = format!("{}({})", channel_name(*op), self.operands(args));
+                    let transfer = self.transfer(call, *return_to, ret, suffix);
+                    return self.line(indent, transfer);
+                }
+                Node::Intrinsic {
+                    op,
+                    args,
+                    return_to,
+                } => {
+                    let call = format!("{}({})", intrinsic_call_name(*op), self.operands(args));
+                    let transfer = self.transfer(call, *return_to, ret, suffix);
+                    return self.line(indent, transfer);
+                }
 
-        jobs.reverse();
-        stack.extend(jobs);
+                Node::ApplyCont(edge) => {
+                    let transfer = self
+                        .returning(edge, ret)
+                        .unwrap_or_else(|| format!("jump {}", self.edge(edge)));
+                    return self.line(indent, format!("{transfer}{suffix}"));
+                }
+                Node::Switch {
+                    scrutinee,
+                    cases,
+                    default,
+                } => {
+                    let scrutinee = self.atom(scrutinee);
+                    self.line(indent, format!("switch {scrutinee}"))?;
+                    for (value, edge) in cases {
+                        let arm = self.arm(edge, ret);
+                        self.line(indent, format!("| {value} => {arm}"))?;
+                    }
+                    if let Some(edge) = default {
+                        let arm = self.arm(edge, ret);
+                        self.line(indent, format!("| _ => {arm}"))?;
+                    }
+                    return self.line(indent, format!("end{suffix}"));
+                }
+                Node::Halt { function, args } => {
+                    let halt = format!(
+                        "halt {}/{}({}){suffix}",
+                        function.namespace(),
+                        function.name(),
+                        self.operands(args)
+                    );
+                    return self.line(indent, halt);
+                }
+                Node::Panic(panic) => return self.line(indent, format!("panic {panic}{suffix}")),
+                Node::Unreachable => return self.line(indent, format!("unreachable{suffix}")),
+            };
+        }
     }
 
     /// The return this edge is, if it is one. The single statement of what an edge to the sentinel prints as, so the transfer and the switch arm cannot drift apart about it.

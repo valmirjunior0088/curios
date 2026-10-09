@@ -110,9 +110,9 @@ fn printing_is_deterministic_across_constructions() {
     assert_eq!(representative().to_string(), representative().to_string());
 }
 
-/// A straight chain of bindings, deeper than any recursive printer would survive. The walk is an explicit job stack, so this is a statement about the stack and not about the module.
+/// A straight chain of fifty thousand bindings prints from a thread of the default stack: the walk follows a chain in a loop, and recurses only into what a node binds.
 #[test]
-fn a_deep_module_prints_without_native_stack() {
+fn a_long_chain_of_bindings_prints_in_a_loop() {
     const DEPTH: usize = 50_000;
 
     let module = module_with(|module, ret| {
