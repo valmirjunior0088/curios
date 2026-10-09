@@ -91,3 +91,13 @@ test logical_operations_use_certified_chars =
             Nat/to_str(Str/len(s)),
             Str/between(s, Str/At/of_offset(s, 1), Str/At/of_offset(s, 4))]),
         "a€😀|€|1|4|😀|true|false|3|€");
+
+-- `repeat` writes its text `n` times, at no copy, at one, at an odd count, and at a count a tree of single copies would not fit a test in: a million copies of one letter have a million bytes, and each half was built once.
+test repeat_writes_its_text_n_times =
+    Test/equal(
+        [
+            Str/repeat("ab", 0),
+            Str/repeat("ab", 1),
+            Str/repeat("ab", 5),
+            Nat/to_str(Str/len(Str/repeat("a", 1000000)))],
+        ["", "ab", "ababababab", "1000000"]);

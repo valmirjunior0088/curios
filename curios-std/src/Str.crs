@@ -344,8 +344,16 @@ pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
     lower_ascii_bytes(to_bytes(a)) == lower_ascii_bytes(to_bytes(b));
 
 --- `s` written `n` times.
+---
+--- Half the copies are built once and joined to themselves, with `s` once more where `n` is odd, so `n` copies take a number of joins logarithmic in `n` and hold each half once.
 pub let repeat(s: Str, n: Nat) -> Str =
-    List/balanced(n, "", (_, _) => s, (l, r) => concat(l, r));
+    match n < 2
+    | true => match n | 0 => "" | _ => s end
+    | false =>
+        let half = repeat(s, n / 2);
+        let doubled = concat(half, half);
+        match n % 2 | 0 => doubled | _ => concat(doubled, s) end
+    end;
 
 --- Whether a scan state can only finish its character at a scalar value, `partial` being the bits gathered so far: `pending` inside a character, and nothing owed between them.
 let pending_at(sc: Scan, partial: Nat) -> Bool =
