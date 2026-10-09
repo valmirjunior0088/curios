@@ -1,6 +1,6 @@
 //! Fixtures the intrinsic-fold suites share: the terms they fold and the reducer they fold through.
 //!
-//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it but [`Folding`], which `term`'s walk harness puts the truth table through.
+//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it but [`Folding`], which `term`'s walk harness puts the truth table through and `linear`'s suite folds a closed comparison with.
 
 use {
     super::{Reducer, reduce_intrinsic},

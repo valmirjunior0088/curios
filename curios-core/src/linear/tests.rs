@@ -1,9 +1,6 @@
 use {
     super::*,
-    crate::{
-        Cost, Free, One, ReduceError, Reducer, Scope, int_negate, int_of_nat, int_sum,
-        reduce_intrinsic,
-    },
+    crate::{Folding, Free, One, Reducer, Scope, int_negate, int_of_nat, int_sum},
 };
 
 fn sym(index: u32, hint: &'static str) -> Term {
@@ -22,31 +19,7 @@ fn int(value: i32) -> Term {
     Term::intrinsic(Intrinsic::Int(Integer::from(value)))
 }
 
-/// Folds intrinsics all the way down, so a comparison whose symbols were replaced by literals comes back a `Bool`.
-struct Folding;
-
-impl Reducer for Folding {
-    fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
-        match &*term {
-            Subterm::Intrinsic(intrinsic) => Ok(reduce_intrinsic(self, intrinsic)?.into()),
-            _ => Ok(term),
-        }
-    }
-
-    fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
-        self.reduce(term)
-    }
-
-    fn spend(&mut self, _cost: Cost) -> Result<(), ReduceError> {
-        Ok(())
-    }
-
-    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
-        Free::local(1_000_000, hint)
-    }
-}
-
-/// `comparison` with each of `symbols` replaced by the literal `values` gives it, folded to its `Bool`.
+/// `comparison` with each of `symbols` replaced by the literal `values` gives it, folded to its `Bool`: [`Folding`] folds intrinsics all the way down.
 fn value_at(comparison: &Intrinsic, symbols: &[(u32, &'static str)], values: &[Term]) -> bool {
     let mut term = Term::intrinsic(comparison.clone());
     for ((index, hint), value) in symbols.iter().zip(values) {
