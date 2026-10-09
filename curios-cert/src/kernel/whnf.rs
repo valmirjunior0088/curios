@@ -28,9 +28,10 @@ use {
     },
     curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS},
     curios_core::{
-        Apply, Atom, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid,
-        Func, Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj,
-        Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
+        Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
+        FreeMonoid, Func, Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat,
+        Probe, Proj, Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var,
+        Variant, Visit,
     },
     curios_utilities::recurse,
 };
@@ -54,6 +55,19 @@ impl ClosedHost for Kernel<'_> {
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
         self.value_at(name)
     }
+
+    fn closed_memo(&mut self) -> &mut ClosedMemo {
+        self.closed_memo_mut()
+    }
+}
+
+/// A run of the closed machine over `term`, on the memo the kernel keeps for its runs.
+fn closed_run(kernel: &mut Kernel, term: Term, demand: Demand) -> Result<Term, ReduceError> {
+    let outer = kernel.begin_closed_run();
+    let value = reduce_closed(kernel, term, demand);
+    kernel.end_closed_run(outer);
+
+    value
 }
 
 /// Whether the closed machine may take `term` under this judgment: the kernel admits it at all (the `machine` field is false only in the differential fixture's strategy arm), the representation-side gate ([`accelerable`]) holds, and no case equation is in scope — because inside an arm a closed scrutinee *is* the arm's assumed value.
@@ -137,7 +151,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     if machine_admissible(kernel, &term) {
         let entry = term.clone();
         let before = kernel.consumption();
-        let value = reduce_closed(kernel, term, Demand::Whnf)?;
+        let value = closed_run(kernel, term, Demand::Whnf)?;
         let replay = kernel.replay_since(value.clone(), before);
         kernel.whnf_store(entry, false, replay);
 
@@ -784,7 +798,7 @@ pub(crate) fn unfold_rec(rec: Rec) -> Term {
 fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
     if machine_admissible(kernel, &term) {
-        return reduce_closed(kernel, term, Demand::Forced);
+        return closed_run(kernel, term, Demand::Forced);
     }
 
     let folded = term.clone();

@@ -23,11 +23,11 @@ use {
         pinned_instance,
     },
     curios_core::{
-        Advance, Apply, Argument, Atom, Bound, Carrier, Cases, Classes, ClosedHost, Cost, Demand,
-        Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
-        InstanceHead, Intrinsic, Layer, Let, Level, Match, MatchResult, Metavar, Nat, Polarity,
-        Probe, Proj, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Var, Variant, Visit, accelerable, atoms_within,
+        Advance, Apply, Argument, Atom, Bound, Carrier, Cases, Classes, ClosedHost, ClosedMemo,
+        Cost, Demand, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType,
+        Instance, InstanceHead, Intrinsic, Layer, Let, Level, Match, MatchResult, Metavar, Nat,
+        Polarity, Probe, Proj, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
+        Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, Visit, accelerable, atoms_within,
         classable, instantiate_universe_levels_scoped, probe_spellings, project_erased_universes,
         reduce_closed, reduce_intrinsic, refold,
     },
@@ -53,6 +53,10 @@ impl ClosedHost for Context<'_> {
 
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
         self.var_reduct_at(name)
+    }
+
+    fn closed_memo(&mut self) -> &mut ClosedMemo {
+        self.closed_memo_mut()
     }
 }
 

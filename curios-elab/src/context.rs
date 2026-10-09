@@ -63,12 +63,12 @@ use {
     },
     curios_analysis::{Unfolding, records_case_equation},
     curios_core::{
-        Advance, Bound, ConceptDecl, Consumption, Cost, Definition, DefinitionKind, Extent, Free,
-        FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl, Item, Level,
-        Metavar, MetavarId, MetavarOrigin, Minted, Mints, Probe, RecGroup, ReduceError, StructDecl,
-        Subterm, Term, Totality, Trace, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, UniverseMetaId, UniverseRole, Variance, WitnessKey,
-        WitnessOrigin, instantiate_universe_levels_scoped,
+        Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Definition, DefinitionKind,
+        Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl,
+        Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, Probe, RecGroup,
+        ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
+        Variance, WitnessKey, WitnessOrigin, instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -680,6 +680,13 @@ impl<'s> Context<'s> {
     /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
     pub fn heaviest_declaration(&self) -> Consumption {
         self.typing.spend.heaviest()
+    }
+
+    /// The closed machine's memo for the reduction in progress.
+    pub(crate) fn closed_memo_mut(&mut self) -> &mut ClosedMemo {
+        let plain = self.typing.asking.plain();
+
+        self.typing.caches.closed_memo(plain)
     }
 
     /// The read half of the reduction cache. The reducer probes it wherever a term's reduction begins — at entry, and at the scrutinee stack's frame push, where a warm scrutinee dispatches in place instead of framing.

@@ -1,5 +1,5 @@
 use {
-    super::{ClosedHost, Demand, reduce_closed, unfold_rec},
+    super::{ClosedHost, ClosedMemo, Demand, reduce_closed, unfold_rec},
     crate::{
         Cases, Category, Cost, Exhaustion, Free, Func, InductArm, Intrinsic, Let, Many, Match,
         ReduceError, Reducer, Scope, Subterm, Term,
@@ -16,6 +16,7 @@ struct Host {
     minted: u32,
     /// What this host reads for a payload off a scrutinee's type: nothing, unless a test states one.
     stated: Option<Vec<Term>>,
+    memo: ClosedMemo,
 }
 
 impl Host {
@@ -26,6 +27,7 @@ impl Host {
             by_category: BTreeMap::new(),
             minted: 0,
             stated: None,
+            memo: ClosedMemo::default(),
         }
     }
 }
@@ -70,6 +72,10 @@ impl ClosedHost for Host {
         _tag: &crate::Atom,
     ) -> Result<Option<Vec<Term>>, ReduceError> {
         Ok(self.stated.clone())
+    }
+
+    fn closed_memo(&mut self) -> &mut ClosedMemo {
+        &mut self.memo
     }
 }
 
@@ -534,9 +540,10 @@ fn an_argument_at_a_proof_binder_is_bound_as_written() {
         ),
         Ok(nat(7))
     );
+    // On a host of its own: one that ran the marked call holds its answer, and a mark is no part of the term the answer is kept by.
     assert!(
         reduce_closed(
-            &mut host,
+            &mut Host::new(100_000),
             Term::apply(function, [nat(7), unaffordable()]),
             Demand::Forced
         )

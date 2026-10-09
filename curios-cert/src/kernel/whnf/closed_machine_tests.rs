@@ -268,7 +268,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         )
     };
 
-    // A run that forces a *bare* member selection and then asks a plain demand for a call on the same member. Both demands are exercised in one term because the machine's value memo is run-scoped: the `let` value is an intrinsic operand, which is forced, and its tail is an ordinary application, which must come back folded. Keyed on the term alone, the memo would answer a projection recorded at the forced demand to the plain probe, and the machine would run the whole fold where the strategy stops at the folded spelling.
+    // A run that forces a *bare* member selection and then asks a plain demand for a call on the same member. Both demands are exercised in one term, so that one run records at the first and is probed at the second: the `let` value is an intrinsic operand, which is forced, and its tail is an ordinary application, which must come back folded. Keyed on the term alone, the memo would answer a projection recorded at the forced demand to the plain probe, and the machine would run the whole fold where the strategy stops at the folded spelling.
     let forced_then_plain = {
         let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
         let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));

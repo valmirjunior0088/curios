@@ -923,6 +923,33 @@ fn a_claim_over_a_solved_metavariable_costs_what_the_claim_written_out_costs() {
     }
 }
 
+/// An equation costs each checker what the decision of the same fact costs. A claim `Eq()(lhs, rhs)` is typed by a run that evaluates both sides, a family's operands being evaluated as any substituend is, and conversion then asks for each side by itself: what the first run answered is kept by the closed term (`curios_core::ClosedMemo`), so the second asking is a probe. Asked twice, the equation cost twice the decision.
+#[test]
+fn an_equation_costs_what_its_decision_costs() {
+    for letters in [16, 32] {
+        let decided = declaration_cost(&parse_claim(
+            letters,
+            over_read("let _claim: Holds(ok(read)) = True/qed();"),
+        ));
+        let equated = declaration_cost(&parse_claim(
+            letters,
+            over_read("let _claim: Eq()(ok(read), true) = Eq/refl();"),
+        ));
+
+        for (checker, decided, equated) in [
+            ("elaborator", decided.0, equated.0),
+            ("kernel", decided.1, equated.1),
+        ] {
+            assert!(
+                equated.units() * 4 <= decided.units() * 5,
+                "at {letters} letters the {checker} spends {} units on the equation and {} on the decision",
+                equated.units(),
+                decided.units()
+            );
+        }
+    }
+}
+
 /// A published item's binders state whether they bind a proof, each asked at its declared type under the binders before it: a function's proof does, and its type parameter, its number and a value at the type parameter do not; of two `let`s, the equation does and the sum does not.
 #[test]
 fn a_published_binder_states_whether_it_binds_a_proof() {

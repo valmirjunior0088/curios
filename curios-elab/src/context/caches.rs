@@ -9,8 +9,8 @@
 use {
     crate::Sort,
     curios_core::{
-        Free, Level, LevelHead, RecGroup, Term, UniverseMetaId, rewrite_universe_levels_scoped,
-        rewrite_universe_levels_scoped_shared,
+        ClosedMemo, Free, Level, LevelHead, RecGroup, Term, UniverseMetaId,
+        rewrite_universe_levels_scoped, rewrite_universe_levels_scoped_shared,
     },
     curios_utilities::Entropy,
     std::{cell::RefCell, collections::HashMap, rc::Rc},
@@ -49,6 +49,8 @@ pub(crate) struct Caches {
     reduction: [HashMap<Term, Term>; 2],
     /// The reduction table's second door, for the terms mentioning no local binder: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it, so two spellings differing only in their levels — the one checking wrote with universe metavariables and the one totality reads with them solved — are one computation; the exact table cannot see that, and every phase re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`adapted_across_levels`], which rewrites the stored reduct's levels to the asking spelling's or declines.
     reduction_erased: [HashMap<Term, Term>; 2],
+    /// What the closed machine's runs have answered ([`ClosedMemo`]), one for each of the two reductions as the reducts have: discarded and kept wherever they are.
+    closed: [ClosedMemo; 2],
     /// The sort of each type classified since the context was last written to — `Sort::of_in`'s own answer, remembered so that a type whose graph shares a field is classified once per node where the walk alone classifies it once per path.
     ///
     /// **Valid for a quiet stretch, and that is as long as it needs to be.** A sort is derived by reduction and reads more besides: the type a local is assumed at, what a metavariable is solved to and has for a type, a declaration's sort, the levels the universe solver holds. Each of those changes by a stamped write, by a frame's exit — which closes binders and stamps nothing — or where a reduct is cleared, so the table is emptied at the first probe after either stamp has moved, wherever a frame is left, and wherever the reducts are. One classification does none of the three: it opens its binders beside the context rather than in it, which is why `Sort::of_in` threads them, and it is the classification that is per path without the table.
@@ -126,6 +128,11 @@ impl Caches {
         adapted
     }
 
+    /// The closed machine's memo for the reduction `plain` names.
+    pub(crate) fn closed_memo(&mut self, plain: bool) -> &mut ClosedMemo {
+        &mut self.closed[usize::from(plain)]
+    }
+
     pub(crate) fn reduction_insert(&mut self, term: Term, reduct: Term, plain: bool) {
         let plain = usize::from(plain);
         if !term.has_local_free() {
@@ -140,6 +147,9 @@ impl Caches {
     fn clear_reductions(&mut self) {
         for table in self.reduction.iter_mut().chain(&mut self.reduction_erased) {
             table.clear();
+        }
+        for closed in &mut self.closed {
+            closed.clear();
         }
         self.sorts.clear();
         self.kernel_spellings.get_mut().clear();
@@ -325,6 +335,9 @@ impl Caches {
             // The second door indexes exact keys, so it keeps exactly the ones the exact table kept.
             erased.retain(|_, key| reduction.contains_key(key));
         }
+        for closed in &mut self.closed {
+            closed.retain_without(name);
+        }
         // A sort is read through reducts and names none, so it has nothing to be retained by.
         self.sorts.clear();
     }
@@ -359,6 +372,7 @@ impl Caches {
             true => {
                 self.reduction[1].clear();
                 self.reduction_erased[1].clear();
+                self.closed[1].clear();
                 self.sorts.retain(|(_, plain), _| !plain);
                 // A scrutinee's spelling reads the refinements in the window, which this boundary moves.
                 self.kernel_spellings.get_mut().clear();

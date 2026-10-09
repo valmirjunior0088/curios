@@ -1,6 +1,6 @@
 //! Closed-term evaluation on an explicit stack: the machine that makes a fold cost what it computes rather than what the recursive strategy spends walking it.
 //!
-//! Both checkers' reducers are recursive functions that re-enter themselves once per operand of a nested intrinsic and once per link of a match tower, and both substitute arguments unreduced. On *closed* terms those are the two habits that manufacture cost the term never asked for: the re-entry puts one native frame — priced at [`Cost::FRAME`] — on the stack per element of a data-shaped walk, and the unreduced substitution threads accumulator chains that make every memo entry linear in how far the walk has come. This module evaluates the same terms with the recursion reified into a [`Frame`] stack and every substituted term taken to a value first, so depth costs the small frame it takes and the chains an unreduced substitution would thread are never built — an accumulator that is *genuinely* a growing closed neutral is the value itself, and the run-scoped memo below keeps re-encountering one linear.
+//! Both checkers' reducers are recursive functions that re-enter themselves once per operand of a nested intrinsic and once per link of a match tower, and both substitute arguments unreduced. On *closed* terms those are the two habits that manufacture cost the term never asked for: the re-entry puts one native frame — priced at [`Cost::FRAME`] — on the stack per element of a data-shaped walk, and the unreduced substitution threads accumulator chains that make every memo entry linear in how far the walk has come. This module evaluates the same terms with the recursion reified into a [`Frame`] stack and every substituted term taken to a value first, so depth costs the small frame it takes and the chains an unreduced substitution would thread are never built — an accumulator that is *genuinely* a growing closed neutral is the value itself, and the memo below keeps re-encountering one linear.
 //!
 //! # Why this is representation, not judgment
 //!
@@ -12,9 +12,9 @@
 //!
 //! # How the machine differs from the recursive strategy, and why each difference is safe
 //!
-//! **Substituted terms are evaluated first.** Arguments, `let` values, and `Induct` payload binds are taken to weak-head values before substitution, where the hosts substitute them unreduced. On a closed term the result is the same by confluence; what changes is cost, which is the point. Two consequences are handled rather than hoped away: a substituend whose evaluation *errors* falls back to its unreduced spelling — the hosts defer such an error until the position is demanded, and the fallback preserves exactly that — and a substituend whose evaluation exhausts the budget propagates, because spend is never refunded. An induction hypothesis is the deliberate exception: it is bound unreduced exactly as the hosts bind it, because evaluating one eagerly would run the whole tail fold whether or not the arm uses it. Once an arm does demand it, its value is recorded in the run-scoped memo under the hypothesis term, so an arm projecting a tuple-valued hypothesis several times runs the tail fold once rather than once per projection.
+//! **Substituted terms are evaluated first.** Arguments, `let` values, and `Induct` payload binds are taken to weak-head values before substitution, where the hosts substitute them unreduced. On a closed term the result is the same by confluence; what changes is cost, which is the point. Two consequences are handled rather than hoped away: a substituend whose evaluation *errors* falls back to its unreduced spelling — the hosts defer such an error until the position is demanded, and the fallback preserves exactly that — and a substituend whose evaluation exhausts the budget propagates, because spend is never refunded. An induction hypothesis is the deliberate exception: it is bound unreduced exactly as the hosts bind it, because evaluating one eagerly would run the whole tail fold whether or not the arm uses it. Once an arm does demand it, its value is recorded in the memo under the hypothesis term, so an arm projecting a tuple-valued hypothesis several times runs the tail fold once rather than once per projection.
 //!
-//! **A proof is left as written.** A substituend at a binder that states it binds a proof is: an argument, a `let`'s value and an arm's payload at one are a proof, whose value no judgment reads, so they are bound unreduced, and a body that eliminates one demands it where it does, the run's memo keeping the demand to one evaluation. The binder states it because the machine holds a value and a closed body where it substitutes, and no telescope to read a sort under ([`Scope::binds_proof`]). So is the proof of an operation's bound: no fold reads it ([`Intrinsic::bound`]), so the intrinsic arm, which forces the operands it folds over, never enters it. A type is evaluated as any substituend is, a family among them: conversion compares the reduct it is handed, and two instances of a definition apart in a level are told from one by whether they reach it as written or as what they unfold to.
+//! **A proof is left as written.** A substituend at a binder that states it binds a proof is: an argument, a `let`'s value and an arm's payload at one are a proof, whose value no judgment reads, so they are bound unreduced, and a body that eliminates one demands it where it does, the memo keeping the demand to one evaluation. The binder states it because the machine holds a value and a closed body where it substitutes, and no telescope to read a sort under ([`Scope::binds_proof`]). So is the proof of an operation's bound: no fold reads it ([`Intrinsic::bound`]), so the intrinsic arm, which forces the operands it folds over, never enters it. A type is evaluated as any substituend is, a family among them: conversion compares the reduct it is handed, and two instances of a definition apart in a level are told from one by whether they reach it as written or as what they unfold to.
 //!
 //! **A witness named at an instance is left as written.** An argument at a `use` position that is a global name at a universe instance is bound as that name, as a monomorphic witness's bare name is by the rule for names: the hosts leave it so, a method projected off it unfolds it where the method is demanded, and evaluated here its dictionary stands wherever an alias over the witness unfolds, in a type a report prints and resolution can no longer restore. The application states the position, since a function literal's binder does not. A family passed at an instance is no witness, and is evaluated as the paragraph above says.
 //!
@@ -26,7 +26,11 @@
 //!
 //! # What a step costs
 //!
-//! A dispatch spends [`Cost::STEP`], an opening spends the kernel's beta formula, a frame is charged per new *peak* of machine depth at [`machine_frame`] — the few slots a [`Frame`] takes, priced honestly the way [`Cost::FRAME`] prices the native frame the recursive strategy takes — and every write to the run-scoped memo is charged as the two handles it stores. That difference is the whole yield: a fold's per-element price falls from the native frame row to the transitions and openings the fold actually performs, and what the strategy amortized through its compilation-scoped memos the machine amortizes through the run-scoped one, since its internal steps bypass the hosts' tables.
+//! A dispatch spends [`Cost::STEP`], an opening spends the kernel's beta formula, a frame is charged per new *peak* of machine depth at [`machine_frame`] — the few slots a [`Frame`] takes, priced honestly the way [`Cost::FRAME`] prices the native frame the recursive strategy takes — and every write to the memo is charged as the two handles it stores. That difference is the whole yield: a fold's per-element price falls from the native frame row to the transitions and openings the fold actually performs, and what the strategy amortized through its compilation-scoped memos the machine amortizes through its own, since its internal steps bypass the hosts' tables.
+//!
+//! # What a run leaves behind
+//!
+//! The memo is the host's to keep ([`ClosedMemo`], [`ClosedHost::closed_memo`]), and a run reads what the runs before it wrote. A closed term has one value at a demand under one definition store, whichever run finds it, so an answer stands for every later run its host makes while that store stands: in both checkers the declaration under judgment, each discarding the memo where it discards its own reducts. A term a run evaluated on the way to something else is then a probe when it is asked for by itself: the two sides of an equation, evaluated where the equation's type is formed and asked again by conversion, cost one evaluation each.
 
 use {
     super::{
@@ -56,6 +60,41 @@ pub trait ClosedHost: Reducer {
     /// The payload the one arm of a closed match binds, read off its scrutinee's type with the scrutinee unevaluated: the payload of `tag`, where `head`'s family is a proposition whose indices state every component of it, and `None` where the scrutinee has to be evaluated to bind one. A closed proof of such a family is that constructor, so the indices are asked nothing. The machine holds no type to read, which is why this is the host's.
     fn stated_payload(&mut self, head: &Term, tag: &Atom)
     -> Result<Option<Vec<Term>>, ReduceError>;
+
+    /// What this host's closed runs have answered, for as long as a closed term's value stands with it: the machine reads and writes it at every run, and the host discards it where what a name unfolds to may have changed.
+    fn closed_memo(&mut self) -> &mut ClosedMemo;
+}
+
+/// What closed runs have answered, by the closed term asked: the machine's memo, which its host keeps past the run that filled it.
+///
+/// A closed term has one value at a demand under one definition store, whichever run finds it, so an entry answers every later run its host makes while that store stands. The second asking of a term a run evaluated on the way to something else — an equation's side, run to form the equation's type and asked again by conversion — is then a probe.
+#[derive(Debug, Default)]
+pub struct ClosedMemo {
+    /// Values produced at the plain demand, keyed on the term as focused — intrinsic reducts among them, see [`Finish::Intrinsic`] for the chain it exists to keep linear. Each insertion is charged before it is made.
+    values: HashMap<Term, Term>,
+    /// Values produced at the forced demand. Kept apart because a term's value differs by demand exactly where a recursive call is involved: forced, a call is the value its fold computes; plain, it is the folded call itself. A plain request reads [`ClosedMemo::values`] alone, and a forced one either table, since a weak-head value that is not a folded spelling is its own forced form and a folded one is never recorded.
+    forced: HashMap<Term, Term>,
+}
+
+impl ClosedMemo {
+    /// Forget every answer.
+    pub fn clear(&mut self) {
+        self.values.clear();
+        self.forced.clear();
+    }
+
+    /// Forget every answer that names `name`: a name defined since can only move a value that read its absence, and a value that did holds the name.
+    pub fn retain_without(&mut self, name: &Free) {
+        self.values.retain(|_, value| !value.mentions_free(name));
+        self.forced.retain(|_, value| !value.mentions_free(name));
+    }
+
+    fn remembered(&self, term: &Term, demand: Demand) -> Option<&Term> {
+        match demand {
+            Demand::Whnf => self.values.get(term),
+            Demand::Forced => self.forced.get(term).or_else(|| self.values.get(term)),
+        }
+    }
 }
 
 /// Whether `term` is in the machine's domain: no local frees and no metavariables, read off the per-node cached bits in O(1). The hosts add their own judgment-side condition — no refinements in scope — at the call site.
@@ -82,8 +121,6 @@ pub fn reduce_closed<H: ClosedHost>(
     Machine {
         stack: Vec::new(),
         peak: 0,
-        values: HashMap::new(),
-        forced: HashMap::new(),
     }
     .run(host, term, demand)
 }
@@ -115,7 +152,7 @@ enum Finish {
 ///
 /// `catch` marks the positions the hosts substitute unreduced — beta arguments and arm payload binds — where an evaluation error must fall back to the original spelling rather than surface, because the host would have deferred it until the position was demanded. Intrinsic and foreign operands are strict in the hosts too, so their runs do not catch.
 ///
-/// `written` says which of those positions are bound as they are written, one answer per term and none where no position is: the ones whose binder states that it binds a proof ([`Scope::binds_proof`]), and at a beta step a witness named at an instance. No judgment reads a proof's value, so the run does not compute it; a body that eliminates one demands it where it does, once, through the run's memo.
+/// `written` says which of those positions are bound as they are written, one answer per term and none where no position is: the ones whose binder states that it binds a proof ([`Scope::binds_proof`]), and at a beta step a witness named at an instance. No judgment reads a proof's value, so the run does not compute it; a body that eliminates one demands it where it does, once, through the memo.
 struct Args {
     originals: Vec<Term>,
     written: Vec<bool>,
@@ -161,7 +198,7 @@ enum Frame {
         index: usize,
         demand: Demand,
     },
-    /// Record the value about to be produced under `key` in the run-scoped memo, in the table of the `demand` it is produced at — pushed under an application, a member selection or a match, so the second occurrence of the same closed call — or the second projection of the same induction hypothesis — is one probe. This is the machine's spelling of the amortization the hosts get from their own memos, which the machine's internal steps bypass.
+    /// Record the value about to be produced under `key` in the memo, in the table of the `demand` it is produced at — pushed under an application, a member selection or a match, so the second occurrence of the same closed call — or the second projection of the same induction hypothesis — is one probe. This is the machine's spelling of the amortization the hosts get from their own memos, which the machine's internal steps bypass.
     Memo {
         key: Term,
         demand: Demand,
@@ -211,10 +248,6 @@ impl<H: Reducer> Reducer for Tap<'_, H> {
 struct Machine {
     stack: Vec<Frame>,
     peak: usize,
-    /// Run-scoped values produced at the plain demand, keyed on the term as focused — intrinsic reducts among them, see [`Finish::Intrinsic`] for the chain it exists to keep linear. Dropped with the run; each insertion is charged before it is made.
-    values: HashMap<Term, Term>,
-    /// Run-scoped values produced at the forced demand. Kept apart because a term's value differs by demand exactly where a recursive call is involved: forced, a call is the value its fold computes; plain, it is the folded call itself. A plain request reads [`Machine::values`] alone, and a forced one either table, since a weak-head value that is not a folded spelling is its own forced form and a folded one is never recorded.
-    forced: HashMap<Term, Term>,
 }
 
 impl Machine {
@@ -314,15 +347,11 @@ impl Machine {
         }
 
         // A plain request reads what plain requests produced; a forced one may read either — see [`Machine::forced`]. Keyed on the term alone, a forced call's or a forced match's value answered a later plain request for the same term, where the strategy answers the folded call.
-        let remembered = match demand {
-            Demand::Whnf => self.values.get(&term),
-            Demand::Forced => self.forced.get(&term).or_else(|| self.values.get(&term)),
-        };
-        if let Some(value) = remembered {
+        if let Some(value) = host.closed_memo().remembered(&term, demand) {
             return Ok(Step::Value(value.clone()));
         }
 
-        // The forced demand steps into the member's body, and the value is remembered under the projection so a recursive member's body is opened and eta-probed once per run rather than once per call.
+        // The forced demand steps into the member's body, and the value is remembered under the projection so a recursive member's body is opened and eta-probed once rather than once per call.
         if let Some((group, index)) = term.as_rec_proj() {
             let body = group.member_body(index);
             let key = term.clone();
@@ -344,7 +373,7 @@ impl Machine {
             },
 
             aps @ Subterm::Apply(_) => {
-                // The application is remembered whole so that, if its head turns out to be a plain function, its value can be recorded under it — the same closed call, `step` at the same byte and state, then evaluates once per run and probes thereafter. Whether to record is the head frame's decision, because only there is the head known: a member selection's calls never repeat within a run (their fold argument strictly shrinks), and a folded spelling must never be served to a demand that would unfold it.
+                // The application is remembered whole so that, if its head turns out to be a plain function, its value can be recorded under it — the same closed call, `step` at the same byte and state, then evaluates once and probes thereafter. Whether to record is the head frame's decision, because only there is the head known: a member selection's calls never repeat within a run (their fold argument strictly shrinks), and a folded spelling must never be served to a demand that would unfold it.
                 let key = Term::from(aps);
                 let Subterm::Apply(Apply { head, arguments }) = Term::unwrap_or_clone(key.clone())
                 else {
@@ -545,10 +574,12 @@ impl Machine {
                         Ok(Step::Eval(head, demand))
                     }
                     _ => {
-                        // Remember the probe's negative outcome under the function itself, so a body reached again — a plain definition's, unfolded at every call — pays the eta probe once per run.
+                        // Remember the probe's negative outcome under the function itself, so a body reached again — a plain definition's, unfolded at every call — pays the eta probe once.
                         let value = Term::from(Subterm::Func(func));
                         host.spend(Cost::buffer(2))?;
-                        self.values.insert(value.clone(), value.clone());
+                        host.closed_memo()
+                            .values
+                            .insert(value.clone(), value.clone());
                         Ok(Step::Value(value))
                     }
                 }
@@ -725,9 +756,10 @@ impl Machine {
                 if !folded {
                     // One entry of two `Term` handles, on the buffer row, charged before the write.
                     host.spend(Cost::buffer(2))?;
+                    let memo = host.closed_memo();
                     match demand {
-                        Demand::Whnf => self.values.insert(key, value.clone()),
-                        Demand::Forced => self.forced.insert(key, value.clone()),
+                        Demand::Whnf => memo.values.insert(key, value.clone()),
+                        Demand::Forced => memo.forced.insert(key, value.clone()),
                     };
                 }
 
@@ -787,7 +819,7 @@ impl Machine {
 
     /// Advance an [`Args`] run: evaluate the next pending term, or finish over the collected values.
     ///
-    /// **A global name in a catching position stays a name.** The hosts substitute a beta argument or an arm payload as written and unfold a name only where it is demanded; evaluating the name here and substituting its *value* is call-by-value on definitions, and on a function-valued global it inlines the definition's whole web once per occurrence — `both(r11, anyof(r11, r11))` came back holding `r11`'s value twice, that value holding `r10`'s twice, a graph whose tree is `2^n` — which the host's unfold memo then retained and the host's own beta later opened as a tree. Everything else in a catching position is still evaluated, which is what keeps a data-shaped walk at constant native depth; a name costs the host one unfold where it is demanded, served by the run-scoped memo thereafter.
+    /// **A global name in a catching position stays a name.** The hosts substitute a beta argument or an arm payload as written and unfold a name only where it is demanded; evaluating the name here and substituting its *value* is call-by-value on definitions, and on a function-valued global it inlines the definition's whole web once per occurrence — `both(r11, anyof(r11, r11))` came back holding `r11`'s value twice, that value holding `r10`'s twice, a graph whose tree is `2^n` — which the host's unfold memo then retained and the host's own beta later opened as a tree. Everything else in a catching position is still evaluated, which is what keeps a data-shaped walk at constant native depth; a name costs the host one unfold where it is demanded, served by the memo thereafter.
     fn args<H: ClosedHost>(&mut self, host: &mut H, mut args: Args) -> Result<Step, ReduceError> {
         while args.next < args.originals.len() {
             let next = args.originals[args.next].clone();
@@ -826,8 +858,9 @@ impl Machine {
                 let value = Term::from(reduce_intrinsic(&mut tap, &intrinsic)?);
                 // Two entries of two `Term` handles each, on the buffer row, charged before they are made. The self-entry is what makes a *rebuilt* neutral — a chain link — recognizable as already evaluated when it comes back around as somebody's operand.
                 host.spend(Cost::buffer(4))?;
-                self.values.insert(value.clone(), value.clone());
-                self.values.insert(key, value.clone());
+                let memo = host.closed_memo();
+                memo.values.insert(value.clone(), value.clone());
+                memo.values.insert(key, value.clone());
 
                 Ok(Step::Value(value))
             }

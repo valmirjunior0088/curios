@@ -53,9 +53,9 @@ use {
     crate::{Baseline, entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
-        Advance, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level, LevelHead,
-        Lexicon, Module, Polarity, Probe, Reads, ReduceError, Reducer, Spelling, StructDecl, Term,
-        UniverseConstraint, UniverseContext, UniverseError, Variance,
+        Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
+        LevelHead, Lexicon, Module, Polarity, Probe, Reads, ReduceError, Reducer, Spelling,
+        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Variance,
     },
     curios_utilities::{Plicity, SyntaxRegistry},
     std::{collections::BTreeMap, fmt, mem, rc::Rc},
@@ -656,6 +656,21 @@ impl<'s> Kernel<'s> {
     /// An observation for a measurement: nothing in the kernel reads it, and it exists so a figure can be stated with a probe beside it instead of bisected against a budget from outside the compiler. See [`Consumption`] for why depth is the row it separates out.
     pub fn heaviest_declaration(&self) -> Consumption {
         self.spend.heaviest()
+    }
+
+    /// The closed machine's memo, which lives the declaration as the local-free reducts do.
+    pub(crate) fn closed_memo_mut(&mut self) -> &mut ClosedMemo {
+        self.memos.closed()
+    }
+
+    /// See [`Memos::begin_closed_run`].
+    pub(crate) fn begin_closed_run(&mut self) -> Option<ClosedMemo> {
+        self.memos.begin_closed_run()
+    }
+
+    /// See [`Memos::end_closed_run`].
+    pub(crate) fn end_closed_run(&mut self, outer: Option<ClosedMemo>) {
+        self.memos.end_closed_run(outer);
     }
 
     /// See [`Spend::snapshot`].

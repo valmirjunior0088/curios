@@ -21,8 +21,8 @@
 use {
     super::{Prefix, Replay, Sort},
     curios_analysis::Erased,
-    curios_core::{Bound, Term},
-    std::{collections::HashMap, hash::Hash},
+    curios_core::{Bound, ClosedMemo, Term},
+    std::{collections::HashMap, hash::Hash, mem},
 };
 
 /// How long a remembered answer stands.
@@ -104,6 +104,8 @@ pub(super) struct Memos {
     checked: Lives<(Term, Term), ()>,
     /// The verdict of each comparison decided with no goal in progress assumed, at its type: `convert`'s own answer, both ways. Two terms that are equal graphs built apart are compared along every path that reaches a pair of their nodes, and remembered by pair each is compared once. A verdict that rested on the recurrence rule is true of the goals that were in progress when it was reached, and is not kept — see `convert`'s `History`. One for each of the two reductions, as the sorts have: a comparison reduces its sides, so a verdict plain reduction reached is not the verdict of a judgment's, which may have asked.
     converted: [Lives<(Term, Term, Term), bool>; 2],
+    /// What the closed machine's runs have answered ([`ClosedMemo`]): a closed term's value is a function of the definition store, as a local-free reduct is, and lives the declaration with them. With the memos off it lives one run ([`Memos::begin_closed_run`]), which the machine cannot do without: a fold over a neutral accumulator is linear by it.
+    closed: ClosedMemo,
 }
 
 impl Memos {
@@ -119,6 +121,7 @@ impl Memos {
             types: Lives::new(),
             checked: Lives::new(),
             converted: [Lives::new(), Lives::new()],
+            closed: ClosedMemo::default(),
         }
     }
 
@@ -277,10 +280,28 @@ impl Memos {
         )
     }
 
+    /// The closed machine's memo.
+    pub(super) fn closed(&mut self) -> &mut ClosedMemo {
+        &mut self.closed
+    }
+
+    /// A run of the closed machine is about to start. With the memos off it starts from nothing, as every reduction then does: the memo the kernel holds is set aside and handed back, for [`Memos::end_closed_run`] to restore, so a run made inside another's fold leaves the outer one's memo as it found it.
+    pub(super) fn begin_closed_run(&mut self) -> Option<ClosedMemo> {
+        (!self.enabled).then(|| mem::take(&mut self.closed))
+    }
+
+    /// The run [`Memos::begin_closed_run`] opened has ended: what it set aside is the memo again.
+    pub(super) fn end_closed_run(&mut self, outer: Option<ClosedMemo>) {
+        if let Some(outer) = outer {
+            self.closed = outer;
+        }
+    }
+
     /// Discard every remembered reduct, sort, type, check and verdict. Called wherever the budget is restored, which is what makes a hit on them free rather than order-dependent.
     pub(super) fn begin_declaration(&mut self) {
         self.whnf.clear();
         self.forced.clear();
+        self.closed.clear();
         for sorts in &mut self.sorts {
             sorts.begin_declaration();
         }
