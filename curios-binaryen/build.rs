@@ -35,7 +35,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 /// This script's own bytes, hashed — the build *recipe*, as distinct from the source it builds.
 ///
-/// This replaces a hand-bumped `BUILD_SCHEMA` constant. The constant was correct and forgettable: nothing but a contributor's memory connected a changed CMake flag to the bump that would invalidate every warm cache, so the same commit could link a library built with the old flags here and the new flags on a cold machine. Deriving it removes the step instead of documenting it.
+/// Derived, and not a constant bumped by hand: nothing but a contributor's memory would connect a changed CMake flag to the bump that invalidates every warm cache, so one commit could link a library built with the old flags here and with the new flags on a cold machine. Deriving it removes the step instead of documenting it.
 ///
 /// `include_bytes!` rather than a read at run time, because the path is then resolved by the compiler relative to this file and cannot go looking in the wrong directory. Hashing the file that computes the hash is not circular: the hash is never written into the file.
 ///
@@ -46,7 +46,7 @@ fn build_schema() -> String {
 
 /// How the C++ toolchain identifies itself, which is what the cached library is actually compatible with.
 ///
-/// The entry's *path* carries the target triple, so an architecture cannot be confused. Nothing carried the platform underneath it, and two machines of one triple on different distributions produce incompatible static libraries under identical paths and identical markers. That was nearly unreachable while this cache sat under `target/`; beside the crate it is one `rsync`, shared checkout, or restored CI cache away.
+/// The entry's *path* carries the target triple, so an architecture cannot be confused, and nothing in the path carries the platform underneath it: two machines of one triple on different distributions produce incompatible static libraries under identical paths. The cache sits beside the crate, one `rsync`, shared checkout or restored CI cache away from such a machine.
 ///
 /// A probe that fails answers with the compiler's name rather than a fixed string, so an unidentifiable toolchain differs from an identified one and forces a rebuild rather than silently inheriting someone else's.
 fn toolchain() -> String {
