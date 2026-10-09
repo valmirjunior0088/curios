@@ -5,8 +5,7 @@
 use {
     super::{
         Atoms, Declaration, Element, Extremum, Intrinsic, Nat, Operands, Sequence, Subterm, Term,
-        Words, bin_grain, int_cancellation, int_monomial, int_rebuild_cancelled, int_shaped,
-        list_element,
+        Words, bin_grain, int_cancellation, int_monomial, int_rebuild_cancelled, list_element,
     },
     curios_algebra::{
         Carrier, Conclusion, Deduction, Operation, Stripped, pair_factors, same_leaves,
@@ -75,9 +74,11 @@ fn stands_behind(first: Option<&Verdict>, answer: &Verdict) -> bool {
 
 /// The `Int` peel: ℤ under `+` is a group, so two reduced sums are one value exactly when their difference is zero, and `curios-algebra`'s cancellation moves that difference to the two sides by sign. Two constant residuals decide `Equal` or `Impossible`; a pair the cancellation changed carries on as `Equivalent` over its residuals, so `i + a ~ i + b` becomes `a ~ b` for the caller; and a pair it left untouched is `Undecided`, the stability [`peel_nat_terms`] rests on for the same reason. `None` when neither side is a literal, a sum spine or a product, so the caller keeps its own handling.
 pub fn peel_int_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
-    let this = Term::intrinsic(left.clone());
-    let that = Term::intrinsic(right.clone());
-    (int_shaped(&this) || int_shaped(&that)).then(|| {
+    // Gated before lifting, as [`peel_nat_pair`] is, so a pair that is not an `Int` costs a shape test rather than two allocations.
+    (int_shaped_intrinsic(left) || int_shaped_intrinsic(right)).then(|| {
+        let this = Term::intrinsic(left.clone());
+        let that = Term::intrinsic(right.clone());
+
         int_cancellation(&this, &that)
             .deduction()
             .map(|cancelled| int_rebuild_cancelled(cancelled, &this, &that))
@@ -339,6 +340,14 @@ fn nat_shaped(term: &Term) -> bool {
 
 fn nat_shaped_intrinsic(intrinsic: &Intrinsic) -> bool {
     matches!(intrinsic, Intrinsic::Nat(_) | Intrinsic::NatAdd(..))
+}
+
+/// [`int_shaped`](super::int_shaped) of an intrinsic not yet lifted to a term.
+fn int_shaped_intrinsic(intrinsic: &Intrinsic) -> bool {
+    matches!(
+        intrinsic,
+        Intrinsic::Int(_) | Intrinsic::IntAdd(..) | Intrinsic::IntMul(..)
+    )
 }
 
 /// Two stuck `get`s are one value when they read one position of one root: `get(slice(xs, s, l), i)` is `xs`'s element at `s + i`, which is `get(xs, s + i)`, and `get(xs ++ ys, i)` is `get(xs, i)` where the second read's own bound places `i` inside `xs`. `Equal` when `curios-algebra`'s `same_position` finds the two positions one, `Undecided` otherwise and never `Impossible` — two unlike positions may still hold one element. `None` for a pair that is not two `get`s of one carrier and grain.
