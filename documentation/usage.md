@@ -441,7 +441,7 @@ Everything generated lands under `.curios/`, beside the governing manifest, in s
 | `documentation/<package>/` | what `document` emits | beside the project |
 | `sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against | shared |
 | `foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way | shared |
-| `verdicts/<slot>` | judged units, one slot per unit | shared |
+| `verdicts/<slot>` | judged units, one slot per unit: a library, or an executable's own declarations | shared |
 | `payloads/<slot>` | precompiled payloads, one slot per executable | shared |
 | `compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary | shared |
 

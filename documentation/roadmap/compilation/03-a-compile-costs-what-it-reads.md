@@ -17,7 +17,6 @@ What is in the tree and what is open, each part by where it is written. What is 
 | A declaration's lowering is kept where its text and the names it resolved stand | In the tree | [A lowering is kept where its text and the names it resolved stand](../../design/compilation/a-lowering-is-kept-where-its-text-and-the-names-it-resolved-stand.md) |
 | A file is parsed where a declaration of it is lowered | In the tree | [A file is parsed where a declaration of it is lowered](../../design/compilation/a-file-is-parsed-where-a-declaration-of-it-is-lowered.md) |
 | Every read of elaboration and of erasure is recorded, a compile over a baseline redoes what its records say moved, and a build compiles over one as a question does | In the tree | [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md) |
-| Program: the program asked for is compiled as a unit | Open | [Stage 5](#stages) |
 
 ## What this builds on
 
@@ -55,8 +54,6 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 
 **An edit elaborates what read it, each from nothing.** Respelling `/std/Bool/not`'s body elaborates and erases again the 130 declarations that unfolded it and none behind them (`demand::asked`, `erase::asked`), and what they cost is what they cost a whole compile: a declaration is the grain, and one whose trace fails at its last question is elaborated whole.
 
-**A question about a program redoes the program.** The entry is no unit (`Fold::check`, `curios-pipeline/src/standard.rs`): nothing of it is kept or filed, so each question lowers, elaborates, judges and erases every declaration it holds. Asked about `programs/walk_mirror_indexed.crs`, 111 lines, that is 0.22 M allocations elaborating and 0.11 M judging its 14 declarations, whichever was edited.
-
 **A file is parsed whole, and a header twice.** The file an edit touched is parsed whole, and so is a standing file where one of its declarations is lowered again, though its head says where that declaration's text lies: `Bool.crs`, 3,102 bytes, is 0.11 M allocations of the edited question's parse, and a session parses a file again for every text it holds of it; the finding in [`surface`](../surface/00-findings.md), which bounds what a keystroke costs once nothing else follows the file. The rest of both columns is the unit's header, `lib.crs`, parsed twice before any unit is compiled: for the stems its package's root claims (`package_source`, `curios-package/src/layout.rs`), from the disk and outside the parse memo by design, and for whether the unit declares the file asked about (`RootSource::declares_module`).
 
 **A void attempt is forgotten.** An attempt that read a declaration not yet elaborated is made again, and the next compile of the same unit finds the same order again: a whole compile of the prelude voids 45.
@@ -90,7 +87,6 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 7. **The certifier's verdict is a facet, and its reads name facets.** It decides which of its verdicts stand as it does today, from its own record, and by comparing the facets that record names in place of looking names up: a read of another unit carries the digest of what it read, so nothing of an adopted verdict stands on a baseline's address.
 8. **Whether a proof was offered the unit's lemmas is one question of its declaration's trace.** The walk elaborates what the vocabulary reads before it offers anything, whole or over a baseline, so a declaration settled on the other side of that line from its trace is elaborated again, and no graph is consulted.
 9. **A scope and a baseline are read where they stand, at every stage.** Erasure's view reads a unit's declarations by the places it keeps, as elaboration's scope and the kernel's environment do, and a report spells a name of a unit in scope by that unit's own paths, made where the report is: nothing of a scope or a baseline is copied, replayed, validated or keyed again.
-11. **The program asked for is a unit.** Its declarations have facets as any unit's do, compiled over a baseline as any unit's are, and its final term is treated as one more declaration; a session keeps it and a project files it.
 12. **A unit is stored and restored by facet.** A unit's file is an index of its declarations, a blob for each facet that shares nothing with another declaration's — a lowered form, found by the names it declares, an erased form, a verdict, a trace — and one archive of its elaborated declarations, consed in one table, one node still standing for one structure. Reading a declaration restores its blobs and what it reaches of that archive, its signature apart from its body, and no other declaration, and a blob is validated where it is read. Filing a unit copies the blobs of the facets it kept and serializes the ones it made, with the elaborated archive, consed from the nodes its baseline already holds; and a unit compiled over a baseline is still the bytes it is compiled whole. Each name is written once in an image, and each file's text once, which its scan's heads and the places of its declarations both lie in; and whatever of a unit only its own recompile reads is restored by no other reader.
 13. **A unit is addressed by who it is.** Its slot names the compiler, its mounts and the prefixes it declared, and no unit before it. What it read of another unit is in its facets' traces, by digest, so a unit after an edited dependency is believed facet by facet.
 
@@ -102,13 +98,10 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 
 | Component | Treatment | Stage |
 | --- | --- | --- |
-| The entry | A unit, its final term one more declaration | Program |
 
 ## Stages
 
 Each lands alone, on its own check, and says what it expects to move; a move outside that is a finding.
-
-5. **Program.** Decision 11. Expected to move: which declarations a question about a program redoes, and what a question files.
 
 ## Verification
 
@@ -117,13 +110,9 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 - **Reproduction.** `std_unit_reproduction` and `std_recompile_reproduction` after every stage that changes what a unit stores: a unit compiled over a baseline is the bytes it is compiled whole.
 - **The trace is complete.** `std_replay_census` compiles `/std` over the archived unit once for each of its declarations, that one alone elaborated again and every other kept by its trace, and reports the ones that come out another way, ask otherwise, or take another declaration with them: none of 2,223, with and without an unrelated definition elaborated beside it, counted at `8f1cb4982`. That a declaration reads nothing its trace does not name is what a measurement at `648d8a850` counted, each declaration elaborated with its baseline answering for the names its trace holds and for no other (`std_trace_census` there, which the walk has since replaced): none differed and none was refused. The same of a lowered form against its lookups is not measured.
 - **Invalidation.** A recompile over a baseline redoes the declarations whose recorded reads changed, held by `curios-pipeline`'s incremental fixtures over a renamed parameter, a body edit that leaves a signature standing, one that reaches a declaration that unfolded it, and a witness declared where a declaration was told none stood; by `std_vocabulary_reach_reproduction` for a declaration moved into what the prover's vocabulary reaches; and by `curios-elab`'s erasure fixtures for a binding that moved and one that did not.
-- **Program.** A question about a program after one of its declarations' bodies is edited redoes that declaration and what read the edit, held by a fixture; the `walk_mirror_indexed` rows are retaken.
 - **The void attempts.** The `demand::void` samples of the profile the prelude's elaboration files, `curios-prelude-archive/.artifacts/profile.tsv`. Counted.
 
 ## Design decisions this overturns or corrects
-
-- [A module is a compilation unit, and the prelude is an environment](../../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): the program as something beside the units. Program.
-- [A command compiles only as far as its answer needs, and a project keeps what it compiled](../../design/tools/a-command-compiles-only-as-far-as-its-answer-needs-and-a-project-keeps-what-it-compiled.md): what a question keeps of a program. Program.
 
 ## Rejected
 
@@ -134,7 +123,6 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 - **A digest compared inside a process.** Where a baseline is in hand it holds the facet itself, and a term's comparison ends at a pointer or a cached hash; a digest is what a record holds.
 - **A unit addressed by the closure of what it depends on.** The closure needs an order no fold gives twice, and a unit after an edited dependency is still compiled whole.
 - **A stored order of declarations**, Excel's calc chain. A reused declaration's reads are settled before it is examined, in the order its trace gives, so only a declaration made again can meet one unfinished, and a whole compile has no baseline to learn an order from.
-- **The entry left a program beside the units.** Its declarations are the ones an author edits most, and nothing of them would be kept.
 
 ## Completion and retirement
 
