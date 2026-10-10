@@ -61,5 +61,4 @@ And the solver's re-validation of a candidate has three answers — it fits, it 
 - **Typing an arm's body at its motive.** It brings an arm's case equations into conversion, for no verdict.
 - **Unfolding lazily in both reducers**, comparing unreduced spellings by shape before any definition is opened: a redesign of both reducers for a verdict the lookup already gives.
 - **Settling a candidate in re-validation**, and **postponing by the candidate's shape**: the first commits a lambda's written shape before the drain, the second repeats the list of forms the parking sites already are and misses the same candidate one level down.
-- **A relevance mark on a binder**, so that irrelevance is decided with no type, as Rocq's kernel decides it: a second statement of what the type says.
 - **A table on the elaborator's context for the binders conversion opens**, **assuming them there**, and **a binder's type stored on the arm**: a second scope with a removal rule of its own, a cache write at every binder, and what Rocq's case node dropped for the declaration's.
