@@ -8,7 +8,7 @@ use {
         elaborate_func_settle, embeds, is_monad, monad_shape, normalize, problem_outcome,
         reduce_forced, refold_recs, refused_scrutinee, retry_discharge, retry_match,
         retry_projection, retry_witness, settle_qualities, shallow_scrutinee, subsume_outcome,
-        zonk_solved_term_metas,
+        synth_neutral, zonk_solved_term_metas,
     },
     curios_analysis::{
         RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation, scrutinee_solution,
@@ -100,13 +100,15 @@ pub(crate) fn quality_of(context: &mut Context, type_: &Term) -> Result<Quality,
         })
 }
 
-/// Hold `type_` to a proposition where a rule admits nothing else of it: answers whether it is one, having decided its sort where that was a quality nothing had solved. A type, and a sort its declaration leaves to a caller, is none.
-pub(crate) fn hold_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+/// Hold `type_` to a proposition where a rule admits nothing else of it: answers whether it is one, having decided its sort where that was a quality nothing had solved. A type, and a sort its declaration leaves to a caller, is none. `site` is the term the rule is asked of, which a `Sort` this decides is reported with.
+pub(crate) fn hold_prop(
+    context: &mut Context,
+    type_: &Term,
+    site: Option<Extent>,
+) -> Result<bool, Error> {
     Ok(match quality_of(context, type_)? {
         Quality::Prop => true,
-        quality @ Quality::Meta(_) => {
-            context.same_quality_at(quality, Quality::Prop, type_.extent())
-        }
+        quality @ Quality::Meta(_) => context.same_quality_at(quality, Quality::Prop, site),
         Quality::Type | Quality::Param(_) => false,
     })
 }
@@ -250,6 +252,10 @@ pub(crate) fn display_mismatch(
     this: &Term,
     that: &Term,
 ) -> Error {
+    if let Some(report) = sort_decided_twice(context, this, that) {
+        return report;
+    }
+
     let this = resolved_for_display(context, this);
     let that = resolved_for_display(context, that);
 
@@ -259,15 +265,55 @@ pub(crate) fn display_mismatch(
     if let Some(report) = unembedded_action(context, &this, &that) {
         return report;
     }
-    if let Some(report) = proposition_at_implicit_type(context, &this, &that) {
+    if let Some(report) = implicit_at_other_sort(context, &this, &that) {
         return report;
     }
 
     Error::type_mismatch(this, that)
 }
 
-/// The specialized report for a proof handed where an implicit argument declared at `Type` is still open: `this` is a proposition, the one candidate the argument offers the implicit `that` stands for, and no `Type` admits a proposition, so the implicit stays unsolved and the generic report names it `?`.
-fn proposition_at_implicit_type(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
+/// The specialized report for two sorts apart where one is a `Sort` the declaration wrote and an earlier term decided: the reader wrote neither sort, and what refuses this term is the other's decision. Read off the sides as conversion held them: the display form settles each quality to the sort it was solved to, and a written `Sort` is told from that sort nowhere after.
+fn sort_decided_twice(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
+    let inferred = reduce_forced(context, this.clone()).ok()?;
+    let expected = reduce_forced(context, that.clone()).ok()?;
+    let (Subterm::Sort(inferred, _), Subterm::Sort(expected, _)) = (&*inferred, &*expected) else {
+        return None;
+    };
+    let universes = context.universes();
+
+    // The side that is the written `Sort` states what the earlier term decided, and the other what this one needs of it.
+    [(*inferred, *expected), (*expected, *inferred)]
+        .into_iter()
+        .find_map(|(needed, written)| {
+            let other = universes.written_decision(written)?;
+            match universes.quality(needed) {
+                needed @ (Quality::Prop | Quality::Type)
+                    if needed != universes.quality(written) =>
+                {
+                    Some(Error::sort_decided_twice(needed.is_prop(), other))
+                }
+                _ => None,
+            }
+        })
+}
+
+/// Where a term of the declaration decided the sort `type_` stands at, that sort being a `Sort` the declaration wrote ([`UniverseSolver::written_decision`](crate::UniverseSolver::written_decision)): the term, where its check was recorded. `None` where `type_` stands at no such sort. A refusal that follows from the decision asks before it names a sort its reader did not write.
+///
+/// A type at a written `Sort` is a variable or an application of one, so the sort is read off the neutral's own type, where the written quality still stands for itself.
+pub(crate) fn decided_sort_of(context: &mut Context, type_: &Term) -> Option<Option<Extent>> {
+    let reduced = reduce_forced(context, type_.clone()).ok()?;
+    let sort = synth_neutral(context, &Binders::default(), &[], &reduced).ok()??;
+
+    match &*reduce_forced(context, sort).ok()? {
+        Subterm::Sort(quality, _) => context.universes().written_decision(*quality),
+        _ => None,
+    }
+}
+
+/// The specialized report for an argument handed where an implicit argument declared at the other sort is still open: `this` is the one candidate the argument offers the implicit `that` stands for, a proposition where the implicit is declared at `Type` and a type where it is declared at `Prop`, and neither sort admits what stands at the other, so the implicit stays unsolved and the generic report names it `?`.
+///
+/// Where `this` stands at a `Sort` the declaration wrote, an earlier term decided the sort it is at, and the report is that the two terms decide it apart.
+fn implicit_at_other_sort(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
     let Subterm::Metavar(Metavar {
         id,
         origin: MetavarOrigin::Implicit(ImplicitOrigin { func, binder }),
@@ -281,15 +327,30 @@ fn proposition_at_implicit_type(context: &mut Context, this: &Term, that: &Term)
     }
     let declared = context.metavar_entry(*id)?.result.clone();
     let declared = reduce_forced(context, declared).ok()?;
-    let at_a_type = matches!(&*declared, Subterm::Sort(quality, _) if context.universes().quality(*quality) == Quality::Type);
-    if !at_a_type || !is_prop(context, this).ok()? {
+    let Subterm::Sort(declared, _) = &*declared else {
+        return None;
+    };
+    let declared = context.universes().quality(*declared);
+
+    // A type still stuck on a metavariable is read as a type's where nothing states its sort, which says nothing of what it comes to.
+    let given = reduce_forced(context, this.clone()).ok()?;
+    if stuck_on_metavar(context, &given) {
         return None;
     }
+    let proposition = match (quality_of(context, this).ok()?, declared) {
+        (Quality::Prop, Quality::Type) => true,
+        (Quality::Type, Quality::Prop) => false,
+        _ => return None,
+    };
+    if let Some(other) = decided_sort_of(context, this) {
+        return Some(Error::sort_decided_twice(!proposition, other));
+    }
 
-    Some(Error::proposition_at_implicit_type(
+    Some(Error::implicit_at_other_sort(
         callee(context, func),
         binder.clone(),
         this.clone(),
+        proposition,
     ))
 }
 

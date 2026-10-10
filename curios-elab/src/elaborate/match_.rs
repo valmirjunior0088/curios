@@ -2,16 +2,16 @@ use {
     super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
     crate::{
         BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_motive,
-        contradicted_guard, hold_prop, is_prop, quality_of, reduce_with, refine_head,
-        resolved_for_display, same_uncommitted, stuck_on_metavar, unreachable_arm,
+        contradicted_guard, decided_sort_of, hold_prop, is_prop, quality_of, reduce_with,
+        refine_head, resolved_for_display, same_uncommitted, stuck_on_metavar, unreachable_arm,
     },
     curios_analysis::{
         Invert, invert_indices, retyped, scrutinee_solution, solve_indices, wholly_pinned,
     },
     curios_core::{
-        Advance, Arity, Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic,
-        IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Quality, Scope, Subterm,
-        Telescope, Term, Three, Two,
+        Advance, Arity, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType,
+        Intrinsic, IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Quality, Scope,
+        Subterm, Telescope, Term, Three, Two,
     },
     curios_num::{Binary, Grain, Natural},
     curios_utilities::Plicity,
@@ -913,7 +913,7 @@ fn elaborate_induct_match(
             Quality::Prop => false,
             Quality::Meta(_) => true,
             Quality::Type | Quality::Param(_) => {
-                return Err(Error::large_elim_of_prop(name.symbol()));
+                return Err(eliminated_into_data(context, &name, &result_type));
             }
         },
     };
@@ -1104,8 +1104,8 @@ fn elaborate_induct_match(
         .map(|d| context.with_frame(|context| check(context, d, result_type.clone())))
         .transpose()?;
 
-    if undecided && !hold_prop(context, &result_type)? {
-        return Err(Error::large_elim_of_prop(name.symbol()));
+    if undecided && !hold_prop(context, &result_type, term.extent())? {
+        return Err(eliminated_into_data(context, &name, &result_type));
     }
 
     // A match with one arm over a proposition whose indices pin its payload states the instance it eliminates: reduction fires it on that instance and reads no binder's type, so what it is moves with the term and with nothing else.
@@ -1123,6 +1123,14 @@ fn elaborate_induct_match(
     .into();
 
     Ok((rebuilt, result_type))
+}
+
+/// The refusal of a match on the proposition `name` into `result_type`, which is no proposition: this elimination's. Where the result stands at a `Sort` the declaration wrote, it is a type's because an earlier term decided so, the reader having written neither sort, and the refusal is that the two terms decide it apart.
+fn eliminated_into_data(context: &mut Context, name: &Global, result_type: &Term) -> Error {
+    match decided_sort_of(context, result_type) {
+        Some(other) => Error::sort_decided_twice(true, other),
+        None => Error::large_elim_of_prop(name.symbol()),
+    }
 }
 
 /// Open a case's instantiated telescope under `labels`, each entered at its declared (dependent) type under its payload's mark, and answer the index targets the signature terminates in, stated over those binders. The caller holds the frame the assumptions live in.

@@ -58,6 +58,27 @@ fn a_proof_handed_to_an_implicit_type_is_reported_as_a_proposition() {
 }
 
 #[test]
+fn a_value_handed_to_an_implicit_proposition_is_reported_as_a_type() {
+    // The mirror of the report above: `P` is declared at `Prop` and the one candidate the argument offers it is the type `Nat`, which no `Prop` admits.
+    let source = r#"
+        use /std/{Nat, Io};
+
+        let proves(@P: Prop, p: P) -> Nat = 0;
+        let count: Nat = proves(5);
+
+        Io/pure(())
+    "#;
+    let error = compile(source).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains(
+            "a type was given where the implicit argument 'P' of 'proves' takes a proposition"
+        ) && error.contains("Nat is a type"),
+        "unexpected report: {error}"
+    );
+    assert!(!error.contains("expected: ?"), "unexpected report: {error}");
+}
+
+#[test]
 fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     // The transcript's two stalls, reported by the text stage, which is the one that can say what was meant: `cong` is a member of `Eq`, so the route through an imported `Eq` is offered beside the direct import; `Bool` is a root's child, so the import is the route. The prelude build elaborates every `/std` module through this same path, so a false report here would fail the workspace build before it reached this test.
     let source = r#"

@@ -2689,7 +2689,7 @@ impl Convert {
                     convert_intrinsic(self, context, this, that)?
                 }
                 (Subterm::Sort(this_quality, this), Subterm::Sort(that_quality, that)) => {
-                    context.same_quality(this_quality, that_quality)
+                    context.same_quality_at(this_quality, that_quality, self.extent)
                         && Self::join_levels(context, &this, &that)?
                 }
                 (Subterm::Instance(this), Subterm::Instance(that)) => {

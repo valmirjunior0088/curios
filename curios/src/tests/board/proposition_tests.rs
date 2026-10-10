@@ -122,14 +122,17 @@ fn a_proposition_may_not_carry_a_type_field() {
 
 // Definitional proof irrelevance, at the premise the rule is stated over rather than at the rule: *which* types are propositions. `Prop` is the type of propositions, so anything admitted at `Prop` is one as far as every later rule is concerned, and irrelevance then identifies its inhabitants without looking at them.
 //
-// A list of proofs is not a proposition however little its elements carry — a list has a length, so two of them are distinguishable where their elements are not, and `Sort::of` says exactly that in both checkers. The *typing* rule for a parameterized intrinsic former follows that one rule rather than reporting the element's sort as the former's, which would infer such a list at `Prop` on both sides — and nothing here needs the former written in a `Prop` position: `@X : Prop` is solved by unification, and the solution is the reduced `ListType` node. No proposition is an element type, so the list is one of `Evidence(True)`, the type made to hold a proof.
+// A list of proofs is not a proposition however little its elements carry — a list has a length, so two of them are distinguishable where their elements are not, and `Sort::of` says exactly that in both checkers. The *typing* rule for a parameterized intrinsic former follows that one rule rather than reporting the element's sort as the former's, which would infer such a list at `Prop` on both sides — and nothing here needs the former written in a `Prop` position: `@X : Prop` is solved by unification, and the solution is the reduced `ListType` node. The list is one of `Option(True)`, a type that holds a proof.
 //
 // From there every step is the ordinary machinery. `all_equal` is sound and stays accepted below — its conclusion is discharged because irrelevance identifies any two inhabitants of the proposition `X`. Instantiating `X` at the list's type would equate a one-element list with the empty one; congruence through `List/len` carries that to `1` and `0`, and a transport takes `()` into `False`.
 //
 // Both controls are load-bearing, because the two ways to "close" this without fixing it are to stop believing `Prop` and to stop believing `List`. Irrelevance must still identify two genuinely different inhabitants of a real proposition, and a list of evidence must still be an ordinary list with a length. Both are run: the first has both checkers accept the lemma and its instantiation, and its call, whose every argument erases, reaches the runtime as the program it is.
 #[test]
 fn a_list_of_proofs_is_not_a_proposition() {
-    rejected_by(A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION, "type mismatch");
+    rejected_by(
+        A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION,
+        "a type was given where the implicit argument 'P' of 'Same' takes a proposition",
+    );
 }
 
 #[test]

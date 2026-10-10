@@ -78,17 +78,24 @@ impl UniverseSolver {
     }
 
     /// Hold two qualities one: an unsolved one is solved to the other, and two that each state a sort are one where they state the same. Answers whether they are held one. `site` is the term whose check asked, where one did: what a `Sort` this decides is reported with.
+    ///
+    /// Of two unsolved ones, one the elaboration invented is solved to one the declaration wrote, whichever side each stands on. So every quality held one with a written `Sort` is solved through a written one last, which is where [`UniverseSolver::written_decision`] reads that a term decided it.
     pub fn unify_qualities(&mut self, this: Quality, that: Quality, site: Option<Extent>) -> bool {
-        match (self.quality(this), self.quality(that)) {
-            (this, that) if this == that => true,
-            (Quality::Meta(meta), other) | (other, Quality::Meta(meta)) => {
-                self.qualities[meta.0].solution = Some(other);
-                self.qualities[meta.0].solved_at = site;
-                self.quality_log.push(meta);
-                true
+        let (open, held) = match (self.quality(this), self.quality(that)) {
+            (this, that) if this == that => return true,
+            (written @ Quality::Meta(this), Quality::Meta(invented))
+                if self.qualities[this.0].written && !self.qualities[invented.0].written =>
+            {
+                (invented, written)
             }
-            _ => false,
-        }
+            (Quality::Meta(open), held) | (held, Quality::Meta(open)) => (open, held),
+            _ => return false,
+        };
+        self.qualities[open.0].solution = Some(held);
+        self.qualities[open.0].solved_at = site;
+        self.quality_log.push(open);
+
+        true
     }
 
     /// Every quality metavariable as far as it is solved, by its index: what a walk over a term reads each sort's quality from. One still unsolved is itself, or `Type` where `settled`, which is what a quality nothing decides closes as and what a report shows of one.
@@ -147,13 +154,30 @@ impl UniverseSolver {
 
     /// Where the chain `meta` is solved through reached `Prop` or `Type`: the site recorded at the link that states one.
     fn decided_at(&self, meta: QualityMetaId) -> Option<Extent> {
-        let mut entry = self.qualities.get(meta.0)?;
-        loop {
-            match entry.solution? {
-                Quality::Meta(next) => entry = self.qualities.get(next.0)?,
-                _ => return entry.solved_at,
-            }
+        let last = self.last_meta(Quality::Meta(meta))?;
+        self.qualities.get(last.0)?.solved_at
+    }
+
+    /// The metavariable `quality` is solved through last: the one that states what its chain ends in, or the unsolved one the chain ends in.
+    fn last_meta(&self, quality: Quality) -> Option<QualityMetaId> {
+        let Quality::Meta(mut last) = quality else {
+            return None;
+        };
+        while let Some(Quality::Meta(next)) =
+            self.qualities.get(last.0).and_then(|entry| entry.solution)
+        {
+            last = next;
         }
+
+        Some(last)
+    }
+
+    /// Where a term of the declaration decided `quality`, read as a `Sort` the declaration wrote or a quality held one with it: the term whose check solved it to `Prop` or to `Type`, where one was recorded. `None` where `quality` is no written `Sort` so decided, which is what a refusal reads before it names a sort its reader did not write.
+    pub fn written_decision(&self, quality: Quality) -> Option<Option<Extent>> {
+        let entry = self.qualities.get(self.last_meta(quality)?.0)?;
+        let decided = matches!(entry.solution, Some(Quality::Prop | Quality::Type));
+
+        (entry.written && decided).then_some(entry.solved_at)
     }
 
     /// Hold the qualities an occurrence of a declaration states to be that declaration's own parameters, in order: what a constructor or a method wrapper, issued in its owner's context, makes of the instance its type names the owner at.

@@ -342,6 +342,11 @@ pub enum Error {
         prop: bool,
         at_decider: bool,
     },
+    /// A `Sort` its declaration wrote and two of its terms decide apart: the term the report stands at as `Prop` where `prop` and as `Type` otherwise, and the term at `other`, whose check decided it first, as the other of the two. `other` is `None` where no term's check was recorded as deciding it.
+    SortDecidedTwice {
+        prop: bool,
+        other: Option<Extent>,
+    },
     /// A declaration leaving more sorts to its caller than one may: it is judged once at every assignment of them.
     TooManySorts {
         stated: usize,
@@ -490,11 +495,12 @@ pub enum Error {
         /// Why the procedure that proves a bound from the facts in scope proved nothing: the facts it considered, and what its search concluded.
         refusal: Option<Box<Refusal>>,
     },
-    /// A proof handed where an implicit argument declared at `Type` is still open. The proposition the proof proves is the one candidate the argument offers the implicit, and no `Type` admits a proposition, so the implicit stays unsolved and the argument's own mismatch would show it as `?`.
-    PropositionAtImplicitType {
+    /// An argument handed where an implicit argument declared at the other sort is still open: a proof where the implicit is declared at `Type`, which is where `proposition`, and a value of a type where it is declared at `Prop`. `given`, the argument's type, is the one candidate the argument offers the implicit, and neither sort admits what stands at the other, so the implicit stays unsolved and the argument's own mismatch would show it as `?`.
+    ImplicitAtOtherSort {
         callee: Callee,
         binder: String,
-        proposition: Box<Term>,
+        given: Box<Term>,
+        proposition: bool,
     },
     /// A settle-synthesized lambda's domain that nothing ever pinned — not the body, not anything the settled type met. Carries only the binder's name: the metavariable is elaboration state the reader cannot see, and the parameter is what they can annotate.
     DomainNeverDetermined {
@@ -951,6 +957,10 @@ impl Error {
         Self::SortDecided { prop, at_decider }
     }
 
+    pub(crate) fn sort_decided_twice(prop: bool, other: Option<Extent>) -> Self {
+        Self::SortDecidedTwice { prop, other }
+    }
+
     pub(crate) fn too_many_sorts(stated: usize) -> Self {
         Self::TooManySorts { stated }
     }
@@ -1140,15 +1150,17 @@ impl Error {
         }
     }
 
-    pub(crate) fn proposition_at_implicit_type(
+    pub(crate) fn implicit_at_other_sort(
         callee: Callee,
         binder: String,
-        proposition: Term,
+        given: Term,
+        proposition: bool,
     ) -> Self {
-        Self::PropositionAtImplicitType {
+        Self::ImplicitAtOtherSort {
             callee,
             binder,
-            proposition: Box::new(proposition),
+            given: Box::new(given),
+            proposition,
         }
     }
 
@@ -1795,7 +1807,7 @@ impl Error {
             Self::InformativePropStruct { field_type, .. } => out.push(field_type),
             Self::NotStrictlyPositive { site_type, .. } => out.push(site_type),
             Self::OperatorUndefined { type_, .. } => out.push(type_),
-            Self::PropositionAtImplicitType { proposition, .. } => out.push(proposition),
+            Self::ImplicitAtOtherSort { given, .. } => out.push(given),
             Self::UninferredImplicit {
                 bound,
                 reduct,

@@ -254,7 +254,7 @@ impl Callee {
 
 /// An error paired with the [`Spelling`] its terms render under — the parameter `Display::fmt` cannot take, and the reason every arm below rebinds its term fields before interpolating them. A field left unrebound would silently render core's own spelling, which is why the rebinding is per-arm and mechanical rather than left to each `write!`.
 ///
-/// The third is where the declarations a position lies in were written, for the two messages that state one in their own text: a goal batch rendered whole, and a written goal a postponed conversion watched. Empty where nobody knows, and the position is then left out.
+/// The third is where the declarations a position lies in were written, for the three messages that state one in their own text: a goal batch rendered whole, a written goal a postponed conversion watched, and the other of two terms that decide one `Sort` apart. Empty where nobody knows, and the position is then left out.
 pub(super) struct Displayed<'a>(
     pub(super) &'a Error,
     pub(super) Rc<Spelling>,
@@ -630,6 +630,23 @@ impl fmt::Display for Displayed<'_> {
                     "\n  a sort left to a caller is one each use states, so one the declaration decides is written `{sort}`"
                 )
             }
+            Error::SortDecidedTwice { prop, other } => {
+                let (here, there) = match prop {
+                    true => ("Prop", "Type"),
+                    false => ("Type", "Prop"),
+                };
+                let other = match other.and_then(|extent| extent.resolved(anchors)) {
+                    Some(span) => {
+                        let (line, column) = span.line_column();
+                        format!("the term at {line}:{column}")
+                    }
+                    None => "another of its terms".to_string(),
+                };
+                write!(
+                    f,
+                    "this decides a `Sort` its declaration leaves to a caller as `{here}`, and {other} decides it as `{there}`\n  a sort is one of the two wherever it is stated, so no `Sort` serves both terms"
+                )
+            }
             Error::TooManySorts { stated } => {
                 write!(
                     f,
@@ -1001,17 +1018,24 @@ impl fmt::Display for Displayed<'_> {
                     ),
                 }
             }
-            Error::PropositionAtImplicitType {
+            Error::ImplicitAtOtherSort {
                 callee,
                 binder,
+                given,
                 proposition,
             } => {
-                let proposition = proposition.spelled(spelling);
-                write!(
-                    f,
-                    "a proposition was given where {} takes a type\n  {proposition} is a proposition, and no proposition stands where a Type is declared",
-                    callee.slot("implicit argument", binder, spelling)
-                )
+                let given = given.spelled(spelling);
+                let slot = callee.slot("implicit argument", binder, spelling);
+                match proposition {
+                    true => write!(
+                        f,
+                        "a proposition was given where {slot} takes a type\n  {given} is a proposition, and no proposition stands where a Type is declared"
+                    ),
+                    false => write!(
+                        f,
+                        "a type was given where {slot} takes a proposition\n  {given} is a type, and no type stands where a Prop is declared"
+                    ),
+                }
             }
             Error::DomainNeverDetermined { binder } => {
                 write!(

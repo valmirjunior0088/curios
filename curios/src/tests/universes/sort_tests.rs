@@ -154,6 +154,82 @@ fn a_sort_its_declaration_decides_is_refused_with_what_it_is() {
     );
 }
 
+// Two terms that decide one `Sort` apart are told so: the second where the report stands, as the sort it needs, and the first as the sort it decided, where a mismatch or an elimination's refusal would state a sort the declaration never wrote. Put to each rule that reads a sort: two sorts compared, an implicit argument's sort, and the guard on a proposition matched into data.
+#[test]
+fn a_sort_two_terms_decide_apart_is_refused_as_decided_twice() {
+    for (rule, declaration, here, there) in [
+        (
+            "two arms of a match",
+            "pub let F(c: Bool) -> Sort = match c | true => Two | false => Nat end;",
+            "Prop",
+            "Type",
+        ),
+        (
+            "two explicit arguments",
+            "pub let both(A: Sort) -> Nat = at_type(A) + at_prop(A);",
+            "Prop",
+            "Type",
+        ),
+        (
+            "two implicit arguments",
+            "pub let both(@A: Sort, x: A) -> Nat = takes(x) + proves(x);",
+            "Prop",
+            "Type",
+        ),
+        (
+            "a use at a type, then a match on a proposition",
+            "pub let pick(@A: Sort, t: Two, x: A, y: A) -> A = after(takes(x), match t | a() => x | b() => y end);",
+            "Prop",
+            "Type",
+        ),
+        (
+            "a match on a proposition, then a use at a type",
+            "pub let pick(@A: Sort, t: Two, x: A, y: A) -> Nat = let z: A = match t | a() => x | b() => y end; takes(z);",
+            "Type",
+            "Prop",
+        ),
+    ] {
+        let report = error(&format!(
+            r#"
+            use /std/{{Nat, Bool}};
+            induct Two: pub Prop
+            | a()
+            | b()
+            end
+            let at_type(B: Type) -> Nat = 0;
+            let at_prop(P: Prop) -> Nat = 0;
+            let takes(@B: Type, b: B) -> Nat = 0;
+            let proves(@P: Prop, p: P) -> Nat = 0;
+            let after(@B: Sort, n: Nat, b: B) -> B = b;
+            {declaration}
+            /std/print("")
+            "#
+        ));
+
+        assert!(
+            report.contains(&format!(
+                "this decides a `Sort` its declaration leaves to a caller as `{here}`"
+            )) && report.contains(&format!("decides it as `{there}`")),
+            "{rule}: {report}"
+        );
+    }
+
+    // The first term is named by where it stands, wherever its check was recorded as the decision.
+    let report = error(
+        r#"
+        use /std/{Nat, Bool};
+        let at_type(B: Type) -> Nat = 0;
+        let at_prop(P: Prop) -> Nat = 0;
+        pub let both(A: Sort) -> Nat = at_type(A) + at_prop(A);
+        /std/print("")
+        "#,
+    );
+    assert!(
+        report.contains("and the term at 5:48 decides it as `Type`"),
+        "{report}"
+    );
+}
+
 // The word stands where a caller reads it: a body, a local definition, a concept and a witness each hold one sort, and a family's own sort is `Type` or `Prop`.
 #[test]
 fn a_sort_is_written_where_a_caller_states_it() {

@@ -354,7 +354,10 @@ fn a_type_that_is_a_proposition_in_one_case_is_at_no_sort_left_to_a_caller() {
         /std/print("")
         "#;
 
-    rejected_by(source, "type mismatch");
+    rejected_by(
+        source,
+        "this decides a `Sort` its declaration leaves to a caller as `Prop`",
+    );
 }
 
 // A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart. The elaborator refuses the definition for deciding its sort; the kernel, handed it all the same, refuses it at the assignment that states `Type`.

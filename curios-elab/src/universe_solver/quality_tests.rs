@@ -118,6 +118,42 @@ fn an_invented_quality_held_to_a_written_one_is_its_parameter() {
 }
 
 #[test]
+fn an_invented_quality_is_solved_to_the_written_sort_it_is_held_one_with() {
+    // Whichever side the written one stands on, so what is held one with a written `Sort` ends in a written one.
+    for written_first in [true, false] {
+        let (mut solver, written) = writing(1);
+        let invented = solver.fresh_quality(None);
+        let (this, that) = match written_first {
+            true => (written[0], invented),
+            false => (invented, written[0]),
+        };
+
+        assert!(solver.unify_qualities(this, that, None));
+        assert_eq!(solver.quality(invented), written[0]);
+        assert_eq!(solver.quality(written[0]), written[0]);
+    }
+}
+
+#[test]
+fn a_written_sort_a_term_decided_is_read_through_what_is_held_one_with_it() {
+    let (mut solver, written) = writing(2);
+    let (beside, apart) = (solver.fresh_quality(None), solver.fresh_quality(None));
+    assert!(solver.unify_qualities(beside, written[0], None));
+    assert_eq!(solver.written_decision(beside), None);
+
+    assert!(solver.unify_qualities(beside, Quality::Prop, None));
+    assert!(solver.unify_qualities(apart, Quality::Prop, None));
+
+    // No term's check was recorded as deciding it, so the decision is known and its place is not.
+    assert_eq!(solver.written_decision(written[0]), Some(None));
+    assert_eq!(solver.written_decision(beside), Some(None));
+    // A quality the elaboration invented and decided is no written `Sort`, and neither is a written one nothing decided or a sort stated outright.
+    assert_eq!(solver.written_decision(apart), None);
+    assert_eq!(solver.written_decision(written[1]), None);
+    assert_eq!(solver.written_decision(Quality::Prop), None);
+}
+
+#[test]
 fn an_invented_quality_alone_is_no_parameter() {
     let mut solver = UniverseSolver::new(0);
     let invented = solver.fresh_quality(None);
