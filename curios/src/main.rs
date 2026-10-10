@@ -123,8 +123,15 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Resolv
     let governing = Governing::of(root)?;
     let store = governing.store();
 
+    // Only a module that answers a row the program reaches is read: the rest of the graph's modules are neither linked nor carried.
     declared_modules(&governing)?
         .into_iter()
+        .filter(|(_, _, foreign)| {
+            foreign
+                .exports
+                .values()
+                .any(|declaration| foreigns.get(declaration).is_some())
+        })
         .map(|(package, directory, foreign)| {
             Ok(ResolvedModule {
                 package,

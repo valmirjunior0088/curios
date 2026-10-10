@@ -1405,13 +1405,24 @@ where
     let entered = entered?;
     let ersd_module = entered.erased(budget, predecessors, syntax)?;
 
-    // Every unit's rows, the program's own declarations' among them: an embedder binds one registry, and a dependency that declares a `foreign` row has to reach it. Disjoint by mount, so the union cannot collide.
+    // Every unit's rows, the program's own declarations' among them, disjoint by mount, so the union cannot collide.
     let mut all_foreigns = predecessors.foreigns();
     all_foreigns.absorb(entered.unit.foreigns());
 
-    Ok((
-        lower_from_ersd(ersd_module, &mut observe),
-        all_foreigns,
-        entered.records,
-    ))
+    let module = lower_from_ersd(ersd_module, &mut observe);
+
+    // What an embedder is handed is the rows the module imports: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
+    let mut reached = ForeignStore::new();
+
+    for function in all_foreigns.iter() {
+        let imported = module.imports().iter().any(|(namespace, name, _)| {
+            namespace == function.namespace().as_str() && name == function.name()
+        });
+
+        if imported {
+            reached.register((**function).clone());
+        }
+    }
+
+    Ok((module, reached, entered.records))
 }

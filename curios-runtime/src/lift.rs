@@ -255,15 +255,12 @@ impl Lift for Vec<u8> {
             .as_array(&*caller)?
             .ok_or_else(|| wasmtime::Error::msg("expected array ref"))?;
 
-        let len = array_ref.len(&*caller)?;
+        // The whole body in one copy: read an element at a time, a byte string costs a decoded value a byte, which is what a program that shuttles bytes to a module pays twice for each.
+        let mut bytes = vec![0; array_ref.len(&*caller)? as usize];
 
-        (0..len)
-            .map(|index| {
-                array_ref
-                    .get(&mut *caller, index)
-                    .map(|value| value.unwrap_i32() as u8)
-            })
-            .collect()
+        array_ref.copy_to_i8_slice(&mut *caller, &mut bytes)?;
+
+        Ok(bytes)
     }
 }
 

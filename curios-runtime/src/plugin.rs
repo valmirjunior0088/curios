@@ -55,12 +55,23 @@ pub enum ModuleBytes {
     Precompiled(Vec<u8>),
 }
 
+/// The allocator of a module that follows the canonical ABI, by the name that ABI gives it: the old offset and size, an alignment and the new size in, an offset out.
+const REALLOC: &str = "cabi_realloc";
+
+/// How a module hands out the memory a byte string crossing to it is written in, which is also which conventions its exports follow.
+enum Allocator {
+    /// [`ALLOC`]: a size in, an offset out. Its byte-string result is the `(ptr, len)` pair of a multi-value return, and it answers one result or none.
+    Own(TypedFunc<u32, u32>),
+    /// [`REALLOC`]. A result that is no single scalar comes back as one pointer to an area holding each field as the canonical ABI lays it out, released through the export's post-return — the shape a bindings generator emits for a core module, so a module built from generated bindings is linked as it is.
+    Canonical(TypedFunc<(u32, u32, u32, u32), u32>),
+}
+
 /// An instantiated plugin: its store, its memory, the allocator every byte string goes through, and what it exports.
 struct Plugin {
     store: Store<()>,
     instance: Instance,
     memory: Memory,
-    alloc: TypedFunc<u32, u32>,
+    allocator: Allocator,
     /// Read once at instantiation, because reading it later would need the store this also owns — and a caller holding the lock to ask what a plugin exports would be holding it to answer itself.
     exports: BTreeSet<String>,
 }
@@ -114,13 +125,20 @@ impl Plugin {
             ));
         };
 
-        let alloc = instance
-            .get_typed_func::<u32, u32>(&mut store, ALLOC)
-            .map_err(|error| {
-                format!(
-                    "{subject} exports no `{ALLOC}` taking a size and answering an offset, which is how a byte string reaches its memory: {error}"
-                )
-            })?;
+        let allocator = match instance
+            .get_typed_func::<(u32, u32, u32, u32), u32>(&mut store, REALLOC)
+        {
+            Ok(realloc) => Allocator::Canonical(realloc),
+            Err(_) => Allocator::Own(
+                instance
+                    .get_typed_func::<u32, u32>(&mut store, ALLOC)
+                    .map_err(|error| {
+                        format!(
+                            "{subject} exports neither `{REALLOC}` nor an `{ALLOC}` taking a size and answering an offset, which is how a byte string reaches its memory: {error}"
+                        )
+                    })?,
+            ),
+        };
 
         let exports = instance
             .exports(&mut store)
@@ -131,9 +149,14 @@ impl Plugin {
             store,
             instance,
             memory,
-            alloc,
+            allocator,
             exports,
         })
+    }
+
+    /// Whether the module follows the canonical ABI's conventions for what it answers.
+    fn canonical(&self) -> bool {
+        matches!(self.allocator, Allocator::Canonical(_))
     }
 
     /// Copy `bytes` into the plugin's memory through its allocator, answering the offset they landed at.
@@ -145,10 +168,15 @@ impl Plugin {
             )
         })?;
 
-        let offset = self
-            .alloc
-            .call(&mut self.store, length)
-            .map_err(|error| format!("`{ALLOC}` failed: {error}"))?;
+        // The module owns what it hands out: a call's argument is its to release, as the canonical ABI has it, so nothing is freed from this side.
+        let offset = match &self.allocator {
+            Allocator::Own(alloc) => alloc
+                .call(&mut self.store, length)
+                .map_err(|error| format!("`{ALLOC}` failed: {error}"))?,
+            Allocator::Canonical(realloc) => realloc
+                .call(&mut self.store, (0, 0, 1, length))
+                .map_err(|error| format!("`{REALLOC}` failed: {error}"))?,
+        };
 
         self.memory
             .write(&mut self.store, offset as usize, bytes)
@@ -209,6 +237,76 @@ impl Crossing {
             Crossing::Bytes => &["i32", "i32"],
         }
     }
+
+    /// The size and the alignment a value of this crossing has in a module's memory, as the canonical ABI lays a field out: a byte string is its offset and its length, four bytes each.
+    fn layout(self) -> (u32, u32) {
+        match self {
+            Crossing::Nat | Crossing::Int | Crossing::Float => (8, 8),
+            Crossing::Bool | Crossing::Byte => (1, 1),
+            Crossing::Bytes => (8, 4),
+        }
+    }
+}
+
+/// How a module's export answers.
+#[derive(Clone, PartialEq, Eq)]
+enum Answer {
+    Nothing,
+    /// One scalar, as itself.
+    Scalar(Crossing),
+    /// A byte string as the `(ptr, len)` pair of a multi-value return: what a module with an [`ALLOC`] of its own answers.
+    Pair,
+    /// Whatever else a module that follows the canonical ABI answers — a byte string, or several results — as one pointer to an area holding each field in order.
+    Area(Vec<Crossing>),
+}
+
+impl Answer {
+    /// The core types the export's results have.
+    fn slots(&self) -> &'static [&'static str] {
+        match self {
+            Answer::Nothing => &[],
+            Answer::Scalar(crossing) => crossing.slots(),
+            Answer::Pair => &["i32", "i32"],
+            Answer::Area(_) => &["i32"],
+        }
+    }
+}
+
+/// Lower the scalar a module answered as `value` into the guest's slot, refusing a word its type does not admit.
+fn lower_scalar(
+    crossing: Crossing,
+    value: Val,
+    caller: &mut wasmtime::Caller<'_, ()>,
+    slot: &mut [Val],
+    subject: &str,
+    export: &str,
+) -> wasmtime::Result<()> {
+    match crossing {
+        Crossing::Nat => value.unwrap_i64().cast_unsigned().lower(caller, slot),
+        Crossing::Int => value.unwrap_i64().lower(caller, slot),
+        // A module's `Bool` is a word of its own choosing, so anything but `0` or `1` is refused rather than read as true.
+        Crossing::Bool => match value.unwrap_i32() {
+            0 => false.lower(caller, slot),
+            1 => true.lower(caller, slot),
+            word => Err(wasmtime::Error::msg(format!(
+                "{subject} answered `{export}` with {word}, which is not a Bool"
+            ))),
+        },
+        // A word past 255 is refused here rather than truncated into a different byte.
+        Crossing::Byte => {
+            let word = value.unwrap_i32();
+
+            u8::try_from(word)
+                .map_err(|_| {
+                    wasmtime::Error::msg(format!(
+                        "{subject} answered `{export}` with {word}, which is not a byte"
+                    ))
+                })?
+                .lower(caller, slot)
+        }
+        Crossing::Float => value.unwrap_f64().lower(caller, slot),
+        Crossing::Bytes => unreachable!("a byte string is no scalar"),
+    }
 }
 
 /// Wire one declaration to the plugin export answering it.
@@ -230,28 +328,37 @@ fn define_row(
         .map(|wire| crossing(*wire, subject, &declaration))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let result = match signature.results.shape() {
-        // Ending the instance is the host's to do: a module reaches no environment, and its own trap is a failure of the call.
-        ResultShape::Never => {
-            return Err(format!(
-                "{subject} answers `{declaration}`, which does not return. A foreign module answers a value or none, and only the host ends the program"
-            ));
-        }
-        ResultShape::Unit => None,
-        ResultShape::Single(wire) => Some(crossing(wire, subject, &declaration)?),
-        // A plugin answering several results at once would need the guest-facing tuple built from a shape the raw ABI has no spelling for. Refused rather than guessed at.
-        ResultShape::Record(_) => {
-            return Err(format!(
-                "{subject} answers `{declaration}`, which yields several results. A foreign module answers one result or none"
-            ));
-        }
-    };
+    // Ending the instance is the host's to do: a module reaches no environment, and its own trap is a failure of the call.
+    if signature.results.shape() == ResultShape::Never {
+        return Err(format!(
+            "{subject} answers `{declaration}`, which does not return. A foreign module answers a value or none, and only the host ends the program"
+        ));
+    }
+
+    let fields = signature
+        .results
+        .types()
+        .iter()
+        .map(|wire| crossing(*wire, subject, &declaration))
+        .collect::<Result<Vec<_>, _>>()?;
 
     // The export is held to the declaration here, where the two are linked: a module that answers another type is refused before the program runs, and not at the first call that reaches it.
-    {
+    let answer = {
         let mut held = plugin
             .lock()
             .map_err(|_| format!("{subject} was left poisoned by an earlier call"))?;
+        let answer = match (fields.as_slice(), held.canonical()) {
+            ([], _) => Answer::Nothing,
+            ([Crossing::Bytes], false) => Answer::Pair,
+            ([scalar], _) if *scalar != Crossing::Bytes => Answer::Scalar(*scalar),
+            (fields, true) => Answer::Area(fields.to_vec()),
+            // Several results at once have no spelling in a multi-value return a toolchain emits, which is what the canonical ABI's area is for.
+            (_, false) => {
+                return Err(format!(
+                    "{subject} answers `{declaration}`, which yields several results. A module with an `{ALLOC}` of its own answers one result or none; one that follows the canonical ABI, exporting `{REALLOC}`, answers several"
+                ));
+            }
+        };
         let instance = held.instance;
         let exported = instance
             .get_func(&mut held.store, export)
@@ -264,9 +371,9 @@ fn define_row(
                 .flat_map(|crossing| crossing.slots())
                 .map(|slot| slot.to_string())
                 .collect::<Vec<_>>(),
-            result
+            answer
+                .slots()
                 .iter()
-                .flat_map(|crossing| crossing.slots())
                 .map(|slot| slot.to_string())
                 .collect::<Vec<_>>(),
         );
@@ -290,7 +397,9 @@ fn define_row(
                 spelled(expected.1),
             ));
         }
-    }
+
+        answer
+    };
 
     let plugin = Arc::clone(plugin);
     let export = export.to_string();
@@ -334,61 +443,100 @@ fn define_row(
             .get_func(&mut plugin.store, &export)
             .ok_or_else(|| wasmtime::Error::msg(format!("{subject} exports no `{export}`")))?;
 
-        // A byte-string result is the `(ptr, len)` pair wasm multi-value returns; everything else is one slot, and nothing is two.
-        let mut returned = vec![Val::I32(0); usize::from(result == Some(Crossing::Bytes)) + 1];
-        let returned = match result {
-            None => {
-                function
-                    .call(&mut plugin.store, &arguments, &mut [])
-                    .map_err(|error| wasmtime::Error::msg(format!("`{export}`: {error}")))?;
+        let mut returned = vec![Val::I32(0); answer.slots().len()];
 
-                return Ok(());
-            }
-            Some(_) => {
-                function
-                    .call(&mut plugin.store, &arguments, &mut returned)
-                    .map_err(|error| wasmtime::Error::msg(format!("`{export}`: {error}")))?;
-
-                returned
-            }
-        };
+        function
+            .call(&mut plugin.store, &arguments, &mut returned)
+            .map_err(|error| wasmtime::Error::msg(format!("`{export}`: {error}")))?;
 
         // Plugin -> guest, by the same reading in reverse.
-        match result {
-            Some(Crossing::Nat) => returned[0]
-                .unwrap_i64()
-                .cast_unsigned()
-                .lower(&mut caller, answers),
-            Some(Crossing::Int) => returned[0].unwrap_i64().lower(&mut caller, answers),
-            // A plugin's `Bool` is a word of its own choosing too, so anything but `0` or `1` is refused rather than read as true.
-            Some(Crossing::Bool) => match returned[0].unwrap_i32() {
-                0 => false.lower(&mut caller, answers),
-                1 => true.lower(&mut caller, answers),
-                word => Err(wasmtime::Error::msg(format!(
-                    "{subject} answered `{export}` with {word}, which is not a Bool"
-                ))),
-            },
-            // A plugin answers a word of its own choosing, so one past 255 is refused here rather than truncated into a different byte.
-            Some(Crossing::Byte) => {
-                let word = returned[0].unwrap_i32();
-
-                u8::try_from(word)
-                    .map_err(|_| {
-                        wasmtime::Error::msg(format!(
-                            "{subject} answered `{export}` with {word}, which is not a byte"
-                        ))
-                    })?
-                    .lower(&mut caller, answers)
-            }
-            Some(Crossing::Float) => returned[0].unwrap_f64().lower(&mut caller, answers),
-            Some(Crossing::Bytes) => {
+        match &answer {
+            Answer::Nothing => Ok(()),
+            Answer::Scalar(crossing) => lower_scalar(
+                *crossing,
+                returned[0],
+                &mut caller,
+                answers,
+                &subject,
+                &export,
+            ),
+            Answer::Pair => {
                 let offset = returned[0].unwrap_i32() as u32;
                 let length = returned[1].unwrap_i32() as u32;
                 let bytes = plugin.read(offset, length).map_err(wasmtime::Error::msg)?;
 
                 bytes.lower(&mut caller, answers)
             }
-            None => Ok(()),
+            // Each field where the canonical ABI lays it: after the ones before it, at its own alignment. The module is told once every field is read, so it may release what the area holds.
+            Answer::Area(fields) => {
+                let area = returned[0].unwrap_i32() as u32;
+                let mut offset = 0;
+
+                for (index, field) in fields.iter().enumerate() {
+                    let (size, alignment) = field.layout();
+                    offset = u32::next_multiple_of(offset, alignment);
+
+                    let held = plugin
+                        .read(area + offset, size)
+                        .map_err(wasmtime::Error::msg)?;
+                    let slot = &mut answers[index..index + 1];
+
+                    match field {
+                        Crossing::Bytes => {
+                            let word = |at: usize| {
+                                u32::from_le_bytes(held[at..at + 4].try_into().expect("four bytes"))
+                            };
+
+                            plugin
+                                .read(word(0), word(4))
+                                .map_err(wasmtime::Error::msg)?
+                                .lower(&mut caller, slot)?
+                        }
+                        Crossing::Nat | Crossing::Int => lower_scalar(
+                            *field,
+                            Val::I64(i64::from_le_bytes(
+                                held[..].try_into().expect("eight bytes"),
+                            )),
+                            &mut caller,
+                            slot,
+                            &subject,
+                            &export,
+                        )?,
+                        Crossing::Float => lower_scalar(
+                            *field,
+                            Val::F64(u64::from_le_bytes(
+                                held[..].try_into().expect("eight bytes"),
+                            )),
+                            &mut caller,
+                            slot,
+                            &subject,
+                            &export,
+                        )?,
+                        Crossing::Bool | Crossing::Byte => lower_scalar(
+                            *field,
+                            Val::I32(i32::from(held[0])),
+                            &mut caller,
+                            slot,
+                            &subject,
+                            &export,
+                        )?,
+                    }
+
+                    offset += size;
+                }
+
+                if let Some(released) =
+                    instance.get_func(&mut plugin.store, &format!("cabi_post_{export}"))
+                {
+                    released
+                        .call(&mut plugin.store, &[Val::I32(area as i32)], &mut [])
+                        .map_err(|error| {
+                            wasmtime::Error::msg(format!("`cabi_post_{export}`: {error}"))
+                        })?;
+                }
+
+                Ok(())
+            }
         }
     });
 
@@ -418,10 +566,9 @@ pub fn plugin_bindings(
         let plugin = Arc::new(Mutex::new(instantiated));
 
         for (export, declaration) in &module.exports {
+            // The rows handed over are the ones the program reaches, so a claim on another is a claim nothing asks about here.
             let Some(row) = rows.get(declaration) else {
-                return Err(format!(
-                    "{subject} claims to answer `{declaration}`, which the program declares no `foreign` for"
-                ));
+                continue;
             };
 
             if !exported.contains(export) {

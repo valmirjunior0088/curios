@@ -256,15 +256,7 @@ impl Lower for Vec<u8> {
         let array_ref_pre = ArrayRefPre::new(&mut *caller, array_type);
 
         results[0] = Val::AnyRef(Some(
-            ArrayRef::new_fixed(
-                &mut *caller,
-                &array_ref_pre,
-                &self
-                    .into_iter()
-                    .map(|byte| Val::I32(byte as i32))
-                    .collect::<Vec<_>>(),
-            )?
-            .to_anyref(),
+            ArrayRef::new_from_i8_slice(&mut *caller, &array_ref_pre, &self)?.to_anyref(),
         ));
 
         Ok(())
