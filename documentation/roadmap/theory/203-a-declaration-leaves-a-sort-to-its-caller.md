@@ -9,6 +9,7 @@ A definition that serves a proposition and a type alike is written once for each
 - **The sort of a type left to inference is a quality the elaborator solves.** `UniverseSolver` holds quality metavariables beside the levels' (`curios-elab/src/universe_solver/qualities.rs`), two sorts compared unify theirs, and one nothing decides is a type's where its item has drained what it parked.
 - **A level is left to a caller already.** A declaration generalizes the levels its constraints leave free and each use instantiates them ([A universe level is implicit, cumulative, and settles by where it stands](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md)): a `UniverseContext` on the declaration, an instance on each occurrence (`Universes`, on `Instance`, `InductType`, `Variant`, `StructType` and `Struct`, `curios-core/src/term/shape.rs`), and `UniverseSolver` (`curios-elab/src/universe_solver.rs`) between them.
 - **Core and the kernel hold a declaration that leaves a sort to its caller.** A `UniverseContext` counts them (`quality_count`), an occurrence's instance states a quality for each beside its levels, and one walk reads a declaration at an instance, stating both (`instantiate_universes_scoped`, `curios-core/src/scope.rs`). The kernel judges a definition, a top-level recursive group and a registry entry once at every assignment of them, each read at the assignment (`at_every_sort`, `curios-cert/src/kernel/module.rs`), and names the assignment a refusal was reached at (`Error::AtSorts`). It holds an occurrence to as many sorts as its declaration leaves, each `Prop` or `Type` (`Kernel::check_instance`), compares two instances apart in a sort as two types, reads a family's own sort off the entry as stated, and refuses a group inside a term whose context leaves a sort (`Error::GroupLeavesSort`).
+- **`Sort` is written, and closes as a parameter.** The surface tree holds the word (`Subterm::Sort`, `curios-text/src/term.rs`), the lowering gives each one written in the signature of a top-level `let`, `induct` or `struct` a quality of its own and refuses it anywhere else (`Context::written_quality`, `curios-text/src/into_core/context.rs`), and the elaborator checks the declaration with those qualities open. Where the declaration's levels are finalized, each written quality still open becomes a parameter (`UniverseSolver::generalize_qualities`, `curios-elab/src/universe_solver/qualities.rs`); one the declaration decided is refused at the term that decided it, and a tuple type formed over two of them is refused where it was written. A use mints a quality for each (`UniverseSolver::instantiate`), and a constructor's are pinned to its family's (`UniverseSolver::pin_qualities`). A position at an open quality owes the termination a proof does (`proof_position`, `curios-elab/src/typing.rs`).
 - **Erasure keeps a slot for what a caller's variable types.** A function takes a parameter for each binder and a tuple a field for each member, and only a declaration drops one, by its own signature (`curios-elab/src/into_ersd/classify.rs`). A proof handed where the callee knows a variable fills a kept slot.
 - **The rules that tell a proof from data by a declaration read its literal result sort**: the clash and injectivity guard of index inversion (`unify_index`, `curios-analysis/src/invert.rs`), the large-elimination guard (`guard_large_elimination`, `curios-cert/src/kernel/infer/eliminate.rs`) and the pinned payload a proof's match fires on (`pinned_instance`).
 - **An intrinsic node takes either sort where its row says a type.** `Operand::IsType` (`curios-core/src/intrinsic/signature.rs`) is checked by each checker's type-formation judgment, and `sort_of_intrinsic` (`curios-cert/src/kernel/sort.rs`) lands a former over a proposition at `Type`.
@@ -20,7 +21,7 @@ A definition that serves a proposition and a type alike is written once for each
 
 **An equation relates no two proofs, and no list, cell, channel or description holds one.** `/std/Eq` takes `@A: Type`. `/sys` declares each former and each operation over a `Type` (`curios-text/src/sys_module/helpers.rs`) where the node its body builds takes either sort, so the kernel forms a list of proofs that no program can write.
 
-**No program leaves a sort open.** Core and the kernel hold a declaration that does, and nothing writes one: no word of the surface language leaves a sort open, and the elaborator closes every quality it mints as `Prop` or `Type`.
+**The library leaves no sort open.** A program writes `Sort`, and `/sys` and `/std` do not: the three pairs above stand, and `/std/Eq`, `/std/Option` and `/sys`'s formers take a `Type`.
 
 ## Decisions
 
@@ -42,7 +43,9 @@ A definition that serves a proposition and a type alike is written once for each
 
 **What a refusal at one assignment tells a reader who wrote neither.** The kernel names the assignment it refused at. Whether the report restates the declaration at that assignment is not decided.
 
-**Which of the elaborator's readers meet an open quality once `/std` says `Sort`.** Counted where the second stage lands, by a note at each.
+**What a mismatch against a `Sort` already decided reports.** A second term that needs the other sort is a type mismatch against the sort the first one decided, `expected: Type` where the reader wrote `Sort`. Whether that report names the term that decided it is not decided.
+
+**Which of the elaborator's readers meet an open quality once `/std` says `Sort`.** Counted where the first stage lands, by a note at each.
 
 **Whether a `Sort` reaches a concept.** A witness is found by the key its signature is spelled at, and what a key at an open quality matches is not designed.
 
@@ -50,16 +53,15 @@ A definition that serves a proposition and a type alike is written once for each
 
 Each stage is one commit, and its check passes before the next starts.
 
-1. **The word, generalization and instantiation.** `Sort` in `curios-text`, in the tree-sitter grammar and in the VS Code grammar; the elaborator's written qualities, its closing of a declaration and its instantiation of a use. Check: `curios`'s `tests::universes::sort_tests` for one definition asked at both sorts, a family over a sort and each refusal; the two run-time tests of a proof handed to a caller's variable restored in `tests::erasure::shape_tests`; in `tests::board::subsumption_tests`, a type that is a proposition in one case of a match refused at `Sort`, and a declaration whose `Type` assignment eliminates a proposition refused by both checkers under one name; in `curios-pipeline`'s `tests::budget_tests`, a declaration that leaves a sort open taken under the budget one assignment of it takes.
-2. **`/sys` and `/std` say `Sort` where either serves.** `/sys`'s formers and operations at every operand its row calls a type; `/std/Eq`; `/std/Eq/subst`, `/std/Nat/descend` and `/std/Option`, with `/std/Eq/transp`, `/std/Nat/recurse` and `/std/Evidence` removed. Check: `cargo xtask clippy`, which elaborates, erases and certifies `/std`, and `curios-std`'s tests. It may move any reading of `xbench` whose loop holds a decision: an `Option` of a proof keeps the slot `Evidence` dropped.
-3. **The decision, and this specification retired.** Check: the gate.
+1. **`/sys` and `/std` say `Sort` where either serves.** `/sys`'s formers and operations at every operand its row calls a type; `/std/Eq`; `/std/Eq/subst`, `/std/Nat/descend` and `/std/Option`, with `/std/Eq/transp`, `/std/Nat/recurse` and `/std/Evidence` removed. Check: `cargo xtask clippy`, which elaborates, erases and certifies `/std`, and `curios-std`'s tests. It may move any reading of `xbench` whose loop holds a decision: an `Option` of a proof keeps the slot `Evidence` dropped.
+2. **The decision, and this specification retired.** Check: the gate.
 
 ## Verification
 
-- **The corpus compiled to the same bytes.** With the compiler `cargo xtask build` builds, each loose program of `programs/` is compiled with `curios compile <program> -o <file>` and the files' SHA-256 digests are compared with those taken at `103139151`. The first stage changes none; the second may.
+- **The corpus compiled to the same bytes.** With the compiler `cargo xtask build` builds, each loose program of `programs/` is compiled with `curios compile <program> -o <file>` and the files' SHA-256 digests are compared with those taken at `103139151`. The first stage may change them.
 - **What an eager check would cost were every `Type` a caller's choice.** Over the headers of the top-level `let`, `induct`, `struct`, `concept` and `satisfy` declarations under `curios-std/src` outside `tests/`, the written `Type`s in an input position are counted, a binder's own type and the codomain of a function-typed binder, the declaration's own result left out. At `103139151`, counted: 532 of 2,376 declarations write one, and they have 3,624 ground assignments between them.
-- `cargo xboard report` holds every ticket after the first and second stages.
-- After the second stage, on standard input: one definition used at a number and at a proof runs; `List(True)` and `Option(True)` are certified; `let F(c: Bool) -> Sort = match c | true => Two | false => Nat end;` is refused.
+- `cargo xboard report` holds every ticket after the first stage.
+- After the first stage, on standard input: one definition used at a number and at a proof runs; `List(True)` and `Option(True)` are certified; `let F(c: Bool) -> Sort = match c | true => Two | false => Nat end;` is refused.
 
 ## Rejected
 

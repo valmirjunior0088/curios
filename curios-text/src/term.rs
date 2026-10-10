@@ -520,6 +520,8 @@ pub struct NumLit {
 pub enum Subterm {
     Type,
     Prop,
+    /// A sort its declaration leaves to each caller, `Prop` at one use and `Type` at another: written in the signature of a top-level `let`, `induct` or `struct`, where a use states it.
+    Sort,
     /// A literal as written (see [`Literal`]).
     Literal(Literal),
     /// One of core's intrinsics over surface operands (see [`Intrinsic`]). Never parsed — the `/sys` roster plants it — and lowered by lowering its operands.

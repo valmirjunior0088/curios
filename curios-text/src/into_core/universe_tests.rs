@@ -40,6 +40,62 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
     assert_eq!(minted.declarations.len(), 1);
 }
 
+/// A written `Sort` is one quality however many times its text is lowered, in the signature and under the lambda the definition is, and each written `Sort` is a quality of its own, counted from zero for its declaration.
+#[test]
+fn each_written_sort_is_one_quality_of_its_declaration() {
+    let (_, minted, _) = super::into_core(
+        &"let first(@A : Sort, x : A) -> A = x; let both(@A : Sort, @B : Sort, x : A, y : B) -> A = x; Type"
+            .parse::<Entrypoint>()
+            .unwrap(),
+        &RootSource::none(),
+        syntax(),
+    )
+    .unwrap();
+
+    let written = minted
+        .declarations
+        .iter()
+        .map(|mints| mints.qualities.len())
+        .collect::<Vec<_>>();
+    assert_eq!(written, vec![1, 2]);
+    assert!(
+        minted
+            .declarations
+            .iter()
+            .flat_map(|mints| &mints.qualities)
+            .all(Option::is_some)
+    );
+    assert!(minted.entry.qualities.is_empty());
+}
+
+/// A sort is left to a caller where a caller reads it: a `Sort` outside the signature of a top-level declaration is refused with what it stands in.
+#[test]
+fn a_sort_outside_a_signature_is_refused_with_where_it_stands() {
+    for (site, source) in [
+        ("a body", "let n : Type = Sort; Type"),
+        ("a body", "Sort"),
+        (
+            "a local definition",
+            "let outer(n : Type) -> Type = let inner(@A : Sort, a : A) -> A = a; n; Type",
+        ),
+    ] {
+        let refusal = super::into_core(
+            &source.parse::<Entrypoint>().unwrap(),
+            &RootSource::none(),
+            syntax(),
+        )
+        .map(|_| ())
+        .expect_err("a `Sort` no caller states is refused");
+
+        assert!(
+            refusal
+                .to_string()
+                .contains(&format!("this one stands in {site}")),
+            "{source}: {refusal}"
+        );
+    }
+}
+
 /// A declaration's identities count from zero for it, so what it lowers to and how much its lowering minted are the same whatever is written before it.
 #[test]
 fn a_declaration_lowers_the_same_whatever_is_written_before_it() {

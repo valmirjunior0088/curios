@@ -36,6 +36,45 @@ pub(super) struct Anchoring {
     journal: RefCell<Journal>,
 }
 
+/// Where a written `Sort` stands, as far as whether a caller can state it goes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum SortSite {
+    /// The signature of a top-level `let`, `induct` or `struct`, which each use reads and states the sort of.
+    Signature,
+    /// A term no caller reads a sort off: a body, a test, a foreign declaration.
+    #[default]
+    Body,
+    /// A definition local to another, whose every use is inside one declaration.
+    Local,
+    /// A `concept`, whose members a witness is found for by the key its signature spells.
+    Concept,
+    /// A `satisfy` declaration, found by its key and written by no caller.
+    Witness,
+}
+
+impl SortSite {
+    /// What a `Sort` refused here is told it stands in: `None` where it is taken.
+    fn refused(self) -> Option<&'static str> {
+        match self {
+            SortSite::Signature => None,
+            SortSite::Body => Some("a body"),
+            SortSite::Local => Some("a local definition"),
+            SortSite::Concept => Some("a concept"),
+            SortSite::Witness => Some("a witness"),
+        }
+    }
+}
+
+/// The `Sort`s the declaration being lowered has written, and whether one may be written where its lowering stands.
+#[derive(Default)]
+pub(super) struct WrittenSorts {
+    /// Where each was written, by the id of its quality, from zero for each declaration.
+    seeds: RefCell<Vec<Option<curios_core::UniverseConstraintOrigin>>>,
+    /// The quality of each written `Sort`, by its span: one written `Sort` is one quality however many times its text is lowered.
+    allocations: RefCell<HashMap<Span, curios_core::QualityMetaId>>,
+    site: Cell<SortSite>,
+}
+
 /// What a declaration's lowering asked of its scope and wrote beside its items, since [`Context::begin_declaration`]: what is recorded of it beside its items.
 #[derive(Default)]
 pub(super) struct Journal {
@@ -325,6 +364,8 @@ pub(super) struct Context<'a> {
     universe_role: &'a Cell<curios_core::UniverseRole>,
     universe_seeds: &'a RefCell<Vec<curios_core::UniverseSeed>>,
     universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
+    // The `Sort`s the declaration being lowered wrote — see `WrittenSorts`.
+    sorts: &'a WrittenSorts,
     // Shared counter for every binder identity a lowered term closes over. Threaded (not a process-global atomic) for determinism: two runs over the same source must mint the same identities, or terms that should be equal would differ.
     binders: &'a Entropy,
     // What each source declaration lowered so far minted, with the names it lowered to — see `curios_core::Minted`. The unit's, shared across nested contexts like the counters it is read off.
@@ -361,6 +402,7 @@ impl<'a> Context<'a> {
         universe_role: &'a Cell<curios_core::UniverseRole>,
         universe_seeds: &'a RefCell<Vec<curios_core::UniverseSeed>>,
         universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
+        sorts: &'a WrittenSorts,
         binders: &'a Entropy,
         minted: &'a RefCell<curios_core::Minted>,
         witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
@@ -384,6 +426,7 @@ impl<'a> Context<'a> {
             universe_role,
             universe_seeds,
             universe_allocations,
+            sorts,
             binders,
             minted,
             witnesses,
@@ -414,6 +457,7 @@ impl<'a> Context<'a> {
             universe_role: self.universe_role,
             universe_seeds: self.universe_seeds,
             universe_allocations: self.universe_allocations,
+            sorts: self.sorts,
             binders: self.binders,
             minted: self.minted,
             witnesses: self.witnesses,
@@ -481,6 +525,9 @@ impl<'a> Context<'a> {
         self.binders.reset();
         self.universe_seeds.borrow_mut().clear();
         self.universe_allocations.borrow_mut().clear();
+        self.sorts.seeds.borrow_mut().clear();
+        self.sorts.allocations.borrow_mut().clear();
+        self.sorts.site.set(SortSite::default());
         *self.anchoring.within.borrow_mut() = None;
         *self.anchoring.journal.borrow_mut() = Journal::default();
     }
@@ -535,6 +582,7 @@ impl<'a> Context<'a> {
             binders: self.binders.count(),
             metavariables: self.metavars.count(),
             universes: self.universe_seeds.borrow().clone(),
+            qualities: self.sorts.seeds.borrow().clone(),
         }
     }
 
@@ -597,6 +645,52 @@ impl<'a> Context<'a> {
                 .insert(span.clone(), id);
         }
         curios_core::Level::meta(id)
+    }
+
+    /// The quality of the `Sort` written at `span`: one for each written `Sort`, shared by every lowering of its text, and refused where no caller states it ([`SortSite`]). A `Sort` whose text was lowered in a signature is taken wherever that text is lowered again, as a parameter's annotation is under the lambda its definition is.
+    pub(super) fn written_quality(
+        &self,
+        span: Option<&Span>,
+    ) -> Result<curios_core::Quality, Error> {
+        if let Some(span) = span
+            && let Some(id) = self.sorts.allocations.borrow().get(span)
+        {
+            return Ok(curios_core::Quality::Meta(*id));
+        }
+        if let Some(site) = self.sorts.site.get().refused() {
+            return Err(Error::SortOutsideSignature { site });
+        }
+
+        let mut seeds = self.sorts.seeds.borrow_mut();
+        let id = curios_core::QualityMetaId(seeds.len());
+        seeds.push(span.map(|span| curios_core::UniverseConstraintOrigin {
+            extent: self.extent(span),
+            kind: curios_core::UniverseConstraintKind::WrittenSort,
+            declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
+            binder: None,
+        }));
+        if let Some(span) = span {
+            self.sorts.allocations.borrow_mut().insert(span.clone(), id);
+        }
+
+        Ok(curios_core::Quality::Meta(id))
+    }
+
+    /// Lower what `f` lowers with a written `Sort` standing in `site`.
+    pub(super) fn with_sorts<T>(
+        &self,
+        site: SortSite,
+        f: impl FnOnce() -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let outer = self.sorts.site.replace(site);
+        let result = f();
+        self.sorts.site.set(outer);
+        result
+    }
+
+    /// From here to the end of the declaration being lowered, a written `Sort` stands in `site`: for a declaration that is one kind of site throughout.
+    pub(super) fn sorts_stand_in(&self, site: SortSite) {
+        self.sorts.site.set(site);
     }
 
     pub(super) fn universe_role(&self) -> curios_core::UniverseRole {

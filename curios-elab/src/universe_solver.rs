@@ -19,9 +19,9 @@ mod weak_tests;
 
 use {
     curios_core::{
-        Level, LevelHead, QualityMetaId, UniverseConstraint, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseParam,
-        UniverseRole, UniverseSeed, Universes,
+        Extent, Level, LevelHead, Quality, QualityMetaId, UniverseConstraint,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes,
     },
     curios_utilities::recurse,
     std::collections::{BTreeMap, BTreeSet, VecDeque},
@@ -33,6 +33,7 @@ pub struct UniverseMark {
     constraints: StoreScope,
     solution_log_len: usize,
     quality_log_len: usize,
+    quality_joins_len: usize,
     weak_len: usize,
 }
 
@@ -618,6 +619,8 @@ pub struct UniverseSolver {
     /// The quality metavariables, each with what it was solved to, and the ones solved in the order they were, which a rollback unwinds ([`qualities`]).
     qualities: Vec<QualityMeta>,
     quality_log: Vec<QualityMetaId>,
+    /// Each record type formed over two open qualities apart, with its extent ([`UniverseSolver::note_quality_join`]).
+    quality_joins: Vec<(Quality, Quality, Option<Extent>)>,
     consistency: Option<ConsistencyCache>,
     /// The pairs conversion met at positions a nominal family or a definition is irrelevant in, in the order it met them. None is a constraint, since no checker compares the two levels of one; each is tried where its declaration's levels settle ([`UniverseSolver::join_weak_equations`]).
     weak: Vec<(Level, Level)>,
@@ -684,6 +687,7 @@ impl UniverseSolver {
             next_meta: meta_floor,
             qualities: Vec::new(),
             quality_log: Vec::new(),
+            quality_joins: Vec::new(),
             consistency: None,
             weak: Vec::new(),
         }
@@ -758,6 +762,7 @@ impl UniverseSolver {
             constraints: self.constraints.enter(),
             solution_log_len: self.solution_log.len(),
             quality_log_len: self.quality_log.len(),
+            quality_joins_len: self.quality_joins.len(),
             weak_len: self.weak.len(),
         }
     }
@@ -785,6 +790,7 @@ impl UniverseSolver {
             self.metas[meta.0].solution = None;
         }
         self.unsolve_qualities(mark.quality_log_len);
+        self.quality_joins.truncate(mark.quality_joins_len);
         self.constraints.rollback(mark.constraints);
         self.consistency = None;
         self.weak.truncate(mark.weak_len);
@@ -1951,10 +1957,13 @@ impl UniverseSolver {
     pub fn finalize_at_instance(
         &mut self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
-        instance: &[Level],
+        instance: &Universes,
         parameter_count: usize,
     ) -> Result<(), UniverseError> {
         curios_profile::profile!("universe::finalize_at_instance");
+        // The sorts the instance states are the owner's parameters as its levels are.
+        self.pin_qualities(&instance.qualities)?;
+        let instance = &instance.levels;
         // The instance's levels are the concept's parameters, each its own: a join that made two of them one would leave the second no parameter to be.
         let held = self.representatives(instance.iter().flat_map(Level::metas));
         self.join_weak_equations(&held);

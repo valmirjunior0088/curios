@@ -417,6 +417,7 @@ pub struct UniverseSeed {
 pub enum UniverseConstraintKind {
     WrittenType,
     WrittenProp,
+    WrittenSort,
     Cumulativity,
     PropositionCumulativity,
     TypeSuccessor,

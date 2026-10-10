@@ -193,7 +193,7 @@ fn elaborate_subterm(
         Subterm::Match(m) => return elaborate_match(context, m, term, mode),
         Subterm::FuncType(ft) => elaborate_func_type(context, ft)?,
         Subterm::Apply(apply) => return elaborate_apply(context, apply, term, mode),
-        Subterm::TupleType(tt) => elaborate_tuple_type(context, tt)?,
+        Subterm::TupleType(tt) => elaborate_tuple_type(context, tt, term.extent())?,
         Subterm::Proj(proj) => elaborate_proj(context, proj, term)?,
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),

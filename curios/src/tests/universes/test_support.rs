@@ -31,6 +31,27 @@ pub(super) fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
         .collect()
 }
 
+/// How many sorts every definition leaves to its caller, keyed as [`universe_parameters`] keys it.
+pub(super) fn sort_parameters(source: &str) -> BTreeMap<String, usize> {
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+    let program: Program =
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+            .expect("the fixture type-checks")
+            .program;
+
+    program
+        .module
+        .items
+        .iter()
+        .flat_map(|item| {
+            let described = item.describe();
+            item.definitions().into_iter().map(move |definition| {
+                (described.clone(), definition.universe_context.quality_count)
+            })
+        })
+        .collect()
+}
+
 /// Every inductive family's variance vector as its unit carries it, keyed by the family's name: `*` for an irrelevant level and `=` for an invariant one.
 pub(super) fn family_variances(source: &str) -> BTreeMap<String, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");

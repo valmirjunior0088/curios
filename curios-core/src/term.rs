@@ -1904,6 +1904,8 @@ pub struct MetaRenaming {
     universes_back: BTreeMap<UniverseMetaId, UniverseMetaId>,
     metavars: BTreeMap<MetavarId, MetavarId>,
     metavars_back: BTreeMap<MetavarId, MetavarId>,
+    qualities: BTreeMap<QualityMetaId, QualityMetaId>,
+    qualities_back: BTreeMap<QualityMetaId, QualityMetaId>,
 }
 
 impl MetaRenaming {
@@ -1931,6 +1933,16 @@ impl MetaRenaming {
 
     fn metavar(&mut self, this: MetavarId, that: MetavarId) -> bool {
         Self::bind(&mut self.metavars, &mut self.metavars_back, this, that)
+    }
+
+    /// Whether two qualities are equal under the renaming: two written `Sort`s pair their metavariables and bind them, and any other pair is compared exactly.
+    fn qualities_equal(&mut self, this: Quality, that: Quality) -> bool {
+        match (this, that) {
+            (Quality::Meta(this), Quality::Meta(that)) => {
+                Self::bind(&mut self.qualities, &mut self.qualities_back, this, that)
+            }
+            _ => this == that,
+        }
     }
 
     /// Whether two levels are equal under the renaming. A one-atom level pairs its atom unambiguously and binds it; any other shape is compared exactly, since the order of a map keyed by id says nothing about which atom stands where — and a lowering mints one metavariable per written `Type`, so a lowered level is one atom.
@@ -1983,7 +1995,7 @@ impl Term {
                     Subterm::Sort(this_quality, this_level),
                     Subterm::Sort(that_quality, that_level),
                 ) => {
-                    if this_quality != that_quality
+                    if !renaming.qualities_equal(*this_quality, *that_quality)
                         || !renaming.levels_equal(this_level, that_level)
                     {
                         return false;

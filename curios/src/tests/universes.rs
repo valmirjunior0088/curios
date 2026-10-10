@@ -11,4 +11,5 @@
 mod hierarchy_tests;
 mod instance_tests;
 mod settlement_tests;
+mod sort_tests;
 mod test_support;

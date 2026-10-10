@@ -38,6 +38,14 @@ fn a_numeral_pattern_prints_in_the_radix_and_width_it_was_written_in() {
 }
 
 #[test]
+fn a_sort_prints_as_the_word_it_was_written_with() {
+    assert_eq!(
+        render("(A: Sort, P: (A) -> Prop) -> Type", 80),
+        "(A: Sort, P: (A) -> Prop) -> Type"
+    );
+}
+
+#[test]
 fn a_fitting_application_stays_flat() {
     assert_eq!(render("f(alpha, bravo)", 80), "f(alpha, bravo)");
 }

@@ -435,7 +435,7 @@ module.exports = grammar({
 
     goal: (_) => "?",
 
-    sort: (_) => choice("Type", "Prop"),
+    sort: (_) => choice("Type", "Prop", "Sort"),
 
     boolean: (_) => choice("true", "false"),
 

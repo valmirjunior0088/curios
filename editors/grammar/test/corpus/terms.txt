@@ -541,3 +541,31 @@ Sized { ..base, @_, items = other }
             (identifier)
             (path
               (identifier))))))))
+
+================================================================================
+A sort left to a caller
+================================================================================
+
+let keep(@A: Sort, a: A) -> A = a;
+keep
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_item
+    (let_member
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (sort))
+        (parameter
+          (identifier)
+          (path
+            (identifier))))
+      (path
+        (identifier))
+      (path
+        (identifier))))
+  (path
+    (identifier)))

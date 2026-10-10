@@ -24,6 +24,12 @@ pub(super) fn parse_prop<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
+pub(super) fn parse_caller_sort<'a>() -> Parser<'a, Term> {
+    parse_keyword("Sort")
+        .map(|()| Subterm::Sort)
+        .map(Into::into)
+}
+
 // A polymorphic integer literal: an optional sign glued to a magnitude (decimal, `0x`, or `0b`). Its concrete type (`Nat`/`Int`/`Flt`) is chosen by elaboration — a written sign rules out `Nat`. The sign must touch the digits; `- 42` (spaced) is the subtraction operator, not a negative literal.
 pub(super) fn parse_num_lit<'a>() -> Parser<'a, Term> {
     take_exact("-")

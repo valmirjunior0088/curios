@@ -63,7 +63,7 @@ The following words are reserved and cannot be used as path segments:
 | --- | --- |
 | `let`, `match`, `choose`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
 
-`concept`, `satisfy`, `and`, and `test` are contextual words. They are recognized only in the grammatical positions that use them and remain valid identifiers and path segments elsewhere. `Type` and `Prop` denote sorts when parsed as terms, but they are not globally forbidden path segments.
+`concept`, `satisfy`, `and`, and `test` are contextual words. They are recognized only in the grammatical positions that use them and remain valid identifiers and path segments elsewhere. `Type`, `Prop` and `Sort` denote sorts when parsed as terms, but they are not globally forbidden path segments.
 
 ### Paths
 
@@ -217,7 +217,25 @@ Adjacent constant atoms lower to a single packed constant rather than a chain of
 
 `Type` is the sort of computational types. `Prop` is the sort of proof-irrelevant propositions.
 
-Although the surface spelling is always the nullary term `Type` or `Prop`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A proposition is sized as a type is: one that quantifies over a type, or holds a value of one, sits at that type's level, so no proposition quantifies over the propositions of its own level. A type accepted at one level is also accepted where a higher level is required, and a proposition among propositions likewise. No proposition is accepted where a type is required, nor a type where a proposition is: a predicate is no family of types, and a function over `(A: Type)` takes no proposition for `A`. A value of an `induct` or a `struct` whose level only sizes its parameters is accepted at every such level: a function answering `Result(E, Nat)` is sequenced with `!` in a region that answers `Result(E, Type)`.
+Although the surface spelling is always a nullary term, `Type`, `Prop` or `Sort`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A proposition is sized as a type is: one that quantifies over a type, or holds a value of one, sits at that type's level, so no proposition quantifies over the propositions of its own level. A type accepted at one level is also accepted where a higher level is required, and a proposition among propositions likewise. No proposition is accepted where a type is required, nor a type where a proposition is: a predicate is no family of types, and a function over `(A: Type)` takes no proposition for `A`. A value of an `induct` or a `struct` whose level only sizes its parameters is accepted at every such level: a function answering `Result(E, Nat)` is sequenced with `!` in a region that answers `Result(E, Type)`.
+
+`Sort` is a sort its declaration leaves to each caller: `Prop` at a use that hands it a proposition and `Type` at one that hands it a type. It is written in the signature of a top-level `let`, `induct` or `struct`, and a use states it as it states a level, by inference and with no syntax of its own.
+
+```crs
+let keep(@A: Sort, a: A) -> A = a;
+
+induct Maybe(A: Sort): pub Type
+| some(A)
+| none()
+end
+
+let carry(@A: Type, @x: A, @y: A, P: (A) -> Sort, p: Eq()(x, y), v: P(x)) -> P(y) =
+    match p | refl() => v end;
+```
+
+Each written `Sort` is a sort of its own, as each `Type` is a level of its own, and two the declaration requires to be equal are one. The declaration is checked with each of them unknown. A value at one is not known to be a proof, so two such values are not equal for being proofs; and it is not known to be data, so a proposition is matched into it only where it would be matched into data, and what computes it terminates, as a proof must. A tuple type over two `Sort`s is refused: it is a proposition where both are `Prop` and a type otherwise, which is no one sort.
+
+A `Sort` the declaration's own terms decide is refused, and is written as the `Type` or `Prop` it is. `Sort` is refused in a body, in a local definition, in a `concept` and in a `satisfy`, and the sort of an `induct` or a `struct` after its `:` is `Type` or `Prop`. A declaration leaves at most eight.
 
 All inhabitants of the same proposition are definitionally irrelevant, so a proof does its thinking at compile time and then weighs nothing at runtime. Eliminating a proposition into a computational result is restricted: the proposition must be empty, or have one constructor whose payloads are each non-informative or fixed by the family's indices — which is what lets an `Eq` proof be matched to produce data. Proofs may always be eliminated to prove another proposition. Why the sorts are shaped this way is [`Prop` is strict, proof-irrelevant, and definitionally K](design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md) and [A universe level is implicit, cumulative, and settles by where it stands](design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md).
 

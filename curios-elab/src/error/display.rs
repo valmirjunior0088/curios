@@ -610,6 +610,39 @@ impl fmt::Display for Displayed<'_> {
                     ),
                 }
             }
+            Error::SortDecided { prop, at_decider } => {
+                let sort = match prop {
+                    true => "Prop",
+                    false => "Type",
+                };
+                match at_decider {
+                    true => write!(
+                        f,
+                        "this decides a `Sort` its declaration leaves to a caller: it can only be `{sort}`"
+                    )?,
+                    false => write!(
+                        f,
+                        "this `Sort` can only be `{sort}`: its declaration decides it"
+                    )?,
+                }
+                write!(
+                    f,
+                    "\n  a sort left to a caller is one each use states, so one the declaration decides is written `{sort}`"
+                )
+            }
+            Error::TooManySorts { stated } => {
+                write!(
+                    f,
+                    "this declaration leaves {stated} sorts to its caller, and one leaves at most {}\n  a declaration is checked once at every way of stating them",
+                    curios_core::UniverseContext::QUALITY_LIMIT
+                )
+            }
+            Error::RecordOverTwoSorts => {
+                write!(
+                    f,
+                    "this tuple type stands over two sorts each left to a caller\n  it is a proposition where both are `Prop` and a type otherwise, so it has no one sort: state one of the two as `Type` or `Prop`"
+                )
+            }
             Error::LargeElimOfProp { name } => {
                 write!(
                     f,

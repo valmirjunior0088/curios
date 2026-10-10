@@ -98,6 +98,11 @@ pub enum Error {
     },
     /// A postfix `!` was reached through a *type* lowering (an annotation, a motive, a Π/Σ component): types have no region to hoist the action to.
     BangInTypePosition,
+    /// A `Sort` written where no caller states it. A sort left open is a parameter of a top-level declaration, stated at each use of it, so the word stands in the signature of a top-level `let`, `induct` or `struct` and nowhere else.
+    SortOutsideSignature {
+        /// What it was written in instead.
+        site: &'static str,
+    },
     /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bin`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
     /// Two match-arm rows write incompatible shapes for the same column — a plain binder beside a concrete constructor/tuple/struct shape in one group, which the matrix cannot order since arms have no priority (a final top-level `_` is split off as the default before the matrix sees the rows), or two concrete shapes that disagree (a tuple/struct of different arity or field labels, a struct with a different head name, or the same constructor tag applied with a different number of arguments).
@@ -291,6 +296,12 @@ impl fmt::Display for Error {
             }
             Error::BangInTypePosition => {
                 write!(f, "postfix `!` is not allowed inside a type")
+            }
+            Error::SortOutsideSignature { site } => {
+                write!(
+                    f,
+                    "`Sort` is left to a caller, so it is written in the signature of a top-level `let`, `induct` or `struct`: this one stands in {site}"
+                )
             }
             Error::MatrixMotiveRequiresCtorHead => {
                 write!(

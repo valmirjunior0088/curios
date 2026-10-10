@@ -1183,6 +1183,7 @@ fn print_term_inner(term: Term) -> Printer {
     match term.into_subterm() {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
+        Subterm::Sort => pure("Sort"),
         Subterm::Literal(literal) => print_literal(literal),
         Subterm::Intrinsic(intrinsic) => print_intrinsic(intrinsic),
         // A builtin row surfaces under its `/sys` subject (`Handle/write`); a user's `foreign` declaration under the name they gave it.

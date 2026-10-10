@@ -136,6 +136,17 @@ fn bare_type_names_parse_as_names() {
 }
 
 #[test]
+fn a_sort_left_to_a_caller_parses_as_its_word() {
+    assert_eq!("Sort".parse::<Term>().unwrap(), Term::from(Subterm::Sort));
+    assert_eq!("Prop".parse::<Term>().unwrap(), Term::from(Subterm::Prop));
+    // A longer word that begins with it is a name.
+    assert_eq!(
+        "Sorted".parse::<Term>().unwrap(),
+        Term::from(Subterm::Name(Name::from(["Sorted".to_string()])))
+    );
+}
+
+#[test]
 fn use_brace_group() {
     assert_eq!(
         "use /std/{Bin, List};".parse::<Module>().unwrap().items,

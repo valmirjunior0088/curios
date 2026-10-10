@@ -5,7 +5,7 @@ use {
         check_is_sort, elaborate, expect, reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_core::{
-        Bound, Field, InductType, Level, Proj, Quality, SelfReference, StructType, Subterm,
+        Bound, Extent, Field, InductType, Level, Proj, Quality, SelfReference, StructType, Subterm,
         Telescope, Term, Tuple, TupleType, Variant, instantiate_universes_scoped,
         stamp_declaration_instance,
     },
@@ -16,6 +16,7 @@ use {
 pub(super) fn elaborate_tuple_type(
     context: &mut Context,
     tt: &TupleType,
+    extent: Option<Extent>,
 ) -> Result<(Term, Term), Error> {
     curios_profile::profile!("aggregate::elaborate_tuple_type");
     // Labels are part of the type's identity and the target of `.label` resolution, so they must be unique and survive the rebuild verbatim (the walk gensyms its binders to keep nested frames collision-free; `relabel` restores the written names afterwards).
@@ -31,9 +32,21 @@ pub(super) fn elaborate_tuple_type(
     // The level of each field, as typing read it, and the quality of the record they make ([`Sort::join`]).
     let mut levels = Vec::new();
     let mut quality = Quality::Prop;
+    // The first field at a quality nothing has solved, for the pair it makes with a second ([`UniverseSolver::note_quality_join`]).
+    let mut open: Option<Quality> = None;
     context.with_frame(|context| {
         tt.telescope.walk_producing(|_, hint, ty| {
             let (field, field_sort) = check_is_sort(context, &ty)?;
+            let field_quality = context.universes().quality(field_sort.quality);
+            if !field_quality.is_ground() {
+                match open {
+                    Some(first) if first != field_quality => context
+                        .universes_mut()
+                        .note_quality_join(first, field_quality, extent),
+                    Some(_) => {}
+                    None => open = Some(field_quality),
+                }
+            }
             quality = Sort::join(quality, field_sort.quality);
             levels.push(field_sort.level);
             let name = context.fresh(hint);

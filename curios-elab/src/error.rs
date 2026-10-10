@@ -337,6 +337,17 @@ pub enum Error {
     LargeElimOfProp {
         name: String,
     },
+    /// A `Sort` its declaration wrote and then decided: `Prop` where `prop`, `Type` otherwise. A sort is left to a caller where each use states it, and one the declaration's own terms decide is no caller's to state. The report stands at the term whose check decided it where `at_decider`, and at the written `Sort` otherwise.
+    SortDecided {
+        prop: bool,
+        at_decider: bool,
+    },
+    /// A declaration leaving more sorts to its caller than one may: it is judged once at every assignment of them.
+    TooManySorts {
+        stated: usize,
+    },
+    /// A record type formed over two sorts its declaration leaves to a caller, each a parameter of its own: a proposition where both are stated `Prop` and a type otherwise, so no one sort is its own.
+    RecordOverTwoSorts,
     /// A struct was declared at sort `Prop` but a field is informative (its type is not itself a proposition). Proof irrelevance would then let projection observe which inhabitant was built — the singleton-elimination condition, applied at declaration time. `field` is the offending field; `field_type` its type.
     InformativePropStruct {
         name: String,
@@ -934,6 +945,18 @@ impl Error {
 
     pub(crate) fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
         Self::LargeElimOfProp { name: name.into() }
+    }
+
+    pub(crate) fn sort_decided(prop: bool, at_decider: bool) -> Self {
+        Self::SortDecided { prop, at_decider }
+    }
+
+    pub(crate) fn too_many_sorts(stated: usize) -> Self {
+        Self::TooManySorts { stated }
+    }
+
+    pub(crate) fn record_over_two_sorts() -> Self {
+        Self::RecordOverTwoSorts
     }
 
     pub(crate) fn informative_prop_struct<N: Into<String>, F: Into<String>, T: Into<Term>>(

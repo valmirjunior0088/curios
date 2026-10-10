@@ -104,8 +104,22 @@ pub(crate) fn quality_of(context: &mut Context, type_: &Term) -> Result<Quality,
 pub(crate) fn hold_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
     Ok(match quality_of(context, type_)? {
         Quality::Prop => true,
-        quality @ Quality::Meta(_) => context.same_quality(quality, Quality::Prop),
+        quality @ Quality::Meta(_) => {
+            context.same_quality_at(quality, Quality::Prop, type_.extent())
+        }
         Quality::Type | Quality::Param(_) => false,
+    })
+}
+
+/// What a term at `type_` is called where it owes what a proof owes, and `None` where it owes nothing: a proof where the type is a proposition, and a value at a sort its declaration leaves to a caller, which is a proof at the use that states `Prop`. What the termination of an erased position is taken by, where [`is_prop`] answers for what is known a proof.
+pub(crate) fn proof_position(
+    context: &mut Context,
+    type_: &Term,
+) -> Result<Option<&'static str>, Error> {
+    Ok(match quality_of(context, type_)? {
+        Quality::Prop => Some("a proof"),
+        Quality::Param(_) => Some("a value at a sort left to a caller"),
+        Quality::Type | Quality::Meta(_) => None,
     })
 }
 

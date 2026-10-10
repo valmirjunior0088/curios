@@ -1,10 +1,10 @@
 use {
     super::{
         DEFINITION_NAMES_ITS_PLAIN_MEMBERS, MEMO_ATOMIC_TERM, MEMO_TERM, Read, comment_ending_at,
-        members, parse_choose, parse_func, parse_func_type, parse_intrinsic, parse_keyword,
-        parse_let_binder, parse_literal, parse_mark, parse_match, parse_name, parse_parens,
-        parse_pattern, parse_premise, parse_prop, parse_qualified_name, parse_struct_lit,
-        parse_tuple, parse_tuple_type, parse_type, parse_usize_raw, refused,
+        members, parse_caller_sort, parse_choose, parse_func, parse_func_type, parse_intrinsic,
+        parse_keyword, parse_let_binder, parse_literal, parse_mark, parse_match, parse_name,
+        parse_parens, parse_pattern, parse_premise, parse_prop, parse_qualified_name,
+        parse_struct_lit, parse_tuple, parse_tuple_type, parse_type, parse_usize_raw, refused,
     },
     crate::{
         Apply, Argument, Field, FuncSugarParam, Infix, Label, Let, LetBinding, LetGroup,
@@ -273,6 +273,7 @@ pub(super) fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
                 .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
                 .or(parse_type)
                 .or(parse_prop)
+                .or(parse_caller_sort)
                 .or(parse_intrinsic)
                 .or(parse_tuple_type)
                 .or(parse_empty_tuple)

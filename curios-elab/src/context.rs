@@ -2523,6 +2523,16 @@ impl<'s> Context<'s> {
 
     /// Hold two sorts' qualities one, as conversion compares them: an unsolved one solved to the other, and two that each state a sort one where they state the same. Where conversion answers a question asked with nothing committed it solves none, as it joins no two levels there ([`Context::withholds`]), and an equation it would have made is noted on the question.
     pub(crate) fn same_quality(&mut self, this: Quality, that: Quality) -> bool {
+        self.same_quality_at(this, that, None)
+    }
+
+    /// [`Context::same_quality`] asked on behalf of the term at `site`: what a `Sort` this decides is reported with.
+    pub(crate) fn same_quality_at(
+        &mut self,
+        this: Quality,
+        that: Quality,
+        site: Option<Extent>,
+    ) -> bool {
         let this = self.universes().quality(this);
         let that = self.universes().quality(that);
         if this == that {
@@ -2535,7 +2545,7 @@ impl<'s> Context<'s> {
             return false;
         }
 
-        self.universes_mut().unify_qualities(this, that)
+        self.universes_mut().unify_qualities(this, that, site)
     }
 
     pub(crate) fn default_universes(&mut self, terms: &[&Term]) -> Result<Vec<Term>, Error> {
@@ -2564,20 +2574,43 @@ impl<'s> Context<'s> {
         compared: BTreeSet<UniverseMetaId>,
     ) -> Result<UniverseContext, Error> {
         curios_profile::profile!("ctx::finalize_universe_metas");
-        let universe_context = self
+        let mut universe_context = self
             .universes_mut()
             .finalize(interface, internal, compared)
             .map_err(Error::from)?;
+        universe_context.quality_count = self.generalize_written_sorts()?;
         self.underway.scheme_open = false;
         self.typing.caches.invalidate_for_universe_rewrite();
         self.typing.frames.forget_spellings();
         Ok(universe_context)
     }
 
+    /// Close the `Sort`s the declaration wrote as its parameters ([`UniverseSolver::generalize_qualities`]), answering how many it leaves to its caller. Refused where the declaration decided one, at the term that decided it where one was recorded and at the written `Sort` otherwise; where it leaves more than a declaration may; and where it formed a record type over two of them.
+    fn generalize_written_sorts(&mut self) -> Result<usize, Error> {
+        let count = self
+            .universes_mut()
+            .generalize_qualities()
+            .map_err(|decided| {
+                let prop = decided.sort.is_prop();
+                match (decided.decided, decided.written) {
+                    (Some(site), _) => Error::sort_decided(prop, true).at(site),
+                    (None, written) => Error::sort_decided(prop, false).at_opt(written),
+                }
+            })?;
+        if count > UniverseContext::QUALITY_LIMIT {
+            return Err(Error::too_many_sorts(count));
+        }
+        if let Some(site) = self.universes().open_quality_join() {
+            return Err(Error::record_over_two_sorts().at_opt(site));
+        }
+
+        Ok(count)
+    }
+
     pub(crate) fn finalize_universe_metas_at_instance(
         &mut self,
         metas: BTreeSet<UniverseMetaId>,
-        instance: &[Level],
+        instance: &Universes,
         parameter_count: usize,
     ) -> Result<(), Error> {
         self.universes_mut()

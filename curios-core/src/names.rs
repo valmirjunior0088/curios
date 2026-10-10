@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{UniverseSeed, WitnessId},
+    crate::{UniverseConstraintOrigin, UniverseSeed, WitnessId},
     curios_utilities::{InfixOp, Qualifier, Symbol, name},
     std::{cmp::Ordering, collections::BTreeMap, fmt, hash, rc::Rc},
 };
@@ -148,6 +148,8 @@ pub struct Mints {
     pub metavariables: usize,
     /// One seed per universe level the lowering minted, by its id: the role the solver reads the level's provenance off, and where it was written. Every copy of one written `Type` shares a level, so there are as many seeds as written types, not as occurrences.
     pub universes: Vec<UniverseSeed>,
+    /// Where each `Sort` the declaration writes stands, by the id of the quality metavariable the lowering gave it: a quality its elaboration closes as a parameter of the declaration, where nothing of the declaration decides it. Every copy of one written `Sort` shares a quality, as a written `Type` shares a level.
+    pub qualities: Vec<Option<UniverseConstraintOrigin>>,
 }
 
 /// What one unit's lowering minted, declaration by declaration — the whole of what the lowering hands elaboration beside the module.
@@ -173,6 +175,7 @@ impl Minted {
             binders: 0,
             metavariables: 0,
             universes: Vec::new(),
+            qualities: Vec::new(),
         };
 
         self.from

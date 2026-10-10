@@ -13,6 +13,18 @@ fn a_function_written_at_a_universe_is_called_at_a_variable() {
     assert_eq!(run(source), b"42");
 }
 
+// The same with a proposition where the type went, the callee leaving its variable's sort to the caller: a proof is a value of that variable to the callee, and fills the parameter a type's value would.
+#[test]
+fn a_function_written_at_a_proposition_is_called_at_a_variable() {
+    let source = r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+        let apply(@A: Sort, h: (A, Nat) -> Nat, a: A) -> Nat = h(a, 41);
+        /std/print(Nat/to_str(apply((p, n) => n + 1, True/qed())))
+        "#;
+    assert_eq!(run(source), b"42");
+}
+
 // The other way about: the function is written at a variable, inside the definition that hands it back, and called at the universe the caller put there.
 #[test]
 fn a_function_written_at_a_variable_is_called_at_a_universe() {
@@ -59,6 +71,18 @@ fn a_tuple_built_at_a_universe_is_read_at_a_variable() {
         use /std/{Nat};
         let second(@A: Type, p: {A, Nat}) -> Nat = p.1;
         /std/print(Nat/to_str(second((Nat, 41))))
+        "#;
+    assert_eq!(run(source), b"41");
+}
+
+// A tuple holding a proof beside a number is two fields to a reader that knows the first only as a variable at a sort its caller states.
+#[test]
+fn a_tuple_built_at_a_proposition_is_read_at_a_variable() {
+    let source = r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+        let second(@A: Sort, p: {A, Nat}) -> Nat = p.1;
+        /std/print(Nat/to_str(second((True/qed(), 41))))
         "#;
     assert_eq!(run(source), b"41");
 }

@@ -1265,7 +1265,9 @@ fn process_items(
                         context.record_import_scope(Some(&name));
                         let lower = Lowerer::new(context, Some(name));
                         let signature = lower.signature(&let_item.signature);
-                        let type_ = lower.signature_type(&signature, None)?;
+                        let type_ = context.with_sorts(SortSite::Signature, || {
+                            lower.signature_type(&signature, None)
+                        })?;
                         Ok(FlatLet {
                             kind: curios_core::DefinitionKind::Authored,
                             span: let_item.label.span().cloned(),
@@ -1324,6 +1326,8 @@ fn process_items(
                 }));
             }
             TopItem::Induct(group) => {
+                // An inductive's lowering is its signature throughout: parameters, indices and constructor telescopes.
+                context.sorts_stand_in(SortSite::Signature);
                 // Step 1: type bindings as one rec group. An inductive's type binding wraps an intrinsic `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Bin, Nat)` beta-reduces to `InductType { Result, [Bin, Nat] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin], [3] }`), and its shape is recorded in the inductive registry.
                 let type_flat_items = group
                     .iter()
@@ -1602,6 +1606,8 @@ fn process_items(
             // A struct lowers to a single type-former `let` plus a registry entry — no value-constructor binding (the literal elaborates directly) and no indices.
             // A group of structures lowers its formers into one `rec` item, as an `induct` group does, so each member's fields may name the others; a lone structure stays a `let`, its own name reached through its registry telescope.
             TopItem::Struct(group) => {
+                // A structure's lowering is its signature throughout: parameters and fields.
+                context.sorts_stand_in(SortSite::Signature);
                 let mut formers = Vec::with_capacity(group.len());
                 for s in group {
                     let name = curios_core::Global::Authored(context.prefixed(&s.label));
@@ -1710,6 +1716,7 @@ fn process_items(
             // A concept lowers to a representation-public nominal `StructDecl` and its type-former `let` — plus a concept-registry entry (field labels, superclass edges, the parameter telescope) and one method-wrapper `let` per field, synthed into the concept's own namespace.
             // A concept group lowers its formers into one `rec` item as a struct group does; the method wrappers stay `let` items of their own, since each names only its former.
             TopItem::Concept(group) => {
+                context.sorts_stand_in(SortSite::Concept);
                 let mut formers = Vec::with_capacity(group.len());
                 for concept in group {
                     let name = curios_core::Global::Authored(context.prefixed(&concept.label));
@@ -1933,6 +1940,7 @@ fn process_items(
             // A witness desugars to an anonymous top-level definition satisfy (tele) -> C(args) = C { f = e, … }; and marks it for registration in the program-wide witness table. It gets an *identity*, not a manufactured name: a `satisfy` block has no name a programmer wrote, and the module a diagnostic reports for it comes from `Definition::island`. The identity it is lowered under is its place in its module; the one it keeps is what its signature spells, read once every item is lowered (`name_witnesses`).
             // A group `satisfy … and …` lowers to one `rec` item, so its members' anonymous names are bound in one another; a lone witness stays a `let` item, and may still resolve through its own entry — that repair is elaboration's, since a witness references itself by resolution rather than by name.
             TopItem::Witness(group) => {
+                context.sorts_stand_in(SortSite::Witness);
                 let mut items = group
                     .iter()
                     .map(|witness| {
@@ -2334,6 +2342,7 @@ fn into_core_unit_within(
     // The seed table of the declaration being lowered, from index zero, in step with `universes`.
     let universe_seeds = RefCell::new(Vec::new());
     let universe_allocations = RefCell::new(HashMap::new());
+    let sorts = WrittenSorts::default();
 
     let mut context = Context::new(
         &table,
@@ -2344,6 +2353,7 @@ fn into_core_unit_within(
         &universe_role,
         &universe_seeds,
         &universe_allocations,
+        &sorts,
         &binders,
         &minted,
         &witness_ids,

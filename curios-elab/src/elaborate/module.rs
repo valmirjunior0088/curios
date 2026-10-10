@@ -591,7 +591,7 @@ fn finalize_definition(
         metas.extend(context.universe_metas_in(&body));
         context.finalize_universe_metas_at_instance(
             metas,
-            &instance.levels,
+            &instance,
             universe_context.parameter_count,
         )?;
         let type_ = context.zonk_universe_levels(&type_)?;
@@ -620,7 +620,7 @@ fn finalize_definition(
         metas.extend(context.universe_metas_in(&body));
         context.finalize_universe_metas_at_instance(
             metas,
-            &instance.levels,
+            &instance,
             universe_context.parameter_count,
         )?;
         let type_ = context.zonk_universe_levels(&type_)?;

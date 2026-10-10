@@ -52,6 +52,7 @@ impl Attempt {
         solutions.seed_floor(mints.metavariables);
         let mut universe_solver = UniverseSolver::new(0);
         universe_solver.seed(&mints.universes);
+        universe_solver.seed_qualities(&mints.qualities);
 
         Self {
             solutions,

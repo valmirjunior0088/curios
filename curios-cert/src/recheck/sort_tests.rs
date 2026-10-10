@@ -5,9 +5,9 @@ use {
     crate::{Counted, Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Module,
-        Nat, Quality, QualityParam, Rec, RecItem, Subterm, Telescope, Term, UniverseContext,
-        Universes, test_support::declaring,
+        Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many,
+        Module, Nat, Quality, QualityParam, Rec, RecItem, Scope, Subterm, Telescope, Term,
+        UniverseContext, Universes, test_support::declaring,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeSet,
@@ -557,6 +557,64 @@ fn a_declaration_leaves_no_more_sorts_than_the_limit() {
         verdicts.iter().any(|verdict| matches!(
             verdict.error,
             Error::TooManySorts { stated: found } if found == stated
+        )),
+        "{verdicts:?}",
+    );
+}
+
+/// A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart: judged at `Prop` the match is a proof's, and at `Type` it is the large elimination the guard refuses, so the definition is refused at that assignment. `curios`'s `tests::board::subsumption_tests` puts the same proposition to the elaborator under this name. Rename both or neither.
+#[test]
+fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
+    let nullary = |tag: &str| {
+        (
+            Atom::from(tag),
+            InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+        )
+    };
+    let two = named("Two");
+    let two_type = Term::induct_type(two, Vec::<Term>::new(), Vec::<Term>::new());
+    let (carrier, chosen, this, that, scrutinee) = (
+        Free::local(30, Some("A")),
+        Free::local(31, Some("t")),
+        Free::local(32, Some("x")),
+        Free::local(33, Some("y")),
+        Free::local(34, Some("s")),
+    );
+    let binders = || {
+        [
+            (carrier, left(0)),
+            (chosen, two_type.clone()),
+            (this, Term::free_var(&carrier)),
+            (that, Term::free_var(&carrier)),
+        ]
+    };
+    let pick = generic(
+        &named("pick"),
+        1,
+        Term::func_type(binders(), Term::free_var(&carrier)),
+        Term::func(
+            binders(),
+            Term::induct_match_scoped_marked(
+                Term::free_var(&chosen),
+                Scope::close(Many(1), &[&scrutinee], Term::free_var(&carrier)),
+                [
+                    ("a", Vec::new(), Term::free_var(&this)),
+                    ("b", Vec::new(), Term::free_var(&that)),
+                ],
+                None,
+            ),
+        ),
+    );
+
+    let verdicts = verdicts(&module(
+        vec![pick],
+        [(two, proposition(vec![nullary("a"), nullary("b")]))],
+    ));
+
+    assert!(
+        verdicts.iter().any(|verdict| matches!(
+            at_sorts(verdict),
+            Some((sorts, Error::LargeElimination(_))) if sorts == [Quality::Type]
         )),
         "{verdicts:?}",
     );

@@ -15,7 +15,7 @@ mod tests;
 /// The two obligations run one analysis over one partiality relation, seeded twice, and this says which seeding rejected: a type must be total or type formation may not terminate, a proof must be total or it proves anything. Both checkers state that same distinction and each carries it in its own diagnostic, so a second declaration of it would be two vocabularies that could drift while describing one thing.
 pub use curios_analysis::Erased;
 use {
-    super::{Context, Error, is_prop, zonk},
+    super::{Context, Error, proof_position, zonk},
     curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
         Definition, Enter, Entrypoint, Global, Item, Module, Rec, RecGroup, RecItem, Subterm, Term,
@@ -325,7 +325,7 @@ pub(crate) fn check_proof_totality(
 ///
 /// Two properties follow from the seed rather than from care. **Coverage** is a consequence of elaboration being a typechecker: a position it never settles is a position the program was never typed at. And the **prelude boundary** is a consequence of replay — the archived prefix is defined into the context rather than elaborated, so it settles nothing and seeds nothing, and its verdicts arrive through [`recorded_totality`] instead.
 ///
-/// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Once the declaration is published every solution is materialized, so [`is_prop`] is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
+/// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Once the declaration is published every solution is materialized, so [`proof_position`] is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
 fn checked_proof_positions(
     context: &mut Context,
     mark: usize,
@@ -333,31 +333,30 @@ fn checked_proof_positions(
 ) -> Result<Vec<Position>, Error> {
     let checked = context.split_checked(mark);
     // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
-    let mut sites: HashMap<Rc<str>, Rc<str>> = HashMap::new();
-    let mut memo: HashMap<Term, bool> = HashMap::new();
+    let mut sites: HashMap<(Rc<str>, &'static str), Rc<str>> = HashMap::new();
+    let mut memo: HashMap<Term, Option<&'static str>> = HashMap::new();
     let mut positions = Vec::new();
 
     for (term, type_, site) in checked {
-        // Two memos, keyed on the two different terms, because they save two different things. `memo` answers `is_prop` once per *zonked* type, as the doc above says. `zonked` answers the zonk once per *raw* type, which is the coarser question: a recorded type is the type elaboration wrote down, and thousands of terms are checked against the same one. Keying the outer memo on the raw type rather than folding both into one map keeps `is_prop`'s dedup as wide as the zonked types — raw types that differ but zonk alike still share a verdict.
+        // Two memos, keyed on the two different terms, because they save two different things. `memo` answers `proof_position` once per *zonked* type, as the doc above says. `zonked` answers the zonk once per *raw* type, which is the coarser question: a recorded type is the type elaboration wrote down, and thousands of terms are checked against the same one. Keying the outer memo on the raw type rather than folding both into one map keeps `proof_position`'s dedup as wide as the zonked types — raw types that differ but zonk alike still share a verdict.
         //
-        // Sound because zonk is a pure function of the solution set, and the solution set is final here: what is read has been published, and `is_prop` sees only zonked — hence metavariable-free — types, so it cannot solve anything that would make an earlier answer stale.
+        // Sound because zonk is a pure function of the solution set, and the solution set is final here: what is read has been published, and `proof_position` sees only zonked — hence metavariable-free — types, so it cannot solve anything that would make an earlier answer stale.
         let type_ = zonked(context, cache, &type_)?;
-        let prop = match memo.get(&type_) {
-            Some(prop) => *prop,
+        let held = match memo.get(&type_) {
+            Some(held) => *held,
             None => {
-                let prop =
-                    curios_profile::profile!("totality::is_prop" => is_prop(context, &type_))?;
-                memo.insert(type_, prop);
-                prop
+                let held = curios_profile::profile!("totality::proof_position" => proof_position(context, &type_))?;
+                memo.insert(type_, held);
+                held
             }
         };
-        if prop {
+        if let Some(what) = held {
             positions.push(Position {
                 term: zonked(context, cache, &term)?,
                 site: Rc::clone(
                     sites
-                        .entry(site.clone())
-                        .or_insert_with(|| Rc::from(format!("a proof in {site}"))),
+                        .entry((site.clone(), what))
+                        .or_insert_with(|| Rc::from(format!("{what} in {site}"))),
                 ),
             });
         }

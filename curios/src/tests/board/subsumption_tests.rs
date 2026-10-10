@@ -337,3 +337,39 @@ fn a_sort_and_a_value_under_one_implicit_are_refused() {
     let report = error(no_sort);
     assert!(report.contains("type mismatch"), "{report}");
 }
+
+// Whether a type is a proposition is one fact of it under every case: a result declared at a sort its caller states is one sort, so a match that answers a proposition in one case and a type in another is refused, as it is at `Type`.
+#[test]
+fn a_type_that_is_a_proposition_in_one_case_is_at_no_sort_left_to_a_caller() {
+    let source = r#"
+        use /std/{Nat, Bool};
+
+        induct Two: pub Prop
+        | a()
+        | b()
+        end
+
+        let F(c: Bool) -> Sort = match c | true => Two | false => Nat end;
+
+        /std/print("")
+        "#;
+
+    rejected_by(source, "type mismatch");
+}
+
+// A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart. The elaborator refuses the definition for deciding its sort; the kernel, handed it all the same, refuses it at the assignment that states `Type`.
+#[test]
+fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
+    let source = r#"
+        induct Two: pub Prop
+        | a()
+        | b()
+        end
+
+        let pick(@A: Sort, t: Two, x: A, y: A) -> A = match t | a() => x | b() => y end;
+
+        /std/print("")
+        "#;
+
+    rejected_by(source, "it can only be `Prop`");
+}

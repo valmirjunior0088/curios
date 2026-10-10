@@ -226,7 +226,7 @@
         },
         {
           "name": "storage.type.sort.curios",
-          "match": "(?<![\\w/])(Type|Prop)(?![\\w/])"
+          "match": "(?<![\\w/])(Type|Prop|Sort)(?![\\w/])"
         }
       ]
     },

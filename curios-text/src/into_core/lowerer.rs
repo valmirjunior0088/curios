@@ -1,5 +1,5 @@
 use {
-    super::{Context, MatchCompiler},
+    super::{Context, MatchCompiler, SortSite},
     crate::{
         Apply, BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic,
         Label, Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Literal,
@@ -350,6 +350,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.context
                     .fresh_universe(span, curios_core::UniverseConstraintKind::WrittenProp),
             ),
+            Subterm::Sort => curios_core::Term::sort_at(
+                self.context.written_quality(span)?,
+                self.context
+                    .fresh_universe(span, curios_core::UniverseConstraintKind::WrittenSort),
+            ),
             Subterm::Hole => curios_core::Term::hole(self.context.fresh_metavar()),
             // A written goal `?`: same fresh metavariable, but marked so zonk reports what elaboration determined for it instead of splicing.
             Subterm::Goal => {
@@ -640,16 +645,20 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         );
 
         let mut binds = Vec::new();
-        let (types, values) = self.bound(&binders, || {
-            let mut types = Vec::with_capacity(group.members.len());
-            let mut values = Vec::with_capacity(group.members.len());
-            for member in &group.members {
-                let signature = self.signature(&member.signature);
-                values
-                    .push(self.signature_value(&signature, |body| lower_value(body, &mut binds))?);
-                types.push(self.signature_type(&signature, None)?);
-            }
-            Ok((types, values))
+        // A member's every use is inside the declaration that holds it, so no caller states a sort it leaves: what follows the statement stands where the statement does.
+        let (types, values) = self.context.with_sorts(SortSite::Local, || {
+            self.bound(&binders, || {
+                let mut types = Vec::with_capacity(group.members.len());
+                let mut values = Vec::with_capacity(group.members.len());
+                for member in &group.members {
+                    let signature = self.signature(&member.signature);
+                    values.push(
+                        self.signature_value(&signature, |body| lower_value(body, &mut binds))?,
+                    );
+                    types.push(self.signature_type(&signature, None)?);
+                }
+                Ok((types, values))
+            })
         })?;
 
         // The hoisted actions count: a `!` lifts its operand out of the value, and the self-reference travels with it.

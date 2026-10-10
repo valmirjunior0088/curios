@@ -638,7 +638,7 @@ impl Convert {
         match (&*lower, &*upper) {
             (Subterm::Sort(below, lower), Subterm::Sort(above, upper)) => {
                 // No proposition stands where a type is wanted: two sorts are related where they are one quality, which solves one still open, and each is cumulative in its own levels.
-                if !context.same_quality(*below, *above) {
+                if !context.same_quality_at(*below, *above, self.extent) {
                     return Ok(false);
                 }
                 // What is put below is named for the report: a proposition's level and a type's are told apart by nothing else on the path.

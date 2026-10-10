@@ -77,6 +77,19 @@ fn values(count: usize) -> String {
     source
 }
 
+/// One value at a type read through the aliases, in a definition of three parameters each at `sort`, which nothing of what the definition costs reads: at `Sort` it leaves three sorts to its caller, and at `Type` none.
+fn value_over(sort: &str) -> String {
+    let mut source = aliases();
+    writeln!(
+        source,
+        "induct B: Type\n| b()\nend\nlet value(@S1: {sort}, @S2: {sort}, @S3: {sort}, s1: S1, s2: S2, s3: S3) -> W12(B) = B/b();"
+    )
+    .unwrap();
+    source.push_str("/std/Io/pure(())\n");
+
+    source
+}
+
 /// Whether `source` is taken under `budget` over `scope` by everything that judges it: elaborated, certified by the kernel and erased.
 fn checks(source: &str, budget: u64, scope: &[&Unit]) -> bool {
     let entrypoint = entrypoint_of(source);
@@ -181,4 +194,17 @@ fn a_unit_erases_its_values_under_the_budget_one_of_them_takes() {
         erases(&values(16), one),
         "sixteen independent values are refused by erasure under {one}, which one of them erases under"
     );
+}
+
+/// A definition that leaves three sorts to its caller is taken under the budget it is taken under leaving none: the kernel judges it once at each of the eight assignments of them, each under the whole budget, so what it costs to accept is what one assignment costs.
+#[test]
+fn a_definition_leaving_sorts_open_is_taken_under_the_budget_one_assignment_takes() {
+    with_prelude(|prelude| {
+        let at_type = smallest(|budget| checks(&value_over("Type"), budget, prelude));
+
+        assert!(
+            checks(&value_over("Sort"), at_type, prelude),
+            "a definition leaving three sorts open is refused under {at_type}, which it is taken under at `Type`"
+        );
+    });
 }
