@@ -20,18 +20,6 @@ use {
     },
 };
 
-/// Every assignment of `count` sorts, each `Prop` or `Type`, the one stating `Prop` throughout first: the one empty assignment where a declaration leaves none open.
-fn assignments(count: usize) -> impl Iterator<Item = Vec<Quality>> {
-    (0..1usize << count).map(move |chosen| {
-        (0..count)
-            .map(|sort| match (chosen >> sort) & 1 {
-                0 => Quality::Prop,
-                _ => Quality::Type,
-            })
-            .collect()
-    })
-}
-
 /// Judge a declaration at every assignment of the sorts `universes` leaves to its caller, the budget restored and the declaration's constraints assumed for each.
 ///
 /// **A declaration generic in a sort is judged at each sort a use can state, and never at the parameter.** Every rule that reads a sort reads which of `Prop` and `Type` it is — irrelevance, the elimination guard, eta, the obligation an erased position carries — and each has its own safe answer for a sort that states neither. So `judge` is handed the assignment and reads the declaration's terms at it ([`at_sorts`]): what it judges holds no parameter, a store keyed by a term holds each term at one sort, and a use at any instance stands at an assignment that was judged. That is two to the count judgments, which [`UniverseContext::QUALITY_LIMIT`] bounds.
@@ -48,7 +36,7 @@ fn at_every_sort(
         });
     }
 
-    for sorts in assignments(universes.quality_count) {
+    for sorts in Quality::assignments(universes.quality_count) {
         kernel.restore_budget();
         kernel.assume_universes(universes);
 

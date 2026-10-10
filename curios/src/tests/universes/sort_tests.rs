@@ -286,3 +286,21 @@ fn a_declaration_leaves_a_bounded_number_of_sorts() {
         "#;
     assert_eq!(typecheck(eight), Ok(()));
 }
+
+// The library holds a proof where it holds data: a list and an option of proofs, an equation between two of them, and a cell of one, each the declaration that holds data at another sort.
+#[test]
+fn the_library_holds_proofs_where_it_holds_data() {
+    let source = r#"
+        use /std/{Nat, List, Option, Eq, Cell};
+        use /std/Bool/{True};
+        let proofs: List(True) = [True/qed(), True/qed()];
+        let found: Option(True) = Option/some(True/qed());
+        let same: Eq()(True/qed(), True/qed()) = Eq/refl();
+        let held = Cell/new(@True)!;
+        let _ = Cell/fill(held, True/qed())!;
+        let count = match found | some(_) => 1 | none() => 0 end;
+        /std/print(Nat/to_str(List/len(proofs) + count))
+        "#;
+
+    assert_eq!(run(source), b"3");
+}

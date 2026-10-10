@@ -448,7 +448,7 @@ pub(super) const A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_C
         "#;
 
 pub(super) const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
-        use /std/{List, Evidence};
+        use /std/{List, Option};
         use /std/Bool/{True};
 
         induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
@@ -456,8 +456,8 @@ pub(super) const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
         let all_equal(@X : Prop, x : X, y : X) -> Same()(x, y) =
             Same/same();
 
-        let one : List(Evidence(True)) = [Evidence/some(True/qed())];
-        let none : List(Evidence(True)) = [];
+        let one : List(Option(True)) = [Option/some(True/qed())];
+        let none : List(Option(True)) = [];
 
         let bad : Same()(one, none) =
             all_equal(one, none);
@@ -486,10 +486,10 @@ pub(super) const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str =
         "#;
 
 pub(super) const A_LIST_OF_EVIDENCE_IS_STILL_A_LIST: &str = r#"
-        use /std/{Nat, List, Evidence};
+        use /std/{Nat, List, Option};
         use /std/Bool/{True};
 
-        let one : List(Evidence(True)) = [Evidence/some(True/qed())];
+        let one : List(Option(True)) = [Option/some(True/qed())];
 
         /std/print(Nat/to_str(List/len(one)))
         "#;
@@ -1370,7 +1370,7 @@ pub(super) const A_CAST_ALONG_A_HYPOTHESIS_THE_ALGEBRA_EQUATES_IS_ITS_ARGUMENT: 
         use /std/{Eq, Nat};
 
         let along(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-            -> Eq()(Eq/transp(P, p, v), v) = Eq/refl();
+            -> Eq()(Eq/subst(P, p, v), v) = Eq/refl();
 
         /std/print(Nat/to_str(1))
         "#;
@@ -1379,10 +1379,10 @@ pub(super) const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str =
         use /std/{Eq, Nat};
 
         let through_a_let(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-            -> Eq()(Eq/transp(P, (let q = p; q), v), v) = Eq/refl();
+            -> Eq()(Eq/subst(P, (let q = p; q), v), v) = Eq/refl();
 
         let through_a_function(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-            -> Eq()(Eq/transp(P, ((q : Eq()(a + b, b + a)) => q)(p), v), v) = Eq/refl();
+            -> Eq()(Eq/subst(P, ((q : Eq()(a + b, b + a)) => q)(p), v), v) = Eq/refl();
 
         /std/print(Nat/to_str(1))
         "#;
@@ -1405,15 +1405,15 @@ pub(super) const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
             | k + 1; ih => Eq/cong((m : Nat) => m + 1, ih)
             end;
 
-        let _closed : Eq()(Eq/transp((_) => Nat, slow(100000000000), 7), 7) = Eq/refl();
+        let _closed : Eq()(Eq/subst((_) => Nat, slow(100000000000), 7), 7) = Eq/refl();
 
-        let _open(n : Nat, v : Nat) -> Eq()(Eq/transp((_) => Nat, slow(n), v), v) = Eq/refl();
+        let _open(n : Nat, v : Nat) -> Eq()(Eq/subst((_) => Nat, slow(n), v), v) = Eq/refl();
 
         let inner(@x : Nat, @y : Nat, e : Eq()(x + 1, y + 1)) -> Nat = match e | refl(@z) => z end;
         let widen(n : Nat) -> Eq()(n + 1, n + 1) = Eq/cong((m : Nat) => m + 1, slow(n));
         let _named : Eq()(inner(widen(100000000000)), 100000000001) = Eq/refl();
 
-        /std/print(Nat/to_str(Eq/transp((_) => Nat, slow(100000000000), 7)))
+        /std/print(Nat/to_str(Eq/subst((_) => Nat, slow(100000000000), 7)))
         "#;
 
 pub(super) const AN_ARM_THAT_NAMES_A_PINNED_PAYLOAD_READS_THE_INDEX: &str = r#"
@@ -1528,7 +1528,7 @@ pub(super) const THE_SAME_PAIR_DECLARED_APART_CERTIFIES: &str = r#"
         "#;
 
 pub(super) const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
-        use /std/{Eq, Nat, Evidence, Str};
+        use /std/{Eq, Nat, Option, Str};
 
         induct P : pub Prop | mk() end
         struct S : pub Type { n : Nat, p : P }
@@ -1536,7 +1536,7 @@ pub(super) const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
 
         let field(n : Nat, p : P, q : P) -> Eq()(S { n = n, p = p }, S { n = n, p = q }) = Eq/refl();
         let payload(n : Nat, p : P, q : P) -> Eq()(W/wrap(n, p), W/wrap(n, q)) = Eq/refl();
-        let some(p : P, q : P) -> Eq()(Evidence/some(p), Evidence/some(q)) = Eq/refl();
+        let some(p : P, q : P) -> Eq()(Option/some(p), Option/some(q)) = Eq/refl();
         let assoc(a : Str, b : Str, c : Str)
             -> Eq()(Str/concat(Str/concat(a, b), c), Str/concat(a, Str/concat(b, c))) = Eq/refl();
 

@@ -1,4 +1,4 @@
-use /std/{Int, Bool, Option, Evidence};
+use /std/{Int, Bool, Option};
 use /std/Bool/{True, Holds};
 use /std/Toml/{Date, Time};
 
@@ -26,10 +26,10 @@ pub let of(
 ) -> OffsetDateTime =
     OffsetDateTime { date = date, time = time, offset_minutes = offset_minutes };
 
-let try_valid(offset_minutes: Int) -> Evidence(Valid(offset_minutes)) =
-    match sound(offset_minutes): (r) => Evidence(Holds(r))
-    | true => Evidence/some(True/qed())
-    | false => Evidence/none()
+let try_valid(offset_minutes: Int) -> Option(Valid(offset_minutes)) =
+    match sound(offset_minutes): (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
+    | false => Option/none()
     end;
 
 --- The moment, decided: `none` where the offset is not one.

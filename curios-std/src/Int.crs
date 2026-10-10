@@ -1,6 +1,6 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, div, rem, gt, ge, and, or, xor, shr, to_nat, to_flt};
-use /std/{Nat, Bool, Str, Option, Evidence, Show, Spell, Ord, Eq};
+use /std/{Nat, Bool, Str, Option, Show, Spell, Ord, Eq};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -79,7 +79,7 @@ pub let view(i: Int) -> Sign(i) =
             Sign/neg(to_nat(-1 - i, @ok))
     end(Eq/refl());
 
-let absurd_succ(@P: Prop, x: Nat, h: Holds(+0 == Nat/to_int(x) + 1)) -> P =
+let absurd_succ(@P: Sort, x: Nat, h: Holds(+0 == Nat/to_int(x) + 1)) -> P =
     match h: (_) => P end;
 
 --- Where `a` stands against `b`, with the evidence.
@@ -140,10 +140,10 @@ pub let of_str(s: Str) -> Option(Int) =
     end;
 
 --- The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.
-pub let non_neg(n: Int) -> Evidence(NonNeg(n)) =
-    match n >= +0: (r) => Evidence(Holds(r))
-    | true => Evidence/some(True/qed())
-    | false => Evidence/none()
+pub let non_neg(n: Int) -> Option(NonNeg(n)) =
+    match n >= +0: (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
+    | false => Option/none()
     end;
 
 satisfy Eql(Int) {

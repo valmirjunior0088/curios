@@ -7,7 +7,7 @@
 //! A bound is read back over the nodes the row states it in, `Holds(Nat/lt(i, Bytes/len(b)))`, and not through the `/sys` wrappers a caller's guard is written with. A case equation answers its scrutinee's reduct, which is those nodes (`documentation/design/soundness/case-equations-and-their-key.md`), so a guard discharges the bound either way.
 
 use {
-    super::{applied, fn_over, intrinsic, name, type_, unit},
+    super::{applied, fn_over, intrinsic, name, sort, type_, unit},
     crate::{Intrinsic, Name, Subterm, Term},
     curios_core::{Operand, Produced},
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
@@ -124,7 +124,7 @@ pub(super) fn projection(
                     true => Plicity::Explicit,
                     false => Plicity::Implicit,
                 },
-                type_(),
+                sort(),
             ),
             Operand::At(demanded) => (
                 match proof(demanded) {

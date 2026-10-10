@@ -34,13 +34,13 @@ fn a_channel_preserves_fifo_through_wraparound_and_close() {
 fn evidence_payloads_still_occupy_storage() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Eq, Evidence, Cell, Option, Io, print};
+        use /std/{Nat, Eq, Option, Cell, Io, print};
         use /std/Async/{Channel};
-        let proof = Cell/new(@Evidence(Eq()(1, 1)))!;
-        let _ = Cell/fill(proof, Evidence/some(Eq/refl()))!;
+        let proof = Cell/new(@Option(Eq()(1, 1)))!;
+        let _ = Cell/fill(proof, Option/some(Eq/refl()))!;
         let _ = print(match Cell/poll(proof)! | some(_) => "proof " | none() => "missing " end)!;
-        let p = Channel/new(@Evidence(Eq()(1, 1)), 1)!;
-        let _ = Channel/try_send(p.0, Evidence/some(Eq/refl()))!;
+        let p = Channel/new(@Option(Eq()(1, 1)), 1)!;
+        let _ = Channel/try_send(p.0, Option/some(Eq/refl()))!;
         print(match Channel/try_recv(p.1)! | item(_) => "proof" | empty() => "empty" | ended() => "ended" end)
     "#),
         b"proof proof"

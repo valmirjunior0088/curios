@@ -331,6 +331,18 @@ impl Quality {
         matches!(self, Quality::Prop | Quality::Type)
     }
 
+    /// Every assignment of `count` sorts, each `Prop` or `Type`, the one stating `Prop` throughout first: the one empty assignment for none.
+    pub fn assignments(count: usize) -> impl Iterator<Item = Vec<Quality>> {
+        (0..1usize << count).map(move |chosen| {
+            (0..count)
+                .map(|sort| match (chosen >> sort) & 1 {
+                    0 => Quality::Prop,
+                    _ => Quality::Type,
+                })
+                .collect()
+        })
+    }
+
     /// This quality at an instance: a parameter as the quality `arguments` states for it, and anything else as it stands. A parameter past the instance's width is left, for the reader that refuses an open sort to meet.
     pub fn instantiate(&self, arguments: &[Quality]) -> Quality {
         match self {

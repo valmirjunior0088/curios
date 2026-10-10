@@ -657,7 +657,10 @@ impl<'a> Context<'a> {
         {
             return Ok(curios_core::Quality::Meta(*id));
         }
-        if let Some(site) = self.sorts.site.get().refused() {
+        // A `Sort` with no span is one the compiler built, in `/sys`: it stands in a signature by construction, and is lowered again, at no span to find it by, under the lambda its declaration is.
+        if span.is_some()
+            && let Some(site) = self.sorts.site.get().refused()
+        {
             return Err(Error::SortOutsideSignature { site });
         }
 

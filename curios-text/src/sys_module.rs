@@ -41,7 +41,7 @@ use {
 fn option_decl() -> TopItem {
     let module: Module = r#"
         --- A value that may be absent.
-        pub induct Option(A: Type): pub Type
+        pub induct Option(A: Sort): pub Type
         --- The value is there.
         | some(A)
         --- There is none.
@@ -927,7 +927,7 @@ fn channel_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         | closed()
         end
         --- The outcome of one nonblocking take.
-        pub induct Take(A: Type): pub Type
+        pub induct Take(A: Sort): pub Type
         | item(A)
         | empty()
         | ended()

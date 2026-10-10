@@ -532,7 +532,7 @@ fn the_library_recursion_on_a_bound_computes_at_a_dependent_motive() {
         use /std/{Nat, Eq};
         let Shape(n: Nat) -> Type = match n | 0 => {} | _ + 1 => Nat end;
         let pick(n: Nat) -> Shape(n) =
-            Nat/recurse((k: Nat) => k, Shape, (k, _) => match k | 0 => () | kp + 1 => kp end, n);
+            Nat/descend((k: Nat) => k, Shape, (k, _) => match k | 0 => () | kp + 1 => kp end, n);
         let _computed: Eq()(pick(5), 4) = Eq/refl();
         /std/print(Nat/to_str(pick(5)))
         "#;

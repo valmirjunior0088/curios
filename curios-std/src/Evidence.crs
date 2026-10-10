@@ -1,9 +1,0 @@
---- What a decision of `P` found: the proof, or nothing.
-pub induct Evidence(P: Prop): pub Type
---- The decision held, and this is its proof.
-| some(P)
---- The decision did not hold, which proves nothing of `P`.
-| none()
-end
-
-pub use Evidence/*;

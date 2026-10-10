@@ -141,14 +141,21 @@ fn suggest_in_scope(
             });
         }
     }
-    for (pool, (name, type_)) in module_pool(context, written, entry, owner) {
+    for (pool, name) in module_pool(context, written, entry, owner) {
         if attempts >= ATTEMPTS {
             break;
         }
         attempts += 1;
         let head = Term::var(Var::free(Free::Global(name)));
-        if let Some((term, holes)) = apply_fit(context, telescope, &head, &type_, goal_type, &hole)
-        {
+        // A candidate is a use of its declaration, so its type is read at an instance of its own, as an occurrence's is: the levels and the sorts the declaration leaves to a caller are the goal's to state. The instance goes with the attempt.
+        let mark = context.solution_mark();
+        let fit = match context.instantiate_assumption(&Free::Global(name)) {
+            Ok(Some((type_, _))) => apply_fit(context, telescope, &head, &type_, goal_type, &hole),
+            Ok(None) | Err(_) => None,
+        };
+        context.rollback_solutions(mark);
+        context.end_solutions(mark);
+        if let Some((term, holes)) = fit {
             candidates.push(Candidate { term, holes, pool });
         }
     }
@@ -175,7 +182,7 @@ fn suggest_in_scope(
     }
 }
 
-/// Pools 3 to 5: the unit's own definitions, then every other global its items reference, then every binding in scope of the owning definition through a `use` that neither earlier pool holds, each at the type the context holds it at. The goal's owning definition is excluded.
+/// Pools 3 to 5: the unit's own definitions, then every other global its items reference, then every binding in scope of the owning definition through a `use` that neither earlier pool holds, each a name the context holds a type for. The goal's owning definition is excluded.
 ///
 /// `written` is read for the names it declares and the names its terms mention, never for a type: an item that wrote a goal is among them as it elaborated, in a state of its own, and its type is the context's to give, as every other item's is ([`Context::publish_held`]).
 fn module_pool(
@@ -183,16 +190,16 @@ fn module_pool(
     written: &[Item],
     entry: Option<&Entrypoint>,
     owner: Option<&Global>,
-) -> Vec<(usize, (Global, Term))> {
+) -> Vec<(usize, Global)> {
     let mut pool = Vec::new();
     let mut own = BTreeSet::new();
 
     let mut definitions = |definition: &curios_core::Definition| {
         own.insert(definition.name);
         if Some(&definition.name) != owner
-            && let Some(type_) = context.assumption(&Free::Global(definition.name))
+            && context.assumption(&Free::Global(definition.name)).is_some()
         {
-            pool.push((3, (definition.name, type_.clone())));
+            pool.push((3, definition.name));
         }
     };
     for item in written {
@@ -231,9 +238,8 @@ fn module_pool(
         if own.contains(global) || Some(global) == owner {
             continue;
         }
-        let free = Free::Global(*global);
-        if let Some(type_) = context.assumption(&free) {
-            pool.push((4, (*global, type_.clone())));
+        if context.assumption(&Free::Global(*global)).is_some() {
+            pool.push((4, *global));
         }
     }
 
@@ -248,9 +254,8 @@ fn module_pool(
         {
             continue;
         }
-        let free = Free::Global(*global);
-        if let Some(type_) = context.assumption(&free) {
-            pool.push((5, (*global, type_.clone())));
+        if context.assumption(&Free::Global(*global)).is_some() {
+            pool.push((5, *global));
         }
     }
 

@@ -166,13 +166,9 @@ pub let eq_of_eql(a: Nat, b: Nat, h: Holds(a == b)) -> Eq()(a, b) =
 pub mod ord;
 pub use ord/{let ord};
 
---- Induction on a measure that descends, by a bound the measure fits under.
+--- Recursion on a measure that descends, by a bound the measure fits under.
 pub mod descend;
 pub use descend/{let descend};
-
---- Recursion on a measure that descends, by a bound the measure fits under.
-pub mod recurse;
-pub use recurse/{let recurse};
 
 --- Whether a decision holds of every number below a bound, and that it then holds of each.
 pub mod all_below;

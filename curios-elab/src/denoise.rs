@@ -10,8 +10,8 @@ mod tests;
 use {
     super::Context,
     curios_core::{
-        Apply, Bound, Enter, Free, Func, Global, InstanceHead, Rec, RecGroup, Subterm, Term, Var,
-        Visit,
+        Apply, Bound, Enter, Free, Func, Global, InstanceHead, Quality, Rec, RecGroup, Subterm,
+        Term, Var, Visit,
     },
     std::{collections::HashSet, rc::Rc},
 };
@@ -21,11 +21,20 @@ pub(crate) fn refold_recs(context: &Context, term: &Term) -> Term {
     if !term.mentions_rec() {
         return term.clone();
     }
+    // A group that leaves sorts to its caller is opened at one assignment of them, and its members then state that assignment's sorts: it is known by what it projects to at each.
     let table: Rc<Vec<(RecGroup, Vec<Global>)>> = Rc::new(
         context
             .rec_definitions()
             .into_iter()
-            .map(|(group, names)| (group.projected(), names))
+            .flat_map(|(group, names)| {
+                Quality::assignments(group.universes().quality_count).map(move |sorts| {
+                    let opened = match sorts.is_empty() {
+                        true => group.projected(),
+                        false => group.at_qualities(&sorts).projected(),
+                    };
+                    (opened, names.clone())
+                })
+            })
             .collect(),
     );
     refold_with(&table, term)
@@ -117,7 +126,7 @@ pub(crate) fn named_members(context: &Context, term: &Term) -> Term {
 /// The terms naming `group`'s members, in member order: each member's global where the base frame defines the group itself, and that global at the instance's levels where `group` is an instance reduction opened.
 fn members_named(context: &Context, group: &RecGroup) -> Option<Vec<Term>> {
     let named = |name: &Global| Var::free(Free::Global(*name));
-    if group.universes().parameter_count == 0
+    if group.universes().width() == 0
         && let Some(names) = context.member_names(group)
     {
         return Some(names.iter().map(|name| Term::var(named(name))).collect());

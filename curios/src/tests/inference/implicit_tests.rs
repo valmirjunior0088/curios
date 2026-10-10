@@ -383,7 +383,7 @@ fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
                 match Bytes/get(b, k) == f
                 | true =>
                     let found = Byte/eq_of_eql(Bytes/get(b, k), f, True/qed());
-                    consume(Bytes/get(b, k), Eq/transp((c: Byte) => P(c), Eq/sym(found), lead))
+                    consume(Bytes/get(b, k), Eq/subst((c: Byte) => P(c), Eq/sym(found), lead))
                 | false => fallback
                 end
             | false => fallback
@@ -477,7 +477,7 @@ fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
         .nth(1)
         .expect("the row is printed");
 
-    assert!(row.contains("refl.{0}(@Nat, @(f(n)).0)"), "{row}");
+    assert!(row.contains("refl.{Type; 0}(@Nat, @(f(n)).0)"), "{row}");
     assert!(!row.contains("rec "), "{row}");
 }
 

@@ -1246,7 +1246,7 @@ pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
     end;
 ```
 
-The standard equality operations include reflexivity, symmetry, transitivity and congruence, and the two that carry something along an equation: `Eq/subst` takes a proof of `P(x)` to one of `P(y)`, and `Eq/transp` a value, where `P` is a family of types. `Eq` is propositional equality; `Eql` is the value-level concept used by `==` and `!=`.
+The standard equality operations include reflexivity, symmetry, transitivity and congruence, and `Eq/subst`, which carries a `P(x)` to a `P(y)` along an equation: a proof where `P` is a family of propositions and a value where it is one of types, `P` being declared into a `Sort`. `Eq` is propositional equality; `Eql` is the value-level concept used by `==` and `!=`.
 
 ### Bounds from the facts in scope
 

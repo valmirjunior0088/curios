@@ -1,4 +1,4 @@
-use /std/{Nat, Eq, Evidence};
+use /std/{Nat, Eq, Option};
 use /std/Nat/{Divides, Gcd};
 use /std/Bool/{True, Holds};
 
@@ -7,10 +7,10 @@ pub let Coprime(a: Nat, b: Nat) -> Prop =
     Eq()(Nat/gcd(a, b), 1);
 
 --- The procedure that decides `Coprime(a, b)`: the evidence when it holds, `none` otherwise.
-pub let try(a: Nat, b: Nat) -> Evidence(Coprime(a, b)) =
+pub let try(a: Nat, b: Nat) -> Option(Coprime(a, b)) =
     match Nat/gcd(a, b) == 1
-    | true => Evidence/some(Nat/eq_of_eql(Nat/gcd(a, b), 1, True/qed()))
-    | false => Evidence/none()
+    | true => Option/some(Nat/eq_of_eql(Nat/gcd(a, b), 1, True/qed()))
+    | false => Option/none()
     end;
 
 --- `Coprime(a, b)` gives `Coprime(b, a)`.

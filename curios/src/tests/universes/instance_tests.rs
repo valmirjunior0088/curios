@@ -202,7 +202,7 @@ fn two_instances_of_a_former_convert_where_their_spellings_differ_in_more_than_l
     let signatures = signatures(source);
     let first = &signatures["/first"];
     assert!(
-        first.contains("Io.{u+1}") && first.contains("Io.{0}"),
+        first.contains("Io.{Type; u+1}") && first.contains("Io.{Type; 0}"),
         "the two instances no longer sit at two levels no instance makes one, so the program holds nothing: {first}",
     );
     assert_eq!(run(source), b"picked");

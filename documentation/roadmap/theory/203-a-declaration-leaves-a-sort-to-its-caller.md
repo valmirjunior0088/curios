@@ -17,11 +17,7 @@ A definition that serves a proposition and a type alike is written once for each
 
 ## The gap
 
-**One definition is written once for each sort.** `/std/Eq/subst` carries a proof along an equation and `/std/Eq/transp` a value, with one body (`curios-std/src/Eq.crs`). `/std/Nat/descend` is induction on a measure and `/std/Nat/recurse` the fixpoint, with one body (`curios-std/src/Nat/descend.crs`, `curios-std/src/Nat/recurse.crs`). `/std/Evidence` is `/std/Option` over a proposition (`curios-std/src/Evidence.crs`).
-
-**An equation relates no two proofs, and no list, cell, channel or description holds one.** `/std/Eq` takes `@A: Type`. `/sys` declares each former and each operation over a `Type` (`curios-text/src/sys_module/helpers.rs`) where the node its body builds takes either sort, so the kernel forms a list of proofs that no program can write.
-
-**The library leaves no sort open.** A program writes `Sort`, and `/sys` and `/std` do not: the three pairs above stand, and `/std/Eq`, `/std/Option` and `/sys`'s formers take a `Type`.
+**The rule is stated in no decision.** `/sys` and `/std` say `Sort` where either sort serves: `/sys`'s formers and operations at every operand a row calls a type (`curios-text/src/sys_module/projected.rs`), `/sys/Option`, `/std/Eq` with its lemmas, `/std/Eq/subst` and `/std/Nat/descend`. What is left is the decision that states the rule with what it rejects, and the documents that still state the one it replaces.
 
 ## Decisions
 
@@ -45,7 +41,7 @@ A definition that serves a proposition and a type alike is written once for each
 
 **What a mismatch against a `Sort` already decided reports.** A second term that needs the other sort is a type mismatch against the sort the first one decided, `expected: Type` where the reader wrote `Sort`. Whether that report names the term that decided it is not decided.
 
-**Which of the elaborator's readers meet an open quality once `/std` says `Sort`.** Counted where the first stage lands, by a note at each.
+**Which of the elaborator's readers meet an open quality now `/std` says `Sort`.** Not counted: a note at each reader, read from a profiling build's `profile.tsv`.
 
 **Whether a `Sort` reaches a concept.** A witness is found by the key its signature is spelled at, and what a key at an open quality matches is not designed.
 
@@ -53,15 +49,14 @@ A definition that serves a proposition and a type alike is written once for each
 
 Each stage is one commit, and its check passes before the next starts.
 
-1. **`/sys` and `/std` say `Sort` where either serves.** `/sys`'s formers and operations at every operand its row calls a type; `/std/Eq`; `/std/Eq/subst`, `/std/Nat/descend` and `/std/Option`, with `/std/Eq/transp`, `/std/Nat/recurse` and `/std/Evidence` removed. Check: `cargo xtask clippy`, which elaborates, erases and certifies `/std`, and `curios-std`'s tests. It may move any reading of `xbench` whose loop holds a decision: an `Option` of a proof keeps the slot `Evidence` dropped.
-2. **The decision, and this specification retired.** Check: the gate.
+1. **The decision, and this specification retired.** Check: the gate.
 
 ## Verification
 
-- **The corpus compiled to the same bytes.** With the compiler `cargo xtask build` builds, each loose program of `programs/` is compiled with `curios compile <program> -o <file>` and the files' SHA-256 digests are compared with those taken at `103139151`. The first stage may change them.
+- **The corpus compiled to the same bytes.** With the compiler `cargo xtask build` builds, each loose program of `programs/` is compiled with `curios compile <program> -o <file>` and the files' SHA-256 digests are compared with those taken at `103139151`. They are compared where the last stage's gate runs.
 - **What an eager check would cost were every `Type` a caller's choice.** Over the headers of the top-level `let`, `induct`, `struct`, `concept` and `satisfy` declarations under `curios-std/src` outside `tests/`, the written `Type`s in an input position are counted, a binder's own type and the codomain of a function-typed binder, the declaration's own result left out. At `103139151`, counted: 532 of 2,376 declarations write one, and they have 3,624 ground assignments between them.
-- `cargo xboard report` holds every ticket after the first stage.
-- After the first stage, on standard input: one definition used at a number and at a proof runs; `List(True)` and `Option(True)` are certified; `let F(c: Bool) -> Sort = match c | true => Two | false => Nat end;` is refused.
+- `cargo xboard report` holds every ticket.
+- On standard input: one definition used at a number and at a proof runs; `List(True)` and `Option(True)` are certified; `let F(c: Bool) -> Sort = match c | true => Two | false => Nat end;` is refused.
 
 ## Rejected
 

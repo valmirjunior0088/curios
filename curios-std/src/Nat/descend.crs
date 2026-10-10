@@ -5,13 +5,15 @@ use /std/Bool/{True, False, Holds};
 let none_below(m: Nat, k: Nat, below: Holds(m < k), within: Holds(k <= 0)) -> False =
     False/refuted();
 
---- Induction over a measure: the step may assume `P` at every state whose measure is below `s`'s.
+--- The fixpoint over a measure, and induction over one where `P` is a family of propositions: the step may assume `P` at every state whose measure is below `s`'s.
 ---
---- The recursion is structural, on a number the measure fits under, so it is total as it stands. The step never meets the bound: it is handed a hypothesis that holds at any state below, given the proof that it lies below, which the arithmetic in scope usually writes. Over the identity it is course-of-values induction on `Nat`. `Nat/recurse` is the same recursion where `P` is a family of data.
+--- The recursion is structural, on a number the measure fits under, so it is total as it stands and computes wherever a value is demanded, in a type as at runtime. The step never meets the bound: it is handed a hypothesis that recurs at any state below, with the proof that it lies below, which the arithmetic in scope usually writes. Over the identity it is course-of-values recursion on `Nat`.
+---
+--- The loop is local to a wrapper that does not recurse, so inlining the wrapper at a call fuses `step` into the loop. A `descend` that passed `step` to itself would keep an indirect call at every level, and run out of stack sooner.
 pub let descend(
     @S: Type,
     measure: (S) -> Nat,
-    P: (S) -> Prop,
+    P: (S) -> Sort,
     step: (s: S, ih: (t: S, r: Holds(measure(t) < measure(s))) -> P(t)) -> P(s),
     s: S,
 ) -> P(s) =

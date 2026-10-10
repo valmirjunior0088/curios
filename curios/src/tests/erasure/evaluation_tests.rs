@@ -132,14 +132,14 @@ fn a_trivial_program_retains_none_of_the_parser_web() {
     }
 }
 
-// A recursion on a bound runs as its step and nothing else: the proofs that keep the measure under the bound are erased, and `recurse` is a wrapper around a local loop, so inlining the wrapper fuses the step into the loop. A `recurse` passing `step` to itself would survive to the optimized program as a function of its own, calling the step through a closure at every level.
+// A recursion on a bound runs as its step and nothing else: the proofs that keep the measure under the bound are erased, and `descend` is a wrapper around a local loop, so inlining the wrapper fuses the step into the loop. A `recurse` passing `step` to itself would survive to the optimized program as a function of its own, calling the step through a closure at every level.
 #[test]
 fn a_recursion_on_a_bound_is_fused_with_its_step() {
     let source = r#"
         use /std/{Nat, List, Io, proc};
         use /std/Bool/{True};
         let sum_to(n: Nat) -> Nat =
-            Nat/recurse(
+            Nat/descend(
                 (k: Nat) => k,
                 (_) => Nat,
                 (k, ih) => match k | 0 => 0 | kp + 1 => k + ih(kp, True/qed()) end,
@@ -148,7 +148,7 @@ fn a_recursion_on_a_bound_is_fused_with_its_step() {
         "#;
     let optimized = cont_optm(source);
     assert!(
-        !optimized.contains("Nat/recurse"),
+        !optimized.contains("Nat/descend"),
         "the fixpoint survived the step it should have fused:\n{optimized}"
     );
 }

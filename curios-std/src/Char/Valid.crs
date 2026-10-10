@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Evidence};
+use /std/{Nat, Bool, Option};
 use /std/Bool/{True, Holds};
 
 --- Whether `code` is a Unicode scalar value: a code point up to `U+10FFFF` outside the surrogate range.
@@ -60,8 +60,8 @@ pub let below_surrogates_of(
     end;
 
 --- The evidence that `code` is a Unicode scalar value, or `none`.
-pub let try(code: Nat) -> Evidence(Valid(code)) =
-    match of(code): (r) => Evidence(Holds(r))
-    | true => Evidence/some(True/qed())
-    | false => Evidence/none()
+pub let try(code: Nat) -> Option(Valid(code)) =
+    match of(code): (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
+    | false => Option/none()
     end;
