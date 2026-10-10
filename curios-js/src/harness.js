@@ -1,4 +1,4 @@
-// The browser run harness: instantiates a compiled curios program against a JS implementation of the host boundary and drives its entrypoint. Like any embedder, this file spells the wire names itself — the `sys.*` import keys, the `sys`/`ffi` namespaces, the `func/main` export; the contract is pinned by the Rust test suite and by the Node suite under `tests/`. The codes and the standard streams' tokens arrive via `config`, built Rust-side from curios-abi (see src/abi.rs), and the program's own `foreign` rows arrive with the program, as `compile` described them (see src/foreigns.rs).
+// The browser run harness: instantiates a compiled curios program against a JS implementation of the host boundary and drives its entrypoint. Like any embedder, this file spells the wire names itself — the host's method names, the `sys`/`ffi` namespaces, the `func/main` export; the contract is pinned by the Rust test suite and by the Node suite under `tests/`. The codes, the standard streams' tokens and the name the standard library declares each of the host's rows under arrive via `config`, built Rust-side from curios-abi (see src/abi.rs), and the `foreign` rows the program reaches arrive with the program, as `compile` described them (see src/foreigns.rs).
 //
 // A `Nat` or `Int` crosses as an `i64`, which JavaScript sees as a `BigInt` in both directions: a count arrives as one, and every status, size and time handed back must be one — the status codes in `config` already are. A `Bool` and a `Byte`, the exit code among them, cross as plain numbers.
 //
@@ -54,7 +54,8 @@ const describe = (value) => {
  * - `compiled`: what `compile` returned — `program`, the module bytes, and `foreigns`, the program's own `foreign` rows as `{ name, params, results }`;
  * - `bridge`: the bridge module's bytes, from `bridge_bytes`;
  * - `status`, `event`, `stdio`: the wire code tables and the standard streams' tokens from `abi`;
- * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each receiving a copy of every write as a `Uint8Array`; `foreign` implements the program's own `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states.
+ * - `rows`: from `abi` too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
+ * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each receiving a copy of every write as a `Uint8Array`; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does.
  *
  * Resolves to `{ stdout, stderr, exitCode, trap }`: the accumulated output bytes, the code the program exited with (0 when `main` returns), and the trap message if execution failed instead.
  */
@@ -140,8 +141,8 @@ export async function run(config) {
     throw new Error(`${name} is not supported in the browser playground`);
   };
 
-  // The `sys` import object, keyed by wire name. A `host_ops` row without a browser implementation surfaces as a `LinkError` naming the import when a program calls it.
-  const sysEnv = {
+  // What this host answers of the rows the standard library declares, keyed by the host's method name, which is each declaration's own label.
+  const host = {
     // Standard input is at its end, so a read of it answers `EOF` — or, asked for nothing, succeeds with nothing, since a request for nothing only asks whether the handle could be read. The output streams are not open for reading.
     handle_read: (handle, count) => {
       switch (keyOf(handle)) {
@@ -271,10 +272,20 @@ export async function run(config) {
 
       throw new ExitSignal(code);
     },
-    panic: (message) => {
-      throw new PanicSignal(new TextDecoder().decode(decodeBytes(message)));
-    },
   };
+
+  // The compiler's own refusal: the sentence handed over is the report.
+  const panic = (message) => {
+    throw new PanicSignal(new TextDecoder().decode(decodeBytes(message)));
+  };
+
+  // The host's answers under the names a program imports them by.
+  const answered = new Map(
+    Object.entries(config.rows).map(([declared, method]) => [
+      declared,
+      host[method],
+    ]),
+  );
 
   const lengthOf = {
     longs: bridge.longs_len,
@@ -429,7 +440,7 @@ export async function run(config) {
     }
   };
 
-  // The `ffi` import object, built from the module's own imports: each one the program calls must be a row `compile` described, and a hook must implement it. A declaration the program never calls is never imported, so it needs no hook; a hook naming no row is a hook for a program other than this one.
+  // The `ffi` import object, built from the module's own imports. A hook answers a row before this host does, as a module answers one before the native host, and is held to the row `compile` described; a row no hook implements is this host's where it answers that name, and needs no description, since nothing here is held to one. A declaration the program never calls is never imported, so it needs no hook; a hook naming no row is a hook for a program other than this one.
   const ffiEnv = (module) => {
     const rows = new Map(
       config.compiled.foreigns.map((row) => [row.name, row]),
@@ -453,6 +464,13 @@ export async function run(config) {
         continue;
       }
 
+      const hooked = typeof implemented[name] === "function";
+
+      if (!hooked && answered.has(name)) {
+        env[name] = answered.get(name);
+        continue;
+      }
+
       const row = rows.get(name);
 
       if (row === undefined) {
@@ -461,7 +479,7 @@ export async function run(config) {
         );
       }
 
-      if (typeof implemented[name] !== "function") {
+      if (!hooked) {
         throw new Error(
           `the program calls ffi ${name}, and hooks.foreign implements no ${name}`,
         );
@@ -498,7 +516,7 @@ export async function run(config) {
   try {
     const module = await WebAssembly.compile(config.compiled.program);
     const instance = await WebAssembly.instantiate(module, {
-      sys: sysEnv,
+      sys: { panic },
       ffi: ffiEnv(module),
     });
 

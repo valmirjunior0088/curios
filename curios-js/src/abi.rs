@@ -2,7 +2,7 @@
 
 use {
     crate::set,
-    curios_abi::{Handle, Poll, errno, event, file_kind, status, stdio_mode},
+    curios_abi::{Handle, HostOp, Poll, errno, event, file_kind, status, stdio_mode},
     js_sys::Object,
     wasm_bindgen::JsValue,
 };
@@ -46,7 +46,18 @@ fn tokens(entries: &[(&str, Handle)]) -> Object {
     object
 }
 
-/// The wire codes as a JS object: the `status`/`file_kind`/`stdio_mode` code tables as `BigInt`s, the `event` masks as numbers, and the `stdio` tokens as hex.
+/// The rows a host answers: the name the standard library declares each under, which is the name a program imports it by, beside the host method that answers it.
+fn rows() -> Object {
+    let object = Object::new();
+
+    for op in HostOp::ALL {
+        set(&object, &op.declared(), &JsValue::from_str(op.name()));
+    }
+
+    object
+}
+
+/// The wire codes as a JS object: the `status`/`file_kind`/`stdio_mode` code tables as `BigInt`s, the `event` masks as numbers, the `stdio` tokens as hex, and `rows`, the name the standard library declares each host row under beside the method that answers it.
 pub(crate) fn abi() -> Object {
     let object = Object::new();
     set(
@@ -105,6 +116,7 @@ pub(crate) fn abi() -> Object {
             ("STDERR", Handle::Stderr),
         ]),
     );
+    set(&object, "rows", &rows());
 
     object
 }

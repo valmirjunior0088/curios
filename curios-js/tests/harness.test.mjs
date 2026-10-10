@@ -140,11 +140,13 @@ let _ = used!;
 /std/print("ran")
 `;
 
-test("compile hands back the program beside its own foreign rows as plain data", () => {
+test("compile hands back the program beside the foreign rows it reaches as plain data", () => {
   const { program, foreigns } = compile(PAIR);
 
   assert.ok(program instanceof Uint8Array);
-  assert.deepEqual(foreigns, [
+  // The program's own row, and the standard library's a print reaches, each by the name it is declared under.
+  assert.deepEqual(
+    foreigns.find(({ name }) => name === "/pair"),
     {
       name: "/pair",
       params: ["Nat", "Bytes"],
@@ -153,7 +155,8 @@ test("compile hands back the program beside its own foreign rows as plain data",
         { label: "ok", type: "Bool" },
       ],
     },
-  ]);
+  );
+  assert.ok(foreigns.some(({ name }) => name === "/std/Handle/handle_write"));
 });
 
 test("a Byte crosses whole at 0 and 255, and a hook's answer outside them stops the program", async () => {

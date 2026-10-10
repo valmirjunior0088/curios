@@ -188,29 +188,30 @@ fn words_accessors_roundtrip_a_word() {
     }
 }
 
-/// Every builtin host operation has an entry in `harness.js`'s `sys` import object — every `for_each_host_op!` row, `proc_exit` among them, and the one `sys` import that is not a row, `panic`. The harness spells the wire names by hand, like any embedder — so without this check, a new `for_each_host_op!` row keeps the workspace suite green while every browser program touching it dies with a `LinkError` only an actual browser can surface.
+/// Every row a host answers has an entry in `harness.js`'s `host` object, keyed by the host's method name — every `for_each_host_op!` row, `proc_exit` among them — and the one `sys` import, `panic`, is defined beside it. The harness spells those names by hand, like any embedder, so a row added to the table without one is found here and not by the program that first calls it.
 #[test]
 fn harness_implements_every_host_op() {
     let source = include_str!("harness.js");
 
     let start = source
-        .find("const sysEnv = {")
-        .expect("harness.js declares sysEnv");
+        .find("const host = {")
+        .expect("harness.js declares its host table");
     let body = &source[start..];
     // The object closes at two-space indentation; every nested closure inside it closes deeper, so this marker is unambiguous.
-    let end = body.find("\n  };").expect("sysEnv closes");
+    let end = body.find("\n  };").expect("the host table closes");
     let body = &body[..end];
 
-    for name in host_ops()
-        .iter()
-        .map(|function| function.name())
-        .chain([PANIC])
-    {
+    for name in host_ops().iter().map(|function| function.name()) {
         assert!(
             body.contains(&format!("\n    {name}:")),
-            "harness.js's sysEnv lacks an entry for host op `{name}`"
+            "harness.js's host table lacks an entry for host op `{name}`"
         );
     }
+
+    assert!(
+        source.contains(&format!("sys: {{ {PANIC} }}")),
+        "harness.js does not define the `sys` import `{PANIC}`"
+    );
 
     // The entry export is the other wire name the harness spells by hand, and it is invoked outside `sysEnv`, so it is pinned on its own.
     assert!(
