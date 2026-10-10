@@ -79,6 +79,25 @@ fn a_value_handed_to_an_implicit_proposition_is_reported_as_a_type() {
 }
 
 #[test]
+fn a_refusal_at_the_tail_of_a_let_is_placed_at_the_tail() {
+    // A `let` block's tail is a term of its own: a mismatch at its root is reported where the tail is written, as one at a lambda's body is, and not under the block's first binding.
+    let source = r#"
+        use /std/{Nat, Bool, Io};
+
+        let pick(x: Nat) -> Bool =
+            let n = 5;
+            Nat/add(n, x);
+
+        Io/pure(())
+    "#;
+    let error = compile(source).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("Nat/add(n, x);") && !error.contains("let n = 5;"),
+        "unexpected report: {error}"
+    );
+}
+
+#[test]
 fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     // The transcript's two stalls, reported by the text stage, which is the one that can say what was meant: `cong` is a member of `Eq`, so the route through an imported `Eq` is offered beside the direct import; `Bool` is a root's child, so the import is the route. The prelude build elaborates every `/std` module through this same path, so a false report here would fail the workspace build before it reached this test.
     let source = r#"

@@ -1265,6 +1265,8 @@ impl Term {
         let body = body.into();
         let tail = tail.into();
 
+        // The tail is a term of its own, written where it was: taken apart to merge a block it is, it is put back under its extent where it is none, so a refusal at its root is placed at it and not at the block.
+        let extent = tail.extent();
         match Term::unwrap_or_clone(tail) {
             Subterm::Let(Let { bindings, tail }) => {
                 let mut merged = Vec::with_capacity(bindings.len() + 1);
@@ -1285,7 +1287,7 @@ impl Term {
             }
             other => Self::from(Subterm::Let(Let {
                 bindings: vec![LetBinding::new(type_, body)],
-                tail: Scope::close(Many(1), &[binder], Term::from(other)),
+                tail: Scope::close(Many(1), &[binder], Term::from(other).occurring_at(extent)),
             })),
         }
     }
@@ -1316,6 +1318,8 @@ impl Term {
             })
             .collect::<Vec<_>>();
 
+        // The tail keeps where it was written, as in [`Term::let_`].
+        let extent = tail.extent();
         let tail = match Term::unwrap_or_clone(tail) {
             Subterm::Let(Let {
                 bindings: inner,
@@ -1331,7 +1335,11 @@ impl Term {
 
                 tail.prepend(&binders)
             }
-            other => Scope::close(Many(binders.len()), &binders, Term::from(other)),
+            other => Scope::close(
+                Many(binders.len()),
+                &binders,
+                Term::from(other).occurring_at(extent),
+            ),
         };
 
         Self::from(Subterm::Let(Let { bindings, tail }))
