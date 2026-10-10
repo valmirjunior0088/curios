@@ -1031,12 +1031,16 @@ fn could_settle(context: &Context, original: &Term, probe: &Term, proofs: &[Free
     could_reduce_to(&context.kernel_spelled(original), probe, proofs)
 }
 
-/// The binders `probe` names that are themselves proofs: assumed at a proposition, so conversion reads them nowhere, and a stuck form naming one a scrutinee does not may still be that scrutinee's term. The kernel's `proofs_named`, by the elaborator's own classifier.
+/// The binders `probe` names that are themselves proofs: assumed at a proposition, so conversion reads them nowhere, and a stuck form naming one a scrutinee does not may still be that scrutinee's term. The kernel's `proofs_named`, by the elaborator's own classifier. A global is passed over, as the kernel passes over one: the filter this answers for tests a local alone (`could_reduce_to`).
 ///
 /// Each binder is asked once and remembered for the declaration, by plain reduction, and counted not a proof while it is being asked. One whose type still holds an unsolved metavariable is not known to be a proof and is asked again, since a solution may make it one.
 fn proofs_named(context: &mut Context, probe: &Term) -> Result<Vec<Free>, ReduceError> {
     let mut proofs = Vec::new();
-    for name in probe.free_vars_shared().iter() {
+    for name in probe
+        .free_vars_shared()
+        .iter()
+        .filter(|name| name.is_local())
+    {
         let proof = match context.cached_proof(name) {
             Some(proof) => proof,
             None => {
