@@ -1,5 +1,8 @@
 use /std/{Nat, Bytes, Io};
 
+--- Exactly so many random bytes.
+foreign rand_bytes: (Nat) -> Bytes;
+
 --- `n` bytes from the operating system's generator.
 pub let bytes(n: Nat) -> Io(Bytes) =
-    /sys/rand/bytes(n);
+    rand_bytes(n);

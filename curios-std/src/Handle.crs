@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{close, stdin, stdout, stderr};
-use /std/{Bool, Byte, Bytes, Nat, Int, List, Result, Io, Async};
+use /std/{Bool, Byte, Bytes, Nat, Int, List, Option, Result, Io, Async};
 use /std/Bool/{Holds};
 
 --- What a park asks to be woken for.
@@ -48,9 +48,23 @@ pub let poll(
 let answered(b: Bytes) -> Io/Chunk =
     match b | x[] => Io/Chunk/eof() | x[_, .._] => Io/Chunk/chunk(b) end;
 
+--- Up to so many bytes of the stream: `ok` beside between one and that many, or beside none where none were asked for; `eof` once the stream has ended; or the status of the failure. A handle a peer decides on answers `would_block` rather than waiting.
+foreign handle_read: (Handle, Nat) -> {status: Nat, bytes: Bytes};
+
+--- A read's reply as its outcome: the status before anything else, and the bytes only under a success. A success holds no more than was asked for, and one that holds more is the host's fault, answered as the failure no errno names.
+let reading(h: Handle, n: Nat) -> Io(Result(Nat, Option(Bytes))) =
+    let reply = handle_read(h, n)!;
+    Io/pure(
+        choose
+        | reply.status == /sys/status/eof => Result/success(Option/none())
+        | reply.status != /sys/status/ok => Result/failure(reply.status)
+        | Bytes/len(reply.bytes) <= n => Result/success(Option/some(reply.bytes))
+        | _ => Result/failure(/sys/status/other_base)
+        end);
+
 --- Up to `n` bytes, waited for on this program's own behalf: a host that would block is polled until it would not.
 let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
-    let r = /sys/Handle/read(h, n)!;
+    let r = reading(h, n)!;
     match r
     | success(some(b)) => Io/pure(answered(b))
     | success(none()) => Io/pure(Io/Chunk/eof())
@@ -100,7 +114,7 @@ let park_on(h: Handle, interest: Interest) -> Async({}) =
 
 --- Up to `n` bytes, parking the fiber while the host would block.
 let read_parking(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Async(Io/Chunk) =
-    let r = /sys/Handle/read(h, n)!;
+    let r = reading(h, n)!;
     match r
     | success(some(b)) => Async/pure(answered(b))
     | success(none()) => Async/pure(Io/Chunk/eof())

@@ -41,7 +41,7 @@ pub(crate) fn foreign_rows(foreigns: &ForeignStore) -> Array {
                 &row,
                 "results",
                 &match signature.results.shape() {
-                    ResultShape::Unit => Array::new(),
+                    ResultShape::Unit | ResultShape::Never => Array::new(),
                     ResultShape::Single(wire_type) => Array::of1(&result(None, wire_type)),
                     ResultShape::Record(fields) => fields
                         .into_iter()

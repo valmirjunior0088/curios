@@ -665,7 +665,7 @@ pub let run(main: Async({})) -> Io({}) =
                     "async: deadlocked, no runnable work remains and ",
                     Nat/to_str(d.parked),
                     " fiber(s) wait on a condition that cannot become ready\n"]))!;
-        /sys/proc/exit(1)
+        /std/proc/exit(1)
     end;
 
 --- A spawned fiber: its answer, and the means to cancel it.

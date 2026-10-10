@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Path, Try, Async, Io, Handle};
+use /std/{Bytes, Nat, Path, Result, Try, Async, Io, Handle};
 use /std/Bool/{Holds};
 
 --- An open file.
@@ -24,9 +24,21 @@ pub let of_mode(mode: Mode) -> Nat =
     | append() => /sys/open_mode/append
     end;
 
+--- Open the file at this path in this mode, one of `/sys/open_mode`'s codes: `ok` beside its handle, or the status of the failure beside the empty token.
+foreign file_open: (Bytes, Nat) -> {status: Nat, handle: Handle};
+
+--- An open's reply as its outcome: the status before anything else, and the handle only under a success.
+let opening(path: Bytes, mode: Nat) -> Io(Result(Nat, Handle)) =
+    let reply = file_open(path, mode)!;
+    Io/pure(
+        match reply.status == /sys/status/ok
+        | true => Result/success(reply.handle)
+        | false => Result/failure(reply.status)
+        end);
+
 --- The file at `path`, opened in `mode`.
 pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
-    let h = Io/Error/of_result(/sys/file/open(Path/to_bytes(path), of_mode(mode))!)!;
+    let h = Io/Error/of_result(opening(Path/to_bytes(path), of_mode(mode))!)!;
     Try/pure(File { h });
 
 --- Close `f`.

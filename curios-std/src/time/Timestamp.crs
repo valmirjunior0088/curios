@@ -16,9 +16,12 @@ pub struct Timestamp: Type {
 pub let of_unix(secs: Nat, nanos: Nat) -> Timestamp =
     Timestamp { secs = secs + nanos / 1000000000, nanos = nanos % 1000000000 };
 
+--- The wall clock: seconds since the Unix epoch, and the nanoseconds within the second.
+foreign clock_wall: {secs: Nat, nanos: Nat};
+
 --- The wall clock now.
 pub let now() -> Io(Timestamp) =
-    let r = /sys/clock/wall!;
+    let r = clock_wall!;
     Io/pure(of_unix(r.secs, r.nanos));
 
 --- The seconds since the epoch, and the nanoseconds within the second.

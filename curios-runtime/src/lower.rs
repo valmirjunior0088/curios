@@ -313,6 +313,52 @@ impl Lower for Vec<Vec<u8>> {
     }
 }
 
+/// A host's reply to a row a unit declared: encoded as its type states and written slot by slot. What [`Replied`] does for a builtin, without a table row to hold the reply to — the declaration is the row, and the guest's own reading of it is where a reply is held.
+pub(crate) struct Answered<R>(pub(crate) R);
+
+impl<R: WireReply> Lower for Answered<R> {
+    fn shape() -> Vec<WireType> {
+        R::results("value")
+            .into_iter()
+            .map(|(_, wire_type)| wire_type)
+            .collect()
+    }
+
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        let values = match self.0.encode() {
+            Encoded::Reply(values) => values,
+            Encoded::Terminate(code) => return Err(wasmtime::Error::from(ExitTrap(code))),
+            Encoded::Refused(sentence) => return Err(wasmtime::Error::msg(sentence)),
+        };
+
+        written(values, caller, results)
+    }
+}
+
+/// Write a reply's values into the slots they cross in, each as its wire type crosses.
+fn written(
+    values: Vec<WireValue>,
+    caller: &mut Caller<'_, ()>,
+    results: &mut [Val],
+) -> Result<(), wasmtime::Error> {
+    for (value, slot) in values.into_iter().zip(results.iter_mut()) {
+        let slot = std::slice::from_mut(slot);
+
+        match value {
+            WireValue::Nat(value) => value.lower(caller, slot)?,
+            WireValue::Bytes(bytes) => bytes.lower(caller, slot)?,
+            WireValue::Handle(handle) => handle.lower(caller, slot)?,
+            WireValue::BytesList(list) => list.lower(caller, slot)?,
+        }
+    }
+
+    Ok(())
+}
+
 /// A builtin's call as its binding answers it: the row, the measures of the operands its contract reads, and the reply — or the refusal of a call whose operands broke a requirement, in which case the host was never asked.
 ///
 /// Lowering holds the reply to its row's contract before a single value is written, so a host that answers outside it refuses the call rather than hand the guest a reply its row does not allow: a host's fault is reported as the host's, naming the import.
@@ -363,17 +409,6 @@ impl<R: WireReply, const N: usize> Lower for Replied<R, N> {
             .check_reply(&values, &self.operands)
             .map_err(refused)?;
 
-        for (value, slot) in values.into_iter().zip(results.iter_mut()) {
-            let slot = std::slice::from_mut(slot);
-
-            match value {
-                WireValue::Nat(value) => value.lower(caller, slot)?,
-                WireValue::Bytes(bytes) => bytes.lower(caller, slot)?,
-                WireValue::Handle(handle) => handle.lower(caller, slot)?,
-                WireValue::BytesList(list) => list.lower(caller, slot)?,
-            }
-        }
-
-        Ok(())
+        written(values, caller, results)
     }
 }

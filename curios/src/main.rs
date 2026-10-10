@@ -115,10 +115,9 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Resolv
         return Ok(Vec::new());
     }
 
+    // A loose program has no manifest and so no module: what it reaches of the standard library's rows the host answers, and a row of its own is refused by name where the program is linked.
     let Some(root) = root else {
-        return Err(
-            "this program declares `foreign`, and a loose program has no manifest to say what implements it: work inside a package, whose `[[foreign]]` rows name the module and the declarations its exports answer".to_string(),
-        );
+        return Ok(Vec::new());
     };
 
     let governing = Governing::of(root)?;

@@ -1,10 +1,21 @@
 pub use /sys/proc/{args};
 use /std/{Byte, Bytes, Str, Option, Io};
 
+--- The environment variable of this name: `ok` beside its value, possibly empty, or `not_found` beside nothing. A name that is empty or holds `=` or NUL names no variable.
+foreign proc_env: (Bytes) -> {status: Nat, value: Bytes};
+
+--- End the instance with this code. The call does not return.
+foreign proc_exit: (Byte) -> Never;
+
 --- The environment variable `name`, or `none` when it is unset.
 pub let env(name: Str) -> Io(Option(Bytes)) =
-    /sys/proc/env(Str/to_bytes(name));
+    let reply = proc_env(Str/to_bytes(name))!;
+    Io/pure(
+        match reply.status == /sys/status/ok
+        | true => Option/some(reply.value)
+        | false => Option/none()
+        end);
 
 --- End the process with `code`, a byte because that is the status every host hands its parent whole. The description yields whatever the region wanted, so an exiting arm can end a region of any type.
 pub let exit(@A: Type, code: Byte) -> Io(A) =
-    /sys/proc/exit(code);
+    proc_exit(code);

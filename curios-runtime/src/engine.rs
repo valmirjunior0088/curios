@@ -1,7 +1,8 @@
 use {
     super::{
-        Handle, HostOps, Lift, Lower, Mode, Poll, Replied, SerialFlow, SerialOp, SerialParity,
-        StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type, words_array_type,
+        Answered, Handle, HostOps, Lift, Lower, Mode, Poll, Replied, SerialFlow, SerialOp,
+        SerialParity, StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type,
+        words_array_type,
     },
     curios_abi::{
         ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireOperand,
@@ -87,6 +88,13 @@ pub fn shared_engine() -> &'static Engine {
 
 /// The wasmtime type of one host import, derived from its `WireSignature` — the same derivation `curios-emit` applies to the module's import section, so the two ends cannot drift (and wasmtime validates them against each other at instantiation). Scalars cross raw in both directions — `i64` for a `Nat` or `Int`, `i32` for a `Bool` or a `Byte`, `f64` for an `Flt` — and the guest boxes a result; `Bytes`/`Bits`/`Handle` are the concrete i8-array, a list of `Nat` or `Int` the `i64` longs array, a list of `Bool` the `i32` words array, any other `List` the anyref-element array — wasmtime-universe mirrors of curios-emit's `bytes_sub_type`/`longs_sub_type`/`words_sub_type`/`elems_sub_type` (the flat payloads every reference crosses the boundary as); keep the two ends in sync.
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
+    let signature = function.signature();
+
+    wire_func_type(engine, &signature.params, &signature.results.types())
+}
+
+/// [`host_func_type`] over the wire types alone: what an import that takes `params` and answers `results` is typed as.
+fn wire_func_type(engine: &Engine, params: &[WireType], results: &[WireType]) -> FuncType {
     let bytes_ref = ValType::Ref(RefType::new(
         false,
         HeapType::ConcreteArray(i8_array_type(engine)),
@@ -114,17 +122,10 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
         WireType::List(_) => list_ref.clone(),
     };
 
-    let signature = &function.signature();
-
     FuncType::new(
         engine,
-        signature.params.iter().map(val_type).collect::<Vec<_>>(),
-        signature
-            .results
-            .types()
-            .iter()
-            .map(val_type)
-            .collect::<Vec<_>>(),
+        params.iter().map(val_type).collect::<Vec<_>>(),
+        results.iter().map(val_type).collect::<Vec<_>>(),
     )
 }
 
@@ -225,6 +226,16 @@ impl ForeignBindings {
         self.trampolines.insert(name.to_string(), Arc::new(f));
     }
 
+    /// Whether a binding answers the row named `name`: a module's, or an embedder's.
+    fn answers(&self, name: &str) -> bool {
+        self.trampolines.contains_key(name)
+    }
+
+    /// The row named `name`, as the program's units declared it.
+    fn row(&self, name: &str) -> Option<&Arc<ForeignFunction>> {
+        self.foreigns.get(name)
+    }
+
     /// Define the import named `name` into `linker` under `namespace`, typing it from its store row — the pull side of the registry, driven by the module's own import section.
     fn link(
         &self,
@@ -290,6 +301,112 @@ macro_rules! declare_sys_impls {
 }
 
 for_each_host_op!(declare_sys_impls);
+
+/// What a host answers of the rows a unit declares, by the name each is declared under: the wire types its implementation takes and answers, as its Rust types state them, and its trampoline.
+///
+/// A program's `ffi` import is linked here where no binding answers it, so a row the standard library declares is answered by the host as a row a package declares is answered by its module. An implementation is held to the program's declaration where it is linked, and a disagreement is a refusal naming the row.
+#[derive(Default)]
+pub(crate) struct Provided {
+    rows: HashMap<String, (Vec<WireType>, Vec<WireType>, Trampoline)>,
+}
+
+impl Provided {
+    /// Answer the row declared as `name` with a typed closure, as [`ForeignBindings::define`] takes one.
+    fn answer<Li, Lo, F>(&mut self, name: String, f: F)
+    where
+        Li: Lift,
+        Lo: Lower,
+        F: Fn(Li) -> Lo + Send + Sync + 'static,
+    {
+        let trampoline: Trampoline = Arc::new(move |mut caller, params, results| {
+            f(Li::lift(&mut caller, params)?).lower(&mut caller, results)
+        });
+
+        self.rows
+            .insert(name, (Li::shape(), Lo::shape(), trampoline));
+    }
+
+    /// Define the `ffi` import named `name` into `linker`, held to `declared` where the program's rows describe it.
+    fn link(
+        &self,
+        linker: &mut Linker<()>,
+        engine: &Engine,
+        name: &str,
+        declared: Option<&Arc<ForeignFunction>>,
+    ) -> Result<(), String> {
+        let Some((params, results, trampoline)) = self.rows.get(name) else {
+            return Err(format!(
+                "no implementation for `{name}`: no module answers it, and this host does not"
+            ));
+        };
+
+        if let Some(function) = declared {
+            let signature = function.signature();
+            let crossing =
+                |types: &[WireType]| types.iter().copied().map(codec).collect::<Vec<_>>();
+            let spelled = |types: &[WireType]| {
+                types
+                    .iter()
+                    .map(WireType::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+
+            if crossing(&signature.params) != *params
+                || crossing(&signature.results.types()) != *results
+            {
+                return Err(format!(
+                    "this host answers `{name}` as ({}) -> ({}), and the program declares it ({}) -> ({})",
+                    spelled(params),
+                    spelled(results),
+                    spelled(&signature.params),
+                    spelled(&signature.results.types()),
+                ));
+            }
+        }
+
+        let trampoline = Arc::clone(trampoline);
+
+        linker
+            .func_new(
+                Namespace::Ffi.as_str(),
+                name,
+                wire_func_type(engine, params, results),
+                move |caller, params, results| trampoline(caller, params, results),
+            )
+            .map(|_| ())
+            .map_err(|error| format!("failed to define {name}: {error}"))
+    }
+}
+
+/// What `host` answers of the rows the standard library declares: each under the module that reads it, labelled as the host's own method is, so `handle_read` is one spelling in `/std/Handle`, here and in every host. Each import lifts its operands as the method types them, calls it and lowers the reply as its type encodes it.
+pub(crate) fn host_rows<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> Provided {
+    let mut provided = Provided::default();
+
+    // One row: the `/std` module it is declared in, and the method that answers it.
+    macro_rules! answer {
+        ($module:literal, $name:ident($($p:ident: $t:ty),*)) => {
+            provided.answer(
+                concat!("/std/", $module, "/", stringify!($name)).to_string(),
+                {
+                    let host = Arc::clone(&host);
+
+                    move |($($p,)*): ($($t,)*)| Answered(host.$name($($p),*))
+                },
+            );
+        };
+    }
+
+    answer!("Handle", handle_read(h: Handle, n: u64));
+    answer!("File", file_open(path: Vec<u8>, mode: Mode));
+    answer!("proc", proc_env(name: Vec<u8>));
+    answer!("proc", proc_exit(code: u8));
+    answer!("time/Timestamp", clock_wall());
+    answer!("time/Instant", clock_mono());
+    answer!("rand", rand_bytes(n: u64));
+
+    provided
+}
 
 /// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap. Made only when a [`Termination`](curios_abi::Termination) reply is encoded, so a host method answering the row cannot return into the guest.
 #[derive(Debug)]
@@ -388,11 +505,14 @@ impl Compiled {
         host: H,
         bindings: ForeignBindings,
     ) -> Result<u8, String> {
+        let host = Arc::new(host);
+
         instantiate(
             shared_engine(),
             &self.0,
-            sys_impls(Arc::new(host)),
+            sys_impls(Arc::clone(&host)),
             bindings,
+            host_rows(host),
         )
     }
 
@@ -402,23 +522,27 @@ impl Compiled {
         host: H,
         bindings: ForeignBindings,
     ) -> Result<TestEnd, String> {
+        let host = Arc::new(host);
+
         instantiate(
             shared_engine(),
             &self.0,
-            sys_impls(Arc::new(host)),
+            sys_impls(Arc::clone(&host)),
             bindings,
+            host_rows(host),
         )
     }
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `impls` supplies the `sys`-tier implementations, every builtin row's, and `bindings` the `ffi`-tier ones for the module's own `foreign` declarations. What [`Compiled::run`] does once it has the builtin rows' implementations.
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `impls` supplies the `sys`-tier implementations, every builtin row's, `bindings` the `ffi`-tier ones a module or an embedder answers, and `provided` the ones the host answers itself. What [`Compiled::run`] does once it has the builtin rows' implementations.
 pub(crate) fn instantiate<E: Ended>(
     engine: &Engine,
     module: &Module,
     impls: ForeignBindings,
     bindings: ForeignBindings,
+    provided: Provided,
 ) -> Result<E, String> {
-    on_guest_stack(move || entered(engine, module, impls, bindings))?
+    on_guest_stack(move || entered(engine, module, impls, bindings, provided))?
 }
 
 /// [`instantiate`], on the thread it is called on.
@@ -427,6 +551,7 @@ fn entered<E: Ended>(
     module: &Module,
     impls: ForeignBindings,
     bindings: ForeignBindings,
+    provided: Provided,
 ) -> Result<E, String> {
     let mut linker = Linker::new(engine);
 
@@ -456,7 +581,16 @@ fn entered<E: Ended>(
                 }
                 name => impls.link(&mut linker, engine, Namespace::Sys, name)?,
             },
-            FFI => bindings.link(&mut linker, engine, Namespace::Ffi, import.name())?,
+            // A module's or an embedder's answer first, and the host's own where there is none: who answers a row is decided here, by what was linked, and nothing in the program says which.
+            FFI => match bindings.answers(import.name()) {
+                true => bindings.link(&mut linker, engine, Namespace::Ffi, import.name())?,
+                false => provided.link(
+                    &mut linker,
+                    engine,
+                    import.name(),
+                    bindings.row(import.name()),
+                )?,
+            },
             namespace => {
                 return Err(format!(
                     "the module imports {}.{}, but host imports live in {SYS} or {FFI}",

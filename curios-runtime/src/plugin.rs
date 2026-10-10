@@ -199,6 +199,18 @@ enum Crossing {
     Bytes,
 }
 
+impl Crossing {
+    /// The core types a value of this crossing takes in a module's signature, as [`crossing`] states them.
+    fn slots(self) -> &'static [&'static str] {
+        match self {
+            Crossing::Nat | Crossing::Int => &["i64"],
+            Crossing::Bool | Crossing::Byte => &["i32"],
+            Crossing::Float => &["f64"],
+            Crossing::Bytes => &["i32", "i32"],
+        }
+    }
+}
+
 /// Wire one declaration to the plugin export answering it.
 ///
 /// The trampoline owns its plugin through an `Arc<Mutex<_>>`: wasmtime calls it from whichever thread is running the guest, and a plugin's memory is a single mutable thing whatever the guest is doing.
@@ -219,6 +231,12 @@ fn define_row(
         .collect::<Result<Vec<_>, _>>()?;
 
     let result = match signature.results.shape() {
+        // Ending the instance is the host's to do: a module reaches no environment, and its own trap is a failure of the call.
+        ResultShape::Never => {
+            return Err(format!(
+                "{subject} answers `{declaration}`, which does not return. A foreign module answers a value or none, and only the host ends the program"
+            ));
+        }
         ResultShape::Unit => None,
         ResultShape::Single(wire) => Some(crossing(wire, subject, &declaration)?),
         // A plugin answering several results at once would need the guest-facing tuple built from a shape the raw ABI has no spelling for. Refused rather than guessed at.
@@ -228,6 +246,51 @@ fn define_row(
             ));
         }
     };
+
+    // The export is held to the declaration here, where the two are linked: a module that answers another type is refused before the program runs, and not at the first call that reaches it.
+    {
+        let mut held = plugin
+            .lock()
+            .map_err(|_| format!("{subject} was left poisoned by an earlier call"))?;
+        let instance = held.instance;
+        let exported = instance
+            .get_func(&mut held.store, export)
+            .ok_or_else(|| format!("{subject} exports `{export}`, which is no function"))?
+            .ty(&held.store);
+        let spelled = |slots: Vec<String>| slots.join(", ");
+        let expected = (
+            params
+                .iter()
+                .flat_map(|crossing| crossing.slots())
+                .map(|slot| slot.to_string())
+                .collect::<Vec<_>>(),
+            result
+                .iter()
+                .flat_map(|crossing| crossing.slots())
+                .map(|slot| slot.to_string())
+                .collect::<Vec<_>>(),
+        );
+        let found = (
+            exported
+                .params()
+                .map(|slot| slot.to_string())
+                .collect::<Vec<_>>(),
+            exported
+                .results()
+                .map(|slot| slot.to_string())
+                .collect::<Vec<_>>(),
+        );
+
+        if expected != found {
+            return Err(format!(
+                "{subject} exports `{export}` as ({}) -> ({}), and `{declaration}` crosses to a module as ({}) -> ({})",
+                spelled(found.0),
+                spelled(found.1),
+                spelled(expected.0),
+                spelled(expected.1),
+            ));
+        }
+    }
 
     let plugin = Arc::clone(plugin);
     let export = export.to_string();
@@ -382,14 +445,6 @@ pub fn plugin_bindings(
         }
     }
 
-    // Every declaration the program holds, claimed. The refusal names the row and where to say so, since an unclaimed one is a manifest that has not caught up with a source file.
-    for name in rows.keys() {
-        if !claimed.contains_key(name) {
-            return Err(format!(
-                "no implementation for `{name}`: the program declares it `foreign`, and no `[foreign.exports]` in the package graph claims it. Add the export answering it to the `[[foreign]]` row of the package that declares it"
-            ));
-        }
-    }
-
+    // A row no module claims is left for the link, which follows what the program imports: the host answers it there, or it is refused by name where the program reaches it. A declaration nothing reaches asks for no implementation.
     Ok(bindings)
 }

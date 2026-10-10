@@ -12,8 +12,8 @@
 
 use {
     super::{
-        Compiled, ForeignBindings, HostOps, Lower, instantiate, lower_scalars, on_guest_stack,
-        shared_engine, sys_impls, words_array_type,
+        Compiled, ForeignBindings, HostOps, Lower, host_rows, instantiate, lower_scalars,
+        on_guest_stack, shared_engine, sys_impls, words_array_type,
     },
     curios_abi::HostOp,
     std::sync::Arc,
@@ -208,7 +208,8 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
     raw: Vec<(HostOp, Vec<RawValue>)>,
     bindings: ForeignBindings,
 ) -> Result<u8, String> {
-    let mut impls = sys_impls(Arc::new(host));
+    let host = Arc::new(host);
+    let mut impls = sys_impls(Arc::clone(&host));
 
     for (op, values) in raw {
         impls.replace_raw(op.name(), move |caller, _, results| {
@@ -216,5 +217,11 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
         });
     }
 
-    instantiate(shared_engine(), &compiled.0, impls, bindings)
+    instantiate(
+        shared_engine(),
+        &compiled.0,
+        impls,
+        bindings,
+        host_rows(host),
+    )
 }
