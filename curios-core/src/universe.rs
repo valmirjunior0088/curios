@@ -290,6 +290,48 @@ impl fmt::Display for Level {
     }
 }
 
+/// A declaration-local quality parameter: which of the sorts its top-level item leaves to a caller this is, counted from zero in that item's [`UniverseContext`].
+///
+/// Flat, where a [`UniverseParam`] is scoped: only a top-level item binds a quality, so one names the same parameter at every depth beneath it and nothing shifts it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
+pub struct QualityParam(pub usize);
+
+/// An elaboration-minted quality metavariable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
+pub struct QualityMetaId(pub usize);
+
+impl fmt::Display for QualityMetaId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "?q{}", self.0)
+    }
+}
+
+/// What kind of universe a sort is, beside its level: of propositions, of types, or one not stated.
+///
+/// Any two inhabitants of a proposition are one to conversion and a type's are not, so every judgment that reads a sort reads its quality. An open quality is neither: a parameter is a sort its declaration leaves to each caller, and a metavariable one its elaboration has not solved. The kernel judges no term that holds one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
+pub enum Quality {
+    Prop,
+    Type,
+    Param(QualityParam),
+    Meta(QualityMetaId),
+}
+
+impl Quality {
+    /// Whether this is the quality of propositions. An open quality is not: what it will be is not what it is.
+    pub fn is_prop(&self) -> bool {
+        matches!(self, Quality::Prop)
+    }
+
+    /// Whether this states a sort: `Prop` or `Type`, and neither a parameter nor a metavariable.
+    pub fn is_ground(&self) -> bool {
+        matches!(self, Quality::Prop | Quality::Type)
+    }
+}
+
 /// Whether an unsolved level is an input eligible for generalization or an inferred output/classifier that should be minimized.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]

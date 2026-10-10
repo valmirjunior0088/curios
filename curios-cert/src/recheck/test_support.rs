@@ -402,6 +402,11 @@ pub(super) fn indexed_module(target: Term) -> Module {
 
 /// `let held : Type(level) = Nat`, as a whole module.
 pub(super) fn level_definition(level: &Level) -> Module {
+    sorted_definition(Term::type_at(level.clone()))
+}
+
+/// `let held : sort = Nat`, as a whole module.
+pub(super) fn sorted_definition(sort: Term) -> Module {
     let definition = Definition {
         name: Global::Authored(Qualifier::from(["held"])),
         kind: DefinitionKind::Authored,
@@ -410,7 +415,7 @@ pub(super) fn level_definition(level: &Level) -> Module {
         totality: Totality::Total,
         proof: false,
         variances: Vec::new(),
-        type_: Term::type_at(level.clone()),
+        type_: sort,
         body: Term::intrinsic(Intrinsic::NatType),
     };
 
@@ -424,12 +429,17 @@ pub(super) fn level_definition(level: &Level) -> Module {
 
 /// A constructor-free family declared at `Type(level)`, carried as a registry entry.
 pub(super) fn level_registry(level: &Level) -> Module {
+    sorted_registry(Term::type_at(level.clone()))
+}
+
+/// A constructor-free family declared at `sort`, carried as a registry entry.
+pub(super) fn sorted_registry(sort: Term) -> Module {
     let family = Global::Authored(Qualifier::from(["Levelled"]));
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
         constructors: Vec::new(),
-        result_sort: Term::type_at(level.clone()),
+        result_sort: sort,
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),

@@ -7,7 +7,7 @@ use {
     crate::{
         Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
         InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Nat, Proj,
-        Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
+        Quality, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
         UniverseContext, UniverseMetaId, Var, Variant, Visit, print_term,
     },
     curios_abi::ForeignFunction,
@@ -21,8 +21,10 @@ use {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Subterm {
-    Type(Level),
-    Prop(Level),
+    /// The elaboration-transient constructors, grouped so post-elaboration consumers dismiss the class with one arm.
+    Transient(Transient),
+    /// A sort: a universe of the quality `Quality`, at its level. `Type u` and `Prop u` are the two a program writes, and both are typed `Type (u + 1)`.
+    Sort(Quality, Level),
     Intrinsic(Intrinsic),
     /// A store-described host call: the row's [`WireSignature`](curios_abi::WireSignature) fixes the operand types checked at elaboration and the result shape (unit, bare value, or named record). Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
     ///
@@ -44,8 +46,6 @@ pub enum Subterm {
     Instance(Instance),
     Var(Var),
     Metavar(Metavar),
-    /// The elaboration-transient constructors, grouped so post-elaboration consumers dismiss the class with one arm.
-    Transient(Transient),
 }
 
 impl Subterm {
@@ -106,7 +106,7 @@ impl Subterm {
                 })
             };
         match self {
-            Subterm::Type(level) | Subterm::Prop(level) => level_matches(level),
+            Subterm::Sort(_, level) => level_matches(level),
             Subterm::Intrinsic(intrinsic) => intrinsic.result_universes().iter().any(level_matches),
             // A projection head's group context is this node's own data, the head being typed rather than a child term, so its constraints are direct here exactly as `Rec`'s are below.
             Subterm::Instance(Instance { head, levels }) => {
@@ -179,7 +179,7 @@ impl Subterm {
 
     pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
-            Subterm::Type(_) | Subterm::Prop(_) | Subterm::Var(_) => {}
+            Subterm::Sort(..) | Subterm::Var(_) => {}
             Subterm::Instance(Instance { head, .. }) => match head {
                 InstanceHead::Var(_) => {}
                 InstanceHead::RecProj(group, _) => {
@@ -357,7 +357,7 @@ impl Subterm {
     pub fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
-            Subterm::Type(_) | Subterm::Prop(_) | Subterm::Var(_) => false,
+            Subterm::Sort(..) | Subterm::Var(_) => false,
             // A variable head is this node's own data, like `Var`'s identity; a projection head's children are its group's scope bodies, exactly `Rec`'s minus the tail (a projection's tail is a bare member variable, which contributes to no child predicate).
             Subterm::Instance(Instance { head, .. }) => match head {
                 InstanceHead::Var(_) => false,
@@ -497,8 +497,7 @@ impl Subterm {
     /// Both checkers read it to say which terms a literal's eta is taken against.
     pub fn shows_its_type(&self, syntax: &SyntaxRegistry) -> bool {
         match self {
-            Subterm::Type(_)
-            | Subterm::Prop(_)
+            Subterm::Sort(..)
             | Subterm::Foreign(..)
             | Subterm::FuncType(_)
             | Subterm::Func(_)
@@ -541,7 +540,9 @@ impl Subterm {
     pub(crate) fn has_universe_meta(&self) -> bool {
         let level_has_meta = |level: &Level| level.metas().next().is_some();
         match self {
-            Subterm::Type(level) | Subterm::Prop(level) => level_has_meta(level),
+            Subterm::Sort(quality, level) => {
+                level_has_meta(level) || matches!(quality, Quality::Meta(_))
+            }
             Subterm::Intrinsic(intrinsic) => {
                 intrinsic.result_universes().iter().any(level_has_meta)
                     || self.any_child_term(&mut |term| term.has_universe_meta())
@@ -563,7 +564,8 @@ impl Subterm {
 
     pub(crate) fn has_universe_data(&self) -> bool {
         match self {
-            Subterm::Type(level) | Subterm::Prop(level) => level != &Level::zero(),
+            // An open quality is universe data as a level is: a walk that instantiates or solves one visits the node.
+            Subterm::Sort(quality, level) => level != &Level::zero() || !quality.is_ground(),
             Subterm::Intrinsic(intrinsic) => {
                 !intrinsic.result_universes().is_empty()
                     || self.any_child_term(&mut |term| term.has_universe_data())
@@ -639,8 +641,9 @@ impl Bound for Subterm {
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
         match self {
-            Subterm::Type(level) => Subterm::Type(visit.visit_level(level)),
-            Subterm::Prop(level) => Subterm::Prop(visit.visit_level(level)),
+            Subterm::Sort(quality, level) => {
+                Subterm::Sort(visit.visit_quality(quality), visit.visit_level(level))
+            }
             Subterm::Intrinsic(intrinsic) => Subterm::Intrinsic(intrinsic.traverse(visit)),
             Subterm::Foreign(function, args) => Subterm::Foreign(
                 Arc::clone(function),
@@ -912,8 +915,7 @@ impl Bound for Subterm {
 
     fn reach(&self) -> usize {
         match self {
-            Subterm::Type(_) => 0,
-            Subterm::Prop(_) => 0,
+            Subterm::Sort(..) => 0,
             Subterm::Transient(transient) => transient
                 .subterms()
                 .map(|child| child.reach())

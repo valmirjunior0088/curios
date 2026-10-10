@@ -74,7 +74,7 @@ fn read(params: &[&str], term: &curios_core::Term) -> Option<Term> {
             }
         }
         curios_core::Subterm::TupleType(tuple) if tuple.telescope.is_empty() => unit(),
-        curios_core::Subterm::Type(_) => type_(),
+        curios_core::Subterm::Sort(curios_core::Quality::Type, _) => type_(),
         _ => return None,
     })
 }

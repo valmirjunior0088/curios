@@ -24,10 +24,10 @@ use {
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, Classes, ClosedHost, ClosedMemo,
         Cost, Demand, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType,
         Instance, InstanceHead, Intrinsic, Layer, Let, Level, Match, MatchResult, Metavar, Nat,
-        Polarity, Probe, Proj, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
-        Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, Visit, accelerable, atoms_within,
-        classable, instantiate_universe_levels_scoped, probe_spellings, project_erased_universes,
-        reduce_closed, reduce_intrinsic, refold,
+        Polarity, Probe, Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, Visit, accelerable,
+        atoms_within, classable, instantiate_universe_levels_scoped, probe_spellings,
+        project_erased_universes, reduce_closed, reduce_intrinsic, refold,
     },
     curios_utilities::{SyntaxRegistry, recurse},
     std::collections::{BTreeSet, HashMap},
@@ -553,7 +553,7 @@ fn stated(context: &mut Context, instance: &Term, tag: &Atom) -> Result<Said, Re
     else {
         return Ok(Said::Silent);
     };
-    if !matches!(&*declaration.result_sort, Subterm::Prop(_)) {
+    if !matches!(&*declaration.result_sort, Subterm::Sort(Quality::Prop, _)) {
         return Ok(Said::Silent);
     }
     // Left to the ordinary rule, such a match would have its proof reduced to a constructor, which no judgment reads.

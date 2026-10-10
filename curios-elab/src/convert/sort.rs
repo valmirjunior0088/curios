@@ -8,7 +8,7 @@ use {
     crate::{Binders, Context, Opened, reduce, reduce_forced, synth_neutral},
     curios_core::{
         Bound, Free, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, MatchResult,
-        ReduceError, StructType, Subterm, Term, TupleType,
+        Quality, ReduceError, StructType, Subterm, Term, TupleType,
     },
 };
 
@@ -321,9 +321,7 @@ impl Sort {
                     }
                 }
             }
-            Subterm::Type(level) | Subterm::Prop(level) => {
-                Sort::Type(level.succ().map_err(ReduceError::Universe)?)
-            }
+            Subterm::Sort(_, level) => Sort::Type(level.succ().map_err(ReduceError::Universe)?),
             Subterm::Instance(instance) => {
                 Sort::of_under(context, binders, opened, &instance.head.to_term())?
             }
@@ -334,7 +332,7 @@ impl Sort {
                     .map(|entry| entry.result.clone());
                 let proposition = match result {
                     Some(result) => match &*reduce(context, result)? {
-                        Subterm::Prop(level) => Some(level.clone()),
+                        Subterm::Sort(Quality::Prop, level) => Some(level.clone()),
                         _ => None,
                     },
                     None => None,
@@ -382,7 +380,7 @@ impl Sort {
 
         Ok(match synth_neutral(context, binders, opened, type_)? {
             Some(declared) => match &*reduce(context, declared)? {
-                Subterm::Prop(level) => Some(level.clone()),
+                Subterm::Sort(Quality::Prop, level) => Some(level.clone()),
                 _ => None,
             },
             None => None,
@@ -401,8 +399,8 @@ impl Sort {
     fn from_universe(context: &mut Context, universe: &Term) -> Result<Sort, ReduceError> {
         let reduced = reduce(context, universe.clone())?;
         Ok(match &*reduced {
-            Subterm::Prop(level) => Sort::Prop(level.clone()),
-            Subterm::Type(level) => Sort::Type(level.clone()),
+            Subterm::Sort(Quality::Prop, level) => Sort::Prop(level.clone()),
+            Subterm::Sort(Quality::Type, level) => Sort::Type(level.clone()),
             _ => {
                 probe_level_fallback("universe term is not a sort", &reduced);
                 Sort::Type(Level::zero())

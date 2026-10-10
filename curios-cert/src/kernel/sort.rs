@@ -22,7 +22,7 @@ use {
     crate::instantiate_universe_levels_scoped,
     curios_core::{
         Bound, Field, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, Match,
-        MatchResult, Proj, Reducer, StructType, Subterm, Telescope, Term, TupleType,
+        MatchResult, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term, TupleType,
     },
 };
 
@@ -69,8 +69,11 @@ pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Erro
     let reduced = whnf(kernel, universe.clone())?;
 
     match &*reduced {
-        Subterm::Prop(level) => Ok(Sort::Prop(level.clone())),
-        Subterm::Type(level) => Ok(Sort::Type(level.clone())),
+        Subterm::Sort(Quality::Prop, level) => Ok(Sort::Prop(level.clone())),
+        Subterm::Sort(Quality::Type, level) => Ok(Sort::Type(level.clone())),
+        Subterm::Sort(Quality::Param(_) | Quality::Meta(_), _) => {
+            Err(Error::OpenSort(reduced.clone()))
+        }
         _ => Err(Error::NotASort(reduced.clone())),
     }
 }
@@ -160,8 +163,10 @@ impl Sort {
             Subterm::Rec(_) if reduced.as_rec_proj().is_some() => sort_of_neutral(kernel, &reduced),
 
             // `Type u : Type (u + 1)`, and `Prop : Type 0`.
-            Subterm::Type(level) => Ok(Sort::Type(level.succ()?)),
-            Subterm::Prop(level) => Ok(Sort::Type(level.succ()?)),
+            Subterm::Sort(Quality::Type | Quality::Prop, level) => Ok(Sort::Type(level.succ()?)),
+            Subterm::Sort(Quality::Param(_) | Quality::Meta(_), _) => {
+                Err(Error::OpenSort(reduced.clone()))
+            }
 
             _ => Err(Error::Unclassified(reduced.clone())),
         }
@@ -187,7 +192,7 @@ pub(crate) fn declared_into_prop(
     };
 
     Ok(match &*whnf(kernel, declared)? {
-        Subterm::Prop(level) => Some(level.clone()),
+        Subterm::Sort(Quality::Prop, level) => Some(level.clone()),
         _ => None,
     })
 }

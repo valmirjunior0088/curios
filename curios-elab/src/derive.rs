@@ -282,7 +282,7 @@ fn classify(
     type_: &Term,
 ) -> Result<Classified, Error> {
     let reduced = reduce_with(context, type_)?;
-    if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop(_)) {
+    if matches!(&*reduced, Subterm::Sort(..)) {
         return Err(site.refuse(Underivable::TypeValued {
             constructor: payload.constructor,
             payload: payload.described,

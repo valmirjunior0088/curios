@@ -59,7 +59,7 @@ fn former(parent: &Subterm) -> Option<Former> {
         // A local recursive group and a host call: `tests::recursion` and `tests::host` hold what conversion makes of them.
         Subterm::Rec(_) | Subterm::Foreign(..) => None,
         // No term beneath it.
-        Subterm::Type(_) | Subterm::Prop(_) | Subterm::Var(_) | Subterm::Instance(_) => None,
+        Subterm::Sort(..) | Subterm::Var(_) | Subterm::Instance(_) => None,
         // No part of a finished term.
         Subterm::Metavar(_) | Subterm::Transient(_) => None,
     }

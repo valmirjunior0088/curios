@@ -120,6 +120,8 @@ pub enum Error {
     Unclassified(Term),
     /// A term used as a universe that is neither `Type` nor `Prop`.
     NotASort(Term),
+    /// A sort that states neither `Prop` nor `Type`: one whose quality is a declaration's parameter, or a metavariable elaboration left. Every rule that reads a sort reads which of the two it is, so the kernel judges a term only once each of its sorts states one, and a parameter is what a declaration is checked at every assignment of.
+    OpenSort(Term),
     /// An elimination's motive is not a well-typed function landing in a sort. The motive is a claim the term makes about its own result — `infer` reads the elimination's type off it and `Sort::of` classifies a type-valued `match` by it — so a motive stating one sort while its arms inhabit another would be believed by both.
     NotAMotive {
         stated: Term,
@@ -269,6 +271,10 @@ impl fmt::Display for Displayed<'_> {
             Error::NotASort(term) => {
                 let term = term.spelled(spelling);
                 write!(formatter, "`{term}` is not a universe")
+            }
+            Error::OpenSort(term) => {
+                let term = term.spelled(spelling);
+                write!(formatter, "`{term}` states neither `Prop` nor `Type`")
             }
             Error::NoProof(type_) => {
                 let type_ = type_.spelled(spelling);

@@ -2,7 +2,7 @@
 
 use {
     super::ProofBinders,
-    crate::{Bound, Free, Func, FuncType, Intrinsic, Let, Subterm, Term},
+    crate::{Bound, Free, Func, FuncType, Intrinsic, Let, Quality, Subterm, Term},
     std::collections::BTreeMap,
 };
 
@@ -25,13 +25,13 @@ impl ProofBinders for Sorts {
             .filter(|(_, type_)| {
                 type_
                     .as_ref()
-                    .is_some_and(|type_| matches!(&**type_, Subterm::Prop(_)))
+                    .is_some_and(|type_| matches!(&**type_, Subterm::Sort(Quality::Prop, _)))
             })
             .map(|(binder, _)| (*binder, ()))
             .collect::<BTreeMap<_, _>>();
 
         Ok(match &**type_ {
-            Subterm::Type(_) | Subterm::Prop(_) => true,
+            Subterm::Sort(..) => true,
             Subterm::Var(var) => var
                 .as_free()
                 .is_some_and(|free| propositions.contains_key(free)),

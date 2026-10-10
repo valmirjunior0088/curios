@@ -4,8 +4,8 @@
 
 use {
     super::{
-        Extent, Free, Global, Level, LevelHead, Subterm, Term, UniverseError, UniverseMetaId,
-        UniverseParam,
+        Extent, Free, Global, Level, LevelHead, Quality, Subterm, Term, UniverseError,
+        UniverseMetaId, UniverseParam,
     },
     curios_utilities::Symbol,
     std::{
@@ -351,6 +351,47 @@ fn rewrite_levels_through<B: Bound, E: 'static>(
         Some(error) => Err(error),
         None => Ok(rewritten),
     }
+}
+
+/// Every quality `value`'s sorts carry through `rewrite`, its levels left as they are: for a hook whose answer is a function of the quality, a substitution or a check.
+pub fn rewrite_universe_qualities<B: Bound, E: 'static>(
+    value: &B,
+    rewrite: impl FnMut(&Quality) -> Result<Quality, E> + 'static,
+) -> Result<B, E> {
+    let mut rewrite = rewrite;
+    let error = Rc::new(RefCell::new(None));
+    let error_for_visit = Rc::clone(&error);
+    let unchanged: Unchanged = |_, _| None;
+    let mut visit = Visit::rewriting_universes_scoped_shared(
+        unchanged,
+        Box::new(|_, level| level.clone()),
+        Box::new(move |quality| {
+            if error_for_visit.borrow().is_some() {
+                return *quality;
+            }
+            match rewrite(quality) {
+                Ok(quality) => quality,
+                Err(found) => {
+                    *error_for_visit.borrow_mut() = Some(found);
+                    *quality
+                }
+            }
+        }),
+    );
+    let rewritten = value.traverse(&mut visit);
+    match error.borrow_mut().take() {
+        Some(error) => Err(error),
+        None => Ok(rewritten),
+    }
+}
+
+/// The first open quality one of `value`'s sorts states: a declaration's parameter, or a metavariable.
+pub fn open_quality<B: Bound>(value: &B) -> Option<Quality> {
+    rewrite_universe_qualities(value, |quality| match quality.is_ground() {
+        true => Ok(*quality),
+        false => Err(*quality),
+    })
+    .err()
 }
 
 pub fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, UniverseError> {
@@ -821,6 +862,8 @@ impl Sharing {
 /// A term-level pre-hook for [`Visit`]: `Some(replacement)` substitutes the whole node at the current depth.
 type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
 type LevelRewrite = Box<dyn FnMut(usize, &Level) -> Level>;
+/// A quality-level hook for [`Visit`], asked at every sort a level hook is asked at. It reads no depth: only a top-level item binds a quality, so a parameter names one thing wherever it stands.
+type QualityRewrite = Box<dyn FnMut(&Quality) -> Quality>;
 
 /// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, and what the traversal does beyond rewriting variables (`Mode`).
 pub struct Visit<F> {
@@ -918,8 +961,8 @@ enum Mode {
     Rewriting(Rewrite),
     /// [`Mode::Rewriting`], visiting only nodes that carry universe data.
     RewritingUniverses(Rewrite),
-    /// A level-level hook, visiting only nodes that carry universe data.
-    RewritingLevels(LevelRewrite),
+    /// A level-level hook, visiting only nodes that carry universe data, and a quality-level one beside it where the walk rewrites both.
+    RewritingLevels(LevelRewrite, Option<QualityRewrite>),
     /// [`Mode::Masking`] that also stands every level of the node itself down to a sentinel, keeping what it removed: the children each with the universe-binder depth it sits at below the node, and the levels each with theirs. Every node is visited, a ground `Type 0` included — a comparison that aligns levels by position has to see the one that carries no universe data. This is one node of [`Term::level_differences`]'s walk over a pair.
     MaskingLevels {
         placeholder: Term,
@@ -1059,7 +1102,7 @@ where
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::RewritingLevels(rewrite),
+            mode: Mode::RewritingLevels(rewrite, None),
             memo: Memo::None,
         }
     }
@@ -1070,7 +1113,22 @@ where
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::RewritingLevels(rewrite),
+            mode: Mode::RewritingLevels(rewrite, None),
+            memo: Memo::ByNodeAndDepth(HashMap::new()),
+        }
+    }
+
+    /// [`rewriting_levels_scoped_shared`](Self::rewriting_levels_scoped_shared) with a quality hook beside the level one: for a walk that instantiates or solves both, each hook a function of what it is handed.
+    pub(crate) fn rewriting_universes_scoped_shared(
+        visit: F,
+        levels: LevelRewrite,
+        qualities: QualityRewrite,
+    ) -> Self {
+        Self {
+            term_depth: 0,
+            universe_depth: 0,
+            visit,
+            mode: Mode::RewritingLevels(levels, Some(qualities)),
             memo: Memo::ByNodeAndDepth(HashMap::new()),
         }
     }
@@ -1152,12 +1210,20 @@ where
         }
         let universe_depth = self.universe_depth;
         match &mut self.mode {
-            Mode::RewritingLevels(rewrite) => rewrite(universe_depth, level),
+            Mode::RewritingLevels(rewrite, _) => rewrite(universe_depth, level),
             Mode::MaskingLevels { levels, .. } => {
                 levels.push((universe_depth, level.clone()));
                 Level::constant(1)
             }
             _ => level.clone(),
+        }
+    }
+
+    /// A sort's quality through the walk's quality hook, where it has one; every other walk leaves a quality as it is, an erasing one included, since a quality is what the sort is and no payload of it.
+    pub(crate) fn visit_quality(&mut self, quality: &Quality) -> Quality {
+        match &mut self.mode {
+            Mode::RewritingLevels(_, Some(rewrite)) => rewrite(quality),
+            _ => *quality,
         }
     }
 
@@ -1187,7 +1253,7 @@ where
             Mode::Plain
             | Mode::Pruning
             | Mode::Capturing
-            | Mode::RewritingLevels(_)
+            | Mode::RewritingLevels(..)
             | Mode::ErasingUniverses
             | Mode::Sharing { .. } => None,
         }
@@ -1232,7 +1298,7 @@ where
     pub(crate) fn universes_only(&self) -> bool {
         matches!(
             self.mode,
-            Mode::RewritingUniverses(_) | Mode::RewritingLevels(_) | Mode::ErasingUniverses
+            Mode::RewritingUniverses(_) | Mode::RewritingLevels(..) | Mode::ErasingUniverses
         )
     }
 

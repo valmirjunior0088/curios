@@ -5,9 +5,9 @@ use {
     crate::{Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, Module, Nat, Term,
-        Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseMetaId, UniverseParam, Variance,
+        Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, Module, Nat, Quality,
+        QualityMetaId, QualityParam, Term, Totality, UniverseConstraint, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, Variance,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
@@ -120,6 +120,33 @@ fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
                 .any(|verdict| matches!(verdict.error, Error::NotCore(_))),
             "{label}: the kernel certified a module carrying an unsolved universe metavariable: {verdicts:?}",
         );
+    }
+}
+
+/// A sort whose quality is open, in the two positions the boundary pass walks: a metavariable elaboration left, and a parameter no context binds.
+///
+/// Every rule that reads a sort reads which of `Prop` and `Type` it is: irrelevance, the large-elimination guard, the totality an erased position owes. One that states neither has no answer any of them may take, so the kernel judges a term only once each of its sorts states one. Neither module is reachable from a surface program, so only these fixtures put the refusal to the test; the control is [`a_ground_level_in_the_same_positions_is_accepted`].
+#[test]
+fn a_sort_stating_neither_prop_nor_type_is_refused() {
+    for (quality, open) in [
+        ("a quality metavariable", Quality::Meta(QualityMetaId(0))),
+        ("a quality parameter", Quality::Param(QualityParam(0))),
+    ] {
+        let sort = || Term::sort_at(open, Level::zero());
+
+        for (label, module) in [
+            ("a definition's declared type", sorted_definition(sort())),
+            ("a registry entry's result sort", sorted_registry(sort())),
+        ] {
+            let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+
+            assert!(
+                verdicts
+                    .iter()
+                    .any(|verdict| matches!(verdict.error, Error::OpenSort(_))),
+                "{label}: the kernel certified a module carrying {quality}: {verdicts:?}",
+            );
+        }
     }
 }
 

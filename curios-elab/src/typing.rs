@@ -15,8 +15,8 @@ use {
     },
     curios_core::{
         Advance, Apply, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
-        Intrinsic, Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope,
-        Spelling, Subterm, Telescope, Term, Transient, Visit,
+        Intrinsic, Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, Quality, ReduceError,
+        Scope, Spelling, Subterm, Telescope, Term, Transient, Visit,
     },
     std::{
         cell::RefCell,
@@ -120,7 +120,7 @@ pub(crate) fn is_erasable_in(
     }
 
     match Term::unwrap_or_clone(reduce_with(context, type_)?) {
-        Subterm::Type(_) | Subterm::Prop(_) => Ok(true),
+        Subterm::Sort(..) => Ok(true),
         Subterm::Instance(instance) => is_erasable_in(context, opened, &instance.head.to_term()),
         // A function erases iff what it ultimately returns does — a proof-/type-producing function is pure, content-free; an effectful `X -> {}` is not. Recurse past the parameters into the codomain, each opened binder joining `opened` so the codomain can read its sort.
         Subterm::FuncType(FuncType { telescope, .. }) => {
@@ -179,8 +179,8 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
     };
 
     match &*reduce_with(context, &inferred)? {
-        Subterm::Prop(level) => Ok((rebuilt, Sort::Prop(level.clone()))),
-        Subterm::Type(level) => Ok((rebuilt, Sort::Type(level.clone()))),
+        Subterm::Sort(Quality::Prop, level) => Ok((rebuilt, Sort::Prop(level.clone()))),
+        Subterm::Sort(Quality::Type, level) => Ok((rebuilt, Sort::Type(level.clone()))),
         // The reduct is not what is reported: it spells a recursive name as its group, which the display form gives back its name.
         _ => Err(Error::type_mismatch(
             resolved_for_display(context, &inferred),
@@ -239,8 +239,7 @@ fn proposition_at_implicit_type(context: &mut Context, this: &Term, that: &Term)
     }
     let declared = context.metavar_entry(*id)?.result.clone();
     let declared = reduce_forced(context, declared).ok()?;
-    let at_a_type =
-        matches!(&*declared, Subterm::Type(level) if !context.universes().classifies(level));
+    let at_a_type = matches!(&*declared, Subterm::Sort(Quality::Type, level) if !context.universes().classifies(level));
     if !at_a_type || !is_prop(context, this).ok()? {
         return None;
     }
@@ -844,7 +843,7 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
                 // What was compared is read off the type the problem is posed at: at a sort the two are types, one inferred and one expected, and anywhere else they are terms a type states at one position.
                 Outcome::Mismatch(declined) => Retry::Mismatch(
                     match &*goal.type_ {
-                        Subterm::Type(_) | Subterm::Prop(_) => {
+                        Subterm::Sort(..) => {
                             display_mismatch(context, &origin, &goal.this, &goal.that)
                         }
                         _ => Error::terms_differ(

@@ -29,7 +29,7 @@ pub use subterm::*;
 use {
     super::{
         Atom, Bound, Enter, Extent, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
-        MaskedLevels, Scope, SelfReference, Spelled, Spelling, Telescope, Three, Two,
+        MaskedLevels, Quality, Scope, SelfReference, Spelled, Spelling, Telescope, Three, Two,
         UniverseMetaId, Var, Variance, Visit, print_term, project_erased_universes,
         stamp_declaration_instance, universe_metas,
     },
@@ -385,7 +385,10 @@ impl Term {
 
         match Rc::try_unwrap(this.inner) {
             // Swapped out rather than moved out: [`Node`] dismantles itself on drop, and a type with a `Drop` impl cannot have a field moved away. The husk left behind is childless, so dropping it is free.
-            Ok(mut node) => mem::replace(&mut node.subterm, Subterm::Prop(Level::zero())),
+            Ok(mut node) => mem::replace(
+                &mut node.subterm,
+                Subterm::Sort(Quality::Prop, Level::zero()),
+            ),
             Err(shared) => shared.subterm.clone(),
         }
     }
@@ -696,7 +699,7 @@ impl Term {
 
     /// `Type` at a known internal level.
     pub fn type_at(level: Level) -> Self {
-        Self::from(Subterm::Type(level))
+        Self::from(Subterm::Sort(Quality::Type, level))
     }
 
     /// Ground `Prop 0`, the level of a decided proposition.
@@ -706,7 +709,12 @@ impl Term {
 
     /// `Prop` at a known internal level.
     pub fn prop_at(level: Level) -> Self {
-        Self::from(Subterm::Prop(level))
+        Self::from(Subterm::Sort(Quality::Prop, level))
+    }
+
+    /// The sort of `quality` at a known internal level: [`Term::type_at`] and [`Term::prop_at`] for the two a program writes, and the one spelling of a sort whose quality is open.
+    pub fn sort_at(quality: Quality, level: Level) -> Self {
+        Self::from(Subterm::Sort(quality, level))
     }
 
     /// An intrinsic term — any literal or intrinsic operation that converts into [`Intrinsic`].
@@ -1350,7 +1358,7 @@ impl Term {
 ///
 /// Every child is cloned into `work` *before* the old value is released, so releasing it can only decrement — the reference `work` now holds is what stops the drop cascading. What is left behind is `Prop`: no children, and no allocation, because it is a variant with no payload.
 fn detach_children(subterm: &mut Subterm, work: &mut Vec<Term>) {
-    let detached = mem::replace(subterm, Subterm::Prop(Level::zero()));
+    let detached = mem::replace(subterm, Subterm::Sort(Quality::Prop, Level::zero()));
     detached.any_child_term(&mut |child| {
         work.push(child.clone());
         false
@@ -1939,9 +1947,13 @@ impl Term {
             }
 
             match (this.look(), that.look()) {
-                (Subterm::Type(this_level), Subterm::Type(that_level))
-                | (Subterm::Prop(this_level), Subterm::Prop(that_level)) => {
-                    if !renaming.levels_equal(this_level, that_level) {
+                (
+                    Subterm::Sort(this_quality, this_level),
+                    Subterm::Sort(that_quality, that_level),
+                ) => {
+                    if this_quality != that_quality
+                        || !renaming.levels_equal(this_level, that_level)
+                    {
                         return false;
                     }
                     continue;

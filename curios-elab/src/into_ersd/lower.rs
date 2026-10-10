@@ -327,8 +327,7 @@ impl<'s> Lowering<'s> {
                 })
             }
             // Type formers carry nothing to lower; their value is the unit of a retained-but-erased slot.
-            Subterm::Type(_)
-            | Subterm::Prop(_)
+            Subterm::Sort(..)
             | Subterm::FuncType(_)
             | Subterm::TupleType(_)
             | Subterm::InductType(_)

@@ -145,11 +145,7 @@ fn elaborate_subterm(
 
     // Synthesizable nodes compute their type and hit the `expect` turnaround in `Check` mode; naturally-checked nodes (and the mode-propagating `Let`/`Rec`) consume `mode` directly and return early. Every arm returns the rebuilt term — binders re-closed, lambda domains solved.
     let (rebuilt, type_) = match &**term {
-        Subterm::Type(level) => (
-            term.clone(),
-            Term::type_at(level.succ().map_err(Error::from)?),
-        ),
-        Subterm::Prop(level) => (
+        Subterm::Sort(_, level) => (
             term.clone(),
             Term::type_at(level.succ().map_err(Error::from)?),
         ),

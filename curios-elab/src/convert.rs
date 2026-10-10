@@ -37,8 +37,8 @@ use {
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Exhaustion, Extent, Families,
         Free, Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic,
-        Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarOrigin, Probe, Proj, Rec,
-        ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
+        Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarOrigin, Probe, Proj, Quality,
+        Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
         TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variance,
         Variant, past_bool_cap,
     },
@@ -615,11 +615,13 @@ impl Convert {
         let upper = reduce_forced(context, that.clone())?;
 
         match (&*lower, &*upper) {
-            (below @ Subterm::Type(lower), Subterm::Type(upper))
-            | (below @ Subterm::Prop(lower), Subterm::Prop(upper)) => {
+            (below @ Subterm::Sort(Quality::Type, lower), Subterm::Sort(Quality::Type, upper))
+            | (below @ Subterm::Sort(Quality::Prop, lower), Subterm::Sort(Quality::Prop, upper)) => {
                 // What is put below is named for the report: a proposition's level and a type's are told apart by nothing else on the path.
                 let kind = match below {
-                    Subterm::Prop(_) => UniverseConstraintKind::PropositionCumulativity,
+                    Subterm::Sort(Quality::Prop, _) => {
+                        UniverseConstraintKind::PropositionCumulativity
+                    }
                     _ => UniverseConstraintKind::Cumulativity,
                 };
                 let lower = lower.clone();
@@ -639,7 +641,7 @@ impl Convert {
 
                 Ok(true)
             }
-            (Subterm::Prop(lower), Subterm::Type(upper))
+            (Subterm::Sort(Quality::Prop, lower), Subterm::Sort(Quality::Type, upper))
                 if context.universes().classifies(upper) =>
             {
                 context
@@ -2214,14 +2216,11 @@ impl Convert {
         };
 
         match &*forced {
-            sort @ (Subterm::Type(level) | Subterm::Prop(level)) => {
+            Subterm::Sort(quality, level) => {
                 // What is put below is named for the report, as the relation's own rule names it.
-                let (kind, at): (_, fn(Level) -> Term) = match sort {
-                    Subterm::Prop(_) => (
-                        UniverseConstraintKind::PropositionCumulativity,
-                        Term::prop_at,
-                    ),
-                    _ => (UniverseConstraintKind::Cumulativity, Term::type_at),
+                let kind = match quality {
+                    Quality::Prop => UniverseConstraintKind::PropositionCumulativity,
+                    _ => UniverseConstraintKind::Cumulativity,
                 };
                 let origin = UniverseConstraintOrigin {
                     extent: self.extent,
@@ -2241,7 +2240,7 @@ impl Convert {
                     .add_leq(lower, upper, origin)
                     .map_err(ReduceError::Universe)?;
 
-                Ok(Some(at(own)))
+                Ok(Some(Term::sort_at(*quality, own)))
             }
             Subterm::FuncType(FuncType { telescope }) => {
                 let mut binders = Vec::with_capacity(telescope.len());
@@ -2592,7 +2591,7 @@ impl Convert {
             }
 
             // Where the problem's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand — a stuck elimination's scrutinee, a projection's head. What a type directs between two neutrals is then asked of the type a lookup gives both sides, as the kernel asks it.
-            if matches!(&*type_, Subterm::Type(_) | Subterm::Prop(_))
+            if matches!(&*type_, Subterm::Sort(..))
                 && by_their_own_type(context, &posed, &this, &that)?
             {
                 continue;
@@ -2687,8 +2686,8 @@ impl Convert {
                 (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
                     convert_intrinsic(self, context, this, that)?
                 }
-                (Subterm::Type(this), Subterm::Type(that))
-                | (Subterm::Prop(this), Subterm::Prop(that)) => {
+                (Subterm::Sort(Quality::Type, this), Subterm::Sort(Quality::Type, that))
+                | (Subterm::Sort(Quality::Prop, this), Subterm::Sort(Quality::Prop, that)) => {
                     Self::join_levels(context, &this, &that)?
                 }
                 (Subterm::Instance(this), Subterm::Instance(that)) => {

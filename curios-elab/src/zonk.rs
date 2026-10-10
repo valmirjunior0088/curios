@@ -1192,12 +1192,10 @@ fn zonk_levels(context: &Zonk, levels: &[Level]) -> Result<Vec<Level>, Error> {
 
 fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
     Ok(match &**term {
-        Subterm::Type(level) => {
-            Subterm::Type(context.universes().zonk(level).map_err(Error::from)?)
-        }
-        Subterm::Prop(level) => {
-            Subterm::Prop(context.universes().zonk(level).map_err(Error::from)?)
-        }
+        Subterm::Sort(quality, level) => Subterm::Sort(
+            *quality,
+            context.universes().zonk(level).map_err(Error::from)?,
+        ),
         Subterm::Foreign(function, args) => {
             Subterm::Foreign(Arc::clone(function), zonk_terms(context, args)?)
         }

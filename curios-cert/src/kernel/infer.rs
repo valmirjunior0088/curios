@@ -45,8 +45,8 @@ use {
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
         InstanceHead, Intrinsic, Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj,
-        Rec, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple,
-        TupleType, Variant,
+        Quality, Rec, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality,
+        Tuple, TupleType, Variant,
     },
     curios_num::{Binary, Grain, Natural},
     curios_utilities::recurse,
@@ -112,8 +112,10 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 
     match &**term {
         // `Type u : Type (u + 1)`, and `Prop : Type 0`. The hierarchy is what makes `Type : Type` — and Girard's paradox with it — unstatable.
-        Subterm::Type(level) => Ok(Term::type_at(level.succ()?)),
-        Subterm::Prop(level) => Ok(Term::type_at(level.succ()?)),
+        Subterm::Sort(Quality::Type | Quality::Prop, level) => Ok(Term::type_at(level.succ()?)),
+        Subterm::Sort(Quality::Param(_) | Quality::Meta(_), _) => {
+            Err(Error::OpenSort(term.clone()))
+        }
 
         Subterm::Intrinsic(intrinsic) => infer_intrinsic(kernel, intrinsic),
 
@@ -1100,8 +1102,7 @@ fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<boo
 
     match (&*lower, &*upper) {
         // Each sort is cumulative in its own levels, and neither stands for the other.
-        (Subterm::Type(lower), Subterm::Type(upper))
-        | (Subterm::Prop(lower), Subterm::Prop(upper)) => {
+        (Subterm::Sort(below, lower), Subterm::Sort(above, upper)) if below == above => {
             return Ok(kernel.level_leq(lower, upper));
         }
         // Plicity is part of a function type's identity, exactly as in `convert`: `(A) -> A` and `(@A) -> A` have different calling conventions, so a difference there is a mismatch and not a codomain question.

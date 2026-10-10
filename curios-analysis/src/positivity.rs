@@ -587,7 +587,7 @@ impl<E: Env> Walk<'_, E> {
 
         match &*term {
             // Sorts name nothing.
-            Subterm::Type(_) | Subterm::Prop(_) => {}
+            Subterm::Sort(..) => {}
 
             // A variable head is the occurrence itself, the levels spelling it rather than standing between the walk and it — the reading `Subterm::has_local_free` already takes, and the one place `opaque` cannot serve: `any_child_term` reports no child here, the head being the node's own data exactly as a `Var`'s identity is, so the descent would find nothing and a parameter named this way would keep the `Unused` the fixpoint seeds it at. A projection head is no variable and keeps the opaque reading below.
             Subterm::Var(var)

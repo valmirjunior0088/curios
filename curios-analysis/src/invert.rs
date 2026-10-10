@@ -10,7 +10,9 @@ mod tests;
 use {
     crate::{Judge, locals_beneath},
     curios_algebra::Deduction,
-    curios_core::{Free, Instance, InstanceHead, Subterm, Telescope, Term, peel_intrinsic},
+    curios_core::{
+        Free, Instance, InstanceHead, Quality, Subterm, Telescope, Term, peel_intrinsic,
+    },
     std::collections::BTreeSet,
 };
 
@@ -309,7 +311,7 @@ fn unify_index<J: Judge>(
             let Some(declaration) = judge.induct_decl(&a.name) else {
                 return Ok(Step::Refuse);
             };
-            if matches!(&*declaration.result_sort, Subterm::Prop(_)) {
+            if matches!(&*declaration.result_sort, Subterm::Sort(Quality::Prop, _)) {
                 return Ok(Step::Ok);
             }
             if a.tag != t.tag {

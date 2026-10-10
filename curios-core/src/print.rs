@@ -2,8 +2,8 @@ use {
     super::{
         Apply, Argument, Ascribed, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor, Field,
         Free, Func, FuncType, Global, InductType, Infix, Intrinsic, Label, Let, Level, Match,
-        MatchResult, Metavar, MetavarOrigin, Nat, NumLit, Proj, Rec, Scope, Spellings, Struct,
-        StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
+        MatchResult, Metavar, MetavarOrigin, Nat, NumLit, Proj, Quality, Rec, Scope, Spellings,
+        Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
         Variant,
     },
     curios_abi::stdio,
@@ -2055,20 +2055,18 @@ fn within_reader(term: Term, frame: Frame, binders: &[(Free, Term)]) -> Printer 
 
 fn term_doc(term: Term, frame: Frame) -> Printer {
     match Term::unwrap_or_clone(term) {
-        Subterm::Type(level) => {
+        Subterm::Sort(quality, level) => {
+            // An open quality is spelled by the word a program leaves one with.
+            let word = match quality {
+                Quality::Type => "Type",
+                Quality::Prop => "Prop",
+                Quality::Param(_) | Quality::Meta(_) => "Sort",
+            };
             if level.is_zero() || (frame.spelling.erase_universes && level.metas().next().is_some())
             {
-                pure("Type")
+                pure(word)
             } else {
-                pure(format!("Type.{{{level}}}"))
-            }
-        }
-        Subterm::Prop(level) => {
-            if level.is_zero() || (frame.spelling.erase_universes && level.metas().next().is_some())
-            {
-                pure("Prop")
-            } else {
-                pure(format!("Prop.{{{level}}}"))
+                pure(format!("{word}.{{{level}}}"))
             }
         }
         Subterm::Instance(instance) => flat([

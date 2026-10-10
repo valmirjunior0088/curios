@@ -51,8 +51,8 @@ use {
     super::{
         Adopting, Baseline, Error, Globals, Kernel, Totals, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl, define_as_stated,
-        free_locals_outside, positivity_vectors, rewrite_universe_levels_scoped_shared,
-        satisfiable, universe_metas, variance_vectors,
+        free_locals_outside, open_quality, positivity_vectors,
+        rewrite_universe_levels_scoped_shared, satisfiable, universe_metas, variance_vectors,
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
@@ -288,6 +288,14 @@ fn universe_residue<B: Bound>(value: &B) -> Option<Error> {
         .into_iter()
         .next()
         .map(|meta| Error::NotCore(Term::type_at(Level::meta(meta))))
+        .or_else(|| open_sort(value))
+}
+
+/// The first sort of `value` whose quality is open, as the refusal of it.
+///
+/// A quality metavariable is residue as a level's is. A quality parameter is one no declaration binds: a context states its level parameters and no quality, so nothing a use supplies would say which sort the term stands at, and every rule that reads a sort would read one that states none.
+fn open_sort<B: Bound>(value: &B) -> Option<Error> {
+    open_quality(value).map(|quality| Error::OpenSort(Term::sort_at(quality, Level::zero())))
 }
 
 /// The first universe parameter one of `value`'s levels names that a scheme of `parameter_count` parameters does not have.

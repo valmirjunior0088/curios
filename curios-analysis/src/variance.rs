@@ -349,7 +349,7 @@ impl<E: Env> Walk<'_, E> {
         };
 
         match &*term {
-            Subterm::Type(level) | Subterm::Prop(level) => self.level(level),
+            Subterm::Sort(_, level) => self.level(level),
             // A parameter, a local or a monomorphic name carries no level.
             Subterm::Var(_) => {}
 

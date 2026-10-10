@@ -11,7 +11,7 @@ use {
         Apply, Error, Func, FuncType, Lowering, Outcome, Retyping, Subterm, Term, emitted,
         is_erasable,
     },
-    curios_core::{DefinitionKind, Global, Lockstep, Step},
+    curios_core::{DefinitionKind, Global, Lockstep, Quality, Step},
 };
 
 impl Lowering<'_> {
@@ -231,6 +231,6 @@ fn is_proof_constructor(context: &mut Retyping, head: &Term) -> Result<bool, Err
 
     Ok(matches!(
         &*context.reduce_with(&declaration.result_sort)?,
-        Subterm::Prop(_)
+        Subterm::Sort(Quality::Prop, _)
     ))
 }

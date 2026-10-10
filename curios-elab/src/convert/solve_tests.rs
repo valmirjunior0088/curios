@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_core::{
         Atom, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId, MetavarOrigin, Nat,
-        Subterm, Telescope, Term, UniverseContext,
+        Quality, Subterm, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -1398,7 +1398,7 @@ fn a_metavariable_met_at_a_proposition_from_below_is_a_proposition_at_a_level_of
         context
             .metavar_solution(MetavarId(0))
             .map(|solution| &**solution),
-        Some(Subterm::Prop(_))
+        Some(Subterm::Sort(Quality::Prop, _))
     ));
     assert!(matches!(
         subsume_outcome(&mut context, &large, &Term::hole(0), None),

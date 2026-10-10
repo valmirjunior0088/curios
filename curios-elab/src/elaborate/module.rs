@@ -26,7 +26,7 @@ use {
     curios_core::{
         Advance, Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType,
         Global, InductDecl, InductParam, Intrinsic, Item, Level, Minted, Module, Nominal, Places,
-        RecItem, SelfReference, StructDecl, Subterm, Telescope, Term, Totality,
+        Quality, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
         stamp_declaration_instance, universe_metas,
     },
@@ -91,9 +91,7 @@ fn add_arity_sizing(
     result_sort: &Term,
     kind: UniverseConstraintKind,
 ) -> Result<(), Error> {
-    let (Subterm::Type(result_level) | Subterm::Prop(result_level)) =
-        &*reduce_with(context, result_sort)?
-    else {
+    let Subterm::Sort(_, result_level) = &*reduce_with(context, result_sort)? else {
         return Ok(());
     };
     let result_level = result_level.clone();
@@ -167,7 +165,7 @@ fn telescope_sizing<B: Bound>(
 
         let domain_sort = sort_term(context, &domain)?;
         let domain_sort = reduce_with(context, &domain_sort)?;
-        if let Subterm::Type(domain_level) | Subterm::Prop(domain_level) = &*domain_sort {
+        if let Subterm::Sort(_, domain_level) = &*domain_sort {
             let upper = if position < uniform_count {
                 result_level.checked_add(1).map_err(Error::from)?
             } else {
@@ -202,9 +200,7 @@ fn add_declaration_sizing<B: Bound>(
     result_sort: &Term,
     kind: UniverseConstraintKind,
 ) -> Result<(), Error> {
-    let (Subterm::Type(result_level) | Subterm::Prop(result_level)) =
-        &*reduce_with(context, result_sort)?
-    else {
+    let Subterm::Sort(_, result_level) = &*reduce_with(context, result_sort)? else {
         return Ok(());
     };
     let result_level = result_level.clone();
@@ -381,7 +377,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
 
     let declared_prop = matches!(
         &*reduce_with(context, &struct_decl.result_sort)?,
-        Subterm::Prop(_)
+        Subterm::Sort(Quality::Prop, _)
     );
 
     // Open the parameters, then check the field telescope they terminate in against `Type` under the binders before it.
@@ -487,7 +483,7 @@ fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseM
 
     let mut domains = Vec::new();
     let terminal = peel(type_, &mut domains);
-    if !matches!(&**terminal, Subterm::Type(_) | Subterm::Prop(_)) {
+    if !matches!(&**terminal, Subterm::Sort(..)) {
         return BTreeSet::new();
     }
     let mut result = context.universe_metas_in(terminal);

@@ -196,11 +196,11 @@ impl Intrinsic {
 impl Term {
     /// Return the absolute free-variable head of a direct type-family alias.
     ///
-    /// The declared type must structurally end in a literal [`Subterm::Type`] or [`Subterm::Prop`] after peeling only function-type telescopes. The body is then peeled through function literals and application spines, again structurally and without reduction or substitution. Computed heads, local heads, and aliased universe annotations are deliberately excluded.
+    /// The declared type must structurally end in a literal [`Subterm::Sort`] after peeling only function-type telescopes. The body is then peeled through function literals and application spines, again structurally and without reduction or substitution. Computed heads, local heads, and aliased universe annotations are deliberately excluded.
     pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<&Free> {
         fn ends_in_literal_sort(term: &Term) -> bool {
             match &**term {
-                Subterm::Type(_) | Subterm::Prop(_) => true,
+                Subterm::Sort(..) => true,
                 Subterm::FuncType(FuncType { telescope, .. }) => {
                     ends_in_literal_sort(telescope.terminal())
                 }
