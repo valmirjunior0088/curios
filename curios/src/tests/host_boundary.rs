@@ -45,9 +45,9 @@ fn assert_stream(io: &MockIo) {
     assert!(io.errors().is_empty());
 }
 
-/// Measure compilation and execution around the host and guest boundary's checked adapters and outcomes.
+/// Measure compilation and execution around the host and guest boundary: the adapter, the rows' requirements and the library's readings of their replies.
 ///
-/// This capture times compilation and execution around the checked host and guest boundary — [a host operation has one contract, checked at both ends](../../../documentation/design/runtime/a-host-operation-has-one-contract-checked-at-both-ends.md): the checked host adapter, the operation contracts, guest reply validation and the `/sys` outcomes built over wire-shaped calls. It is a local native measurement, separate from the containerized cross-language series.
+/// This capture times compilation and execution around the host and guest boundary — [a host operation is a foreign declaration whose types are its whole contract](../../../documentation/design/runtime/a-host-operation-is-a-foreign-declaration-whose-types-are-its-whole-contract.md): the host's adapter, the rows' requirements and the readings `/std` makes of wire-shaped replies. It is a local native measurement, separate from the containerized cross-language series.
 ///
 /// ## Workloads and reproduction
 ///
@@ -57,7 +57,7 @@ fn assert_stream(io: &MockIo) {
 ///
 /// The instrument runs one warmup (sample 0) and five measured samples per workload, in order: `monad_io`, then `stream_copy`, then `tui`. Each sample compiles the source afresh against the embedded prelude and executes it once with a fresh scripted host. There is no package-cache lookup. Rust compilation and prelude construction finish before the instrument starts and are excluded.
 ///
-/// - **`monad_io`:** the existing `programs/monad_io.crs` corpus program, with stdin `10000\n`, requiring stdout `30000\n` and no stderr. It measures the `Io` carrier's per-`bind` cost, which every generated `/sys` adapter adds to, and reads its line a byte at a time.
+/// - **`monad_io`:** the existing `programs/monad_io.crs` corpus program, with stdin `10000\n`, requiring stdout `30000\n` and no stderr. It measures the `Io` carrier's per-`bind` cost, which every reading of a reply adds to, and reads its line a byte at a time.
 /// - **`stream_copy`:** 2,000 chunks of 256 bytes on standard input, copied to standard output through `Io/read` and `Io/write`, requiring the output to equal the input and no stderr. The scripted host answers `would_block` between chunks, so every chunk costs a read that blocks, a poll, a read that succeeds and a write.
 /// - **`tui`:** the bordered listing fixture `curios/src/tests/coordination.rs` measures, with its host and assertions: reads, writes, polls and terminal-size queries through a whole session.
 ///
@@ -93,8 +93,6 @@ fn assert_stream(io: &MockIo) {
 /// | `tui` | 5 | 2942.890 | 20.914 | 11368 |
 ///
 /// Measured medians: `monad_io` compile **737.592 ms**, run **0.638 ms**; `stream_copy` compile **400.891 ms**, run **28.003 ms**; `tui` compile **2965.527 ms**, run **21.664 ms**. All eighteen samples passed their behavior and closed-span assertions; each workload produced the same output length in every sample.
-///
-/// What the checks cost at compile time is in `cont_optimize`, spread across its passes in proportion to their size, while parsing, elaboration, erasure, pruning and emission are unaffected: the continuation module carries the code each fallible call needs — `/sys`'s bind, continuation and status match — and `tui` reaches more rows than the other workloads. `stream_copy`'s read loop matches the row's `Result` directly rather than building and taking apart an `Option`, and `monad_io`'s run pays for its byte-at-a-time reads, each read through `/sys` and held to its row by the guest.
 #[test]
 #[ignore = "measurement: captures compilation and execution costs"]
 fn host_boundary_measurements() {

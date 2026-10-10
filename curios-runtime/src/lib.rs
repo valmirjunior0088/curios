@@ -1,4 +1,4 @@
-//! Runtime-only Curios engine: deserialize a precompiled module and run it on an embedded wasmtime, wiring the `sys.*` host imports.
+//! Runtime-only Curios engine: deserialize a precompiled module and run it on an embedded wasmtime, answering the rows it imports.
 //!
 //! **This crate is the workspace's only `wasmtime` dependency**, and nothing above it names a wasmtime type at all. The pin and the feature set live in its manifest — the arrangement `curios-archive` and `curios-num` use for rkyv and num-bigint — so the version `curios` precompiles a `.cwasm` against and the version the launcher deserializes it with cannot drift: there is only one row to change.
 //!

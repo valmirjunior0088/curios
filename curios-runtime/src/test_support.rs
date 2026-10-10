@@ -8,7 +8,7 @@
 //!
 //! Calls are untyped, and deliberately: they type-check dynamically against the module's declared signatures, so a call succeeding *is* the assertion that the emitted shapes are right.
 //!
-//! It also runs a compiled program against replies no checked host would give: [`run_raw`](crate::test_support::run_raw) answers chosen builtin rows, and [`raw_reply`](crate::test_support::raw_reply) an embedder's own, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the guest's own checks of a reply are put under test, since the native adapter refuses the same replies before they cross.
+//! It also runs a compiled program against replies no adapter would write: [`run_raw`](crate::test_support::run_raw) answers chosen rows of the host's, and [`raw_reply`](crate::test_support::raw_reply) an embedder's own, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the standard library's reading of a reply is put under test past what a host's types let it answer.
 
 use {
     super::{
@@ -148,7 +148,7 @@ impl GuestInstance {
     }
 }
 
-/// One value of a raw host reply, written into the guest's result slot as it stands. No row's contract is consulted, so a reply can hold what no checked host would give: a status its row never answers, a `Bool` word past `1`, an empty handle beside `ok`.
+/// One value of a raw host reply, written into the guest's result slot as it stands. No reply's type is consulted, so one can hold what no adapter would write: a status its row never answers, a code outside its table, an empty handle beside `ok`.
 #[derive(Debug, Clone)]
 pub enum RawValue {
     /// A `Nat` or a status, as the unsigned bits it crosses as.
@@ -201,7 +201,7 @@ pub fn raw_reply(bindings: &mut ForeignBindings, name: &str, values: Vec<RawValu
     });
 }
 
-/// Run `compiled` under `host`, except that each of the host's rows in `raw` answers its values on every call, raw — the checked adapter bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`Compiled::run`]'s does.
+/// Run `compiled` under `host`, except that each of the host's rows in `raw` answers its values on every call, raw — the adapter's lowering bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`Compiled::run`]'s does.
 pub fn run_raw<H: HostOps + Send + Sync + 'static>(
     compiled: &Compiled,
     host: H,

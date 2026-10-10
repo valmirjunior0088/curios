@@ -1,4 +1,4 @@
-//! A host that answers one row with a scripted reply and every other with a [`MockHost`]'s: how a host that breaks its contract is put in front of the adapter, since no honest host does, and how one call of a row fails where the mock's script only succeeds.
+//! A host that answers one row with a scripted reply and every other with a [`MockHost`]'s: how one call of a row fails where the mock's script only succeeds.
 
 use {
     curios_abi::{

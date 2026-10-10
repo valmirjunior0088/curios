@@ -18,7 +18,7 @@ pub mod status {
     pub const WOULD_BLOCK: u64 = 6;
     /// A TLS upgrade or server-config build failed. `rustls` errors carry no OS errno, so they collapse to this one named code instead of riding the errno passthrough.
     pub const TLS_ERROR: u64 = 7;
-    /// A `dir/remove` on a directory that still has entries (`ErrorKind::DirectoryNotEmpty`). Named, with the two below, because a program removing a directory has to tell them apart portably and the browser has no errno to pass through.
+    /// A `dir_remove` on a directory that still has entries (`ErrorKind::DirectoryNotEmpty`). Named, with the two below, because a program removing a directory has to tell them apart portably and the browser has no errno to pass through.
     pub const NOT_EMPTY: u64 = 8;
     /// A file operation applied to a directory (`ErrorKind::IsADirectory`).
     pub const IS_DIRECTORY: u64 = 9;
@@ -54,7 +54,7 @@ pub mod open_mode {
     pub const APPEND: u64 = 2;
 }
 
-/// What `file/stat` found at a path, mirrored by `/sys/file_kind` and the guest's `/std/fs/Kind`. `file_stat` follows symbolic links, so `SYMLINK` is reported only where the link's target is missing.
+/// What `file_stat` found at a path, mirrored by `/sys/file_kind` and the guest's `/std/fs/Kind`. `file_stat` follows symbolic links, so `SYMLINK` is reported only where the link's target is missing.
 pub mod file_kind {
     /// A regular file.
     pub const FILE: u64 = 0;
@@ -66,7 +66,7 @@ pub mod file_kind {
     pub const OTHER: u64 = 3;
 }
 
-/// How `proc/spawn` wires each of a child's standard streams, mirrored by `/sys/stdio_mode` and the guest's `/std/Command/Stdio`: the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
+/// How `proc_spawn` wires each of a child's standard streams, mirrored by `/sys/stdio_mode` and the guest's `/std/Command/Stdio`: the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
 pub mod stdio_mode {
     /// The child shares the parent's stream.
     pub const INHERIT: u64 = 0;
@@ -76,7 +76,7 @@ pub mod stdio_mode {
     pub const NULL: u64 = 2;
 }
 
-/// The parity `serial/open` frames a character with, mirrored by `/sys/serial_parity` and the guest's `/std/Serial/Parity`. Mark and space parity are deliberately absent: the one modern design that pruned by usage, Web Serial, ships exactly these three.
+/// The parity `serial_open` frames a character with, mirrored by `/sys/serial_parity` and the guest's `/std/Serial/Parity`. Mark and space parity are deliberately absent: the one modern design that pruned by usage, Web Serial, ships exactly these three.
 pub mod serial_parity {
     /// No parity bit.
     pub const NONE: u64 = 0;
@@ -86,7 +86,7 @@ pub mod serial_parity {
     pub const ODD: u64 = 2;
 }
 
-/// How `serial/open` paces the wire, mirrored by `/sys/serial_flow` and the guest's `/std/Serial/Flow`. Software (XON/XOFF) flow control is deliberately absent, as it is from Web Serial.
+/// How `serial_open` paces the wire, mirrored by `/sys/serial_flow` and the guest's `/std/Serial/Flow`. Software (XON/XOFF) flow control is deliberately absent, as it is from Web Serial.
 pub mod serial_flow {
     /// No flow control.
     pub const NONE: u64 = 0;
@@ -94,7 +94,7 @@ pub mod serial_flow {
     pub const HARDWARE: u64 = 1;
 }
 
-/// What `serial/control` does to a port, mirrored by `/sys/serial_op`. The two output lines a program drives to reset a board or enter its bootloader, and the one buffer it drops afterwards.
+/// What `serial_control` does to a port, mirrored by `/sys/serial_op`. The two output lines a program drives to reset a board or enter its bootloader, and the one buffer it drops afterwards.
 pub mod serial_op {
     /// Set the Data Terminal Ready line to the given level.
     pub const DTR: u64 = 0;

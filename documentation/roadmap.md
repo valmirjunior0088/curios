@@ -72,7 +72,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] Execution on a shared, GC-enabled Wasmtime engine, from precompiled `.cwasm` compiled across threads
 - [x] A slim launcher embedded in the compiler, and self-contained executables carrying their foreign modules
 - [x] [The heap is sized ahead of its churn](../curios-runtime/README.md#the-heap-is-sized-ahead-of-its-churn)
-- [x] [A host operation has one contract, checked at both ends](design/runtime/a-host-operation-has-one-contract-checked-at-both-ends.md): each row typed in `curios-abi`, read by `/sys` as a `Result` or an `Option`, held to its row by the native adapter and by the guest, and conformed across the native, mock, plugin and browser hosts
+- [x] [A host operation is a foreign declaration whose types are its whole contract](design/runtime/a-host-operation-is-a-foreign-declaration-whose-types-are-its-whole-contract.md): each a private `foreign` of the `/std` module that reads it, typed on the host's side in `curios-abi`, written to the wire by an adapter and read unchecked by the guest, and answered alike by the native, mock, plugin and browser hosts
 - [x] Host capabilities: terminal with raw mode, files and the filesystem over `Path`, clock and randomness, process IO and subprocesses, TCP with TLS, and serial ports, each handle a token no host mints twice
 - [x] Foreign functions: `foreign` declarations answered by a WebAssembly module a package names and pins, linked by `run` and `test`, and carried inside a `compile`d executable
 

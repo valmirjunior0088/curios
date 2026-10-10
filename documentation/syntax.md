@@ -1214,7 +1214,7 @@ Higher-kinded parameters are keyable. When conversion establishes a shape such a
 
 ## Foreign declarations
 
-A `foreign` declaration introduces a value implemented by the embedder. Its declared type uses the wire grammar rather than arbitrary Curios types.
+A `foreign` declaration introduces a value implemented outside the program: by a module its package names, by the embedder, or by the host. Its declared type uses the wire grammar rather than arbitrary Curios types.
 
 ```crs
 foreign random: Nat;
@@ -1223,11 +1223,14 @@ pub foreign log: (Bytes) -> Nat;
 foreign close: (Handle) -> {};
 foreign flip: (Byte) -> Byte;
 foreign read: (Handle, Nat) -> {status: Nat, bytes: Bytes};
+foreign abort: (Byte) -> Never;
 ```
 
 The wire types are `Nat`, `Int`, `Bool`, `Byte`, `Flt`, `Bytes`, `Bits`, `Handle`, and `List(T)`, spelled bare: the wire grammar is a closed vocabulary that resolves no names, so `/std/Nat` is refused where `Nat` is meant. A `Byte` crosses as the integer it is, in both directions; a host answering one outside `0..=255` stops the program rather than handing it a different byte. A `Nat` or `Int` crosses as a 64-bit integer although the program's are unbounded: a `Nat` argument crosses below `2⁶⁴` and an `Int` between `-2⁶³` and `2⁶³ - 1`, and a larger one stops the program rather than crossing changed. A result comes back as a 64-bit integer too — a `Nat` read unsigned and an `Int` signed — and the program boxes it, so every result the integer holds arrives whole. A wire signature is a wire result for a zero-argument foreign, or a parenthesized wire parameter list followed by `->` and a wire result.
 
-A wire result is a wire type, or a braced list of labelled wire types — the [tuple type](#tuple-types) the call yields. `{}` is no result at all, which is the unit type; `()` is the unit value and never stands here. Two or more fields are the tuple the guest projects by name, as `/sys` reads `.status` and `.bytes` off a host read.
+A wire result is a wire type, or a braced list of labelled wire types — the [tuple type](#tuple-types) the call yields. `{}` is no result at all, which is the unit type; `()` is the unit value and never stands here. Two or more fields are the tuple the guest projects by name, as `/std/Handle` reads `.status` and `.bytes` off a host's read.
+
+`Never` in place of a wire result says the call does not return, which is not the same as returning nothing. It is no type and stands nowhere else: a declaration that states it takes the type its call yields as an implicit argument ahead of its own, so `abort` above is `(@A: Type, Byte) -> Io(A)`, a description that ends the program and so fits a region of any type. `/std/proc/exit` is such a call.
 
 A tuple type's labels are part of its identity, so nothing may be invented, dropped or moved: the fields cross in the order written, a reference result — `Bytes`, `Bits`, `Handle` or `List(T)` — in whatever slot it is written, and as many of them as the row has. The one spelling refused is a single result in braces: it is written bare rather than as `{value: T}`, because one result crosses as itself and a one-field brace would name a tuple the row cannot carry.
 

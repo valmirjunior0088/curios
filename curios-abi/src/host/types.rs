@@ -1,4 +1,4 @@
-//! The semantic Rust types a builtin host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
+//! The semantic Rust types a host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
 //! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Poll`] a byte of flags, a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
 
@@ -35,7 +35,7 @@ impl Handle {
         token.to_bytes_le()
     }
 
-    /// No handle: the empty token, which no host mints. It is the padding a failed handle row answers beside its status, and what `proc/spawn` answers for a stream the call did not pipe; `/sys` reads neither, since it reads a payload only under a success and a spawned stream by the mode the call asked for. `handle_close` on it is the no-op closing any unknown handle is.
+    /// No handle: the empty token, which no host mints. It is the padding a failed handle row answers beside its status, and what `proc_spawn` answers for a stream the call did not pipe; `/sys` reads neither, since it reads a payload only under a success and a spawned stream by the mode the call asked for. `handle_close` on it is the no-op closing any unknown handle is.
     pub fn none() -> Self {
         Handle::Other(Vec::new())
     }
@@ -272,7 +272,7 @@ pub trait ClosedCode: Copy + PartialEq + 'static {
     }
 }
 
-/// The open mode of `/sys/file/open`, mirrored by `/std/File`'s `Mode` inductive, its tags [`open_mode`]'s.
+/// The open mode of `file_open`, mirrored by `/std/File`'s `Mode` inductive, its tags [`open_mode`]'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Read,
@@ -288,7 +288,7 @@ impl ClosedCode for Mode {
     ];
 }
 
-/// How `proc/spawn` wires one of a child's standard streams, its tags [`stdio_mode`]'s.
+/// How `proc_spawn` wires one of a child's standard streams, its tags [`stdio_mode`]'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StdioMode {
     Inherit,
@@ -304,7 +304,7 @@ impl ClosedCode for StdioMode {
     ];
 }
 
-/// What `proc/spawn` answers: the child's handle, and the parent's end of each standard stream the call piped — `None` for one it did not.
+/// What `proc_spawn` answers: the child's handle, and the parent's end of each standard stream the call piped — `None` for one it did not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildHandles {
     pub child: Handle,
@@ -313,7 +313,7 @@ pub struct ChildHandles {
     pub stderr: Option<Handle>,
 }
 
-/// The parity `serial/open` frames a character with, its tags [`serial_parity`]'s.
+/// The parity `serial_open` frames a character with, its tags [`serial_parity`]'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SerialParity {
     None,
@@ -329,7 +329,7 @@ impl ClosedCode for SerialParity {
     ];
 }
 
-/// How `serial/open` paces the wire, its tags [`serial_flow`]'s.
+/// How `serial_open` paces the wire, its tags [`serial_flow`]'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SerialFlow {
     None,
@@ -343,7 +343,7 @@ impl ClosedCode for SerialFlow {
     ];
 }
 
-/// What `serial/control` does to a port, its tags [`serial_op`]'s.
+/// What `serial_control` does to a port, its tags [`serial_op`]'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SerialOp {
     Dtr,
