@@ -123,6 +123,29 @@ fn a_recursive_definition_leaves_a_sort_to_its_caller() {
     assert_eq!(run(source), b"42");
 }
 
+// Two calls of declarations over one family each state their own sort, one nested in the other: mapping an option of a proof to an option of a number and reading it, and the other way about. Each occurrence of the family is read at the sort its own call states.
+#[test]
+fn a_call_at_one_sort_nests_in_a_call_at_the_other() {
+    let source = r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+        induct Maybe(A: Sort): pub Type
+        | some(A)
+        | none()
+        end
+        let map(@A: Sort, @B: Sort, m: Maybe(A), f: (A) -> B) -> Maybe(B) =
+            match m | some(a) => Maybe/some(f(a)) | none() => Maybe/none() end;
+        let or(@A: Sort, m: Maybe(A), default: A) -> A =
+            match m | some(a) => a | none() => default end;
+        let count(found: Maybe(True)) -> Nat = or(map(found, (p) => 41), 0);
+        let proof(found: Maybe(Nat)) -> True = or(map(found, (n) => True/qed()), True/qed());
+        let held: True = proof(Maybe/some(1));
+        /std/print(Nat/to_str(count(Maybe/some(True/qed())) + 1))
+        "#;
+
+    assert_eq!(run(source), b"42");
+}
+
 // A `Sort` the declaration's own terms decide is no caller's to state: refused at the term that decided it, with the sort it can only be.
 #[test]
 fn a_sort_its_declaration_decides_is_refused_with_what_it_is() {

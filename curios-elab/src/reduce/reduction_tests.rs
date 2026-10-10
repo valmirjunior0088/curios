@@ -6,9 +6,9 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Apply, Bound, Exhaustion, Free, InductDecl, Intrinsic, Level, MetavarId, MetavarOrigin,
-        Nat, ReduceError, Subterm, Telescope, Term, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
-        Variance,
+        Nat, Quality, QualityMetaId, QualityParam, ReduceError, Subterm, Telescope, Term,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
+        UniverseParam, UniverseRole, Universes, Variance,
     },
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
     curios_utilities::Qualifier,
@@ -1162,6 +1162,94 @@ fn a_closed_reduct_is_served_across_universe_spellings() {
         context.consumed().units(),
         spent,
         "and served without a step, since the two spellings share one erased key"
+    );
+}
+
+/// A closed reduct served across universe spellings states the asking spelling's sorts: an instance's sorts are dropped from the erased key with its levels, so a definition unfolded at one sort metavariable answers for it at another sort, and the reduct is rewritten to that sort as it is to the level. Served as stored, a family's occurrence at one sort would be read at the sort of the occurrence before it.
+#[test]
+fn a_closed_reduct_served_across_spellings_states_the_asking_sorts() {
+    let mut context = context();
+    let poly = Free::Global(nominal("poly"));
+    let level = Level::param(UniverseParam(0));
+    let left = Quality::Param(QualityParam(0));
+    context.assume(&poly, &Term::type_at(level.succ().unwrap()));
+    context.define(&poly, &Term::sort_at(left, level), None);
+    context.set_assumption_universe_context(
+        &poly,
+        UniverseContext {
+            parameter_count: 1,
+            quality_count: 1,
+            constraints: Vec::new(),
+        },
+    );
+    let at = |level: Level, quality: Quality| {
+        Term::instance_of(
+            &poly,
+            Universes {
+                levels: vec![level],
+                qualities: vec![quality],
+            },
+        )
+    };
+
+    let meta = Level::meta(UniverseMetaId(7));
+    let open = Quality::Meta(QualityMetaId(2));
+    assert_eq!(
+        reduce(&mut context, at(meta.clone(), open)),
+        Ok(Term::sort_at(open, meta))
+    );
+    let spent = context.consumed().units();
+
+    let other = Quality::Meta(QualityMetaId(3));
+    assert_eq!(
+        reduce(&mut context, at(Level::constant(3), other)),
+        Ok(Term::sort_at(other, Level::constant(3))),
+        "the reduct is rewritten to the asking spelling's sort"
+    );
+    assert_eq!(
+        context.consumed().units(),
+        spent,
+        "and served without a step, since the two spellings share one erased key"
+    );
+}
+
+/// A sort an instance states outright is no metavariable to map: a reduct stored for an occurrence at `Prop` is declined for one at `Type`, which is reduced as itself.
+#[test]
+fn a_reduct_stored_at_one_stated_sort_is_not_served_at_another() {
+    let mut context = context();
+    let poly = Free::Global(nominal("poly"));
+    let level = Level::param(UniverseParam(0));
+    context.assume(&poly, &Term::type_at(level.succ().unwrap()));
+    context.define(
+        &poly,
+        &Term::sort_at(Quality::Param(QualityParam(0)), level),
+        None,
+    );
+    context.set_assumption_universe_context(
+        &poly,
+        UniverseContext {
+            parameter_count: 1,
+            quality_count: 1,
+            constraints: Vec::new(),
+        },
+    );
+    let at = |quality: Quality| {
+        Term::instance_of(
+            &poly,
+            Universes {
+                levels: vec![Level::constant(3)],
+                qualities: vec![quality],
+            },
+        )
+    };
+
+    assert_eq!(
+        reduce(&mut context, at(Quality::Prop)),
+        Ok(Term::sort_at(Quality::Prop, Level::constant(3)))
+    );
+    assert_eq!(
+        reduce(&mut context, at(Quality::Type)),
+        Ok(Term::sort_at(Quality::Type, Level::constant(3)))
     );
 }
 

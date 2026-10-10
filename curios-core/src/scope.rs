@@ -310,6 +310,30 @@ pub fn rewrite_universe_levels_scoped<B: Bound, E: 'static>(
     rewrite_levels_through(value, rewrite, Visit::rewriting_levels_scoped)
 }
 
+/// Every level and every quality `value` carries, each sequence in the order one per-occurrence walk meets its members ([`rewrite_universe_levels_scoped`]): what two spellings of one term, apart in their universe instances alone, are aligned by position by position.
+pub fn universes_in_order<B: Bound>(value: &B) -> (Vec<Level>, Vec<Quality>) {
+    let levels = Rc::new(RefCell::new(Vec::new()));
+    let qualities = Rc::new(RefCell::new(Vec::new()));
+    let level_sink = Rc::clone(&levels);
+    let quality_sink = Rc::clone(&qualities);
+    let unchanged: Unchanged = |_, _| None;
+    let mut visit = Visit::rewriting_universes_scoped(
+        unchanged,
+        Box::new(move |_, level| {
+            level_sink.borrow_mut().push(level.clone());
+            level.clone()
+        }),
+        Qualities::Rewritten(Box::new(move |quality| {
+            quality_sink.borrow_mut().push(*quality);
+            *quality
+        })),
+    );
+    let _ = value.traverse(&mut visit);
+    drop(visit);
+
+    (levels.take(), qualities.take())
+}
+
 /// [`rewrite_universe_levels_scoped`], once per node and depth rather than once per occurrence: for a hook whose answer is a function of the level and the depth — a substitution, an instantiation, a check — or whose effect is idempotent. Every such caller walks what finalization and certification walk, and a solution stored as a reduct is a graph whose tree can be exponential in its depth. The first error is the same as the per-occurrence walk's, since skipping a revisit leaves the order first occurrences are met in unchanged.
 pub fn rewrite_universe_levels_scoped_shared<B: Bound, E: 'static>(
     value: &B,
@@ -1185,6 +1209,17 @@ where
             visit,
             mode: Mode::RewritingLevels(rewrite, Qualities::Kept),
             memo: Memo::ByNodeAndDepth(HashMap::new()),
+        }
+    }
+
+    /// [`rewriting_levels_scoped`](Self::rewriting_levels_scoped) with a quality hook beside the level one, each asked once per occurrence and in walk order.
+    fn rewriting_universes_scoped(visit: F, levels: LevelRewrite, qualities: Qualities) -> Self {
+        Self {
+            term_depth: 0,
+            universe_depth: 0,
+            visit,
+            mode: Mode::RewritingLevels(levels, qualities),
+            memo: Memo::None,
         }
     }
 

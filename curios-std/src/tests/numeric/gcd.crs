@@ -89,4 +89,5 @@ test coprimality_is_decided =
         Test/assert(Option/is_some(Coprime/try(9, 28))),
         Test/assert(Option/is_none(Coprime/try(6, 9))),
         Test/assert(Option/is_some(Coprime/try(1, 0))),
-        Test/assert(Option/is_none(Coprime/try(0, 0)))]);
+        Test/assert(Option/is_none(Coprime/try(0, 0))),
+        Test/assert(Option/unwrap_or(Option/map(Coprime/try(9, 28), (_) => true), false))]);

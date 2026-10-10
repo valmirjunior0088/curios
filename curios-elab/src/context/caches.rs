@@ -9,11 +9,12 @@
 use {
     crate::Sort,
     curios_core::{
-        ClosedMemo, Free, Level, LevelHead, RecGroup, Term, UniverseMetaId, Universes,
-        rewrite_universe_levels_scoped, rewrite_universe_levels_scoped_shared,
+        ClosedMemo, Free, Level, LevelHead, Quality, QualityMetaId, RecGroup, Term, UniverseMetaId,
+        Universes, rewrite_universe_levels_scoped_shared, rewrite_universe_qualities,
+        universes_in_order,
     },
     curios_utilities::Entropy,
-    std::{cell::RefCell, collections::HashMap, rc::Rc},
+    std::{cell::RefCell, collections::HashMap, convert::Infallible},
 };
 
 /// Key of one memoized `elaborate` call: the lowered term, the `Check` expected type (`None` for `Infer`), whether an island's representation-privacy checks were live, and whether reduction was plain. Validity under suppressed privacy is directional — an entry that passed strict checks would be valid under suppression, but not the reverse — so checked and suppressed runs each answer only their own partition. A run under plain reduction, which asks the elaborator's conversion nothing (`Context::plainly`), refuses what a judgment's run accepts by a fold or an equation its conversion decided, so a plain run and a judgment's each answer only their own partition as well.
@@ -47,7 +48,7 @@ pub(crate) struct Caches {
     ///
     /// **One table for each of the two reductions**, as the kernel's local-bearing memos have: the first for a judgment's, which may ask the elaborator's conversion at a stuck fold and at a missed equation, and the second for plain reduction, which asks nothing (`Context::plainly`). A term's reduct under one is not its reduct under the other.
     reduction: [HashMap<Term, Term>; 2],
-    /// The reduction table's second door, for the terms mentioning no local binder: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it, so two spellings differing only in their levels — the one checking wrote with universe metavariables and the one totality reads with them solved — are one computation; the exact table cannot see that, and every phase re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`adapted_across_levels`], which rewrites the stored reduct's levels to the asking spelling's or declines.
+    /// The reduction table's second door, for the terms mentioning no local binder: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it and whatever sorts its instances state, so two spellings differing only in those — the one checking wrote with universe metavariables and the one totality reads with them solved — are one computation; the exact table cannot see that, and every phase re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`adapted_across_universes`], which rewrites the stored reduct's levels and sorts to the asking spelling's or declines.
     reduction_erased: [HashMap<Term, Term>; 2],
     /// What the closed machine's runs have answered ([`ClosedMemo`]), one for each of the two reductions as the reducts have: discarded and kept wherever they are.
     closed: [ClosedMemo; 2],
@@ -123,7 +124,7 @@ impl Caches {
             curios_profile::sample!("reduction::across_levels", 1);
             return Some(term.clone());
         }
-        let adapted = adapted_across_levels(key, term, reduct);
+        let adapted = adapted_across_universes(key, term, reduct);
         curios_profile::sample!("reduction::across_levels", u64::from(adapted.is_some()));
         adapted
     }
@@ -435,57 +436,71 @@ impl Caches {
     }
 }
 
-/// `reduct`, stored under `key`, as the answer for `query`, which shares `key`'s universe-erased projection: the stored spelling's levels are matched to the asking spelling's position by position, and the reduct's levels rewritten through the metavariables that differ.
+/// `reduct`, stored under `key`, as the answer for `query`, which shares `key`'s universe-erased projection: the stored spelling's levels and the sorts its instances state are matched to the asking spelling's position by position, and the reduct's rewritten through the metavariables that differ.
 ///
 /// **Sound by level-parametricity.** No reduction rule reads a level — `Type u` is a payload, never a scrutinee — so a reduct is the same function of its term whatever the levels in it, and rewriting the stored reduct's levels through the map the two spellings determine yields exactly what reducing the asking spelling would have. The map is exact or the hit is declined: a stored level that is not a bare metavariable and differs from the asked one, a metavariable asked for two levels, or spellings whose level positions do not align — one carrying an instance the other erased, which projection equates and this cannot map — each decline, and the caller reduces as it would have.
-fn adapted_across_levels(key: &Term, query: &Term, reduct: &Term) -> Option<Term> {
+///
+/// **A sort an instance states is a payload as a level is.** The erased projection drops an instance whole, the sorts it states with its levels, so two spellings it equates may state different sorts: an occurrence of a family at `Prop` beside one at `Type`, or two whose sorts are metavariables of their own. No reduction rule reads one, and the reduct holds them, so they are mapped as the levels are: a stored metavariable to the one sort the asking spelling states in its every place, itself included, and a stored `Prop`, `Type` or parameter to nothing but itself. Served with the stored sorts, the second occurrence would be read at the first one's.
+fn adapted_across_universes(key: &Term, query: &Term, reduct: &Term) -> Option<Term> {
     if !key.has_universe_data() || !query.has_universe_data() {
         return None;
     }
 
-    let stored = levels_in_order(key);
-    let asked = levels_in_order(query);
-    if stored.len() != asked.len() {
+    // Once per occurrence, deliberately: the sequences are the answer, and two spellings are aligned by position in them, so a walk that skipped a revisit on one side would pair the wrong members.
+    let (stored_levels, stored_sorts) = universes_in_order(key);
+    let (asked_levels, asked_sorts) = universes_in_order(query);
+    if stored_levels.len() != asked_levels.len() || stored_sorts.len() != asked_sorts.len() {
         return None;
     }
 
-    let mut map: HashMap<UniverseMetaId, Level> = HashMap::new();
-    for (stored, asked) in stored.iter().zip(&asked) {
+    let mut levels: HashMap<UniverseMetaId, Level> = HashMap::new();
+    for (stored, asked) in stored_levels.iter().zip(&asked_levels) {
         if stored == asked {
             continue;
         }
         let meta = bare_meta(stored)?;
-        match map.insert(meta, asked.clone()) {
+        match levels.insert(meta, asked.clone()) {
             Some(previous) if &previous != asked => return None,
             _ => {}
         }
     }
 
-    if map.is_empty() {
-        return Some(reduct.clone());
+    let mut sorts: HashMap<QualityMetaId, Quality> = HashMap::new();
+    for (stored, asked) in stored_sorts.iter().zip(&asked_sorts) {
+        let Quality::Meta(meta) = stored else {
+            if stored == asked {
+                continue;
+            }
+            return None;
+        };
+        match sorts.insert(*meta, *asked) {
+            Some(previous) if previous != *asked => return None,
+            _ => {}
+        }
+    }
+    sorts.retain(|meta, asked| *asked != Quality::Meta(*meta));
+
+    let levelled = match levels.is_empty() {
+        true => reduct.clone(),
+        false => rewrite_universe_levels_scoped_shared(reduct, move |_, level| {
+            level.substitute(|head| match head {
+                LevelHead::Meta(meta) => levels.get(&meta).cloned(),
+                LevelHead::Param(_) => None,
+            })
+        })
+        .ok()?,
+    };
+    if sorts.is_empty() {
+        return Some(levelled);
     }
 
-    rewrite_universe_levels_scoped_shared(reduct, move |_, level| {
-        level.substitute(|head| match head {
-            LevelHead::Meta(meta) => map.get(&meta).cloned(),
-            LevelHead::Param(_) => None,
+    rewrite_universe_qualities(&levelled, move |quality| {
+        Ok::<_, Infallible>(match quality {
+            Quality::Meta(meta) => sorts.get(meta).copied().unwrap_or(*quality),
+            stated => *stated,
         })
     })
     .ok()
-}
-
-/// Every level a term carries, in the order the level-rewriting walk meets them — the order two spellings of one term share.
-fn levels_in_order(term: &Term) -> Vec<Level> {
-    let levels = Rc::new(RefCell::new(Vec::new()));
-    let sink = Rc::clone(&levels);
-    // Once per occurrence, deliberately: the sequence is the answer, and two spellings are aligned by position in it, so a walk that skipped a revisit on one side would pair the wrong levels.
-    let _ = rewrite_universe_levels_scoped(term, move |_, level: &Level| {
-        sink.borrow_mut().push(level.clone());
-        Ok::<_, ()>(level.clone())
-    });
-    Rc::try_unwrap(levels)
-        .map(RefCell::into_inner)
-        .unwrap_or_else(|shared| shared.borrow().clone())
 }
 
 /// The metavariable `level` is, when it is one bare metavariable and nothing else.

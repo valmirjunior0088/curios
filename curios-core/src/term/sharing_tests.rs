@@ -262,6 +262,36 @@ fn the_per_occurrence_level_walk_asks_every_occurrence() {
     assert_eq!(asked.get(), 8);
 }
 
+/// The walk two spellings' universes are aligned by reads every level and every quality once per occurrence, in walk order: a shared instance at the base of two doublings is four entries of each sequence, as it is four occurrences.
+#[test]
+fn the_per_occurrence_universe_walk_reads_levels_and_sorts_in_order() {
+    let poly = Free::Global(nominal("poly"));
+    let open = Quality::Meta(QualityMetaId(4));
+    let instance = Term::instance_of(
+        &poly,
+        Universes {
+            levels: vec![Level::meta(UniverseMetaId(0))],
+            qualities: vec![open],
+        },
+    );
+    // A sort above level zero: a ground one at zero carries no universe data, and no universe walk enters it.
+    let sort = Term::sort_at(Quality::Prop, Level::constant(1));
+    let term = Term::tuple([doubled(instance, 2), sort]);
+
+    let (levels, qualities) = universes_in_order(&term);
+
+    assert_eq!(
+        levels.len(),
+        5,
+        "four occurrences of the instance, then the sort"
+    );
+    assert_eq!(
+        qualities,
+        vec![open, open, open, open, Quality::Prop],
+        "each occurrence states its sort, and a sort states its own"
+    );
+}
+
 /// Every walk this crate owns, over one doubling term — sixty levels, a tree no walk per path finishes and a graph of sixty-one nodes — answers in the graph's size, and each walk that rebuilds hands back a graph. A walk the crate adds joins this table, so one a change makes per-path again stalls its row here rather than waiting for a profile to find it; the fixtures above hold each walk's own contract beside it. `shift`, `release` and the read of a binder's use run over the same sixty levels with a loose index at their base: `reach` prunes nothing of an open term, so only the node each remembers keeps them in the graph.
 #[test]
 fn every_walk_answers_a_doubling_term_in_its_own_size() {
