@@ -600,9 +600,9 @@ impl Convert {
         Ok(true)
     }
 
-    /// The relation's own rules, for a problem at below, both sides read forced as the kernel's `subsumes` reads them: two `Type`s and two `Prop`s add `lower ≤ upper`, and two function types of one plicity vector pose each domain as an equation and their codomains at below. Answers whether they decided the problem. A `Prop` against a `Type` is none of them, so it goes on as the equation it is not.
+    /// The relation's own rules, for a problem at below, both sides read forced as the kernel's `subsumes` reads them: two sorts of one quality add `lower ≤ upper`, and two function types of one plicity vector pose each domain as an equation and their codomains at below. Answers whether they decided the problem. A `Prop` against a `Type` is none of them, so it goes on as the equation it is not.
     ///
-    /// **A classifier admits either sort.** `Type` at a level the elaborator invented for a type it left to inference — an unannotated binder's, a motive's result, a parked term's — states no sort: it stands where the type's own sort is still to be read, and a proposition is such a type as any other is. So `Prop u` is below it, a level bound. The kernel has no such rule and needs none: a classifier is the type of a metavariable or what a term is checked against, and no elaborated term holds one. Where the elaborator read a sort off a classifier before the type was known, it read `Type`, which is the conservative answer for a proposition and decides nothing the kernel does not decide again.
+    /// **A sort left to inference takes the quality of the first sort it meets.** The sort of a type the elaborator left to inference — an unannotated binder's, a motive's result, a parked term's — has a quality nothing has stated ([`Context::fresh_sort`]), and holding it to a `Prop` or to a `Type` solves it ([`Context::same_quality`]), as holding it to another such sort makes the two one. The kernel has no such rule and needs none: a quality still open where its declaration closes is a type's, so no elaborated term holds one.
     ///
     /// Any other pair is the equation it is, taken from its written spelling through every step an equation takes: that is sufficient for a subsumption, and it is the whole of one wherever neither side can come to a sort or a function type. A problem those steps leave waiting on a metavariable keeps the relation it was asked at, so it resumes here.
     fn decide_below(
@@ -615,35 +615,16 @@ impl Convert {
         let upper = reduce_forced(context, that.clone())?;
 
         match (&*lower, &*upper) {
-            (below @ Subterm::Sort(Quality::Type, lower), Subterm::Sort(Quality::Type, upper))
-            | (below @ Subterm::Sort(Quality::Prop, lower), Subterm::Sort(Quality::Prop, upper)) => {
+            (Subterm::Sort(below, lower), Subterm::Sort(above, upper)) => {
+                // No proposition stands where a type is wanted: two sorts are related where they are one quality, which solves one still open, and each is cumulative in its own levels.
+                if !context.same_quality(*below, *above) {
+                    return Ok(false);
+                }
                 // What is put below is named for the report: a proposition's level and a type's are told apart by nothing else on the path.
-                let kind = match below {
-                    Subterm::Sort(Quality::Prop, _) => {
-                        UniverseConstraintKind::PropositionCumulativity
-                    }
+                let kind = match context.universes().quality(*below) {
+                    Quality::Prop => UniverseConstraintKind::PropositionCumulativity,
                     _ => UniverseConstraintKind::Cumulativity,
                 };
-                let lower = lower.clone();
-                context
-                    .universes_mut()
-                    .add_leq(
-                        lower,
-                        upper.clone(),
-                        UniverseConstraintOrigin {
-                            extent: self.extent,
-                            kind,
-                            declaration: None,
-                            binder: None,
-                        },
-                    )
-                    .map_err(ReduceError::Universe)?;
-
-                Ok(true)
-            }
-            (Subterm::Sort(Quality::Prop, lower), Subterm::Sort(Quality::Type, upper))
-                if context.universes().classifies(upper) =>
-            {
                 context
                     .universes_mut()
                     .add_leq(
@@ -651,7 +632,7 @@ impl Convert {
                         upper.clone(),
                         UniverseConstraintOrigin {
                             extent: self.extent,
-                            kind: UniverseConstraintKind::PropositionCumulativity,
+                            kind,
                             declaration: None,
                             binder: None,
                         },
@@ -2218,7 +2199,7 @@ impl Convert {
         match &*forced {
             Subterm::Sort(quality, level) => {
                 // What is put below is named for the report, as the relation's own rule names it.
-                let kind = match quality {
+                let kind = match context.universes().quality(*quality) {
                     Quality::Prop => UniverseConstraintKind::PropositionCumulativity,
                     _ => UniverseConstraintKind::Cumulativity,
                 };
@@ -2487,10 +2468,7 @@ impl Convert {
             // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the kernel's order, for the kernel's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof would spend the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
             if !this.has_metavar()
                 && !that.has_metavar()
-                && matches!(
-                    Sort::of_under(context, &posed, &mut Vec::new(), &type_)?,
-                    Sort::Prop(_)
-                )
+                && Sort::of_under(context, &posed, &mut Vec::new(), &type_)?.is_prop()
             {
                 continue;
             }
@@ -2586,7 +2564,7 @@ impl Convert {
             }
 
             // Definitional proof irrelevance: any two inhabitants of a strict proposition are convertible. Placed after the metavar dispatch so a flexible side is still solved against the other (a metavar is not left dangling merely because its type is a proposition); a pair with neither side flexible was decided before either was reduced, above.
-            if let Sort::Prop(_) = Sort::of_under(context, &posed, &mut Vec::new(), &type_)? {
+            if Sort::of_under(context, &posed, &mut Vec::new(), &type_)?.is_prop() {
                 continue;
             }
 
@@ -2686,9 +2664,9 @@ impl Convert {
                 (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
                     convert_intrinsic(self, context, this, that)?
                 }
-                (Subterm::Sort(Quality::Type, this), Subterm::Sort(Quality::Type, that))
-                | (Subterm::Sort(Quality::Prop, this), Subterm::Sort(Quality::Prop, that)) => {
-                    Self::join_levels(context, &this, &that)?
+                (Subterm::Sort(this_quality, this), Subterm::Sort(that_quality, that)) => {
+                    context.same_quality(this_quality, that_quality)
+                        && Self::join_levels(context, &this, &that)?
                 }
                 (Subterm::Instance(this), Subterm::Instance(that)) => {
                     if !Self::compare_levels(context, &this.levels, &that.levels)? {
@@ -3021,10 +2999,7 @@ fn holds_data<B: Bound>(
             false => type_,
         };
         if type_.has_metavar()
-            || !matches!(
-                Sort::of_under(context, binders, &mut Vec::new(), &type_)?,
-                Sort::Prop(_)
-            )
+            || !Sort::of_under(context, binders, &mut Vec::new(), &type_)?.is_prop()
         {
             return Ok(true);
         }
@@ -3056,10 +3031,7 @@ fn by_their_own_type(
     // The type first, and the sides only where it decides: nearly every pair here is two types at a sort, which this leaves at the cost of two lookups.
     let this_type = through(context, &this_type);
     if this_type.has_metavar()
-        || !matches!(
-            Sort::of_under(context, binders, &mut Vec::new(), &this_type)?,
-            Sort::Prop(_)
-        )
+        || !Sort::of_under(context, binders, &mut Vec::new(), &this_type)?.is_prop()
     {
         return Ok(false);
     }

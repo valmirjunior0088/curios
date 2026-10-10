@@ -29,8 +29,8 @@ pub use subterm::*;
 use {
     super::{
         Atom, Bound, Enter, Extent, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
-        MaskedLevels, Quality, Scope, SelfReference, Spelled, Spelling, Telescope, Three, Two,
-        UniverseMetaId, Var, Variance, Visit, print_term, project_erased_universes,
+        MaskedLevels, Quality, QualityMetaId, Scope, SelfReference, Spelled, Spelling, Telescope,
+        Three, Two, UniverseMetaId, Var, Variance, Visit, print_term, project_erased_universes,
         stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
@@ -200,6 +200,27 @@ impl Term {
                     return ControlFlow::Continue(Enter::Skip(()));
                 }
                 if term.look().any_direct_universe_meta(&mut pred) {
+                    return ControlFlow::Break(());
+                }
+                ControlFlow::Continue(Enter::Descend)
+            },
+            |_, _, _| (),
+        )
+        .is_break()
+    }
+
+    /// Whether any quality metavariable one of this subtree's sorts states satisfies `pred`. Walked as [`Term::any_universe_meta`] is, past every subtree that holds no universe metavariable.
+    pub fn any_quality_meta(&self, mut pred: impl FnMut(QualityMetaId) -> bool) -> bool {
+        let mut seen: HashSet<*const Node> = HashSet::new();
+        self.try_walk(
+            &mut seen,
+            |seen, term| {
+                if !seen.insert(Rc::as_ptr(&term.inner)) || !term.has_universe_meta() {
+                    return ControlFlow::Continue(Enter::Skip(()));
+                }
+                if let Subterm::Sort(Quality::Meta(meta), _) = term.look()
+                    && pred(*meta)
+                {
                     return ControlFlow::Break(());
                 }
                 ControlFlow::Continue(Enter::Descend)

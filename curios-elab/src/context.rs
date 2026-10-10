@@ -65,10 +65,10 @@ use {
     curios_core::{
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Definition, DefinitionKind,
         Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl,
-        Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, Probe, RecGroup,
+        Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, Probe, Quality, RecGroup,
         ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, Variance,
-        WitnessKey, WitnessOrigin, instantiate_universe_levels_scoped,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
+        Variance, WitnessKey, WitnessOrigin, instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -938,16 +938,13 @@ impl<'s> Context<'s> {
     }
 
     fn has_unsolved_universe_meta(&self, term: &Term) -> bool {
-        term.any_universe_meta(|meta| {
-            match self
-                .underway
-                .attempt
-                .universe_solver
-                .zonk(&Level::meta(meta))
-            {
-                Ok(level) => level.metas().next().is_some(),
-                Err(_) => true,
-            }
+        let solver = &self.underway.attempt.universe_solver;
+
+        term.any_universe_meta(|meta| match solver.zonk(&Level::meta(meta)) {
+            Ok(level) => level.metas().next().is_some(),
+            Err(_) => true,
+        }) || term.any_quality_meta(|meta| {
+            matches!(solver.quality(Quality::Meta(meta)), Quality::Meta(_))
         })
     }
 
@@ -2514,14 +2511,36 @@ impl<'s> Context<'s> {
             .map(Level::meta)
     }
 
-    /// The sort of a type left to inference: `Type` at a classifier's level ([`UniverseSolver::fresh_classifier`]), which states no sort, so a proposition is admitted under it as a type is.
-    pub(crate) fn fresh_classifier_type(&mut self, kind: &str) -> Term {
+    /// The sort of a type left to inference: its quality and its level each a metavariable of its own ([`UniverseSolver::fresh_quality`]), so the first sort it is held to decides whether it is a proposition's or a type's.
+    pub(crate) fn fresh_sort(&mut self, kind: &str) -> Term {
+        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Other(kind.into()));
+        let quality = self.universes_mut().fresh_quality(Some(origin.clone()));
         let level = self
             .universes_mut()
-            .fresh_classifier(Some(UniverseConstraintOrigin::new(
-                UniverseConstraintKind::Other(kind.into()),
-            )));
-        Term::type_at(Level::meta(level))
+            .fresh(UniverseRole::Flexible, Some(origin));
+        Term::sort_at(quality, Level::meta(level))
+    }
+
+    /// Close the qualities nothing decided, each as a type's ([`UniverseSolver::default_qualities`]). An item closes them once it has drained what it parked: a problem that waited on a metavariable may be the one that puts a proposition under a sort left to inference, and it is retried after the item's levels have closed.
+    pub(crate) fn close_qualities(&mut self) {
+        self.universes_mut().default_qualities();
+    }
+
+    /// Hold two sorts' qualities one, as conversion compares them: an unsolved one solved to the other, and two that each state a sort one where they state the same. Where conversion answers a question asked with nothing committed it solves none, as it joins no two levels there ([`Context::withholds`]), and an equation it would have made is noted on the question.
+    pub(crate) fn same_quality(&mut self, this: Quality, that: Quality) -> bool {
+        let this = self.universes().quality(this);
+        let that = self.universes().quality(that);
+        if this == that {
+            return true;
+        }
+        if self.typing.asking.withholding() {
+            if matches!(this, Quality::Meta(_)) || matches!(that, Quality::Meta(_)) {
+                self.typing.asking.note_withheld();
+            }
+            return false;
+        }
+
+        self.universes_mut().unify_qualities(this, that)
     }
 
     pub(crate) fn default_universes(&mut self, terms: &[&Term]) -> Result<Vec<Term>, Error> {
@@ -2530,6 +2549,7 @@ impl<'s> Context<'s> {
             .flat_map(|term| self.universe_metas_in(term))
             .collect::<BTreeSet<_>>();
         self.universes_mut().default(metas).map_err(Error::from)?;
+        self.universes_mut().default_qualities();
         self.underway.scheme_open = false;
         let solver = self.underway.attempt.universe_solver.clone();
         let terms = terms

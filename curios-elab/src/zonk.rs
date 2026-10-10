@@ -10,11 +10,11 @@ use {
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
         Entrypoint, Extent, Free, Func, FuncType, Global, InductDecl, InductParam, InductType,
         Instance, InstanceHead, Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar,
-        MetavarId, MetavarOrigin, Minted, Module, NodeMemo, Nominal, Proj, Rec, RecGroup, RecItem,
-        RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
+        MetavarId, MetavarOrigin, Minted, Module, NodeMemo, Nominal, Proj, Quality, Rec, RecGroup,
+        RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
         TupleType, UniverseContext, UniverseError, UniverseMetaId, Var, Variant, Visit,
-        project_erased_universes, rewrite_universe_levels_scoped_shared, shift_universe_params,
-        universe_metas,
+        project_erased_universes, rewrite_universe_levels_scoped_shared,
+        rewrite_universe_qualities, shift_universe_params, universe_metas,
     },
     curios_utilities::recurse,
     std::{
@@ -976,7 +976,10 @@ pub(crate) fn report_goals(
     let display = |term: &Term| {
         contract_redexes(&refold_recs(
             context,
-            &project_erased_universes(&zonk_solved_term_metas(context, term)),
+            &project_erased_universes(&settle_qualities(
+                context,
+                &zonk_solved_term_metas(context, term),
+            )),
         ))
     };
     sites
@@ -1014,7 +1017,12 @@ pub(crate) fn report_goals(
 
 /// The report a written goal `?` errors out with: the local scope frozen at its birth, the goal's type, and the solution elaboration committed (if any) — each zonked for *display*, keeping the raw spelling where unsolved holes survive (the same tolerance the no-witness report uses).
 fn goal_report(context: &Zonk, id: MetavarId) -> Error {
-    let display = |term: &Term| zonk_term(context, term).unwrap_or_else(|_| term.clone());
+    let display = |term: &Term| {
+        settle_qualities(
+            context,
+            &zonk_term(context, term).unwrap_or_else(|_| term.clone()),
+        )
+    };
     match context.metavar_entry(id) {
         Some(entry) => Error::goal(
             entry
@@ -1193,7 +1201,7 @@ fn zonk_levels(context: &Zonk, levels: &[Level]) -> Result<Vec<Level>, Error> {
 fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
     Ok(match &**term {
         Subterm::Sort(quality, level) => Subterm::Sort(
-            *quality,
+            context.universes().quality(*quality),
             context.universes().zonk(level).map_err(Error::from)?,
         ),
         Subterm::Foreign(function, args) => {
@@ -1503,6 +1511,29 @@ fn zonk_field_telescope(context: &Zonk, telescope: &Telescope<()>) -> Result<Tel
     }
 }
 
+/// `quality` as `table` has it ([`UniverseSolver::quality_table`]): a metavariable by its index, and anything else as it stands.
+fn tabled_quality(table: &[Quality], quality: &Quality) -> Quality {
+    match quality {
+        Quality::Meta(meta) => table.get(meta.0).copied().unwrap_or(*quality),
+        _ => *quality,
+    }
+}
+
+/// `value` with each sort's quality as far as it is solved, and one nothing has decided as the `Type` it closes as: the form a report shows, to a reader who writes no quality metavariable.
+pub(crate) fn settle_qualities<B: Bound>(context: &Context, value: &B) -> B {
+    if !context.universes().has_qualities() {
+        return value.clone();
+    }
+    let table = context.universes().quality_table(true);
+    let settled: Result<B, std::convert::Infallible> =
+        rewrite_universe_qualities(value, move |quality| Ok(tabled_quality(&table, quality)));
+
+    match settled {
+        Ok(settled) => settled,
+        Err(never) => match never {},
+    }
+}
+
 /// Replace every solved universe metavariable under `value`'s binders by its recursively zonked solution, shifting each solution past the binders it crosses.
 ///
 /// Lives here rather than beside the scoped-rewrite traversals it calls: those are representation, while [`UniverseSolver`] is elaboration state.
@@ -1531,8 +1562,10 @@ pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
         })
     }
 
+    // A sort's quality as far as it is solved, read with the levels: one walk where no quality was minted, which is every declaration that leaves no sort to inference.
+    let qualities = solver.has_qualities().then(|| solver.quality_table(false));
     let solver = solver.clone();
-    rewrite_universe_levels_scoped_shared(value, move |depth, level| {
+    let levelled = rewrite_universe_levels_scoped_shared(value, move |depth, level| {
         let mut replacements = BTreeMap::new();
         for meta in level.metas() {
             if let Some(solution) = solver.solution(meta) {
@@ -1544,5 +1577,12 @@ pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
             LevelHead::Param(_) => None,
             LevelHead::Meta(meta) => replacements.get(&meta).cloned(),
         })
-    })
+    })?;
+
+    match qualities {
+        Some(table) => rewrite_universe_qualities(&levelled, move |quality| {
+            Ok(tabled_quality(&table, quality))
+        }),
+        None => Ok(levelled),
+    }
 }

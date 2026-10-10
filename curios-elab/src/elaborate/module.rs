@@ -16,11 +16,11 @@ use {
         Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Traces, Zonked,
         body_levels, check_concept_registry, check_is_sort, check_proof_totality,
         check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
-        decide_polarities, definition_variances, family_levels, goal_sites, hold_variances,
-        is_prop, record_definition_totality, record_superclasses, record_variances, reduce_with,
-        register_witness, report_goals, sort_term, stamp_totality, state_proof_binders,
-        superclass_targets, test_program_tail, validate_entry_universes, validate_universes, zonk,
-        zonk_arity, zonk_entry, zonk_published, zonk_solved_term_metas,
+        decide_polarities, definition_variances, family_levels, goal_sites, hold_prop,
+        hold_variances, record_definition_totality, record_superclasses, record_variances,
+        reduce_with, register_witness, report_goals, sort_term, stamp_totality,
+        state_proof_binders, superclass_targets, test_program_tail, validate_entry_universes,
+        validate_universes, zonk, zonk_arity, zonk_entry, zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -392,7 +392,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
             // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
             if declared_prop {
                 for ((_, _, ty), label) in fields.iter().zip(&field_labels) {
-                    if !is_prop(context, ty)? {
+                    if !hold_prop(context, ty)? {
                         return Err(Error::informative_prop_struct(
                             name.symbol(),
                             label.clone(),
@@ -1288,6 +1288,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     context
         .drain_parked()
         .map_err(|error| error.in_declaration(&item_names, owner))?;
+    context.close_qualities();
     context.finish_universe_transaction();
 
     if context.holds_goals() {

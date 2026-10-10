@@ -37,6 +37,18 @@ fn solved_goal_reports_its_solution() {
     );
 }
 
+#[test]
+fn a_goal_solved_by_a_proposition_is_reported_at_prop() {
+    // The goal stands for a type left to inference, whose sort is a quality its solution decides: `True` is a proposition, so the goal is reported at `Prop`.
+    let error = compile("let u : ? = /std/Bool/True/qed(); /std/Io/pure(())").unwrap_err();
+
+    assert!(error.contains("? : Prop"), "unexpected error: {error}");
+    assert!(
+        error.contains("? =") && error.contains("True"),
+        "unexpected error: {error}"
+    );
+}
+
 /// A prelude signature is reported under the names it was written with: `pow(base: Nat, exp: Nat)` is one type with `min(a: Nat, b: Nat)`, a row beside it in `/sys/Nat`, and is stored as its own spelling of it.
 ///
 /// Mutation-checked: with the image's table keyed on the term alone, whose equality reads no binder name, `pow` is stored as the node `min` was, and reported as `(a: /std/Nat, b: /std/Nat) -> /std/Nat`.

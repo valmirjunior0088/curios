@@ -2,16 +2,16 @@ use {
     super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
     crate::{
         BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_motive,
-        contradicted_guard, is_prop, reduce_with, refine_head, resolved_for_display,
-        same_uncommitted, stuck_on_metavar, unreachable_arm,
+        contradicted_guard, hold_prop, is_prop, quality_of, reduce_with, refine_head,
+        resolved_for_display, same_uncommitted, stuck_on_metavar, unreachable_arm,
     },
     curios_analysis::{
         Invert, invert_indices, retyped, scrutinee_solution, solve_indices, wholly_pinned,
     },
     curios_core::{
         Advance, Arity, Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic,
-        IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Scope, Subterm, Telescope,
-        Term, Three, Two,
+        IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Quality, Scope, Subterm,
+        Telescope, Term, Three, Two,
     },
     curios_num::{Binary, Grain, Natural},
     curios_utilities::Plicity,
@@ -571,8 +571,8 @@ fn park_match(
     let result = match &mode {
         Mode::Check(expected) => expected.clone(),
         Mode::Infer => {
-            let classifier = context.fresh_classifier_type("parked match type");
-            context.fresh_hole_metavar(classifier, term.extent())
+            let sort = context.fresh_sort("parked match type");
+            context.fresh_hole_metavar(sort, term.extent())
         }
     };
     let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.extent());
@@ -904,13 +904,19 @@ fn elaborate_induct_match(
     // Whether the scrutinee's family is a proposition whose one constructor has every payload pinned: the only kind a match may take into data once it has an arm, and the kind whose arms are written over what their equations state below.
     let proposition = is_prop(context, &head_type)?;
     let pinned = proposition && singleton_eliminable(context, &induct_decl, &params);
-    if proposition && !is_prop(context, &result_type)? {
-        // A match with no arm is vacuous: the coverage check below proves every constructor ruled out at the scrutinee's indices, so nothing is eliminated. Any other is judged by the family's declared constructors, as the kernel judges it, so a second constructor the indices rule out here counts all the same. A catch-all default stands in for more than one constructor — a relevant result branching on an erased scrutinee's tag is exactly what this guard forbids — so it is never permitted here. (A prop-into-prop defaulted match never reaches this branch.)
-        let permitted = default.is_none() && (cases.is_empty() || pinned);
-        if !permitted {
-            return Err(Error::large_elim_of_prop(name.symbol()));
-        }
-    }
+    // A match with no arm is vacuous: the coverage check below proves every constructor ruled out at the scrutinee's indices, so nothing is eliminated. Any other is judged by the family's declared constructors, as the kernel judges it, so a second constructor the indices rule out here counts all the same. A catch-all default stands in for more than one constructor — a relevant result branching on an erased scrutinee's tag is exactly what this guard forbids — so it is never permitted here. (A prop-into-prop defaulted match never reaches this branch.)
+    let permitted = default.is_none() && (cases.is_empty() || pinned);
+    // Every other match on a proposition answers a proposition and nothing else. A result known for data is refused here, before an arm is read. One whose sort nothing has decided waits for the arms, which decide it where they are typed, and is held to `Prop` after them ([`hold_prop`]): so a match its arms make data is refused as this elimination, and not as a mismatch in an arm.
+    let undecided = match proposition && !permitted {
+        false => false,
+        true => match quality_of(context, &result_type)? {
+            Quality::Prop => false,
+            Quality::Meta(_) => true,
+            Quality::Type | Quality::Param(_) => {
+                return Err(Error::large_elim_of_prop(name.symbol()));
+            }
+        },
+    };
 
     // Every written arm must name a constructor; coverage is decided per constructor below — a missing arm is legal iff inversion proves it impossible.
     if let Some(tag) = cases
@@ -1097,6 +1103,10 @@ fn elaborate_induct_match(
     let default_elaborated = default
         .map(|d| context.with_frame(|context| check(context, d, result_type.clone())))
         .transpose()?;
+
+    if undecided && !hold_prop(context, &result_type)? {
+        return Err(Error::large_elim_of_prop(name.symbol()));
+    }
 
     // A match with one arm over a proposition whose indices pin its payload states the instance it eliminates: reduction fires it on that instance and reads no binder's type, so what it is moves with the term and with nothing else.
     let stated = (pinned && default_elaborated.is_none() && cases_elaborated.len() == 1)

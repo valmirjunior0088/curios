@@ -1,4 +1,4 @@
-//! The universe a type inhabits, as conversion classifies it: `Prop` for a strict proposition, `Type` otherwise.
+//! The universe a type inhabits, as conversion classifies it: its quality, `Prop` for a strict proposition, and its level.
 
 #[cfg(test)]
 mod tests;
@@ -12,15 +12,46 @@ use {
     },
 };
 
-/// The universe a type inhabits — `Prop` for a strict proposition, `Type` otherwise.
+/// The universe a type inhabits: its quality, as far as it is solved, and its level.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Sort {
-    Type(Level),
-    Prop(Level),
+pub(crate) struct Sort {
+    pub(crate) quality: Quality,
+    pub(crate) level: Level,
 }
 
 impl Sort {
-    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting would read it as an ordinary implicit nothing retries.
+    /// The quality of a record of fields at `this` and at `that`: a type's where either is one, a proposition's where both are, and an open one where it is the only one that is not a proposition's. Two open qualities apart have no join a sort can state, and are read as a type's, which is what a quality nothing decides closes as.
+    pub(crate) fn join(this: Quality, that: Quality) -> Quality {
+        match (this, that) {
+            (Quality::Type, _) | (_, Quality::Type) => Quality::Type,
+            (Quality::Prop, other) | (other, Quality::Prop) => other,
+            (this, that) if this == that => this,
+            _ => Quality::Type,
+        }
+    }
+
+    /// `Type` at `level`.
+    pub(crate) fn type_at(level: Level) -> Sort {
+        Sort {
+            quality: Quality::Type,
+            level,
+        }
+    }
+
+    /// `Prop` at `level`.
+    pub(crate) fn prop_at(level: Level) -> Sort {
+        Sort {
+            quality: Quality::Prop,
+            level,
+        }
+    }
+
+    /// Whether this is a sort of propositions. One whose quality is open is not: irrelevance is taken where a type is known a proposition, and a sort not decided yet, or left to a caller, is not known one.
+    pub(crate) fn is_prop(&self) -> bool {
+        self.quality.is_prop()
+    }
+
+    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting would read it as an ordinary implicit nothing retries. A quality still open is handed back as it stands, a metavariable or a declaration's parameter, and is no proposition's to [`Sort::is_prop`].
     pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
         Sort::of_in(context, &mut Vec::new(), type_)
     }
@@ -54,7 +85,8 @@ impl Sort {
         }
 
         let sort = Sort::classify_under(context, binders, opened, type_)?;
-        if remembered {
+        // A sort read while its quality is unsolved is the answer of this reading alone: the next one may meet it solved.
+        if remembered && !matches!(sort.quality, Quality::Meta(_)) {
             context.record_sort(type_.clone(), sort.clone());
         }
 
@@ -70,7 +102,7 @@ impl Sort {
     ) -> Result<Sort, ReduceError> {
         // Asked of the type as written, before anything is run to classify it.
         if let Some(level) = Sort::declared_into_prop(context, binders, opened, type_)? {
-            return Ok(Sort::Prop(level));
+            return Ok(Sort::prop_at(level));
         }
 
         let reduced = reduce_forced(context, type_.clone())?;
@@ -87,7 +119,7 @@ impl Sort {
                 }
                 None => {
                     probe_level_fallback("induct decl missing", &reduced);
-                    Sort::Type(Level::zero())
+                    Sort::type_at(Level::zero())
                 }
             },
             Subterm::StructType(StructType {
@@ -101,20 +133,19 @@ impl Sort {
                 }
                 None => {
                     probe_level_fallback("struct decl missing", &reduced);
-                    Sort::Type(Level::zero())
+                    Sort::type_at(Level::zero())
                 }
             },
             // A *non-empty* record of propositions is a proposition. The empty tuple `{}` is unit, not a prop: it is the result type of effects (`/std/print : .. -> {}`), so it stays `Type` (the `_` arm) and is kept at runtime rather than erased.
             Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
                 // A later field may mention an earlier one, so each opened binder joins `opened` before the walk descends. See the `FuncType` arm below for why leaving it out is not merely imprecise but silently wrong. Each field is opened once, at every binder before it: opening binder by binder would rewrite every later field, whose metavariable spines name every earlier one.
                 let mut levels = Vec::new();
-                let mut proofs = Vec::new();
+                let mut quality = Quality::Prop;
                 let mark = opened.len();
                 telescope.walk_producing(|_, hint, ty| {
-                    match Sort::of_under(context, binders, opened, &ty)? {
-                        Sort::Type(level) => levels.push(level),
-                        Sort::Prop(level) => proofs.push(level),
-                    }
+                    let field = Sort::of_under(context, binders, opened, &ty)?;
+                    quality = Sort::join(quality, field.quality);
+                    levels.push(field.level);
                     let binder = context.fresh(hint);
                     let variable = Term::free_var(&binder);
                     opened.push((binder, ty));
@@ -122,16 +153,13 @@ impl Sort {
                 })?;
                 opened.truncate(mark);
 
-                match levels.is_empty() {
-                    true => Sort::Prop(Level::max(proofs)),
-                    false => {
-                        levels.extend(proofs);
-                        Sort::Type(Level::max(levels))
-                    }
+                Sort {
+                    quality,
+                    level: Level::max(levels),
                 }
             }
             // The empty tuple `{}` is unit — it quantifies over nothing, so level 0 is the answer rather than a default, and like `Prop` below it is not worth reporting as a fallback.
-            Subterm::TupleType(_) => Sort::Type(Level::zero()),
+            Subterm::TupleType(_) => Sort::type_at(Level::zero()),
             // An intrinsic type former states its own level.
             //
             // A closed intrinsic is small: it quantifies over nothing, so it sits at level 0. A parameterized one carries its parameter's level — `List : Type u -> Type u` — and pinning those at 0 would claim the type is smaller than it is, which is the unsound direction: it is what would let a large type be stored in a small universe.
@@ -142,17 +170,14 @@ impl Sort {
                 | Intrinsic::IntType
                 | Intrinsic::FltType
                 | Intrinsic::BinType(_)
-                | Intrinsic::HandleType => Sort::Type(Level::zero()),
+                | Intrinsic::HandleType => Sort::type_at(Level::zero()),
                 Intrinsic::ListType(element)
                 | Intrinsic::CellType(element)
                 | Intrinsic::ChannelType(element)
                 | Intrinsic::IoType(element) => {
                     let element = element.clone();
-                    match Sort::of_under(context, binders, opened, &element)? {
-                        Sort::Type(level) => Sort::Type(level),
-                        // A list, cell, or description of proofs is not itself a proposition — it has length, identity, or an effect, so its inhabitants are distinguishable and proof irrelevance does not apply. It lands at `Type` instead, and `Prop : Type 0`. For `Io` that is what keeps sort-driven erasure from dropping a description of a proof and its host effect with it.
-                        Sort::Prop(level) => Sort::Type(level),
-                    }
+                    // A list, cell, or description of proofs is not itself a proposition — it has length, identity, or an effect, so its inhabitants are distinguishable and proof irrelevance does not apply. It lands at `Type` whatever its element's quality, at the element's level. For `Io` that is what keeps sort-driven erasure from dropping a description of a proof and its host effect with it.
+                    Sort::type_at(Sort::of_under(context, binders, opened, &element)?.level)
                 }
                 // An intrinsic *value* in type position is not a shape this can classify, and unlike the formers above it is not expected.
                 //
@@ -265,13 +290,13 @@ impl Sort {
                 | Intrinsic::NatMin(..)
                 | Intrinsic::NatMax(..) => {
                     probe_level_fallback("non-type intrinsic", &reduced);
-                    Sort::Type(Level::zero())
+                    Sort::type_at(Level::zero())
                 }
             },
             // A host call is a value, never a type, so it takes the same ground level the non-type intrinsics above do.
             Subterm::Foreign(..) => {
                 probe_level_fallback("host call", &reduced);
-                Sort::Type(Level::zero())
+                Sort::type_at(Level::zero())
             }
             // Π into a proposition is a proposition.
             Subterm::FuncType(FuncType { telescope, .. }) => {
@@ -279,26 +304,20 @@ impl Sort {
                 let mut domains = Vec::new();
                 let mark = opened.len();
                 let (_, output) = telescope.walk_producing(|_, hint, domain| {
-                    let (Sort::Type(level) | Sort::Prop(level)) =
-                        Sort::of_under(context, binders, opened, &domain)?;
-                    domains.push(level);
+                    domains.push(Sort::of_under(context, binders, opened, &domain)?.level);
                     let binder = context.fresh(hint);
                     let variable = Term::free_var(&binder);
                     opened.push((binder, domain));
                     Ok(variable)
                 })?;
-                let sort = match Sort::of_under(context, binders, opened, &output)? {
-                    Sort::Prop(output) => {
-                        domains.push(output);
-                        Sort::Prop(Level::max(domains))
-                    }
-                    Sort::Type(output) => {
-                        domains.push(output);
-                        Sort::Type(Level::max(domains))
-                    }
-                };
+                // A function type takes its codomain's quality, a proposition where it answers one, at the join of its domains' levels and the codomain's.
+                let output = Sort::of_under(context, binders, opened, &output)?;
+                domains.push(output.level);
                 opened.truncate(mark);
-                sort
+                Sort {
+                    quality: output.quality,
+                    level: Level::max(domains),
+                }
             }
             // A type-valued match (`Lt = match _ : Prop | ..`): its sort is its result — a constant `Prop` when the result is a proposition.
             Subterm::Match(m) => match &m.result {
@@ -317,37 +336,46 @@ impl Sort {
                     Some(sort) => Sort::from_universe(context, &sort)?,
                     None => {
                         probe_level_fallback("neutral type unsynthesizable", &reduced);
-                        Sort::Type(Level::zero())
+                        Sort::type_at(Level::zero())
                     }
                 }
             }
-            Subterm::Sort(_, level) => Sort::Type(level.succ().map_err(ReduceError::Universe)?),
+            Subterm::Sort(_, level) => Sort::type_at(level.succ().map_err(ReduceError::Universe)?),
             Subterm::Instance(instance) => {
                 Sort::of_under(context, binders, opened, &instance.head.to_term())?
             }
-            // An unsolved metavariable whose type is `Prop` is a proposition whatever it is solved to, so the answer is exact rather than conservative: `@P: Prop, @p: P` makes `p` a bound before `P` is known. A solved one never reaches here, since reduction substitutes its solution, and `Prop` is closed, so the spine an occurrence carries changes nothing. At any other type an unsolved one keeps the fallback below, since its level is what the solution will say.
+            // An unsolved metavariable is classified by the sort its own type states, which no solution changes: one whose type is `Prop` is a proposition before it is solved, so `@P: Prop, @p: P` makes `p` a bound before `P` is known, and one whose type's quality is open has that quality, for a reader that decides it or takes its own safe answer. A solved one never reaches here, since reduction substitutes its solution, and a sort is closed, so the spine an occurrence carries changes nothing. At a type its level is what the solution will say, so it keeps the fallback below.
             Subterm::Metavar(metavar) => {
                 let result = context
                     .metavar_entry(metavar.id)
                     .map(|entry| entry.result.clone());
-                let proposition = match result {
+                let stated = match result {
                     Some(result) => match &*reduce(context, result)? {
-                        Subterm::Sort(Quality::Prop, level) => Some(level.clone()),
+                        Subterm::Sort(quality, level) => {
+                            Some((context.universes().quality(*quality), level.clone()))
+                        }
                         _ => None,
                     },
                     None => None,
                 };
-                match proposition {
-                    Some(level) => Sort::Prop(level),
-                    None => {
+                match stated {
+                    Some((Quality::Prop, level)) => Sort::prop_at(level),
+                    Some((quality @ (Quality::Meta(_) | Quality::Param(_)), _)) => {
                         probe_level_fallback("unsolved metavariable", &reduced);
-                        Sort::Type(Level::zero())
+                        Sort {
+                            quality,
+                            level: Level::zero(),
+                        }
+                    }
+                    Some((Quality::Type, _)) | None => {
+                        probe_level_fallback("unsolved metavariable", &reduced);
+                        Sort::type_at(Level::zero())
                     }
                 }
             }
             _ => {
                 probe_level_fallback("unclassified shape", &reduced);
-                Sort::Type(Level::zero())
+                Sort::type_at(Level::zero())
             }
         })
     }
@@ -380,30 +408,33 @@ impl Sort {
 
         Ok(match synth_neutral(context, binders, opened, type_)? {
             Some(declared) => match &*reduce(context, declared)? {
-                Subterm::Sort(Quality::Prop, level) => Some(level.clone()),
+                Subterm::Sort(quality, level)
+                    if context.universes().quality(*quality).is_prop() =>
+                {
+                    Some(level.clone())
+                }
                 _ => None,
             },
             None => None,
         })
     }
 
-    /// The universe term this sort denotes — `Type` or `Prop`. The inverse of [`Sort::from_universe`]; used as the type-of-a-type a type-former reports.
+    /// The universe term this sort denotes. The inverse of [`Sort::from_universe`]; used as the type-of-a-type a type-former reports.
     pub(crate) fn term(self) -> Term {
-        match self {
-            Sort::Type(level) => Term::type_at(level),
-            Sort::Prop(level) => Term::prop_at(level),
-        }
+        Term::sort_at(self.quality, self.level)
     }
 
     /// Decode a universe term — a kind's codomain, a match motive, or a synthesized neutral type — into its sort. Distinct from [`Sort::of`], which classifies an arbitrary *type*: `from_universe(Prop) = Prop`, whereas `of(Prop) = Type` (the universe `Prop` is itself `Type`-sorted).
     fn from_universe(context: &mut Context, universe: &Term) -> Result<Sort, ReduceError> {
         let reduced = reduce(context, universe.clone())?;
         Ok(match &*reduced {
-            Subterm::Sort(Quality::Prop, level) => Sort::Prop(level.clone()),
-            Subterm::Sort(Quality::Type, level) => Sort::Type(level.clone()),
+            Subterm::Sort(quality, level) => Sort {
+                quality: context.universes().quality(*quality),
+                level: level.clone(),
+            },
             _ => {
                 probe_level_fallback("universe term is not a sort", &reduced);
-                Sort::Type(Level::zero())
+                Sort::type_at(Level::zero())
             }
         })
     }

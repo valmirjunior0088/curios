@@ -550,7 +550,7 @@ fn region_monad(
     region: &Term,
     extent: Option<Extent>,
 ) -> Result<Option<Term>, Error> {
-    let sort = context.fresh_classifier_type("region monad");
+    let sort = context.fresh_sort("region monad");
     let binder = context.fresh(None);
     let former = Term::func_type([(binder, sort.clone())], sort.clone());
     let monad = context.fresh_hole_metavar(former, extent);
@@ -901,8 +901,8 @@ pub(super) fn elaborate_infix(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     // `?T`: the operand type shared by both sides.
-    let classifier = context.fresh_classifier_type("infix operand classifier");
-    let (operand_id, operand_type) = context.fresh_hole(classifier, term.extent());
+    let sort = context.fresh_sort("infix operand sort");
+    let (operand_id, operand_type) = context.fresh_hole(sort, term.extent());
 
     let target = context.syntax().operator.concept_field(infix.op);
     let field_name = target.field;

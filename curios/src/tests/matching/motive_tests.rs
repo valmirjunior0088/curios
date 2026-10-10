@@ -297,3 +297,38 @@ fn an_arms_goal_that_eliminates_its_scrutinee_is_a_result_a_match_may_store() {
     assert_eq!(run(variable), b"held");
     assert_eq!(run(call), b"held");
 }
+
+// A motive left out where nothing is expected is a metavariable, and the sort of what it answers is a quality nothing has stated. A proposition of two constructors is matched into a proposition alone, so its arms decide: where they are proofs the result is a proposition and the match stands.
+#[test]
+fn an_omitted_motive_over_a_proposition_is_decided_by_the_proofs_in_its_arms() {
+    let source = r#"
+        use /std/Bool/{True};
+        induct Two: Prop | a() | b() end
+        let chosen(t: Two) -> True =
+            let r = match t | a() => True/qed() | b() => True/qed() end;
+            r;
+        let _ : True = chosen(Two/a());
+        /std/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// Where its arms are data the same match takes a proposition into data, and is refused as that elimination rather than as a mismatch in an arm.
+#[test]
+fn an_omitted_motive_over_a_proposition_is_refused_where_its_arms_are_data() {
+    let source = r#"
+        use /std/{Nat};
+        induct Two: Prop | a() | b() end
+        let chosen(t: Two, n: Nat) -> Nat =
+            let r = match t | a() => n | b() => n end;
+            r;
+        /std/print(Nat/to_str(chosen(Two/a(), 3)))
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("cannot eliminate the proposition '/Two'"),
+        "{report}"
+    );
+}

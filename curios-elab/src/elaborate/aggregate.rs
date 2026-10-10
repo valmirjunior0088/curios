@@ -5,8 +5,9 @@ use {
         check_is_sort, elaborate, expect, reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_core::{
-        Bound, Field, InductType, Level, Proj, SelfReference, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, Variant, instantiate_universe_levels_scoped, stamp_declaration_instance,
+        Bound, Field, InductType, Level, Proj, Quality, SelfReference, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, Variant, instantiate_universe_levels_scoped,
+        stamp_declaration_instance,
     },
     curios_utilities::Plicity,
     std::collections::BTreeSet,
@@ -27,16 +28,14 @@ pub(super) fn elaborate_tuple_type(
 
     // One walk, each field type opened once at the binders before it, rather than a recursion reopening the rest per field.
     let mut fields = Vec::new();
-    // The level of each field that is no proposition, as typing read it, and of each that is one.
+    // The level of each field, as typing read it, and the quality of the record they make ([`Sort::join`]).
     let mut levels = Vec::new();
-    let mut proofs = Vec::new();
+    let mut quality = Quality::Prop;
     context.with_frame(|context| {
         tt.telescope.walk_producing(|_, hint, ty| {
             let (field, field_sort) = check_is_sort(context, &ty)?;
-            match field_sort {
-                Sort::Type(level) => levels.push(level),
-                Sort::Prop(level) => proofs.push(level),
-            }
+            quality = Sort::join(quality, field_sort.quality);
+            levels.push(field_sort.level);
             let name = context.fresh(hint);
             let x = Term::free_var(&name);
             // The *rebuilt* field type, as in `elaborate_func_type`.
@@ -47,12 +46,12 @@ pub(super) fn elaborate_tuple_type(
     })?;
 
     // A tuple type's sort: `Prop` when it has a field and every one is a proposition, so a record of proofs checks against `Prop`, and `Type` otherwise, the unit `{}` at zero. Sized from its fields' sorts as typing read each, as a function type is and for its reason.
-    let sort = match levels.is_empty() && !fields.is_empty() {
-        true => Sort::Prop(Level::max(proofs)),
-        false => {
-            levels.extend(proofs);
-            Sort::Type(Level::max(levels))
-        }
+    let sort = match fields.is_empty() {
+        true => Sort::type_at(Level::zero()),
+        false => Sort {
+            quality,
+            level: Level::max(levels),
+        },
     };
     let telescope = Telescope::build(fields, ()).relabel(&source_labels);
 
@@ -165,8 +164,8 @@ fn park_projection(
     field: Field,
     term: &Term,
 ) -> (Term, Term) {
-    let classifier = context.fresh_classifier_type("parked projection type");
-    let result = context.fresh_hole_metavar(classifier, term.extent());
+    let sort = context.fresh_sort("parked projection type");
+    let result = context.fresh_hole_metavar(sort, term.extent());
     let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.extent());
     context.park(
         ParkedWork::Projection(ParkedProjection {

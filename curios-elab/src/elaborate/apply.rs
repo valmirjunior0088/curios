@@ -26,8 +26,7 @@ pub(super) fn elaborate_func_type(
         while let Some((_, ty)) = cursor.entry() {
             let mark = cursor.mark().expect("a mark stands at an entry");
             let (domain, domain_sort) = check_is_sort(context, &ty)?;
-            let (Sort::Type(level) | Sort::Prop(level)) = domain_sort;
-            levels.push(level);
+            levels.push(domain_sort.level);
             // A definition sugar's parameter is one written binder in its type and in its lambda, so a proof written under it here credits it as one written in the body does.
             let written = cursor.written();
             let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
@@ -68,15 +67,10 @@ pub(super) fn elaborate_func_type(
     let rebuilt = Term::func_type_marked(domains, output);
 
     // Sized from its parts' sorts as typing read each, a Π into a proposition being one: where the kernel types it, which reads a part as it is written. Sized from the parts' reducts, a part whose written type sits above its reduct's, a call typed by its codomain or an occurrence at a level its value drops, leaves the former below the sort the kernel finds.
-    let sort = match output_sort {
-        Sort::Prop(level) => {
-            levels.push(level);
-            Sort::Prop(Level::max(levels))
-        }
-        Sort::Type(level) => {
-            levels.push(level);
-            Sort::Type(Level::max(levels))
-        }
+    levels.push(output_sort.level);
+    let sort = Sort {
+        quality: output_sort.quality,
+        level: Level::max(levels),
     };
     Ok((rebuilt, sort.term()))
 }

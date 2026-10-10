@@ -7,7 +7,7 @@ use {
         Problem, Sort, Watched, callee, convert, diagnose_embedding, diagnose_shape, elaborate,
         elaborate_func_settle, embeds, is_monad, monad_shape, normalize, problem_outcome,
         reduce_forced, refold_recs, refused_scrutinee, retry_discharge, retry_match,
-        retry_projection, retry_witness, shallow_scrutinee, subsume_outcome,
+        retry_projection, retry_witness, settle_qualities, shallow_scrutinee, subsume_outcome,
         zonk_solved_term_metas,
     },
     curios_analysis::{
@@ -81,12 +81,32 @@ pub(crate) fn is_prop_in(
     type_: &Term,
 ) -> Result<bool, Error> {
     Sort::of_in(context, opened, type_)
-        .map(|sort| matches!(sort, Sort::Prop(_)))
+        .map(|sort| sort.is_prop())
         .map_err(|error| {
             Error::from_reduce(error, |refusal| {
                 Error::reduce_exhausted(type_.clone(), refusal)
             })
         })
+}
+
+/// The quality of the sort `type_` inhabits, as far as it is solved. Wraps `Sort::of`, mapping an exhausted budget like the helpers above.
+pub(crate) fn quality_of(context: &mut Context, type_: &Term) -> Result<Quality, Error> {
+    Sort::of(context, type_)
+        .map(|sort| sort.quality)
+        .map_err(|error| {
+            Error::from_reduce(error, |refusal| {
+                Error::reduce_exhausted(type_.clone(), refusal)
+            })
+        })
+}
+
+/// Hold `type_` to a proposition where a rule admits nothing else of it: answers whether it is one, having decided its sort where that was a quality nothing had solved. A type, and a sort its declaration leaves to a caller, is none.
+pub(crate) fn hold_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+    Ok(match quality_of(context, type_)? {
+        Quality::Prop => true,
+        quality @ Quality::Meta(_) => context.same_quality(quality, Quality::Prop),
+        Quality::Type | Quality::Param(_) => false,
+    })
 }
 
 /// Whether `type_`, as written, is an application of a declaration that lands in `Prop` ([`Sort::declared_into_prop`]), under the binders a surrounding walk has opened: what erasure's classifier asks before it reduces a type to read it.
@@ -172,15 +192,20 @@ pub(crate) fn is_proof_in(
 /// Elaborate `term` as a type/proposition without inventing an arbitrary expected universe upper bound.
 pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
     let (rebuilt, inferred) = if matches!(&**term, Subterm::Metavar(_)) {
-        let classifier = context.fresh_classifier_type("type left to inference");
-        elaborate(context, term, Mode::Check(classifier))?
+        let sort = context.fresh_sort("type left to inference");
+        elaborate(context, term, Mode::Check(sort))?
     } else {
         elaborate(context, term, Mode::Infer)?
     };
 
     match &*reduce_with(context, &inferred)? {
-        Subterm::Sort(Quality::Prop, level) => Ok((rebuilt, Sort::Prop(level.clone()))),
-        Subterm::Sort(Quality::Type, level) => Ok((rebuilt, Sort::Type(level.clone()))),
+        Subterm::Sort(quality, level) => Ok((
+            rebuilt,
+            Sort {
+                quality: context.universes().quality(*quality),
+                level: level.clone(),
+            },
+        )),
         // The reduct is not what is reported: it spells a recursive name as its group, which the display form gives back its name.
         _ => Err(Error::type_mismatch(
             resolved_for_display(context, &inferred),
@@ -194,7 +219,10 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
 /// Normalization is the whole story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator; the printer spells it, against the witness binders the report carries (axis (h)).
 pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     // Refolded on both sides of normalization. Before: a committed solution spells a stuck recursive call as its canonical neutral, the `Rec` node itself, and `normalize` keeps a name only where the *written* head is one (`stalled_unfolding`) — so the node is first given back its name, which the stall rule then holds. After: whatever normalization exposed elsewhere.
-    let zonked = refold_recs(context, &zonk_solved_term_metas(context, term));
+    let zonked = refold_recs(
+        context,
+        &settle_qualities(context, &zonk_solved_term_metas(context, term)),
+    );
     let resolved = normalize(context, zonked.clone()).unwrap_or(zonked);
     refold_recs(context, &resolved)
 }
@@ -239,7 +267,7 @@ fn proposition_at_implicit_type(context: &mut Context, this: &Term, that: &Term)
     }
     let declared = context.metavar_entry(*id)?.result.clone();
     let declared = reduce_forced(context, declared).ok()?;
-    let at_a_type = matches!(&*declared, Subterm::Sort(Quality::Type, level) if !context.universes().classifies(level));
+    let at_a_type = matches!(&*declared, Subterm::Sort(quality, _) if context.universes().quality(*quality) == Quality::Type);
     if !at_a_type || !is_prop(context, this).ok()? {
         return None;
     }
@@ -1146,7 +1174,7 @@ impl MotiveShape<'_> {
         scrutinee_type
     }
 
-    /// This shape's motive type, `(ī' : Ī(p̄)) -> I(p̄, ī') -> Type`, which a *written* motive is checked against. The codomain is a classifier ([`Context::fresh_classifier_type`]), which states no sort: a motive into `Prop` and one into `Type` both stand under it at the checking boundary (`expect`).
+    /// This shape's motive type, `(ī' : Ī(p̄)) -> I(p̄, ī') -> Type`, which a *written* motive is checked against. The codomain is a sort left to inference ([`Context::fresh_sort`]), its quality still to be solved: a motive into `Prop` and one into `Type` each decide it at the checking boundary (`expect`).
     fn motive_type(&self, context: &mut Context) -> Term {
         let mut binders = Vec::with_capacity(self.arity());
 
@@ -1168,8 +1196,8 @@ impl MotiveShape<'_> {
         };
 
         binders.push((context.fresh(None), scrutinee_type));
-        let classifier = context.fresh_classifier_type("motive result");
-        Term::func_type(binders, classifier)
+        let sort = context.fresh_sort("motive result");
+        Term::func_type(binders, sort)
     }
 }
 
@@ -1222,8 +1250,8 @@ fn check_closed_motive(
 
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
         let refs = vars.iter().collect::<Vec<_>>();
-        let classifier = context.fresh_classifier_type("eliminator motive result");
-        let body = check(context, &motive.open(&refs), classifier)?;
+        let sort = context.fresh_sort("eliminator motive result");
+        let body = check(context, &motive.open(&refs), sort)?;
 
         let binders = labels.iter().collect::<Vec<_>>();
         Ok(Scope::close(Many(labels.len()), &binders, body))

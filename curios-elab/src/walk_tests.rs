@@ -88,7 +88,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
                 &mut context,
                 &doubled_record(Term::intrinsic(Intrinsic::NatType)),
             )
-            .is_ok_and(|sort| sort == Sort::Type(Level::zero())),
+            .is_ok_and(|sort| sort == Sort::type_at(Level::zero())),
         ),
     ];
 
