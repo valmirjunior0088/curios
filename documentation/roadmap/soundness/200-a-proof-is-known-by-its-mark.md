@@ -35,6 +35,7 @@
 - What a projection out of a record states: a field at a proposition makes the projection a proof and the record's own head does not say which field is one.
 - How many comparisons the lookup decides today that the head would not. Certifying `/sys` and `/std` at `f748db3f4`, irrelevance decided eight comparisons between two different terms, counted with a line added to `compare` and removed; how many of them stood at a position handed no type was not counted.
 - Whether the elaborator's conversion can take the same form while a binder's type is still a metavariable, or keeps a lookup until the type is solved.
+- What a binder at a sort its declaration leaves to a caller states. It binds a proof at one assignment and data at another ([A declaration leaves a sort to its caller](../../design/theory/a-declaration-leaves-a-sort-to-its-caller.md)), so a mark that is exact is a quality, stated at an instance as the sort is.
 
 ## Retirement
 

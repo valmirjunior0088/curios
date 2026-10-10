@@ -68,6 +68,16 @@ The Curios certifier: the kernel deciding, from a finished term alone, whether t
 
 **Rejected.** Memoizing the backward search, whose refuted subgoals depend on the path they were reached on; normalizing the constraint set before searching, which narrows each branch and keeps the search; Rocq's incremental model, when a declaration's hypotheses are fixed and a model per question costs a pass or two.
 
+### A declaration that leaves a sort to its caller is judged at every assignment
+
+**Decision.** A definition, a top-level recursive group and a registry entry whose universe context leaves sorts to a caller are judged once at each assignment of `Prop` and `Type` to them, on the declaration read at the assignment (`at_every_sort`), each under the whole budget, and stored as stated; a refusal names its assignment. An occurrence states as many sorts as its declaration leaves, each `Prop` or `Type`, and two instances apart in a sort are two types. A family's own sort is read off the entry as stated, a quality the declaration does not bind is refused by the scan made before any judgment, a group inside a term whose context leaves a sort is refused, and a declaration leaves at most `UniverseContext::QUALITY_LIMIT`. The rule is [A declaration leaves a sort to its caller](../documentation/design/theory/a-declaration-leaves-a-sort-to-its-caller.md).
+
+**Rationale.** Every rule that reads a sort reads which of the two it is, and reading the declaration at an assignment leaves each of them a literal to read: no reader takes an answer for a sort that states neither, no memo holds one term at two sorts, and what is accepted of a generic declaration is what would be accepted of the declarations written out. A group's verdict is the conjunction of its assignments', filed under the group as stated, which is the spelling a later walk reads it by. Positivity and variance are decided on the entry as stated: each walks and reduces, and neither reads a sort.
+
+**Evidence.** `recheck::sort_tests` holds a declaration well typed at one sort alone refused at the other, put to a definition, a group and a registry entry and mutation-checked against a walk cut to its first assignment and to its last; an occurrence stating no sort, too few, or a parameter refused; a family over a sort holding data and proofs, and one whose own sort is left open refused; and a proposition not matched into a sort left to a caller, which `curios`'s board puts to the elaborator under the same name.
+
+**Rejected.** Judging at the parameter with an answer for each reader, which is the elaborator's own check: the decision's reason. One budget across the assignments, under which what a declaration costs to accept follows how many sorts it leaves.
+
 ## Measuring the certifier
 
 `cargo xtask clippy` builds `curios-prelude` with `--all-features`, and its build script certifies the fixed prelude under a record stream filed at `curios-prelude/.artifacts/profile.tsv`; elaboration's is `curios-prelude-archive/.artifacts/profile.tsv`. The walk carries three kinds of span:
