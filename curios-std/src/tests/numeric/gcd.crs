@@ -1,5 +1,5 @@
 -- The greatest common divisor where a type mentions it, at a zero, a one and equal operands, and coprimality with Euclid's lemma and the reduced fraction it serves.
-use /std/{Nat, Bool, Eq, Test};
+use /std/{Nat, Eq, Option, Test};
 use /std/Nat/{Divides, Gcd, Coprime};
 use /std/Bool/{Holds};
 
@@ -84,12 +84,9 @@ let _a_reduced_fraction_is_the_only_one_with_its_cross_products(
 ) -> {numerator: Eq()(a, 2), denominator: Eq()(b, 3)} =
     Coprime/unique(p, _quotients_by_the_greatest_common_divisor_are_coprime, e);
 
-let decided(a: Nat, b: Nat) -> Bool =
-    match Coprime/try(a, b) | some(_) => true | none() => false end;
-
 test coprimality_is_decided =
     Test/all([
-        Test/assert(decided(9, 28)),
-        Test/assert(Bool/not(decided(6, 9))),
-        Test/assert(decided(1, 0)),
-        Test/assert(Bool/not(decided(0, 0)))]);
+        Test/assert(Option/is_some(Coprime/try(9, 28))),
+        Test/assert(Option/is_none(Coprime/try(6, 9))),
+        Test/assert(Option/is_some(Coprime/try(1, 0))),
+        Test/assert(Option/is_none(Coprime/try(0, 0)))]);
