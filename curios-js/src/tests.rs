@@ -1,7 +1,7 @@
 //! Tests for the browser bridge helpers and the harness's host table. Program-side `Bytes` is a rope (`$rope/bin/leaf` / `$rope/bin/node` structs); what crosses to a host is always the forced flat payload, which is what the bridge accessors read and write.
 
 use {
-    curios_abi::{ENTRY, PANIC, host_ops},
+    curios_abi::{ENTRY, HostOp, PANIC},
     curios_runtime::test_support::{GuestInstance, GuestValue},
     curios_wasm::{CompType, Export, SubType, TypeName},
 };
@@ -201,7 +201,7 @@ fn harness_implements_every_host_op() {
     let end = body.find("\n  };").expect("the host table closes");
     let body = &body[..end];
 
-    for name in host_ops().iter().map(|function| function.name()) {
+    for name in HostOp::ALL.iter().map(|op| op.name()) {
         assert!(
             body.contains(&format!("\n    {name}:")),
             "harness.js's host table lacks an entry for host op `{name}`"

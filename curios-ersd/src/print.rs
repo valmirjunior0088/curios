@@ -20,6 +20,7 @@ use {
         ProductId, RecValue, Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
         ValueId,
     },
+    curios_abi::Namespace,
     curios_num::{Grain, Rounding},
     curios_utilities::{grown, recurse},
     std::{
@@ -308,10 +309,7 @@ impl Printer<'_, '_, '_, '_> {
             if !self.reach.foreigns.contains(&id) {
                 continue;
             }
-            self.line(
-                0,
-                format!("foreign {id} {}/{}", row.namespace(), row.name()),
-            )?;
+            self.line(0, format!("foreign {id} {}/{}", Namespace::Ffi, row.name()))?;
         }
 
         for &item in self.module.items() {
@@ -374,7 +372,7 @@ impl Printer<'_, '_, '_, '_> {
                 let row = self.module.foreign(*foreign).expect("live foreign");
                 format!(
                     "halt {}/{}({})",
-                    row.namespace(),
+                    Namespace::Ffi,
                     row.name(),
                     self.atoms(operands)
                 )
@@ -512,7 +510,7 @@ impl Printer<'_, '_, '_, '_> {
                         let row = self.module.foreign(*foreign).expect("live foreign");
                         format!(
                             "{}/{}({})",
-                            row.namespace(),
+                            Namespace::Ffi,
                             row.name(),
                             self.atoms(operands)
                         )

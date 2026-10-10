@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{ForeignFunction, HostOp},
+    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
     curios_num::Natural,
     std::sync::Arc,
 };
@@ -385,7 +385,14 @@ fn an_initializer_that_performs_an_effect_is_rejected() {
     let member = builder.value(Some("member".into()));
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);
-    let exit = builder.foreign(Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)));
+    let exit = builder.foreign(Arc::new(ForeignFunction {
+        name: "/exit".to_string(),
+        label: "exit".to_string(),
+        signature: WireSignature {
+            params: vec![WireType::Byte],
+            results: WireResults::never(),
+        },
+    }));
     let init = builder.seal_block(Terminator::Halt {
         foreign: exit,
         operands: vec![zero],

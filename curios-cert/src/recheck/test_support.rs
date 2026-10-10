@@ -6,7 +6,7 @@
 
 use {
     crate::{Globals, Kernel, Rechecked, Verdict},
-    curios_abi::{DeclaredForeign, ForeignFunction, HostOp, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
         InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Nominal, Places,
@@ -872,16 +872,16 @@ pub(super) fn instance_of_width(width: usize) -> Module {
     )
 }
 
-/// A declared row no store issued, returning one `Nat` — the only kind of row a term can forge, since a builtin is an identity whose row is the roster's.
+/// A row no store issued, returning one `Nat`.
 pub(super) fn forged_row() -> ForeignFunction {
-    ForeignFunction::Declared(DeclaredForeign {
+    ForeignFunction {
         name: "/forged".to_string(),
         label: "forged".to_string(),
         signature: WireSignature {
             params: Vec::new(),
             results: WireResults::single(WireType::Nat),
         },
-    })
+    }
 }
 
 /// `let held : claimed = <a call to row with no operands>`, with `False` declared alongside.
@@ -1698,7 +1698,14 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
 
     let payload = match carried {
         Carried::Exit => Term::foreign(
-            Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)),
+            Arc::new(ForeignFunction {
+                name: "/exit".to_string(),
+                label: "exit".to_string(),
+                signature: WireSignature {
+                    params: vec![WireType::Byte],
+                    results: WireResults::never(),
+                },
+            }),
             vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(0))],
         ),
         Carried::Pure => Term::intrinsic(Intrinsic::io_pure(

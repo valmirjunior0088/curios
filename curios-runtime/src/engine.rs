@@ -132,14 +132,14 @@ fn wire_func_type(engine: &Engine, params: &[WireType], results: &[WireType]) ->
 type Trampoline =
     Arc<dyn Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
-/// The host side of a foreign registry: for each [`ForeignFunction`] in a store, the trampoline implementing it. `instantiate` fills the `sys`-tier one from the `Host` trait, and links *pull-based* — it walks the module's imports and defines exactly what the module demands, so an import with no registered implementation is a clean, named error instead of a stranded wasmtime lookup. An embedder builds its own `ffi`-tier one from a [`ForeignStore`] returned by `compile_entrypoint`, `define`-ing each row it wants to supply.
+/// An embedder's side of a foreign registry: for each [`ForeignFunction`] of a store it answers, the trampoline implementing it. An embedder builds one from the [`ForeignStore`] `compile_entrypoint` returned, `define`-ing each row it wants to supply, and a module's exports are bound through the same door. `instantiate` links *pull-based* — it walks the module's imports and defines exactly what the module demands, a binding here ahead of the host's own answer — so an import nothing answers is a clean, named error instead of a stranded wasmtime lookup.
 pub struct ForeignBindings {
     foreigns: ForeignStore,
     trampolines: HashMap<String, Trampoline>,
 }
 
 impl ForeignBindings {
-    /// An empty registry over the rows of `foreigns`: follow with one [`define`](Self::define) per row the module will import. `instantiate` seeds the `sys`-tier registry this way from `host_ops()`; an embedder seeds the `ffi`-tier one from the [`ForeignStore`] that `compile_entrypoint` returned for the program.
+    /// An empty registry over the rows of `foreigns`, the [`ForeignStore`] that `compile_entrypoint` returned for the program: follow with one [`define`](Self::define) per row to answer.
     pub fn new(foreigns: ForeignStore) -> Self {
         Self {
             foreigns,
@@ -147,7 +147,7 @@ impl ForeignBindings {
         }
     }
 
-    /// No bindings — the store every no-FFI caller passes through [`Compiled::run`], since a program with no `foreign` declarations imports nothing under `ffi`.
+    /// No bindings: every row the program reaches is left to the host, which answers the standard library's.
     pub fn empty() -> Self {
         Self::new(ForeignStore::new())
     }
@@ -353,7 +353,7 @@ impl Provided {
 macro_rules! declare_host_rows {
     ($(
         $(#[doc = $doc:literal])*
-        $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty as $subject:ident / $label:ident { $($contract:tt)* }
+        $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty { $($contract:tt)* }
     )*) => {
         /// What `host` answers of the rows the standard library declares.
         pub(crate) fn host_rows<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> Provided {

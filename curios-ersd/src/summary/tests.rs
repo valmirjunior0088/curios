@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
     std::sync::Arc,
 };
 
@@ -17,14 +17,14 @@ fn a_self_recursive_function_that(total: bool, effectful: bool) -> Module {
     let param = builder.value(Some("n".into()));
     builder.open_block();
     if effectful {
-        let row = Arc::new(ForeignFunction::Declared(DeclaredForeign {
+        let row = Arc::new(ForeignFunction {
             name: "/beep".into(),
             label: "beep".into(),
             signature: WireSignature {
                 params: vec![],
                 results: WireResults::single(WireType::Nat),
             },
-        }));
+        });
         let foreign = builder.foreign(row);
         builder.let_value(
             None,

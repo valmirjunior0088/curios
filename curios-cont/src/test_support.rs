@@ -9,7 +9,7 @@ use {
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
         Module, Node, NodeId, ValueExpr, ValueId, function_nodes,
     },
-    curios_abi::{ForeignFunction, HostOp},
+    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
     curios_num::Natural,
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -17,10 +17,17 @@ use {
     },
 };
 
-/// A halt through `proc/exit` reading `args` — the terminal a fixture ends a path with when what it passes must stay live.
+/// A halt reading `args`, through a row that does not return, `/exit: (Byte) -> Never` — the terminal a fixture ends a path with when what it passes must stay live.
 pub(super) fn halt(args: Vec<Atom>) -> Node {
     Node::Halt {
-        function: Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)),
+        function: Arc::new(ForeignFunction {
+            name: "/exit".to_string(),
+            label: "exit".to_string(),
+            signature: WireSignature {
+                params: vec![WireType::Byte],
+                results: WireResults::never(),
+            },
+        }),
         args,
     }
 }

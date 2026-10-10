@@ -100,13 +100,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_sys_imports(&mut self) {
-        // The store-described imports — exactly the functions whose call sites recorded themselves in the table, in minted-name order, a diverging row's among them. Each function's own `namespace` (decided by its case — see `ForeignFunction`) is the wasm namespace it imports under, so codegen neither rebuilds `host_ops()` to re-derive membership nor chooses a namespace itself.
+        // The store-described imports — exactly the functions whose call sites recorded themselves in the table, in minted-name order, a diverging row's among them. Each imports under `ffi` by the name its declaration has, so codegen neither knows who answers a row nor chooses its name.
         for function in self.table.host_funcs() {
             let signature = function.signature();
             let func_name = self.table.host_func(&function);
 
             self.add_host_import(
-                function.namespace().as_str(),
+                Namespace::Ffi.as_str(),
                 function.name(),
                 curios_wasm::TypeName::from(func_name.as_str()),
                 func_name.clone(),

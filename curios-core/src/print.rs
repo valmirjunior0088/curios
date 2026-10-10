@@ -2088,13 +2088,9 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             pure(universe_suffix(&instance.universes, frame.spelling)),
         ]),
         Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),
-        // A builtin row surfaces under its `/sys` subject (`Handle/write`); a user's `foreign` declaration under the name they gave it.
+        // A call across the wire reads as the name its declaration binds.
         Subterm::Foreign(function, args) => {
-            let name = match function.subject() {
-                Some(subject) => format!("{subject}/{}", function.label()),
-                None => function.label().to_string(),
-            };
-            print_named_call(name, vec![], args, frame)
+            print_named_call(function.label().to_string(), vec![], args, frame)
         }
         Subterm::FuncType(FuncType { telescope }) => {
             let plicities = telescope.marks();

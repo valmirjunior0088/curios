@@ -3,19 +3,9 @@ use {
         MachineFunction, MachineInstruction, MachineOperand, MachineTerminator, MachineValueId,
         lower,
     },
-    crate::{EmissionHostTarget, EmissionTail},
-    curios_abi::{ForeignFunction, HostOp},
+    crate::{EmissionHostTarget, EmissionTail, test_support::halt},
     curios_num::Natural,
-    std::sync::Arc,
 };
-
-/// A halt through `proc/exit` reading `args`.
-fn halt(args: Vec<curios_cont::Atom>) -> curios_cont::Node {
-    curios_cont::Node::Halt {
-        function: Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)),
-        args,
-    }
-}
 
 #[test]
 fn return_sentinel_becomes_machine_return_without_a_block() {

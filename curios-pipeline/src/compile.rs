@@ -2,7 +2,7 @@
 
 use {
     super::{Stage, compile_lowered_over, compile_unit_over},
-    curios_abi::ForeignStore,
+    curios_abi::{ForeignStore, Namespace},
     curios_cert::{
         Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
         recheck_program_measured,
@@ -1444,7 +1444,7 @@ where
 
     for function in all_foreigns.iter() {
         let imported = module.imports().iter().any(|(namespace, name, _)| {
-            namespace == function.namespace().as_str() && name == function.name()
+            namespace == Namespace::Ffi.as_str() && name == function.name()
         });
 
         if imported {

@@ -4,8 +4,7 @@ use {
     super::{ForeignBindings, host_rows, shared_engine},
     crate::MockHost,
     curios_abi::{
-        DeclaredForeign, ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults,
-        WireSignature, WireType,
+        ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults, WireSignature, WireType,
     },
     std::sync::Arc,
     wasmtime::Linker,
@@ -15,14 +14,14 @@ use {
 fn doubling() -> ForeignBindings {
     let mut store = ForeignStore::new();
 
-    store.register(ForeignFunction::Declared(DeclaredForeign {
+    store.register(ForeignFunction {
         name: "/double".to_string(),
         label: "double".to_string(),
         signature: WireSignature {
             params: vec![WireType::Nat],
             results: WireResults::single(WireType::Nat),
         },
-    }));
+    });
 
     ForeignBindings::new(store)
 }
@@ -54,7 +53,7 @@ fn every_host_answer_crosses_as_its_row() {
 
     for op in HostOp::ALL {
         let stated = op.signature();
-        let declared = Arc::new(ForeignFunction::Declared(DeclaredForeign {
+        let declared = Arc::new(ForeignFunction {
             name: op.declared(),
             label: op.name().to_string(),
             signature: WireSignature {
@@ -64,7 +63,7 @@ fn every_host_answer_crosses_as_its_row() {
                     false => stated.results.clone(),
                 },
             },
-        }));
+        });
 
         provided
             .link(&mut linker, engine, &op.declared(), Some(&declared))
@@ -77,14 +76,14 @@ fn every_host_answer_crosses_as_its_row() {
 fn a_bits_row_is_read_by_the_bytes_codec() {
     let mut store = ForeignStore::new();
 
-    store.register(ForeignFunction::Declared(DeclaredForeign {
+    store.register(ForeignFunction {
         name: "/echo".to_string(),
         label: "echo".to_string(),
         signature: WireSignature {
             params: vec![WireType::List(WireLeaf::Bits)],
             results: WireResults::single(WireType::List(WireLeaf::Bits)),
         },
-    }));
+    });
 
     ForeignBindings::new(store).define("/echo", |runs: Vec<Vec<u8>>| runs);
 }

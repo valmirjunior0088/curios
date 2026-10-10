@@ -81,7 +81,7 @@ pub fn foreign_produced(
 
 /// A foreign call's operand demands and result, in the vocabulary [`Intrinsic::signature`] states an intrinsic's in — so the kernel and the elaborator walk a host call with the operand handling they already share with the intrinsics, rather than a rule of each checker's own. The result is [`foreign_produced`]'s over `operands`, record labels bound by binders `fresh` mints.
 ///
-/// **The row is the whole statement.** For a builtin it is the roster's, reached through the identity the term carries, and for a declared row its own; nothing the term says beside the row reaches the type.
+/// **The row is the whole statement.** It is the one its declaration states, carried on the term, and nothing the term says beside it reaches the type.
 pub fn foreign_signature(
     function: &ForeignFunction,
     operands: &[Term],

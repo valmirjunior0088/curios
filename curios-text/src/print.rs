@@ -1186,13 +1186,9 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::Sort => pure("Sort"),
         Subterm::Literal(literal) => print_literal(literal),
         Subterm::Intrinsic(intrinsic) => print_intrinsic(intrinsic),
-        // A builtin row surfaces under its `/sys` subject (`Handle/write`); a user's `foreign` declaration under the name they gave it.
+        // A call across the wire reads as the name its declaration binds.
         Subterm::Foreign(function, args) => {
-            let name = match function.subject() {
-                Some(subject) => format!("{subject}/{}", function.label()),
-                None => function.label().to_string(),
-            };
-            print_intrinsic_call(name, vec![], args)
+            print_intrinsic_call(function.label().to_string(), vec![], args)
         }
         // The row a declaration binds reads as the name it is bound under.
         Subterm::ForeignRow(function) => pure(function.label().to_string()),

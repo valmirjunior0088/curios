@@ -1,8 +1,8 @@
 use {
     super::{
-        ClosedCode, DeclaredForeign, Failure, FileKind, ForeignFunction, HostOp, Mode, Namespace,
-        Outcome, Poll, ResultShape, SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf,
-        WireResults, WireSignature, WireType, host_ops,
+        ClosedCode, Failure, FileKind, ForeignFunction, ForeignStore, HostOp, Mode, Outcome, Poll,
+        ResultShape, SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf, WireResults,
+        WireSignature, WireType,
     },
     crate::{event, status},
     std::{collections::BTreeSet, fmt::Debug},
@@ -30,96 +30,11 @@ fn errno_lane_is_disjoint_from_named_codes() {
     assert_eq!(Failure::Other(0).code(), status::OTHER_BASE);
 }
 
-/// The builtin import names, byte for byte and in declaration order — the wire ABI contract between the wasm emitter and the runtime linker. A mismatch here silently strands an import, so the whole list is pinned.
-#[test]
-fn names_are_the_wire_abi() {
-    let names = host_ops()
-        .iter()
-        .map(|function| function.name().to_string())
-        .collect::<Vec<_>>();
-
-    assert_eq!(
-        names,
-        [
-            "handle_read",
-            "handle_write",
-            "handle_flush",
-            "handle_finish",
-            "file_open",
-            "dns_lookup",
-            "dns_resolve",
-            "socket_open",
-            "socket_bind",
-            "socket_connect",
-            "socket_finish_connect",
-            "socket_listen",
-            "socket_accept",
-            "tls_start",
-            "tls_server_config",
-            "tls_start_server",
-            "socket_set_reuseaddr",
-            "handle_poll",
-            "handle_close",
-            "clock_wall",
-            "clock_mono",
-            "rand_bytes",
-            "proc_args",
-            "proc_env",
-            "proc_exit",
-            "tty_raw",
-            "tty_size",
-            "serial_open",
-            "serial_control",
-            "serial_drain",
-            "serial_list",
-            "file_stat",
-            "file_remove",
-            "file_rename",
-            "dir_list",
-            "dir_create",
-            "dir_remove",
-            "proc_cwd",
-            "proc_spawn",
-            "proc_wait",
-            "proc_kill",
-        ]
-    );
-}
-
-/// A row's `/sys` placement is its subject module plus its label, and two rows sharing one is a binding conflict the prelude only discovers when it is built. Labels alone are *not* unique — `file/open` and `socket/open` deliberately share a POSIX leaf name — so the pair is what this pins.
-#[test]
-fn placements_are_unique() {
-    let store = host_ops();
-    let placements: BTreeSet<_> = store
-        .iter()
-        .map(|function| (function.subject(), function.label()))
-        .collect();
-
-    assert_eq!(placements.len(), store.iter().count());
-}
-
-/// Every builtin states the `/sys` module it surfaces in: the prelude places rows by that column rather than by a list beside the table, so a row without one is a table it cannot read.
-#[test]
-fn ops_rows_name_a_subject() {
-    assert!(
-        host_ops()
-            .iter()
-            .all(|function| function.subject().is_some())
-    );
-}
-
 /// Result labels are the record fields the guest projects (`.status`, `.secs`, …) — renaming one is a standard-library break, so the multi-result shapes are pinned.
 #[test]
 fn result_records_keep_their_labels() {
-    let store = host_ops();
-    let labels = |name: &str| -> Vec<String> {
-        match store
-            .get(name)
-            .unwrap_or_else(|| panic!("host_ops lacks {name}"))
-            .signature()
-            .results
-            .shape()
-        {
+    let labels = |op: HostOp| -> Vec<String> {
+        match op.signature().results.shape() {
             ResultShape::Record(fields) => fields
                 .into_iter()
                 .map(|(label, _)| label.to_string())
@@ -128,32 +43,32 @@ fn result_records_keep_their_labels() {
         }
     };
 
-    assert_eq!(labels("handle_read"), ["status", "bytes"]);
-    assert_eq!(labels("handle_write"), ["status", "written"]);
-    assert_eq!(labels("file_open"), ["status", "handle"]);
-    assert_eq!(labels("dns_lookup"), ["status", "handle"]);
-    assert_eq!(labels("dns_resolve"), ["status", "addresses"]);
-    assert_eq!(labels("socket_open"), ["status", "handle"]);
-    assert_eq!(labels("socket_accept"), ["status", "handle"]);
-    assert_eq!(labels("tls_server_config"), ["status", "handle"]);
-    assert_eq!(labels("clock_wall"), ["secs", "nanos"]);
-    assert_eq!(labels("clock_mono"), ["secs", "nanos"]);
-    assert_eq!(labels("proc_env"), ["status", "value"]);
-    assert_eq!(labels("tty_size"), ["status", "cols", "rows"]);
-    assert_eq!(labels("serial_open"), ["status", "handle"]);
-    assert_eq!(labels("serial_drain"), ["status", "handle"]);
-    assert_eq!(labels("serial_list"), ["status", "paths"]);
+    assert_eq!(labels(HostOp::HandleRead), ["status", "bytes"]);
+    assert_eq!(labels(HostOp::HandleWrite), ["status", "written"]);
+    assert_eq!(labels(HostOp::FileOpen), ["status", "handle"]);
+    assert_eq!(labels(HostOp::DnsLookup), ["status", "handle"]);
+    assert_eq!(labels(HostOp::DnsResolve), ["status", "addresses"]);
+    assert_eq!(labels(HostOp::SocketOpen), ["status", "handle"]);
+    assert_eq!(labels(HostOp::SocketAccept), ["status", "handle"]);
+    assert_eq!(labels(HostOp::TlsServerConfig), ["status", "handle"]);
+    assert_eq!(labels(HostOp::ClockWall), ["secs", "nanos"]);
+    assert_eq!(labels(HostOp::ClockMono), ["secs", "nanos"]);
+    assert_eq!(labels(HostOp::ProcEnv), ["status", "value"]);
+    assert_eq!(labels(HostOp::TtySize), ["status", "cols", "rows"]);
+    assert_eq!(labels(HostOp::SerialOpen), ["status", "handle"]);
+    assert_eq!(labels(HostOp::SerialDrain), ["status", "handle"]);
+    assert_eq!(labels(HostOp::SerialList), ["status", "paths"]);
     assert_eq!(
-        labels("file_stat"),
+        labels(HostOp::FileStat),
         ["status", "kind", "size", "mtime_secs", "mtime_nanos"]
     );
-    assert_eq!(labels("dir_list"), ["status", "names"]);
-    assert_eq!(labels("proc_cwd"), ["status", "path"]);
+    assert_eq!(labels(HostOp::DirList), ["status", "names"]);
+    assert_eq!(labels(HostOp::ProcCwd), ["status", "path"]);
     assert_eq!(
-        labels("proc_spawn"),
+        labels(HostOp::ProcSpawn),
         ["status", "child", "stdin", "stdout", "stderr"]
     );
-    assert_eq!(labels("proc_wait"), ["status", "code", "signal"]);
+    assert_eq!(labels(HostOp::ProcWait), ["status", "code", "signal"]);
 }
 
 /// Every row is well-formed: it names each operand once, since a requirement or a check finds an operand by its name, and its names stand beside what crosses — one per operand, one per result, a record's fields under the labels the row reads them by.
@@ -189,10 +104,8 @@ fn results_cross_in_the_order_they_are_written() {
     assert_eq!(single.len(), 1);
     assert_eq!(single.types(), [WireType::Bytes]);
 
-    let store = host_ops();
-    let read = store.get("handle_read").expect("host_ops defines read");
     assert_eq!(
-        read.signature().results.types(),
+        HostOp::HandleRead.signature().results.types(),
         [WireType::Nat, WireType::Bytes]
     );
 
@@ -215,21 +128,53 @@ fn results_cross_in_the_order_they_are_written() {
 /// The guest-facing shape is read off the count and nothing else: `handle_close` answers the unit value, `rand_bytes` its bytes bare, `handle_read` a record of its two labelled results.
 #[test]
 fn the_guest_shape_is_read_off_the_result_count() {
-    let store = host_ops();
-    let shape = |name: &str| {
-        store
-            .get(name)
-            .expect("a host_ops row")
-            .signature()
-            .results
-            .shape()
+    let shape = |op: HostOp| op.signature().results.shape();
+
+    assert_eq!(shape(HostOp::HandleClose), ResultShape::Unit);
+    assert_eq!(
+        shape(HostOp::RandBytes),
+        ResultShape::Single(WireType::Bytes)
+    );
+    assert_eq!(
+        shape(HostOp::HandleRead),
+        ResultShape::Record(vec![("status", WireType::Nat), ("bytes", WireType::Bytes)])
+    );
+}
+
+/// Every variant names the row it was written with, so a row read back by its method is the row the table states.
+#[test]
+fn a_row_reads_back_by_its_method() {
+    for &op in HostOp::ALL {
+        assert_eq!(HostOp::named(op.name()), Some(op));
+    }
+}
+
+/// A row is declared in its module by its method's name, each segment of the module's path a segment of the name.
+#[test]
+fn a_row_is_declared_in_its_module_by_its_method() {
+    assert_eq!(HostOp::HandleRead.declared(), "/std/Handle/handle_read");
+    assert_eq!(HostOp::DnsLookup.declared(), "/std/tcp/resolve/dns_lookup");
+}
+
+/// A function is its import name: neither its label nor its signature participates, since no store holds two under one name.
+#[test]
+fn a_function_is_its_import_name() {
+    let declared = |name: &str, label: &str| ForeignFunction {
+        name: name.to_string(),
+        label: label.to_string(),
+        signature: WireSignature {
+            params: vec![],
+            results: WireResults::none(),
+        },
     };
 
-    assert_eq!(shape("handle_close"), ResultShape::Unit);
-    assert_eq!(shape("rand_bytes"), ResultShape::Single(WireType::Bytes));
     assert_eq!(
-        shape("handle_read"),
-        ResultShape::Record(vec![("status", WireType::Nat), ("bytes", WireType::Bytes)])
+        declared("/frobnicate", "frobnicate"),
+        declared("/frobnicate", "frobnicate_again")
+    );
+    assert_ne!(
+        declared("/frobnicate", "frobnicate"),
+        declared("/other", "frobnicate")
     );
 }
 
@@ -237,77 +182,18 @@ fn the_guest_shape_is_read_off_the_result_count() {
 #[test]
 #[should_panic(expected = "already registered")]
 fn register_rejects_a_duplicate_name() {
-    let mut store = host_ops();
-
-    store.register(ForeignFunction::Builtin(HostOp::HandleRead));
-}
-
-/// Every `host_ops` row is stamped with the `sys` wasm namespace — the fixed substrate `emit_sys_imports` reads instead of re-deriving membership by rebuilding this same store.
-#[test]
-fn ops_rows_are_stamped_with_the_sys_namespace() {
-    assert!(
-        host_ops()
-            .iter()
-            .all(|function| function.namespace() == Namespace::Sys)
-    );
-}
-
-/// A builtin is its variant and a declared row its import name: neither a declared row's label nor its signature participates, and a declared row never equals the builtin whose wire name it happens to spell, since the two import under different namespaces.
-#[test]
-fn a_builtin_is_its_variant_and_a_declared_row_its_name() {
-    let declared = |name: &str, label: &str| {
-        ForeignFunction::Declared(DeclaredForeign {
-            name: name.to_string(),
-            label: label.to_string(),
-            signature: WireSignature {
-                params: vec![],
-                results: WireResults::none(),
-            },
-        })
+    let declared = || ForeignFunction {
+        name: "/frobnicate".to_string(),
+        label: "frobnicate".to_string(),
+        signature: WireSignature {
+            params: vec![],
+            results: WireResults::none(),
+        },
     };
-    let read = HostOp::HandleRead;
+    let mut store = ForeignStore::new();
 
-    assert_eq!(
-        declared("/frobnicate", "frobnicate"),
-        declared("/frobnicate", "frobnicate_again")
-    );
-    assert_eq!(
-        ForeignFunction::Builtin(read),
-        ForeignFunction::Builtin(read)
-    );
-    assert_ne!(
-        ForeignFunction::Builtin(read),
-        declared("handle_read", "read")
-    );
-}
-
-/// Every variant names the row it was declared with, so a builtin read back through its identity is the row the table states.
-#[test]
-fn a_builtin_reads_back_the_row_it_names() {
-    for &op in HostOp::ALL {
-        assert_eq!(HostOp::named(op.name()), Some(op));
-        assert_eq!(
-            op.name(),
-            format!("{}_{}", op.subject().to_lowercase(), op.label())
-        );
-    }
-}
-
-/// A row's wire name is its placement spelled flat — the subject lowercased, an underscore, the label — so no two rows sharing a label contend for one import name, and a new row cannot choose a name beside where it is placed.
-#[test]
-fn a_wire_name_is_its_placement_spelled_flat() {
-    for function in host_ops().iter() {
-        let subject = function
-            .subject()
-            .expect("every builtin row names its subject");
-
-        assert_eq!(
-            function.name(),
-            format!("{}_{}", subject.to_lowercase(), function.label()),
-            "the row placed at {subject}/{}",
-            function.label(),
-        );
-    }
+    store.register(declared());
+    store.register(declared());
 }
 
 /// `proc_exit` is the one row that diverges, and it crosses a `Byte` out and nothing back: its call never returns, which is not the same as a row returning nothing.
@@ -329,9 +215,9 @@ fn exit_is_the_one_row_that_diverges() {
     assert!(!HostOp::HandleClose.diverges());
 }
 
-/// A variant is its row's wire name in CamelCase — the one spelling the table writes twice, since a macro cannot change an identifier's case — so a row whose two names disagree fails here rather than reading as a different operation.
+/// A variant is its row's method name in CamelCase — the one spelling the table writes twice, since a macro cannot change an identifier's case — so a row whose two names disagree fails here rather than reading as a different operation.
 #[test]
-fn a_variant_is_its_wire_name_in_camel_case() {
+fn a_variant_is_its_method_name_in_camel_case() {
     for &op in HostOp::ALL {
         let camel = op
             .name()

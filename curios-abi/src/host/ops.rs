@@ -1,6 +1,6 @@
-//! The single authored table of builtin host operations, and what `curios-abi` derives from it.
+//! The single authored table of the host's operations, and what `curios-abi` derives from it.
 //!
-//! `for_each_host_op!` is the one place a builtin operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then where the guest surfaces it, `as Handle/read`, then a brace group of what its types cannot say: `yields`, the label a lone payload crosses under (`value` when omitted), and `requires`, what its operands must hold before the call ([`Requirement`]), naming the operands it reads. The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape its [`Outcome`] — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
+//! `for_each_host_op!` is the one place a host operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then a brace group of what its types cannot say: `module`, the `/std` module that declares it; `yields`, the label a lone payload crosses under (`value` when omitted); and `requires`, what its operands must hold before the call ([`Requirement`]), naming the operands it reads. The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape its [`Outcome`] — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
 //!
 //! **Every row shares three clauses beside its own.** A handle that names nothing, or a resource of a kind that cannot do the operation at all, fails `NotFound` and leaves every resource as it was; a stream used in a direction it is not open for — reading `stdout` or `stderr`, writing `stdin`, or a file against its open mode — fails with `EBADF` through the errno lane, on every host. Every operand is copied in and every reply copied out, so no host keeps a reference to guest memory across a call. A malformed operand is refused by the host's adapter. A reply is lowered from its own type, which is what makes it a value of the row's wire types, and nothing checks it further: what a row's rustdoc promises beyond its types is its host's to keep, and the hosts' own tests hold them to it.
 //!
@@ -8,18 +8,18 @@
 //!
 //! A row whose reply is a [`Termination`] diverges: its call never returns, which is distinct from a row returning nothing, and it crosses no result. `proc_exit` is the one such row. No host implementation can return into the guest, since nothing but the adapter's guest-exit trap is made of a termination, and the guest holds no code for a return from it.
 //!
-//! Each row also states where the guest surfaces it, as `as Subject/label`. The `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. The wire name is that pair spelled flat — the subject lowercased, an underscore, the label, so `Handle/read` is `handle_read` — which keeps two rows sharing a label, `file/open` and `serial/open`, from contending for one import name; `a_wire_name_is_its_placement_spelled_flat` holds every row to it. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket`, `clock`).
+//! **A row is a `foreign` declaration of the standard library.** `module` names the `/std` module that declares it, by the host's own method name, so `handle_read` in `Handle` is `/std/Handle/handle_read` ([`HostOp::declared`]): the name a program imports, and the name a host answers. It is a clause of the row rather than a lookup beside the table, so a new row cannot go without one, and `curios-prelude-archive`'s `the_library_declares_every_row_a_host_answers` holds the library's declarations to the table, by name and by signature, in both directions. No program names a row any other way: what a term carries is the declaration ([`ForeignFunction`](super::ForeignFunction)), as it carries a package's.
 
 use {
     super::{
-        ChildExit, ChildHandles, Failure, FileStat, ForeignFunction, ForeignStore, Handle, Mode,
-        Outcome, Poll, Refusal, Requirement, SerialFlow, SerialOp, SerialParity, StdioMode,
-        Termination, Timestamp, TtySize, WireOperand, WireReply, WireResults, WireSignature,
+        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Outcome, Poll, Refusal,
+        Requirement, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp,
+        TtySize, WireOperand, WireReply, WireResults, WireSignature,
     },
     std::sync::LazyLock,
 };
 
-/// The one authored table of builtin host operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply as Subject/label { yields: label, marks: [..], requires: [..], checks: [..] }`, each clause optional: the variant is the row's [`HostOp`], the method name the wasm import name and the [`HostOps`] method; `Subject/label` is where the guest surfaces it under `/sys`; and the brace group holds what the types cannot say.
+/// The one authored table of the host's operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply { module: path, yields: label, requires: [..] }`, the last two clauses optional: the variant is the row's [`HostOp`], the method name the [`HostOps`] method and the label `module` declares the row by, and the brace group holds what the types cannot say.
 ///
 /// Exported so `curios-runtime` can generate its bindings from the rows it binds, and hidden because nothing else should read the table as tokens: every other consumer reads [`HostOp`] and [`HostOps`]. A callback must have in scope every type it expands, since the rows expand where the callback does.
 #[doc(hidden)]
@@ -28,127 +28,127 @@ macro_rules! for_each_host_op {
     ($callback:ident) => {
         $callback! {
             /// Read up to `n` bytes from `h`: a success with between one and `n` bytes, or with none and no I/O at all when `n` is `0`; the end of the stream once it has ended; or a failure. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `handle_poll` is where the wait happens; a regular file is read synchronously, since the disk answers it. A TLS stream ends only where its peer sent the closure alert: one closed without it fails with `TlsError`, since what arrived cannot be told from a stream cut short. The native host reads at most 64 KiB in one call, whatever `n` asks. Reading `stdout` or `stderr` fails with `EBADF`, as reading any descriptor opened only to write does.
-            HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure> as Handle/read { yields: bytes }
+            HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure> { module: Handle, yields: bytes }
 
             /// Write `b` to `h` in one attempt, succeeding with how many bytes it accepted — between one and all of them, or `0` for an empty `b`, which checks the handle and writes nothing. The contract is every handle's, the standard streams included: a handle may take only a prefix, and the caller resends the tail. A handle that can accept nothing now answers `WouldBlock`; an interruption before any progress is retried rather than reported; and a descriptor that accepts nothing and reports no error fails with the errno-less `Other(0)`. The host holds nothing of what a write accepted except a TLS stream's records, which `handle_flush` drains. Writing `stdin` fails with `EBADF`.
-            HandleWrite: fn handle_write(h: Handle, b: Vec<u8>) -> Result<u64, Failure> as Handle/write { yields: written }
+            HandleWrite: fn handle_write(h: Handle, b: Vec<u8>) -> Result<u64, Failure> { module: Handle, yields: written }
 
             /// Drain what the host still holds for `h`: a TLS stream's pending records, answering `WouldBlock` until `rustls` holds nothing — `handle_poll` reports the handle writable meanwhile — and `Ok` at once for any other kind, whose accepted writes the host holds nothing of. It promises the host's own buffers are empty, not that a peer has received the bytes or a disk has stored them. `NotFound` for an unknown handle.
-            HandleFlush: fn handle_flush(h: Handle) -> Result<(), Failure> as Handle/flush {}
+            HandleFlush: fn handle_flush(h: Handle) -> Result<(), Failure> { module: Handle }
 
             /// End `h`'s sending half and leave its receiving half as it is: the peer reads the end of the stream, and `h` still reads what the peer sends. A connected socket shuts down its write side. A TLS stream sends its closure alert first — queued once, answering `WouldBlock` until `rustls` holds none of it, `handle_poll` reporting the handle writable meanwhile — and shuts the socket's write side down after. It is how a stream tells its peer it has finished before `handle_close`, which tells it nothing and resets a connection that holds unread bytes. `NotFound` for an unknown handle and for a kind with no sending half of its own to end: a standard stream, a file, a listener, a pipe to a child, a serial port.
-            HandleFinish: fn handle_finish(h: Handle) -> Result<(), Failure> as Handle/finish {}
+            HandleFinish: fn handle_finish(h: Handle) -> Result<(), Failure> { module: Handle }
 
             /// Open the file at `path` in `mode`, succeeding with its handle.
-            FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> as file/open { yields: handle }
+            FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> { module: File, yields: handle }
 
             /// Start an asynchronous lookup of `host`:`port`, succeeding with a handle that becomes `READ`-ready once resolution completes, at which point `dns_resolve` forces the address list off it. The blocking resolution runs off the calling thread. A `host` that is not UTF-8 names nothing a resolver can find and is `NotFound`, and a `port` past 65535 is `EINVAL`, both before any lookup starts.
-            DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Result<Handle, Failure> as dns/lookup { yields: handle }
+            DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Result<Handle, Failure> { module: tcp/resolve, yields: handle }
 
             /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it: every address the resolver found, none included, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_bind`/`socket_connect`. A lookup that failed is `NotFound`. `WouldBlock` before readiness.
-            DnsResolve: fn dns_resolve(handle: Handle) -> Result<Vec<Vec<u8>>, Failure> as dns/resolve { yields: addresses }
+            DnsResolve: fn dns_resolve(handle: Handle) -> Result<Vec<Vec<u8>>, Failure> { module: tcp/resolve, yields: addresses }
 
             /// Create an unconnected, non-blocking socket for the address family encoded in `addr`, succeeding with its handle; transitioned by `socket_bind`/`socket_connect`/`socket_listen`.
-            SocketOpen: fn socket_open(addr: Vec<u8>) -> Result<Handle, Failure> as socket/open { yields: handle }
+            SocketOpen: fn socket_open(addr: Vec<u8>) -> Result<Handle, Failure> { module: tcp, yields: handle }
 
             /// Bind socket `h` to the local address `addr`.
-            SocketBind: fn socket_bind(h: Handle, addr: Vec<u8>) -> Result<(), Failure> as socket/bind {}
+            SocketBind: fn socket_bind(h: Handle, addr: Vec<u8>) -> Result<(), Failure> { module: tcp/Listener }
 
             /// Start connecting socket `h` to the resolved address `addr`. `Ok` when the kernel completed it at once, on which the handle is an ordinary byte stream `handle_read`/`handle_write`/`handle_close` serve; `WouldBlock` while it is under way, on which `handle_poll` reports `h` `WRITE`-ready once it has settled and `socket_finish_connect` reads the outcome; a refusal otherwise, on which the socket drops.
-            SocketConnect: fn socket_connect(h: Handle, addr: Vec<u8>) -> Result<(), Failure> as socket/connect {}
+            SocketConnect: fn socket_connect(h: Handle, addr: Vec<u8>) -> Result<(), Failure> { module: tcp/Socket }
 
             /// Complete a `socket_connect` that answered `WouldBlock`, once `handle_poll` reports `h` `WRITE`-ready. `Ok` re-files `h` as a connected byte stream; a refusal or other failure reports its status and drops the socket; `WouldBlock` while the connect is still pending. `Ok` on a connect that never went pending.
-            SocketFinishConnect: fn socket_finish_connect(h: Handle) -> Result<(), Failure> as socket/finish_connect {}
+            SocketFinishConnect: fn socket_finish_connect(h: Handle) -> Result<(), Failure> { module: tcp/Socket }
 
             /// Mark bound socket `h` as listening with accept-queue depth `backlog` (OS-clamped to `somaxconn`). A refused listen leaves the socket unconnected, as it was.
-            SocketListen: fn socket_listen(h: Handle, backlog: u64) -> Result<(), Failure> as socket/listen {}
+            SocketListen: fn socket_listen(h: Handle, backlog: u64) -> Result<(), Failure> { module: tcp/Listener }
 
             /// Pull the next connection from listener `h`: `WouldBlock` when none is pending, else a success with its handle, a non-blocking byte stream like a connected socket.
-            SocketAccept: fn socket_accept(h: Handle) -> Result<Handle, Failure> as socket/accept { yields: handle }
+            SocketAccept: fn socket_accept(h: Handle) -> Result<Handle, Failure> { module: tcp/Listener, yields: handle }
 
             /// Upgrade connected socket `h` to a TLS client stream in place. `sni` is the server name to present and verify against. The handshake is driven by the reads and writes that follow, each answering `WouldBlock` while it waits on the peer; a failed verification or protocol surfaces as `TlsError` from the read or write that discovers it, with the handle still filed for `handle_close`. An upgrade that cannot start — an invalid server name among its reasons — fails `TlsError` and leaves the socket connected.
-            TlsStart: fn tls_start(h: Handle, sni: Vec<u8>) -> Result<(), Failure> as tls/start {}
+            TlsStart: fn tls_start(h: Handle, sni: Vec<u8>) -> Result<(), Failure> { module: tcp/Socket }
 
             /// Build an opaque server-side TLS configuration from a PEM certificate chain and private key, succeeding with a host-owned config token consumed by `tls_start_server` and released by `handle_close`.
-            TlsServerConfig: fn tls_server_config(cert: Vec<u8>, key: Vec<u8>) -> Result<Handle, Failure> as tls/server_config { yields: handle }
+            TlsServerConfig: fn tls_server_config(cert: Vec<u8>, key: Vec<u8>) -> Result<Handle, Failure> { module: tcp/Listener, yields: handle }
 
             /// Upgrade accepted socket `h` to a TLS server stream in place using configuration handle `cfg`; the handshake is driven by the reads and writes that follow, as `tls_start`'s is. The configuration stays filed for the next connection, and an upgrade that cannot start leaves the socket connected.
-            TlsStartServer: fn tls_start_server(h: Handle, cfg: Handle) -> Result<(), Failure> as tls/start_server {}
+            TlsStartServer: fn tls_start_server(h: Handle, cfg: Handle) -> Result<(), Failure> { module: tcp/Listener }
 
             /// Set socket `h`'s `SO_REUSEADDR` flag; set before `socket_bind`.
-            SocketSetReuseaddr: fn socket_set_reuseaddr(h: Handle, on: bool) -> Result<(), Failure> as socket/set_reuseaddr {}
+            SocketSetReuseaddr: fn socket_set_reuseaddr(h: Handle, on: bool) -> Result<(), Failure> { module: tcp/Listener }
 
             /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle, each within the interest it asked for plus `ERR` and `HUP`; a handle that is unknown — closed, say — has no descriptor, or names a descriptor the system calls invalid reports `ERR`, so its waiter wakes into the call that says why. Each distinct descriptor is polled once, whatever number of handles name it, and an interruption is retried against a deadline taken at the call. A poll the system refuses outright refuses the call, naming the error.
-            HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Result<Vec<Poll>, Refusal> as Handle/poll { yields: revents, requires: [SameLength { a: handles, b: events }] }
+            HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Result<Vec<Poll>, Refusal> { module: Handle, yields: revents, requires: [SameLength { a: handles, b: events }] }
 
             /// Close `h`. Closing an unknown handle is a no-op.
-            HandleClose: fn handle_close(h: Handle) -> () as Handle/close {}
+            HandleClose: fn handle_close(h: Handle) -> () { module: Handle }
 
             /// Read the wall clock. `(secs, nanos)`: seconds since the Unix epoch, and the nanoseconds within the second.
-            ClockWall: fn clock_wall() -> Timestamp as clock/wall {}
+            ClockWall: fn clock_wall() -> Timestamp { module: time/Timestamp }
 
             /// Read the monotonic clock. `(secs, nanos)` elapsed since a fixed origin; only differences are meaningful.
-            ClockMono: fn clock_mono() -> Timestamp as clock/mono {}
+            ClockMono: fn clock_mono() -> Timestamp { module: time/Instant }
 
             /// Exactly `n` random bytes. A host that cannot find the memory or the entropy for them refuses the call, naming why, rather than answer fewer.
-            RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> as rand/bytes { yields: bytes }
+            RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> { module: rand, yields: bytes }
 
             /// The process arguments, each an opaque byte string.
-            ProcArgs: fn proc_args() -> Vec<Vec<u8>> as proc/args { yields: argv }
+            ProcArgs: fn proc_args() -> Vec<Vec<u8>> { module: proc, yields: argv }
 
             /// Look up the environment variable `name`: its value, possibly empty, or its absence. A name that is empty or holds `=` or NUL names no variable, and is absent.
-            ProcEnv: fn proc_env(name: Vec<u8>) -> Option<Vec<u8>> as proc/env { yields: value }
+            ProcEnv: fn proc_env(name: Vec<u8>) -> Option<Vec<u8>> { module: proc, yields: value }
 
             /// End the instance with `code`, the status every host hands its parent whole. The call never returns: the native host carries the code out as its guest-exit trap and the browser as its exit signal, neither ending the embedding process, and a host that returns anyway is refused rather than resumed.
-            ProcExit: fn proc_exit(code: u8) -> Termination as proc/exit {}
+            ProcExit: fn proc_exit(code: u8) -> Termination { module: proc }
 
             /// Put terminal `h` in raw mode (`on`) — the descriptor's termios recorded on first use, then no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0 — or restore the record (`off`). The native host also restores every record when it is dropped, so a trap or an `exit` leaves the terminal usable. `ENOTTY` through the errno lane is how a program learns it has no terminal.
-            TtyRaw: fn tty_raw(h: Handle, on: bool) -> Result<(), Failure> as tty/raw {}
+            TtyRaw: fn tty_raw(h: Handle, on: bool) -> Result<(), Failure> { module: Tty }
 
             /// The terminal's dimensions (`TIOCGWINSZ`): a success with its `cols` and `rows`.
-            TtySize: fn tty_size(h: Handle) -> Result<TtySize, Failure> as tty/size {}
+            TtySize: fn tty_size(h: Handle) -> Result<TtySize, Failure> { module: Tty }
 
             /// Open the serial device at `path`: read-write, no controlling terminal and non-blocking, then raw termios with `CLOCAL` and `CREAD`, no input mode at all, `baud` as the speed (from 1 through 4294967295), and the frame `data_bits` (7 or 8), `parity` (a [`serial_parity`](crate::serial_parity) tag), `stop_bits` (1 or 2) and `flow` (a [`serial_flow`](crate::serial_flow) tag). With no input mode set, whatever the port's last user left behind, the system sends no flow-control characters of its own, a character that fails its parity check arrives as it was received, and a break arrives as a zero byte. No exclusive hold is taken, so whether another open of the same device is refused is the device's to say. A success is a non-blocking byte stream `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve as they serve a pipe to a child, except that closing it discards what it accepted and has not sent, so the close never waits on the wire; `serial_drain` is the wait. A setting outside those ranges answers `EINVAL` through the errno lane without opening. The frame and the speed are read back once set, and a device that took another answers `EINVAL` too, after the open: on macOS a speed outside the driver's table is set by `IOSSIOSPEED`, and on Linux a speed the device cannot do is one it reports having replaced. Opening asserts DTR whatever the program wants, so a board that resets on DTR resets on open — a program that cares discards the boot noise afterwards.
-            SerialOpen: fn serial_open(path: Vec<u8>, baud: u64, data_bits: u64, parity: SerialParity, stop_bits: u64, flow: SerialFlow) -> Result<Handle, Failure> as serial/open { yields: handle }
+            SerialOpen: fn serial_open(path: Vec<u8>, baud: u64, data_bits: u64, parity: SerialParity, stop_bits: u64, flow: SerialFlow) -> Result<Handle, Failure> { module: Serial, yields: handle }
 
             /// Drive serial port `h`: `op` is a [`serial_op`](crate::serial_op) tag — `DTR` or `RTS` set to the level `on`, or `DISCARD_INPUT`, which drops what the device sent and the program has not read (`on` ignored). A handle that is not a serial port — a standard stream, a file, a pipe, a socket — is `NotFound`. Break and the four status lines are deliberately absent until a program needs them.
-            SerialControl: fn serial_control(h: Handle, op: SerialOp, on: bool) -> Result<(), Failure> as serial/control {}
+            SerialControl: fn serial_control(h: Handle, op: SerialOp, on: bool) -> Result<(), Failure> { module: Serial }
 
             /// Start waiting for serial port `h` to send what it has accepted, off the calling thread, succeeding with a handle to the wait: a stream that holds nothing and reaches its end once the output has left the system, or can no longer leave it. `handle_poll` reports that handle `READ`-ready then, `handle_read` answers the end, and `handle_close` releases it, which abandons the wait without stopping the output. Closing the port discards what is unsent, which ends a wait under way. `NotFound` for a handle that is not a serial port.
-            SerialDrain: fn serial_drain(h: Handle) -> Result<Handle, Failure> as serial/drain { yields: handle }
+            SerialDrain: fn serial_drain(h: Handle) -> Result<Handle, Failure> { module: Serial, yields: handle }
 
             /// The serial devices the system has, each by a path `serial_open` takes, sorted so two listings agree; none is the empty list. On Linux, every terminal with a device behind it whose port the driver found, by its `/dev/serial/by-id` name where the system keeps one — a name that says what the device is and outlives the order it was plugged in — and by its node otherwise, as an onboard port is; on macOS, the callout devices, `/dev/cu.*`.
-            SerialList: fn serial_list() -> Result<Vec<Vec<u8>>, Failure> as serial/list { yields: paths }
+            SerialList: fn serial_list() -> Result<Vec<Vec<u8>>, Failure> { module: Serial, yields: paths }
 
             /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag, `size` the size in bytes, and `mtime_secs` and `mtime_nanos` the modification time as `clock_wall` reads the clock. A dangling link reports the `SYMLINK` kind with zero sizes.
-            FileStat: fn file_stat(path: Vec<u8>) -> Result<FileStat, Failure> as file/stat {}
+            FileStat: fn file_stat(path: Vec<u8>) -> Result<FileStat, Failure> { module: fs }
 
             /// Remove the file at `path`. `IsDirectory` on a directory.
-            FileRemove: fn file_remove(path: Vec<u8>) -> Result<(), Failure> as file/remove {}
+            FileRemove: fn file_remove(path: Vec<u8>) -> Result<(), Failure> { module: fs }
 
             /// Rename `from` to `to`, file or directory, replacing an existing `to` as `rename(2)` does.
-            FileRename: fn file_rename(from: Vec<u8>, to: Vec<u8>) -> Result<(), Failure> as file/rename {}
+            FileRename: fn file_rename(from: Vec<u8>, to: Vec<u8>) -> Result<(), Failure> { module: fs }
 
             /// The names in directory `path`, as the bytes the directory holds — no `.` or `..`, sorted so two listings agree. `NotDirectory` on a file.
-            DirList: fn dir_list(path: Vec<u8>) -> Result<Vec<Vec<u8>>, Failure> as dir/list { yields: names }
+            DirList: fn dir_list(path: Vec<u8>) -> Result<Vec<Vec<u8>>, Failure> { module: fs, yields: names }
 
             /// Create the directory at `path`; its parent must exist. `AlreadyExists` when anything is there.
-            DirCreate: fn dir_create(path: Vec<u8>) -> Result<(), Failure> as dir/create {}
+            DirCreate: fn dir_create(path: Vec<u8>) -> Result<(), Failure> { module: fs }
 
             /// Remove the empty directory at `path`. `NotEmpty` when it has entries, `NotDirectory` on a file.
-            DirRemove: fn dir_remove(path: Vec<u8>) -> Result<(), Failure> as dir/remove {}
+            DirRemove: fn dir_remove(path: Vec<u8>) -> Result<(), Failure> { module: fs }
 
             /// The process's working directory, as bytes. WASI has preopens instead, so the browser denies it.
-            ProcCwd: fn proc_cwd() -> Result<Vec<u8>, Failure> as proc/cwd { yields: path }
+            ProcCwd: fn proc_cwd() -> Result<Vec<u8>, Failure> { module: fs, yields: path }
 
             /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. A success is the child's handle, which becomes `READ`-ready when the child exits, which is when `proc_wait` answers, beside the parent's end of each stream the call piped: a non-blocking handle `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve, and the empty token for a stream that was not piped. Closing the child leaves its streams filed. An empty `argv`, a NUL in any argument, the working directory or an environment entry, or an entry with no name before its `=` fails `EINVAL` without starting anything.
-            ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<ChildHandles, Failure> as proc/spawn {}
+            ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<ChildHandles, Failure> { module: Command }
 
             /// How `child` ended, once its handle is readable: a success with `code` and `signal`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs. An answer consumes the handle, and so does an end the host could not observe, which fails with the errno that kept it from knowing.
-            ProcWait: fn proc_wait(child: Handle) -> Result<ChildExit, Failure> as proc/wait {}
+            ProcWait: fn proc_wait(child: Handle) -> Result<ChildExit, Failure> { module: Command/Child }
 
             /// Send `child` `SIGKILL` if it still runs; `proc_wait` then reports the signal. A child whose end is already recorded is not signaled and answers `Ok`, since the host may have reaped its pid and the system handed it on.
-            ProcKill: fn proc_kill(child: Handle) -> Result<(), Failure> as proc/kill {}
+            ProcKill: fn proc_kill(child: Handle) -> Result<(), Failure> { module: Command/Child }
         }
     };
 }
@@ -157,26 +157,26 @@ macro_rules! for_each_host_op {
 macro_rules! declare_host_rows {
     ($(
         $(#[doc = $doc:literal])*
-        $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty as $subject:ident / $label:ident {
+        $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty {
+            module: $($module:ident)/+ $(,)?
             $(yields: $yields:ident $(,)?)?
             $(requires: [$($requirement:ident { $($requirement_field:ident: $requirement_operand:ident),* $(,)? }),* $(,)?] $(,)?)?
         }
     )*) => {
-        /// A builtin host operation, one variant per row of the table, named as the row names it: the variant is the wire name in CamelCase, and `a_variant_is_its_wire_name_in_camel_case` holds the two spellings together.
+        /// A host operation, one variant per row of the table, named as the row names it: the variant is the method name in CamelCase, and `a_variant_is_its_method_name_in_camel_case` holds the two spellings together.
         ///
-        /// **A term carries this and nothing else about the row.** Its signature, placement, outcome and description are read back from the table wherever they are needed, so no copy exists that could disagree with it: equality, interning, linking and cache admission compare variants, and a conflicting description of a builtin cannot be written down. A user's `foreign` declaration has no table to point into and carries its own signature instead, as [`ForeignFunction::Declared`]. An archived variant is validated as its discriminant when it is read back, so a stored unit cannot name a row the table does not hold.
+        /// **No program carries one.** A program reaches a row through the `foreign` declaration of `/std` that states it, and what its terms carry is that declaration. A variant is how a host's side names a row: what [`HostOps`] implements, what an adapter admits a call's operands against, and what a test scripts a reply for.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        #[curios_archive::archived]
         pub enum HostOp {
             $($(#[doc = $doc])* $variant,)*
         }
 
         impl HostOp {
-            /// Every builtin, in the table's order.
+            /// Every row, in the table's order.
             pub const ALL: &[HostOp] = &[$(HostOp::$variant),*];
         }
 
-        /// Every builtin row, in the table's order — the declaration order `/sys` binds them in — indexed by [`HostOp`]'s discriminant.
+        /// Every row, in the table's order, indexed by [`HostOp`]'s discriminant.
         fn roster() -> &'static [Row] {
             static ROWS: LazyLock<Vec<Row>> = LazyLock::new(|| {
                 vec![$({
@@ -187,8 +187,7 @@ macro_rules! declare_host_rows {
 
                     Row {
                         name: stringify!($name),
-                        subject: stringify!($subject),
-                        label: stringify!($label),
+                        module: concat!($(stringify!($module), "/"),+),
                         operands: vec![$(stringify!($p)),*],
                         fields: slots.iter().map(|(field, _)| field.clone()).collect(),
                         signature: WireSignature {
@@ -197,8 +196,6 @@ macro_rules! declare_host_rows {
                         },
                         outcome: <$r as WireReply>::OUTCOME,
                         requirements: vec![$($(Requirement::$requirement { $($requirement_field: stringify!($requirement_operand)),* }),*)?],
-                        // The row's own `///`, which is where a builtin's meaning is already written down.
-                        description: concat!($($doc),*).trim(),
                     }
                 },)*]
             });
@@ -206,7 +203,7 @@ macro_rules! declare_host_rows {
             &ROWS
         }
 
-        /// The host side of the builtin import surface: one method per row, typed as the row is written. Operands arrive owned, so a host may keep a buffer without copying it; a reply is its row's outcome, which the adapter encodes. One shared `Arc<H>` backs every import closure, so methods take `&self` and implementations synchronize internally. Implemented by `OsHost` over real OS resources and by `MockHost` over scripted in-memory ones.
+        /// The host's side of its rows: one method per row, typed as the row is written. Operands arrive owned, so a host may keep a buffer without copying it; a reply is its row's outcome, which the adapter encodes. One shared `Arc<H>` backs every import closure, so methods take `&self` and implementations synchronize internally. Implemented by `OsHost` over real OS resources and by `MockHost` over scripted in-memory ones.
         pub trait HostOps {
             $($(#[doc = $doc])* fn $name(&self, $($p: $t),*) -> $r;)*
         }
@@ -218,18 +215,17 @@ for_each_host_op!(declare_host_rows);
 /// One row as the table states it. Private: a caller names a row by its [`HostOp`] and reads it through that, so the table has no second spelling outside this module.
 struct Row {
     name: &'static str,
-    subject: &'static str,
-    label: &'static str,
+    /// The `/std` module that declares the row, each segment closed by its slash.
+    module: &'static str,
     operands: Vec<&'static str>,
     fields: Vec<String>,
     signature: WireSignature,
     outcome: Outcome,
     requirements: Vec<Requirement>,
-    description: &'static str,
 }
 
 impl HostOp {
-    /// The builtin whose wire name is `name`.
+    /// The row whose method is `name`.
     pub fn named(name: &str) -> Option<HostOp> {
         Self::ALL.iter().copied().find(|op| op.name() == name)
     }
@@ -238,64 +234,14 @@ impl HostOp {
         &roster()[self as usize]
     }
 
-    /// The wasm import name and [`HostOps`] method — the row's placement spelled flat.
+    /// The [`HostOps`] method that answers the row, which is the label the standard library declares it by.
     pub fn name(self) -> &'static str {
         self.row().name
     }
 
-    /// The `/sys` module the row surfaces in.
-    pub fn subject(self) -> &'static str {
-        self.row().subject
-    }
-
-    /// The binding the row surfaces as within its subject.
-    pub fn label(self) -> &'static str {
-        self.row().label
-    }
-
-    /// The `/std` module that declares the row as a `foreign`: the one that reads it. Exhaustive, so a row added to the table without a declaration to answer does not compile.
-    fn module(self) -> &'static str {
-        match self {
-            HostOp::HandleRead
-            | HostOp::HandleWrite
-            | HostOp::HandleFlush
-            | HostOp::HandleFinish
-            | HostOp::HandlePoll
-            | HostOp::HandleClose => "Handle",
-            HostOp::FileOpen => "File",
-            HostOp::FileStat
-            | HostOp::FileRemove
-            | HostOp::FileRename
-            | HostOp::DirList
-            | HostOp::DirCreate
-            | HostOp::DirRemove
-            | HostOp::ProcCwd => "fs",
-            HostOp::DnsLookup | HostOp::DnsResolve => "tcp/resolve",
-            HostOp::SocketOpen => "tcp",
-            HostOp::SocketConnect | HostOp::SocketFinishConnect | HostOp::TlsStart => "tcp/Socket",
-            HostOp::SocketBind
-            | HostOp::SocketListen
-            | HostOp::SocketAccept
-            | HostOp::SocketSetReuseaddr
-            | HostOp::TlsServerConfig
-            | HostOp::TlsStartServer => "tcp/Listener",
-            HostOp::ClockWall => "time/Timestamp",
-            HostOp::ClockMono => "time/Instant",
-            HostOp::RandBytes => "rand",
-            HostOp::ProcArgs | HostOp::ProcEnv | HostOp::ProcExit => "proc",
-            HostOp::TtyRaw | HostOp::TtySize => "Tty",
-            HostOp::SerialOpen
-            | HostOp::SerialControl
-            | HostOp::SerialDrain
-            | HostOp::SerialList => "Serial",
-            HostOp::ProcSpawn => "Command",
-            HostOp::ProcWait | HostOp::ProcKill => "Command/Child",
-        }
-    }
-
     /// The name the standard library declares the row by, which is the name a program imports it under: its module, then the host's own method name, so `handle_read` is one spelling in `/std/Handle` and in every host.
     pub fn declared(self) -> String {
-        format!("/std/{}/{}", self.module(), self.name())
+        format!("/std/{}{}", self.row().module, self.name())
     }
 
     /// The row's operands and results, as they cross.
@@ -303,12 +249,12 @@ impl HostOp {
         &self.row().signature
     }
 
-    /// The name each operand is written under, in the order they cross: what the row's requirements and checks read an operand by, and what `/sys` declares its parameters as.
+    /// The name each operand is written under, in the order they cross: what the row's requirements read an operand by.
     pub fn operands(self) -> &'static [&'static str] {
         &self.row().operands
     }
 
-    /// The position of the operand the row names `name`: the one lookup every reader of a requirement or a check makes.
+    /// The position of the operand the row names `name`: the one lookup a requirement's reader makes.
     pub fn operand(self, name: &str) -> usize {
         self.operands()
             .iter()
@@ -353,20 +299,4 @@ impl HostOp {
     pub fn requirements(self) -> &'static [Requirement] {
         &self.row().requirements
     }
-
-    /// What the operation does, in the words the table states it in.
-    pub fn description(self) -> &'static str {
-        self.row().description
-    }
-}
-
-/// The builtin store: every host operation the standard library consumes, in prelude (= declaration) order. The method name is the wasm import name; the subject and label are the `/sys` module and binding the guest surfaces it as; parameter names match those declarations; result labels are the record fields the guest projects. The runtime binds its implementations from the same rows, so the two ends cannot drift.
-pub fn host_ops() -> ForeignStore {
-    let mut store = ForeignStore::new();
-
-    for &op in HostOp::ALL {
-        store.register(ForeignFunction::Builtin(op));
-    }
-
-    store
 }

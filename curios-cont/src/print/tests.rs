@@ -99,7 +99,7 @@ entry ~f0$main() =
         let ~v1 = Nat/add(~v0$n, 1);
         return ~v1;
     cont ~k2$join(~v2$total) =
-        halt sys/proc_exit(~v2$total);
+        halt ffi//exit(~v2$total);
     ~f1$helper(2) -> ~k2$join;
 "
     );
@@ -182,7 +182,7 @@ fn a_value_bound_in_an_enclosing_continuation_reads_in_view_of_its_binder() {
 entry ~f0$main() =
     cont ~k1$outer(~v0$x) =
         cont ~k2$inner() =
-            halt sys/proc_exit(~v0$x);
+            halt ffi//exit(~v0$x);
         jump ~k2$inner();
     jump ~k1$outer(1);
 "
@@ -237,7 +237,7 @@ fn a_join_is_defined_once_and_named_at_every_predecessor() {
         "\
 entry ~f0$main() =
     cont ~k1$join(~v0) =
-        halt sys/proc_exit(~v0);
+        halt ffi//exit(~v0);
     switch 0
     | 0 => ~k1$join(1)
     | 1 => ~k1$join(2)
@@ -350,7 +350,7 @@ row ~r1$Outer(~r0)
 
 entry ~f0$main() =
     let ~v0 = ~r1$Outer(pad);
-    halt sys/proc_exit(~v0);
+    halt ffi//exit(~v0);
 "
     );
 }
@@ -380,7 +380,7 @@ fn an_unread_binder_spells_a_hole_only_when_it_is_also_hintless() {
 entry ~f0$main() =
     let _ = 2;
     let ~v1$kept = 3;
-    halt sys/proc_exit(0);
+    halt ffi//exit(0);
 "
     );
 }
@@ -403,7 +403,7 @@ fn a_single_use_binding_is_not_inlined() {
         "\
 entry ~f0$main() =
     let ~v0 = 5;
-    halt sys/proc_exit(~v0);
+    halt ffi//exit(~v0);
 "
     );
 }
@@ -446,7 +446,7 @@ fn a_node_reached_twice_is_reported_rather_than_duplicated() {
         "\
 entry ~f0$main() =
     cont ~k1$first() =
-        halt sys/proc_exit(0)
+        halt ffi//exit(0)
     and ~k2$second() =
         <~n0 again>;
     jump ~k1$first();
@@ -514,7 +514,7 @@ fn a_function_the_walk_never_reaches_still_prints() {
         module.to_string(),
         "\
 entry ~f0$main() =
-    halt sys/proc_exit(0);
+    halt ffi//exit(0);
 
 unreached
     let ~f1$orphan() =
@@ -561,7 +561,7 @@ fn an_operand_names_its_kind_by_its_sigil() {
 entry ~f0$main() =
     let ~v0$f = (0);
     cont ~k1$resume(~v1) =
-        halt sys/proc_exit(~v1);
+        halt ffi//exit(~v1);
     ~v0$f(pad, 4) -> ~k1$resume;
 "
     );
@@ -607,7 +607,7 @@ entry ~f0$main() =
     let ~v0 = ~r0$Pair(1, pad);
     let ~v1 = ~v0.~r0/0;
     let ~v2 = ~v1.1;
-    halt sys/proc_exit(~v2);
+    halt ffi//exit(~v2);
 "
     );
 }
@@ -651,7 +651,7 @@ entry ~f0$main() =
         return
     and ~f2$second() =
         return;
-    halt sys/proc_exit(0);
+    halt ffi//exit(0);
 "
     );
 }
@@ -727,7 +727,7 @@ fn an_empty_binding_group_prints_nothing() {
         module.to_string(),
         "\
 entry ~f0$main() =
-    halt sys/proc_exit(0);
+    halt ffi//exit(0);
 "
     );
 }
@@ -773,7 +773,7 @@ fn a_switch_arm_to_the_sentinel_spells_the_return() {
         "\
 entry ~f0$main() =
     cont ~k1$arm() =
-        halt sys/proc_exit(0);
+        halt ffi//exit(0);
     switch 0
     | 0 => ~k1$arm()
     | _ => return 9

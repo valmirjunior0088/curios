@@ -18,6 +18,7 @@ use {
         Atom, Callee, CellOp, ChannelOp, ContinuationId, Edge, FieldGroup, FunctionId, Intrinsic,
         IntrinsicCall, Literal, Module, Node, NodeId, RowId, Slot, ValueExpr, ValueId,
     },
+    curios_abi::Namespace,
     curios_num::{Grain, Rounding},
     curios_utilities::{grown, recurse},
     std::{
@@ -349,7 +350,7 @@ impl Printer<'_, '_, '_, '_> {
                 } => {
                     let call = format!(
                         "{}/{}({})",
-                        function.namespace(),
+                        Namespace::Ffi,
                         function.name(),
                         self.operands(args)
                     );
@@ -410,7 +411,7 @@ impl Printer<'_, '_, '_, '_> {
                 Node::Halt { function, args } => {
                     let halt = format!(
                         "halt {}/{}({}){suffix}",
-                        function.namespace(),
+                        Namespace::Ffi,
                         function.name(),
                         self.operands(args)
                     );

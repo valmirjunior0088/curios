@@ -1,6 +1,6 @@
 //! How a wire row becomes a Curios declaration: the surface type a [`WireType`] denotes, the declaration a [`ForeignFunction`] surfaces as, and the registration a user's own `foreign` goes through.
 //!
-//! Serves two callers that are peers rather than layers — the `/sys` roster, whose rows come off `curios_abi::host_ops`, and `into_core`, whose row is the one the user wrote. Both get the same shape, which is what keeps a call across the wire a host effect whoever declared it. It sits under `sys_module` because a wire type *is* a `/sys` carrier: the vocabulary this reads is the roster's own.
+//! Serves `into_core`, whose row is the one a `foreign` declaration wrote, the standard library's as any package's. It sits under `sys_module` because a wire type *is* a `/sys` carrier: the vocabulary this reads is the roster's own.
 //!
 //! **[`host_fn`] wraps every store row's result in `Io`, at this one site.** That is load-bearing rather than incidental: it is half of what narrows `documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md` from an argument about the whole library to a check over two Rust tables — a foreign row cannot introduce an eliminator for the effect type, because every row's result is built here and [`WireType`] is a closed enum with no case that could name an `Io` in a domain. A second site building a row's result would end it.
 
@@ -9,7 +9,7 @@ use {
         Decl, bin, bool_, byte, flt, handle, int, io_of, list_of, name, nat, record, type_, unit,
     },
     crate::{FuncType, FuncTypeParam, LetSignature, Subterm, Term, TopForeign},
-    curios_abi::{DeclaredForeign, ForeignFunction, ForeignStore, ResultShape, WireType},
+    curios_abi::{ForeignFunction, ForeignStore, ResultShape, WireType},
     curios_num::Grain,
     curios_utilities::Plicity,
     std::{iter, sync::Arc},
@@ -105,18 +105,18 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
     }
 }
 
-/// Handle one user-written `foreign` declaration: register its [`ForeignFunction`] into the compilation's (non-`host_ops`) foreign store, and return the ordinary [`LetSignature`] `into_core` lowers it as — wire-type bookkeeping and `host_fn`'s shape stay internal to this module, so `into_core` only ever deals with the same `LetSignature` it already knows how to lower for a plain `TopItem::Let`. `name` is the declaration's fully qualified name (leading `/`, the caller's current position while walking the module tree), which becomes the wasm import string under the `ffi` namespace. Qualified names are unique per compilation (a same-scope duplicate is a binding conflict long before lowering reaches this point), so `register`'s duplicate panic stays what it is everywhere else: a construction bug.
+/// Handle one user-written `foreign` declaration: register its [`ForeignFunction`] into the compilation's foreign store, and return the ordinary [`LetSignature`] `into_core` lowers it as — wire-type bookkeeping and `host_fn`'s shape stay internal to this module, so `into_core` only ever deals with the same `LetSignature` it already knows how to lower for a plain `TopItem::Let`. `name` is the declaration's fully qualified name (leading `/`, the caller's current position while walking the module tree), which becomes the wasm import string under the `ffi` namespace. Qualified names are unique per compilation (a same-scope duplicate is a binding conflict long before lowering reaches this point), so `register`'s duplicate panic stays what it is everywhere else: a construction bug.
 pub(crate) fn foreign_signature(
     declaration: &TopForeign,
     foreigns: &mut ForeignStore,
     name: String,
 ) -> LetSignature {
     // A user's `foreign` carries its own `---` on the declaration they wrote, which is what a page reads; the row has nothing to add.
-    let function = ForeignFunction::Declared(DeclaredForeign {
+    let function = ForeignFunction {
         name,
         label: declaration.label.to_string(),
         signature: declaration.signature.clone(),
-    });
+    };
 
     foreigns.register(function.clone());
 

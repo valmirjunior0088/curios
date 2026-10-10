@@ -74,7 +74,7 @@ impl Lying {
 macro_rules! declare_lying_host {
     ($(
         $(#[doc = $doc:literal])*
-        $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty as $subject:ident / $label:ident { $($contract:tt)* }
+        $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty { $($contract:tt)* }
     )*) => {
         impl HostOps for Lying {
             $(

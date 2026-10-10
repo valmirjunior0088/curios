@@ -1,9 +1,8 @@
-//! A foreign row inhabits its wire type and nothing more: a declared one whatever it claims, and a builtin exactly the roster's type for its row.
+//! A foreign row inhabits its wire type and nothing more, whatever a term claims of it.
 
 use {
     super::test_support::*,
     crate::{Error, Globals},
-    curios_abi::{ForeignFunction, HostOp},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Global, Intrinsic, Term},
     curios_num::Grain,
@@ -14,7 +13,7 @@ use {
 ///
 /// The foreign wire contract is enforced by the *grammar*, as `curios/src/tests/board`'s `a_foreign_declaration_is_confined_to_wire_types` shows: `parse_wire_type` is a closed keyword grammar, so `foreign bad : False` never parses and neither checker is asked — the rule is the parser's. As a statement about where the rule is enforced that is right. As a soundness statement it understates the position, and it leaves open the question that matters: a host call is the one place an *embedder* supplies a value the compiler never saw, so what happens if a module reaches the kernel with the rule already broken?
 ///
-/// It cannot be broken, and the reason is representational rather than a check. `Subterm::Foreign` carries a `ForeignFunction`: a builtin is an identity whose row is the roster's and cannot be written on the term at all, and a declared row's `signature` is a `WireSignature` over `WireType`, a closed enum of wire carriers. No variant denotes a nominal type, so no row, forged by hand or not, can *say* its result is a proposition. And `infer`'s rule does not read a type off the term: it **constructs** the result through `foreign_signature` over that enum and checks each operand against its own wire type, so what a declared row claims about its name — the part a forgery controls — never reaches the type at all.
+/// It cannot be broken, and the reason is representational rather than a check. `Subterm::Foreign` carries a `ForeignFunction`, whose `signature` is a `WireSignature` over `WireType`, a closed enum of wire carriers. No variant denotes a nominal type, so no row, forged by hand or not, can *say* its result is a proposition. And `infer`'s rule does not read a type off the term: it **constructs** the result through `foreign_signature` over that enum and checks each operand against its own wire type, so what a row claims about its name — the part a forgery controls — never reaches the type at all.
 ///
 /// A null result, recorded as one: nothing here was found to be wrong. What the fixture pins is that the boundary holds from Core and not merely from the parser, which is the half no surface program can reach and no fixture covered. The row below is a forgery — a name no store would issue — and the kernel is then made to type its call.
 ///
@@ -60,39 +59,16 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
     );
 }
 
-/// `proc/args` as a term carries it: the identity alone, whose row the kernel reads from the roster.
-fn proc_args() -> ForeignFunction {
-    ForeignFunction::Builtin(HostOp::ProcArgs)
-}
-
-/// A builtin is typed by its roster row: `proc/args` inhabits `Io(List(Bytes))`, the description of the argument list the table states, with nothing on the term to say so.
+/// A row cannot be held at another wire type than its own: the type is built from the signature the row carries, so a claim that a row answering a `Nat` yields a list of bytes is a mismatch like any other.
 #[test]
-fn a_builtin_is_typed_by_its_roster_row() {
+fn a_foreign_row_cannot_be_held_at_another_wire_type() {
     let false_name = Global::Authored(Qualifier::from(["False"]));
-    let arguments = Term::intrinsic(Intrinsic::io_type(Term::intrinsic(Intrinsic::ListType(
+    let claimed = Term::intrinsic(Intrinsic::io_type(Term::intrinsic(Intrinsic::ListType(
         Term::intrinsic(Intrinsic::BinType(Grain::X)),
     ))));
 
-    assert_eq!(
-        fixture_verdicts(
-            &foreign_held_at(proc_args(), &arguments, &false_name),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        ),
-        Vec::new(),
-        "the kernel refused a builtin at the type its roster row denotes",
-    );
-}
-
-/// A builtin cannot be held at another row's type: a term carries only the identity, so there is no description on it to disagree with the roster, and a claim that `proc/args` yields a `Nat` is a mismatch like any other.
-#[test]
-fn a_builtin_cannot_be_held_at_another_rows_type() {
-    let false_name = Global::Authored(Qualifier::from(["False"]));
-    let claimed = Term::intrinsic(Intrinsic::io_type(Term::intrinsic(Intrinsic::NatType)));
-
     let verdicts = fixture_verdicts(
-        &foreign_held_at(proc_args(), &claimed, &false_name),
+        &foreign_held_at(forged_row(), &claimed, &false_name),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -102,6 +78,6 @@ fn a_builtin_cannot_be_held_at_another_rows_type() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
-        "the kernel let a builtin take another row's type: {verdicts:?}",
+        "the kernel let a row take another wire type than its own: {verdicts:?}",
     );
 }

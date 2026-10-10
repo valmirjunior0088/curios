@@ -196,7 +196,7 @@ fn parse_wire_never<'a>() -> Parser<'a, WireResults> {
     })
 }
 
-// `(T, T, ...) -> R` (a foreign function) or a bare `R` (a zero-argument foreign, like `host_ops`'s `clock_wall`). An operand is its wire type alone and so is a bare result, while a braced result names its fields, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.
+// `(T, T, ...) -> R` (a foreign function) or a bare `R` (a zero-argument foreign, like `/std/time/Timestamp`'s `clock_wall`). An operand is its wire type alone and so is a bare result, while a braced result names its fields, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.
 pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
     parse_literal("(")
         .and_keep(sep_by0_trailing(parse_wire_type, || parse_literal(",")))

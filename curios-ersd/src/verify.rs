@@ -21,6 +21,7 @@ use {
         RecGroupId, Rhs, SequenceArity, Statement, StatementId, Terminator, ValueId, VariantFamily,
         spell_function, spell_value,
     },
+    curios_abi::Namespace,
     curios_utilities::{grown, recurse},
     std::collections::HashSet,
 };
@@ -712,7 +713,7 @@ impl<'m> Verifier<'m> {
                         StructuralRule::ForeignArity,
                         format!(
                             "statement {id} calls {}/{} with {} operands; its wire arity is {arity}",
-                            row.namespace(),
+                            Namespace::Ffi,
                             row.name(),
                             operands.len()
                         ),
@@ -779,7 +780,7 @@ impl<'m> Verifier<'m> {
                         StructuralRule::ForeignArity,
                         format!(
                             "the terminator of block {id} calls {}/{} with {} operands; its wire arity is {arity}",
-                            row.namespace(),
+                            Namespace::Ffi,
                             row.name(),
                             operands.len()
                         ),

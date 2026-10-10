@@ -5,7 +5,7 @@ use {
         EmissionValue, EmissionValueName, FltHelper, LoadAs, call, concrete_val, get, i64_const,
         refuse_func_name, tee, when,
     },
-    curios_abi::{ForeignFunction, WireLeaf, WireType},
+    curios_abi::{ForeignFunction, Namespace, WireLeaf, WireType},
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, HashMap, HashSet},
@@ -693,13 +693,10 @@ impl<'a> Table<'a> {
 
     /// The internal binding name of a store-described host function. First use during emission records the function as live; [`host_funcs`](Self::host_funcs) hands the recorded set to `emit_sys_imports`.
     ///
-    /// A row's identity is its `(namespace, name)` pair (see [`ForeignFunction`]), and its name is chosen outside the emitter, so the minted name embeds both components under the reserved `host/` row prefix — a foreign name can never collide with a runtime helper, another minted row, or a same-named row from another namespace. The embedding is injective because namespaces are compiler-chosen and never contain `/`.
+    /// A row's identity is its import name (see [`ForeignFunction`]), which is chosen outside the emitter, so the minted name embeds it, after the namespace every row imports under, beneath the reserved `host/` row prefix — a foreign name can never collide with a runtime helper or with another minted row.
     pub(crate) fn host_func(&self, function: &Arc<ForeignFunction>) -> curios_wasm::FuncName {
-        let func_name = curios_wasm::FuncName::from(format!(
-            "host/{}/{}",
-            function.namespace(),
-            function.name()
-        ));
+        let func_name =
+            curios_wasm::FuncName::from(format!("host/{}/{}", Namespace::Ffi, function.name()));
 
         self.host_funcs
             .borrow_mut()

@@ -1,21 +1,18 @@
 //! The foreign-function store — the generic description of a host call, from which each consumer derives its own view of the boundary.
 //!
-//! A [`ForeignFunction`] is one host call: a builtin, which is its [`HostOp`] identity and reads every fact about itself back from the roster, or a user's own `foreign` declaration, which carries its own. Either way its `namespace`/`name` pair is the wasm import (`sys` and the roster's wire name for a builtin, `ffi` and the declaration's fully qualified name for a declared row — the wire-level ABI contract between the emitter and the runtime linker), and its [`WireSignature`] names the operands and results and gives each a [`WireType`]. Every host call is effectful, so reducing one at the type level is always an error — the effect cannot happen at compile time. The IR nodes carry the function as an `Arc`, so every stage reads what it needs through the node instead of keeping an independently hand-written spelling in lockstep:
+//! A [`ForeignFunction`] is one host call as its `foreign` declaration states it: the fully qualified name it is declared under, which is its wasm import name in the `ffi` namespace — the wire-level ABI contract between the wasm emitter and whatever links the program — and a [`WireSignature`] that names the results and gives each operand and result a [`WireType`]. Every host call is effectful, so reducing one at the type level is always an error — the effect cannot happen at compile time. The IR nodes carry the function as an `Arc`, so every stage reads what it needs through the node instead of keeping an independently hand-written spelling in lockstep:
 //!
-//! - the `/sys` prelude declaration, or a user's own `foreign` declaration (surface parameter types and the named result record the guest projects),
+//! - the `foreign` declaration itself (surface parameter types and the named result record the guest projects),
 //! - the core elaborator's operand checks and result type,
-//! - the wasm emitter's `sys.*`/`ffi.*` import types and call-site operand loads,
+//! - the wasm emitter's `ffi.*` import types and call-site operand loads,
 //! - the runtime linker's `wasmtime::FuncType`s.
 //!
-//! A [`ForeignStore`] is the set of foreign functions declared under one tier. [`host_ops`](super::host_ops) is the fixed builtin (`sys`) tier, consumable only by the standard library: `/sys` is minted from it when the prelude is built, and the runtime binds it. Each unit's own `foreign` declarations accumulate into a store of the `ffi` tier (`curios_text`'s generated foreign signature), and a compilation hands its embedder the union of those. The two tiers are never merged, but the wasm namespace is decided by the row's case — the store split only governs who may consume a tier.
+//! A [`ForeignStore`] is the set of foreign functions a unit declares, and a compilation hands its embedder the union of the ones its program reaches. A function says nothing of who answers it: a host's own operations are declarations of the standard library, as a package's are its own, and whether a name is answered by a module, an embedder or the host is decided where the program is linked.
 
-use {
-    super::HostOp,
-    std::{
-        fmt::{self, Display, Formatter},
-        hash::{Hash, Hasher},
-        sync::Arc,
-    },
+use std::{
+    fmt::{self, Display, Formatter},
+    hash::{Hash, Hasher},
+    sync::Arc,
 };
 
 /// The element type of a wire [`WireType::List`] — the same vocabulary minus `List` itself, so a list of lists is unrepresentable rather than merely unchecked; `README.md` states why one level is all the boundary handles.
@@ -150,7 +147,7 @@ impl From<WireReference> for WireType {
 
 /// The results of one foreign function, in the order they cross, a scalar or a reference in whatever slot the row gives it.
 ///
-/// The count fixes the guest-facing shape, as [`ResultShape`] states, and a result is labelled only where that shape reads a label: the fields of a record. One result crosses bare, so a name for it is nothing the wire carries — a builtin's is its row's, which a check reads it by ([`HostOp::fields`]), and a declared row writes none. Where a reference stands is no constraint on anyone: the guest waits a row's results out in locals and embeds each reference where it stands, and the runtime lowers each result into its own slot; `README.md` states the decision and what it rejected.
+/// The count fixes the guest-facing shape, as [`ResultShape`] states, and a result is labelled only where that shape reads a label: the fields of a record. One result crosses bare, so a name for it is nothing the wire carries, and a declaration writes none. Where a reference stands is no constraint on anyone: the guest waits a row's results out in locals and embeds each reference where it stands, and the runtime lowers each result into its own slot; `README.md` states the decision and what it rejected.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireResults {
@@ -173,7 +170,7 @@ impl WireResults {
         Self { slots: Slots::None }
     }
 
-    /// No result ever: the row's call does not return, which is distinct from a row answering nothing. What a declared row states to diverge, as a builtin's reply type does.
+    /// No result ever: the row's call does not return, which is distinct from a row answering nothing. What a declaration states with `Never`.
     pub fn never() -> Self {
         Self {
             slots: Slots::Never,
@@ -241,7 +238,7 @@ impl WireResults {
     }
 }
 
-/// How a row's results reach the guest: no result is the unit value, one is the bare value forwarded through, two or more a record of the named fields — whose labels are load-bearing, since `/sys` projects `.status` and `.bytes` in reading a row's outcome, and the standard library `.secs`, `.nanos`, ….
+/// How a row's results reach the guest: no result is the unit value, one is the bare value forwarded through, two or more a record of the named fields — whose labels are load-bearing, since the standard library projects `.status`, `.bytes`, `.secs`, `.nanos`, … in reading a row's reply.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResultShape<'a> {
     Unit,
@@ -251,7 +248,7 @@ pub enum ResultShape<'a> {
     Never,
 }
 
-/// The signature of one foreign function: what crosses. Each operand is its wire type, in order, and the results are shaped as [`WireResults`] states. An operand has no name here: a builtin's is its row's, which a requirement or a check reads it by ([`HostOp::operands`]), and a declared row's operands are positions.
+/// The signature of one foreign function: what crosses. Each operand is its wire type, in order, and the results are shaped as [`WireResults`] states. An operand has no name here: a declaration's operands are positions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireSignature {
@@ -259,7 +256,7 @@ pub struct WireSignature {
     pub results: WireResults,
 }
 
-/// The wasm import namespace a foreign function links under — the closed pair both ends agree on. `Sys` is the fixed builtin substrate, consumable only by the standard library; `Ffi` is a user's own `foreign` declaration.
+/// The wasm import namespaces — the closed pair both ends agree on. `Ffi` holds every foreign function, under the name its declaration has, the standard library's among them; `Sys` holds [`PANIC`] alone, the one import no declaration states.
 ///
 /// Two variants rather than a `&'static str`, so the namespaces that exist are exactly the namespaces that can be written — `README.md`'s decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -269,7 +266,7 @@ pub enum Namespace {
     Ffi,
 }
 
-/// The one `sys` import that is not a store row: the emitter's own refusal. `panic` takes a byte string and traps rather than returns, so no [`WireSignature`] describes it; no `/sys` declaration names it either, since no program can spell it — `curios-emit` calls it wherever it refuses a computation, with one constant sentence per refusal class, and both runtimes render what arrives as `panicked: …`. Only the name is wire.
+/// The one `sys` import, which no store row describes: the emitter's own refusal. `panic` takes a byte string and traps rather than returns, so no [`WireSignature`] describes it; no `/sys` declaration names it either, since no program can spell it — `curios-emit` calls it wherever it refuses a computation, with one constant sentence per refusal class, and both runtimes render what arrives as `panicked: …`. Only the name is wire.
 pub const PANIC: &str = "panic";
 
 /// The one export both ends link on: the entrypoint the emitter exports and the runtime looks up to run a program. It spells the entry function's own name under the compiler's naming scheme, so a module dump reads as it links — but the name is a contract stated here, not a consequence of that scheme or of the hint the entry happens to carry, so no debug name decides a wire string.
@@ -293,99 +290,53 @@ impl Display for Namespace {
     }
 }
 
-/// One foreign (host-provided) function: a builtin the roster names, or a user's own `foreign` declaration.
-///
-/// **A builtin is its identity and nothing else.** [`HostOp`] names a row of the one authored table, and every fact about the row — its wire name, `/sys` placement, signature and description — is read back from the table, so no term carries a description of a builtin that could disagree with it. A declared row has no table to point into and carries its signature itself. The accessors below answer both alike: the wasm import pair is `(namespace, name)` — `sys` and the roster's wire name for a builtin, `ffi` and the declaration's fully qualified name (leading `/`) for a declared row — the wire ABI shared by the wasm emitter and the runtime linker. `label` is the binding the function surfaces under in the guest and `subject` the module that binding sits in: `Some` for a builtin, whose placement the table states, and `None` for a declared row, which the guest already places by writing it where it wants it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[curios_archive::archived]
-pub enum ForeignFunction {
-    Builtin(HostOp),
-    Declared(DeclaredForeign),
-}
-
-/// A user's own `foreign` declaration, as its row: the fully qualified name it imports under in the `ffi` namespace, the label it binds, and the signature it declared.
+/// One foreign function, as its `foreign` declaration states it: the fully qualified name it imports under in the `ffi` namespace (leading `/`), the label it binds in the guest, and the signature it declared. The pair `(ffi, name)` is the wire ABI the wasm emitter and the runtime linker share. Nothing here says who answers the call — a module, an embedder or the host — which is decided where the program is linked.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub struct DeclaredForeign {
+pub struct ForeignFunction {
     pub name: String,
     pub label: String,
     pub signature: WireSignature,
 }
 
-// A declared row's identity is its import name: a [`ForeignStore`] never holds two functions with one name (`register` enforces it), and qualified names are unique per compilation, so the name determines the whole row. Equality and hashing stay O(1) rather than walking the signature.
-impl PartialEq for DeclaredForeign {
+// A function's identity is its import name: a [`ForeignStore`] never holds two with one name (`register` enforces it), and qualified names are unique per compilation, so the name determines the whole row. Equality and hashing stay O(1) rather than walking the signature.
+impl PartialEq for ForeignFunction {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
 }
 
-impl Eq for DeclaredForeign {}
+impl Eq for ForeignFunction {}
 
-impl Hash for DeclaredForeign {
+impl Hash for ForeignFunction {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
 }
 
 impl ForeignFunction {
-    /// The wasm import namespace: `sys` for a builtin, `ffi` for a declared row.
-    pub fn namespace(&self) -> Namespace {
-        match self {
-            ForeignFunction::Builtin(_) => Namespace::Sys,
-            ForeignFunction::Declared(_) => Namespace::Ffi,
-        }
-    }
-
-    /// The wasm import name: the roster's wire name, or the declaration's fully qualified name.
+    /// The wasm import name: the declaration's fully qualified name.
     pub fn name(&self) -> &str {
-        match self {
-            ForeignFunction::Builtin(op) => op.name(),
-            ForeignFunction::Declared(declared) => &declared.name,
-        }
-    }
-
-    /// The `/sys` module a builtin surfaces in; a declared row is placed where it was written.
-    pub fn subject(&self) -> Option<&str> {
-        match self {
-            ForeignFunction::Builtin(op) => Some(op.subject()),
-            ForeignFunction::Declared(_) => None,
-        }
+        &self.name
     }
 
     /// The binding the function surfaces as in the guest.
     pub fn label(&self) -> &str {
-        match self {
-            ForeignFunction::Builtin(op) => op.label(),
-            ForeignFunction::Declared(declared) => &declared.label,
-        }
+        &self.label
     }
 
-    /// Whether a call never returns: a builtin whose reply is a termination, or a declared row that answers `Never`.
+    /// Whether a call never returns: the declaration answers `Never`.
     pub fn diverges(&self) -> bool {
-        match self {
-            ForeignFunction::Builtin(op) => op.diverges(),
-            ForeignFunction::Declared(declared) => declared.signature.results.is_never(),
-        }
+        self.signature.results.is_never()
     }
 
-    /// The operands and results: the roster's for a builtin, the declaration's own otherwise.
+    /// The operands and results the declaration states.
     pub fn signature(&self) -> &WireSignature {
-        match self {
-            ForeignFunction::Builtin(op) => op.signature(),
-            ForeignFunction::Declared(declared) => &declared.signature,
-        }
-    }
-
-    /// What the operation does, in the words the roster states it in — the guest's own documentation of the row, so a page showing a builtin says the same thing the table says. Empty for a declared row, whose prose sits on the declaration the author wrote.
-    pub fn description(&self) -> &str {
-        match self {
-            ForeignFunction::Builtin(op) => op.description(),
-            ForeignFunction::Declared(_) => "",
-        }
+        &self.signature
     }
 }
 
-/// The foreign functions one compilation declares, in declaration order — the order the prelude surfaces them under `/sys`. Rows are `Arc`ed so the IR nodes share them; cloning a store is a handful of reference bumps.
+/// The foreign functions a unit declares, in declaration order. Rows are `Arc`ed so the IR nodes share them; cloning a store is a handful of reference bumps.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct ForeignStore {
@@ -416,7 +367,7 @@ impl ForeignStore {
             .find(|function| function.name() == name)
     }
 
-    /// The rows in registration order — the declaration order the prelude binds them in and the runtime seeds its implementations by.
+    /// The rows in registration order, which is the order they were declared in.
     pub fn iter(&self) -> impl Iterator<Item = &Arc<ForeignFunction>> {
         self.functions.iter()
     }

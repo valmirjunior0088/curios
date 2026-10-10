@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
     curios_num::Natural,
     std::sync::Arc,
 };
@@ -56,14 +56,14 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
     builder.item_functions(vec![count]);
 
     builder.open_block();
-    let row = Arc::new(ForeignFunction::Declared(DeclaredForeign {
+    let row = Arc::new(ForeignFunction {
         name: "/poll".into(),
         label: "poll".into(),
         signature: WireSignature {
             params: vec![],
             results: WireResults::single(WireType::Nat),
         },
-    }));
+    });
     let foreign = builder.foreign(row);
     let opaque = builder.let_value(
         Some("opaque".into()),

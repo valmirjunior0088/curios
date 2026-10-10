@@ -6,15 +6,24 @@
 
 use {
     crate::into_wasm,
-    curios_abi::{ForeignFunction, HostOp, host_ops},
+    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
     std::{collections::BTreeMap, sync::Arc},
 };
 
-/// A halt through `proc/exit` reading `args` — the terminal a fixture ends with when what it passes must stay live.
+/// The row a program declares as `/name`, taking `params` and answering `results`.
+pub(super) fn row(name: &str, params: Vec<WireType>, results: WireResults) -> Arc<ForeignFunction> {
+    Arc::new(ForeignFunction {
+        name: format!("/{name}"),
+        label: name.to_string(),
+        signature: WireSignature { params, results },
+    })
+}
+
+/// A halt reading `args`, through a row that does not return, `/exit: (Byte) -> Never` — the terminal a fixture ends with when what it passes must stay live.
 pub(super) fn halt(args: Vec<curios_cont::Atom>) -> curios_cont::Node {
     curios_cont::Node::Halt {
-        function: Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)),
+        function: row("exit", vec![WireType::Byte], WireResults::never()),
         args,
     }
 }
@@ -319,16 +328,6 @@ pub(super) fn channel_roundtrip() -> curios_cont::Module {
 }
 
 // --- Foreign ABI ----------------------------------------------------------
-
-/// A call to the builtin row `name`, as [`foreign_call_to`] builds one.
-pub(super) fn foreign_call(name: &str) -> curios_cont::Module {
-    foreign_call_to(
-        host_ops()
-            .get(name)
-            .unwrap_or_else(|| panic!("host_ops defines {name}"))
-            .clone(),
-    )
-}
 
 /// A host call whose signature has `results` results, resuming into a continuation that binds them all and exits with the first.
 pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cont::Module {

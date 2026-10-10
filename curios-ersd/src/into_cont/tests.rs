@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{ForeignFunction, HostOp},
+    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
     curios_num::{Binary, Grain, Natural},
     std::sync::Arc,
 };
@@ -982,7 +982,14 @@ fn a_halt_lowers_to_its_node() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
     let three = nat(&mut builder, 3);
-    let exit = builder.foreign(Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)));
+    let exit = builder.foreign(Arc::new(ForeignFunction {
+        name: "/exit".to_string(),
+        label: "exit".to_string(),
+        signature: WireSignature {
+            params: vec![WireType::Byte],
+            results: WireResults::never(),
+        },
+    }));
     let entry = builder.seal_block(Terminator::Halt {
         foreign: exit,
         operands: vec![three],
