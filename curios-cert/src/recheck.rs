@@ -59,8 +59,8 @@ use {
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
         Abroad, Bound, Certification, Certified, Entrypoint, Free, Global, InductDecl, Item, Level,
-        MetavarId, Module, Polarity, Program, Reads, StructDecl, Term, Totality, UniverseContext,
-        Variance, Zonked,
+        Lexicon, MetavarId, Module, Polarity, Program, Reads, StructDecl, Term, Totality,
+        UniverseContext, Variance, Zonked,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::{
@@ -80,6 +80,29 @@ pub struct Verdict {
     /// What failed: an item, or the registry entry a declaration pass refused — a recursive group is named by its first member, since a group is checked and refused as a unit. `None` is the entrypoint expression, which has no name to export.
     pub name: Option<Global>,
     pub error: Error,
+}
+
+impl Verdict {
+    /// The refusal as a reader is told it: [`Error::format_with`]'s rendering, and, where the declaration was refused at one assignment of the sorts it leaves to its caller, the type `module` holds under the verdict's name restated at that assignment.
+    pub fn format_with(
+        &self,
+        module: &Module,
+        scope: &[&Lexicon],
+        syntax: &SyntaxRegistry,
+    ) -> String {
+        let stated = match (&self.error, self.name) {
+            (Error::AtSorts { .. }, Some(name)) => module
+                .items
+                .iter()
+                .flat_map(Item::definitions)
+                .find(|definition| definition.name == name)
+                .map(|definition| definition.type_),
+            _ => None,
+        };
+
+        self.error
+            .format_stating(stated.as_ref(), module, scope, syntax)
+    }
 }
 
 /// What one whole-module walk reached: every refusal, and the record of what it concluded about the definitions it judged.

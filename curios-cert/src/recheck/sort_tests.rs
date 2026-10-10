@@ -305,6 +305,23 @@ fn a_definition_well_typed_at_every_sort_is_accepted() {
     assert!(verdicts.is_empty(), "{verdicts:?}");
 }
 
+/// A refusal at one assignment spells the declaration's terms at it, where the declaration's text says `Sort`. Its report restates the type the declaration states, read at the assignment, which is where a reader sees which written sort stood at which.
+#[test]
+fn a_refusal_at_one_sort_restates_the_declaration_at_it() {
+    let module = module(vec![handing_back("back", Term::prop())], []);
+    let reports = verdicts(&module)
+        .iter()
+        .map(|verdict| verdict.format_with(&module, &[], &SYNTAX))
+        .collect::<Vec<_>>();
+
+    assert!(
+        reports.iter().any(|report| report.starts_with(
+            "with the sorts it leaves to its caller at `Type`, where it reads `(A: Type) -> Prop`: "
+        )),
+        "{reports:?}",
+    );
+}
+
 /// An occurrence states as many sorts as its declaration leaves, each `Prop` or `Type`: one stating none denotes no instance, one stating too few is short of what the type is read at, and one stating a parameter would be judged at a sort that is neither.
 #[test]
 fn an_occurrence_states_every_sort_its_declaration_leaves() {

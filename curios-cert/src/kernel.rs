@@ -50,7 +50,7 @@ mod whnf;
 pub(crate) use whnf::*;
 
 use {
-    crate::{Baseline, entails, erased_half},
+    crate::{Baseline, entails, erased_half, instantiate_qualities},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
         Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
@@ -239,6 +239,17 @@ impl Error {
         scope: &[&Lexicon],
         syntax: &SyntaxRegistry,
     ) -> String {
+        self.format_stating(None, module, scope, syntax)
+    }
+
+    /// [`Error::format_with`] for a refusal of the declaration that states the type `stated`: one reached at an assignment of the sorts the declaration leaves to its caller restates that type read at the assignment. The refusal spells the declaration's terms at the assignment, where the declaration's text says `Sort`, so the type is where a reader sees which written `Sort` stood at which sort.
+    pub(crate) fn format_stating(
+        &self,
+        stated: Option<&Term>,
+        module: &Module,
+        scope: &[&Lexicon],
+        syntax: &SyntaxRegistry,
+    ) -> String {
         // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope, which each unit in scope says by the lexicon it keeps.
         let own = module.lexicon(syntax);
         let spelling = Rc::new(
@@ -246,19 +257,21 @@ impl Error {
                 .with_lexicons(&own, scope)
                 .with_string_literals(Global::Authored(syntax.string.string.qualifier())),
         );
-        Displayed(self, spelling).to_string()
+        Displayed(self, spelling, stated).to_string()
     }
 }
 
 /// The faithful rendering: core's own names, every universe shown. A refusal reported to a reader goes through [`Error::format_with`].
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Displayed(self, Rc::new(Spelling::default())).fmt(formatter)
+        Displayed(self, Rc::new(Spelling::default()), None).fmt(formatter)
     }
 }
 
 /// A refusal paired with the [`Spelling`] its terms render under — the parameter `Display::fmt` cannot take. Local to this crate because the orphan rule forbids implementing a foreign trait for a foreign wrapper, and because the axes a kernel refusal wants are not the ones an elaboration diagnostic wants.
-struct Displayed<'a>(&'a Error, Rc<Spelling>);
+///
+/// The third is the type the refused declaration states, where whoever renders the refusal holds the declaration: what a refusal at one assignment of the declaration's sorts restates at it ([`Error::format_stating`]).
+struct Displayed<'a>(&'a Error, Rc<Spelling>, Option<&'a Term>);
 
 /// Every arm below rebinds its term fields through the spelling before interpolating them. A field left unrebound renders core's own spelling and still compiles, which is why the rebinding is mechanical rather than left to each `write!`.
 impl fmt::Display for Displayed<'_> {
@@ -292,7 +305,7 @@ impl fmt::Display for Displayed<'_> {
                 write!(formatter, "`{term}` states neither `Prop` nor `Type`")
             }
             Error::AtSorts { sorts, refusal } => {
-                let sorts = sorts
+                let stated_at = sorts
                     .iter()
                     .map(|quality| match quality.is_prop() {
                         true => "`Prop`",
@@ -302,9 +315,15 @@ impl fmt::Display for Displayed<'_> {
                     .join(", ");
                 write!(
                     formatter,
-                    "with the sorts it leaves to its caller at {sorts}: "
+                    "with the sorts it leaves to its caller at {stated_at}"
                 )?;
-                Displayed(refusal, Rc::clone(spelling)).fmt(formatter)
+                if let Some(stated) = self.2 {
+                    let stated = instantiate_qualities(stated, sorts);
+                    let stated = stated.spelled(spelling);
+                    write!(formatter, ", where it reads `{stated}`")?;
+                }
+                formatter.write_str(": ")?;
+                Displayed(refusal, Rc::clone(spelling), None).fmt(formatter)
             }
             Error::GroupLeavesSort => formatter.write_str(
                 "a recursive group inside a term leaves a sort to its caller, which a top-level declaration alone does",
@@ -327,7 +346,7 @@ impl fmt::Display for Displayed<'_> {
                     formatter,
                     "`{stated}` is not a valid motive, which is well typed and lands in a sort: ",
                 )?;
-                Displayed(refusal, Rc::clone(spelling)).fmt(formatter)
+                Displayed(refusal, Rc::clone(spelling), None).fmt(formatter)
             }
             Error::AmbientFold(goal) => {
                 let goal = goal.spelled(spelling);

@@ -240,7 +240,7 @@ pub(crate) fn kernel_refusal(
     scope: &[&curios_core::Lexicon],
     syntax: &SyntaxRegistry,
 ) -> CompileError {
-    let refusal = verdict.error.format_with(module, scope, syntax);
+    let refusal = verdict.format_with(module, scope, syntax);
 
     CompileError::failure(match &verdict.name {
         Some(name) => format!("the kernel refused {name}: {refusal}"),
@@ -969,7 +969,7 @@ fn judged(
         certify_program(&program, budget, &globals(scope), *syntax)
     };
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = verdict.error.format_with(
+        let refusal = verdict.format_with(
             &program.as_program().module,
             &scope.lexicons(syntax),
             syntax,
