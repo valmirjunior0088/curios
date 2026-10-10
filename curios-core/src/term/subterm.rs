@@ -21,8 +21,6 @@ use {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Subterm {
-    /// The elaboration-transient constructors, grouped so post-elaboration consumers dismiss the class with one arm.
-    Transient(Transient),
     /// A sort: a universe of the quality `Quality`, at its level. `Type u` and `Prop u` are the two a program writes, and both are typed `Type (u + 1)`.
     Sort(Quality, Level),
     Intrinsic(Intrinsic),
@@ -46,6 +44,8 @@ pub enum Subterm {
     Instance(Instance),
     Var(Var),
     Metavar(Metavar),
+    /// The elaboration-transient constructors, grouped so post-elaboration consumers dismiss the class with one arm.
+    Transient(Transient),
 }
 
 impl Subterm {

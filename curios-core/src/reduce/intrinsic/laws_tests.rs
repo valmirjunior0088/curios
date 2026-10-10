@@ -2421,13 +2421,17 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             integer(1),
             nats(),
         ),
+        // A magnitude widened back is its operand as the fold read it, its monomials in the order of their ranks, where the operand as it is written holds them in the order it was written in: one sum under two spellings wherever the two orders differ. So the law is stated as their difference, which the fold cancels whichever order either holds.
         (
-            "to_int(abs(to_int(x) - to_int(x - y))) = to_int(x) - to_int(x - y)",
-            widen(int_abs(int_sub(
-                widen(x.clone()),
-                widen(sub(x.clone(), y.clone())),
-            ))),
-            int_sub(widen(x.clone()), widen(sub(x.clone(), y.clone()))),
+            "to_int(abs(to_int(x) - to_int(x - y))) - (to_int(x) - to_int(x - y)) = 0",
+            int_sub(
+                widen(int_abs(int_sub(
+                    widen(x.clone()),
+                    widen(sub(x.clone(), y.clone())),
+                ))),
+                int_sub(widen(x.clone()), widen(sub(x.clone(), y.clone()))),
+            ),
+            integer(0),
             vec![
                 vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
                 vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
