@@ -89,7 +89,13 @@ curios = { path = "curios" }
 wasm-bindgen = { version = "0.2.126" }
 wasm-bindgen-cli-support = { version = "0.2.126" }
 
+[profile.dev]
+opt-level = 3
+
 [profile.dev.build-override]
+opt-level = 3
+
+[profile.release]
 opt-level = 3
 
 [profile.release.build-override]

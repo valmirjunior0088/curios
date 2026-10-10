@@ -14,7 +14,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 - [x] Crate boundaries: a pipeline with no back end, a launcher with no Cranelift or Binaryen, the shared analyses apart from the certifier, and the emitter out of the prelude build
 - [x] [One crate is the authority for one external concern](design/one-crate-is-the-authority-for-one-external-concern.md), and [every gate step catches what no other step does](design/every-gate-step-catches-what-no-other-step-does.md)
-- [x] [A build script is compiled optimized](design/a-build-script-is-compiled-optimized.md), and [a test is compiled optimized, with its checks on](design/a-test-is-compiled-optimized-with-its-checks-on.md)
+- [x] [A build script is compiled optimized](design/a-build-script-is-compiled-optimized.md), at the level of the debug or release build it serves, and [a test is compiled optimized, with its checks on](design/a-test-is-compiled-optimized-with-its-checks-on.md)
 - [x] CI: on every push to `main`, the gate's steps on Ubuntu and the runtime's tests on macOS as well
 
 ## Arithmetic
