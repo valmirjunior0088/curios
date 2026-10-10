@@ -1,6 +1,6 @@
 //! The single authored table of the host's operations, and what `curios-abi` derives from it.
 //!
-//! `for_each_host_op!` is the one place a host operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then a brace group of what its types cannot say: `module`, the `/std` module that declares it; `yields`, the label a lone payload crosses under (`value` when omitted); and `requires`, what its operands must hold before the call ([`Requirement`]), naming the operands it reads. The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape its [`Outcome`] — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
+//! `for_each_host_op!` is the one place a host operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then a brace group of what its types cannot say: `module`, the `/std` module that declares it; `yields`, the label a lone payload crosses under (`value` when omitted); and `requires`, what its operands must hold before the call ([`Requirement`]), naming the operands it reads. The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape what crosses beside them — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
 //!
 //! **Every row shares three clauses beside its own.** A handle that names nothing, or a resource of a kind that cannot do the operation at all, fails `NotFound` and leaves every resource as it was; a stream used in a direction it is not open for — reading `stdout` or `stderr`, writing `stdin`, or a file against its open mode — fails with `EBADF` through the errno lane, on every host. Every operand is copied in and every reply copied out, so no host keeps a reference to guest memory across a call. A malformed operand is refused by the host's adapter. A reply is lowered from its own type, which is what makes it a value of the row's wire types, and nothing checks it further: what a row's rustdoc promises beyond its types is its host's to keep, and the hosts' own tests hold them to it.
 //!
@@ -12,9 +12,9 @@
 
 use {
     super::{
-        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Outcome, Poll, Refusal,
-        Requirement, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp,
-        TtySize, WireOperand, WireReply, WireResults, WireSignature,
+        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Poll, Refusal, Requirement,
+        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
+        WireOperand, WireReply, WireSignature,
     },
     std::sync::LazyLock,
 };
@@ -179,25 +179,19 @@ macro_rules! declare_host_rows {
         /// Every row, in the table's order, indexed by [`HostOp`]'s discriminant.
         fn roster() -> &'static [Row] {
             static ROWS: LazyLock<Vec<Row>> = LazyLock::new(|| {
-                vec![$({
-                    // The label `yields` names, or `value`.
-                    let label = [$(stringify!($yields),)? "value"][0];
-                    // The reply's slots under their labels. The row keeps every label, for the checks that read a field by one; the wire keeps a record's, which are the type the guest projects.
-                    let slots = <$r as WireReply>::results(label);
-
+                vec![$(
                     Row {
                         name: stringify!($name),
                         module: concat!($(stringify!($module), "/"),+),
                         operands: vec![$(stringify!($p)),*],
-                        fields: slots.iter().map(|(field, _)| field.clone()).collect(),
                         signature: WireSignature {
                             params: vec![$(<$t as WireOperand>::WIRE),*],
-                            results: WireResults::of(slots),
+                            // A lone payload crosses under the label `yields` names, or `value`.
+                            results: <$r as WireReply>::results([$(stringify!($yields),)? "value"][0]),
                         },
-                        outcome: <$r as WireReply>::OUTCOME,
                         requirements: vec![$($(Requirement::$requirement { $($requirement_field: stringify!($requirement_operand)),* }),*)?],
-                    }
-                },)*]
+                    },
+                )*]
             });
 
             &ROWS
@@ -218,18 +212,11 @@ struct Row {
     /// The `/std` module that declares the row, each segment closed by its slash.
     module: &'static str,
     operands: Vec<&'static str>,
-    fields: Vec<String>,
     signature: WireSignature,
-    outcome: Outcome,
     requirements: Vec<Requirement>,
 }
 
 impl HostOp {
-    /// The row whose method is `name`.
-    pub fn named(name: &str) -> Option<HostOp> {
-        Self::ALL.iter().copied().find(|op| op.name() == name)
-    }
-
     fn row(self) -> &'static Row {
         &roster()[self as usize]
     }
@@ -265,34 +252,6 @@ impl HostOp {
                     self.name()
                 )
             })
-    }
-
-    /// The label each result slot is read under, in the order they cross: a record's are the fields the guest projects, and a lone result's is the row's alone, since one result crosses bare.
-    pub fn fields(self) -> &'static [String] {
-        &self.row().fields
-    }
-
-    /// The position of the result slot the row labels `name`.
-    pub fn field(self, name: &str) -> usize {
-        self.fields()
-            .iter()
-            .position(|field| field == name)
-            .unwrap_or_else(|| {
-                panic!(
-                    "`{}` checks a field `{name}` it does not answer",
-                    self.name()
-                )
-            })
-    }
-
-    /// What the row's reply promises, read off its type.
-    pub fn outcome(self) -> Outcome {
-        self.row().outcome
-    }
-
-    /// Whether the row never returns: its call ends the instance, so it takes the result type it describes as an operand, and nothing resumes after it.
-    pub fn diverges(self) -> bool {
-        self.outcome() == Outcome::Diverges
     }
 
     /// What the row's operands must hold before the host is asked.

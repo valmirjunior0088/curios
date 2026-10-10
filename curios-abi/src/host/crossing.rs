@@ -1,14 +1,14 @@
-//! How each Rust type a builtin row is written in crosses the wire — the knowledge the table's rows read off their types rather than spell as columns.
+//! How each Rust type a host's row is written in crosses the wire — the knowledge the table's rows read off their types rather than spell as columns.
 //!
-//! An operand type states the [`WireType`] it arrives as and, where a row's contract relates a reply to it, its measure ([`WireOperand`]). A payload states the labelled slots a success fills, how it fills them, the padding a reply without it fills them with, and the checks its own values answer to ([`WirePayload`]). A reply type, built around a payload, states the [`Outcome`] it crosses as and encodes the whole reply ([`WireReply`]): a bare payload returns, `Result<T, Failure>` is fallible, `Result<Option<T>, Failure>` a stream whose `None` is its end, `Option<T>` a lookup whose `None` is absence, `Result<T, Refusal>` a returning row its host may refuse, and [`Termination`] diverges. The generic shapes are disjoint because no `Option` or `Result` is a payload, which coherence holds rather than a comment.
+//! An operand type states the [`WireType`] it arrives as and, where a row's requirements read it, its measure ([`WireOperand`]). A payload states the labelled slots a success fills, how it fills them, and the padding a reply without it fills them with ([`WirePayload`]). A reply type, built around a payload, states the results it crosses as and encodes the whole reply ([`WireReply`]): a bare payload crosses as its own slots; `Result<T, Failure>` puts a status ahead of them, as do `Result<Option<T>, Failure>`, a stream whose `None` is its end, and `Option<T>`, a lookup whose `None` is absence; `Result<T, Refusal>` crosses as its payload, its host free to refuse the call instead; and [`Termination`] crosses nothing, its row one that does not return. The generic shapes are disjoint because no `Option` or `Result` is a payload, which coherence holds rather than a comment.
 //!
-//! A reply encodes to the [`WireValue`]s it crosses with, in slot order ([`Encoded`]), which is what the row's contract is checked against before the runtime writes them into wasm values: this leaf names no wasm value, and the table's types agree with the bindings built from them by construction, since both are read off the same row.
+//! A reply encodes to the [`WireValue`]s it crosses with, in slot order ([`Encoded`]), which the runtime writes into wasm values: this leaf names no wasm value, and the table's types agree with the bindings built from them by construction, since both are read off the same row.
 
 use {
     super::{
         ChildExit, ChildHandles, ClosedCode, Failure, FileStat, Handle, Mode, Poll, Refusal,
         SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf,
-        WireType,
+        WireResults, WireType,
     },
     crate::status,
 };
@@ -16,22 +16,7 @@ use {
 #[cfg(test)]
 mod tests;
 
-/// What a builtin's reply promises, read off its Rust type by [`WireReply`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Outcome {
-    /// A value; the call cannot fail.
-    Returns,
-    /// A value, or a [`Failure`].
-    Fallible,
-    /// A value, the end of the stream, or a [`Failure`].
-    Stream,
-    /// A value, or its absence.
-    Lookup,
-    /// Nothing: the call ends the instance.
-    Diverges,
-}
-
-/// A type an operand of a builtin row is written in: the wire type it arrives as, and the measure a contract relates a reply to.
+/// A type an operand of a host's row is written in: the wire type it arrives as, and the measure a requirement reads.
 pub trait WireOperand {
     const WIRE: WireType;
 
@@ -122,7 +107,7 @@ impl WireOperand for SerialOp {
     const WIRE: WireType = WireType::Nat;
 }
 
-/// One value a reply crosses with, in the vocabulary a builtin's results are written in.
+/// One value a reply crosses with, in the vocabulary a row's results are written in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WireValue {
     Nat(u64),
@@ -139,14 +124,14 @@ pub enum Encoded {
     Refused(String),
 }
 
-/// What a successful call carries: the labelled slots it fills, how it fills them, what a reply without it fills them with, and what its own values answer to.
+/// What a successful call carries: the labelled slots it fills, how it fills them, and what a reply without it fills them with.
 pub trait WirePayload: Sized {
     /// The slots, in the order they cross. A payload of one value fills one slot, labelled `label`; a payload of several fields labels each with its field's name, which is what the guest projects.
     fn slots(label: &'static str) -> Vec<(String, WireType)>;
 
     fn encode(self, values: &mut Vec<WireValue>);
 
-    /// Fill the slots of a reply that carries no payload — a failure, an end of stream or an absence. The values are inert: the guest reads the status first and never projects them, so no check reads them either.
+    /// Fill the slots of a reply that carries no payload — a failure, an end of stream or an absence. The values are inert: the guest reads the status first and never projects them.
     fn pad(values: &mut Vec<WireValue>);
 }
 
@@ -314,7 +299,7 @@ impl WirePayload for ChildExit {
     }
 }
 
-/// A stream the call did not pipe crosses as [`Handle::none`], the padding a failure fills every slot with: which streams a success holds is the call's to say, and the row's own checks hold the host to it.
+/// A stream the call did not pipe crosses as [`Handle::none`], the padding a failure fills every slot with: which streams a success holds is the call's to say.
 impl WirePayload for ChildHandles {
     fn slots(_: &'static str) -> Vec<(String, WireType)> {
         ["child", "stdin", "stdout", "stderr"]
@@ -335,22 +320,22 @@ impl WirePayload for ChildHandles {
     }
 }
 
-/// A builtin's whole reply: the outcome it crosses as, its result slots, the checks its success answers to, and its encoding.
+/// A row's whole reply: the results it crosses as, and its encoding.
 pub trait WireReply: Sized {
-    const OUTCOME: Outcome;
-
-    /// The result slots, each under its label, a lone payload's labelled `label`.
-    fn results(label: &'static str) -> Vec<(String, WireType)>;
+    /// The results, a lone payload's slot labelled `label`: a payload's own slots, a status ahead of them where the reply carries one, and none ever for a reply that ends the instance.
+    fn results(label: &'static str) -> WireResults;
 
     fn encode(self) -> Encoded;
 }
 
-/// The slots a reply crosses with that carries a status: the status first, then the payload's.
-fn with_status<T: WirePayload>(label: &'static str) -> Vec<(String, WireType)> {
-    [("status".to_string(), WireType::Nat)]
-        .into_iter()
-        .chain(T::slots(label))
-        .collect()
+/// The results a reply crosses as that carries a status: the status first, then the payload's slots.
+fn with_status<T: WirePayload>(label: &'static str) -> WireResults {
+    WireResults::of(
+        [("status".to_string(), WireType::Nat)]
+            .into_iter()
+            .chain(T::slots(label))
+            .collect(),
+    )
 }
 
 /// A status, then either the payload or its padding.
@@ -366,10 +351,8 @@ fn with_payload<T: WirePayload>(status: u64, payload: Option<T>) -> Encoded {
 }
 
 impl<T: WirePayload> WireReply for T {
-    const OUTCOME: Outcome = Outcome::Returns;
-
-    fn results(label: &'static str) -> Vec<(String, WireType)> {
-        T::slots(label)
+    fn results(label: &'static str) -> WireResults {
+        WireResults::of(T::slots(label))
     }
 
     fn encode(self) -> Encoded {
@@ -381,9 +364,7 @@ impl<T: WirePayload> WireReply for T {
 }
 
 impl<T: WirePayload> WireReply for Result<T, Failure> {
-    const OUTCOME: Outcome = Outcome::Fallible;
-
-    fn results(label: &'static str) -> Vec<(String, WireType)> {
+    fn results(label: &'static str) -> WireResults {
         with_status::<T>(label)
     }
 
@@ -397,9 +378,7 @@ impl<T: WirePayload> WireReply for Result<T, Failure> {
 
 /// The end of the stream crosses as `EOF` beside the payload's padding.
 impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
-    const OUTCOME: Outcome = Outcome::Stream;
-
-    fn results(label: &'static str) -> Vec<(String, WireType)> {
+    fn results(label: &'static str) -> WireResults {
         with_status::<T>(label)
     }
 
@@ -414,9 +393,7 @@ impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
 
 /// Absence crosses as `NOT_FOUND` beside the payload's padding.
 impl<T: WirePayload> WireReply for Option<T> {
-    const OUTCOME: Outcome = Outcome::Lookup;
-
-    fn results(label: &'static str) -> Vec<(String, WireType)> {
+    fn results(label: &'static str) -> WireResults {
         with_status::<T>(label)
     }
 
@@ -430,10 +407,8 @@ impl<T: WirePayload> WireReply for Option<T> {
 
 /// A value, or a refusal: a row with no failure lane whose host could not answer is refused rather than answered with something the host does not have. The refusal never crosses, so the row returns exactly as its payload does.
 impl<T: WirePayload> WireReply for Result<T, Refusal> {
-    const OUTCOME: Outcome = Outcome::Returns;
-
-    fn results(label: &'static str) -> Vec<(String, WireType)> {
-        T::slots(label)
+    fn results(label: &'static str) -> WireResults {
+        WireResults::of(T::slots(label))
     }
 
     fn encode(self) -> Encoded {
@@ -446,10 +421,8 @@ impl<T: WirePayload> WireReply for Result<T, Refusal> {
 
 /// A diverging call crosses nothing back: its reply ends the instance.
 impl WireReply for Termination {
-    const OUTCOME: Outcome = Outcome::Diverges;
-
-    fn results(_: &'static str) -> Vec<(String, WireType)> {
-        Vec::new()
+    fn results(_: &'static str) -> WireResults {
+        WireResults::never()
     }
 
     fn encode(self) -> Encoded {

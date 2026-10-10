@@ -1,6 +1,6 @@
 use {
     super::{
-        ClosedCode, Failure, FileKind, ForeignFunction, ForeignStore, HostOp, Mode, Outcome, Poll,
+        ClosedCode, Failure, FileKind, ForeignFunction, ForeignStore, HostOp, Mode, Poll,
         ResultShape, SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf, WireResults,
         WireSignature, WireType,
     },
@@ -71,7 +71,7 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels(HostOp::ProcWait), ["status", "code", "signal"]);
 }
 
-/// Every row is well-formed: it names each operand once, since a requirement or a check finds an operand by its name, and its names stand beside what crosses — one per operand, one per result, a record's fields under the labels the row reads them by.
+/// Every row is well-formed: it names each operand once, since a requirement finds an operand by its name, and its names stand beside what crosses, one for each operand.
 #[test]
 fn rows_are_well_formed() {
     for &op in HostOp::ALL {
@@ -85,15 +85,6 @@ fn rows_are_well_formed() {
             op.name()
         );
         assert_eq!(op.operands().len(), signature.params.len(), "{op:?}");
-        assert_eq!(op.fields().len(), signature.results.len(), "{op:?}");
-
-        if let ResultShape::Record(fields) = signature.results.shape() {
-            assert_eq!(
-                fields.iter().map(|(label, _)| *label).collect::<Vec<_>>(),
-                op.fields(),
-                "{op:?}"
-            );
-        }
     }
 }
 
@@ -139,14 +130,6 @@ fn the_guest_shape_is_read_off_the_result_count() {
         shape(HostOp::HandleRead),
         ResultShape::Record(vec![("status", WireType::Nat), ("bytes", WireType::Bytes)])
     );
-}
-
-/// Every variant names the row it was written with, so a row read back by its method is the row the table states.
-#[test]
-fn a_row_reads_back_by_its_method() {
-    for &op in HostOp::ALL {
-        assert_eq!(HostOp::named(op.name()), Some(op));
-    }
 }
 
 /// A row is declared in its module by its method's name, each segment of the module's path a segment of the name.
@@ -201,7 +184,7 @@ fn register_rejects_a_duplicate_name() {
 fn exit_is_the_one_row_that_diverges() {
     let diverging = HostOp::ALL
         .iter()
-        .filter(|op| op.diverges())
+        .filter(|op| op.signature().results.is_never())
         .collect::<Vec<_>>();
     assert_eq!(
         diverging.iter().map(|op| op.name()).collect::<Vec<_>>(),
@@ -212,7 +195,7 @@ fn exit_is_the_one_row_that_diverges() {
     assert_eq!(exit.params, [WireType::Byte]);
     assert_eq!(diverging[0].operands(), ["code"]);
     assert!(exit.results.is_empty());
-    assert!(!HostOp::HandleClose.diverges());
+    assert!(!HostOp::HandleClose.signature().results.is_never());
 }
 
 /// A variant is its row's method name in CamelCase — the one spelling the table writes twice, since a macro cannot change an identifier's case — so a row whose two names disagree fails here rather than reading as a different operation.
@@ -227,18 +210,6 @@ fn a_variant_is_its_method_name_in_camel_case() {
 
         assert_eq!(format!("{op:?}"), camel);
     }
-}
-
-/// A row's outcome is its reply type's: a stream, a lookup, a fallible call, a plain value and a divergence, each read off the Rust type the row returns rather than stated beside it.
-#[test]
-fn outcomes_are_read_off_the_reply_types() {
-    assert_eq!(HostOp::HandleRead.outcome(), Outcome::Stream);
-    assert_eq!(HostOp::ProcEnv.outcome(), Outcome::Lookup);
-    assert_eq!(HostOp::FileOpen.outcome(), Outcome::Fallible);
-    assert_eq!(HostOp::SocketBind.outcome(), Outcome::Fallible);
-    assert_eq!(HostOp::HandleClose.outcome(), Outcome::Returns);
-    assert_eq!(HostOp::ClockWall.outcome(), Outcome::Returns);
-    assert_eq!(HostOp::ProcExit.outcome(), Outcome::Diverges);
 }
 
 /// A file kind's codes are every kind's, and no other.

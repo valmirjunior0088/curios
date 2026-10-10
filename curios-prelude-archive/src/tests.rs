@@ -101,13 +101,9 @@ fn the_library_declares_every_row_a_host_answers() {
                 .get(&name)
                 .unwrap_or_else(|| panic!("`/std` declares no `{name}`"));
             let (written, stated) = (row.signature(), op.signature());
-            let results = match op.diverges() {
-                true => written.results.is_never(),
-                false => written.results == stated.results,
-            };
 
             assert!(
-                written.params == stated.params && results,
+                written == stated,
                 "`{name}` is declared {written:?}, and the host answers {stated:?}"
             );
         }

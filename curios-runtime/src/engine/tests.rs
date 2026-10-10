@@ -52,17 +52,10 @@ fn every_host_answer_crosses_as_its_row() {
     let mut linker = Linker::new(engine);
 
     for op in HostOp::ALL {
-        let stated = op.signature();
         let declared = Arc::new(ForeignFunction {
             name: op.declared(),
             label: op.name().to_string(),
-            signature: WireSignature {
-                params: stated.params.clone(),
-                results: match op.diverges() {
-                    true => WireResults::never(),
-                    false => stated.results.clone(),
-                },
-            },
+            signature: op.signature().clone(),
         });
 
         provided
