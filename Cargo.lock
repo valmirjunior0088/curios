@@ -852,6 +852,7 @@ name = "curios-std"
 version = "0.15.9"
 dependencies = [
  "curios",
+ "curios-package",
  "curios-pipeline",
  "curios-runtime",
  "curios-text",

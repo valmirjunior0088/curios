@@ -2,7 +2,7 @@
 
 use {
     crate::with_prelude,
-    curios_std::{STD_DESCRIPTION, STD_NAME, std_directory, std_source},
+    curios_std::{std_directory, std_source},
     curios_text::{Formatted, SYNTAX, prepare_prelude, sys_source},
     std::{fs, path::PathBuf},
 };
@@ -83,26 +83,5 @@ fn every_authored_source_is_lint_clean() {
         "{} lints in the prelude:\n\n{}",
         lints.len(),
         lints.join("\n\n")
-    );
-}
-
-/// **`/std` is an ordinary package, and the two strings the archive build holds are the ones its manifest declares.**
-///
-/// The build script cannot read the manifest: `curios-package` would become a build prerequisite of this crate, and so of every crate that reaches the prelude, which would re-elaborate the whole standard library on every edit to a manifest parser. So the name and the description are constants there, and this is what keeps them honest — a dev-dependency, the way this crate already takes `curios-cert`, so the parser is linked by the test and by nothing that ships.
-#[test]
-fn the_archive_build_agrees_with_the_standard_library_manifest() {
-    let manifest = std_directory();
-    let curios_package::Manifest::Package(package) =
-        curios_package::Manifest::from_path(&manifest.join("curios.toml"))
-            .expect("the standard library's manifest parses")
-    else {
-        panic!("the standard library declares a package, not an umbrella");
-    };
-
-    assert_eq!(package.name, STD_NAME);
-    assert_eq!(package.description.as_deref(), Some(STD_DESCRIPTION));
-    assert!(
-        manifest.join("lib.crs").is_file(),
-        "a package's library header sits beside its manifest"
     );
 }

@@ -3,6 +3,8 @@
 mod elaborate;
 
 use {
+    curios_package::MANIFEST,
+    curios_std::std_directory,
     elaborate::elaborate,
     std::{env, path::PathBuf},
 };
@@ -20,4 +22,10 @@ fn main() {
     for path in elaborate(&out) {
         println!("cargo:rerun-if-changed={}", path.display());
     }
+
+    // The library's manifest is read beside its files, as a package's is: what it names, describes and says its modules answer is part of what the unit is made from.
+    println!(
+        "cargo:rerun-if-changed={}",
+        std_directory().join(MANIFEST).display()
+    );
 }
