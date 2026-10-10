@@ -1165,6 +1165,58 @@ fn a_closed_reduct_is_served_across_universe_spellings() {
     );
 }
 
+/// A stored spelling that holds one level metavariable at two positions answers for no spelling asking it for itself at one and for another level at the other: the map the two determine sends one metavariable to two levels, and the reduct rewritten through either would state the wrong level at one of them.
+#[test]
+fn a_level_metavariable_asked_for_itself_and_for_another_level_is_reduced_afresh() {
+    let mut context = context();
+    let poly = Free::Global(nominal("poly"));
+    let x = context.fresh(Some("x"));
+    let (first, second) = (
+        Level::param(UniverseParam(0)),
+        Level::param(UniverseParam(1)),
+    );
+    context.assume(&poly, &Term::type_at(first.succ().unwrap()));
+    context.define(
+        &poly,
+        &Term::func_type([(x, Term::type_at(first))], Term::type_at(second)),
+        None,
+    );
+    context.set_assumption_universe_context(
+        &poly,
+        UniverseContext {
+            parameter_count: 2,
+            quality_count: 0,
+            constraints: Vec::new(),
+        },
+    );
+    let arrow = |domain: &Level, codomain: &Level| {
+        Term::func_type(
+            [(x, Term::type_at(domain.clone()))],
+            Term::type_at(codomain.clone()),
+        )
+    };
+
+    let (kept, other) = (
+        Level::meta(UniverseMetaId(7)),
+        Level::meta(UniverseMetaId(8)),
+    );
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::instance_of(&poly, vec![kept.clone(), kept.clone()])
+        ),
+        Ok(arrow(&kept, &kept))
+    );
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::instance_of(&poly, vec![kept.clone(), other.clone()])
+        ),
+        Ok(arrow(&kept, &other)),
+        "the first position keeps the metavariable the second is asked to leave"
+    );
+}
+
 /// A closed reduct served across universe spellings states the asking spelling's sorts: an instance's sorts are dropped from the erased key with its levels, so a definition unfolded at one sort metavariable answers for it at another sort, and the reduct is rewritten to that sort as it is to the level. Served as stored, a family's occurrence at one sort would be read at the sort of the occurrence before it.
 #[test]
 fn a_closed_reduct_served_across_spellings_states_the_asking_sorts() {

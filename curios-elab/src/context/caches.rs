@@ -438,7 +438,7 @@ impl Caches {
 
 /// `reduct`, stored under `key`, as the answer for `query`, which shares `key`'s universe-erased projection: the stored spelling's levels and the sorts its instances state are matched to the asking spelling's position by position, and the reduct's rewritten through the metavariables that differ.
 ///
-/// **Sound by level-parametricity.** No reduction rule reads a level — `Type u` is a payload, never a scrutinee — so a reduct is the same function of its term whatever the levels in it, and rewriting the stored reduct's levels through the map the two spellings determine yields exactly what reducing the asking spelling would have. The map is exact or the hit is declined: a stored level that is not a bare metavariable and differs from the asked one, a metavariable asked for two levels, or spellings whose level positions do not align — one carrying an instance the other erased, which projection equates and this cannot map — each decline, and the caller reduces as it would have.
+/// **Sound by level-parametricity.** No reduction rule reads a level — `Type u` is a payload, never a scrutinee — so a reduct is the same function of its term whatever the levels in it, and rewriting the stored reduct's levels through the map the two spellings determine yields exactly what reducing the asking spelling would have. The map is exact or the hit is declined: a stored level that is not a bare metavariable and differs from the asked one, a metavariable asked for two levels, itself counted as one of them, a level kept as it stands that names a metavariable the map sends elsewhere, or spellings whose level positions do not align — one carrying an instance the other erased, which projection equates and this cannot map — each decline, and the caller reduces as it would have.
 ///
 /// **A sort an instance states is a payload as a level is.** The erased projection drops an instance whole, the sorts it states with its levels, so two spellings it equates may state different sorts: an occurrence of a family at `Prop` beside one at `Type`, or two whose sorts are metavariables of their own. No reduction rule reads one, and the reduct holds them, so they are mapped as the levels are: a stored metavariable to the one sort the asking spelling states in its every place, itself included, and a stored `Prop`, `Type` or parameter to nothing but itself. Served with the stored sorts, the second occurrence would be read at the first one's.
 fn adapted_across_universes(key: &Term, query: &Term, reduct: &Term) -> Option<Term> {
@@ -455,14 +455,29 @@ fn adapted_across_universes(key: &Term, query: &Term, reduct: &Term) -> Option<T
 
     let mut levels: HashMap<UniverseMetaId, Level> = HashMap::new();
     for (stored, asked) in stored_levels.iter().zip(&asked_levels) {
-        if stored == asked {
-            continue;
-        }
-        let meta = bare_meta(stored)?;
+        let Some(meta) = bare_meta(stored) else {
+            if stored == asked {
+                continue;
+            }
+            return None;
+        };
         match levels.insert(meta, asked.clone()) {
             Some(previous) if &previous != asked => return None,
             _ => {}
         }
+    }
+    levels.retain(|meta, asked| bare_meta(asked) != Some(*meta));
+    // A level kept as it stands is kept in the reduct only where the map leaves its every metavariable alone.
+    let rewritten = |level: &Level| {
+        level
+            .atoms()
+            .any(|(head, _)| matches!(head, LevelHead::Meta(meta) if levels.contains_key(&meta)))
+    };
+    if stored_levels
+        .iter()
+        .any(|stored| bare_meta(stored).is_none() && rewritten(stored))
+    {
+        return None;
     }
 
     let mut sorts: HashMap<QualityMetaId, Quality> = HashMap::new();
