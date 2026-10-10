@@ -217,8 +217,39 @@ pub(crate) fn display_mismatch(
     if let Some(report) = unembedded_action(context, &this, &that) {
         return report;
     }
+    if let Some(report) = proposition_at_implicit_type(context, &this, &that) {
+        return report;
+    }
 
     Error::type_mismatch(this, that)
+}
+
+/// The specialized report for a proof handed where an implicit argument declared at `Type` is still open: `this` is a proposition, the one candidate the argument offers the implicit `that` stands for, and no `Type` admits a proposition, so the implicit stays unsolved and the generic report names it `?`.
+fn proposition_at_implicit_type(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
+    let Subterm::Metavar(Metavar {
+        id,
+        origin: MetavarOrigin::Implicit(ImplicitOrigin { func, binder }),
+        ..
+    }) = &**that
+    else {
+        return None;
+    };
+    if context.metavar_solution(*id).is_some() {
+        return None;
+    }
+    let declared = context.metavar_entry(*id)?.result.clone();
+    let declared = reduce_forced(context, declared).ok()?;
+    let at_a_type =
+        matches!(&*declared, Subterm::Type(level) if !context.universes().classifies(level));
+    if !at_a_type || !is_prop(context, this).ok()? {
+        return None;
+    }
+
+    Some(Error::proposition_at_implicit_type(
+        callee(context, func),
+        binder.clone(),
+        this.clone(),
+    ))
 }
 
 /// The specialized report for a mismatch between two monad applications that differ in their head or a context argument: an action of one monad where another is expected. The `!` and tail oracles embed such an action through the declared `Lift` witness when its monad can be read from its head's declaration, so this is the case they could not read — a projection, a computed head — or a position they never look at, and the explicit `lift` spelling is the remedy the report names. `None` for every other mismatch, which keeps the generic report — and for one whose shapes cannot be read, exhaustion included, since the refusal this decorates is already the verdict.

@@ -968,6 +968,18 @@ impl fmt::Display for Displayed<'_> {
                     ),
                 }
             }
+            Error::PropositionAtImplicitType {
+                callee,
+                binder,
+                proposition,
+            } => {
+                let proposition = proposition.spelled(spelling);
+                write!(
+                    f,
+                    "a proposition was given where {} takes a type\n  {proposition} is a proposition, and no proposition stands where a Type is declared",
+                    callee.slot("implicit argument", binder, spelling)
+                )
+            }
             Error::DomainNeverDetermined { binder } => {
                 write!(
                     f,

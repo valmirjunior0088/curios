@@ -479,6 +479,12 @@ pub enum Error {
         /// Why the procedure that proves a bound from the facts in scope proved nothing: the facts it considered, and what its search concluded.
         refusal: Option<Box<Refusal>>,
     },
+    /// A proof handed where an implicit argument declared at `Type` is still open. The proposition the proof proves is the one candidate the argument offers the implicit, and no `Type` admits a proposition, so the implicit stays unsolved and the argument's own mismatch would show it as `?`.
+    PropositionAtImplicitType {
+        callee: Callee,
+        binder: String,
+        proposition: Box<Term>,
+    },
     /// A settle-synthesized lambda's domain that nothing ever pinned — not the body, not anything the settled type met. Carries only the binder's name: the metavariable is elaboration state the reader cannot see, and the parameter is what they can annotate.
     DomainNeverDetermined {
         binder: String,
@@ -1108,6 +1114,18 @@ impl Error {
             proposition,
             reduct: reduct.map(Box::new),
             refusal: refusal.map(Box::new),
+        }
+    }
+
+    pub(crate) fn proposition_at_implicit_type(
+        callee: Callee,
+        binder: String,
+        proposition: Term,
+    ) -> Self {
+        Self::PropositionAtImplicitType {
+            callee,
+            binder,
+            proposition: Box::new(proposition),
         }
     }
 
@@ -1754,6 +1772,7 @@ impl Error {
             Self::InformativePropStruct { field_type, .. } => out.push(field_type),
             Self::NotStrictlyPositive { site_type, .. } => out.push(site_type),
             Self::OperatorUndefined { type_, .. } => out.push(type_),
+            Self::PropositionAtImplicitType { proposition, .. } => out.push(proposition),
             Self::UninferredImplicit {
                 bound,
                 reduct,

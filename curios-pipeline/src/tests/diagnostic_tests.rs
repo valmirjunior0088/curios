@@ -25,6 +25,39 @@ fn a_proposition_where_a_proof_belongs_is_named_and_its_metavariables_are_not_nu
 }
 
 #[test]
+fn a_proof_handed_to_an_implicit_type_is_reported_as_a_proposition() {
+    // `A` is declared at `Type` and the one candidate the argument offers it is the proposition `True`, which no `Type` admits: the implicit stays unsolved, and a mismatch against it would say `expected: ?`.
+    let source = r#"
+        use /std/{Io};
+        use /std/Bool/{True};
+
+        let keep(@A: Type, a: A) -> A = a;
+        let proof: True = keep(True/qed());
+
+        Io/pure(())
+    "#;
+    let error = compile(source).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains(
+            "a proposition was given where the implicit argument 'A' of 'keep' takes a type"
+        ) && error.contains("True is a proposition"),
+        "unexpected report: {error}"
+    );
+    assert!(!error.contains("expected: ?"), "unexpected report: {error}");
+
+    // A type handed to the same implicit is no such report.
+    let source = r#"
+        use /std/{Nat, Io};
+
+        let keep(@A: Type, a: A) -> A = a;
+        let data: Nat = keep(3);
+
+        Io/pure(())
+    "#;
+    assert!(compile(source).is_ok());
+}
+
+#[test]
 fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     // The transcript's two stalls, reported by the text stage, which is the one that can say what was meant: `cong` is a member of `Eq`, so the route through an imported `Eq` is offered beside the direct import; `Bool` is a root's child, so the import is the route. The prelude build elaborates every `/std` module through this same path, so a false report here would fail the workspace build before it reached this test.
     let source = r#"
