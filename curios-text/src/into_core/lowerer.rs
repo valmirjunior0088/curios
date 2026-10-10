@@ -377,21 +377,40 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // The row as the function of its operands: one binder for each, with no name, in the row's order. A row that takes none is the call itself, a description being a constant already.
             Subterm::ForeignRow(function) => {
                 let params = &function.signature().params;
+                // A row that does not return takes the type its description yields ahead of its wire operands, an implicit binder as the declaration's type states it.
+                let yielded = function
+                    .diverges()
+                    .then(|| self.mint(["A".to_string()]).remove(0).1);
                 let binders = self.mint(params.iter().map(|_| String::new()));
                 let call = curios_core::Term::foreign(
                     Arc::clone(function),
-                    binders
+                    yielded
                         .iter()
-                        .map(|(_, binder)| curios_core::Term::free_var(binder))
+                        .chain(binders.iter().map(|(_, binder)| binder))
+                        .map(curios_core::Term::free_var)
                         .collect(),
                 );
 
-                match binders.is_empty() {
+                match yielded.is_none() && binders.is_empty() {
                     true => call,
-                    false => curios_core::Term::func(
-                        binders.iter().zip(params).map(|((_, binder), wire_type)| {
-                            (*binder, curios_core::wire_term(wire_type))
-                        }),
+                    false => curios_core::Term::func_marked(
+                        yielded
+                            .map(|binder| {
+                                let sort = curios_core::Term::type_at(self.context.fresh_universe(
+                                    span,
+                                    curios_core::UniverseConstraintKind::WrittenType,
+                                ));
+
+                                (Plicity::Implicit, binder, sort)
+                            })
+                            .into_iter()
+                            .chain(binders.iter().zip(params).map(|((_, binder), wire_type)| {
+                                (
+                                    Plicity::Explicit,
+                                    *binder,
+                                    curios_core::wire_term(wire_type),
+                                )
+                            })),
                         call,
                     ),
                 }

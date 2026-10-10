@@ -1543,6 +1543,7 @@ fn print_wire_type(type_: WireType) -> Printer {
 fn print_wire_results(results: &WireResults) -> Printer {
     match results.shape() {
         ResultShape::Unit => pure("{}"),
+        ResultShape::Never => pure("Never"),
         ResultShape::Single(type_) => print_wire_type(type_),
         ResultShape::Record(fields) => listed(
             "{",

@@ -16,7 +16,7 @@ use {
     },
     curios_num::Grain,
     curios_utilities::Plicity,
-    std::sync::Arc,
+    std::{iter, sync::Arc},
 };
 
 /// The surface type a host-boundary [`WireType`] denotes — the prelude's reading of the signature, mirrored by `core::wire_term` after lowering.
@@ -185,7 +185,8 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
     let signature = function.signature();
 
     let result = match signature.results.shape() {
-        ResultShape::Unit => unit(),
+        // A row that does not return yields the type its call is handed, stated below; nothing reads this.
+        ResultShape::Unit | ResultShape::Never => unit(),
         ResultShape::Single(result) => wire_type(&result),
         ResultShape::Record(fields) => record(
             fields
@@ -196,11 +197,35 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
     };
     // A declared row's operands have no names, so no call over them can be written here: the declaration binds the row as the function the lowering opens, at the type this states.
     let ForeignFunction::Builtin(op) = &**function else {
-        let (output, body) = adapted(
-            function,
-            result,
-            Subterm::ForeignRow(Arc::clone(function)).into(),
-        );
+        let row = Term::from(Subterm::ForeignRow(Arc::clone(function)));
+
+        // A declared row that does not return is typed as the builtin one is: it takes the type its description yields as an implicit operand ahead of its wire operands, which the lowering opens a binder for.
+        if function.diverges() {
+            return Decl {
+                doc,
+                vis_pub,
+                label: function.label().to_string(),
+                params: Vec::new(),
+                output: Subterm::FuncType(FuncType {
+                    params: iter::once(FuncTypeParam {
+                        plicity: Plicity::Implicit,
+                        label: Some("A".into()),
+                        type_: type_(),
+                    })
+                    .chain(signature.params.iter().map(|operand| FuncTypeParam {
+                        plicity: Plicity::Explicit,
+                        label: None,
+                        type_: wire_type(operand),
+                    }))
+                    .collect(),
+                    output: io_of(name("A")),
+                })
+                .into(),
+                body: row,
+            };
+        }
+
+        let (output, body) = adapted(function, result, row);
 
         return Decl {
             doc,

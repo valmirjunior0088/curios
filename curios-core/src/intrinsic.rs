@@ -32,7 +32,8 @@ pub fn wire_term(wire_type: &WireType) -> Term {
 /// The core type a row's results denote, as [`wire_term`] reads one wire type: the unit type for no result, the bare type for one, and a record of the named fields otherwise, each label bound by a binder `fresh` mints. The one reading of a row's guest-facing shape — the elaborator and the kernel both build the type of a host call through it, so the two cannot come to different answers about what a call yields, and the arity rule itself is `WireResults`'s to state.
 pub fn wire_results_term(results: &WireResults, mut fresh: impl FnMut(&str) -> Free) -> Term {
     match results.shape() {
-        ResultShape::Unit => Term::tuple_type_unit(),
+        // A row that does not return answers the type its call is handed, which [`foreign_produced`] reads off its first operand; no reader asks this of one.
+        ResultShape::Unit | ResultShape::Never => Term::tuple_type_unit(),
         ResultShape::Single(wire_type) => wire_term(&wire_type),
         ResultShape::Record(fields) => Term::tuple_type(
             fields

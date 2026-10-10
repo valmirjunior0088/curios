@@ -184,7 +184,16 @@ fn parse_wire_results<'a>() -> Parser<'a, WireResults> {
             // A brace has been read, so nothing else could have been meant: the refusal is the diagnosis rather than a backtrack into a vaguer one.
             Err(message) => commit(fail(message)),
         })
+        .or(parse_wire_never())
         .or(parse_wire_type().map(WireResults::single))
+}
+
+// `Never`: the row answers no value because its call does not return. A result alone and no wire type, so it stands in no operand, field or element; any other word is left to `parse_wire_type`, which diagnoses it.
+fn parse_wire_never<'a>() -> Parser<'a, WireResults> {
+    parse_identifier().flat_map(|name| match name {
+        "Never" => pure(WireResults::never()),
+        other => fail(format!("'{other}' is not `Never`")),
+    })
 }
 
 // `(T, T, ...) -> R` (a foreign function) or a bare `R` (a zero-argument foreign, like `host_ops`'s `clock_wall`). An operand is its wire type alone and so is a bare result, while a braced result names its fields, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.
