@@ -1028,3 +1028,44 @@ fn a_tls_upgrade_that_cannot_start_leaves_the_socket_connected() {
     host.handle_close(client);
     host.handle_close(listener);
 }
+
+/// Both clocks answer whole seconds beside the nanoseconds within one.
+#[test]
+fn a_clock_answers_the_nanoseconds_within_a_second() {
+    let host = OsHost::with_args(vec![]);
+
+    assert!(host.clock_wall().nanos < 1_000_000_000);
+    assert!(host.clock_mono().nanos < 1_000_000_000);
+}
+
+/// A write accepts no more than it was offered, and at least a byte of a buffer that holds one.
+#[test]
+fn a_write_accepts_within_what_it_was_offered() {
+    let host = OsHost::with_args(vec![]);
+    let dir = Temporary::new("runtime-write", "accepted");
+    fs::create_dir(&dir).expect("a fresh temporary directory");
+
+    let file = host
+        .file_open(dir.join("out").into_os_string().into_vec(), Mode::Write)
+        .unwrap();
+    let accepted = host.handle_write(file.clone(), vec![b'x'; 4096]).unwrap();
+
+    assert!((1..=4096).contains(&accepted));
+    host.handle_close(file);
+}
+
+/// A poll answers one mask for each handle it was given, each within the events a poll reports.
+#[test]
+fn a_poll_answers_one_mask_for_each_handle() {
+    let host = OsHost::with_args(vec![]);
+    let masks = host
+        .handle_poll(
+            vec![Handle::Stdout, Handle::Stderr],
+            vec![Poll::from_bits(event::WRITE), Poll::from_bits(event::WRITE)],
+            0,
+        )
+        .unwrap();
+
+    assert_eq!(masks.len(), 2);
+    assert!(masks.iter().all(|mask| mask.bits() & !Poll::READINESS == 0));
+}

@@ -713,3 +713,61 @@ fn a_lookup_and_a_variable_are_refused_as_the_native_host_refuses_them() {
     assert_eq!(host.proc_env(b"A=".to_vec()), None);
     assert_eq!(host.proc_env(vec![]), None);
 }
+
+/// A read answers no more than it was asked for, and leaves the rest for the next.
+#[test]
+fn a_read_answers_no_more_than_it_was_asked() {
+    let (host, _io) = MockHost::builder().stdin_lines(["hello"]).build();
+
+    assert_eq!(host.handle_read(Handle::Stdin, 2), Ok(Some(b"he".to_vec())));
+    assert!(
+        host.handle_read(Handle::Stdin, 8)
+            .unwrap()
+            .is_some_and(|rest| rest.starts_with(b"llo"))
+    );
+}
+
+/// A write accepts no more than it was offered, and at least a byte of a buffer that holds one.
+#[test]
+fn a_write_accepts_within_what_it_was_offered() {
+    let (host, _io) = MockHost::builder().build();
+    let accepted = host
+        .handle_write(Handle::Stdout, b"hello".to_vec())
+        .unwrap();
+
+    assert!((1..=5).contains(&accepted));
+}
+
+/// Randomness answers exactly the bytes asked for.
+#[test]
+fn randomness_answers_exactly_what_was_asked() {
+    let (host, _io) = MockHost::builder().build();
+
+    assert_eq!(host.rand_bytes(0).map(|bytes| bytes.len()), Ok(0));
+    assert_eq!(host.rand_bytes(32).map(|bytes| bytes.len()), Ok(32));
+}
+
+/// A poll answers one mask for each handle it was given, each within the events a poll reports.
+#[test]
+fn a_poll_answers_one_mask_for_each_handle() {
+    let (host, _io) = MockHost::builder().build();
+    let masks = host
+        .handle_poll(
+            vec![Handle::Stdout, Handle::Stderr],
+            vec![Poll::from_bits(event::WRITE), Poll::from_bits(event::WRITE)],
+            0,
+        )
+        .unwrap();
+
+    assert_eq!(masks.len(), 2);
+    assert!(masks.iter().all(|mask| mask.bits() & !Poll::READINESS == 0));
+}
+
+/// Both clocks answer whole seconds beside the nanoseconds within one.
+#[test]
+fn a_clock_answers_the_nanoseconds_within_a_second() {
+    let (host, _io) = MockHost::builder().build();
+
+    assert!(host.clock_wall().nanos < 1_000_000_000);
+    assert!(host.clock_mono().nanos < 1_000_000_000);
+}

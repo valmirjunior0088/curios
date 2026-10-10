@@ -3,7 +3,6 @@
 //! Every case here runs against a scripted host, so what is asserted is the program's side of the contract rather than any real device — except `os_tests`, the few programs that run against the real host to prove the scheduler's wait path against a kernel-backed descriptor.
 
 mod boundary_tests;
-mod contract_tests;
 mod file_tests;
 mod fs_tests;
 mod http_tests;

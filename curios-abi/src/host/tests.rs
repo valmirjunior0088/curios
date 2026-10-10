@@ -1,8 +1,8 @@
 use {
     super::{
-        Check, ClosedCode, DeclaredForeign, Failure, FileKind, ForeignFunction, HostOp, Mode,
-        Namespace, Outcome, Poll, Requirement, ResultShape, SerialFlow, SerialOp, SerialParity,
-        StdioMode, WireLeaf, WireResults, WireSignature, WireType, host_ops,
+        ClosedCode, DeclaredForeign, Failure, FileKind, ForeignFunction, HostOp, Mode, Namespace,
+        Outcome, Poll, ResultShape, SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf,
+        WireResults, WireSignature, WireType, host_ops,
     },
     crate::{event, status},
     std::{collections::BTreeSet, fmt::Debug},
@@ -355,80 +355,7 @@ fn outcomes_are_read_off_the_reply_types() {
     assert_eq!(HostOp::ProcExit.outcome(), Outcome::Diverges);
 }
 
-/// A check reads its row by name, and the evaluator trusts the table that the name is there and of the shape it reads: a request or a buffer is a measured operand, a row's own check reads its one payload, and a field check a result of the type it compares.
-#[test]
-fn every_check_reads_what_its_row_has() {
-    let is_list = |wire_type: WireType| matches!(wire_type, WireType::Bytes | WireType::List(_));
-
-    for &op in HostOp::ALL {
-        let signature = op.signature();
-        let results = signature.results.types();
-        let operand = |name: &str| signature.params[op.operand(name)];
-        let result = |name: &str| results[op.field(name)];
-        // A row's own checks read its one payload: every result but the status.
-        let payload = || {
-            let payload = match op.outcome() {
-                Outcome::Returns => &results[..],
-                _ => &results[1..],
-            };
-            assert_eq!(payload.len(), 1, "{op:?} checks a payload of one value");
-            payload[0]
-        };
-
-        for check in op.checks() {
-            match *check {
-                Check::Progress { request } | Check::Exact { request } => {
-                    assert_eq!(operand(request), WireType::Nat, "{op:?}");
-                    assert_eq!(payload(), WireType::Bytes, "{op:?}");
-                }
-                Check::Accepted { buffer } => {
-                    assert_eq!(operand(buffer), WireType::Bytes, "{op:?}");
-                    assert_eq!(payload(), WireType::Nat, "{op:?}");
-                }
-                Check::Parallel { list } => {
-                    assert!(is_list(operand(list)), "{op:?}");
-                    assert!(is_list(payload()), "{op:?}");
-                }
-                Check::Piped { field, mode } => {
-                    assert_eq!(operand(mode), WireType::Nat, "{op:?}");
-                    assert_eq!(result(field), WireType::Handle, "{op:?}");
-                }
-                Check::Present { field } => assert_eq!(result(field), WireType::Handle, "{op:?}"),
-                Check::Mask { field, .. } => assert_eq!(result(field), WireType::Bytes, "{op:?}"),
-                Check::Below { field, .. } | Check::Code { field, .. } => {
-                    assert_eq!(result(field), WireType::Nat, "{op:?}");
-                }
-                Check::Exit { code, signal } => {
-                    assert_eq!(result(code), WireType::Nat, "{op:?}");
-                    assert_eq!(result(signal), WireType::Nat, "{op:?}");
-                }
-            }
-        }
-
-        for requirement in op.requirements() {
-            match *requirement {
-                Requirement::SameLength { a, b } => {
-                    assert!(is_list(operand(a)) && is_list(operand(b)), "{op:?}");
-                }
-            }
-        }
-    }
-}
-
-/// `would_block` and `tls` are failures, so only a row that can fail is marked with either; a lookup answers only `ok` and `not_found`, and a plain value no status at all.
-#[test]
-fn only_a_row_that_can_fail_is_marked() {
-    for &op in HostOp::ALL {
-        if op.blocks() || op.tls() {
-            assert!(
-                matches!(op.outcome(), Outcome::Fallible | Outcome::Stream),
-                "{op:?} is marked but cannot fail"
-            );
-        }
-    }
-}
-
-/// A file kind's check admits every kind and no other code.
+/// A file kind's codes are every kind's, and no other.
 #[test]
 fn a_file_kind_answers_one_of_its_codes() {
     let kinds = [

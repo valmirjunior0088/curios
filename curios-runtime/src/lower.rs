@@ -68,7 +68,7 @@ impl Lower for u64 {
     }
 }
 
-/// A `Byte` result, as its word. The type holds it below 256, which is the range the guest refuses a reply outside of.
+/// A `Byte` result, as its word. The type holds it below 256, which is what makes the word a byte where the guest reads it unchecked.
 impl Lower for u8 {
     fn shape() -> Vec<WireType> {
         vec![WireType::Byte]
@@ -325,29 +325,29 @@ fn written(
     Ok(())
 }
 
-/// A builtin's call as its binding answers it: the row, the measures of the operands its contract reads, and the reply — or the refusal of a call whose operands broke a requirement, in which case the host was never asked.
+/// A host's call as its binding answers it: the reply, or the refusal of a call whose operands broke a requirement of the row, in which case the host was never asked.
 ///
-/// Lowering holds the reply to its row's contract before a single value is written, so a host that answers outside it refuses the call rather than hand the guest a reply its row does not allow: a host's fault is reported as the host's, naming the import.
-pub(crate) struct Replied<R, const N: usize> {
+/// Lowering writes the reply as its type encodes it, which is what makes it a value of the row's wire types. The guest reads it unchecked, and nothing here holds it to more than its type: what a row promises beyond that is its host's to keep, and the hosts' own tests' to hold.
+pub(crate) struct Replied<R> {
     op: HostOp,
-    operands: [Option<u64>; N],
     reply: Result<R, String>,
 }
 
-impl<R: WireReply, const N: usize> Replied<R, N> {
+impl<R: WireReply> Replied<R> {
     /// Admit `operands` to `op`'s requirements, and answer the call only if they hold.
-    pub(crate) fn new(op: HostOp, operands: [Option<u64>; N], call: impl FnOnce() -> R) -> Self {
-        let reply = op.admit(&operands).map(|()| call());
-
+    pub(crate) fn new<const N: usize>(
+        op: HostOp,
+        operands: [Option<u64>; N],
+        call: impl FnOnce() -> R,
+    ) -> Self {
         Self {
             op,
-            operands,
-            reply,
+            reply: op.admit(&operands).map(|()| call()),
         }
     }
 }
 
-impl<R: WireReply, const N: usize> Lower for Replied<R, N> {
+impl<R: WireReply> Lower for Replied<R> {
     fn shape() -> Vec<WireType> {
         R::results("value")
             .into_iter()
@@ -361,7 +361,7 @@ impl<R: WireReply, const N: usize> Lower for Replied<R, N> {
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         let refused =
-            |sentence: String| wasmtime::Error::msg(format!("sys.{}: {sentence}", self.op.name()));
+            |sentence: String| wasmtime::Error::msg(format!("{}: {sentence}", self.op.declared()));
 
         let values = match self.reply.map_err(refused)?.encode() {
             Encoded::Reply(values) => values,
@@ -370,10 +370,6 @@ impl<R: WireReply, const N: usize> Lower for Replied<R, N> {
             // A host that could not answer a row with no failure lane refuses the call, naming why.
             Encoded::Refused(sentence) => return Err(refused(sentence)),
         };
-
-        self.op
-            .check_reply(&values, &self.operands)
-            .map_err(refused)?;
 
         written(values, caller, results)
     }

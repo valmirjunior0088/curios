@@ -6,9 +6,9 @@
 
 use {
     super::{
-        Check, ChildExit, ChildHandles, ClosedCode, Failure, FileKind, FileStat, Handle, Mode,
-        Poll, Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp,
-        TtySize, WireLeaf, WireType,
+        ChildExit, ChildHandles, ClosedCode, Failure, FileStat, Handle, Mode, Poll, Refusal,
+        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf,
+        WireType,
     },
     crate::status,
 };
@@ -35,7 +35,7 @@ pub enum Outcome {
 pub trait WireOperand {
     const WIRE: WireType;
 
-    /// What a row's checks read of the operand — a count's value, a buffer's or a list's length, a mode's code — or `None` for an operand no check reads.
+    /// What a row's requirements read of the operand — a count's value, a buffer's or a list's length, a mode's code — or `None` for an operand none reads.
     fn measure(&self) -> Option<u64> {
         None
     }
@@ -139,9 +139,6 @@ pub enum Encoded {
     Refused(String),
 }
 
-/// A second, in the nanoseconds a clock reading or a modification time counts below it.
-const NANOS_PER_SECOND: u64 = 1_000_000_000;
-
 /// What a successful call carries: the labelled slots it fills, how it fills them, what a reply without it fills them with, and what its own values answer to.
 pub trait WirePayload: Sized {
     /// The slots, in the order they cross. A payload of one value fills one slot, labelled `label`; a payload of several fields labels each with its field's name, which is what the guest projects.
@@ -151,11 +148,6 @@ pub trait WirePayload: Sized {
 
     /// Fill the slots of a reply that carries no payload — a failure, an end of stream or an absence. The values are inert: the guest reads the status first and never projects them, so no check reads them either.
     fn pad(values: &mut Vec<WireValue>);
-
-    /// The checks a success answers to whatever row carries it, reading the slots by the labels [`slots`](Self::slots) gives them.
-    fn checks(_label: &'static str) -> Vec<Check> {
-        Vec::new()
-    }
 }
 
 impl WirePayload for () {
@@ -209,10 +201,6 @@ impl WirePayload for Handle {
     fn pad(values: &mut Vec<WireValue>) {
         values.push(WireValue::Handle(Handle::none()));
     }
-
-    fn checks(label: &'static str) -> Vec<Check> {
-        vec![Check::Present { field: label }]
-    }
 }
 
 impl WirePayload for Vec<Vec<u8>> {
@@ -242,13 +230,6 @@ impl WirePayload for Vec<Poll> {
     fn pad(values: &mut Vec<WireValue>) {
         values.push(WireValue::Bytes(Vec::new()));
     }
-
-    fn checks(label: &'static str) -> Vec<Check> {
-        vec![Check::Mask {
-            field: label,
-            allowed: Poll::READINESS,
-        }]
-    }
 }
 
 impl WirePayload for Timestamp {
@@ -265,13 +246,6 @@ impl WirePayload for Timestamp {
 
     fn pad(values: &mut Vec<WireValue>) {
         values.extend([WireValue::Nat(0), WireValue::Nat(0)]);
-    }
-
-    fn checks(_: &'static str) -> Vec<Check> {
-        vec![Check::Below {
-            field: "nanos",
-            bound: NANOS_PER_SECOND,
-        }]
     }
 }
 
@@ -315,19 +289,6 @@ impl WirePayload for FileStat {
     fn pad(values: &mut Vec<WireValue>) {
         values.extend([0, 0, 0, 0].map(WireValue::Nat));
     }
-
-    fn checks(_: &'static str) -> Vec<Check> {
-        vec![
-            Check::Code {
-                field: "kind",
-                codes: FileKind::WIRE_CODES,
-            },
-            Check::Below {
-                field: "mtime_nanos",
-                bound: NANOS_PER_SECOND,
-            },
-        ]
-    }
 }
 
 /// An exit crosses as the pair `(code, signal)`, the field that does not apply zero: `signal` is nonzero exactly when a signal ended the child.
@@ -351,13 +312,6 @@ impl WirePayload for ChildExit {
     fn pad(values: &mut Vec<WireValue>) {
         values.extend([WireValue::Nat(0), WireValue::Nat(0)]);
     }
-
-    fn checks(_: &'static str) -> Vec<Check> {
-        vec![Check::Exit {
-            code: "code",
-            signal: "signal",
-        }]
-    }
 }
 
 /// A stream the call did not pipe crosses as [`Handle::none`], the padding a failure fills every slot with: which streams a success holds is the call's to say, and the row's own checks hold the host to it.
@@ -379,10 +333,6 @@ impl WirePayload for ChildHandles {
     fn pad(values: &mut Vec<WireValue>) {
         values.extend([(); 4].map(|()| WireValue::Handle(Handle::none())));
     }
-
-    fn checks(_: &'static str) -> Vec<Check> {
-        vec![Check::Present { field: "child" }]
-    }
 }
 
 /// A builtin's whole reply: the outcome it crosses as, its result slots, the checks its success answers to, and its encoding.
@@ -391,9 +341,6 @@ pub trait WireReply: Sized {
 
     /// The result slots, each under its label, a lone payload's labelled `label`.
     fn results(label: &'static str) -> Vec<(String, WireType)>;
-
-    /// The checks a success answers to by its payload's type, a lone payload's slot labelled `label`.
-    fn checks(label: &'static str) -> Vec<Check>;
 
     fn encode(self) -> Encoded;
 }
@@ -425,10 +372,6 @@ impl<T: WirePayload> WireReply for T {
         T::slots(label)
     }
 
-    fn checks(label: &'static str) -> Vec<Check> {
-        T::checks(label)
-    }
-
     fn encode(self) -> Encoded {
         let mut values = Vec::new();
         WirePayload::encode(self, &mut values);
@@ -442,10 +385,6 @@ impl<T: WirePayload> WireReply for Result<T, Failure> {
 
     fn results(label: &'static str) -> Vec<(String, WireType)> {
         with_status::<T>(label)
-    }
-
-    fn checks(label: &'static str) -> Vec<Check> {
-        T::checks(label)
     }
 
     fn encode(self) -> Encoded {
@@ -462,10 +401,6 @@ impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
 
     fn results(label: &'static str) -> Vec<(String, WireType)> {
         with_status::<T>(label)
-    }
-
-    fn checks(label: &'static str) -> Vec<Check> {
-        T::checks(label)
     }
 
     fn encode(self) -> Encoded {
@@ -485,10 +420,6 @@ impl<T: WirePayload> WireReply for Option<T> {
         with_status::<T>(label)
     }
 
-    fn checks(label: &'static str) -> Vec<Check> {
-        T::checks(label)
-    }
-
     fn encode(self) -> Encoded {
         match self {
             Some(value) => with_payload(status::OK, Some(value)),
@@ -505,10 +436,6 @@ impl<T: WirePayload> WireReply for Result<T, Refusal> {
         T::slots(label)
     }
 
-    fn checks(label: &'static str) -> Vec<Check> {
-        T::checks(label)
-    }
-
     fn encode(self) -> Encoded {
         match self {
             Ok(value) => WireReply::encode(value),
@@ -522,10 +449,6 @@ impl WireReply for Termination {
     const OUTCOME: Outcome = Outcome::Diverges;
 
     fn results(_: &'static str) -> Vec<(String, WireType)> {
-        Vec::new()
-    }
-
-    fn checks(_: &'static str) -> Vec<Check> {
         Vec::new()
     }
 
