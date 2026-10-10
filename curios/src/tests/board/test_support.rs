@@ -426,6 +426,27 @@ pub(super) const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
         /std/Io/pure(())
         "#;
 
+pub(super) const A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_CASE: &str = r#"
+        use /std/{Bool};
+        use /std/Bool/{True, Holds};
+
+        induct Read: (Bool) -> Prop | mk(x: Bool): (x) end
+
+        let direct(g: (Bool) -> Bool, b: Bool, p: Read(b),
+              guard: Holds(match p: (i, q) => Bool | mk(x) => g(x) end)) -> Holds(g(b)) =
+            guard;
+
+        let split(g: (Bool) -> Bool, b: Bool, p: Read(b),
+              guard: Holds(match p: (i, q) => Bool | mk(x) => g(x) end),
+              chosen: Holds(b)) -> Holds(g(b)) =
+            match (match p: (i, q) => Bool | mk(x) => g(x) end)
+            | false => match guard end
+            | true => match b | false => match chosen end | true => True/qed() end
+            end;
+
+        /std/print("ok")
+        "#;
+
 pub(super) const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
         use /std/{List, Evidence};
         use /std/Bool/{True};

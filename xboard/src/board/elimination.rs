@@ -47,17 +47,17 @@ pub(super) const ELIMINATION: Part = Part {
         Ticket {
             title: "A guard's reduced spelling is settled under one case of a split inside its arm, and answers outside that case",
             found_on: Date::new(2026, 10, 9),
-            status: Status::Open,
+            status: Status::Fixed,
             witnesses: &[
                 Witness {
                     what: "a guard over a match on a proof, read at zero in one arm of a split and answered at a successor in the next",
                     proof: Proof::Program(A_GUARD_SETTLED_AT_ZERO_ANSWERS_AT_A_SUCCESSOR),
-                    expect: refused![elaborator],
+                    expect: refused![elaborator: curios_elab::Error::TypeMismatch { .. }],
                 },
                 Witness {
                     what: "the same guard settled in the false arm of a split and answered in the true one, as a term",
                     proof: Proof::Module(a_guard_settled_under_one_case_of_a_split),
-                    expect: refused![kernel],
+                    expect: refused![kernel: curios_cert::Error::Mismatch { .. }],
                 },
                 Witness {
                     what: "a guard decided by proof irrelevance under one case of a split, and answered after the split",
@@ -133,7 +133,7 @@ const AN_IDENTITY_ARM_READS_A_LIST_AT_THE_EMPTY_ONE: &str = r#"
     f([1, 2], True/qed())
     "#;
 
-/// The guard is the match on `p`, which stands while `n` is open: its proof's two indices are one only at a literal, so nothing states `z` before then. Its `true` arm assumes it, and the equation stands for the whole arm. Inside the `0` arm of the split `p` proves `Eq()(0, 0)`, the match is `h(0)`, and the equation's reduced spelling is settled there as `h(0)`, where it is true. The spelling is kept with the equation, which outlives that arm: under `k + 1`, where the guard says `h(1)`, `h(0)` is answered `true` still.
+/// The guard is the match on `p`, which stands while `n` is open: its proof's two indices are one only at a literal, so nothing states `z` before then. Its `true` arm assumes it, and the equation stands for the whole arm. Inside the `0` arm of the split `p` proves `Eq()(0, 0)`, and the match fired on the type `p` stood at there, so the equation's reduced spelling was settled as `h(0)`, where it is true. The spelling is kept with the equation, which outlives that arm: under `k + 1`, where the guard says `h(1)`, `h(0)` was answered `true` still. The match now states the instance it eliminates, `Eq()(g(n), g(g(n)))`, and fires on that: the `0` arm reaches it as a substitution into the term, the equation's own spelling is settled with `n` open, and `True/qed()` under `k + 1` is refused at `Holds(h(0))`.
 const A_GUARD_SETTLED_AT_ZERO_ANSWERS_AT_A_SUCCESSOR: &str = r#"
     use /std/{Nat, Eq, Bool};
     use /std/Bool/{True, False, Holds};
@@ -157,7 +157,7 @@ const A_GUARD_SETTLED_AT_ZERO_ANSWERS_AT_A_SUCCESSOR: &str = r#"
     f((m: Nat) => m != 0, 1, Eq/refl(), True/qed(), True/qed())
     "#;
 
-/// `F(c)` is a proposition at `true` and `Nat` at `false`, so `p` and `q` are proofs only under the `true` case of the split, where conversion holds `h(p)` and `h(q)` one term without reading either. The guard is the match on `h(p) == h(q)`, which stands while `c` is open, and its reduced spelling is settled inside that arm, where the comparison is `true` and the match is `k(0)`. The spelling is kept with the guard's equation, which outlives the split: after it, with `c` open again, `k(0)` is answered `true`, and at `false`, where the guard says `k(1)`, that is `Holds(false)`. No match here fires on the type its scrutinee stands at: what the settlement read of the split is whether two locals are proofs.
+/// `F(c)` was a proposition at `true` and `Nat` at `false`, so `p` and `q` were proofs only under the `true` case of the split, where conversion held `h(p)` and `h(q)` one term without reading either. The guard is the match on `h(p) == h(q)`, which stands while `c` is open, and its reduced spelling was settled inside that arm, where the comparison was `true` and the match `k(0)`. The spelling is kept with the guard's equation, which outlives the split: after it, with `c` open again, `k(0)` was answered `true`, and at `false`, where the guard says `k(1)`, that is `Holds(false)`. What the settlement read of the split was whether two locals are proofs. No proposition stands where a type is wanted now, so `F` is refused where it is declared: a type is a proposition under every case of `c` or under none.
 const A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS: &str = r#"
     use /std/{Nat, Bool};
     use /std/Bool/{True, False, Holds};
@@ -182,7 +182,7 @@ const A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS: &str = r#"
     f(false, (n: Nat) => n, (n: Nat) => n == 1, 0, 1, True/qed())
     "#;
 
-/// [`A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS`] with no proposition in it: `F(c)` is the unit type at `true`, where any two inhabitants are one by the type's shape, so the comparison is decided inside that arm as it was there and the guard's spelling is settled the same way. What the settlement read of the split is that a type has one inhabitant, which a proposition is one case of.
+/// [`A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS`] with no proposition in it: `F(c)` is the unit type at `true`, where any two inhabitants were one by the type's shape, so the comparison was decided inside that arm and the guard's spelling settled the same way. What the settlement read of the split was that a type has one inhabitant, which a proposition is one case of. The unit type has no eta now, and no rule reads a type's shape: `h(p)` and `h(q)` stay apart under every case, and the `True/qed()` inside the arm is refused at `Holds(k(0))`.
 const A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_UNITS: &str = r#"
     use /std/{Nat, Bool};
     use /std/Bool/{True, False, Holds};
@@ -244,9 +244,9 @@ fn an_identity_arm_typed_at_zero() -> (Module, Term) {
     (Module::default(), Term::apply(forged, [two(), qed]))
 }
 
-/// `induct Read : (Bool) -> Prop | mk(x : Bool) : (x) end`, and over `g : (Bool) -> Bool`, `b : Bool`, `p : Read(b)`, `guard : Holds(read)` and `chosen : Holds(b)`, with `read` standing for `match p : (_, _) => Bool | mk(x) => g(x) end` and every match at `Holds(g(false))`: `match read | false => match guard end | true => match b | false => match chosen end | true => qed end end`, closed at the identity, `true`, `Read/mk(true)` and two `qed`.
+/// `induct Read : (Bool) -> Prop | mk(x : Bool) : (x) end`, and over `g : (Bool) -> Bool`, `b : Bool`, `p : Read(b)`, `guard : Holds(read)` and `chosen : Holds(b)`, with `read` standing for `match p at Read(b) : (_, _) => Bool | mk(x) => g(x) end` and every match at `Holds(g(false))`: `match read | false => match guard end | true => match b | false => match chosen end | true => qed end end`, closed at the identity, `true`, `Read/mk(true)` and two `qed`.
 ///
-/// The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`, which names `p` and `g` and not `b`. The `false` arm of the split re-types `p` at `Read(false)`, where `read` is `g(false)`, and a stuck form met while that arm is typed settles the equation's reduced spelling there, as `g(false)`, which the equation rightly answers `true` under that case. The settled spelling stays with the equation when the arm is left, so in the `true` arm, where `read` is `g(true)`, `g(false)` is answered `true` as well, and at the identity what the `qed` proves is `Holds(false)`. With the `true` arm of the match on `read` a bare `qed` and no split, the spelling is settled as `g(b)` and the kernel refuses the term.
+/// The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`. The match fired on the type `p` was assumed at, so `read` named `p` and `g` and not `b`: the `false` arm of the split re-types `p` at `Read(false)`, where `read` was `g(false)`, and a stuck form met while that arm is typed settled the equation's reduced spelling there, as `g(false)`, which the equation rightly answers `true` under that case. The settled spelling stays with the equation when the arm is left, so in the `true` arm, where `read` is `g(true)`, `g(false)` was answered `true` as well, and at the identity what the `qed` proved is `Holds(false)`. The match now fires on the instance it states, `Read(b)`, so `read` is `g(b)` wherever it stands and names `b`: the spelling is settled as `g(b)` under either case, and the `qed` in the `true` arm is refused at `Holds(g(false))`.
 fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
     let family = Global::Authored(Qualifier::from(["Read"]));
     let bool_type = || Term::intrinsic(Intrinsic::BoolType);
@@ -295,7 +295,7 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
     let chosen = Free::local(956, Some("chosen"));
     let payload = Free::local(957, Some("x"));
 
-    // match p : (_, _) => Bool | mk(x) => g(x) end
+    // match p at Read(b) : (_, _) => Bool | mk(x) => g(x) end
     let read = Term::induct_match_scoped_marked(
         Term::free_var(&proof),
         Scope::constant(Many(2), bool_type()),
@@ -305,7 +305,8 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
             Term::apply(Term::free_var(&test), [Term::free_var(&payload)]),
         )],
         None,
-    );
+    )
+    .stating(at(Term::free_var(&decided)));
 
     // Holds(g(false)), and a match with no arm on a hypothesis the arm refutes
     let claim = || holds(Term::apply(Term::free_var(&test), [literal(false)]));
@@ -359,9 +360,9 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
     )
 }
 
-/// `induct Two : Prop | a | b end`, and over `c : Bool`, `h : (F(c)) -> Nat`, `k : (Nat) -> Bool`, `p, q : F(c)` and `guard : Holds(read)`, with `F(c)` standing for `match c : (_) => Type | false => Nat | true => Two end` and `read` for `match h(p) == h(q) : (_) => Bool | false => k(1) | true => k(0) end`: `match read : (_) => Holds(k(0)) | false => match guard end | true => let w : True = match c : (_) => True | false => qed | true => let u : Holds(k(0)) = qed; qed end; qed end`, closed at `false`, the identity, `(n) => n == 1`, `0`, `1` and `qed`.
+/// `induct Two : Prop | a | b end`, and over `c : Bool`, `h : (F(c)) -> Nat`, `k : (Nat) -> Bool`, `p, q : F(c)` and `guard : Holds(read)`, with `F(c)` standing for `match c : (_) => Type | false => Nat | true => Two end`, a proposition in one arm of a match into `Type`, and `read` for `match h(p) == h(q) : (_) => Bool | false => k(1) | true => k(0) end`: `match read : (_) => Holds(k(0)) | false => match guard end | true => let w : True = match c : (_) => True | false => qed | true => let u : Holds(k(0)) = qed; qed end; qed end`, closed at `false`, the identity, `(n) => n == 1`, `0`, `1` and `qed`.
 ///
-/// The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`, which names `h`, `p`, `q` and `k` and not `c`. The `true` arm of the split re-types `h`, `p` and `q` at `Two`, where conversion holds `h(p)` and `h(q)` one term, the comparison folds to `true` and `read` is `k(0)`: the `qed` that arm binds at `Holds(k(0))` settles the equation's reduced spelling there, as `k(0)`. The settled spelling stays with the equation when the split is left, so the `qed` after it, typed with `c` open, is checked at a `Holds(k(0))` that still answers `True`, and at `false`, where `read` is `k(1)`, what it proves is `Holds(false)`. With the `true` arm of the split a bare `qed`, the spelling is settled with `c` open, as `read` stands there, and the kernel refuses the term.
+/// The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`, which names `h`, `p`, `q` and `k` and not `c`. The `true` arm of the split re-types `h`, `p` and `q` at `Two`, where conversion holds `h(p)` and `h(q)` one term, the comparison folds to `true` and `read` is `k(0)`: the `qed` that arm binds at `Holds(k(0))` settles the equation's reduced spelling there, as `k(0)`. The settled spelling stays with the equation when the split is left, so the `qed` after it, typed with `c` open, was checked at a `Holds(k(0))` that still answered `True`, and at `false`, where `read` is `k(1)`, what it proved is `Holds(false)`. The kernel now refuses `F(c)` where its `true` arm is typed, a proposition where the motive wants a type.
 fn a_guard_settled_where_its_operands_are_proofs() -> (Module, Term) {
     let two = Global::Authored(Qualifier::from(["Two"]));
 
@@ -394,7 +395,7 @@ fn a_guard_settled_where_its_operands_are_proofs() -> (Module, Term) {
     })
 }
 
-/// [`a_guard_settled_where_its_operands_are_proofs`] with the unit type `{}` where `Two` stood, and no declaration: at `true` the operands' type has one inhabitant by its shape, and conversion holds `h(p)` and `h(q)` one term there as it does at a proposition.
+/// [`a_guard_settled_where_its_operands_are_proofs`] with the unit type `{}` where `Two` stood, and no declaration: at `true` the operands' type has one inhabitant by its shape, and conversion held `h(p)` and `h(q)` one term there as it does at a proposition. It holds them apart now, the unit type having no eta, and the `qed` the arm binds is refused at `Holds(k(0))`.
 fn a_guard_settled_where_its_operands_are_units() -> (Module, Term) {
     a_guard_settled_where_its_operands_are_one(Module::default(), &Term::tuple_type_unit)
 }

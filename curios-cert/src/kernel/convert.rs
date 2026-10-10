@@ -652,11 +652,26 @@ fn structural(
 
         // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
         (Subterm::Match(left), Subterm::Match(right)) => {
-            if !ground(kernel, history, &left.head, &right.head)? {
-                return Ok(false);
-            }
-            // The two scrutinees are one term by now, so one type is theirs: what the motive's and the arms' binders are opened at.
-            let scrutinee = scrutinee_type(kernel, &left.head)?;
+            // The two scrutinees are one term past this, so one type is theirs: what the motive's and the arms' binders are opened at. Where the matches state the instance they eliminate, the two instances are compared, the scrutinees at the instance, a typed position where two proofs are one unread, and the instance is that type with no lookup. One that states an instance and one that states none are two terms.
+            let scrutinee = match (left.cases.stated(), right.cases.stated()) {
+                (Some(this), Some(that)) => {
+                    if !ground(kernel, history, this, that)?
+                        || !compare(kernel, history, this, &left.head, &right.head)?
+                    {
+                        return Ok(false);
+                    }
+
+                    Some(kernel.reduce_forced(this.clone())?)
+                }
+                (None, None) => {
+                    if !ground(kernel, history, &left.head, &right.head)? {
+                        return Ok(false);
+                    }
+
+                    scrutinee_type(kernel, &left.head)?
+                }
+                _ => return Ok(false),
+            };
 
             let results = match (&left.result, &right.result) {
                 (MatchResult::Family(this), MatchResult::Family(that)) => {
@@ -1191,10 +1206,12 @@ fn ground_cases(
             Cases::Induct {
                 cases: this_cases,
                 default: this_default,
+                ..
             },
             Cases::Induct {
                 cases: that_cases,
                 default: that_default,
+                ..
             },
         ) => {
             if this_cases.len() != that_cases.len() {
@@ -1507,22 +1524,18 @@ pub(crate) fn asked_classes(kernel: &mut Kernel, atoms: &[Term]) -> Result<Class
     kernel.plainly(|kernel| classing(kernel, atoms, grounded))
 }
 
-/// What a scrutinee's type states of a match with one arm: the type, the instance the arm's constructor builds at the payload the type's indices state, and that payload.
+/// What the instance a match states says of a match with one arm: the instance, the one the arm's constructor builds at the payload its indices state, and that payload.
 struct Stated {
     type_: Term,
     built: Term,
     payload: Vec<Term>,
 }
 
-/// What `head`'s type states of `tag`'s payload, `head` not reduced: the family instance read off binders and declarations ([`synth_neutral`]), where that family is a proposition and its indices pin every component. `None` where no lookup types `head`, or its family is no such proposition.
-fn stated(kernel: &mut Kernel, head: &Term, tag: &Atom) -> Result<Option<Stated>, ReduceError> {
-    if !names_a_type(head) {
-        return Ok(None);
-    }
-    let Some(type_) = synth_neutral(kernel, head).probed_refusal()?.flatten() else {
-        return Ok(None);
-    };
-    let type_ = kernel.reduce_forced(type_)?;
+/// What `stated`, the instance a match states that it eliminates ([`Cases::stated`]), says of `tag`'s payload: the payload its indices state, where it is an instance of a proposition whose indices pin every component. `None` where it is no such instance.
+///
+/// **Nothing is read but the match.** The instance is the term's own, so what it says moves with a substitution into the term and with nothing else: no binder is looked up, and a scrutinee an arm re-types under its own name is a match that states another instance. Typing holds the instance to the scrutinee's own type where it types the match (`infer`), and a match no judgment typed is, by this reading, a spelling of its arm at the payload it states, as any term standing unchecked in a type position is what it reduces to.
+fn stated(kernel: &mut Kernel, stated: &Term, tag: &Atom) -> Result<Option<Stated>, ReduceError> {
+    let type_ = kernel.reduce_forced(stated.clone())?;
     let Subterm::InductType(family) = &*type_ else {
         return Ok(None);
     };
@@ -1558,19 +1571,19 @@ fn stated(kernel: &mut Kernel, head: &Term, tag: &Atom) -> Result<Option<Stated>
     }))
 }
 
-/// What a match with one arm and no catch-all ([`Cases::sole_arm`]) binds at `head`, which is not reduced: `None` where the rule does not speak and the scrutinee is reduced as for any other match, the payload where the match fires, and no payload where it stands.
+/// What a match with one arm and no catch-all ([`Cases::sole_arm`]) binds, its scrutinee not reduced: `None` where the rule does not speak and the scrutinee is reduced as for any other match, the payload where the match fires, and no payload where it stands.
 ///
-/// The scrutinee's type states the payload ([`stated`]), and the instance the constructor builds at it is put beside the scrutinee's own: where the two are one the proof can be no other value, and the match is its arm at that payload. The kernel's conversion decides it, as reduction asks of a missed equation; plain reduction asks nothing and holds the two to one spelling.
+/// The instance the match states says the payload ([`stated`]), and the instance the constructor builds at it is put beside the stated one: where the two are one the proof can be no other value, and the match is its arm at that payload. The kernel's conversion decides it, as reduction asks of a missed equation; plain reduction asks nothing and holds the two to one spelling.
 pub(crate) fn unread_payload(
     kernel: &mut Kernel,
-    head: &Term,
+    instance: &Term,
     tag: &Atom,
 ) -> Result<Option<Option<Vec<Term>>>, ReduceError> {
     let Some(Stated {
         type_,
         built,
         payload,
-    }) = stated(kernel, head, tag)?
+    }) = stated(kernel, instance, tag)?
     else {
         return Ok(None);
     };
@@ -1583,13 +1596,13 @@ pub(crate) fn unread_payload(
     Ok(Some(fires.then_some(payload)))
 }
 
-/// [`unread_payload`] for a closed scrutinee, which is asked nothing: a closed proof of a family with one constructor is that constructor, so its indices are the constructor's. What the closed machine binds an arm's payload to ([`ClosedHost::stated_payload`](curios_core::ClosedHost::stated_payload)).
+/// [`unread_payload`] for a closed match, which is asked nothing: a closed proof of a family with one constructor is that constructor, so the stated instance's indices are the constructor's. What the closed machine binds an arm's payload to ([`ClosedHost::stated_payload`](curios_core::ClosedHost::stated_payload)).
 pub(crate) fn stated_payload(
     kernel: &mut Kernel,
-    head: &Term,
+    instance: &Term,
     tag: &Atom,
 ) -> Result<Option<Vec<Term>>, ReduceError> {
-    Ok(stated(kernel, head, tag)?.map(|stated| stated.payload))
+    Ok(stated(kernel, instance, tag)?.map(|stated| stated.payload))
 }
 
 /// Which of `atoms` are one by `same`, as a classing asks of them (`curios-core`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about.

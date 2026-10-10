@@ -858,7 +858,7 @@ impl<'s> Kernel<'s> {
         if let Some(index) = name.local_index() {
             self.spend.reserve(index);
         }
-        // A re-typed local is what a remembered sort of a type naming it was read off, and the reduct of a match its type decides.
+        // A re-typed local is what a remembered sort of a type naming it was read off, and what a comparison that looked its type up was decided by.
         if self.scope.assume(name, type_) {
             self.memos.begin_equations();
         }

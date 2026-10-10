@@ -119,7 +119,8 @@ impl Lowering<'_> {
             Cases::Switch { cases, default } => {
                 self.erase_switch(context, head, result, cases, default, hint)
             }
-            Cases::Induct { cases, default } => {
+            // The instance a match states is a type, which erasure reads nothing of.
+            Cases::Induct { cases, default, .. } => {
                 self.erase_induct(context, head, result, cases, default.as_ref(), hint)
             }
             Cases::FreeMonoid {

@@ -417,6 +417,7 @@ fn match_tagged(context: &mut Context, binders: &[(Plicity, &Free)], body: Term)
                 ),
             )]),
             default: None,
+            stated: None,
         },
     })
     .into()
@@ -786,6 +787,7 @@ fn inductive_match_default_is_allowed_on_an_indexed_family() {
                 InductArm::new(Scope::close(Many(0), &[], nat_lit(0)), vec![]),
             )]),
             default: Some(nat_lit(1)),
+            stated: None,
         },
     })
     .into();
@@ -818,6 +820,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
                 InductArm::new(Scope::close(Many(0), &[], nat_lit(0)), vec![]),
             )]),
             default: Some(nat_lit(1)),
+            stated: None,
         },
     })
     .into();

@@ -43,6 +43,7 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
             cases: Cases::Induct {
                 cases: Vec::new(),
                 default: None,
+                stated: None,
             },
         }));
         kernel
@@ -95,6 +96,7 @@ fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
                 cases: Cases::Induct {
                     cases: Vec::new(),
                     default: None,
+                    stated: None,
                 },
             }));
             kernel
@@ -289,6 +291,7 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_proposition() {
             cases: Cases::Induct {
                 cases: Vec::new(),
                 default: None,
+                stated: None,
             },
         }))
     };
@@ -384,6 +387,7 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
     let no_arm = || Cases::Induct {
         cases: Vec::new(),
         default: None,
+        stated: None,
     };
     let eliminated = |scrutinee: &Term, goal: &Term| {
         Term::from(Subterm::Match(Match {
@@ -419,6 +423,47 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
             at(&eliminated(&c, &nat_type()), &n),
             at(&eliminated(&c, &units), &t),
             at(&eliminated(&c, &proposition), &q),
+        ],
+        [Ok(false), Ok(false), Ok(false)]
+    );
+}
+
+/// Two eliminations that state the instance they eliminate are compared by it: the two instances, and then the scrutinees at the instance, a typed position where two proofs are one unread and no lookup types either. Two variables nothing was assumed of converge there, and stay apart where the eliminations state no instance, where the two instances differ, and where one states its instance and the other none. The elaborator's twin of this proposition shares the name.
+///
+/// Mutation-checked: with the scrutinees compared at `Type` whatever the eliminations state, the held goal is refused.
+#[test]
+fn two_eliminations_are_compared_at_the_instance_they_state() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let another = declare(&mut kernel, "Q", Term::prop());
+    let (p, q) = (
+        Term::free_var(&binder(0, "p")),
+        Term::free_var(&binder(1, "q")),
+    );
+    let eliminated = |proof: &Term| {
+        Term::from(Subterm::Match(Match {
+            head: proof.clone(),
+            result: MatchResult::Ambient(nat_type()),
+            cases: Cases::Induct {
+                cases: Vec::new(),
+                default: None,
+                stated: None,
+            },
+        }))
+    };
+    let stating = |proof: &Term, instance: &Term| eliminated(proof).stating(instance.clone());
+    let number = nat_type();
+    let mut at = |this: &Term, that: &Term| convert(&mut kernel, &number, this, that);
+
+    assert_eq!(
+        at(&stating(&p, &proposition), &stating(&q, &proposition)),
+        Ok(true)
+    );
+    assert_eq!(
+        [
+            at(&eliminated(&p), &eliminated(&q)),
+            at(&stating(&p, &proposition), &stating(&q, &another)),
+            at(&stating(&p, &proposition), &eliminated(&p)),
         ],
         [Ok(false), Ok(false), Ok(false)]
     );
@@ -998,6 +1043,7 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
             cases: Cases::Induct {
                 cases: Vec::new(),
                 default: None,
+                stated: None,
             },
         }))
     };

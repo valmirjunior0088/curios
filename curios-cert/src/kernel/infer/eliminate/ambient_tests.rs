@@ -69,6 +69,7 @@ fn arms(body: &Term) -> Cases {
             ),
         ],
         default: None,
+        stated: None,
     }
 }
 

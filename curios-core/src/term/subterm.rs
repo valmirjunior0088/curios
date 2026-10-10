@@ -291,13 +291,20 @@ impl Subterm {
                             .for_each(|(_, b)| b.collect_construction_names(names));
                         default.collect_construction_names(names);
                     }
-                    Cases::Induct { cases, default } => {
+                    Cases::Induct {
+                        cases,
+                        default,
+                        stated,
+                    } => {
                         cases
                             .iter()
                             .for_each(|(_, s)| s.body.body().collect_construction_names(names));
                         default
                             .iter()
                             .for_each(|d| d.collect_construction_names(names));
+                        stated
+                            .iter()
+                            .for_each(|s| s.collect_construction_names(names));
                     }
                     Cases::FreeMonoid { carrier } => match carrier {
                         Carrier::Nat {
@@ -395,9 +402,14 @@ impl Subterm {
                         Cases::Switch { cases, default } => {
                             cases.iter().any(|(_, b)| pred(b)) || pred(default)
                         }
-                        Cases::Induct { cases, default } => {
+                        Cases::Induct {
+                            cases,
+                            default,
+                            stated,
+                        } => {
                             cases.iter().any(|(_, s)| pred(s.body.body()))
                                 || default.as_ref().is_some_and(&mut *pred)
+                                || stated.as_ref().is_some_and(&mut *pred)
                         }
                         Cases::FreeMonoid { carrier } => match carrier {
                             Carrier::Nat {
@@ -763,15 +775,20 @@ impl Bound for Subterm {
                             .collect(),
                         default: visit.visit_subterm(default),
                     },
-                    Cases::Induct { cases, default } => Cases::Induct {
+                    Cases::Induct {
+                        cases,
+                        default,
+                        stated,
+                    } => Cases::Induct {
                         cases: cases
                             .iter()
                             .map(|(atom, arm)| {
                                 (atom.clone(), arm.with_body(visit.visit_scope(&arm.body)))
                             })
                             .collect(),
-                        // The default binds nothing — it lives in the enclosing scope, like `head`.
+                        // The default binds nothing — it lives in the enclosing scope, like `head`, and so does the instance the match states.
                         default: default.as_ref().map(|d| visit.visit_subterm(d)),
+                        stated: stated.as_ref().map(|s| visit.visit_subterm(s)),
                     },
                     Cases::FreeMonoid { carrier } => Cases::FreeMonoid {
                         carrier: match carrier {
@@ -944,12 +961,17 @@ impl Bound for Subterm {
                 Cases::Switch { cases, default } => {
                     max_reach(cases.iter().map(|(_, b)| b)).max(default.reach())
                 }
-                Cases::Induct { cases, default } => cases
+                Cases::Induct {
+                    cases,
+                    default,
+                    stated,
+                } => cases
                     .iter()
                     .map(|(_, s)| s.reach())
                     .max()
                     .unwrap_or(0)
-                    .max(default.as_ref().map_or(0, |d| d.reach())),
+                    .max(default.as_ref().map_or(0, |d| d.reach()))
+                    .max(stated.as_ref().map_or(0, |s| s.reach())),
                 Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat {
                         empty_case,

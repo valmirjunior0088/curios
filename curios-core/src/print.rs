@@ -2316,7 +2316,15 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 },
             };
 
-            let prefix = flat([pure(keyword), sub(head, frame), result, pure(";")]);
+            // The instance a match states is part of the term, printed where it stands: `match p at Eq(@Nat)(a, b) …`.
+            let stated = match &cases {
+                Cases::Induct {
+                    stated: Some(stated),
+                    ..
+                } => flat([pure(" at "), sub(stated.clone(), frame)]),
+                _ => pure(""),
+            };
+            let prefix = flat([pure(keyword), sub(head, frame), stated, result, pure(";")]);
 
             let arms = match cases {
                 Cases::Bool {

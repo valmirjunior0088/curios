@@ -576,10 +576,24 @@ fn check_cases(
     };
 
     match cases {
-        Cases::Induct { cases, default } => {
+        Cases::Induct {
+            cases,
+            default,
+            stated,
+        } => {
             let Some(family) = family else {
                 return Err(Error::Unclassified(scrutinee.clone()));
             };
+            // The instance a match states is held to the type its scrutinee was inferred at, and typed, so that a call in it is one this check graded: reduction reads the payload of the one arm off it and looks no binder up ([`unread_payload`](super::unread_payload)).
+            if let Some(stated) = stated {
+                infer_type(kernel, stated)?;
+                if !convert(kernel, &Term::type_ground(), stated, scrutinee_type)? {
+                    return Err(Error::Mismatch {
+                        inferred: Box::new(scrutinee_type.clone()),
+                        expected: Box::new(stated.clone()),
+                    });
+                }
+            }
             let at = kernel.induct_at(family)?;
 
             // A match with no arms and no catch-all is a vacuous elimination: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The guard exists for eliminations that can run; this one cannot. It sits here rather than inside the arm rule because the sort it consumes is derived here, by `check_motive`, and a second derivation is what this clause exists to avoid.

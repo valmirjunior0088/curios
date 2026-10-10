@@ -334,7 +334,11 @@ impl<E: Env> Walk<'_, E> {
             }
 
             // The arm's binders are the constructor's payloads, whether or not the scrutinee is a binder the arm can refine: what an application of one reads as is a fact about the payload, not about what it was projected from.
-            Cases::Induct { cases, default } => {
+            Cases::Induct {
+                cases,
+                default,
+                stated,
+            } => {
                 for (tag, case) in cases {
                     let (binders, body) = self.open_many(&case.body);
                     let shape = Shape::node(
@@ -345,6 +349,10 @@ impl<E: Env> Walk<'_, E> {
                 }
                 if let Some(default) = default {
                     self.walk_term(default)?;
+                }
+                // The instance a match states is no type position to pass over: where the match fires, its arm is opened at the payload this instance's indices state, so a call in one is a call the reduct holds.
+                if let Some(stated) = stated {
+                    self.walk_term(stated)?;
                 }
             }
 

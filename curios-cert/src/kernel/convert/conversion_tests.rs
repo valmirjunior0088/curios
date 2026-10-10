@@ -497,6 +497,7 @@ fn eta_by_a_literal_is_taken_against_a_neutral_alone() {
             cases: Cases::Induct {
                 cases: Vec::new(),
                 default: None,
+                stated: None,
             },
         }))
     };

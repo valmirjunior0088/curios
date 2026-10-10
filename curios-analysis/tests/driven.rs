@@ -835,6 +835,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             let cases = Cases::Induct {
                 cases: vec![("mk".into(), InductArm::new(arm, vec![Plicity::Explicit]))],
                 default: Some(markers.visited()),
+                stated: Some(markers.visited()),
             };
             matching(markers, cases)
         }),

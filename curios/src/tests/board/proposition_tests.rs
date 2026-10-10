@@ -61,7 +61,7 @@ fn a_cast_along_a_hypothesis_the_algebra_equates_is_its_argument() {
     );
 }
 
-// The scrutinee's type is looked up, so a proof written as a `let` or as a function applied where it stands is first stepped to the hypothesis it is: neither step unfolds a definition, and a cast along either is the cast along the hypothesis.
+// The match states the instance it eliminates and reads nothing of its scrutinee, so a proof written as a `let` or as a function applied where it stands is read no more than a hypothesis is: a cast along either is the cast along the hypothesis.
 #[test]
 fn a_cast_along_a_proof_written_as_a_redex_is_its_argument() {
     assert_eq!(
@@ -79,7 +79,7 @@ fn a_cast_along_a_hypothesis_whose_ends_differ_stands() {
     );
 }
 
-// No checker reduces a proof to take it into data. `slow(n)` proves `n = n` by an induction that reads its hypothesis, so at a hundred billion its proof is a hundred billion steps from `refl`, and a cast that reduced it to fire would run out of steps: closed, the cast is its argument outright; open, `slow(n)` is stuck on `n` and the indices are one all the same; and where a closed match's arm names a payload its equations leave open, as `inner`'s does, the closed machine is handed the payload its scrutinee's type states and evaluates no more of the proof. The running program casts along it too, with the proof erased.
+// No checker reduces a proof to take it into data. `slow(n)` proves `n = n` by an induction that reads its hypothesis, so at a hundred billion its proof is a hundred billion steps from `refl`, and a cast that reduced it to fire would run out of steps: closed, the cast is its argument outright; open, `slow(n)` is stuck on `n` and the indices are one all the same; and where a closed match's arm names a payload its equations leave open, as `inner`'s does, the closed machine is handed the payload the instance the match states says and evaluates no more of the proof. The running program casts along it too, with the proof erased.
 #[test]
 fn a_cast_along_a_lemma_runs_none_of_the_lemma() {
     assert_eq!(run(A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA), b"7");
@@ -137,6 +137,15 @@ fn irrelevance_still_identifies_a_propositions_inhabitants() {
     assert_eq!(
         run(IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS),
         b"1"
+    );
+}
+
+// **A match that takes a proposition into data states the instance it eliminates, and fires on it.** `read` is `g(b)` wherever it stands, its proof unreduced, so a hypothesis about it is one about `g(b)`; and under a case of `b` it is its arm at that case, by the substitution into the term and by nothing read off what `p` is assumed at. The soundness board's elimination part holds the program that forged `False` where the match read that type instead.
+#[test]
+fn a_match_on_a_pinned_proof_is_its_arm_at_the_index_under_every_case() {
+    assert_eq!(
+        run(A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_CASE),
+        b"ok"
     );
 }
 

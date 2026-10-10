@@ -593,11 +593,17 @@ fn a_let_and_an_arm_bind_a_proof_as_written() {
         Subterm::Match(Match {
             head,
             result,
-            cases: Cases::Induct { cases, default },
+            cases:
+                Cases::Induct {
+                    cases,
+                    default,
+                    stated,
+                },
         }) => Term::from(Subterm::Match(Match {
             head,
             result,
             cases: Cases::Induct {
+                stated,
                 cases: cases
                     .into_iter()
                     .map(|(tag, arm)| {
@@ -649,20 +655,29 @@ fn a_match_that_reads_nothing_of_its_scrutinee_does_not_evaluate_it() {
     );
 }
 
-/// An arm that names its payload is bound to what the host reads off the scrutinee's type, the scrutinee unevaluated: the same match that runs out of steps above is its payload where the host states one.
+/// An arm that names its payload is bound to what the host reads off the instance the match states, the scrutinee unevaluated: the same match that runs out of steps above is its payload where it states an instance the host reads one off. A match that states none is asked of no host, and evaluates its scrutinee.
 #[test]
 fn an_arm_that_names_its_payload_is_bound_to_what_the_host_states() {
     let x = binder(0, "x");
-    let read = Term::induct_match(
-        unaffordable(),
-        None,
-        nat_type(),
-        [("box", vec![x], Term::free_var(&x))],
-    );
+    let read = || {
+        Term::induct_match(
+            unaffordable(),
+            None,
+            nat_type(),
+            [("box", vec![x], Term::free_var(&x))],
+        )
+    };
     let mut host = Host::new(100_000);
     host.stated = Some(vec![nat(5)]);
 
-    assert_eq!(reduce_closed(&mut host, read, Demand::Forced), Ok(nat(5)));
+    assert_eq!(
+        reduce_closed(&mut host, read().stating(nat_type()), Demand::Forced),
+        Ok(nat(5))
+    );
+    assert!(
+        reduce_closed(&mut host, read(), Demand::Forced)
+            .is_err_and(|refusal| refusal.is_exhausted())
+    );
 }
 
 /// What the three fold shapes spend per element, printed rather than asserted — the assertions live in the budget bounds of the ordinary tests above. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.

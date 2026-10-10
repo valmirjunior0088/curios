@@ -1360,7 +1360,11 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
                         .collect::<Result<_, Error>>()?,
                     default: zonk_term(context, default)?,
                 },
-                Cases::Induct { cases, default } => Cases::Induct {
+                Cases::Induct {
+                    cases,
+                    default,
+                    stated,
+                } => Cases::Induct {
                     cases: cases
                         .iter()
                         .map(|(atom, arm)| {
@@ -1374,6 +1378,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
                         .as_ref()
                         .map(|d| zonk_term(context, d))
                         .transpose()?,
+                    stated: stated.as_ref().map(|s| zonk_term(context, s)).transpose()?,
                 },
             },
         }),

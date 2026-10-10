@@ -18,7 +18,7 @@
 //!
 //! **A witness named at an instance is left as written.** An argument at a `use` position that is a global name at a universe instance is bound as that name, as a monomorphic witness's bare name is by the rule for names: the hosts leave it so, a method projected off it unfolds it where the method is demanded, and evaluated here its dictionary stands wherever an alias over the witness unfolds, in a type a report prints and resolution can no longer restore. The application states the position, since a function literal's binder does not. A family passed at an instance is no witness, and is evaluated as the paragraph above says.
 //!
-//! **A match that reads nothing of its scrutinee does not evaluate it.** One arm, no catch-all and no payload named ([`Cases::unread`]): the match is its arm's body, since a closed scrutinee can be no other case. A cast along a proof is written in that form, and the elaborator writes a payload as the index that pins it wherever the arm's equations hold the two one, so such a match runs none of its proof. An arm that still names a payload is bound to what the scrutinee's type states of it, which the host reads ([`ClosedHost::stated_payload`]). The hosts take the same steps on a closed term, and on an open one over a proposition fire by the scrutinee's indices, which state the payload.
+//! **A match that reads nothing of its scrutinee does not evaluate it.** One arm, no catch-all and no payload named ([`Cases::unread`]): the match is its arm's body, since a closed scrutinee can be no other case. A cast along a proof is written in that form, and the elaborator writes a payload as the index that pins it wherever the arm's equations hold the two one, so such a match runs none of its proof. An arm that still names a payload is bound to what the instance the match states says of it ([`Cases::stated`]), which the host reads the payload off ([`ClosedHost::stated_payload`]). The hosts take the same steps on a closed term, and on an open one fire by that instance's indices, which state the payload.
 //!
 //! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, through the fresh binder identities [`Reducer::fresh_binder`] mints. Skipping the probe on the theory that conversion decides eta anyway would starve the elaborator's witness keying, which reads rigid heads off weak-head forms and would not find `Async` under `(A) => Async(A)`.
 //!
@@ -57,9 +57,12 @@ pub trait ClosedHost: Reducer {
     /// What `name` unfolds to at a stated universe instance — the one position a polymorphic definition may be unfolded from.
     fn closed_body_at(&self, name: &Free) -> Option<&Term>;
 
-    /// The payload the one arm of a closed match binds, read off its scrutinee's type with the scrutinee unevaluated: the payload of `tag`, where `head`'s family is a proposition whose indices state every component of it, and `None` where the scrutinee has to be evaluated to bind one. A closed proof of such a family is that constructor, so the indices are asked nothing. The machine holds no type to read, which is why this is the host's.
-    fn stated_payload(&mut self, head: &Term, tag: &Atom)
-    -> Result<Option<Vec<Term>>, ReduceError>;
+    /// The payload the one arm of a closed match binds, read off the instance the match states ([`Cases::stated`]) with the scrutinee unevaluated: the payload of `tag`, where `stated` is an instance of a proposition whose indices state every component of it, and `None` where the scrutinee has to be evaluated to bind one. A closed proof of such a family is that constructor, so the indices are asked nothing. The machine reads no declaration, which is why this is the host's.
+    fn stated_payload(
+        &mut self,
+        stated: &Term,
+        tag: &Atom,
+    ) -> Result<Option<Vec<Term>>, ReduceError>;
 
     /// What this host's closed runs have answered, for as long as a closed term's value stands with it: the machine reads and writes it at every run, and the host discards it where what a name unfolds to may have changed.
     fn closed_memo(&mut self) -> &mut ClosedMemo;
@@ -405,9 +408,10 @@ impl Machine {
                 if let Some(body) = cases.unread() {
                     return Ok(Step::Eval(body, demand));
                 }
-                // An arm that names its payload is bound to what its scrutinee's type states of it, where the host reads one: the scrutinee is no more evaluated than above.
+                // An arm that names its payload is bound to what the instance the match states says of it, where it states one the host reads a payload off: the scrutinee is no more evaluated than above.
                 if let Some((tag, arm)) = cases.sole_arm()
-                    && let Some(payload) = host.stated_payload(&head, tag)?
+                    && let Some(stated) = cases.stated()
+                    && let Some(payload) = host.stated_payload(stated, tag)?
                     && payload.len() == arm.arity()
                 {
                     let refs = payload.iter().collect::<Vec<_>>();
@@ -958,7 +962,11 @@ impl Machine {
                 }
             }
 
-            Cases::Induct { cases, default } => {
+            Cases::Induct {
+                cases,
+                default,
+                stated,
+            } => {
                 if let Subterm::Variant(ctor) = &*scrutinee {
                     if let Some((_, arm)) = cases
                         .iter()
@@ -992,7 +1000,11 @@ impl Machine {
                 Ok(Step::Value(Term::from(Subterm::Match(Match {
                     head: scrutinee,
                     result,
-                    cases: Cases::Induct { cases, default },
+                    cases: Cases::Induct {
+                        cases,
+                        default,
+                        stated,
+                    },
                 }))))
             }
 

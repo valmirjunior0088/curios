@@ -995,8 +995,29 @@ impl Term {
             Cases::Induct {
                 cases: Self::induct_cases_marked(cases),
                 default,
+                stated: None,
             },
         )
+    }
+
+    /// `self`, an elimination of a nominal inductive, stating `instance` as the instance it eliminates ([`Cases::Induct`]'s `stated`): what the elaborator writes off the type the scrutinee stands at. Any other term is handed back as it is.
+    pub fn stating(self, instance: Term) -> Self {
+        match Term::unwrap_or_clone(self) {
+            Subterm::Match(Match {
+                head,
+                result,
+                cases: Cases::Induct { cases, default, .. },
+            }) => Self::from(Subterm::Match(Match {
+                head,
+                result,
+                cases: Cases::Induct {
+                    cases,
+                    default,
+                    stated: Some(instance),
+                },
+            })),
+            other => other.into(),
+        }
     }
 
     /// The intrinsic eliminator of a nominal inductive with an explicit `| _ =>` catch-all ([`Cases::Induct`]'s `default`): the enumerated arms plus a binding-free default standing in for every other constructor tag. The dispatching analogue of [`Term::induct_match`], mirroring how [`Term::switch`] relates to [`Term::nat_match`].

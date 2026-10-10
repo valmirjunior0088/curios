@@ -44,12 +44,10 @@ impl ClosedHost for Kernel<'_> {
 
     fn stated_payload(
         &mut self,
-        head: &Term,
+        stated: &Term,
         tag: &Atom,
     ) -> Result<Option<Vec<Term>>, ReduceError> {
-        let head = structural(self, head.clone())?;
-
-        stated_payload(self, &head, tag)
+        stated_payload(self, stated, tag)
     }
 
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
@@ -196,27 +194,21 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                 result,
                 cases,
             }) => {
-                // A match its scrutinee's type decides does not reduce the scrutinee, which is only stepped through the redexes that unfold nothing. Closed, it is its arm: at no payload where the arm names none, as the closed machine takes it, and at the payload the scrutinee's type states where it names one. Open, over a proposition whose indices pin its payload, it is its arm at that payload where the indices are the constructor's, and stands where they are not.
-                let fired = match cases.sole_arm() {
-                    None => None,
-                    Some((tag, arm)) => {
-                        let stepped = structural(kernel, head.clone())?;
-                        match closed {
-                            true => match cases.unread() {
-                                Some(body) => Some(Some(body)),
-                                None => stated_payload(kernel, &stepped, tag)?
-                                    .filter(|payload| payload.len() == arm.arity())
-                                    .map(|payload| {
-                                        Some(arm.open(&payload.iter().collect::<Vec<_>>()))
-                                    }),
-                            },
-                            false => unread_payload(kernel, &stepped, tag)?.map(|payload| {
-                                payload
-                                    .filter(|payload| payload.len() == arm.arity())
-                                    .map(|payload| arm.open(&payload.iter().collect::<Vec<_>>()))
-                            }),
-                        }
-                    }
+                // A match the instance it states decides does not reduce its scrutinee, and reads nothing of it. Closed, it is its arm: at no payload where the arm names none, as the closed machine takes it, and at the payload the stated instance's indices say where it names one. Open, stating an instance of a proposition whose indices pin its payload, it is its arm at that payload where the instance is the one the constructor builds there, and stands where it is not. A match that states none is reduced by its scrutinee's value.
+                let fired = match (cases.sole_arm(), cases.stated()) {
+                    (None, _) => None,
+                    (Some(_), _) if closed && cases.unread().is_some() => Some(cases.unread()),
+                    (Some(_), None) => None,
+                    (Some((tag, arm)), Some(stated)) => match closed {
+                        true => stated_payload(kernel, stated, tag)?
+                            .filter(|payload| payload.len() == arm.arity())
+                            .map(|payload| Some(arm.open(&payload.iter().collect::<Vec<_>>()))),
+                        false => unread_payload(kernel, stated, tag)?.map(|payload| {
+                            payload
+                                .filter(|payload| payload.len() == arm.arity())
+                                .map(|payload| arm.open(&payload.iter().collect::<Vec<_>>()))
+                        }),
+                    },
                 };
 
                 match fired {
@@ -613,39 +605,6 @@ fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, Reduce
     }))
 }
 
-/// `head` stepped through the redexes that unfold no definition: a `let` released, and a function literal applied where it stands. What is left is the scrutinee a lookup types where one can, with no proof read to reach it.
-fn structural(kernel: &mut Kernel, mut head: Term) -> Result<Term, ReduceError> {
-    loop {
-        head = match Term::unwrap_or_clone(head) {
-            Subterm::Let(let_) => step_let(kernel, let_)?,
-            Subterm::Apply(Apply {
-                head: function,
-                arguments,
-            }) => match &*function {
-                Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
-                    kernel
-                        .spend(Cost::collection(arguments.len() as u64).saturating_add(
-                            Cost::term(1).saturating_mul(arguments.len() as u64),
-                        ))?;
-                    let refs = arguments
-                        .iter()
-                        .map(|argument| &argument.term)
-                        .collect::<Vec<_>>();
-
-                    telescope.open(&refs)
-                }
-                _ => {
-                    return Ok(Term::from(Subterm::Apply(Apply {
-                        head: function,
-                        arguments,
-                    })));
-                }
-            },
-            other => return Ok(other.into()),
-        };
-    }
-}
-
 /// Iota: dispatch a `match` on the value `forced` its scrutinee reduced to.
 ///
 /// An arm binds that value's payload components directly. They are themselves unreduced — a `Variant` is a weak-head normal form whose sub-terms this strategy never entered — so binding them is call-by-name, not call-by-value.
@@ -690,7 +649,11 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
             }
         }
 
-        Cases::Induct { cases, default } => {
+        Cases::Induct {
+            cases,
+            default,
+            stated,
+        } => {
             if let Subterm::Variant(Variant { tag, payload, .. }) = &*forced {
                 // The arm's binders must match the payload it is opened at. `check_arm` establishes that, but only once typing reaches the elimination — and a `match` standing in a type position is reduced *before* anything types it, which is the ordering typing itself depends on. `Scope::open` asserts, so an arm that does not match would abort the walk; it is left stuck instead.
                 if let Some((_, arm)) = cases
@@ -711,7 +674,11 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
             Step::Stop(Term::from(Subterm::Match(Match {
                 head: forced,
                 result,
-                cases: Cases::Induct { cases, default },
+                cases: Cases::Induct {
+                    cases,
+                    default,
+                    stated,
+                },
             })))
         }
 

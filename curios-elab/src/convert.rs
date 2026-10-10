@@ -1119,11 +1119,25 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         let head = this.head.clone();
         let result = this.result.clone();
-        let scrutinee = match looked_up(context, &self.binders, &head)? {
-            Some(type_) => Some(reduce_forced(context, type_)?),
-            None => None,
+        // Where the two matches state the instance they eliminate, the instances are posed as equal, the scrutinees at the instance, a typed position where two proofs are one unread, and the instance is the scrutinee's type with no lookup, as the kernel takes it. One that states an instance and one that states none are two terms.
+        let scrutinee = match (this.cases.stated().cloned(), that.cases.stated().cloned()) {
+            (Some(this_stated), Some(that_stated)) => {
+                self.enqueue(Term::type_ground(), this_stated.clone(), that_stated);
+                self.enqueue(this_stated.clone(), this.head, that.head);
+
+                Some(reduce_forced(context, this_stated)?)
+            }
+            (None, None) => {
+                let scrutinee = match looked_up(context, &self.binders, &head)? {
+                    Some(type_) => Some(reduce_forced(context, type_)?),
+                    None => None,
+                };
+                self.enqueue(Term::type_ground(), this.head, that.head);
+
+                scrutinee
+            }
+            _ => return Ok(false),
         };
-        self.enqueue(Term::type_ground(), this.head, that.head);
 
         // A motive's arity is part of its shape — 1 except for an annotated inductive-match motive (pattern binders then the scrutinee); different arities are structurally distinct. One source match reaches both forms: written over a variable it is an ambient goal, and that goal substituted at an expression — a definition's `match o` unfolded at `o := f(x)` — meets the family the same match elaborates to where it was written over `f(x)`. A family at the scrutinee itself *is* the elimination's type, so the two results compare at that instance.
         match (this.result, that.result) {

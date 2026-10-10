@@ -708,6 +708,15 @@ fn same(kernel: &mut Kernel) -> Global {
     )
 }
 
+/// `Same(left, right)`, the instance a match over it states.
+fn same_at(family: &Global, left: &Free, right: &Free) -> Term {
+    Term::induct_type(
+        *family,
+        Vec::<Term>::new(),
+        vec![Term::free_var(left), Term::free_var(right)],
+    )
+}
+
 /// A match on a proposition whose indices pin its payload fires with its scrutinee unreduced, binding the payload to the index that states it: the scrutinee is a variable, which no reduction takes to a constructor, and its type's two indices are one, which is everything `same` would say.
 #[test]
 fn an_arm_that_names_a_pinned_payload_is_bound_to_the_index() {
@@ -723,7 +732,8 @@ fn an_arm_that_names_a_pinned_payload_is_bound_to_the_index() {
         vec![Term::free_var(&n), Term::free_var(&n)],
         nat_type(),
         vec![("same", vec![arm_binder], Term::free_var(&arm_binder))],
-    );
+    )
+    .stating(same_at(&family, &n, &n));
 
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
     assert_eq!(kernel.reduce(term), Ok(Term::free_var(&n)));
@@ -743,7 +753,8 @@ fn an_arm_written_over_the_index_fires_with_its_proof_unreduced() {
         vec![Term::free_var(&n), Term::free_var(&n)],
         nat_type(),
         vec![("same", vec![binder(10, "z")], Term::free_var(&n))],
-    );
+    )
+    .stating(same_at(&family, &n, &n));
 
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
     assert_eq!(kernel.reduce(term), Ok(Term::free_var(&n)));
@@ -764,7 +775,57 @@ fn a_match_over_indices_that_differ_stands() {
         vec![Term::free_var(&n), Term::free_var(&m)],
         nat_type(),
         vec![("same", vec![binder(10, "z")], Term::free_var(&n))],
-    );
+    )
+    .stating(same_at(&family, &n, &m));
 
     assert_eq!(kernel.reduce(term.clone()), Ok(term));
+}
+
+/// What a match fires on is the instance it states, and a match that states none stands: the scrutinee is assumed at `Same(n, n)`, whose indices pin the payload, and no rule looks that up.
+#[test]
+fn a_match_that_states_no_instance_stands() {
+    let mut kernel = kernel();
+    let family = same(&mut kernel);
+    let n = binder(60, "n");
+    let arm_binder = binder(10, "z");
+    kernel.assume(&n, &nat_type());
+
+    let term = eliminate_at(
+        &mut kernel,
+        &family,
+        vec![Term::free_var(&n), Term::free_var(&n)],
+        nat_type(),
+        vec![("same", vec![arm_binder], Term::free_var(&arm_binder))],
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+    assert_eq!(kernel.reduce(term.clone()), Ok(term));
+}
+
+/// The instance a match states is held to the type its scrutinee is inferred at: a match over a scrutinee at `Same(n, m)` that states `Same(n, n)` is refused where it is typed. Reduced where nothing typed it, it is its arm at the payload it states, the step every reader of the term takes alike, with the scrutinee's own type read by none.
+///
+/// Mutation-checked: with the stated instance left unheld, the match is typed at `Nat`.
+#[test]
+fn a_stated_instance_is_held_to_the_scrutinees_type() {
+    let mut kernel = kernel();
+    let family = same(&mut kernel);
+    let (n, m) = (binder(60, "n"), binder(61, "m"));
+    let arm_binder = binder(10, "z");
+    kernel.assume(&n, &nat_type());
+    kernel.assume(&m, &nat_type());
+
+    let term = eliminate_at(
+        &mut kernel,
+        &family,
+        vec![Term::free_var(&n), Term::free_var(&m)],
+        nat_type(),
+        vec![("same", vec![arm_binder], Term::free_var(&arm_binder))],
+    )
+    .stating(same_at(&family, &n, &n));
+
+    assert!(matches!(
+        infer(&mut kernel, &term),
+        Err(Error::Mismatch { .. })
+    ));
+    assert_eq!(kernel.reduce(term), Ok(Term::free_var(&n)));
 }

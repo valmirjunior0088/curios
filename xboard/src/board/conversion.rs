@@ -23,9 +23,9 @@ pub(super) const CONVERSION: Part = Part {
     }],
 };
 
-/// `induct Read : (Bool) -> Prop | mk(x : Bool) : (x) end`, and over `b : Bool` and `p : Read(b)`, with `read` standing for `match p : (_, _) => Bool | mk(x) => x end`: `((w : True) => (k : Holds(read)) => k)(match b : (_) => True | false => qed | true => ((h : Holds(read)) => qed)(qed) end)(qed)`, closed at `false` and `Read/mk(false)`.
+/// `induct Read : (Bool) -> Prop | mk(x : Bool) : (x) end`, and over `b : Bool` and `p : Read(b)`, with `read` standing for `match p at Read(b) : (_, _) => Bool | mk(x) => x end`: `((w : True) => (k : Holds(read)) => k)(match b : (_) => True | false => qed | true => ((h : Holds(read)) => qed)(qed) end)(qed)`, closed at `false` and `Read/mk(false)`.
 ///
-/// A match on a proposition whose indices pin its payload fires on the type its scrutinee stands at, so `read` is `b` wherever `p : Read(b)`. The `true` arm of the match on `b` re-types `p` at `Read(true)`, where `read` is `true` and `Holds(read)` is `True`, and the kernel remembers that reduct under `read`, which names `p` and not `b`. Leaving the arm puts `p` back at `Read(b)` and drops no case equation, and the reducts remembered of terms naming a local were cleared on the way out only where one was dropped. So the `qed` after the match was checked at a `Holds(read)` that still answered `True`, for every `b`, and at `false` what it proved is `Holds(false)`. A bracket that closes an arm's re-typing now clears them as the re-typing does, and after the arm `Holds(read)` is `Holds(b)`, which `qed` does not inhabit.
+/// A match on a proposition whose indices pin its payload fired on the type its scrutinee was assumed at, so `read` was `b` wherever `p : Read(b)` and named `p` and not `b`. The `true` arm of the match on `b` re-types `p` at `Read(true)`, where `read` was `true` and `Holds(read)` `True`, and the kernel remembered that reduct under `read`. Leaving the arm puts `p` back at `Read(b)` and drops no case equation, and the reducts remembered of terms naming a local were cleared on the way out only where one was dropped. So the `qed` after the match was checked at a `Holds(read)` that still answered `True`, for every `b`, and at `false` what it proved is `Holds(false)`. A bracket that closes an arm's re-typing now clears them as the re-typing does; and the match states the instance it eliminates, so the arm's case is a substitution into it and what is remembered inside the arm is remembered of another term. After the arm `Holds(read)` is `Holds(b)`, which `qed` does not inhabit.
 fn a_reduct_read_under_an_arms_retyping() -> (Module, Term) {
     let family = Global::Authored(Qualifier::from(["Read"]));
     let bool_type = || Term::intrinsic(Intrinsic::BoolType);
@@ -66,7 +66,7 @@ fn a_reduct_read_under_an_arms_retyping() -> (Module, Term) {
     let proof = Free::local(943, Some("p"));
     let payload = Free::local(944, Some("x"));
 
-    // match p : (_, _) => Bool | mk(x) => x end
+    // match p at Read(b) : (_, _) => Bool | mk(x) => x end
     let read = Term::induct_match_scoped_marked(
         Term::free_var(&proof),
         Scope::constant(Many(2), bool_type()),
@@ -76,7 +76,8 @@ fn a_reduct_read_under_an_arms_retyping() -> (Module, Term) {
             Term::free_var(&payload),
         )],
         None,
-    );
+    )
+    .stating(at(Term::free_var(&decided)));
     let holds_read = || {
         Term::apply(
             Term::free_var(&Free::global(SYNTAX.proof.holds.qualifier())),

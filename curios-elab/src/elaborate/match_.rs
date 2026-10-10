@@ -646,7 +646,7 @@ pub(crate) fn refused_scrutinee(term: &Term, type_: Term) -> Error {
         Cases::FreeMonoid {
             carrier: Carrier::Bin { grain, .. },
         } => Error::not_bin_type(*grain, type_),
-        Cases::Induct { cases, default } => {
+        Cases::Induct { cases, default, .. } => {
             Error::not_a_induct_type(type_, cases.is_empty() && default.is_none())
         }
     }
@@ -680,7 +680,8 @@ fn eliminate(
         Cases::Switch { cases, default } => {
             elaborate_switch(context, scrutinee, motive, cases, default, term, mode)
         }
-        Cases::Induct { cases, default } => elaborate_induct_match(
+        // The instance a match states is this elaboration's to write, off the type its scrutinee is elaborated at: one read back is written again.
+        Cases::Induct { cases, default, .. } => elaborate_induct_match(
             context,
             InductMatchInput {
                 scrutinee,
@@ -1097,12 +1098,16 @@ fn elaborate_induct_match(
         .map(|d| context.with_frame(|context| check(context, d, result_type.clone())))
         .transpose()?;
 
+    // A match with one arm over a proposition whose indices pin its payload states the instance it eliminates: reduction fires it on that instance and reads no binder's type, so what it is moves with the term and with nothing else.
+    let stated = (pinned && default_elaborated.is_none() && cases_elaborated.len() == 1)
+        .then(|| head_type.clone());
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         result,
         cases: Cases::Induct {
             cases: cases_elaborated,
             default: default_elaborated,
+            stated,
         },
     })
     .into();

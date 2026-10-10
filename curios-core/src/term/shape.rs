@@ -490,6 +490,8 @@ pub enum Cases {
         /// The enumerated arms, in the owning inductive's *declaration order* — the same order `InductDecl::constructor_order` reports, which is what makes this a canonical form: two matches whose arms are written in different source order elaborate to the same sequence, so arm order never enters term identity. Elaboration establishes that by building the arms from `constructor_order` rather than from the written order (`elaborate_induct_match`). A subsequence is legal — an arm may be absent under a `default`, or where index inversion prunes it.
         cases: Vec<(Atom, InductArm)>,
         default: Option<Term>,
+        /// The instance of the family the scrutinee stands at, where the match states it: what a match with one arm over a proposition fires on ([`Cases::sole_arm`]), its payload read off this instance's indices and never off what a binder is assumed at. It is part of the term, so a substitution that moves the scrutinee's type moves the match with it, and what is remembered of the one is not read of the other. The elaborator states it where that rule can speak, a proposition whose one constructor's payload its index targets pin, and nowhere else; a match that states none is reduced by its scrutinee's value alone.
+        stated: Option<Term>,
     },
     /// Structural induction on a native free-monoid intrinsic (`Nat`/`List`/ `Bin`): the `carrier` selects the intrinsic and carries both its parameters (`List`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload), the tail, and the induction hypothesis at the tail.
     FreeMonoid { carrier: Carrier },
@@ -501,6 +503,7 @@ impl Cases {
         let Cases::Induct {
             cases,
             default: None,
+            ..
         } = self
         else {
             return None;
@@ -510,6 +513,14 @@ impl Cases {
         };
 
         Some((tag, arm))
+    }
+
+    /// The instance a match states that it eliminates ([`Cases::Induct`]'s `stated`), where it states one.
+    pub fn stated(&self) -> Option<&Term> {
+        match self {
+            Cases::Induct { stated, .. } => stated.as_ref(),
+            _ => None,
+        }
     }
 
     /// The body of a match that reads nothing of its scrutinee: its [sole arm](Self::sole_arm), naming none of its payload. `None` for every other match.
