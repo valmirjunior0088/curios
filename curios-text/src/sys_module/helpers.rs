@@ -4,26 +4,15 @@
 
 use {
     crate::{
-        Apply, Argument, Field, Func, FuncParam, FuncType, FuncTypeParam, Intrinsic, Label, Match,
-        MatchPattern, MatrixArm, Name, Pattern, Proj, Subterm, Term, Tuple, TupleField, TupleType,
+        Apply, Argument, FuncType, FuncTypeParam, Intrinsic, Label, Name, Subterm, Term, TupleType,
         TupleTypeParam,
     },
     curios_num::{Grain, Natural},
-    curios_utilities::{Plicity, SyntaxName},
+    curios_utilities::Plicity,
 };
 
 pub(super) fn name(label: &str) -> Term {
     Subterm::Name(Name::from([label.to_string()])).into()
-}
-
-// A registered name, absolute so it resolves against the compilation root rather than whatever module the generated declaration lands in.
-pub(super) fn registered(target: SyntaxName) -> Term {
-    Subterm::Name(Name::new(true, target.qualifier())).into()
-}
-
-// One of this roster's own operations, named absolutely for the reason `registered` is: a declaration lands in whatever module the roster puts it in, so a relative name would resolve differently per site. Not a registry entry — the registry holds what a crate *below* `/sys` must be able to name, and these are `/sys` naming itself.
-pub(super) fn sys_op(segments: &'static [&'static str]) -> Term {
-    registered(SyntaxName::new(segments))
 }
 
 pub(super) fn applied(head: Term, args: Vec<Term>) -> Term {
@@ -144,62 +133,4 @@ pub(super) fn sort() -> Term {
 // Authoring them in a `.crs` beside this file would read better and place worse: spliced at the root the `Flt` pair would become `/sys/NonNeg`, saying nothing about which carrier, and the range constants would collide with `/sys/Flt`'s `min` and `max` operations one segment away. Placement is what a generator is good at, so the generator keeps them.
 pub(super) fn prop() -> Term {
     Subterm::Prop.into()
-}
-
-// A one-parameter lambda `(binder: annotation) => body`: the continuation a host row's adapter hands `Io/bind`.
-pub(super) fn lambda(binder: &str, annotation: Term, body: Term) -> Term {
-    Subterm::Func(Func {
-        params: vec![FuncParam {
-            plicity: Plicity::Explicit,
-            pattern: Pattern::Binder(Label::from(binder)),
-            annotation: Some(annotation),
-        }],
-        body,
-    })
-    .into()
-}
-
-// `head.field`, a projection by label.
-pub(super) fn project(head: Term, field: &str) -> Term {
-    Subterm::Proj(Proj {
-        head,
-        field: Field::Label(field.to_string()),
-    })
-    .into()
-}
-
-// A tuple value with every field labelled — `(a = x, b = y)` — and the unit value `()` when there are none.
-pub(super) fn tuple(fields: Vec<(&str, Term)>) -> Term {
-    Subterm::Tuple(Tuple {
-        fields: fields
-            .into_iter()
-            .map(|(label, value)| TupleField {
-                label: Some(label.to_string()),
-                func_params: None,
-                value,
-            })
-            .collect(),
-    })
-    .into()
-}
-
-// `match condition | true => yes | false => no end`.
-pub(super) fn branch(condition: Term, yes: Term, no: Term) -> Term {
-    Subterm::Match(Match {
-        head: condition,
-        motive: None,
-        arms: vec![
-            MatrixArm {
-                pattern: MatchPattern::Bool(true),
-                body: yes,
-                span: None,
-            },
-            MatrixArm {
-                pattern: MatchPattern::Bool(false),
-                body: no,
-                span: None,
-            },
-        ],
-    })
-    .into()
 }

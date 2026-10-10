@@ -30,8 +30,8 @@ use {
         TopItem,
     },
     curios_abi::{
-        ForeignStore, errno, event, file_kind, open_mode, serial_flow, serial_op, serial_parity,
-        status, stdio, stdio_mode,
+        errno, event, file_kind, open_mode, serial_flow, serial_op, serial_parity, status, stdio,
+        stdio_mode,
     },
     curios_num::{Grain, Natural, Rounding},
     curios_utilities::SyntaxRegistry,
@@ -1151,7 +1151,6 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             ]
             .concat(),
         ),
-        // The one label in both inputs: its carrier declarations here, its host rows folded in by `absorb_host_rows` like any other subject's.
         SysModule::carrier(
             "Handle",
             &[
@@ -1191,13 +1190,13 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
     ]
 }
 
-/// Construct the generated `/sys` surface module from the authoritative host function store.
+/// Construct the generated `/sys` surface module.
 ///
-/// **One keyed pass over one declared roster.** Every `/sys` module is a `SysModule` with a label: the ones written here from the intrinsic table, then each host row joining the module its own subject names — opening one where nothing declared the label, which is how `file`, `socket`, `dns` and `proc` come to exist, and joining the declaration where something did, which is how `Handle`'s rows come to sit beside its type. Then the wire-code mirror.
+/// **One declared roster.** Every `/sys` module is a `SysModule` with a label, written here from the intrinsic table, and then the wire-code mirror. No host operation is declared here: a host's rows are `foreign` declarations of `/std`, in the module that reads each.
 ///
 /// Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
-pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
-    let items = absorb_host_rows(declared(syntax), foreigns)
+pub fn sys_module(syntax: &SyntaxRegistry) -> Module {
+    let items = declared(syntax)
         .into_iter()
         .chain(code_modules())
         .flat_map(SysModule::into_items)

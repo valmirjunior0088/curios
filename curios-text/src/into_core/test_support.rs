@@ -4,7 +4,6 @@
 
 use {
     crate::{Entrypoint, RootSource, sys_module},
-    curios_abi::host_ops,
     curios_utilities::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
@@ -320,7 +319,7 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
 /// The prelude these tests lower against: the real `/sys` roster, and a `/std` of stubs deep enough for every name `/sys` reaches through the registry — with one concept beside them, for the order a unit takes around a row it registers into a concept declared before it.
 fn prelude_fixture() -> RootSource {
     let mut modules = RootSource::supplied();
-    modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
+    modules.insert_root("sys", RootKind::Internal, sys_module(&SYNTAX));
     modules.insert_root(
         "std",
         RootKind::Ordinary,

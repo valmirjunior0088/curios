@@ -5,7 +5,7 @@ use {
     },
     curios_abi::{
         ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireOperand,
-        WireType, for_each_host_op, host_ops,
+        WireType, for_each_host_op,
     },
     std::{
         collections::HashMap,
@@ -211,20 +211,6 @@ impl ForeignBindings {
         );
     }
 
-    /// Replace the implementation of the row named `name` with a trampoline that marshals for itself — how a test puts a reply in front of the guest that no checked implementation would give.
-    #[cfg(feature = "test-support")]
-    pub(crate) fn replace_raw<F>(&mut self, name: &str, f: F)
-    where
-        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
-    {
-        assert!(
-            self.foreigns.get(name).is_some(),
-            "'{name}' is not in the foreign store"
-        );
-
-        self.trampolines.insert(name.to_string(), Arc::new(f));
-    }
-
     /// Whether a binding answers the row named `name`: a module's, or an embedder's.
     fn answers(&self, name: &str) -> bool {
         self.trampolines.contains_key(name)
@@ -271,35 +257,6 @@ fn codec(wire_type: WireType) -> WireType {
         other => other,
     }
 }
-
-/// Bind every row of the table to its [`HostOps`] method: each import lifts its operands as the row types them, measures the ones its contract reads, calls the method once its requirements hold, and lowers the reply through [`Replied`], which holds it to the row's checks. Generated from the rows it binds, so no row goes unbound, none is bound twice, and no binding's types can differ from the row's.
-macro_rules! declare_sys_impls {
-    ($(
-        $(#[doc = $doc:literal])*
-        $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty as $subject:ident / $label:ident { $($contract:tt)* }
-    )*) => {
-        /// The registry of builtin implementations: every [`host_ops`] row bound to its [`HostOps`] method.
-        pub(crate) fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
-            let mut impls = ForeignBindings::new(host_ops());
-
-            $(
-                impls.define(HostOp::$variant.name(), {
-                    let host = host.clone();
-
-                    move |($($p,)*): ($($t,)*)| {
-                        let operands = [$(WireOperand::measure(&$p)),*];
-
-                        Replied::new(HostOp::$variant, operands, || host.$name($($p),*))
-                    }
-                });
-            )*
-
-            impls
-        }
-    };
-}
-
-for_each_host_op!(declare_sys_impls);
 
 /// What a host answers of the rows a unit declares, by the name each is declared under: the wire types its implementation takes and answers, as its Rust types state them, and its trampoline.
 ///
@@ -392,7 +349,7 @@ impl Provided {
     }
 }
 
-/// Answer every row of the table under the name the standard library declares it by ([`HostOp::declared`]). Each import is bound as [`sys_impls`] binds it, lifted as the row types its operands and its reply held to the row through [`Replied`].
+/// Answer every row of the table under the name the standard library declares it by ([`HostOp::declared`]). Each import lifts its operands as the row types them, measures the ones its requirements read, calls the method once they hold, and lowers the reply through [`Replied`]. Generated from the rows it binds, so no row goes unanswered, none is answered twice, and no answer's types can differ from the row's.
 macro_rules! declare_host_rows {
     ($(
         $(#[doc = $doc:literal])*
@@ -523,13 +480,7 @@ impl Compiled {
     ) -> Result<u8, String> {
         let host = Arc::new(host);
 
-        instantiate(
-            shared_engine(),
-            &self.0,
-            sys_impls(Arc::clone(&host)),
-            bindings,
-            host_rows(host),
-        )
+        instantiate(shared_engine(), &self.0, bindings, host_rows(host))
     }
 
     /// [`Compiled::run`] for a program compiled as a test program, returning how its run ended: the verdict its entry answered, or the exit that left it unanswered.
@@ -540,32 +491,24 @@ impl Compiled {
     ) -> Result<TestEnd, String> {
         let host = Arc::new(host);
 
-        instantiate(
-            shared_engine(),
-            &self.0,
-            sys_impls(Arc::clone(&host)),
-            bindings,
-            host_rows(host),
-        )
+        instantiate(shared_engine(), &self.0, bindings, host_rows(host))
     }
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `impls` supplies the `sys`-tier implementations, every builtin row's, `bindings` the `ffi`-tier ones a module or an embedder answers, and `provided` the ones the host answers itself. What [`Compiled::run`] does once it has the builtin rows' implementations.
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `bindings` supplies the rows a module or an embedder answers, and `provided` the ones the host answers itself.
 pub(crate) fn instantiate<E: Ended>(
     engine: &Engine,
     module: &Module,
-    impls: ForeignBindings,
     bindings: ForeignBindings,
     provided: Provided,
 ) -> Result<E, String> {
-    on_guest_stack(move || entered(engine, module, impls, bindings, provided))?
+    on_guest_stack(move || entered(engine, module, bindings, provided))?
 }
 
 /// [`instantiate`], on the thread it is called on.
 fn entered<E: Ended>(
     engine: &Engine,
     module: &Module,
-    impls: ForeignBindings,
     bindings: ForeignBindings,
     provided: Provided,
 ) -> Result<E, String> {
@@ -595,7 +538,11 @@ fn entered<E: Ended>(
                         })
                         .map_err(|error| format!("failed to define panic: {error}"))?;
                 }
-                name => impls.link(&mut linker, engine, Namespace::Sys, name)?,
+                name => {
+                    return Err(format!(
+                        "the module imports {SYS}.{name}, and {SYS} holds {PANIC} alone"
+                    ));
+                }
             },
             // A module's or an embedder's answer first, and the host's own where there is none: who answers a row is decided here, by what was linked, and nothing in the program says which.
             FFI => match bindings.answers(import.name()) {

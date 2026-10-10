@@ -3,7 +3,6 @@
 use {
     super::test_support::*,
     crate::{Intrinsic, LetSignature, Subterm, Term, TopItem, sys_module},
-    curios_abi::host_ops,
 };
 
 // `sys` is the trusted intrinsic substrate, reachable only from the standard library. A user entrypoint that names it — through a `use` or a bare term reference — is rejected at resolution; the `/std` wrappers are the door.
@@ -196,7 +195,7 @@ fn the_sys_io_roster_offers_no_eliminator() {
         }
     }
 
-    let sys = sys_module(&host_ops(), &SYNTAX);
+    let sys = sys_module(&SYNTAX);
 
     let io = sys
         .items

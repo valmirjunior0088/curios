@@ -13,7 +13,7 @@
 use {
     super::{
         Compiled, ForeignBindings, HostOps, Lower, host_rows, instantiate, lower_scalars,
-        on_guest_stack, shared_engine, sys_impls, words_array_type,
+        on_guest_stack, shared_engine, words_array_type,
     },
     curios_abi::HostOp,
     std::sync::Arc,
@@ -217,11 +217,5 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
         });
     }
 
-    instantiate(
-        shared_engine(),
-        &compiled.0,
-        sys_impls(host),
-        bindings,
-        provided,
-    )
+    instantiate(shared_engine(), &compiled.0, bindings, provided)
 }

@@ -3,12 +3,11 @@
 //! Split from the roster itself so that `sys_module.rs` reads as *what `/sys` declares* and this reads as *how a declaration is built*. Nothing here knows what is in the roster; everything here is a shape. Its sibling `helpers.rs` sits one rung below: that builds terms, this builds declarations out of them.
 
 use {
-    super::{Projection, host_fn, intrinsic, name, projection},
+    super::{Projection, intrinsic, name, projection},
     crate::{
         Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern, Term,
         TopItem, TopLet, TopMod, TopUse, UseGroup,
     },
-    curios_abi::ForeignStore,
     curios_utilities::{Plicity, SyntaxRegistry},
 };
 
@@ -278,34 +277,4 @@ impl SysModule {
 
         [pub_mod(&self.label, self.items)].into_iter().chain(hoist)
     }
-}
-
-/// Fold every store-described host op into the module its own row names as its subject, opening one where nothing declared the label.
-///
-/// Consumes the declared roster and returns the joined one, so the roster is never a mutable value in the caller. Groups keep declaration order, then first-row order for a subject nothing declared, and rows keep store order within a group — so a new row lands under its subject with nothing beside the table to update. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful intrinsic body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
-pub(super) fn absorb_host_rows(
-    declared: Vec<SysModule>,
-    foreigns: &ForeignStore,
-) -> Vec<SysModule> {
-    let mut modules = declared;
-
-    for function in foreigns.iter() {
-        let subject = function
-            .subject()
-            .expect("a builtin host operation names its /sys subject");
-
-        let index = match modules.iter().position(|module| module.label == subject) {
-            Some(index) => index,
-            None => {
-                modules.push(SysModule::ops(subject, Vec::new()));
-                modules.len() - 1
-            }
-        };
-
-        modules[index]
-            .items
-            .push(host_fn(function, true).into_item());
-    }
-
-    modules
 }

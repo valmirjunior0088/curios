@@ -2,7 +2,6 @@
 
 use {
     crate::{RootSource, SYNTAX, sys_module},
-    curios_abi::host_ops,
     curios_utilities::RootKind,
 };
 
@@ -10,18 +9,14 @@ use {
 const SYS_NAME: &str = "sys";
 
 /// See [`SYS_NAME`].
-const SYS_DESCRIPTION: &str = "The compiler's own root: every intrinsic type former with the operations over it, the host's rows placed by the subject each names, and the propositions those operations state their preconditions in.";
+const SYS_DESCRIPTION: &str = "The compiler's own root: every intrinsic type former with the operations over it, and the propositions those operations state their preconditions in.";
 
 /// The `/sys` root, supplied whole by `sys_module` — the first unit of the prelude fold, which nothing precedes.
 ///
 /// **It documents itself, and that is what makes `/std`'s pages possible.** A declaration `/std` re-exports out of `/sys` is rendered from `/sys`'s *surface tree*, which no unit keeps — a `PreparedText` carries resolution tables and a lowered module, never the items they were read from. So `/sys`'s record is made from this source, and `/std`'s adopts declarations out of it rather than re-deriving them from items it cannot reach.
 pub fn sys_source() -> RootSource {
     let mut modules = RootSource::supplied();
-    modules.insert_root(
-        SYS_NAME,
-        RootKind::Internal,
-        sys_module(&host_ops(), &SYNTAX),
-    );
+    modules.insert_root(SYS_NAME, RootKind::Internal, sys_module(&SYNTAX));
 
     modules.documented(SYS_NAME, Some(SYS_DESCRIPTION))
 }

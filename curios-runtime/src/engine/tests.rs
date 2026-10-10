@@ -1,13 +1,14 @@
 //! A binding is held to the row it implements: its operands and results must cross as the row's do, which is checked when it is defined rather than when a program first calls it.
 
 use {
-    super::{ForeignBindings, sys_impls},
+    super::{ForeignBindings, host_rows, shared_engine},
     crate::MockHost,
     curios_abi::{
-        DeclaredForeign, ForeignFunction, ForeignStore, WireLeaf, WireResults, WireSignature,
-        WireType,
+        DeclaredForeign, ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults,
+        WireSignature, WireType,
     },
     std::sync::Arc,
+    wasmtime::Linker,
 };
 
 /// An embedder's store of one declared row, `/double: (x: Nat) -> Nat`.
@@ -43,12 +44,32 @@ fn a_binding_whose_results_cross_otherwise_is_refused() {
     doubling().define("/double", |x: u64| x.is_multiple_of(2));
 }
 
-/// Every builtin binding is generated from its row, and defining it holds its lifted operands and lowered reply to that row's wire signature: building the bindings is the check that the table's operand types and the runtime's codecs cross alike.
+/// Every answer the host gives is generated from its table row, and it crosses as that row states: linking each against the declaration the table describes is the check that the row's operand and reply types lift and lower as its wire signature says, for every row and not only the ones a program reaches.
 #[test]
-fn every_builtin_binding_crosses_as_its_row() {
+fn every_host_answer_crosses_as_its_row() {
     let (host, _io) = MockHost::builder().build();
+    let provided = host_rows(Arc::new(host));
+    let engine = shared_engine();
+    let mut linker = Linker::new(engine);
 
-    sys_impls(Arc::new(host));
+    for op in HostOp::ALL {
+        let stated = op.signature();
+        let declared = Arc::new(ForeignFunction::Declared(DeclaredForeign {
+            name: op.declared(),
+            label: op.name().to_string(),
+            signature: WireSignature {
+                params: stated.params.clone(),
+                results: match op.diverges() {
+                    true => WireResults::never(),
+                    false => stated.results.clone(),
+                },
+            },
+        }));
+
+        provided
+            .link(&mut linker, engine, &op.declared(), Some(&declared))
+            .unwrap_or_else(|refusal| panic!("{refusal}"));
+    }
 }
 
 /// A `Bits` value crosses as the packed bytes a `Bytes` value does, so the codec that reads one reads the other.

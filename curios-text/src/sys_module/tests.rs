@@ -1,37 +1,12 @@
-//! What a `/sys` description lowers to, and how the host-row join places one.
+//! What a `/sys` description lowers to.
 //!
-//! The subject is the description layer, not the roster's contents. What `/sys` declares is checked where it already is — the prelude build elaborates and certifies every one of these declarations, and `into_core/sys_tests.rs` pins the root's reachability and `/sys/Io`'s roster — so a second statement of the roster here would be a copy to keep in step rather than a check. What has no other check is the shape a `Decl` lowers to, how a node's row in `Intrinsic::signature` is read into a declaration's types, and the placement the join decides.
+//! The subject is the description layer, not the roster's contents. What `/sys` declares is checked where it already is — the prelude build elaborates and certifies every one of these declarations, and `into_core/sys_tests.rs` pins the root's reachability and `/sys/Io`'s roster — so a second statement of the roster here would be a copy to keep in step rather than a check. What has no other check is the shape a `Decl` lowers to, how a node's row in `Intrinsic::signature` is read into a declaration's types, and how a parameter's plicity is read.
 
 use {
     super::*,
-    crate::{LetSignature, Pattern, SYNTAX},
-    curios_abi::{ForeignFunction, ForeignStore, HostOp},
+    crate::{LetSignature, Name, Pattern, SYNTAX, Subterm},
     curios_utilities::Plicity,
 };
-
-/// A store of the roster's rows named by `names`, in that order — a subject is a column of the roster, so the placements these tests ask about are the table's own.
-fn store(names: &[&str]) -> ForeignStore {
-    let mut store = ForeignStore::new();
-
-    for name in names {
-        let op = HostOp::named(name).unwrap_or_else(|| panic!("the roster names {name}"));
-        store.register(ForeignFunction::Builtin(op));
-    }
-
-    store
-}
-
-/// The labels a module declares, in order — the placement question every test below asks. Everything these tests place is a `let`.
-fn labels(module: &SysModule) -> Vec<&str> {
-    module
-        .items
-        .iter()
-        .flat_map(|item| match item {
-            TopItem::Let(lets) => lets.iter().map(|decl| decl.label.as_str()),
-            other => panic!("a placed binding lowered to {other:?}"),
-        })
-        .collect()
-}
 
 // A description with nothing to bind is a value, and `LetSignature::Func` with an empty telescope would lower to a binderless lambda instead.
 #[test]
@@ -77,56 +52,6 @@ fn a_gloss_lands_on_the_declaration_it_is_written_above() {
         .doc
         .expect("a documented declaration carries one");
     assert_eq!(doc.lines, ["Their sum.", "", "A second paragraph."]);
-}
-
-#[test]
-fn a_host_row_opens_the_module_its_subject_names_when_nothing_declared_it() {
-    let modules = absorb_host_rows(Vec::new(), &store(&["file_open", "file_stat"]));
-
-    assert_eq!(modules.len(), 1);
-    assert_eq!(modules[0].label, "file");
-    assert_eq!(labels(&modules[0]), ["open", "stat"]);
-}
-
-// `Handle` is the carrier in both inputs and `proc` the module of operations in both; one rule places each, and neither is lifted out and appended by hand.
-#[test]
-fn a_host_row_joins_the_module_that_declared_its_subject() {
-    let declared = vec![SysModule::ops("proc", vec![nat_succ(&SYNTAX)])];
-    let modules = absorb_host_rows(declared, &store(&["proc_args", "file_open"]));
-
-    assert_eq!(modules.len(), 2, "a joined subject opens no second module");
-    assert_eq!(
-        labels(&modules[0]),
-        ["succ", "args"],
-        "a declared binding precedes the rows that join it"
-    );
-    assert_eq!(modules[1].label, "file");
-}
-
-// A declared module is kept whatever the store holds: the join adds rows to it and never decides whether it exists, so a store that names it in no row cannot drop what it declares.
-#[test]
-fn a_declared_module_survives_a_store_that_names_it_in_no_row() {
-    let declared = vec![SysModule::ops("proc", vec![nat_succ(&SYNTAX)])];
-    let modules = absorb_host_rows(declared, &store(&["file_open"]));
-
-    assert_eq!(labels(&modules[0]), ["succ"]);
-}
-
-// Order is the contract the join states: declaration order first, then first-row order for a subject nothing declared.
-#[test]
-fn a_subject_nothing_declared_keeps_the_order_its_first_row_appears_in() {
-    let modules = absorb_host_rows(
-        Vec::new(),
-        &store(&["socket_bind", "file_open", "socket_listen"]),
-    );
-
-    let order = modules
-        .iter()
-        .map(|module| module.label.as_str())
-        .collect::<Vec<_>>();
-
-    assert_eq!(order, ["socket", "file"]);
-    assert_eq!(labels(&modules[0]), ["bind", "listen"]);
 }
 
 // The table states an operand's type by the operand's position, and an entry names its parameters in its own order: `gt` is `lt` with its operands the other way round. A shift takes an `Int` and then a `Nat`, so the parameter standing second in the node is the `Int`.
@@ -204,7 +129,7 @@ fn a_bound_is_the_tables_proposition_over_the_parameters_it_names() {
     assert_eq!(
         declaration.params[2].2,
         applied(
-            registered(SYNTAX.proof.holds),
+            Subterm::Name(Name::new(true, SYNTAX.proof.holds.qualifier())).into(),
             vec![intrinsic(Intrinsic::NatLt(nat_lit(0), name("b")))]
         )
     );
