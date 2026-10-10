@@ -11,7 +11,7 @@ use {
         is_erasable, narrow_case_key,
     },
     curios_analysis::{Invert, case_target_indices, pinned_by_targets},
-    curios_core::{Free, Level, MatchResult},
+    curios_core::{Free, MatchResult, Universes},
     curios_num::{Binary, Grain, Natural},
 };
 
@@ -93,7 +93,7 @@ struct InductMatch<'a> {
     head: &'a Term,
     result: &'a MatchResult,
     name: &'a curios_core::Global,
-    universes: &'a [Level],
+    universes: &'a Universes,
     params: &'a [Term],
     actual_indices: &'a [Term],
 }
@@ -867,7 +867,7 @@ fn refine_arm(
 
     let constructor_value = Term::variant_at(
         *m.name,
-        m.universes.to_vec(),
+        m.universes.clone(),
         m.params.to_vec(),
         tag.clone(),
         vars.to_vec(),

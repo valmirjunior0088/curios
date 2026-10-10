@@ -19,7 +19,7 @@ mod tests;
 
 use {
     super::{Counted, Error, Kernel, infer_type, whnf},
-    crate::instantiate_universe_levels_scoped,
+    crate::instantiate_universes_scoped,
     curios_core::{
         Bound, Field, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, Match,
         MatchResult, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term, TupleType,
@@ -374,10 +374,10 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
         Subterm::Var(var) => Ok(kernel.type_of(var.unwrap())?.cloned()),
 
         // A polymorphic head at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at those levels; going through the `Var` arm would read an already-instantiated type and have nothing left to substitute.
-        Subterm::Instance(Instance { head, levels }) => match head {
+        Subterm::Instance(Instance { head, universes }) => match head {
             InstanceHead::RecProj(group, index) => {
-                kernel.check_instance(group.universes(), levels)?;
-                let group = group.instantiate_universes(levels)?;
+                kernel.check_instance(group.universes(), universes)?;
+                let group = group.instantiate_universes(universes)?;
 
                 Ok(Some(group.member_type(*index)))
             }
@@ -394,9 +394,9 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                     return Ok(None);
                 };
                 let (scheme, context) = (scheme.clone(), context.clone());
-                kernel.check_instance(&context, levels)?;
+                kernel.check_instance(&context, universes)?;
 
-                Ok(Some(instantiate_universe_levels_scoped(&scheme, levels)?))
+                Ok(Some(instantiate_universes_scoped(&scheme, universes)?))
             }
         },
 

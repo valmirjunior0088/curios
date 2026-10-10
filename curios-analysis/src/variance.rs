@@ -14,8 +14,8 @@ use {
     crate::{Declarations, Env, binders, forceable, labelled, rec_member},
     curios_core::{
         Advance, Bound, Func, FuncType, Global, InductType, Instance, Level, LevelHead, RecGroup,
-        Struct, StructType, Subterm, Telescope, Term, TupleType, UniverseParam, Variance, Variant,
-        universe_metas, universe_params,
+        Struct, StructType, Subterm, Telescope, Term, TupleType, UniverseParam, Universes,
+        Variance, Variant, universe_metas, universe_params,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -280,8 +280,8 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// A nominal occurrence's instance: its levels at the family's invariant positions, and nothing at an irrelevant one.
-    fn nominal(&mut self, name: &Global, universes: &[Level]) {
-        for (index, level) in universes.iter().enumerate() {
+    fn nominal(&mut self, name: &Global, universes: &Universes) {
+        for (index, level) in universes.levels.iter().enumerate() {
             if self.vectors.at(self.env, name, index) == Variance::Invariant {
                 self.level(level);
             }
@@ -410,8 +410,8 @@ impl<E: Env> Walk<'_, E> {
             }
 
             // An instance that survived forcing is a bare or partly applied former, or a definition that does not unfold: its levels are compared for equality, so each is invariant. A projection head's group is closed over its own scheme, which these levels instantiate.
-            Subterm::Instance(Instance { levels, .. }) => {
-                for level in levels {
+            Subterm::Instance(Instance { universes, .. }) => {
+                for level in &universes.levels {
                     self.level(level);
                 }
             }
@@ -421,7 +421,11 @@ impl<E: Env> Walk<'_, E> {
             Subterm::Metavar(_) => self.marked.every = true,
 
             Subterm::Intrinsic(intrinsic) => {
-                for level in intrinsic.result_universes() {
+                for level in intrinsic
+                    .result_universes()
+                    .into_iter()
+                    .flat_map(|universes| &universes.levels)
+                {
                     self.level(level);
                 }
                 self.children(&term);

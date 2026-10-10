@@ -7,7 +7,7 @@ use {
         Atom, Certification, Certified, Definition, DefinitionKind, Entrypoint, Free, Global,
         InductDecl, InductParam, Intrinsic, Item, Level, Module, Nat, Places, Program, RecItem,
         StructDecl, StructType, Subterm, Telescope, Term, Totality, UniverseContext,
-        UniverseMetaId, UniverseParam, Zonkable, Zonked, project_erased_universes,
+        UniverseMetaId, UniverseParam, Universes, Zonkable, Zonked, project_erased_universes,
         test_support::declaring,
     },
     curios_ersd::{FieldShape, test_support::shape},
@@ -770,6 +770,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         island: Qualifier::empty(),
@@ -1565,7 +1566,7 @@ fn newtype_struct(field: &str, type_: Term) -> StructDecl {
 fn struct_type_of(name: &str) -> Term {
     Term::from(Subterm::StructType(StructType {
         name: nominal(name),
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: Vec::new(),
     }))
 }

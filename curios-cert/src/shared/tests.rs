@@ -133,7 +133,7 @@ fn a_use_names_its_functions_and_not_its_types() {
 
 /// A function of the shared layer enters a judgment's reach through the roster alone, so the list is where a reader finds what a verdict calls and where a change to it is seen.
 ///
-/// Mutation-checked against the roster: `instantiate_universe_levels_scoped` imported from `curios_core` again in `kernel/at.rs` fails this for that file.
+/// Mutation-checked against the roster: `instantiate_universes_scoped` imported from `curios_core` again in `kernel/at.rs` fails this for that file.
 #[test]
 fn the_kernel_names_a_shared_function_here_alone() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");

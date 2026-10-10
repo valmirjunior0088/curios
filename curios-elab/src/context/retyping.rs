@@ -11,8 +11,8 @@ use {
     crate::{Binders, Error, is_erasable_in, reduce_with, refine_head, sort_term, synth_neutral},
     curios_analysis::{Invert, solve_indices},
     curios_core::{
-        Advance, Cost, DefinitionKind, Free, Global, InductDecl, Level, ReduceError, StructDecl,
-        Term, Trace, UniverseContext, UniverseError,
+        Advance, Cost, DefinitionKind, Free, Global, InductDecl, ReduceError, StructDecl, Term,
+        Trace, UniverseContext, UniverseError, Universes,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -164,9 +164,10 @@ impl<'s> Retyping<'s> {
     pub(crate) fn instantiate_induct_decl_at(
         &mut self,
         induct_decl: &InductDecl,
-        levels: &[Level],
+        universes: &Universes,
     ) -> Result<InductDecl, UniverseError> {
-        self.context.instantiate_induct_decl_at(induct_decl, levels)
+        self.context
+            .instantiate_induct_decl_at(induct_decl, universes)
     }
 
     /// [`Context::struct_decl`].
@@ -178,9 +179,10 @@ impl<'s> Retyping<'s> {
     pub(crate) fn instantiate_struct_decl_at(
         &mut self,
         struct_decl: &StructDecl,
-        levels: &[Level],
+        universes: &Universes,
     ) -> Result<StructDecl, UniverseError> {
-        self.context.instantiate_struct_decl_at(struct_decl, levels)
+        self.context
+            .instantiate_struct_decl_at(struct_decl, universes)
     }
 
     /// `term` reduced to its head ([`reduce_with`]).

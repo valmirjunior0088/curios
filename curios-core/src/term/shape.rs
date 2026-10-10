@@ -4,9 +4,9 @@
 
 use {
     crate::{
-        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Scope, Subterm,
-        Telescope, Term, Three, Two, UniverseContext, UniverseError, UniverseScheme, Var, Visit,
-        instantiate_universe_levels_scoped, project_erased_universes,
+        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Many, Quality, Scope, Subterm,
+        Telescope, Term, Three, Two, UniverseContext, UniverseError, UniverseScheme, Universes,
+        Var, Visit, instantiate_qualities, instantiate_universes_scoped, project_erased_universes,
     },
     curios_num::{Grain, Natural},
     curios_utilities::{InfixOp, Mint, Plicity, Sign},
@@ -235,7 +235,7 @@ pub struct Proj {
 #[curios_archive::archived]
 pub struct InductType {
     pub name: Global,
-    pub universes: Vec<Level>,
+    pub universes: Universes,
     pub params: Vec<Term>,
     pub indices: Vec<Term>,
 }
@@ -247,7 +247,7 @@ pub struct InductType {
 #[curios_archive::archived]
 pub struct Variant {
     pub name: Global,
-    pub universes: Vec<Level>,
+    pub universes: Universes,
     pub params: Vec<Term>,
     pub tag: Atom,
     pub payload: Vec<Term>,
@@ -258,7 +258,7 @@ pub struct Variant {
 #[curios_archive::archived]
 pub struct StructType {
     pub name: Global,
-    pub universes: Vec<Level>,
+    pub universes: Universes,
     pub params: Vec<Term>,
 }
 
@@ -279,7 +279,7 @@ pub enum StructEntry {
 #[curios_archive::archived]
 pub struct Struct {
     pub name: Global,
-    pub universes: Vec<Level>,
+    pub universes: Universes,
     pub params: Vec<Term>,
     pub fields: Vec<Term>,
     pub entries: Vec<StructEntry>,
@@ -709,11 +709,17 @@ impl RecGroup {
         &self.scheme.context
     }
 
-    pub fn instantiate_universes(&self, arguments: &[Level]) -> Result<Self, UniverseError> {
-        if arguments.len() != self.scheme.context.parameter_count {
+    pub fn instantiate_universes(&self, arguments: &Universes) -> Result<Self, UniverseError> {
+        if arguments.levels.len() != self.scheme.context.parameter_count {
             return Err(UniverseError::InstanceArity {
                 expected: self.scheme.context.parameter_count,
-                got: arguments.len(),
+                got: arguments.levels.len(),
+            });
+        }
+        if arguments.qualities.len() != self.scheme.context.quality_count {
+            return Err(UniverseError::QualityArity {
+                expected: self.scheme.context.quality_count,
+                got: arguments.qualities.len(),
             });
         }
         Ok(Self {
@@ -723,10 +729,10 @@ impl RecGroup {
                     .map(|member| {
                         Ok(RecMemberScopes {
                             type_: member.type_.try_map_body(|body| {
-                                instantiate_universe_levels_scoped(body, arguments)
+                                instantiate_universes_scoped(body, arguments)
                             })?,
                             body: member.body.try_map_body(|body| {
-                                instantiate_universe_levels_scoped(body, arguments)
+                                instantiate_universes_scoped(body, arguments)
                             })?,
                         })
                     })
@@ -735,6 +741,30 @@ impl RecGroup {
                 context: UniverseContext::empty(),
             },
         })
+    }
+
+    /// This group at one assignment of the sorts its context leaves to a caller: every member read at `qualities`, its level parameters its own still, and no sort left.
+    pub fn at_qualities(&self, qualities: &[Quality]) -> Self {
+        let mut context = self.scheme.context.clone();
+        context.quality_count = 0;
+
+        Self {
+            scheme: UniverseScheme {
+                value: self
+                    .iter()
+                    .map(|member| RecMemberScopes {
+                        type_: member
+                            .type_
+                            .map_body(|body| instantiate_qualities(body, qualities)),
+                        body: member
+                            .body
+                            .map_body(|body| instantiate_qualities(body, qualities)),
+                    })
+                    .collect::<Vec<_>>()
+                    .into(),
+                context,
+            },
+        }
     }
 
     pub(super) fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
@@ -754,9 +784,15 @@ impl RecGroup {
         result.scheme.context = if visit.erases_universes() {
             UniverseContext::empty()
         } else {
-            self.scheme
+            let mut context = self
+                .scheme
                 .context
-                .map_levels(|level| visit.visit_level(level))
+                .map_levels(|level| visit.visit_level(level));
+            // A walk that states every quality parameter has stated this group's with the rest.
+            if visit.states_qualities() {
+                context.quality_count = 0;
+            }
+            context
         };
         visit.leave_universe_scope(universe_arity);
         result
@@ -868,12 +904,12 @@ impl Metavar {
     }
 }
 
-/// An internal, occurrence-specific instantiation of a universe-polymorphic binding: a head at the levels this occurrence chose.
+/// An internal, occurrence-specific instantiation of a universe-polymorphic binding: a head at the levels, and the qualities, this occurrence chose.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Instance {
     pub head: InstanceHead,
-    pub levels: Vec<Level>,
+    pub universes: Universes,
 }
 
 /// The two shapes that denote a universe-polymorphic binding: a not-yet-reduced reference to one, or a projection out of a recursive group. Typed rather than held as a general term so an ill-formed head is unrepresentable; the nominal normal forms carry their instance in their own universe vectors instead (see `Term::stamp_declaration_node`).

@@ -24,12 +24,14 @@ fn param(index: usize) -> Level {
 fn a_context_names_only_what_it_declares() {
     let within = UniverseContext {
         parameter_count: 2,
+        quality_count: 0,
         constraints: vec![leq(param(0), param(1))],
     };
     assert!(within.is_closed());
 
     let escaping = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: vec![leq(param(3), param(0))],
     };
     assert!(!escaping.is_closed());
@@ -37,6 +39,7 @@ fn a_context_names_only_what_it_declares() {
     // A metavariable is elaboration residue: a zonked module carries none, so a context that does is not one any checker should interpret.
     let unsolved = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: vec![leq(Level::meta(UniverseMetaId(0)), param(0))],
     };
     assert!(!unsolved.is_closed());

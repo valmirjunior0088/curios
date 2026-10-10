@@ -22,8 +22,8 @@
 use {
     curios_algebra::Conclusion,
     curios_core::{
-        Aligned, Classes, Intrinsic, Level, Nat, Operand, Probe, Produced, ReduceError, Reducer,
-        Subterm, Term, Var, Visit, align_comparisons, atoms_of, classable, classed, decide_bool,
+        Aligned, Classes, Intrinsic, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm,
+        Term, Universes, Var, Visit, align_comparisons, atoms_of, classable, classed, decide_bool,
         int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
         peel_commutative, peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine,
     },
@@ -62,11 +62,11 @@ pub enum Outcome {
     Unpaired,
 }
 
-/// A congruence to discharge: the two sides' result levels first, then each operand pair in order.
+/// A congruence to discharge: the two sides' result instances first, then each operand pair in order.
 pub struct Congruence {
-    pub this_levels: Vec<Level>,
-    pub that_levels: Vec<Level>,
-    /// `None` where the two sides are not one operation, which is unequal once the levels are compared — they are compared first, since the elaborator's comparison may constrain them.
+    pub this_universes: Universes,
+    pub that_universes: Universes,
+    /// `None` where the two sides are not one operation, which is unequal once the instances are compared — they are compared first, since the elaborator's comparison may constrain them.
     pub operands: Option<Vec<Obligation>>,
 }
 
@@ -151,11 +151,11 @@ fn chain(
     // The shapes carry everything that is not a term — which operation, which grain, which literal, which successor floor, which foreign row — so comparing them settles the operation's identity in one derived equality. Their result levels are the driver's to compare.
     let (mut this_shape, this_operands) = decompose(&this);
     let (mut that_shape, that_operands) = decompose(&that);
-    if let Some(levels) = this_shape.result_universes_mut() {
-        levels.clear();
+    if let Some(universes) = this_shape.result_universes_mut() {
+        *universes = Universes::default();
     }
-    if let Some(levels) = that_shape.result_universes_mut() {
-        levels.clear();
+    if let Some(universes) = that_shape.result_universes_mut() {
+        *universes = Universes::default();
     }
     let one_operation = this_shape == that_shape && this_operands.len() == that_operands.len();
 
@@ -189,8 +189,8 @@ fn chain(
     };
 
     Ok(Pass::Settled(Outcome::Congruence(Congruence {
-        this_levels: this.result_universes().to_vec(),
-        that_levels: that.result_universes().to_vec(),
+        this_universes: this.result_universes().cloned().unwrap_or_default(),
+        that_universes: that.result_universes().cloned().unwrap_or_default(),
         operands,
     })))
 }
@@ -344,8 +344,8 @@ fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Re
     // A fused multiply-add's two factors pair as a commutative operation's operands do, and its addends are compared in place: what is left is two pairs, where a commutative operation leaves one.
     if let Some(operands) = pair_fused(&this, &that) {
         return Ok(Read::Decided(Outcome::Congruence(Congruence {
-            this_levels: Vec::new(),
-            that_levels: Vec::new(),
+            this_universes: Universes::default(),
+            that_universes: Universes::default(),
             operands: Some(operands),
         })));
     }

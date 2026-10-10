@@ -8,7 +8,7 @@ use {
         Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
         InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Nat, Proj,
         Quality, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
-        UniverseContext, UniverseMetaId, Var, Variant, Visit, print_term,
+        UniverseContext, UniverseMetaId, Universes, Var, Variant, Visit, print_term,
     },
     curios_abi::ForeignFunction,
     curios_num::{Floating, Integer},
@@ -107,10 +107,12 @@ impl Subterm {
             };
         match self {
             Subterm::Sort(_, level) => level_matches(level),
-            Subterm::Intrinsic(intrinsic) => intrinsic.result_universes().iter().any(level_matches),
+            Subterm::Intrinsic(intrinsic) => intrinsic
+                .result_universes()
+                .is_some_and(|universes| universes.levels.iter().any(level_matches)),
             // A projection head's group context is this node's own data, the head being typed rather than a child term, so its constraints are direct here exactly as `Rec`'s are below.
-            Subterm::Instance(Instance { head, levels }) => {
-                levels.iter().any(&mut level_matches)
+            Subterm::Instance(Instance { head, universes }) => {
+                universes.levels.iter().any(&mut level_matches)
                     || match head {
                         InstanceHead::Var(_) => false,
                         InstanceHead::RecProj(group, _) => {
@@ -118,18 +120,12 @@ impl Subterm {
                         }
                     }
             }
-            Subterm::InductType(InductType {
-                universes: levels, ..
-            })
-            | Subterm::Variant(Variant {
-                universes: levels, ..
-            })
-            | Subterm::StructType(StructType {
-                universes: levels, ..
-            })
-            | Subterm::Struct(Struct {
-                universes: levels, ..
-            }) => levels.iter().any(level_matches),
+            Subterm::InductType(InductType { universes, .. })
+            | Subterm::Variant(Variant { universes, .. })
+            | Subterm::StructType(StructType { universes, .. })
+            | Subterm::Struct(Struct { universes, .. }) => {
+                universes.levels.iter().any(level_matches)
+            }
             Subterm::Rec(Rec { group, .. }) => {
                 context_matches(group.universe_context(), &mut level_matches)
             }
@@ -544,19 +540,17 @@ impl Subterm {
                 level_has_meta(level) || matches!(quality, Quality::Meta(_))
             }
             Subterm::Intrinsic(intrinsic) => {
-                intrinsic.result_universes().iter().any(level_has_meta)
+                intrinsic
+                    .result_universes()
+                    .is_some_and(Universes::has_meta)
                     || self.any_child_term(&mut |term| term.has_universe_meta())
             }
-            Subterm::Instance(Instance { levels, .. }) => {
-                levels.iter().any(level_has_meta)
-                    || self.any_child_term(&mut |term| term.has_universe_meta())
-            }
-            Subterm::InductType(InductType { universes, .. })
+            Subterm::Instance(Instance { universes, .. })
+            | Subterm::InductType(InductType { universes, .. })
             | Subterm::Variant(Variant { universes, .. })
             | Subterm::StructType(StructType { universes, .. })
             | Subterm::Struct(Struct { universes, .. }) => {
-                universes.iter().any(level_has_meta)
-                    || self.any_child_term(&mut |term| term.has_universe_meta())
+                universes.has_meta() || self.any_child_term(&mut |term| term.has_universe_meta())
             }
             _ => self.any_child_term(&mut |term| term.has_universe_meta()),
         }
@@ -567,7 +561,9 @@ impl Subterm {
             // An open quality is universe data as a level is: a walk that instantiates or solves one visits the node.
             Subterm::Sort(quality, level) => level != &Level::zero() || !quality.is_ground(),
             Subterm::Intrinsic(intrinsic) => {
-                !intrinsic.result_universes().is_empty()
+                intrinsic
+                    .result_universes()
+                    .is_some_and(|universes| !universes.is_empty())
                     || self.any_child_term(&mut |term| term.has_universe_data())
             }
             Subterm::Instance(_) => true,
@@ -686,14 +682,7 @@ impl Bound for Subterm {
                 indices,
             }) => Subterm::InductType(InductType {
                 name: *name,
-                universes: if visit.erases_universes() {
-                    Vec::new()
-                } else {
-                    universes
-                        .iter()
-                        .map(|level| visit.visit_level(level))
-                        .collect()
-                },
+                universes: visit.visit_universes(universes),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 indices: indices.iter().map(|i| visit.visit_subterm(i)).collect(),
             }),
@@ -705,14 +694,7 @@ impl Bound for Subterm {
                 payload,
             }) => Subterm::Variant(Variant {
                 name: *name,
-                universes: if visit.erases_universes() {
-                    Vec::new()
-                } else {
-                    universes
-                        .iter()
-                        .map(|level| visit.visit_level(level))
-                        .collect()
-                },
+                universes: visit.visit_universes(universes),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 tag: tag.clone(),
                 payload: payload.iter().map(|p| visit.visit_subterm(p)).collect(),
@@ -723,14 +705,7 @@ impl Bound for Subterm {
                 params,
             }) => Subterm::StructType(StructType {
                 name: *name,
-                universes: if visit.erases_universes() {
-                    Vec::new()
-                } else {
-                    universes
-                        .iter()
-                        .map(|level| visit.visit_level(level))
-                        .collect()
-                },
+                universes: visit.visit_universes(universes),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
             }),
             Subterm::Struct(Struct {
@@ -741,14 +716,7 @@ impl Bound for Subterm {
                 entries,
             }) => Subterm::Struct(Struct {
                 name: *name,
-                universes: if visit.erases_universes() {
-                    Vec::new()
-                } else {
-                    universes
-                        .iter()
-                        .map(|level| visit.visit_level(level))
-                        .collect()
-                },
+                universes: visit.visit_universes(universes),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 fields: fields.iter().map(|f| visit.visit_subterm(f)).collect(),
                 entries: entries.clone(),
@@ -858,7 +826,7 @@ impl Bound for Subterm {
                     (*Term::rec_proj(group.traverse(visit), *index)).clone()
                 }
             },
-            Subterm::Instance(Instance { head, levels }) => {
+            Subterm::Instance(Instance { head, universes }) => {
                 let head = match head {
                     InstanceHead::Var(var) => match visit.call(var) {
                         None => InstanceHead::Var(var.clone()),
@@ -874,10 +842,7 @@ impl Bound for Subterm {
                 };
                 Subterm::Instance(Instance {
                     head,
-                    levels: levels
-                        .iter()
-                        .map(|level| visit.visit_level(level))
-                        .collect(),
+                    universes: visit.visit_universes(universes),
                 })
             }
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),

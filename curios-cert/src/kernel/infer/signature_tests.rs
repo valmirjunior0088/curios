@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Declaration, Free, Global, InductDecl, InductParam, Intrinsic, Nat, Polarity,
-        Reducer, Subterm, Telescope, Term, UniverseContext,
+        Reducer, Subterm, Telescope, Term, UniverseContext, Universes,
     },
     curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
     curios_utilities::{Qualifier, SyntaxName},
@@ -735,7 +735,7 @@ fn every_row_no_fold_answers_produces_an_inert_description() {
         Intrinsic::CellPoll {
             element: nat_type(),
             cell: Term::free_var(&cell),
-            universes: Vec::new(),
+            universes: Universes::default(),
         },
         Intrinsic::Channel {
             element: nat_type(),
@@ -750,7 +750,7 @@ fn every_row_no_fold_answers_produces_an_inert_description() {
         Intrinsic::ChannelTake {
             element: nat_type(),
             channel: Term::free_var(&channel),
-            universes: Vec::new(),
+            universes: Universes::default(),
         },
         Intrinsic::ChannelClose {
             element: nat_type(),

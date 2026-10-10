@@ -330,6 +330,67 @@ impl Quality {
     pub fn is_ground(&self) -> bool {
         matches!(self, Quality::Prop | Quality::Type)
     }
+
+    /// This quality at an instance: a parameter as the quality `arguments` states for it, and anything else as it stands. A parameter past the instance's width is left, for the reader that refuses an open sort to meet.
+    pub fn instantiate(&self, arguments: &[Quality]) -> Quality {
+        match self {
+            Quality::Param(param) => arguments.get(param.0).copied().unwrap_or(*self),
+            _ => *self,
+        }
+    }
+}
+
+/// The instance an occurrence of a universe-polymorphic declaration states: a level for each level parameter of its [`UniverseContext`], and a quality for each sort the declaration leaves to its caller.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[curios_archive::archived]
+pub struct Universes {
+    pub levels: Vec<Level>,
+    pub qualities: Vec<Quality>,
+}
+
+impl Universes {
+    /// The instance of a declaration that leaves no sort open: its levels, and no quality.
+    pub fn levels(levels: Vec<Level>) -> Self {
+        Self {
+            levels,
+            qualities: Vec::new(),
+        }
+    }
+
+    /// Whether this states nothing: the instance of a declaration with no universe parameter of either kind.
+    pub fn is_empty(&self) -> bool {
+        self.levels.is_empty() && self.qualities.is_empty()
+    }
+
+    /// Whether elaboration has left something of this unsolved: a level that names a metavariable, or a quality that is one.
+    pub fn has_meta(&self) -> bool {
+        self.levels
+            .iter()
+            .any(|level| level.metas().next().is_some())
+            || self
+                .qualities
+                .iter()
+                .any(|quality| matches!(quality, Quality::Meta(_)))
+    }
+}
+
+impl From<Vec<Level>> for Universes {
+    fn from(levels: Vec<Level>) -> Self {
+        Self::levels(levels)
+    }
+}
+
+impl<const N: usize> From<[Level; N]> for Universes {
+    fn from(levels: [Level; N]) -> Self {
+        Self::levels(levels.into())
+    }
+}
+
+impl FromIterator<Level> for Universes {
+    /// An instance stating levels alone, which is every instance of a declaration that leaves no sort open.
+    fn from_iter<I: IntoIterator<Item = Level>>(levels: I) -> Self {
+        Self::levels(levels.into_iter().collect())
+    }
 }
 
 /// Whether an unsolved level is an input eligible for generalization or an inferred output/classifier that should be minimized.
@@ -444,12 +505,22 @@ impl Hash for UniverseConstraint {
 #[curios_archive::archived]
 pub struct UniverseContext {
     pub parameter_count: usize,
+    /// How many sorts the declaration leaves to its caller: its quality parameters, which only a top-level declaration binds — a definition, a recursive group, a nominal declaration. A group standing inside a term binds none: a quality parameter there is the enclosing declaration's, and a walk that states a declaration's qualities states them through every group it passes.
+    pub quality_count: usize,
     pub constraints: Vec<UniverseConstraint>,
 }
 
 impl UniverseContext {
+    /// The most sorts one declaration leaves to its caller. The kernel judges a declaration once at every assignment of them, so the count bounds what a declaration costs: two to its power judgments.
+    pub const QUALITY_LIMIT: usize = 8;
+
     pub fn empty() -> Self {
         Self::default()
+    }
+
+    /// How many universe parameters of either kind the declaration binds, which is how much an instance of it states: nothing, for a declaration a bare occurrence denotes.
+    pub fn width(&self) -> usize {
+        self.parameter_count + self.quality_count
     }
 
     /// Whether this context mentions only what it declares: no constraint level naming a parameter past `parameter_count`, and none holding a metavariable.
@@ -471,17 +542,24 @@ impl UniverseContext {
     /// This context's own parameters as an argument vector: the one instance that instantiates it to itself.
     ///
     /// A declaration denotes this instance at every occurrence inside its own signature, body, and registry entries, because a group is monomorphic in its own universes. External uses instead take a fresh instance from `curios-elab`'s `UniverseSolver::instantiate`.
-    pub fn identity_instance(&self) -> Vec<Level> {
-        (0..self.parameter_count)
-            .map(UniverseParam)
-            .map(Level::param)
-            .collect()
+    pub fn identity_instance(&self) -> Universes {
+        Universes {
+            levels: (0..self.parameter_count)
+                .map(UniverseParam)
+                .map(Level::param)
+                .collect(),
+            qualities: (0..self.quality_count)
+                .map(QualityParam)
+                .map(Quality::Param)
+                .collect(),
+        }
     }
 
     /// This context with no constraint saying where in a text it was raised; its kind, its declaration and its binder stand. What a consed declaration carries: the position is read by a report about that declaration's own elaboration, which is over by the time it is stored.
     pub fn unplaced(&self) -> Self {
         Self {
             parameter_count: self.parameter_count,
+            quality_count: self.quality_count,
             constraints: self
                 .constraints
                 .iter()
@@ -500,6 +578,7 @@ impl UniverseContext {
     pub(crate) fn map_levels(&self, mut map: impl FnMut(&Level) -> Level) -> Self {
         Self {
             parameter_count: self.parameter_count,
+            quality_count: self.quality_count,
             constraints: self
                 .constraints
                 .iter()
@@ -538,6 +617,11 @@ pub enum UniverseError {
         expected: usize,
         got: usize,
     },
+    /// An instance states `got` sorts where its scheme leaves `expected` to its caller.
+    QualityArity {
+        expected: usize,
+        got: usize,
+    },
     UnknownMeta(UniverseMetaId),
     MismatchedRecursiveContexts,
     /// The disjunctive consistency search exceeded its node budget.
@@ -566,6 +650,12 @@ impl fmt::Display for UniverseError {
                 write!(
                     formatter,
                     "universe instance has {got} arguments but its scheme expects {expected}"
+                )
+            }
+            UniverseError::QualityArity { expected, got } => {
+                write!(
+                    formatter,
+                    "universe instance states {got} sorts but its scheme leaves {expected} to its caller"
                 )
             }
             UniverseError::UnknownMeta(meta) => write!(formatter, "unknown universe meta {meta}"),

@@ -27,6 +27,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
     };
     let universe_context = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: vec![contradiction],
     };
 
@@ -67,6 +68,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     };
     let universe_context = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: vec![escaping],
     };
 
@@ -171,7 +173,7 @@ fn a_ground_level_in_the_same_positions_is_accepted() {
 ///
 /// A declaration's universe scheme is a promise that every level it mentions is either ground or one of the parameters it declares, so a use site fully determines it. `curios-elab`'s `validate_bound_universes` checks that promise, and this crate's equivalent is `universe_escape`, beside `universe_residue`: where that one looks for an unsolved *metavariable* in a level, this one looks for a parameter index past the declaration's own count.
 ///
-/// What makes that a soundness question rather than a tidiness one is what instantiation does next. `instantiate_universe_levels_scoped` substitutes the indices an instance supplies and *renumbers* the rest down by the instance's width — the correct de Bruijn shift for a well-scoped term, where an index at or above the width refers to an enclosing binder. For an ill-scoped one it is a capture: `Type.{param 1}` and `Type.{param 0}` both instantiate at `[param 0]` to the same `Type.{u}`, so two levels that were distinct become one, and the hierarchy's questions are then decided about the wrong one.
+/// What makes that a soundness question rather than a tidiness one is what instantiation does next. `instantiate_universes_scoped` substitutes the indices an instance supplies and *renumbers* the rest down by the instance's width — the correct de Bruijn shift for a well-scoped term, where an index at or above the width refers to an enclosing binder. For an ill-scoped one it is a capture: `Type.{param 1}` and `Type.{param 0}` both instantiate at `[param 0]` to the same `Type.{u}`, so two levels that were distinct become one, and the hierarchy's questions are then decided about the wrong one.
 ///
 /// Neither module is reachable from a surface program — `validate_universes` runs before a module ever leaves the elaborator — so only these fixtures put the certifier's copy of the rule to the test.
 ///
@@ -228,7 +230,7 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
 ///
 /// `Kernel::check_instance` discharges a scheme's *constraints* at the levels an occurrence supplies, and that is all it does. A scheme with an empty constraint set therefore accepts an instance of any width — the loop body never runs — so the width needs a check of its own, which `check_instance` makes first. `curios-elab`'s `validate_instance_arities` asks the same, of every `Instance`, `InductType`, `Variant`, `StructType` and `Struct` in the module.
 ///
-/// The consequence is the capture [`a_level_naming_an_undeclared_universe_parameter_is_refused`] records, reached from the other side. That fixture is about a declaration naming a parameter it does not have; this one is about a declaration naming a parameter it *does* have, at an occurrence that does not supply it. `instantiate_universe_levels_scoped` renumbers whatever the instance leaves unsupplied down by the instance's width, so `Levelled`'s `Type.{param 1}` at the one-level instance `[param 0]` becomes `Type.{param 0}` — and `param 0` at the use site is the *use site's* own first parameter, not the declaration's second. Two levels that were distinct are now one, and cumulativity is decided about the wrong one.
+/// The consequence is the capture [`a_level_naming_an_undeclared_universe_parameter_is_refused`] records, reached from the other side. That fixture is about a declaration naming a parameter it does not have; this one is about a declaration naming a parameter it *does* have, at an occurrence that does not supply it. `instantiate_universes_scoped` renumbers whatever the instance leaves unsupplied down by the instance's width, so `Levelled`'s `Type.{param 1}` at the one-level instance `[param 0]` becomes `Type.{param 0}` — and `param 0` at the use site is the *use site's* own first parameter, not the declaration's second. Two levels that were distinct are now one, and cumulativity is decided about the wrong one.
 ///
 /// Not reachable from a surface program — `validate_universes` runs before a module leaves the elaborator — so only this fixture puts the certifier's copy of the rule to the test.
 ///

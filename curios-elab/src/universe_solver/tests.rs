@@ -47,6 +47,7 @@ fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
     };
     let scheme = UniverseContext {
         parameter_count: 2,
+        quality_count: 0,
         constraints: vec![UniverseConstraint {
             lower: Level::param(UniverseParam(0)),
             upper: Level::param(UniverseParam(1)),
@@ -405,6 +406,7 @@ fn flexible_dependency_chain_propagates_after_defaulting_its_floor() {
 fn contexts_are_alpha_stable_and_instances_are_fresh() {
     let context = UniverseContext {
         parameter_count: 2,
+        quality_count: 0,
         constraints: vec![UniverseConstraint {
             lower: Level::param(UniverseParam(0)).succ().unwrap(),
             upper: Level::param(UniverseParam(1)),
@@ -415,8 +417,13 @@ fn contexts_are_alpha_stable_and_instances_are_fresh() {
     let mut solver = UniverseSolver::new(7);
     let first = solver.instantiate(&context).unwrap();
     let second = solver.instantiate(&context).unwrap();
-    let first_metas = first.iter().flat_map(Level::metas).collect::<BTreeSet<_>>();
+    let first_metas = first
+        .levels
+        .iter()
+        .flat_map(Level::metas)
+        .collect::<BTreeSet<_>>();
     let second_metas = second
+        .levels
         .iter()
         .flat_map(Level::metas)
         .collect::<BTreeSet<_>>();
@@ -688,6 +695,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "one bound",
             UniverseContext {
                 parameter_count: 2,
+                quality_count: 0,
                 constraints: vec![leq(param(0), param(1))],
             },
         ),
@@ -696,6 +704,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "cyclic but satisfiable",
             UniverseContext {
                 parameter_count: 2,
+                quality_count: 0,
                 constraints: vec![leq(param(0), param(1)), leq(param(1), param(0))],
             },
         ),
@@ -703,6 +712,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "direct positive cycle",
             UniverseContext {
                 parameter_count: 1,
+                quality_count: 0,
                 constraints: vec![leq(param(0).succ().expect("successor"), param(0))],
             },
         ),
@@ -710,6 +720,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "long positive cycle",
             UniverseContext {
                 parameter_count: 3,
+                quality_count: 0,
                 constraints: vec![
                     leq(param(0).succ().expect("successor"), param(1)),
                     leq(param(1), param(2)),
@@ -722,6 +733,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "right-hand maximum",
             UniverseContext {
                 parameter_count: 2,
+                quality_count: 0,
                 constraints: vec![leq(
                     Level::max([Level::constant(1), param(0)]),
                     Level::max([Level::constant(1), param(1)]),
@@ -732,6 +744,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "constant bounds that cross",
             UniverseContext {
                 parameter_count: 1,
+                quality_count: 0,
                 constraints: vec![
                     leq(Level::constant(3), param(0)),
                     leq(param(0).succ().expect("successor"), Level::constant(2)),
@@ -742,6 +755,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "offsets that shift",
             UniverseContext {
                 parameter_count: 2,
+                quality_count: 0,
                 constraints: vec![leq(
                     param(0).checked_add(2).expect("offset"),
                     param(1).checked_add(5).expect("offset"),
@@ -753,6 +767,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "escaping parameter",
             UniverseContext {
                 parameter_count: 1,
+                quality_count: 0,
                 constraints: vec![leq(param(3), param(0))],
             },
         ),
@@ -761,6 +776,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "metavariable residue",
             UniverseContext {
                 parameter_count: 1,
+                quality_count: 0,
                 constraints: vec![leq(Level::meta(UniverseMetaId(0)), param(0))],
             },
         ),
@@ -769,6 +785,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
             "ceiling with no floor",
             UniverseContext {
                 parameter_count: 2,
+                quality_count: 0,
                 constraints: vec![
                     leq(param(0).succ().expect("successor"), param(1)),
                     leq(param(1), Level::zero()),

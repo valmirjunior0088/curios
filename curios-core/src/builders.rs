@@ -5,7 +5,7 @@
 use {
     super::{
         Apply, Ascribed, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit,
-        Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
+        Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes, Var,
     },
     curios_num::{Binary, Grain, Natural, Rounding},
     curios_utilities::{InfixOp, Sign, StringSyntax, SyntaxName},
@@ -299,7 +299,7 @@ impl Term {
 
         Self::from(Subterm::Struct(Struct {
             name,
-            universes: vec![],
+            universes: Universes::default(),
             params: params.into_iter().map(|p| p.into()).collect(),
             fields,
             entries,
@@ -315,15 +315,14 @@ impl Term {
         Self::struct_type_at(name, Vec::<Level>::new(), params)
     }
 
-    pub fn struct_type_at<U, I, P>(name: Global, universes: U, params: I) -> Self
+    pub fn struct_type_at<I, P>(name: Global, universes: impl Into<Universes>, params: I) -> Self
     where
-        U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
     {
         Self::from(Subterm::StructType(StructType {
             name,
-            universes: universes.into_iter().collect(),
+            universes: universes.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
         }))
     }

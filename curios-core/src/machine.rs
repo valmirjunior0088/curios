@@ -37,7 +37,7 @@ use {
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
         Func, Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult,
         Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope, Term,
-        instantiate_universe_levels_scoped, reduce_intrinsic,
+        instantiate_universes_scoped, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -511,27 +511,30 @@ impl Machine {
             }
 
             Subterm::Instance(instance) => {
-                let levels = instance.levels;
+                let universes = instance.universes;
                 let reduct = match instance.head {
                     InstanceHead::Var(var) => {
                         let Some(reduct) = host.closed_body_at(var.unwrap()).cloned() else {
-                            return Ok(Step::Value(Term::instance(InstanceHead::Var(var), levels)));
+                            return Ok(Step::Value(Term::instance(
+                                InstanceHead::Var(var),
+                                universes,
+                            )));
                         };
                         // The variable's stored body may itself be a projection, whose group takes the instance whole rather than a per-level rewrite.
                         match reduct.as_rec_proj() {
                             Some((group, index)) => Term::rec_proj(
                                 group
-                                    .instantiate_universes(&levels)
+                                    .instantiate_universes(&universes)
                                     .map_err(ReduceError::Universe)?,
                                 index,
                             ),
-                            None => instantiate_universe_levels_scoped(&reduct, &levels)
+                            None => instantiate_universes_scoped(&reduct, &universes)
                                 .map_err(ReduceError::Universe)?,
                         }
                     }
                     InstanceHead::RecProj(group, index) => Term::rec_proj(
                         group
-                            .instantiate_universes(&levels)
+                            .instantiate_universes(&universes)
                             .map_err(ReduceError::Universe)?,
                         index,
                     ),

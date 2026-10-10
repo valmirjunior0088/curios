@@ -5,7 +5,7 @@
 use {
     super::{
         Extent, Free, Global, Level, LevelHead, Quality, Subterm, Term, UniverseError,
-        UniverseMetaId, UniverseParam,
+        UniverseMetaId, UniverseParam, Universes,
     },
     curios_utilities::Symbol,
     std::{
@@ -353,7 +353,7 @@ fn rewrite_levels_through<B: Bound, E: 'static>(
     }
 }
 
-/// Every quality `value`'s sorts carry through `rewrite`, its levels left as they are: for a hook whose answer is a function of the quality, a substitution or a check.
+/// Every quality `value`'s sorts and instances carry through `rewrite`, its levels left as they are: for a hook whose answer is a function of the quality, a solver's answer read in or a check. A parameter the hook answers with is still its declaration's to bind.
 pub fn rewrite_universe_qualities<B: Bound, E: 'static>(
     value: &B,
     rewrite: impl FnMut(&Quality) -> Result<Quality, E> + 'static,
@@ -365,7 +365,7 @@ pub fn rewrite_universe_qualities<B: Bound, E: 'static>(
     let mut visit = Visit::rewriting_universes_scoped_shared(
         unchanged,
         Box::new(|_, level| level.clone()),
-        Box::new(move |quality| {
+        Qualities::Rewritten(Box::new(move |quality| {
             if error_for_visit.borrow().is_some() {
                 return *quality;
             }
@@ -376,7 +376,7 @@ pub fn rewrite_universe_qualities<B: Bound, E: 'static>(
                     *quality
                 }
             }
-        }),
+        })),
     );
     let rewritten = value.traverse(&mut visit);
     match error.borrow_mut().take() {
@@ -385,11 +385,12 @@ pub fn rewrite_universe_qualities<B: Bound, E: 'static>(
     }
 }
 
-/// The first open quality one of `value`'s sorts states: a declaration's parameter, or a metavariable.
-pub fn open_quality<B: Bound>(value: &B) -> Option<Quality> {
-    rewrite_universe_qualities(value, |quality| match quality.is_ground() {
-        true => Ok(*quality),
-        false => Err(*quality),
+/// The first quality one of `value`'s sorts or instances states that a declaration leaving `declared` sorts to its caller does not bind: a metavariable, or a parameter at or past `declared`.
+pub fn open_quality<B: Bound>(value: &B, declared: usize) -> Option<Quality> {
+    rewrite_universe_qualities(value, move |quality| match quality {
+        Quality::Prop | Quality::Type => Ok(*quality),
+        Quality::Param(param) if param.0 < declared => Ok(*quality),
+        Quality::Param(_) | Quality::Meta(_) => Err(*quality),
     })
     .err()
 }
@@ -404,18 +405,66 @@ pub fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, Univ
     })
 }
 
-/// Substitute a scheme's own universe parameters by `arguments`.
+/// [`rewrite_universe_levels_scoped_shared`] with each quality parameter of `value` as `qualities` states it beside the levels: the one walk that reads a declaration at an instance or at an assignment, after which no parameter is left ([`Qualities::Stated`]).
+fn state_universes_scoped_shared<B: Bound, E: 'static>(
+    value: &B,
+    levels: impl FnMut(usize, &Level) -> Result<Level, E> + 'static,
+    qualities: impl FnMut(&Quality) -> Quality + 'static,
+) -> Result<B, E> {
+    let mut levels = levels;
+    let error = Rc::new(RefCell::new(None));
+    let error_for_visit = Rc::clone(&error);
+    let unchanged: Unchanged = |_, _| None;
+    let mut visit = Visit::rewriting_universes_scoped_shared(
+        unchanged,
+        Box::new(move |depth, level| {
+            if error_for_visit.borrow().is_some() {
+                return level.clone();
+            }
+            match levels(depth, level) {
+                Ok(level) => level,
+                Err(found) => {
+                    *error_for_visit.borrow_mut() = Some(found);
+                    level.clone()
+                }
+            }
+        }),
+        Qualities::Stated(Box::new(qualities)),
+    );
+    let rewritten = value.traverse(&mut visit);
+    match error.borrow_mut().take() {
+        Some(error) => Err(error),
+        None => Ok(rewritten),
+    }
+}
+
+/// `value` with each of its declaration's quality parameters as the quality `qualities` states for it, its levels left as they are: the declaration at one assignment of the sorts it leaves open.
+pub fn instantiate_qualities<B: Bound>(value: &B, qualities: &[Quality]) -> B {
+    let qualities = qualities.to_vec();
+    let instantiated: Result<B, std::convert::Infallible> = state_universes_scoped_shared(
+        value,
+        |_, level| Ok(level.clone()),
+        move |quality| quality.instantiate(&qualities),
+    );
+
+    match instantiated {
+        Ok(instantiated) => instantiated,
+        Err(never) => match never {},
+    }
+}
+
+/// Substitute a scheme's own universe parameters by `arguments`: its level parameters by the levels the instance states, and its quality parameters by the qualities.
 ///
 /// Universe parameters are innermost-first: beneath the `depth` universe binders this walk has crossed, the scheme's own parameters occupy `depth .. depth + arguments.len()`. An index above that range belongs to an *enclosing* scheme and is shifted down by the parameters this instantiation discharges, exactly as `curios-elab`'s `UniverseSolver::instantiate_at` rewrites the outer references in a nested residual context.
 ///
 /// Instance arity is the owning `UniverseContext`'s contract and is checked against its declared `parameter_count`. Rejecting an out-of-range index here instead would misread every legitimate outer-scheme reference as a missing argument.
-pub fn instantiate_universe_levels_scoped<B: Bound>(
+pub fn instantiate_universes_scoped<B: Bound>(
     value: &B,
-    arguments: &[Level],
+    arguments: &Universes,
 ) -> Result<B, UniverseError> {
-    let arguments = arguments.to_vec();
-    rewrite_universe_levels_scoped_shared(value, move |depth, level| {
-        let arguments = arguments
+    let levels = arguments.levels.clone();
+    let instantiate = move |depth: usize, level: &Level| {
+        let arguments = levels
             .iter()
             .map(|argument| shift_universe_params(argument, depth))
             .collect::<Result<Vec<_>, _>>()?;
@@ -429,7 +478,18 @@ pub fn instantiate_universe_levels_scoped<B: Bound>(
             ),
             LevelHead::Meta(_) => None,
         })
-    })
+    };
+
+    // A quality parameter is flat, bound by the top-level declaration alone, so it is read by its index at every depth.
+    match arguments.qualities.is_empty() {
+        true => rewrite_universe_levels_scoped_shared(value, instantiate),
+        false => {
+            let qualities = arguments.qualities.clone();
+            state_universes_scoped_shared(value, instantiate, move |quality| {
+                quality.instantiate(&qualities)
+            })
+        }
+    }
 }
 
 pub fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
@@ -472,7 +532,7 @@ pub enum SelfReference {
     Bound,
 }
 
-/// Rewrite every occurrence of a declaration group's own members to denote the universe instance `levels`.
+/// Rewrite every occurrence of a declaration group's own members to denote the universe instance `universes`.
 ///
 /// A declaration's signature, body, and registry telescopes are elaborated before its universe parameters exist: within its own group it is monomorphic, so its self-references carry no instance at all. Finalization mints the parameters, and every internal occurrence must then denote *that* instance rather than a freshly instantiated one — the concrete form of the rule that recursion is monomorphic inside a group.
 ///
@@ -483,16 +543,16 @@ pub fn stamp_declaration_instance<B: Bound>(
     value: &B,
     names: &BTreeSet<Global>,
     self_reference: SelfReference,
-    levels: &[Level],
+    universes: &Universes,
 ) -> B {
     if names.is_empty() {
         return value.clone();
     }
     let names = names.clone();
-    let levels = levels.to_vec();
+    let universes = universes.clone();
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
-        Box::new(move |_, term| term.stamp_declaration_node(&names, self_reference, &levels)),
+        Box::new(move |_, term| term.stamp_declaration_node(&names, self_reference, &universes)),
     );
     value.traverse(&mut visit)
 }
@@ -865,6 +925,16 @@ type LevelRewrite = Box<dyn FnMut(usize, &Level) -> Level>;
 /// A quality-level hook for [`Visit`], asked at every sort a level hook is asked at. It reads no depth: only a top-level item binds a quality, so a parameter names one thing wherever it stands.
 type QualityRewrite = Box<dyn FnMut(&Quality) -> Quality>;
 
+/// What a walk does with the qualities it meets, which is also what it leaves of a recursive group's own count of them.
+enum Qualities {
+    /// Each as it stands.
+    Kept,
+    /// Each through the hook, a parameter still its declaration's to bind: a solver's answers read in, or a scan.
+    Rewritten(QualityRewrite),
+    /// Each parameter as the quality an instance or an assignment states for it. No parameter is left, so a group the walk passes binds none afterwards: the group's own are stated with the rest, a group being read at an instance with the declaration that holds it.
+    Stated(QualityRewrite),
+}
+
 /// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, and what the traversal does beyond rewriting variables (`Mode`).
 pub struct Visit<F> {
     term_depth: usize,
@@ -961,8 +1031,8 @@ enum Mode {
     Rewriting(Rewrite),
     /// [`Mode::Rewriting`], visiting only nodes that carry universe data.
     RewritingUniverses(Rewrite),
-    /// A level-level hook, visiting only nodes that carry universe data, and a quality-level one beside it where the walk rewrites both.
-    RewritingLevels(LevelRewrite, Option<QualityRewrite>),
+    /// A level-level hook, visiting only nodes that carry universe data, and what the walk does with a quality beside it.
+    RewritingLevels(LevelRewrite, Qualities),
     /// [`Mode::Masking`] that also stands every level of the node itself down to a sentinel, keeping what it removed: the children each with the universe-binder depth it sits at below the node, and the levels each with theirs. Every node is visited, a ground `Type 0` included — a comparison that aligns levels by position has to see the one that carries no universe data. This is one node of [`Term::level_differences`]'s walk over a pair.
     MaskingLevels {
         placeholder: Term,
@@ -1102,7 +1172,7 @@ where
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::RewritingLevels(rewrite, None),
+            mode: Mode::RewritingLevels(rewrite, Qualities::Kept),
             memo: Memo::None,
         }
     }
@@ -1113,22 +1183,22 @@ where
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::RewritingLevels(rewrite, None),
+            mode: Mode::RewritingLevels(rewrite, Qualities::Kept),
             memo: Memo::ByNodeAndDepth(HashMap::new()),
         }
     }
 
     /// [`rewriting_levels_scoped_shared`](Self::rewriting_levels_scoped_shared) with a quality hook beside the level one: for a walk that instantiates or solves both, each hook a function of what it is handed.
-    pub(crate) fn rewriting_universes_scoped_shared(
+    fn rewriting_universes_scoped_shared(
         visit: F,
         levels: LevelRewrite,
-        qualities: QualityRewrite,
+        qualities: Qualities,
     ) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::RewritingLevels(levels, Some(qualities)),
+            mode: Mode::RewritingLevels(levels, qualities),
             memo: Memo::ByNodeAndDepth(HashMap::new()),
         }
     }
@@ -1219,12 +1289,40 @@ where
         }
     }
 
+    /// An occurrence's instance through the walk: each level through [`Visit::visit_level`] and each quality through [`Visit::visit_quality`], and nothing at all where the walk erases universes, which removes an instance with its owning node's.
+    pub(crate) fn visit_universes(&mut self, universes: &Universes) -> Universes {
+        if self.erases_universes() {
+            return Universes::default();
+        }
+
+        Universes {
+            levels: universes
+                .levels
+                .iter()
+                .map(|level| self.visit_level(level))
+                .collect(),
+            qualities: universes
+                .qualities
+                .iter()
+                .map(|quality| self.visit_quality(quality))
+                .collect(),
+        }
+    }
+
     /// A sort's quality through the walk's quality hook, where it has one; every other walk leaves a quality as it is, an erasing one included, since a quality is what the sort is and no payload of it.
     pub(crate) fn visit_quality(&mut self, quality: &Quality) -> Quality {
         match &mut self.mode {
-            Mode::RewritingLevels(_, Some(rewrite)) => rewrite(quality),
+            Mode::RewritingLevels(
+                _,
+                Qualities::Rewritten(rewrite) | Qualities::Stated(rewrite),
+            ) => rewrite(quality),
             _ => *quality,
         }
+    }
+
+    /// Whether this walk states every quality parameter it meets, and so leaves a recursive group it passes none to bind ([`Qualities::Stated`]).
+    pub(crate) fn states_qualities(&self) -> bool {
+        matches!(self.mode, Mode::RewritingLevels(_, Qualities::Stated(_)))
     }
 
     pub(crate) fn rewrite_term(&mut self, term: &Term) -> Option<Term> {

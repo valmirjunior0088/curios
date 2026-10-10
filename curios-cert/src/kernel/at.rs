@@ -18,8 +18,8 @@
 
 use {
     super::{Counted, Error, Kernel, arity_matches},
-    crate::instantiate_universe_levels_scoped,
-    curios_core::{Atom, Global, InductDecl, InductType, Level, StructDecl, Telescope, Term},
+    crate::instantiate_universes_scoped,
+    curios_core::{Atom, Global, InductDecl, InductType, StructDecl, Telescope, Term, Universes},
 };
 
 /// An `induct` declaration at one occurrence's universes and parameters.
@@ -99,7 +99,7 @@ impl Kernel<'_> {
     pub(crate) fn induct_at_params(
         &self,
         name: &Global,
-        universes: &[Level],
+        universes: &Universes,
         params: &[Term],
     ) -> Result<InductAt, Error> {
         let declaration = self
@@ -118,7 +118,7 @@ impl Kernel<'_> {
     pub(crate) fn struct_at(
         &self,
         name: &Global,
-        universes: &[Level],
+        universes: &Universes,
         params: &[Term],
     ) -> Result<StructAt, Error> {
         let declaration = self
@@ -128,9 +128,9 @@ impl Kernel<'_> {
         arity_matches(Counted::Parameters, declaration.param_count(), params.len())?;
 
         let mut declaration = declaration.clone();
-        declaration.arity = instantiate_universe_levels_scoped(&declaration.arity, universes)?;
+        declaration.arity = instantiate_universes_scoped(&declaration.arity, universes)?;
         declaration.result_sort =
-            instantiate_universe_levels_scoped(&declaration.result_sort, universes)?;
+            instantiate_universes_scoped(&declaration.result_sort, universes)?;
         declaration.universe_context = curios_core::UniverseContext::empty();
 
         Ok(StructAt {
@@ -143,15 +143,14 @@ impl Kernel<'_> {
 /// A declaration with its universe parameters replaced by this occurrence's instance, so its constructor signatures speak of the right levels.
 fn instantiate_induct_decl(
     declaration: &InductDecl,
-    levels: &[Level],
+    universes: &Universes,
 ) -> Result<InductDecl, Error> {
     let mut instantiated = declaration.clone();
 
-    instantiated.arity = instantiate_universe_levels_scoped(&instantiated.arity, levels)?;
-    instantiated.result_sort =
-        instantiate_universe_levels_scoped(&instantiated.result_sort, levels)?;
+    instantiated.arity = instantiate_universes_scoped(&instantiated.arity, universes)?;
+    instantiated.result_sort = instantiate_universes_scoped(&instantiated.result_sort, universes)?;
     for constructor in instantiated.signatures_mut() {
-        constructor.telescope = instantiate_universe_levels_scoped(&constructor.telescope, levels)?;
+        constructor.telescope = instantiate_universes_scoped(&constructor.telescope, universes)?;
     }
     instantiated.universe_context = curios_core::UniverseContext::empty();
 

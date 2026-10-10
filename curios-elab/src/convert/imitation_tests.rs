@@ -66,6 +66,7 @@ fn register_wrap(context: &mut Context, variance: Variance) {
             InductDecl {
                 universe_context: UniverseContext {
                     parameter_count: 1,
+                    quality_count: 0,
                     constraints: Vec::new(),
                 },
                 arity: Telescope::build([(elem, sort.clone())], Telescope::done(())),

@@ -20,8 +20,8 @@ use {
     crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
     curios_core::{
         Advance, CalleeId, ConceptDecl, Enter, Extent, Field, Free, Global, HeadKey,
-        ImplicitOrigin, Instance, InstanceHead, Level, Metavar, MetavarId, StructType, Subterm,
-        Term, UniverseContext, WitnessKey, WitnessOrigin,
+        ImplicitOrigin, Instance, InstanceHead, Metavar, MetavarId, StructType, Subterm, Term,
+        UniverseContext, Universes, WitnessKey, WitnessOrigin,
     },
     curios_utilities::{Mount, Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
@@ -301,7 +301,7 @@ fn flex_head(context: &Context, term: &Term) -> bool {
 }
 
 /// The goal type as a concept application: its (reduced) `StructType` name and parameters, when that name is a registered concept.
-fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(Global, Vec<Level>, Vec<Term>)> {
+fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(Global, Universes, Vec<Term>)> {
     let Subterm::StructType(StructType {
         name,
         universes,
@@ -700,13 +700,13 @@ fn instantiate(
             as_concept_app(context, goal),
         ) {
             (Some((_, from_witness, _)), Some((_, from_goal, _)))
-                if from_witness.len() == from_goal.len() =>
+                if from_witness.levels.len() == from_goal.levels.len() =>
             {
-                (from_witness, from_goal)
+                (from_witness.levels, from_goal.levels)
             }
             _ => (Vec::new(), Vec::new()),
         };
-        context.close_universe_instance(&minted, &instance, &determined)?;
+        context.close_universe_instance(&minted.levels, &instance, &determined)?;
     }
     for (id, type_, provenance) in premises {
         attempt_witness_goal(context, id, &type_, provenance, origin)?;

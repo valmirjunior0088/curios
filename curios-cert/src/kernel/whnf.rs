@@ -23,8 +23,7 @@ use {
     super::{Kernel, asked_classes, stated_payload, unread_payload},
     crate::{
         accelerable, answers, answers_classed, atoms_within, classable,
-        instantiate_universe_levels_scoped, probe_spellings, reduce_closed, reduce_intrinsic,
-        refold,
+        instantiate_universes_scoped, probe_spellings, reduce_closed, reduce_intrinsic, refold,
     },
     curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS},
     curios_core::{
@@ -574,17 +573,17 @@ fn step_let(kernel: &mut Kernel, let_: Let) -> Result<Term, ReduceError> {
 ///
 /// This is the only position from which a polymorphic definition unfolds — a bare occurrence of one denotes no particular instance, so [`Kernel::value`](super::Kernel) withholds it there.
 fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, ReduceError> {
-    let Instance { head, levels } = instance;
+    let Instance { head, universes } = instance;
 
     let reduct = match &head {
         InstanceHead::Var(var) => match kernel.value_at(var.unwrap()).cloned() {
             Some(reduct) => reduct,
-            None => return Ok(Step::Stop(Term::instance(head, levels))),
+            None => return Ok(Step::Stop(Term::instance(head, universes))),
         },
         InstanceHead::RecProj(group, index) => {
             return Ok(Step::Continue(Term::rec_proj(
                 group
-                    .instantiate_universes(&levels)
+                    .instantiate_universes(&universes)
                     .map_err(ReduceError::Universe)?,
                 *index,
             )));
@@ -595,13 +594,11 @@ fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, Reduce
     Ok(Step::Continue(match reduct.as_rec_proj() {
         Some((group, index)) => Term::rec_proj(
             group
-                .instantiate_universes(&levels)
+                .instantiate_universes(&universes)
                 .map_err(ReduceError::Universe)?,
             index,
         ),
-        None => {
-            instantiate_universe_levels_scoped(&reduct, &levels).map_err(ReduceError::Universe)?
-        }
+        None => instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?,
     }))
 }
 

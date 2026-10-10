@@ -149,6 +149,7 @@ fn a_universe_context_is_consed_without_its_positions() {
     };
     let context = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: vec![UniverseConstraint {
             lower: Level::zero(),
             upper: Level::param(UniverseParam(0)),

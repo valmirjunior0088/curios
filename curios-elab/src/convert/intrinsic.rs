@@ -57,11 +57,11 @@ pub(crate) fn convert_intrinsic(
             Ok(true)
         }
         Outcome::Congruence(Congruence {
-            this_levels,
-            that_levels,
+            this_universes,
+            that_universes,
             operands,
         }) => {
-            if !Convert::compare_levels(context, &this_levels, &that_levels)? {
+            if !Convert::compare_universes(context, &this_universes, &that_universes)? {
                 return Ok(false);
             }
             let Some(operands) = operands else {

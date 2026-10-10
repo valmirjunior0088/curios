@@ -195,6 +195,7 @@ fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_unde
     let mut kernel = kernel();
     kernel.assume_universes(&UniverseContext {
         parameter_count: 2,
+        quality_count: 0,
         constraints: vec![between(0, 1), between(1, 0)],
     });
     let a = binder(80, "a");
@@ -223,6 +224,7 @@ fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_un
     let mut kernel = Kernel::new(10_000, SYNTAX);
     kernel.assume_universes(&UniverseContext {
         parameter_count: 2,
+        quality_count: 0,
         constraints: vec![between(0, 1)],
     });
     let a = binder(80, "a");
@@ -241,6 +243,7 @@ fn two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an
     let mut kernel = kernel();
     kernel.assume_universes(&UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: Vec::new(),
     });
     let a = binder(80, "a");

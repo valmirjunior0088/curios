@@ -18,7 +18,7 @@ use {
         InductArm, InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic,
         Level, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj,
         Rec, Scope, Struct, StructEntry, StructType, Subterm, Telescope, Term, Three, Totality,
-        Transient, Tuple, Two, UniverseContext, Var, Variant,
+        Transient, Tuple, Two, UniverseContext, Universes, Var, Variant,
     },
     curios_num::{Grain, Natural, Rounding},
     curios_utilities::{InfixOp, Plicity, Qualifier},
@@ -676,7 +676,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |_| {
             Subterm::Instance(Instance {
                 head: InstanceHead::Var(Var::free(binder(7))),
-                levels: Vec::new(),
+                universes: Universes::default(),
             })
             .into()
         }),
@@ -699,7 +699,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             );
             Subterm::Instance(Instance {
                 head: InstanceHead::RecProj(group_of(&rec), 0),
-                levels: Vec::new(),
+                universes: Universes::default(),
             })
             .into()
         }),
@@ -771,7 +771,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             Subterm::InductType(InductType {
                 name: name(),
-                universes: Vec::new(),
+                universes: Universes::default(),
                 params: vec![markers.visited()],
                 indices: vec![markers.visited()],
             })
@@ -780,7 +780,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             Subterm::Variant(Variant {
                 name: name(),
-                universes: Vec::new(),
+                universes: Universes::default(),
                 params: vec![markers.visited()],
                 tag: "mk".into(),
                 payload: vec![markers.visited()],
@@ -790,7 +790,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             Subterm::StructType(StructType {
                 name: name(),
-                universes: Vec::new(),
+                universes: Universes::default(),
                 params: vec![markers.visited()],
             })
             .into()
@@ -798,7 +798,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             Subterm::Struct(Struct {
                 name: name(),
-                universes: Vec::new(),
+                universes: Universes::default(),
                 params: vec![markers.visited()],
                 fields: vec![markers.visited()],
                 entries: vec![StructEntry::Field(None)],
@@ -958,7 +958,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
     // The variable head is the node's own data rather than a child term, so the fold reports nothing there, but it is still a call position the walk must see.
     let head: Term = Subterm::Instance(Instance {
         head: InstanceHead::Var(Var::free(planted())),
-        levels: Vec::new(),
+        universes: Universes::default(),
     })
     .into();
     assert!(
@@ -1305,7 +1305,7 @@ fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
     // At a level, since forcing spells an instance that states none as its bare head.
     let instance: Term = Subterm::Instance(Instance {
         head: InstanceHead::Var(Var::free(n)),
-        levels: vec![Level::zero()],
+        universes: Universes::levels(vec![Level::zero()]),
     })
     .into();
     let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));

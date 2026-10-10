@@ -54,8 +54,9 @@ use {
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
         Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
-        LevelHead, Lexicon, Module, Polarity, Probe, Reads, ReduceError, Reducer, Spelling,
-        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Variance,
+        LevelHead, Lexicon, Module, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
+        Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes,
+        Variance,
     },
     curios_utilities::{Plicity, SyntaxRegistry},
     std::{collections::BTreeMap, fmt, mem, rc::Rc},
@@ -68,6 +69,8 @@ use {
 pub enum Counted {
     /// The levels an occurrence supplies, against the parameters its declaration's scheme binds.
     UniverseLevels,
+    /// The sorts an occurrence states, against the ones its declaration leaves to its caller.
+    Sorts,
     /// The parameters an occurrence supplies, or a constructor's telescope opens with, against the declaration's.
     Parameters,
     /// The indices an occurrence supplies, or the targets a constructor states, against the declaration's index telescope.
@@ -92,6 +95,7 @@ impl fmt::Display for Counted {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Counted::UniverseLevels => "universe levels",
+            Counted::Sorts => "sorts",
             Counted::Parameters => "parameters",
             Counted::Indices => "indices",
             Counted::GroupMembers => "recursive group members",
@@ -122,6 +126,15 @@ pub enum Error {
     NotASort(Term),
     /// A sort that states neither `Prop` nor `Type`: one whose quality is a declaration's parameter, or a metavariable elaboration left. Every rule that reads a sort reads which of the two it is, so the kernel judges a term only once each of its sorts states one, and a parameter is what a declaration is checked at every assignment of.
     OpenSort(Term),
+    /// A declaration refused at one assignment of the sorts it leaves to its caller, `sorts` in the order it binds them. It is judged once at every assignment, each use standing at one of them, so a refusal at any is a refusal of the declaration.
+    AtSorts {
+        sorts: Vec<Quality>,
+        refusal: Box<Error>,
+    },
+    /// A recursive group judged while its own context leaves a sort to a caller: one standing inside a term, where a quality parameter is the enclosing declaration's. A top-level group is judged at each assignment of its sorts, where it leaves none.
+    GroupLeavesSort,
+    /// A declaration leaving more sorts to its caller than [`UniverseContext::QUALITY_LIMIT`]: judging it at every assignment is two to that count judgments.
+    TooManySorts { stated: usize },
     /// An elimination's motive is not a well-typed function landing in a sort. The motive is a claim the term makes about its own result — `infer` reads the elimination's type off it and `Sort::of` classifies a type-valued `match` by it — so a motive stating one sort while its arms inhabit another would be believed by both.
     NotAMotive {
         stated: Term,
@@ -197,6 +210,8 @@ impl Exhaustion for Error {
     fn refusal(&self) -> Option<&ReduceError> {
         match self {
             Self::Reduce(error) => error.refusal(),
+            // The budget running out at one assignment is the declaration's budget running out.
+            Self::AtSorts { refusal, .. } => refusal.refusal(),
             _ => None,
         }
     }
@@ -276,6 +291,29 @@ impl fmt::Display for Displayed<'_> {
                 let term = term.spelled(spelling);
                 write!(formatter, "`{term}` states neither `Prop` nor `Type`")
             }
+            Error::AtSorts { sorts, refusal } => {
+                let sorts = sorts
+                    .iter()
+                    .map(|quality| match quality.is_prop() {
+                        true => "`Prop`",
+                        false => "`Type`",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(
+                    formatter,
+                    "with the sorts it leaves to its caller at {sorts}: "
+                )?;
+                Displayed(refusal, Rc::clone(spelling)).fmt(formatter)
+            }
+            Error::GroupLeavesSort => formatter.write_str(
+                "a recursive group inside a term leaves a sort to its caller, which a top-level declaration alone does",
+            ),
+            Error::TooManySorts { stated } => write!(
+                formatter,
+                "this declaration leaves {stated} sorts to its caller, past the {} one declaration may",
+                UniverseContext::QUALITY_LIMIT,
+            ),
             Error::NoProof(type_) => {
                 let type_ = type_.spelled(spelling);
                 write!(
@@ -708,21 +746,25 @@ impl<'s> Kernel<'s> {
         left == right || (self.level_leq(left, right) && self.level_leq(right, left))
     }
 
-    /// [`Kernel::level_eq`] pointwise over two instance vectors.
-    pub(crate) fn levels_eq(&self, left: &[Level], right: &[Level]) -> bool {
-        left.len() == right.len()
+    /// Whether two instances are one: the sorts they state the same, and [`Kernel::level_eq`] pointwise over their levels. Two instances apart in a sort are two types, whatever their levels.
+    pub(crate) fn universes_eq(&self, left: &Universes, right: &Universes) -> bool {
+        left.qualities == right.qualities
+            && left.levels.len() == right.levels.len()
             && left
+                .levels
                 .iter()
-                .zip(right)
+                .zip(&right.levels)
                 .all(|(this, that)| self.level_eq(this, that))
     }
 
-    /// [`Kernel::levels_eq`] at the positions the family `name` is invariant in: a level its vector calls irrelevant is compared at nothing. A name the registry does not hold, or a position its vector does not reach, compares its level, which is what every level was compared at before a vector existed.
-    pub(crate) fn instances_eq(&self, name: &Global, left: &[Level], right: &[Level]) -> bool {
-        left.len() == right.len()
+    /// [`Kernel::universes_eq`] with the levels compared at the positions the family `name` is invariant in: a level its vector calls irrelevant is compared at nothing, and the sorts two instances state are compared whatever the vector says. A name the registry does not hold, or a position its vector does not reach, compares its level, which is what every level was compared at before a vector existed.
+    pub(crate) fn instances_eq(&self, name: &Global, left: &Universes, right: &Universes) -> bool {
+        left.qualities == right.qualities
+            && left.levels.len() == right.levels.len()
             && left
+                .levels
                 .iter()
-                .zip(right)
+                .zip(&right.levels)
                 .enumerate()
                 .all(|(index, (this, that))| {
                     self.variance(name, index) == Variance::Irrelevant || self.level_eq(this, that)
@@ -749,18 +791,34 @@ impl<'s> Kernel<'s> {
     ///
     /// A constraint level naming a parameter the instance does not supply is refused rather than kept: an unsubstituted scheme parameter would be misread as one of the ambient item's, which is the accepting direction.
     ///
-    /// The instance's *width* is checked first, and separately, because the constraint loop cannot see it. A scheme with an empty constraint set never enters the guard above at all, and the guard only ever covered levels appearing in constraints — while every one of the declaration's own terms is instantiated at these same levels by the callers below. There an unsupplied parameter is not refused but renumbered: `instantiate_universe_levels_scoped` shifts it down by the instance's width, which is the correct de Bruijn step for a full instance and a capture for a short one, landing the declaration's parameter on the ambient item's. This is the same hazard the paragraph above names, at the position it does not reach.
+    /// The instance's *width* is checked first, and separately, because the constraint loop cannot see it. A scheme with an empty constraint set never enters the guard above at all, and the guard only ever covered levels appearing in constraints — while every one of the declaration's own terms is instantiated at these same levels by the callers below. There an unsupplied parameter is not refused but renumbered: `instantiate_universes_scoped` shifts it down by the instance's width, which is the correct de Bruijn step for a full instance and a capture for a short one, landing the declaration's parameter on the ambient item's. This is the same hazard the paragraph above names, at the position it does not reach.
     pub(crate) fn check_instance(
         &self,
         context: &UniverseContext,
-        levels: &[Level],
+        universes: &Universes,
     ) -> Result<(), Error> {
+        let levels = &universes.levels;
         if levels.len() != context.parameter_count {
             return Err(Error::Arity {
                 counted: Counted::UniverseLevels,
                 expected: context.parameter_count,
                 actual: levels.len(),
             });
+        }
+        // The sorts are counted as the levels are, and each states one: a term is judged at one assignment of its declaration's, so an instance in it names no parameter.
+        if universes.qualities.len() != context.quality_count {
+            return Err(Error::Arity {
+                counted: Counted::Sorts,
+                expected: context.quality_count,
+                actual: universes.qualities.len(),
+            });
+        }
+        if let Some(open) = universes
+            .qualities
+            .iter()
+            .find(|quality| !quality.is_ground())
+        {
+            return Err(Error::OpenSort(Term::sort_at(*open, Level::zero())));
         }
 
         let instantiate = |level: &Level| -> Result<Level, Error> {
@@ -1155,7 +1213,7 @@ impl<'s> Kernel<'s> {
 
         match self.scheme_of(name) {
             None => Ok(None),
-            Some((type_, universes)) => match universes.parameter_count {
+            Some((type_, universes)) => match universes.width() {
                 0 => Ok(Some(type_)),
                 expected => Err(Error::MissingUniverseInstance {
                     name: *name,

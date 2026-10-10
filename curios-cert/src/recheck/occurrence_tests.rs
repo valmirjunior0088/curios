@@ -7,7 +7,7 @@ use {
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductParam, Intrinsic,
         Item, Module, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term, Totality,
-        UniverseContext, test_support::declaring,
+        UniverseContext, Universes, test_support::declaring,
     },
     curios_utilities::{Plicity, Qualifier},
     std::{
@@ -421,7 +421,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
 
     let applied: Term = Subterm::StructType(StructType {
         name,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: vec![Term::intrinsic(Intrinsic::NatType)],
     })
     .into();

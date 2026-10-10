@@ -37,11 +37,11 @@ pub(super) fn convert_intrinsic(
         Outcome::Unequal | Outcome::Unpaired => Ok(false),
         Outcome::Residual(this, that) => ground(kernel, history, &this, &that),
         Outcome::Congruence(Congruence {
-            this_levels,
-            that_levels,
+            this_universes,
+            that_universes,
             operands,
         }) => {
-            if !kernel.levels_eq(&this_levels, &that_levels) {
+            if !kernel.universes_eq(&this_universes, &that_universes) {
                 return Ok(false);
             }
             let Some(operands) = operands else {

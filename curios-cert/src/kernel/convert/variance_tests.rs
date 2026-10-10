@@ -95,6 +95,7 @@ fn a_definition_applied_at_two_instances_converts_by_unfolding() {
             &Term::func([(carrier, sort)], Term::free_var(&carrier)),
             &UniverseContext {
                 parameter_count: 1,
+                quality_count: 0,
                 constraints: Vec::new(),
             },
         )

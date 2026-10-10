@@ -23,6 +23,7 @@ fn declare_wrap(context: &mut Context, variance: Variance) {
             InductDecl {
                 universe_context: UniverseContext {
                     parameter_count: 1,
+                    quality_count: 0,
                     constraints: Vec::new(),
                 },
                 arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
@@ -42,6 +43,7 @@ fn declare_held(context: &mut Context) {
     let level = || Level::param(UniverseParam(0));
     let scheme = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: Vec::new(),
     };
 
@@ -94,6 +96,7 @@ fn define_pick(context: &mut Context, variance: Variance) {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         island: Qualifier::empty(),

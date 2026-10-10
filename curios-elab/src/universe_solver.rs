@@ -21,7 +21,7 @@ use {
     curios_core::{
         Level, LevelHead, QualityMetaId, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseParam,
-        UniverseRole, UniverseSeed,
+        UniverseRole, UniverseSeed, Universes,
     },
     curios_utilities::recurse,
     std::collections::{BTreeMap, BTreeSet, VecDeque},
@@ -1550,12 +1550,17 @@ impl UniverseSolver {
     }
 
     /// Instantiate a closed context for one use, returning its fresh argument vector after inserting the substituted residual constraints transactionally. The levels it mints are the use's own — `Provenance::Occurrence`.
-    pub fn instantiate(&mut self, context: &UniverseContext) -> Result<Vec<Level>, UniverseError> {
+    pub fn instantiate(&mut self, context: &UniverseContext) -> Result<Universes, UniverseError> {
         let levels = (0..context.parameter_count)
             .map(|_| Level::meta(self.mint(Provenance::Occurrence, None)))
             .collect::<Vec<_>>();
-        self.instantiate_at(context, &levels)?;
-        Ok(levels)
+        // A sort the declaration leaves to its caller is this use's to state: a quality nothing has decided yet.
+        let qualities = (0..context.quality_count)
+            .map(|_| self.fresh_quality(None))
+            .collect::<Vec<_>>();
+        let universes = Universes { levels, qualities };
+        self.instantiate_at(context, &universes)?;
+        Ok(universes)
     }
 
     /// Insert a closed context's residual constraints at an already chosen occurrence instance. Used when re-elaborating an explicit `Instance`: its stored arguments are authoritative and must not be replaced by a second fresh instantiation.
@@ -1564,12 +1569,19 @@ impl UniverseSolver {
     pub fn instantiate_at(
         &mut self,
         context: &UniverseContext,
-        levels: &[Level],
+        universes: &Universes,
     ) -> Result<(), UniverseError> {
+        let levels = &universes.levels;
         if levels.len() != context.parameter_count {
             return Err(UniverseError::InstanceArity {
                 expected: context.parameter_count,
                 got: levels.len(),
+            });
+        }
+        if universes.qualities.len() != context.quality_count {
+            return Err(UniverseError::QualityArity {
+                expected: context.quality_count,
+                got: universes.qualities.len(),
             });
         }
         let mark = self.mark();
@@ -1667,6 +1679,7 @@ impl UniverseSolver {
         constraints.retain(|constraint| !constraint.lower.structurally_leq(&constraint.upper));
         let context = UniverseContext {
             parameter_count: replacement.len(),
+            quality_count: 0,
             constraints,
         };
         universe_context_validate(&context)?;

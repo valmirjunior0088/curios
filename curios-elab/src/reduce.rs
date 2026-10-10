@@ -23,10 +23,10 @@ use {
     curios_core::{
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, Classes, ClosedHost, ClosedMemo,
         Cost, Demand, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType,
-        Instance, InstanceHead, Intrinsic, Layer, Let, Level, Match, MatchResult, Metavar, Nat,
-        Polarity, Probe, Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, Visit, accelerable,
-        atoms_within, classable, instantiate_universe_levels_scoped, probe_spellings,
+        Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity,
+        Probe, Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
+        Subterm, Telescope, Term, Tuple, TupleType, Universes, Var, Variant, Visit, accelerable,
+        atoms_within, classable, instantiate_universes_scoped, probe_spellings,
         project_erased_universes, reduce_closed, reduce_intrinsic, refold,
     },
     curios_utilities::{SyntaxRegistry, recurse},
@@ -788,16 +788,16 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
 }
 
 fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, ReduceError> {
-    let Instance { head, levels } = instance;
+    let Instance { head, universes } = instance;
 
     let reduct = match &head {
         InstanceHead::Var(var) => match context.var_reduct_at(var.unwrap()).cloned() {
             Some(reduct) => reduct,
-            None => return Ok(Reduce::Break(Term::instance(head, levels))),
+            None => return Ok(Reduce::Break(Term::instance(head, universes))),
         },
         InstanceHead::RecProj(group, index) => {
             return Ok(Reduce::Continue(Term::rec_proj(
-                opened_instance(context, group, &levels)?,
+                opened_instance(context, group, &universes)?,
                 *index,
             )));
         }
@@ -805,24 +805,22 @@ fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, 
 
     // The variable's stored value may itself be a projection, whose group takes the instance whole rather than a per-level rewrite.
     let reduct = match reduct.as_rec_proj() {
-        Some((group, index)) => Term::rec_proj(opened_instance(context, group, &levels)?, index),
-        None => {
-            instantiate_universe_levels_scoped(&reduct, &levels).map_err(ReduceError::Universe)?
-        }
+        Some((group, index)) => Term::rec_proj(opened_instance(context, group, &universes)?, index),
+        None => instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?,
     };
     Ok(Reduce::Continue(reduct))
 }
 
-/// `group` at `levels`, remembered as that instance of it ([`Context::opened_instance`]): the instance holds the levels substituted through every member, and what names a member of it again needs the two apart.
+/// `group` at `universes`, remembered as that instance of it ([`Context::opened_instance`]): the instance holds them substituted through every member, and what names a member of it again needs the two apart.
 fn opened_instance(
     context: &mut Context,
     group: &RecGroup,
-    levels: &[Level],
+    universes: &Universes,
 ) -> Result<RecGroup, ReduceError> {
     let instance = group
-        .instantiate_universes(levels)
+        .instantiate_universes(universes)
         .map_err(ReduceError::Universe)?;
-    context.opened_instance(&instance, group, levels);
+    context.opened_instance(&instance, group, universes);
     Ok(instance)
 }
 

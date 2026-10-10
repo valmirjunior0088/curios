@@ -27,8 +27,8 @@ use {
         Advance, Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType,
         Global, InductDecl, InductParam, Intrinsic, Item, Level, Minted, Module, Nominal, Places,
         Quality, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term, Totality,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
-        stamp_declaration_instance, universe_metas,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
+        Universes, Visit, stamp_declaration_instance, universe_metas,
     },
     curios_utilities::{Plicity, Qualifier, grown},
     std::{
@@ -45,14 +45,14 @@ use {
 /// The two nominal cases are separate arms rather than one, because the node a declaration normalizes to is what distinguishes a concept from an inductive here. Nothing about the *name* does — deciding by inspecting `name` would be guessing at a fact the term already states.
 ///
 /// Memoized on node identity: the hook only latches the first occurrence, which a memoized walk still reaches first, and a finalized value can hold a solution stored as a reduct, whose tree can be exponential in its depth.
-fn declaration_instance(value: &Term, name: &Global) -> Option<Vec<Level>> {
+fn declaration_instance(value: &Term, name: &Global) -> Option<Universes> {
     let found = Rc::new(RefCell::new(None));
     let sink = Rc::clone(&found);
     let name = *name;
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term: &Term| {
-            let levels = match &**term {
+            let stated = match &**term {
                 Subterm::StructType(struct_type) if struct_type.name == name => {
                     Some(struct_type.universes.clone())
                 }
@@ -66,14 +66,14 @@ fn declaration_instance(value: &Term, name: &Global) -> Option<Vec<Level>> {
                         .and_then(Free::as_global)
                         .is_some_and(|head| *head == name) =>
                 {
-                    Some(instance.levels.clone())
+                    Some(instance.universes.clone())
                 }
                 _ => None,
             };
-            if let Some(levels) = levels
+            if let Some(stated) = stated
                 && sink.borrow().is_none()
             {
-                *sink.borrow_mut() = Some(levels);
+                *sink.borrow_mut() = Some(stated);
             }
             None
         }),
@@ -591,7 +591,7 @@ fn finalize_definition(
         metas.extend(context.universe_metas_in(&body));
         context.finalize_universe_metas_at_instance(
             metas,
-            &instance,
+            &instance.levels,
             universe_context.parameter_count,
         )?;
         let type_ = context.zonk_universe_levels(&type_)?;
@@ -620,7 +620,7 @@ fn finalize_definition(
         metas.extend(context.universe_metas_in(&body));
         context.finalize_universe_metas_at_instance(
             metas,
-            &instance,
+            &instance.levels,
             universe_context.parameter_count,
         )?;
         let type_ = context.zonk_universe_levels(&type_)?;
@@ -669,7 +669,7 @@ fn finalize_definition(
     compared.extend(unfolded);
 
     let universe_context = context.finalize_universe_metas(interface, internal, compared)?;
-    let levels = universe_context.identity_instance();
+    let instance = universe_context.identity_instance();
     let owned = BTreeSet::from([*name]);
     // A non-recursive definition's own name stays free in its signature, body, and registry entry: nothing captures it, so each occurrence carries the instance itself. A definition whose body names *itself* is about to be captured by a single-member group instead, and its occurrences reach that binder — see [`elaborate_module_let`].
     let free = self_reference;
@@ -677,10 +677,14 @@ fn finalize_definition(
         &context.zonk_universe_levels(&type_)?,
         &owned,
         free,
-        &levels,
+        &instance,
     );
-    let body =
-        stamp_declaration_instance(&context.zonk_universe_levels(&body)?, &owned, free, &levels);
+    let body = stamp_declaration_instance(
+        &context.zonk_universe_levels(&body)?,
+        &owned,
+        free,
+        &instance,
+    );
 
     if let Some(struct_decl) = context.struct_decl(name).cloned() {
         context.update_struct(
@@ -691,13 +695,13 @@ fn finalize_definition(
                     &context.zonk_universe_levels(&struct_decl.arity)?,
                     &owned,
                     free,
-                    &levels,
+                    &instance,
                 ),
                 result_sort: stamp_declaration_instance(
                     &context.zonk_universe_levels(&struct_decl.result_sort)?,
                     &owned,
                     free,
-                    &levels,
+                    &instance,
                 ),
                 module: struct_decl.module,
                 rep_public: struct_decl.rep_public,
@@ -715,7 +719,7 @@ fn finalize_definition(
                     &context.zonk_universe_levels(&concept.params)?,
                     &owned,
                     free,
-                    &levels,
+                    &instance,
                 ),
                 fields: concept.fields,
                 supers: concept.supers,
@@ -1092,7 +1096,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         value: &B,
         owned: &BTreeSet<Global>,
         self_reference: SelfReference,
-        instance: &[Level],
+        instance: &Universes,
     ) -> Result<B, Error> {
         Ok(stamp_declaration_instance(
             &context.zonk_universe_levels(value)?,

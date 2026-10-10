@@ -68,7 +68,7 @@ use {
         Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, Probe, Quality, RecGroup,
         ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
-        Variance, WitnessKey, WitnessOrigin, instantiate_universe_levels_scoped,
+        Universes, Variance, WitnessKey, WitnessOrigin, instantiate_universes_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -1032,20 +1032,20 @@ impl<'s> Context<'s> {
         names
     }
 
-    /// Remember that `instance` is `group` opened at `levels`, for the declaration in progress: reduction's own record, read back by [`Context::instance_of`].
+    /// Remember that `instance` is `group` opened at `universes`, for the declaration in progress: reduction's own record, read back by [`Context::instance_of`].
     pub(crate) fn opened_instance(
         &mut self,
         instance: &RecGroup,
         group: &RecGroup,
-        levels: &[Level],
+        universes: &Universes,
     ) {
         self.typing
             .caches
-            .instance_insert(instance.clone(), group.clone(), levels.to_vec());
+            .instance_insert(instance.clone(), group.clone(), universes.clone());
     }
 
-    /// The group `instance` was opened from and the levels it was opened at, where reduction opened it in the declaration in progress.
-    pub(crate) fn instance_of(&self, instance: &RecGroup) -> Option<&(RecGroup, Vec<Level>)> {
+    /// The group `instance` was opened from and the instance it was opened at, where reduction opened it in the declaration in progress.
+    pub(crate) fn instance_of(&self, instance: &RecGroup) -> Option<&(RecGroup, Universes)> {
         self.typing.caches.instance_get(instance)
     }
 
@@ -1079,7 +1079,7 @@ impl<'s> Context<'s> {
     pub(crate) fn instantiate_assumption_universes(
         &mut self,
         name: &Free,
-    ) -> Result<Option<(Term, Vec<Level>)>, UniverseError> {
+    ) -> Result<Option<(Term, Universes)>, UniverseError> {
         let Some(type_) = self.assumption(name).cloned() else {
             return Ok(None);
         };
@@ -1088,18 +1088,18 @@ impl<'s> Context<'s> {
             .frames
             .assumption_universe_context(name)
             .unwrap_or_default();
-        if universe_context.parameter_count == 0 {
-            return Ok(Some((type_, Vec::new())));
+        if universe_context.width() == 0 {
+            return Ok(Some((type_, Universes::default())));
         }
-        let levels = self.universes_mut().instantiate(&universe_context)?;
-        let type_ = instantiate_universe_levels_scoped(&type_, &levels)?;
-        Ok(Some((type_, levels)))
+        let universes = self.universes_mut().instantiate(&universe_context)?;
+        let type_ = instantiate_universes_scoped(&type_, &universes)?;
+        Ok(Some((type_, universes)))
     }
 
     pub(crate) fn instantiate_assumption(
         &mut self,
         name: &Free,
-    ) -> Result<Option<(Term, Vec<Level>)>, Error> {
+    ) -> Result<Option<(Term, Universes)>, Error> {
         self.instantiate_assumption_universes(name)
             .map_err(Error::from)
     }
@@ -1107,7 +1107,7 @@ impl<'s> Context<'s> {
     pub(crate) fn instantiate_assumption_at(
         &mut self,
         name: &Free,
-        levels: &[Level],
+        universes: &Universes,
     ) -> Result<Option<Term>, Error> {
         let Some(type_) = self.assumption(name).cloned() else {
             return Ok(None);
@@ -1116,7 +1116,7 @@ impl<'s> Context<'s> {
         #[cfg(feature = "profile")]
         if found
             .as_ref()
-            .is_none_or(|context| context.parameter_count != levels.len())
+            .is_none_or(|context| context.parameter_count != universes.levels.len())
         {
             let (frames, holders) = self.typing.frames.assumption_universe_holders(name);
             curios_profile::note!(
@@ -1124,7 +1124,7 @@ impl<'s> Context<'s> {
                 %name,
                 registered = found.is_some(),
                 expected = found.as_ref().map_or(0, |context| context.parameter_count),
-                got = levels.len(),
+                got = universes.levels.len(),
                 frames,
                 ?holders,
                 "assumption instance arity mismatch",
@@ -1132,9 +1132,9 @@ impl<'s> Context<'s> {
         }
         let universe_context = found.unwrap_or_default();
         self.universes_mut()
-            .instantiate_at(&universe_context, levels)
+            .instantiate_at(&universe_context, universes)
             .map_err(Error::from)?;
-        let type_ = instantiate_universe_levels_scoped(&type_, levels).map_err(Error::from)?;
+        let type_ = instantiate_universes_scoped(&type_, universes).map_err(Error::from)?;
         Ok(Some(type_))
     }
 
@@ -1142,64 +1142,62 @@ impl<'s> Context<'s> {
         &mut self,
         universe_context: &UniverseContext,
         value: &B,
-    ) -> Result<(B, Vec<Level>), Error> {
-        if universe_context.parameter_count == 0 {
-            return Ok((value.clone(), Vec::new()));
+    ) -> Result<(B, Universes), Error> {
+        if universe_context.width() == 0 {
+            return Ok((value.clone(), Universes::default()));
         }
-        let levels = self
+        let universes = self
             .universes_mut()
             .instantiate(universe_context)
             .map_err(Error::from)?;
-        let value = instantiate_universe_levels_scoped(value, &levels).map_err(Error::from)?;
-        Ok((value, levels))
+        let value = instantiate_universes_scoped(value, &universes).map_err(Error::from)?;
+        Ok((value, universes))
     }
 
     pub(crate) fn instantiate_universe_bound_at<B: Bound>(
         &mut self,
         universe_context: &UniverseContext,
         value: &B,
-        levels: &[Level],
+        universes: &Universes,
     ) -> Result<B, UniverseError> {
         #[cfg(feature = "profile")]
-        if levels.len() != universe_context.parameter_count {
+        if universes.levels.len() != universe_context.parameter_count {
             curios_profile::note!(
                 target: "curios_elab::universe",
                 expected = universe_context.parameter_count,
-                got = levels.len(),
+                got = universes.levels.len(),
                 "bound instance arity mismatch",
             );
         }
         self.universes_mut()
-            .instantiate_at(universe_context, levels)?;
-        instantiate_universe_levels_scoped(value, levels)
+            .instantiate_at(universe_context, universes)?;
+        instantiate_universes_scoped(value, universes)
     }
 
     pub(crate) fn instantiate_induct_decl_at(
         &mut self,
         induct_decl: &InductDecl,
-        levels: &[Level],
+        universes: &Universes,
     ) -> Result<InductDecl, UniverseError> {
-        fn rewrite<B: Bound>(value: &B, levels: &[Level]) -> Result<B, UniverseError> {
-            instantiate_universe_levels_scoped(value, levels)
-        }
-
         #[cfg(feature = "profile")]
-        if levels.len() != induct_decl.universe_context.parameter_count {
+        if universes.levels.len() != induct_decl.universe_context.parameter_count {
             curios_profile::note!(
                 target: "curios_elab::universe",
                 module = ?induct_decl.module,
                 expected = induct_decl.universe_context.parameter_count,
-                got = levels.len(),
+                got = universes.levels.len(),
                 "induct instance arity mismatch",
             );
         }
         self.universes_mut()
-            .instantiate_at(&induct_decl.universe_context, levels)?;
+            .instantiate_at(&induct_decl.universe_context, universes)?;
         let mut instantiated = induct_decl.clone();
-        instantiated.arity = rewrite(&instantiated.arity, levels)?;
-        instantiated.result_sort = rewrite(&instantiated.result_sort, levels)?;
+        instantiated.arity = instantiate_universes_scoped(&instantiated.arity, universes)?;
+        instantiated.result_sort =
+            instantiate_universes_scoped(&instantiated.result_sort, universes)?;
         for constructor in instantiated.signatures_mut() {
-            constructor.telescope = rewrite(&constructor.telescope, levels)?;
+            constructor.telescope =
+                instantiate_universes_scoped(&constructor.telescope, universes)?;
         }
         instantiated.universe_context = UniverseContext::empty();
         Ok(instantiated)
@@ -1208,27 +1206,24 @@ impl<'s> Context<'s> {
     pub(crate) fn instantiate_struct_decl_at(
         &mut self,
         struct_decl: &StructDecl,
-        levels: &[Level],
+        universes: &Universes,
     ) -> Result<StructDecl, UniverseError> {
-        fn rewrite<B: Bound>(value: &B, levels: &[Level]) -> Result<B, UniverseError> {
-            instantiate_universe_levels_scoped(value, levels)
-        }
-
         #[cfg(feature = "profile")]
-        if levels.len() != struct_decl.universe_context.parameter_count {
+        if universes.levels.len() != struct_decl.universe_context.parameter_count {
             curios_profile::note!(
                 target: "curios_elab::universe",
                 module = ?struct_decl.module,
                 expected = struct_decl.universe_context.parameter_count,
-                got = levels.len(),
+                got = universes.levels.len(),
                 "struct instance arity mismatch",
             );
         }
         self.universes_mut()
-            .instantiate_at(&struct_decl.universe_context, levels)?;
+            .instantiate_at(&struct_decl.universe_context, universes)?;
         let mut instantiated = struct_decl.clone();
-        instantiated.arity = rewrite(&instantiated.arity, levels)?;
-        instantiated.result_sort = rewrite(&instantiated.result_sort, levels)?;
+        instantiated.arity = instantiate_universes_scoped(&instantiated.arity, universes)?;
+        instantiated.result_sort =
+            instantiate_universes_scoped(&instantiated.result_sort, universes)?;
         instantiated.universe_context = UniverseContext::empty();
         Ok(instantiated)
     }

@@ -81,6 +81,7 @@ pub(super) fn shaped(params: usize, indices: usize, variances: &[Variance]) -> I
     InductDecl {
         universe_context: UniverseContext {
             parameter_count: variances.len(),
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::build(

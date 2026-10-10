@@ -41,6 +41,8 @@ mod registry_tests;
 #[cfg(test)]
 mod scope_tests;
 #[cfg(test)]
+mod sort_tests;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod totality_tests;
@@ -283,26 +285,28 @@ fn struct_metavar(declaration: &StructDecl) -> Option<MetavarId> {
 /// The first unsolved *universe* metavariable one of `value`'s levels holds.
 ///
 /// A level holding one is elaboration residue exactly as a `Metavar` node is, and no judgment refuses it: `Sort::of` reads `Type(?u)` and answers `Type(?u + 1)` without ever asking whether the level is ground, and [`closed`](curios_core::UniverseContext::is_closed) inspects a `UniverseContext`'s *constraints*, never a level sitting inside a term. So this is not a question of which terms the walk reaches; it is the level algebra having no opinion about an unsolved level, which is why the refusal belongs at the boundary rather than inside a judgment.
-fn universe_residue<B: Bound>(value: &B) -> Option<Error> {
+///
+/// `sorts` is how many sorts `value`'s declaration leaves to its caller, which [`open_sort`] reads.
+fn universe_residue<B: Bound>(value: &B, sorts: usize) -> Option<Error> {
     universe_metas(value)
         .into_iter()
         .next()
         .map(|meta| Error::NotCore(Term::type_at(Level::meta(meta))))
-        .or_else(|| open_sort(value))
+        .or_else(|| open_sort(value, sorts))
 }
 
-/// The first sort of `value` whose quality is open, as the refusal of it.
+/// The first sort or instance of `value` stating a quality its declaration, which leaves `sorts` to its caller, does not bind, as the refusal of it.
 ///
-/// A quality metavariable is residue as a level's is. A quality parameter is one no declaration binds: a context states its level parameters and no quality, so nothing a use supplies would say which sort the term stands at, and every rule that reads a sort would read one that states none.
-fn open_sort<B: Bound>(value: &B) -> Option<Error> {
-    open_quality(value).map(|quality| Error::OpenSort(Term::sort_at(quality, Level::zero())))
+/// A quality metavariable is residue as a level's is. A quality parameter at or past the declaration's count is one nothing binds: no assignment the declaration is judged at reaches it, so the term would be judged, and used, at a sort that states neither `Prop` nor `Type`.
+fn open_sort<B: Bound>(value: &B, sorts: usize) -> Option<Error> {
+    open_quality(value, sorts).map(|quality| Error::OpenSort(Term::sort_at(quality, Level::zero())))
 }
 
 /// The first universe parameter one of `value`'s levels names that a scheme of `parameter_count` parameters does not have.
 ///
 /// A declaration's universe scheme promises that every level it mentions is ground or one of the parameters it declares, so a use site fully determines it. [`universe_residue`] above checks half of that promise — no unsolved metavariable — and this checks the other half: no parameter index past the declaration's own count. `closed` sees a `UniverseContext`'s constraints and not a level sitting in a term, so the two are the same omission at different depths.
 ///
-/// It is a soundness rule rather than a tidiness one because of what instantiation does with an out-of-range index: `instantiate_universe_levels_scoped` substitutes what the instance supplies and *renumbers* the rest down by the instance's width. For a well-scoped term that is the correct de Bruijn shift, since an index at or above the width names an enclosing binder. For an ill-scoped one it is a capture — `Type.{param 1}` and `Type.{param 0}` both instantiate at `[param 0]` to the same level — so two distinct levels become one and every cumulativity question after that is answered about the wrong one.
+/// It is a soundness rule rather than a tidiness one because of what instantiation does with an out-of-range index: `instantiate_universes_scoped` substitutes what the instance supplies and *renumbers* the rest down by the instance's width. For a well-scoped term that is the correct de Bruijn shift, since an index at or above the width names an enclosing binder. For an ill-scoped one it is a capture — `Type.{param 1}` and `Type.{param 0}` both instantiate at `[param 0]` to the same level — so two distinct levels become one and every cumulativity question after that is answered about the wrong one.
 ///
 /// Scoped rather than flat: a nested scheme binds its own parameters innermost, so the bound at any point is the enclosing binder depth plus the declaration's count, exactly as `curios-elab`'s `validate_bound_universes` computes it. Metavariables are left to [`universe_residue`] so the two diagnostics stay distinct.
 fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<Error> {
@@ -319,14 +323,15 @@ fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<Error>
 
 /// Every kind of elaboration residue an `induct` registry entry can carry.
 fn induct_residue(declaration: &InductDecl) -> Option<Error> {
+    let sorts = declaration.universe_context.quality_count;
     induct_metavar(declaration)
         .map(|id| Error::NotCore(Term::hole(id)))
-        .or_else(|| universe_residue(&declaration.arity))
-        .or_else(|| universe_residue(&declaration.result_sort))
+        .or_else(|| universe_residue(&declaration.arity, sorts))
+        .or_else(|| universe_residue(&declaration.result_sort, sorts))
         .or_else(|| {
             declaration
                 .signatures()
-                .find_map(|constructor| universe_residue(&constructor.telescope))
+                .find_map(|constructor| universe_residue(&constructor.telescope, sorts))
         })
         .or_else(|| {
             let count = declaration.universe_context.parameter_count;
@@ -342,10 +347,11 @@ fn induct_residue(declaration: &InductDecl) -> Option<Error> {
 
 /// [`induct_residue`] for a `struct` registry entry.
 fn struct_residue(declaration: &StructDecl) -> Option<Error> {
+    let sorts = declaration.universe_context.quality_count;
     struct_metavar(declaration)
         .map(|id| Error::NotCore(Term::hole(id)))
-        .or_else(|| universe_residue(&declaration.arity))
-        .or_else(|| universe_residue(&declaration.result_sort))
+        .or_else(|| universe_residue(&declaration.arity, sorts))
+        .or_else(|| universe_residue(&declaration.result_sort, sorts))
         .or_else(|| {
             let count = declaration.universe_context.parameter_count;
             universe_escape(&declaration.arity, count)
@@ -538,8 +544,9 @@ fn verdicts_within<'s>(
     for item in changed() {
         for definition in item.definitions() {
             let count = definition.universe_context.parameter_count;
-            if let Some(error) = universe_residue(&definition.type_)
-                .or_else(|| universe_residue(&definition.body))
+            let sorts = definition.universe_context.quality_count;
+            if let Some(error) = universe_residue(&definition.type_, sorts)
+                .or_else(|| universe_residue(&definition.body, sorts))
                 .or_else(|| universe_escape(&definition.type_, count))
                 .or_else(|| universe_escape(&definition.body, count))
             {
@@ -550,13 +557,13 @@ fn verdicts_within<'s>(
             }
         }
     }
-    // The module's own entry stands under no scheme, so every parameter index in it escapes.
+    // The module's own entry stands under no scheme, so every parameter index in it escapes, and every sort it states is one.
     if let Some(entry) = entry
         && let Some(error) = entry
             .type_
             .as_ref()
-            .and_then(universe_residue)
-            .or_else(|| universe_residue(&entry.body))
+            .and_then(|type_| universe_residue(type_, 0))
+            .or_else(|| universe_residue(&entry.body, 0))
             .or_else(|| {
                 entry
                     .type_

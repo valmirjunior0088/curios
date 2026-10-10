@@ -30,8 +30,8 @@ use {
     super::{
         Atom, Bound, Enter, Extent, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
         MaskedLevels, Quality, QualityMetaId, Scope, SelfReference, Spelled, Spelling, Telescope,
-        Three, Two, UniverseMetaId, Var, Variance, Visit, print_term, project_erased_universes,
-        stamp_declaration_instance, universe_metas,
+        Three, Two, UniverseMetaId, Universes, Var, Variance, Visit, print_term,
+        project_erased_universes, stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
     curios_num::{Grain, Natural},
@@ -313,7 +313,7 @@ impl Term {
         );
     }
 
-    /// Rewrite this node, if it is an occurrence of one of `names`, to denote the declaration instance `levels`. Returns `None` for every other node, leaving it to ordinary traversal.
+    /// Rewrite this node, if it is an occurrence of one of `names`, to denote the declaration instance `universes`. Returns `None` for every other node, leaving it to ordinary traversal.
     ///
     /// Two occurrence shapes carry an instance. A nominal normal form holds it in its own universe vector; a not-yet-reduced reference to a type former is an ordinary variable, which holds it as the head of a wrapping [`Instance`] — the same node an external use site receives from scheme instantiation. A variable already heading an `Instance` has been instantiated and is returned untouched rather than wrapped twice.
     ///
@@ -322,17 +322,17 @@ impl Term {
         &self,
         names: &BTreeSet<Global>,
         self_reference: SelfReference,
-        levels: &[Level],
+        universes: &Universes,
     ) -> Option<Self> {
         fn stamp(
             terms: &[Term],
             names: &BTreeSet<Global>,
             self_reference: SelfReference,
-            levels: &[Level],
+            universes: &Universes,
         ) -> Vec<Term> {
             terms
                 .iter()
-                .map(|term| stamp_declaration_instance(term, names, self_reference, levels))
+                .map(|term| stamp_declaration_instance(term, names, self_reference, universes))
                 .collect()
         }
 
@@ -340,32 +340,32 @@ impl Term {
             Subterm::InductType(induct) if names.contains(&induct.name) => {
                 Subterm::InductType(InductType {
                     name: induct.name,
-                    universes: levels.to_vec(),
-                    params: stamp(&induct.params, names, self_reference, levels),
-                    indices: stamp(&induct.indices, names, self_reference, levels),
+                    universes: universes.clone(),
+                    params: stamp(&induct.params, names, self_reference, universes),
+                    indices: stamp(&induct.indices, names, self_reference, universes),
                 })
             }
             Subterm::Variant(variant) if names.contains(&variant.name) => {
                 Subterm::Variant(Variant {
                     name: variant.name,
-                    universes: levels.to_vec(),
-                    params: stamp(&variant.params, names, self_reference, levels),
+                    universes: universes.clone(),
+                    params: stamp(&variant.params, names, self_reference, universes),
                     tag: variant.tag.clone(),
-                    payload: stamp(&variant.payload, names, self_reference, levels),
+                    payload: stamp(&variant.payload, names, self_reference, universes),
                 })
             }
             Subterm::StructType(struct_type) if names.contains(&struct_type.name) => {
                 Subterm::StructType(StructType {
                     name: struct_type.name,
-                    universes: levels.to_vec(),
-                    params: stamp(&struct_type.params, names, self_reference, levels),
+                    universes: universes.clone(),
+                    params: stamp(&struct_type.params, names, self_reference, universes),
                 })
             }
             Subterm::Struct(struct_) if names.contains(&struct_.name) => Subterm::Struct(Struct {
                 name: struct_.name,
-                universes: levels.to_vec(),
-                params: stamp(&struct_.params, names, self_reference, levels),
-                fields: stamp(&struct_.fields, names, self_reference, levels),
+                universes: universes.clone(),
+                params: stamp(&struct_.params, names, self_reference, universes),
+                fields: stamp(&struct_.fields, names, self_reference, universes),
                 entries: struct_.entries.clone(),
             }),
             Subterm::Instance(instance)
@@ -385,7 +385,7 @@ impl Term {
                         .is_some_and(|name| names.contains(name)) =>
             {
                 // The occurrence's extent moves onto the wrapping instance: the head is a bare `Var` with no extent of its own.
-                let stamped = Term::instance(InstanceHead::Var(var.clone()), levels.to_vec());
+                let stamped = Term::instance(InstanceHead::Var(var.clone()), universes.clone());
                 return Some(match self.extent() {
                     Some(extent) => stamped.with_extent(extent),
                     None => stamped,
@@ -492,9 +492,13 @@ impl Term {
         }))
     }
 
-    pub fn induct_type_at<U, I, P, J, Q>(name: Global, universes: U, params: I, indices: J) -> Self
+    pub fn induct_type_at<I, P, J, Q>(
+        name: Global,
+        universes: impl Into<Universes>,
+        params: I,
+        indices: J,
+    ) -> Self
     where
-        U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
         J: IntoIterator<Item = Q>,
@@ -502,7 +506,7 @@ impl Term {
     {
         Self::from(Subterm::InductType(InductType {
             name,
-            universes: universes.into_iter().collect(),
+            universes: universes.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
             indices: indices.into_iter().map(|i| i.into()).collect(),
         }))
@@ -569,9 +573,13 @@ impl Term {
         )
     }
 
-    pub fn struct_at<U, I, P, J, Q>(name: Global, universes: U, params: I, fields: J) -> Self
+    pub fn struct_at<I, P, J, Q>(
+        name: Global,
+        universes: impl Into<Universes>,
+        params: I,
+        fields: J,
+    ) -> Self
     where
-        U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
         J: IntoIterator<Item = Q>,
@@ -579,7 +587,7 @@ impl Term {
     {
         Self::from(Subterm::Struct(Struct {
             name,
-            universes: universes.into_iter().collect(),
+            universes: universes.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
             fields: fields.into_iter().map(|f| f.into()).collect(),
             entries: vec![],
@@ -611,15 +619,14 @@ impl Term {
         )
     }
 
-    pub fn variant_at<U, I, P, A, J, Q>(
+    pub fn variant_at<I, P, A, J, Q>(
         name: Global,
-        universes: U,
+        universes: impl Into<Universes>,
         params: I,
         tag: A,
         payload: J,
     ) -> Self
     where
-        U: IntoIterator<Item = Level>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
         A: Into<Atom>,
@@ -628,7 +635,7 @@ impl Term {
     {
         Self::from(Subterm::Variant(Variant {
             name,
-            universes: universes.into_iter().collect(),
+            universes: universes.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
             tag: tag.into(),
             payload: payload.into_iter().map(|p| p.into()).collect(),
@@ -758,16 +765,17 @@ impl Term {
     }
 
     /// An instance whose head references `name` — the shape elaboration mints for every occurrence of a universe-polymorphic binding.
-    pub fn instance_of(name: &Free, levels: Vec<Level>) -> Self {
-        Self::instance(InstanceHead::Var(Var::free(*name)), levels)
+    pub fn instance_of(name: &Free, universes: impl Into<Universes>) -> Self {
+        Self::instance(InstanceHead::Var(Var::free(*name)), universes)
     }
 
     /// Instantiate a generalized binding at occurrence-specific levels. The result is without a position; a call site holding the occurrence lifts its extent onto the wrapper, since the typed head carries none.
-    pub fn instance(head: InstanceHead, levels: Vec<Level>) -> Self {
-        if levels.is_empty() {
+    pub fn instance(head: InstanceHead, universes: impl Into<Universes>) -> Self {
+        let universes = universes.into();
+        if universes.is_empty() {
             head.to_term()
         } else {
-            Self::from(Subterm::Instance(Instance { head, levels }))
+            Self::from(Subterm::Instance(Instance { head, universes }))
         }
     }
 
@@ -1618,16 +1626,19 @@ impl Term {
             if let (Some(this_applied), Some(that_applied)) =
                 (Applied::of(&this, families), Applied::of(&that, families))
             {
+                // Two instances apart in a sort are apart in more than a level.
                 if this_applied.name != that_applied.name
-                    || this_applied.levels.len() != that_applied.levels.len()
+                    || this_applied.universes.levels.len() != that_applied.universes.levels.len()
+                    || this_applied.universes.qualities != that_applied.universes.qualities
                     || this_applied.arguments.len() != that_applied.arguments.len()
                 {
                     return None;
                 }
                 for (position, (this_level, that_level)) in this_applied
+                    .universes
                     .levels
                     .iter()
-                    .zip(that_applied.levels)
+                    .zip(&that_applied.universes.levels)
                     .enumerate()
                 {
                     if this_level != that_level {
@@ -1703,8 +1714,8 @@ impl Term {
     }
 
     /// The name and the instance, where this term is a family's name or a definition applied in full: the one spelling of either a caller can meet before any reduction.
-    pub fn applied_in_full(&self, families: &impl Families) -> Option<(&Global, &[Level])> {
-        Applied::of(self, families).map(|applied| (applied.name, applied.levels))
+    pub fn applied_in_full(&self, families: &impl Families) -> Option<(&Global, &Universes)> {
+        Applied::of(self, families).map(|applied| (applied.name, applied.universes))
     }
 
     /// The nominal node this application is, where it applies an `induct`'s former in full by its group's projection: the spelling an instance of the family's name reduces to.
@@ -1751,12 +1762,12 @@ impl Term {
     /// The family this term is the bare former of, with the instance it stands at: a projection of an `induct`'s group applied to nothing, which is how reduction spells the family's name, the group's levels substituted in or the projection held at an instance. `None` for every other term.
     ///
     /// The closed body is read for the shape, as [`applied_former`](Self::applied_former) reads it and for its reason.
-    pub fn bare_former(&self) -> Option<(&Global, &[Level])> {
+    pub fn bare_former(&self) -> Option<(&Global, &Universes)> {
         let (group, index, instance) = match self.look() {
             Subterm::Instance(Instance {
                 head: InstanceHead::RecProj(group, index),
-                levels,
-            }) => (group, *index, Some(levels.as_slice())),
+                universes,
+            }) => (group, *index, Some(universes)),
             subterm => {
                 let (group, index) = subterm.as_rec_proj()?;
                 (group, index, None)
@@ -1818,27 +1829,27 @@ pub struct LevelDifferences {
     pub curried: Vec<(usize, Level, Level)>,
 }
 
-/// A family's name or a definition applied in full, as conversion's raw spellings hold it: the name, the instance's levels, and the arguments, a family's parameters then its indices.
+/// A family's name or a definition applied in full, as conversion's raw spellings hold it: the name, the instance, and the arguments, a family's parameters then its indices.
 ///
 /// One spine supplies the parameters of a family with no index, or the indices of one with no parameter; a family with both is applied in two, `Fam.{u,v,w}(F)(N(F))`. A bare name is in full only for a family that takes neither. A definition is in full at the one spine its type's outer telescope asks for, and bare where it asks for none. Anything short of that, a former or a function passed as an argument or one waiting for an index, is not this.
 struct Applied<'a> {
     name: &'a Global,
-    levels: &'a [Level],
+    universes: &'a Universes,
     arguments: Vec<&'a Term>,
 }
 
 impl<'a> Applied<'a> {
     fn of(term: &'a Term, families: &impl Families) -> Option<Self> {
-        fn named(head: &Term) -> Option<(&Global, &[Level])> {
+        fn named(head: &Term) -> Option<(&Global, &Universes)> {
             let Subterm::Instance(Instance {
                 head: InstanceHead::Var(var),
-                levels,
+                universes,
             }) = head.look()
             else {
                 return None;
             };
 
-            Some((var.as_free()?.as_global()?, levels.as_slice()))
+            Some((var.as_free()?.as_global()?, universes))
         }
 
         // How many arguments one spine applies `name` in full by: a family's parameters or its indices where it takes only the one kind, and a definition's outer telescope.
@@ -1849,35 +1860,35 @@ impl<'a> Applied<'a> {
                 .is_some_and(|(_, arity)| arity == supplied),
         };
 
-        if let Some((name, levels)) = named(term) {
+        if let Some((name, universes)) = named(term) {
             return in_full(name, 0).then_some(Self {
                 name,
-                levels,
+                universes,
                 arguments: Vec::new(),
             });
         }
         let Subterm::Apply(outer) = term.look() else {
             return None;
         };
-        if let Some((name, levels)) = named(&outer.head) {
+        if let Some((name, universes)) = named(&outer.head) {
             let supplied = outer.arguments.len();
 
             return (supplied > 0 && in_full(name, supplied)).then(|| Self {
                 name,
-                levels,
+                universes,
                 arguments: outer.params().collect(),
             });
         }
         let Subterm::Apply(inner) = outer.head.look() else {
             return None;
         };
-        let (name, levels) = named(&inner.head)?;
+        let (name, universes) = named(&inner.head)?;
         let (params, indices) = families.shape(name)?;
 
         (indices > 0 && inner.arguments.len() == params && outer.arguments.len() == indices).then(
             || Self {
                 name,
-                levels,
+                universes,
                 arguments: inner.params().chain(outer.params()).collect(),
             },
         )
@@ -2341,14 +2352,7 @@ impl Term {
                             tag,
                             ..
                         }) => {
-                            let universes = if visit.erases_universes() {
-                                Vec::new()
-                            } else {
-                                universes
-                                    .iter()
-                                    .map(|level| visit.visit_level(level))
-                                    .collect()
-                            };
+                            let universes = visit.visit_universes(universes);
                             let params = children.by_ref().take(params.len()).collect();
                             Subterm::Variant(Variant {
                                 name: *name,

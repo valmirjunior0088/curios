@@ -136,6 +136,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
     let declaration = InductDecl {
         universe_context: UniverseContext {
             parameter_count: 2,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
@@ -154,6 +155,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: 2,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         island: Qualifier::default(),

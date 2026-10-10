@@ -10,11 +10,12 @@ fn conversion() -> UniverseConstraintOrigin {
 fn occurrence(solver: &mut UniverseSolver) -> UniverseMetaId {
     let scheme = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: Vec::new(),
     };
     let instance = solver.instantiate(&scheme).unwrap();
 
-    bare_meta(&instance[0]).expect("an instance's level is one bare meta")
+    bare_meta(&instance.levels[0]).expect("an instance's level is one bare meta")
 }
 
 fn bounds(context: &UniverseContext) -> Vec<(Level, Level)> {

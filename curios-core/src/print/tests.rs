@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, crate::Level};
 
 #[test]
 fn a_binder_hinted_like_a_shortened_global_is_suffixed() {

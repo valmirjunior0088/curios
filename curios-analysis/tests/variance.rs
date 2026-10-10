@@ -28,6 +28,7 @@ fn level(index: usize) -> Level {
 fn scheme(parameter_count: usize) -> UniverseContext {
     UniverseContext {
         parameter_count,
+        quality_count: 0,
         constraints: Vec::new(),
     }
 }

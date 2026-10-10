@@ -15,8 +15,8 @@ use {
     },
     curios_core::{
         Advance, Apply, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
-        Intrinsic, Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, Quality, ReduceError,
-        Scope, Spelling, Subterm, Telescope, Term, Transient, Visit,
+        Intrinsic, Many, Metavar, MetavarId, MetavarOrigin, Proj, Quality, ReduceError, Scope,
+        Spelling, Subterm, Telescope, Term, Transient, Universes, Visit,
     },
     std::{
         cell::RefCell,
@@ -1116,7 +1116,7 @@ pub(crate) enum MotiveShape<'a> {
     /// A nominal inductive: `indices` is the declaration's index telescope already instantiated at the scrutinee's actual parameters (`InductDecl::indices_at`), and the scrutinee binder takes `I(p̄, ī)` at those index binders.
     Induct {
         name: &'a Global,
-        universes: &'a [Level],
+        universes: &'a Universes,
         params: &'a [Term],
         indices: Telescope<()>,
     },
@@ -1163,7 +1163,7 @@ impl MotiveShape<'_> {
                 }
                 Term::induct_type_at(
                     *(*name),
-                    universes.to_vec(),
+                    (*universes).clone(),
                     params.to_vec(),
                     cursor.into_args(),
                 )
@@ -1191,7 +1191,7 @@ impl MotiveShape<'_> {
                     binders.push((cursor.advance_fresh(|hint| context.fresh(hint)), ty));
                 }
                 let index_vars = cursor.into_args();
-                Term::induct_type_at(*(*name), universes.to_vec(), params.to_vec(), index_vars)
+                Term::induct_type_at(*(*name), (*universes).clone(), params.to_vec(), index_vars)
             }
         };
 

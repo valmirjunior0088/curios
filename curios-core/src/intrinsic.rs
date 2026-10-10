@@ -5,7 +5,7 @@ mod signature;
 pub use signature::*;
 
 use {
-    super::{Bound, Free, Level, Nat, Subterm, Term, Var, Visit},
+    super::{Bound, Free, Nat, Subterm, Term, Universes, Var, Visit},
     crate::Global,
     curios_abi::{ForeignFunction, ResultShape, WireResults, WireType},
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
@@ -369,7 +369,7 @@ pub enum Intrinsic<T = Term> {
     CellPoll {
         element: T,
         cell: T,
-        universes: Vec<Level>,
+        universes: Universes,
     },
     ChannelType(T),
     Channel {
@@ -385,7 +385,7 @@ pub enum Intrinsic<T = Term> {
     ChannelTake {
         element: T,
         channel: T,
-        universes: Vec<Level>,
+        universes: Universes,
     },
     ChannelClose {
         element: T,
@@ -1169,16 +1169,18 @@ impl Intrinsic {
         reach
     }
 
-    /// The universe instance carried by an operation whose result names an ordinary polymorphic family.
-    pub fn result_universes(&self) -> &[Level] {
+    /// The universe instance carried by an operation whose result names an ordinary polymorphic family; none for every other operation.
+    pub fn result_universes(&self) -> Option<&Universes> {
         match self {
-            Self::CellPoll { universes, .. } | Self::ChannelTake { universes, .. } => universes,
-            _ => &[],
+            Self::CellPoll { universes, .. } | Self::ChannelTake { universes, .. } => {
+                Some(universes)
+            }
+            _ => None,
         }
     }
 
     /// The instance elaboration fills from the checked result type; later traversals preserve and substitute it like a nominal occurrence's own vector.
-    pub fn result_universes_mut(&mut self) -> Option<&mut Vec<Level>> {
+    pub fn result_universes_mut(&mut self) -> Option<&mut Universes> {
         match self {
             Self::CellPoll { universes, .. } | Self::ChannelTake { universes, .. } => {
                 Some(universes)
@@ -1553,14 +1555,7 @@ impl Intrinsic {
             } => Intrinsic::CellPoll {
                 element: visit.visit_subterm(element),
                 cell: visit.visit_subterm(cell),
-                universes: if visit.erases_universes() {
-                    Vec::new()
-                } else {
-                    universes
-                        .iter()
-                        .map(|level| visit.visit_level(level))
-                        .collect()
-                },
+                universes: visit.visit_universes(universes),
             },
             Intrinsic::Channel {
                 element,
@@ -1587,14 +1582,7 @@ impl Intrinsic {
             } => Intrinsic::ChannelTake {
                 element: visit.visit_subterm(element),
                 channel: visit.visit_subterm(channel),
-                universes: if visit.erases_universes() {
-                    Vec::new()
-                } else {
-                    universes
-                        .iter()
-                        .map(|level| visit.visit_level(level))
-                        .collect()
-                },
+                universes: visit.visit_universes(universes),
             },
             Intrinsic::ChannelClose { element, channel } => Intrinsic::ChannelClose {
                 element: visit.visit_subterm(element),

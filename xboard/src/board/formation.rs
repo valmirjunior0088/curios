@@ -1,7 +1,7 @@
 use {
     curios_core::{
         Free, Global, Level, Module, Nominal, StructDecl, StructType, Subterm, Telescope, Term,
-        UniverseContext,
+        UniverseContext, Universes,
     },
     curios_utilities::Qualifier,
     xboard::{Date, Part, Proof, Status, Ticket, Witness, declared, false_type, refused},
@@ -31,13 +31,13 @@ fn a_parameter_named_through_an_instance() -> (Module, Term) {
 
     let bad_type: Term = Subterm::StructType(StructType {
         name: bad,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: Vec::new(),
     })
     .into();
     let sink_at_bad: Term = Subterm::StructType(StructType {
         name: sink,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: vec![bad_type.clone()],
     })
     .into();

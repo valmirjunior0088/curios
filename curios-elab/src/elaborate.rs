@@ -38,7 +38,7 @@ use {
     super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
     curios_core::{
         Ascribed, Func, InstanceHead, Subterm, Term, Transient, foreign_operands, foreign_produced,
-        instantiate_universe_levels_scoped,
+        instantiate_universes_scoped,
     },
     curios_utilities::recurse,
     std::sync::Arc,
@@ -175,14 +175,14 @@ fn elaborate_subterm(
                 InstanceHead::RecProj(group, index) => {
                     context
                         .universes_mut()
-                        .instantiate_at(group.universe_context(), &instance.levels)
+                        .instantiate_at(group.universe_context(), &instance.universes)
                         .map_err(Error::from)?;
 
-                    instantiate_universe_levels_scoped(&group.member_type(*index), &instance.levels)
+                    instantiate_universes_scoped(&group.member_type(*index), &instance.universes)
                         .map_err(Error::from)?
                 }
                 InstanceHead::Var(var) => context
-                    .instantiate_assumption_at(var.unwrap(), &instance.levels)?
+                    .instantiate_assumption_at(var.unwrap(), &instance.universes)?
                     .ok_or_else(|| Error::unbound_variable(instance.head.to_term()))?,
             };
             (term.clone(), type_)
@@ -198,12 +198,12 @@ fn elaborate_subterm(
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
         Subterm::Var(var) => match context.instantiate_assumption(var.unwrap())? {
-            Some((type_, levels)) => {
-                let rebuilt = if levels.is_empty() {
+            Some((type_, universes)) => {
+                let rebuilt = if universes.is_empty() {
                     term.clone()
                 } else {
                     // The occurrence's extent moves onto the wrapping instance: the typed head carries none.
-                    let instance = Term::instance(InstanceHead::Var(var.clone()), levels);
+                    let instance = Term::instance(InstanceHead::Var(var.clone()), universes);
                     match term.extent() {
                         Some(extent) => instance.with_extent(extent),
                         None => instance,

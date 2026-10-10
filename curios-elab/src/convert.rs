@@ -39,8 +39,8 @@ use {
         Free, Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic,
         Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarOrigin, Probe, Proj, Quality,
         Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
-        TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variance,
-        Variant, past_bool_cap,
+        TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Universes,
+        Variance, Variant, past_bool_cap,
     },
     curios_utilities::{Plicity, recurse},
     std::{
@@ -76,7 +76,7 @@ fn instantiate_bound_at<B: Bound>(
     context: &mut Context,
     universe_context: &UniverseContext,
     value: &B,
-    universes: &[Level],
+    universes: &Universes,
 ) -> Result<B, ReduceError> {
     context
         .instantiate_universe_bound_at(universe_context, value, universes)
@@ -318,17 +318,38 @@ impl Convert {
         Ok(true)
     }
 
+    /// Whether two instances are one: the sorts they state held the same ([`Context::same_quality`]), then [`Self::compare_levels`] over their levels.
+    fn compare_universes(
+        context: &mut Context,
+        left: &Universes,
+        right: &Universes,
+    ) -> Result<bool, ReduceError> {
+        Ok(Self::compare_qualities(context, left, right)
+            && Self::compare_levels(context, &left.levels, &right.levels)?)
+    }
+
+    /// Whether two instances state the same sorts, an unsolved one solved to the other: two instances apart in a sort are two types, whatever their levels.
+    fn compare_qualities(context: &mut Context, left: &Universes, right: &Universes) -> bool {
+        left.qualities.len() == right.qualities.len()
+            && left
+                .qualities
+                .iter()
+                .zip(&right.qualities)
+                .all(|(left, right)| context.same_quality(*left, *right))
+    }
+
     /// [`Self::compare_levels`] for two instances of `name`, a family or a definition applied in full: one equation per level its vector calls invariant, and a weak one where it is irrelevant, two instances apart in such a level alone being one term. The weak equation refuses nothing; it is what lets the declaration's closing hold the two occurrences at one instance where it can ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)).
     fn compare_instance_levels(
         context: &mut Context,
         name: &Global,
-        left: &[Level],
-        right: &[Level],
+        left: &Universes,
+        right: &Universes,
     ) -> Result<bool, ReduceError> {
-        if left.len() != right.len() {
+        if left.levels.len() != right.levels.len() || !Self::compare_qualities(context, left, right)
+        {
             return Ok(false);
         }
-        for (index, (left, right)) in left.iter().zip(right).enumerate() {
+        for (index, (left, right)) in left.levels.iter().zip(&right.levels).enumerate() {
             if context.variance(name, index) == Variance::Irrelevant {
                 context
                     .universes_mut()
@@ -787,7 +808,7 @@ impl Convert {
                 .applied_in_full(&*context)
                 .zip(that_term.applied_in_full(&*context))
                 .filter(|_| matches!(&*this.head, Subterm::Instance(_)))
-                .map(|((name, this), (_, that))| (*name, this.to_vec(), that.to_vec()));
+                .map(|((name, this), (_, that))| (*name, this.clone(), that.clone()));
             converts = match instances {
                 Some((name, this, that)) => {
                     Self::compare_instance_levels(context, &name, &this, &that)?
@@ -1978,8 +1999,8 @@ impl Convert {
         };
 
         // The rigid side's arguments, how its node is rebuilt over other arguments at an instance, and, for a nominal node, the family and the instance the rigid side stands at.
-        type MkBody = Box<dyn Fn(Vec<Level>, &[Term]) -> Term>;
-        type Family = Option<(Global, Vec<Level>)>;
+        type MkBody = Box<dyn Fn(Universes, &[Term]) -> Term>;
+        type Family = Option<(Global, Universes)>;
         let (rigid_args, mk_body, family): (Vec<Term>, MkBody, Family) = match &*rigid {
             Subterm::InductType(induct_decl) => {
                 let name = induct_decl.name;
@@ -2067,7 +2088,7 @@ impl Convert {
         let mark = context.solution_mark();
         let instance = match &family {
             Some((name, universes)) => Self::occurrence_of(context, name, universes),
-            None => Ok(Vec::new()),
+            None => Ok(Universes::default()),
         };
         // A family in the fixed prefix, a transformer's base monad, is at an occurrence of its own as the node is ([`Self::family_arguments`]).
         let prefix = Self::family_arguments(context, rigid_prefix);
@@ -2112,8 +2133,8 @@ impl Convert {
     fn occurrence_of(
         context: &mut Context,
         name: &Global,
-        universes: &[Level],
-    ) -> Result<Vec<Level>, ReduceError> {
+        universes: &Universes,
+    ) -> Result<Universes, ReduceError> {
         let scheme = context
             .induct_decl(name)
             .map(|declaration| declaration.universe_context.clone())
@@ -2122,9 +2143,12 @@ impl Convert {
                     .struct_decl(name)
                     .map(|declaration| declaration.universe_context.clone())
             })
-            .filter(|scheme| scheme.parameter_count == universes.len());
+            .filter(|scheme| {
+                scheme.parameter_count == universes.levels.len()
+                    && scheme.quality_count == universes.qualities.len()
+            });
         let Some(scheme) = scheme else {
-            return Ok(universes.to_vec());
+            return Ok(universes.clone());
         };
 
         let fresh = context
@@ -2299,13 +2323,13 @@ impl Convert {
     }
 
     /// The family `term` is the bare name of, with the instance it stands at: a name of a family that takes a parameter, written with no argument or spelled by reduction as the bare projection of its group. A family that takes none is a type under its bare name, and its instance is compared.
-    fn bare_family(context: &Context, term: &Term) -> Option<(Global, Vec<Level>)> {
-        if let Some((name, levels)) = term.bare_former() {
-            return Some((*name, levels.to_vec()));
+    fn bare_family(context: &Context, term: &Term) -> Option<(Global, Universes)> {
+        if let Some((name, universes)) = term.bare_former() {
+            return Some((*name, universes.clone()));
         }
         let Subterm::Instance(Instance {
             head: InstanceHead::Var(var),
-            levels,
+            universes,
         }) = &**term
         else {
             return None;
@@ -2320,7 +2344,7 @@ impl Convert {
                     .map(|declaration| declaration.param_count())
             })?;
 
-        (parameters > 0).then(|| (name, levels.clone()))
+        (parameters > 0).then(|| (name, universes.clone()))
     }
 
     /// `arguments`, the parameters a family's node is applied to, each one that is itself a family at an occurrence of its own ([`Self::family_at_its_own_occurrence`]), as a transformer's base monad is.
@@ -2669,7 +2693,7 @@ impl Convert {
                         && Self::join_levels(context, &this, &that)?
                 }
                 (Subterm::Instance(this), Subterm::Instance(that)) => {
-                    if !Self::compare_levels(context, &this.levels, &that.levels)? {
+                    if !Self::compare_universes(context, &this.universes, &that.universes)? {
                         false
                     } else {
                         self.enqueue(type_, this.head.to_term(), that.head.to_term());
@@ -3095,7 +3119,7 @@ fn looked_up(
 fn declared_at(
     context: &mut Context,
     name: &Global,
-    universes: &[Level],
+    universes: &Universes,
     params: &[Term],
 ) -> Result<Option<InductDecl>, ReduceError> {
     let Some(declaration) = context.induct_decl(name).cloned() else {

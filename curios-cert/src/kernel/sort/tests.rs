@@ -254,6 +254,7 @@ fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level()
             &Term::type_at(parameter),
             &UniverseContext {
                 parameter_count: 1,
+                quality_count: 0,
                 constraints: Vec::new(),
             },
         )
@@ -281,6 +282,7 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
             &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
             &UniverseContext {
                 parameter_count: 1,
+                quality_count: 0,
                 constraints: Vec::new(),
             },
         )

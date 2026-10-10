@@ -7,9 +7,9 @@ use {
         Context, Error, Mode, attempt_witness_goal, check, elaborate, expect, is_prop, reduce_with,
     },
     curios_core::{
-        CalleeId, Free, Global, ImplicitOrigin, Level, Probe, Struct, StructDecl, StructEntry,
-        StructType, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
-        instantiate_universe_levels_scoped,
+        CalleeId, Free, Global, ImplicitOrigin, Probe, Struct, StructDecl, StructEntry, StructType,
+        Subterm, Telescope, Term, UniverseContext, Universes, WitnessOrigin,
+        instantiate_universes_scoped,
     },
     curios_utilities::Plicity,
 };
@@ -17,8 +17,8 @@ use {
 fn instantiate_struct_decl(
     context: &mut Context,
     struct_decl: StructDecl,
-    universes: Option<&[Level]>,
-) -> Result<(StructDecl, Vec<Level>), Error> {
+    universes: Option<&Universes>,
+) -> Result<(StructDecl, Universes), Error> {
     let (arity, universes) = match universes {
         Some(universes) => (
             context.instantiate_universe_bound_at(
@@ -26,15 +26,15 @@ fn instantiate_struct_decl(
                 &struct_decl.arity,
                 universes,
             )?,
-            universes.to_vec(),
+            universes.clone(),
         ),
         None => {
             context.instantiate_universe_bound(&struct_decl.universe_context, &struct_decl.arity)?
         }
     };
     let arguments = universes.clone();
-    let result_sort = instantiate_universe_levels_scoped(&struct_decl.result_sort, &arguments)
-        .map_err(Error::from)?;
+    let result_sort =
+        instantiate_universes_scoped(&struct_decl.result_sort, &arguments).map_err(Error::from)?;
     Ok((
         StructDecl {
             universe_context: UniverseContext::empty(),
@@ -69,7 +69,7 @@ pub(super) fn elaborate_struct_type(
             None => Error::unknown_declaration(name.symbol()),
         });
     };
-    let explicit_universes = (!universes.is_empty()).then_some(universes.as_slice());
+    let explicit_universes = (!universes.is_empty()).then_some(universes);
     let (struct_decl, universes) =
         instantiate_struct_decl(context, struct_decl, explicit_universes)?;
 
@@ -185,8 +185,7 @@ pub(super) fn elaborate_struct(
             None => Error::unknown_declaration(name.symbol()),
         });
     };
-    let explicit_universes =
-        (!written_universes.is_empty()).then_some(written_universes.as_slice());
+    let explicit_universes = (!written_universes.is_empty()).then_some(written_universes);
     let (struct_decl, universes) =
         instantiate_struct_decl(context, struct_decl, explicit_universes)?;
 
@@ -481,7 +480,7 @@ pub(super) fn resolve_struct_params(
 pub(super) fn seed_struct_expectation(
     context: &mut Context,
     name: &Global,
-    universes: &[Level],
+    universes: &Universes,
     resolved: &[Term],
     term: &Term,
     mode: &Mode,
@@ -493,7 +492,7 @@ pub(super) fn seed_struct_expectation(
         }) = Term::unwrap_or_clone(reduce_with(context, expected)?)
         && expected_name == *name
     {
-        let seeded = Term::struct_type_at(*name, universes.to_vec(), resolved.to_vec());
+        let seeded = Term::struct_type_at(*name, universes.clone(), resolved.to_vec());
         expect(context, term, &seeded, expected)?;
     }
     Ok(())
@@ -505,7 +504,7 @@ pub(super) fn seed_struct_expectation(
 pub(super) fn elaborate_struct_spread(
     context: &mut Context,
     struct_decl: &StructDecl,
-    universes: &[Level],
+    universes: &Universes,
     s: &Struct,
     term: &Term,
     mode: &Mode,
@@ -673,11 +672,11 @@ pub(super) fn elaborate_struct_spread(
         // Reduce inside the frame, where the binder is defined: occurrences of it in the result type unfold to the base before escaping the `let`.
         let result_type = reduce_with(
             context,
-            &Term::struct_type_at(*name, universes.to_vec(), resolved.clone()),
+            &Term::struct_type_at(*name, universes.clone(), resolved.clone()),
         )?;
 
         Ok::<_, Error>((
-            Term::struct_at(*name, universes.to_vec(), resolved, elaborated),
+            Term::struct_at(*name, universes.clone(), resolved, elaborated),
             result_type,
         ))
     })?;

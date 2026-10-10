@@ -1,10 +1,10 @@
 use {
     super::{
         Apply, Argument, Ascribed, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor, Field,
-        Free, Func, FuncType, Global, InductType, Infix, Intrinsic, Label, Let, Level, Match,
-        MatchResult, Metavar, MetavarOrigin, Nat, NumLit, Proj, Quality, Rec, Scope, Spellings,
-        Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
-        Variant,
+        Free, Func, FuncType, Global, InductType, Infix, Intrinsic, Label, Let, Match, MatchResult,
+        Metavar, MetavarOrigin, Nat, NumLit, Proj, Quality, Rec, Scope, Spellings, Struct,
+        StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Universes,
+        Var, Variant,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Grain, Rounding},
@@ -17,18 +17,37 @@ use {
     },
 };
 
-fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
-    if levels.is_empty() || spelling.erase_universes {
-        String::new()
-    } else {
-        format!(
-            ".{{{}}}",
-            levels
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        )
+/// The word a sort of `quality` is spelled with: an open one by the word a program leaves one with.
+fn quality_word(quality: &Quality) -> &'static str {
+    match quality {
+        Quality::Type => "Type",
+        Quality::Prop => "Prop",
+        Quality::Param(_) | Quality::Meta(_) => "Sort",
+    }
+}
+
+/// An instance after the name it is of: the sorts it states, then its levels.
+fn universe_suffix(universes: &Universes, spelling: &Rc<Spelling>) -> String {
+    if universes.is_empty() || spelling.erase_universes {
+        return String::new();
+    }
+
+    let qualities = universes
+        .qualities
+        .iter()
+        .map(quality_word)
+        .collect::<Vec<_>>()
+        .join(",");
+    let levels = universes
+        .levels
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    match (qualities.is_empty(), levels.is_empty()) {
+        (true, _) => format!(".{{{levels}}}"),
+        (false, true) => format!(".{{{qualities}}}"),
+        (false, false) => format!(".{{{qualities}; {levels}}}"),
     }
 }
 
@@ -2056,12 +2075,7 @@ fn within_reader(term: Term, frame: Frame, binders: &[(Free, Term)]) -> Printer 
 fn term_doc(term: Term, frame: Frame) -> Printer {
     match Term::unwrap_or_clone(term) {
         Subterm::Sort(quality, level) => {
-            // An open quality is spelled by the word a program leaves one with.
-            let word = match quality {
-                Quality::Type => "Type",
-                Quality::Prop => "Prop",
-                Quality::Param(_) | Quality::Meta(_) => "Sort",
-            };
+            let word = quality_word(&quality);
             if level.is_zero() || (frame.spelling.erase_universes && level.metas().next().is_some())
             {
                 pure(word)
@@ -2071,7 +2085,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         }
         Subterm::Instance(instance) => flat([
             sub(instance.head.to_term(), frame),
-            pure(universe_suffix(&instance.levels, frame.spelling)),
+            pure(universe_suffix(&instance.universes, frame.spelling)),
         ]),
         Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),
         // A builtin row surfaces under its `/sys` subject (`Handle/write`); a user's `foreign` declaration under the name they gave it.

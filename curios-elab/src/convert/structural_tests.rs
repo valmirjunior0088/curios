@@ -6,7 +6,7 @@ use {
     curios_core::{
         Atom, Cases, Exhaustion, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many,
         Match, MatchResult, MetavarId, Scope, StructDecl, StructType, Subterm, Telescope, Term,
-        UniverseContext,
+        UniverseContext, Universes,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -234,7 +234,7 @@ fn two_neutrals_at_a_struct_converge_where_it_is_a_proposition_alone() {
 
         Term::from(Subterm::StructType(StructType {
             name: nominal("Sealed"),
-            universes: Vec::new(),
+            universes: Universes::default(),
             params: Vec::new(),
         }))
     };
@@ -1179,7 +1179,7 @@ fn declare_struct(context: &mut Context, path: &str, fields: Telescope<()>) -> T
 
     Term::from(Subterm::StructType(StructType {
         name: nominal(path),
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: Vec::new(),
     }))
 }

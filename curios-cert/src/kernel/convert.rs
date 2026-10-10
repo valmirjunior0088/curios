@@ -40,12 +40,12 @@ mod variance_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
-    crate::{case_target_indices, instantiate_universe_levels_scoped, pinned_instance},
+    crate::{case_target_indices, instantiate_universes_scoped, pinned_instance},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Classes, Cost, Cursor, Field, Func, FuncType, Global,
-        InductType, Instance, InstanceHead, Level, Lockstep, Many, Match, MatchResult, Probe, Proj,
+        InductType, Instance, InstanceHead, Lockstep, Many, Match, MatchResult, Probe, Proj,
         Quality, ReduceError, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, Variant,
+        Tuple, TupleType, Universes, Variant,
     },
     curios_utilities::recurse,
     std::collections::HashSet,
@@ -310,17 +310,17 @@ fn one_definition_by_its_spines(
             (
                 Subterm::Instance(Instance {
                     head: InstanceHead::Var(left),
-                    levels: left_levels,
+                    universes: left_universes,
                 }),
                 Subterm::Instance(Instance {
                     head: InstanceHead::Var(right),
-                    levels: right_levels,
+                    universes: right_universes,
                 }),
             ) => {
                 let name = left.unwrap();
                 name == right.unwrap()
                     && kernel.value_at(name).is_some()
-                    && kernel.levels_eq(left_levels, right_levels)
+                    && kernel.universes_eq(left_universes, right_universes)
             }
             (Subterm::Apply(_), Subterm::Apply(_)) => {
                 one_definition_by_its_spines(kernel, history, &left.head, &right.head)?
@@ -642,13 +642,13 @@ fn structural(
         (
             Subterm::Instance(Instance {
                 head: left,
-                levels: left_levels,
+                universes: left_universes,
             }),
             Subterm::Instance(Instance {
                 head: right,
-                levels: right_levels,
+                universes: right_universes,
             }),
-        ) => Ok(kernel.levels_eq(left_levels, right_levels)
+        ) => Ok(kernel.universes_eq(left_universes, right_universes)
             && ground(kernel, history, &left.to_term(), &right.to_term())?),
 
         // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
@@ -745,22 +745,22 @@ fn params_at(
 fn struct_params(
     kernel: &Kernel,
     name: &Global,
-    universes: &[Level],
+    universes: &Universes,
 ) -> Option<Telescope<Telescope<()>>> {
     let arity = kernel.struct_decl(name)?.arity.clone();
 
-    instantiate_universe_levels_scoped(&arity, universes).ok()
+    instantiate_universes_scoped(&arity, universes).ok()
 }
 
 /// The same for an inductive family, which a constructor value's parameters are the family's.
 fn induct_params(
     kernel: &Kernel,
     name: &Global,
-    universes: &[Level],
+    universes: &Universes,
 ) -> Option<Telescope<Telescope<()>>> {
     let arity = kernel.induct_decl(name)?.arity.clone();
 
-    instantiate_universe_levels_scoped(&arity, universes).ok()
+    instantiate_universes_scoped(&arity, universes).ok()
 }
 
 /// Argument-wise comparison of two instances of one inductive family, each pair at the type the declaration's full index telescope assigns, opened at the left instance's preceding actuals — the typed context the grounded comparison forfeits. Irrelevance at a `Prop`-typed index is the observable difference: `Same(@P)(p, q)`, a family indexed by two proofs of a `P : Prop`, converts with `Same(@P)(p, p)`, because no proof of a proposition is distinguishable from another. The struct and constructor analogs are [`params_at`]'s, which reads the same outer telescope this does.
@@ -768,7 +768,7 @@ fn induct_type_args(
     kernel: &mut Kernel,
     history: &mut History,
     name: &Global,
-    universes: &[Level],
+    universes: &Universes,
     (left_params, left_indices): (&[Term], &[Term]),
     (right_params, right_indices): (&[Term], &[Term]),
 ) -> Result<bool, Error> {
@@ -786,7 +786,7 @@ fn induct_type_args(
             );
         }
     };
-    let arity = instantiate_universe_levels_scoped(&arity, universes)?;
+    let arity = instantiate_universes_scoped(&arity, universes)?;
 
     // The parameters, against the outer telescope; each one opens what follows, because a later domain may name it.
     let mut cursor = arity.cursor();

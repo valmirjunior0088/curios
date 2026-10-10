@@ -290,6 +290,19 @@ impl Kernel<'_> {
         self.enter_size(None, None, binders.to_vec())
     }
 
+    /// File what the walk decided of `group` as it is stated, over every assignment of the sorts its declaration leaves: the verdict and the members' enclosures the obligations read under the group's own spelling, each assignment's being filed under the group at that assignment.
+    pub(super) fn file_group(
+        &mut self,
+        group: &RecGroup,
+        totality: Totality,
+        enclosing: Vec<bool>,
+    ) {
+        self.calls.verdicts.insert(group.clone(), totality);
+        self.calls
+            .members_enclosing
+            .insert(group.clone(), enclosing);
+    }
+
     /// The verdict `group`'s recorded calls closed to, when this walk checked it.
     pub(crate) fn group_verdict(&self, group: &RecGroup) -> Option<Totality> {
         self.calls.verdicts.get(group).copied()

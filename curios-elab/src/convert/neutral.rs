@@ -8,7 +8,7 @@ use {
     curios_core::{
         Argument, Families, Field, Free, FuncType, InductType, Instance, InstanceHead, Level,
         Match, MatchResult, Proj, ReduceError, StructType, Subterm, Term, TupleType,
-        UniverseConstraintKind, UniverseConstraintOrigin, instantiate_universe_levels_scoped,
+        UniverseConstraintKind, UniverseConstraintOrigin, instantiate_universes_scoped,
     },
     std::rc::Rc,
 };
@@ -337,10 +337,10 @@ pub(crate) fn synth_neutral(
             }
         }
         // A universe-polymorphic head, at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at `levels`; going through the `Var` arm below would instead instantiate it at fresh levels and then have nothing left to substitute.
-        Subterm::Instance(Instance { head, levels }) => match head {
+        Subterm::Instance(Instance { head, universes }) => match head {
             InstanceHead::RecProj(group, index) => {
                 let group = group
-                    .instantiate_universes(levels)
+                    .instantiate_universes(universes)
                     .map_err(ReduceError::Universe)?;
 
                 Ok(Some(group.member_type(*index)))
@@ -353,7 +353,7 @@ pub(crate) fn synth_neutral(
                 let Some(scheme) = context.assumption(name).cloned() else {
                     return Ok(None);
                 };
-                instantiate_universe_levels_scoped(&scheme, levels)
+                instantiate_universes_scoped(&scheme, universes)
                     .map(Some)
                     .map_err(ReduceError::Universe)
             }

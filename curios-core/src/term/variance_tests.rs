@@ -42,7 +42,7 @@ fn number(n: usize) -> Term {
 fn named(path: &str, levels: &[u32]) -> Term {
     Term::instance_of(
         &Free::from(&nominal(path)),
-        levels.iter().copied().map(at).collect(),
+        levels.iter().copied().map(at).collect::<Universes>(),
     )
 }
 

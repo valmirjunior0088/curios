@@ -12,7 +12,7 @@ use {
         Instance, InstanceHead, Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar,
         MetavarId, MetavarOrigin, Minted, Module, NodeMemo, Nominal, Proj, Quality, Rec, RecGroup,
         RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, UniverseContext, UniverseError, UniverseMetaId, Var, Variant, Visit,
+        TupleType, UniverseContext, UniverseError, UniverseMetaId, Universes, Var, Variant, Visit,
         project_erased_universes, rewrite_universe_levels_scoped_shared,
         rewrite_universe_qualities, shift_universe_params, universe_metas,
     },
@@ -375,7 +375,7 @@ fn validate_instance_arities<B: Bound>(
                         "recursive instance",
                         "<local rec>",
                         group.universe_context().parameter_count,
-                        instance.levels.len(),
+                        instance.universes.levels.len(),
                     ),
                     InstanceHead::Var(var) => {
                         var.as_free().and_then(Free::as_global).and_then(|name| {
@@ -384,7 +384,7 @@ fn validate_instance_arities<B: Bound>(
                                     "definition instance",
                                     &name.symbol(),
                                     *expected,
-                                    instance.levels.len(),
+                                    instance.universes.levels.len(),
                                 )
                             })
                         })
@@ -395,7 +395,7 @@ fn validate_instance_arities<B: Bound>(
                         "inductive occurrence",
                         &induct.name.symbol(),
                         *expected,
-                        induct.universes.len(),
+                        induct.universes.levels.len(),
                     )
                 }),
                 Subterm::Variant(variant) => inducts.get(&variant.name).and_then(|expected| {
@@ -403,7 +403,7 @@ fn validate_instance_arities<B: Bound>(
                         "constructor occurrence",
                         &variant.name.symbol(),
                         *expected,
-                        variant.universes.len(),
+                        variant.universes.levels.len(),
                     )
                 }),
                 Subterm::StructType(struct_) => structs.get(&struct_.name).and_then(|expected| {
@@ -411,7 +411,7 @@ fn validate_instance_arities<B: Bound>(
                         "structure occurrence",
                         &struct_.name.symbol(),
                         *expected,
-                        struct_.universes.len(),
+                        struct_.universes.levels.len(),
                     )
                 }),
                 Subterm::Struct(struct_) => structs.get(&struct_.name).and_then(|expected| {
@@ -419,7 +419,7 @@ fn validate_instance_arities<B: Bound>(
                         "structure value",
                         &struct_.name.symbol(),
                         *expected,
-                        struct_.universes.len(),
+                        struct_.universes.levels.len(),
                     )
                 }),
                 _ => None,
@@ -1191,11 +1191,20 @@ fn zonk_terms(context: &Zonk, terms: &[Term]) -> Result<Vec<Term>, Error> {
     terms.iter().map(|t| zonk_term(context, t)).collect()
 }
 
-fn zonk_levels(context: &Zonk, levels: &[Level]) -> Result<Vec<Level>, Error> {
-    levels
-        .iter()
-        .map(|level| context.universes().zonk(level).map_err(Error::from))
-        .collect()
+/// An occurrence's instance with each level zonked and each quality read through what solved it.
+fn zonk_universes(context: &Zonk, universes: &Universes) -> Result<Universes, Error> {
+    Ok(Universes {
+        levels: universes
+            .levels
+            .iter()
+            .map(|level| context.universes().zonk(level).map_err(Error::from))
+            .collect::<Result<_, _>>()?,
+        qualities: universes
+            .qualities
+            .iter()
+            .map(|quality| context.universes().quality(*quality))
+            .collect(),
+    })
 }
 
 fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
@@ -1218,11 +1227,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
                         .expect("zonking a projection head yields a projection")
                 }
             },
-            levels: instance
-                .levels
-                .iter()
-                .map(|level| context.universes().zonk(level).map_err(Error::from))
-                .collect::<Result<_, _>>()?,
+            universes: zonk_universes(context, &instance.universes)?,
         }),
 
         // Transients are consumed by `elaborate` before zonk ever runs.
@@ -1272,7 +1277,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
             indices,
         }) => Subterm::InductType(InductType {
             name: *name,
-            universes: zonk_levels(context, universes)?,
+            universes: zonk_universes(context, universes)?,
             params: zonk_terms(context, params)?,
             indices: zonk_terms(context, indices)?,
         }),
@@ -1285,7 +1290,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
             payload,
         }) => Subterm::Variant(Variant {
             name: *name,
-            universes: zonk_levels(context, universes)?,
+            universes: zonk_universes(context, universes)?,
             params: zonk_terms(context, params)?,
             tag: tag.clone(),
             payload: zonk_terms(context, payload)?,
@@ -1297,7 +1302,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
             params,
         }) => Subterm::StructType(StructType {
             name: *name,
-            universes: zonk_levels(context, universes)?,
+            universes: zonk_universes(context, universes)?,
             params: zonk_terms(context, params)?,
         }),
 
@@ -1309,7 +1314,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
             entries,
         }) => Subterm::Struct(Struct {
             name: *name,
-            universes: zonk_levels(context, universes)?,
+            universes: zonk_universes(context, universes)?,
             params: zonk_terms(context, params)?,
             fields: zonk_terms(context, fields)?,
             entries: entries.clone(),

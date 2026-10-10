@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     curios_core::{
         Free, InstanceHead, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, ReduceError, Subterm,
-        Term, Var,
+        Term, Universes, Var,
     },
     curios_num::{Binary, Grain},
 };
@@ -377,7 +377,7 @@ fn two_polls_of_one_cell_at_two_ground_levels_do_not_convert() {
         Term::intrinsic(Intrinsic::CellPoll {
             element: Term::intrinsic(Intrinsic::NatType),
             cell: cell.clone(),
-            universes: vec![Level::constant(level)],
+            universes: Universes::levels(vec![Level::constant(level)]),
         })
     };
 

@@ -142,6 +142,7 @@ fn a_definition_checks_under_its_own_constraints() {
 
     let constrained = UniverseContext {
         parameter_count: 2,
+        quality_count: 0,
         constraints: vec![UniverseConstraint {
             lower: u,
             upper: w,
@@ -156,6 +157,7 @@ fn a_definition_checks_under_its_own_constraints() {
 
     let unconstrained = UniverseContext {
         parameter_count: 2,
+        quality_count: 0,
         constraints: Vec::new(),
     };
     let mut kernel = self::kernel();
@@ -179,6 +181,7 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
             &Term::type_at(u.clone()),
             &UniverseContext {
                 parameter_count: 2,
+                quality_count: 0,
                 constraints: vec![UniverseConstraint {
                     lower: u.succ().expect("level has a successor"),
                     upper: w,

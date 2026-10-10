@@ -119,7 +119,7 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
             let curios_core::Subterm::Instance(instance) = &*apply.head else {
                 panic!("each external id use is universe-instantiated");
             };
-            instance.levels.clone()
+            instance.universes.levels.clone()
         })
         .collect::<Vec<_>>();
     assert_eq!(

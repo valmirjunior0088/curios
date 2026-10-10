@@ -6,7 +6,7 @@ use {
     super::*,
     curios_core::{
         Atom, Free, Global, InductDecl, InstanceHead, Intrinsic, Polarity, Rec, StructDecl,
-        Subterm, Term,
+        Subterm, Term, Universes,
     },
     curios_num::{Binary, Grain},
 };
@@ -614,7 +614,7 @@ fn a_call_at_a_universe_instance_is_found() {
     let (group, _) = member(Term::free_var(&n));
     let instance: Term = Subterm::Instance(Instance {
         head: InstanceHead::RecProj(group.clone(), 0),
-        levels: Vec::new(),
+        universes: Universes::default(),
     })
     .into();
     let body = Term::tuple([Term::apply(instance, [Term::free_var(&n)])]);

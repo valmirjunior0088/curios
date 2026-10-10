@@ -12,7 +12,7 @@ use {
         InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Nominal, Places,
         Polarity, Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType,
         Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseParam, Variance,
+        UniverseConstraintOrigin, UniverseContext, UniverseParam, Universes, Variance,
         test_support::declaring,
     },
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
@@ -772,6 +772,7 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Module
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
@@ -796,6 +797,7 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
     let declaration = InductDecl {
         universe_context: UniverseContext {
             parameter_count,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
@@ -828,6 +830,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
     let declaration = InductDecl {
         universe_context: UniverseContext {
             parameter_count: 2,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
@@ -845,6 +848,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
@@ -916,6 +920,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
     let declaration = InductDecl {
         universe_context: UniverseContext {
             parameter_count: registry,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
@@ -933,6 +938,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: definition,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
@@ -985,6 +991,7 @@ fn extraction(sort: Term, instance: Option<Level>, tags: &[&str]) -> Module {
     let declaration = InductDecl {
         universe_context: UniverseContext {
             parameter_count: levels,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::build(
@@ -1002,7 +1009,12 @@ fn extraction(sort: Term, instance: Option<Level>, tags: &[&str]) -> Module {
         variances: vec![Variance::Irrelevant; levels],
     };
 
-    let at_zero = Term::induct_type_at(family, instance, Vec::<Term>::new(), [zero.clone()]);
+    let at_zero = Term::induct_type_at(
+        family,
+        instance.into_iter().collect::<Universes>(),
+        Vec::<Term>::new(),
+        [zero.clone()],
+    );
 
     let index = Free::local(601, Some("i"));
     let scrutinee = Free::local(602, Some("s"));
@@ -1236,7 +1248,7 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
 
     let declared: Term = Subterm::StructType(StructType {
         name,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: vec![Term::intrinsic(Intrinsic::NatType)],
     })
     .into();
@@ -2058,7 +2070,7 @@ pub(super) fn computed_field_wrapper(false_case: Term, true_case: Term) -> Struc
 pub(super) fn wrap_at_true(wrap_name: &Global) -> Term {
     Subterm::StructType(StructType {
         name: *wrap_name,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: vec![Term::intrinsic(Intrinsic::Bool(true))],
     })
     .into()
@@ -2204,6 +2216,7 @@ pub(super) fn scheme_context() -> UniverseContext {
 
     UniverseContext {
         parameter_count: 2,
+        quality_count: 0,
         constraints: vec![ordered],
     }
 }
@@ -2212,6 +2225,7 @@ pub(super) fn scheme_context() -> UniverseContext {
 pub(super) fn open_context() -> UniverseContext {
     UniverseContext {
         parameter_count: 2,
+        quality_count: 0,
         constraints: Vec::new(),
     }
 }
@@ -2348,6 +2362,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: vec![bounded],
         },
         island: Qualifier::default(),
@@ -2661,7 +2676,7 @@ pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
     let absurd = Term::induct_type(absurd_name, Vec::<Term>::new(), Vec::<Term>::new());
     let bad_type: Term = Subterm::StructType(StructType {
         name: bad,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: Vec::new(),
     })
     .into();
@@ -2921,6 +2936,7 @@ pub(super) fn wrap_declaration(variances: Vec<Variance>) -> InductDecl {
     InductDecl {
         universe_context: UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::build(
@@ -2956,6 +2972,7 @@ pub(super) fn box_declaration(variances: Vec<Variance>) -> InductDecl {
     InductDecl {
         universe_context: UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
@@ -3046,6 +3063,7 @@ pub(super) fn held_module(
     let declaration = InductDecl {
         universe_context: UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
@@ -3083,6 +3101,7 @@ pub(super) fn index_target_module(variances: Vec<Variance>) -> (Global, Module) 
     let declaration = InductDecl {
         universe_context: UniverseContext {
             parameter_count: 2,
+            quality_count: 0,
             constraints: vec![UniverseConstraint {
                 lower: payload_level.succ().expect("a parameter has a successor"),
                 upper: index_level.clone(),
@@ -3142,6 +3161,7 @@ pub(super) fn method_level_module(
     let declaration = StructDecl {
         universe_context: UniverseContext {
             parameter_count: 2,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::build(
@@ -3202,6 +3222,7 @@ pub(super) fn alias_module(variances: Vec<Variance>) -> (Global, Module) {
     let level = Level::param(UniverseParam(0));
     let scheme = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: Vec::new(),
     };
     let sort = Term::type_at(level.clone());
@@ -3281,6 +3302,7 @@ pub(super) fn excused_arm_module(with_arm: bool) -> (Global, Module) {
     let declaration = InductDecl {
         universe_context: UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: Vec::new(),
         },
         arity: Telescope::build(

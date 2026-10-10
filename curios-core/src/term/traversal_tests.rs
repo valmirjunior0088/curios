@@ -406,7 +406,7 @@ fn a_term_holds_a_group_where_a_rec_or_a_members_instance_stands() {
     };
     let instance: Term = Subterm::Instance(Instance {
         head: InstanceHead::RecProj(group.clone(), 0),
-        levels: Vec::new(),
+        universes: Universes::default(),
     })
     .into();
 
@@ -428,6 +428,7 @@ fn universe_params_are_read_at_the_depth_of_the_binders_above_them() {
     }])
     .with_universe_context(UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: Vec::new(),
     });
     let term = Term::tuple([Term::type_at(level(3)), Term::rec_proj(group, 0)]);

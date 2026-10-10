@@ -6,7 +6,8 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Cases, Free, FuncType, Global, InstanceHead, Intrinsic, Level, Match, MatchResult,
-        MetavarId, StructDecl, StructType, Subterm, Telescope, Term, UniverseContext, Var,
+        MetavarId, StructDecl, StructType, Subterm, Telescope, Term, UniverseContext, Universes,
+        Var,
     },
     curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
@@ -288,7 +289,7 @@ fn two_neutrals_at_a_struct_converge_where_it_is_a_proposition_alone() {
 
         Term::from(Subterm::StructType(StructType {
             name,
-            universes: Vec::new(),
+            universes: Universes::default(),
             params: Vec::new(),
         }))
     };
@@ -598,7 +599,7 @@ fn a_short_struct_literal_does_not_convert_with_a_neutral() {
 
     let type_ = Term::from(Subterm::StructType(StructType {
         name,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: Vec::new(),
     }));
     let literal = Term::struct_(name, Vec::<Term>::new(), Vec::<Term>::new());
@@ -814,7 +815,7 @@ fn two_polls_of_one_cell_at_two_ground_levels_do_not_convert() {
         Term::intrinsic(Intrinsic::CellPoll {
             element: nat_type(),
             cell: cell.clone(),
-            universes: vec![Level::constant(level)],
+            universes: Universes::levels(vec![Level::constant(level)]),
         })
     };
 

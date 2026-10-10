@@ -285,6 +285,7 @@ fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
         &poly,
         UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: Vec::new(),
         },
     );
@@ -868,6 +869,7 @@ fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
                 InductDecl {
                     universe_context: UniverseContext {
                         parameter_count: 1,
+                        quality_count: 0,
                         constraints: Vec::new(),
                     },
                     arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
@@ -1084,6 +1086,7 @@ fn an_unchanged_universe_scheme_keeps_the_reduction_cache_warm() {
     let poly = context.fresh(Some("poly"));
     let scheme = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: Vec::new(),
     };
     context.assume(
@@ -1112,6 +1115,7 @@ fn an_unchanged_universe_scheme_keeps_the_reduction_cache_warm() {
         &poly,
         UniverseContext {
             parameter_count: 2,
+            quality_count: 0,
             constraints: Vec::new(),
         },
     );
@@ -1135,6 +1139,7 @@ fn a_closed_reduct_is_served_across_universe_spellings() {
         &poly,
         UniverseContext {
             parameter_count: 1,
+            quality_count: 0,
             constraints: Vec::new(),
         },
     );

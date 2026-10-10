@@ -5,7 +5,7 @@ use {
     crate::{Error, check, infer},
     curios_core::{
         Global, InductDecl, Intrinsic, MetavarId, StructType, Subterm, Telescope, Term, Transient,
-        UniverseContext,
+        UniverseContext, Universes,
     },
     curios_utilities::Qualifier,
 };
@@ -106,7 +106,7 @@ fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
 
     let short: Term = Subterm::StructType(StructType {
         name,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: Vec::new(),
     })
     .into();
@@ -141,7 +141,7 @@ fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
 
     let exact: Term = Subterm::StructType(StructType {
         name,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: vec![nat_type()],
     })
     .into();

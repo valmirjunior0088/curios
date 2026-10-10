@@ -4,7 +4,7 @@ use {
     curios_core::{
         Atom, Cases, Exhaustion, Free, Global, InductArm, InductDecl, InductParam, Intrinsic, Many,
         Match, MatchResult, MetavarId, MetavarOrigin, Minted, Mints, Nat, Scope, Struct,
-        StructDecl, StructEntry, StructType, Subterm, Telescope, Term, UniverseContext,
+        StructDecl, StructEntry, StructType, Subterm, Telescope, Term, UniverseContext, Universes,
     },
     curios_num::{Floating, Natural},
     curios_utilities::{Plicity, Qualifier, Sign},
@@ -556,7 +556,7 @@ fn register_marked(context: &mut Context) -> Term {
 
     Term::from(Subterm::StructType(StructType {
         name: nominal("Marked"),
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: Vec::new(),
     }))
 }
@@ -887,7 +887,7 @@ fn a_context_argument_the_budget_cannot_read_propagates_the_refusal() {
     context.define(&loop_, &Term::free_var(&loop_), None);
     let region = Term::from(Subterm::StructType(StructType {
         name: nominal("Region"),
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: vec![Term::free_var(&loop_), Term::type_ground()],
     }));
 

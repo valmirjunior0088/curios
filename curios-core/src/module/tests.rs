@@ -51,6 +51,7 @@ fn top_level_rec_item_captures_its_exports_into_the_shared_group() {
 fn recursive_members_cannot_silently_discard_different_universe_contexts() {
     let polymorphic = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: Vec::new(),
     };
 

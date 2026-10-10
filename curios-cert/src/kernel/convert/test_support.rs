@@ -7,7 +7,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Nat, StructDecl, StructType,
-        Subterm, Telescope, Term, UniverseContext, UniverseParam, Variance,
+        Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Variance,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -120,7 +120,7 @@ pub(super) fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<
 
     Term::from(Subterm::StructType(StructType {
         name,
-        universes: Vec::new(),
+        universes: Universes::default(),
         params: Vec::new(),
     }))
 }
@@ -160,6 +160,7 @@ pub(super) fn declare_wrap(
     let level = Level::param(UniverseParam(0));
     let scheme = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: Vec::new(),
     };
     let carrier = binder(80, "A");
@@ -219,6 +220,7 @@ pub(super) fn declare_leaf(
     let name = Global::Authored(Qualifier::from(["Leaf"]));
     let scheme = UniverseContext {
         parameter_count: 1,
+        quality_count: 0,
         constraints: Vec::new(),
     };
 
@@ -269,6 +271,7 @@ pub(super) fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Glob
             &InductDecl {
                 universe_context: UniverseContext {
                     parameter_count: 1,
+                    quality_count: 0,
                     constraints: Vec::new(),
                 },
                 arity: Telescope::done(Telescope::done(())),

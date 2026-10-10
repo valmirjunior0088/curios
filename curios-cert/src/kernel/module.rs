@@ -13,18 +13,70 @@ mod tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
-    crate::{hold_proof, yields_a_sort},
+    crate::{hold_proof, instantiate_qualities, yields_a_sort},
     curios_core::{
         Bound, Free, InductDecl, Quality, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term,
         Totality, UniverseContext,
     },
 };
 
+/// Every assignment of `count` sorts, each `Prop` or `Type`, the one stating `Prop` throughout first: the one empty assignment where a declaration leaves none open.
+fn assignments(count: usize) -> impl Iterator<Item = Vec<Quality>> {
+    (0..1usize << count).map(move |chosen| {
+        (0..count)
+            .map(|sort| match (chosen >> sort) & 1 {
+                0 => Quality::Prop,
+                _ => Quality::Type,
+            })
+            .collect()
+    })
+}
+
+/// Judge a declaration at every assignment of the sorts `universes` leaves to its caller, the budget restored and the declaration's constraints assumed for each.
+///
+/// **A declaration generic in a sort is judged at each sort a use can state, and never at the parameter.** Every rule that reads a sort reads which of `Prop` and `Type` it is — irrelevance, the elimination guard, eta, the obligation an erased position carries — and each has its own safe answer for a sort that states neither. So `judge` is handed the assignment and reads the declaration's terms at it ([`at_sorts`]): what it judges holds no parameter, a store keyed by a term holds each term at one sort, and a use at any instance stands at an assignment that was judged. That is two to the count judgments, which [`UniverseContext::QUALITY_LIMIT`] bounds.
+///
+/// A refusal names the assignment it was reached at. A declaration that leaves no sort open is judged once, as it stands, and its refusal is its own.
+fn at_every_sort(
+    kernel: &mut Kernel,
+    universes: &UniverseContext,
+    mut judge: impl FnMut(&mut Kernel, &[Quality]) -> Result<(), Error>,
+) -> Result<(), Error> {
+    if universes.quality_count > UniverseContext::QUALITY_LIMIT {
+        return Err(Error::TooManySorts {
+            stated: universes.quality_count,
+        });
+    }
+
+    for sorts in assignments(universes.quality_count) {
+        kernel.restore_budget();
+        kernel.assume_universes(universes);
+
+        judge(kernel, &sorts).map_err(|refusal| match sorts.is_empty() {
+            true => refusal,
+            false => Error::AtSorts {
+                sorts: sorts.clone(),
+                refusal: Box::new(refusal),
+            },
+        })?;
+    }
+
+    Ok(())
+}
+
+/// `value` at one assignment of the sorts its declaration leaves open: as it stands where the declaration leaves none.
+fn at_sorts<B: Bound>(value: &B, sorts: &[Quality]) -> B {
+    match sorts.is_empty() {
+        true => value.clone(),
+        false => instantiate_qualities(value, sorts),
+    }
+}
+
 /// Check `name : type_ = body`, then bring it into scope.
 ///
 /// The budget is restored first: each item gets the whole of it, so one expensive definition cannot starve the next.
 ///
-/// A universe-polymorphic definition is checked *generically*, at its own parameters rather than at any instance. That is the right reading — a scheme is valid exactly when its body checks with its parameters held abstract — and it is also the only one available, since the kernel sees no use sites.
+/// A definition polymorphic in a level is checked *generically*, at its own parameters rather than at any instance. That is the right reading — a scheme is valid exactly when its body checks with its parameters held abstract — and it is also the only one available, since the kernel sees no use sites. One that leaves a sort to its caller is checked at every assignment of them ([`at_every_sort`]), and stored as it is stated: an occurrence states the sorts with the levels, and reads the type and the body at them.
 ///
 /// `proof` is the definition's mark ([`curios_core::Definition::proof`]), held to its type one way, as a binder's is ([`hold_proof`]): a name marked a proof at a type that is no proposition is refused, since a judgment reads what such a name unfolds to, and one left unmarked unfolds and is refused nowhere. The sort this check types the statement at answers, with nothing run: no proposition stands at a `Type`, so a statement typed at one reduces to none.
 pub(crate) fn check_definition(
@@ -35,14 +87,15 @@ pub(crate) fn check_definition(
     proof: bool,
     universes: &UniverseContext,
 ) -> Result<(), Error> {
-    kernel.restore_budget();
-    kernel.assume_universes(universes);
+    at_every_sort(kernel, universes, |kernel, sorts| {
+        let (type_, body) = (at_sorts(type_, sorts), at_sorts(body, sorts));
 
-    let sort = infer_type(kernel, type_)?;
-    if proof && !sort.is_prop() {
-        return Err(Error::NoProof(type_.clone()));
-    }
-    check(kernel, body, type_)?;
+        let sort = infer_type(kernel, &type_)?;
+        if proof && !sort.is_prop() {
+            return Err(Error::NoProof(type_.clone()));
+        }
+        check(kernel, &body, &type_)
+    })?;
 
     define_as_stated(kernel, name, type_, body, proof, universes)
 }
@@ -74,6 +127,11 @@ pub(crate) fn check_group<R>(
     group: &RecGroup,
     within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, Error>,
 ) -> Result<R, Error> {
+    // A group is judged at one assignment of its declaration's sorts, where it leaves none, or inside a term, where a quality parameter is the enclosing declaration's: one that leaves a sort here would have it read as that declaration's.
+    if group.universe_context().quality_count != 0 {
+        return Err(Error::GroupLeavesSort);
+    }
+
     kernel.scoped(|kernel| {
         // Signatures first, then bodies — and the two phases must read a sibling differently.
         //
@@ -137,15 +195,14 @@ pub(crate) fn check_group<R>(
 /// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `members` parallels the group's members positionally, each the name it is exported as with its mark ([`curios_core::RecDefinition::proof`]); an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through, and one marked a proof is held to its type as a binder is ([`hold_proof`]) and reduces through nothing.
 ///
 /// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/soundness/totality-of-the-erased-program.md`.
+///
+/// A group that leaves a sort to its caller is judged at every assignment of them ([`at_every_sort`]), the group read at each, and defined as it is stated. What the obligations read of it under its own spelling is what every assignment says: it descends where it does at each, and a member encloses a group that does not where it does at any.
 pub(crate) fn check_rec_group(
     kernel: &mut Kernel,
     members: &[(Free, bool)],
     group: &RecGroup,
     universes: &UniverseContext,
 ) -> Result<(), Error> {
-    kernel.restore_budget();
-    kernel.assume_universes(universes);
-
     if members.len() != group.length() {
         return Err(Error::Arity {
             counted: Counted::GroupMembers,
@@ -154,15 +211,39 @@ pub(crate) fn check_rec_group(
         });
     }
 
-    check_group(kernel, group, |_, _| Ok(()))?;
+    let mut totality = Totality::Total;
+    let mut enclosing = vec![false; group.length()];
+    at_every_sort(kernel, universes, |kernel, sorts| {
+        let at;
+        let group = match sorts.is_empty() {
+            true => group,
+            false => {
+                at = group.at_qualities(sorts);
+                &at
+            }
+        };
+
+        check_group(kernel, group, |_, _| Ok(()))?;
+
+        for (index, (_, proof)) in members.iter().enumerate() {
+            hold_proof(kernel, *proof, &group.member_type(index))?;
+            enclosing[index] |= kernel.member_encloses_partial(group, index);
+        }
+        if kernel.group_verdict(group) != Some(Totality::Total) {
+            totality = Totality::Partial;
+        }
+
+        Ok(())
+    })?;
+    if universes.quality_count != 0 {
+        kernel.file_group(group, totality, enclosing);
+    }
 
     for (index, (name, proof)) in members.iter().enumerate() {
-        let type_ = group.member_type(index);
-        hold_proof(kernel, *proof, &type_)?;
         define_as_stated(
             kernel,
             name,
-            &type_,
+            &group.member_type(index),
             &Term::rec_proj(group.clone(), index),
             *proof,
             universes,
@@ -198,30 +279,68 @@ pub(crate) fn check_rec_group(
 ///
 /// A constructor telescope still repeats the parameters as its prefix. That is not an oversight: a [`Telescope`] is *closed*, and a constructor's payload types mention the parameters, so the parameters must be bound inside it for the signature to be a self-contained value at all. Removing it needs either nesting the constructors under the arity — which buries tags, declaration order and plicities under binders they do not depend on — or context-relative terms, which is `curios-core`'s whole binder discipline rather than this type. So the repetition is the price of closedness, it is kept deliberately, and clause 7 is what makes it an enforced agreement rather than an assumed one.
 ///
+/// # A declaration that leaves a sort to its caller
+///
+/// Clause 3 is read off the entry as it is stated, so the family's own sort is one sort whatever a use states: the readers that take it literally read the entry, and an entry at an assignment would hand them a literal the entry does not hold. Every clause that types a telescope is judged at every assignment of the declaration's open sorts ([`at_every_sort`]), the entry read at each ([`induct_at_sorts`]).
+///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
 pub(crate) fn check_induct_decl(
     kernel: &mut Kernel,
     declaration: &InductDecl,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_induct_decl");
-    kernel.restore_budget();
-    kernel.assume_universes(&declaration.universe_context);
-
     check_declared_sort(&declaration.result_sort)?;
     check_distinct_tags(declaration)?;
-    check_arity(kernel, declaration)?;
 
-    for constructor in declaration.signatures() {
-        check_signature(
-            kernel,
-            &constructor.telescope,
-            declaration.param_count(),
-            &declaration.result_sort,
-            |kernel, entries, targets| check_constructed(kernel, declaration, entries, targets),
-        )?;
+    at_every_sort(kernel, &declaration.universe_context, |kernel, sorts| {
+        let at;
+        let declaration = match sorts.is_empty() {
+            true => declaration,
+            false => {
+                at = induct_at_sorts(declaration, sorts);
+                &at
+            }
+        };
+
+        check_arity(kernel, declaration)?;
+
+        for constructor in declaration.signatures() {
+            check_signature(
+                kernel,
+                &constructor.telescope,
+                declaration.param_count(),
+                &declaration.result_sort,
+                |kernel, entries, targets| check_constructed(kernel, declaration, entries, targets),
+            )?;
+        }
+
+        Ok(())
+    })
+}
+
+/// `declaration` at one assignment of the sorts it leaves open: every telescope it holds read at the assignment, and no sort left to a caller.
+fn induct_at_sorts(declaration: &InductDecl, sorts: &[Quality]) -> InductDecl {
+    let mut at = declaration.clone();
+
+    at.arity = instantiate_qualities(&at.arity, sorts);
+    at.result_sort = instantiate_qualities(&at.result_sort, sorts);
+    for constructor in at.signatures_mut() {
+        constructor.telescope = instantiate_qualities(&constructor.telescope, sorts);
     }
+    at.universe_context.quality_count = 0;
 
-    Ok(())
+    at
+}
+
+/// [`induct_at_sorts`] for a `struct` registry entry.
+fn struct_at_sorts(declaration: &StructDecl, sorts: &[Quality]) -> StructDecl {
+    let mut at = declaration.clone();
+
+    at.arity = instantiate_qualities(&at.arity, sorts);
+    at.result_sort = instantiate_qualities(&at.result_sort, sorts);
+    at.universe_context.quality_count = 0;
+
+    at
 }
 
 /// The declared result sort is a *literal* sort, not a term that reduces to one.
@@ -362,33 +481,44 @@ fn check_constructed(
 /// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), that its `result_sort` is a literal sort (clause 3), the size condition over its field telescope (clause 6), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity and variance are decided over the whole set as they are for an `induct`, a field read as a payload is.
 ///
 /// A `struct` has no constructors and no index targets, so clauses 5 through 9 have nothing to range over — and clause 7 could not be violated even if it did, since a structure's fields are the terminal of its own `arity` rather than a separately-stored telescope repeating the parameters: the same nesting, and the same reason, as [`InductDecl::arity`].
+///
+/// One that leaves a sort to its caller is read as [`check_induct_decl`] reads an `induct`'s: its own sort off the entry as stated, and its telescopes at every assignment.
 pub(crate) fn check_struct_decl(
     kernel: &mut Kernel,
     declaration: &StructDecl,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_struct_decl");
-    kernel.restore_budget();
-    kernel.assume_universes(&declaration.universe_context);
-
     check_declared_sort(&declaration.result_sort)?;
-    check_non_informative(kernel, declaration)?;
 
-    // The parameters, then the fields they terminate in — the second walk runs inside the first's scope, so a field domain sees every parameter. Parameters get the extra rung of slack; fields do not.
-    check_signature(
-        kernel,
-        &declaration.arity,
-        declaration.param_count(),
-        &declaration.result_sort,
-        |kernel, _, fields| {
-            check_signature(
-                kernel,
-                fields,
-                0,
-                &declaration.result_sort,
-                |_, _, _| Ok(()),
-            )
-        },
-    )
+    at_every_sort(kernel, &declaration.universe_context, |kernel, sorts| {
+        let at;
+        let declaration = match sorts.is_empty() {
+            true => declaration,
+            false => {
+                at = struct_at_sorts(declaration, sorts);
+                &at
+            }
+        };
+
+        check_non_informative(kernel, declaration)?;
+
+        // The parameters, then the fields they terminate in — the second walk runs inside the first's scope, so a field domain sees every parameter. Parameters get the extra rung of slack; fields do not.
+        check_signature(
+            kernel,
+            &declaration.arity,
+            declaration.param_count(),
+            &declaration.result_sort,
+            |kernel, _, fields| {
+                check_signature(
+                    kernel,
+                    fields,
+                    0,
+                    &declaration.result_sort,
+                    |_, _, _| Ok(()),
+                )
+            },
+        )
+    })
 }
 
 /// A `Prop`-sorted structure's fields must all be non-informative, which means every one of them is a proof.

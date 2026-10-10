@@ -911,7 +911,7 @@ fn cell_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
                 Intrinsic::CellPoll {
                     element: name("T"),
                     cell: name("c"),
-                    universes: Vec::new(),
+                    universes: curios_core::Universes::default(),
                 },
             ),
         ),
@@ -941,7 +941,7 @@ fn channel_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     outcomes.items.into_iter().chain(items(vec![
         documented(&["A bounded FIFO with positive capacity."], operation("new", &["T", "capacity", "positive"], syntax, Intrinsic::Channel { element: name("T"), capacity: name("capacity"), positive: name("positive") })),
         documented(&["Append if open and not full, reporting this attempt's outcome."], operation("push", &["T", "c", "value"], syntax, Intrinsic::ChannelPush { element: name("T"), channel: name("c"), value: name("value") })),
-        query("take", "Remove the oldest item; empty while open, ended when closed and drained.", Intrinsic::ChannelTake { element: name("T"), channel: name("c"), universes: Vec::new() }),
+        query("take", "Remove the oldest item; empty while open, ended when closed and drained.", Intrinsic::ChannelTake { element: name("T"), channel: name("c"), universes: curios_core::Universes::default() }),
         query("close", "Prevent later pushes, preserving queued items for draining. Repeated closes do nothing.", Intrinsic::ChannelClose { element: name("T"), channel: name("c") }),
         query("closed", "Whether the channel has been closed.", Intrinsic::ChannelClosed { element: name("T"), channel: name("c") }),
         query("count", "The number of queued items. This observation reserves nothing.", Intrinsic::ChannelCount { element: name("T"), channel: name("c") }),

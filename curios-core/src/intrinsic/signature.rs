@@ -20,7 +20,7 @@
 
 use {
     super::Intrinsic,
-    crate::{Free, Global, Level, Nat, Subterm, Term, Var},
+    crate::{Free, Global, Nat, Subterm, Term, Universes, Var},
     curios_num::{Floating, Grain, Integer},
     curios_utilities::{SyntaxName, SyntaxRegistry},
 };
@@ -96,7 +96,7 @@ impl Intrinsic {
         let list_len = |element, list| Term::intrinsic(Intrinsic::ListLen { element, list });
         let cell_type = |element: Term| Term::intrinsic(Intrinsic::CellType(element));
         let channel_type = |element: Term| Term::intrinsic(Intrinsic::ChannelType(element));
-        let nominal = |family: SyntaxName, universes: Vec<Level>, params: Vec<Term>| {
+        let nominal = |family: SyntaxName, universes: Universes, params: Vec<Term>| {
             Term::induct_type_at(
                 Global::Authored(family.qualifier()),
                 universes,
@@ -535,7 +535,11 @@ impl Intrinsic {
                     Operand::At(channel_type(element.clone())),
                     Operand::At(element.clone()),
                 ],
-                io_type(nominal(syntax.channel.push, Vec::new(), Vec::new())),
+                io_type(nominal(
+                    syntax.channel.push,
+                    Universes::default(),
+                    Vec::new(),
+                )),
             ),
             Self::ChannelTake {
                 element, universes, ..

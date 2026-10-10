@@ -530,7 +530,7 @@ impl<'s> Environment<'s> {
     /// A definition with universe parameters is withheld: see [`Held`].
     pub(super) fn value(&self, name: &Free) -> Option<&Term> {
         self.held(name)
-            .filter(|held| held.universes.parameter_count == 0)
+            .filter(|held| held.universes.width() == 0)
             .and_then(|held| held.value)
     }
 

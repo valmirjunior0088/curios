@@ -5,7 +5,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item, Level, Minted,
-        Module, Nat, Telescope, Term, Totality, UniverseContext, UniverseParam,
+        Module, Nat, Telescope, Term, Totality, UniverseContext, UniverseParam, Universes,
         test_support::declaring,
     },
     curios_utilities::Qualifier,
@@ -53,7 +53,7 @@ fn a_declaration_instance_is_read_once_per_node() {
 
     assert_eq!(
         super::declaration_instance(&value, &family),
-        Some(vec![level])
+        Some(Universes::levels(vec![level]))
     );
 }
 
