@@ -5,7 +5,7 @@ mod tests;
 
 use {
     super::probe_level_fallback,
-    crate::{Binders, Context, Opened, reduce, reduce_forced, synth_neutral},
+    crate::{Binders, Context, Opened, probe_open_sort, reduce, reduce_forced, synth_neutral},
     curios_core::{
         Bound, Free, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, MatchResult,
         Quality, ReduceError, StructType, Subterm, Term, TupleType,
@@ -49,6 +49,12 @@ impl Sort {
     /// Whether this is a sort of propositions. One whose quality is open is not: irrelevance is taken where a type is known a proposition, and a sort not decided yet, or left to a caller, is not known one.
     pub(crate) fn is_prop(&self) -> bool {
         self.quality.is_prop()
+    }
+
+    /// [`Sort::is_prop`] as the reader named `reader` asks it, noted under `profile` where the answer is taken for a sort the declaration leaves to a caller ([`probe_open_sort`]).
+    pub(crate) fn is_prop_to(&self, context: &Context, reader: &'static str) -> bool {
+        probe_open_sort(context, reader, self.quality);
+        self.is_prop()
     }
 
     /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting would read it as an ordinary implicit nothing retries. A quality still open is handed back as it stands, a metavariable or a declaration's parameter, and is no proposition's to [`Sort::is_prop`].

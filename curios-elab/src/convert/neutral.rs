@@ -7,7 +7,7 @@ use {
     crate::{Context, Structural, reduce, reduce_forced},
     curios_core::{
         Argument, Families, Field, Free, FuncType, InductType, Instance, InstanceHead, Level,
-        Match, MatchResult, Proj, ReduceError, StructType, Subterm, Term, TupleType,
+        Match, MatchResult, Proj, Quality, ReduceError, StructType, Subterm, Term, TupleType,
         UniverseConstraintKind, UniverseConstraintOrigin, instantiate_universes_scoped,
     },
     std::rc::Rc,
@@ -487,3 +487,18 @@ pub(super) fn probe_level_fallback(site: &'static str, type_: &Term) {
 
 #[cfg(not(feature = "profile"))]
 pub(super) fn probe_level_fallback(_site: &'static str, _type_: &Term) {}
+
+/// Report, under `profile`, that the reader named `reader` took its answer for a sort its declaration leaves to a caller ([`UniverseSolver::left_to_caller`](crate::UniverseSolver::left_to_caller)). Each reader answers for such a sort in the direction it calls safe, and the notes under `curios_elab::sort` that carry a `reader` are what counts which of them meet one, and how often. Diagnostic only: it changes nothing.
+#[cfg(feature = "profile")]
+pub(crate) fn probe_open_sort(context: &Context, reader: &'static str, quality: Quality) {
+    if context.universes().left_to_caller(quality) {
+        curios_profile::note!(
+            target: "curios_elab::sort",
+            reader,
+            "answered for a sort left to a caller",
+        );
+    }
+}
+
+#[cfg(not(feature = "profile"))]
+pub(crate) fn probe_open_sort(_context: &Context, _reader: &'static str, _quality: Quality) {}

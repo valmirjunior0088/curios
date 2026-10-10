@@ -2,8 +2,9 @@ use {
     super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
     crate::{
         BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_motive,
-        contradicted_guard, decided_sort_of, hold_prop, is_prop, quality_of, reduce_with,
-        refine_head, resolved_for_display, same_uncommitted, stuck_on_metavar, unreachable_arm,
+        contradicted_guard, decided_sort_of, hold_prop, is_prop, probe_open_sort, quality_of,
+        reduce_with, refine_head, resolved_for_display, same_uncommitted, stuck_on_metavar,
+        unreachable_arm,
     },
     curios_analysis::{
         Invert, invert_indices, retyped, scrutinee_solution, solve_indices, wholly_pinned,
@@ -909,13 +910,17 @@ fn elaborate_induct_match(
     // Every other match on a proposition answers a proposition and nothing else. A result known for data is refused here, before an arm is read. One whose sort nothing has decided waits for the arms, which decide it where they are typed, and is held to `Prop` after them ([`hold_prop`]): so a match its arms make data is refused as this elimination, and not as a mismatch in an arm.
     let undecided = match proposition && !permitted {
         false => false,
-        true => match quality_of(context, &result_type)? {
-            Quality::Prop => false,
-            Quality::Meta(_) => true,
-            Quality::Type | Quality::Param(_) => {
-                return Err(eliminated_into_data(context, &name, &result_type));
+        true => {
+            let quality = quality_of(context, &result_type)?;
+            probe_open_sort(context, "elaborate_induct_match", quality);
+            match quality {
+                Quality::Prop => false,
+                Quality::Meta(_) => true,
+                Quality::Type | Quality::Param(_) => {
+                    return Err(eliminated_into_data(context, &name, &result_type));
+                }
             }
-        },
+        }
     };
 
     // Every written arm must name a constructor; coverage is decided per constructor below — a missing arm is legal iff inversion proves it impossible.

@@ -98,6 +98,18 @@ impl UniverseSolver {
         true
     }
 
+    /// Whether `quality` is, as far as it is solved, a `Sort` the declaration wrote that nothing decided: the metavariable one is while its declaration is checked, or the parameter it closes as.
+    pub fn left_to_caller(&self, quality: Quality) -> bool {
+        match self.quality(quality) {
+            Quality::Param(_) => true,
+            Quality::Meta(open) => self
+                .qualities
+                .get(open.0)
+                .is_some_and(|entry| entry.written),
+            Quality::Prop | Quality::Type => false,
+        }
+    }
+
     /// Every quality metavariable as far as it is solved, by its index: what a walk over a term reads each sort's quality from. One still unsolved is itself, or `Type` where `settled`, which is what a quality nothing decides closes as and what a report shows of one.
     pub fn quality_table(&self, settled: bool) -> Vec<Quality> {
         (0..self.qualities.len())

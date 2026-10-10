@@ -294,7 +294,7 @@ fn classify(
             Error::reduce_exhausted(type_.clone(), refusal)
         })
     })?;
-    if sort.is_prop() {
+    if sort.is_prop_to(context, "derive::classify") {
         return Ok(Classified {
             position,
             payload,

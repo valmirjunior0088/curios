@@ -5,10 +5,10 @@ use {
     super::{
         Binders, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedProblem, ParkedWork,
         Problem, Sort, Watched, callee, convert, diagnose_embedding, diagnose_shape, elaborate,
-        elaborate_func_settle, embeds, is_monad, monad_shape, normalize, problem_outcome,
-        reduce_forced, refold_recs, refused_scrutinee, retry_discharge, retry_match,
-        retry_projection, retry_witness, settle_qualities, shallow_scrutinee, subsume_outcome,
-        synth_neutral, zonk_solved_term_metas,
+        elaborate_func_settle, embeds, is_monad, monad_shape, normalize, probe_open_sort,
+        problem_outcome, reduce_forced, refold_recs, refused_scrutinee, retry_discharge,
+        retry_match, retry_projection, retry_witness, settle_qualities, shallow_scrutinee,
+        subsume_outcome, synth_neutral, zonk_solved_term_metas,
     },
     curios_analysis::{
         RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation, scrutinee_solution,
@@ -69,19 +69,20 @@ pub(crate) fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Err
 
 /// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps `Sort::of`, mapping an exhausted budget like the helpers above.
 pub(crate) fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
-    is_prop_in(context, &mut Vec::new(), type_)
+    is_prop_in(context, &mut Vec::new(), type_, "is_prop")
 }
 
-/// [`is_prop`] under the binders a surrounding walk has opened.
+/// [`is_prop`] under the binders a surrounding walk has opened, asked by the reader named `reader` ([`Sort::is_prop_to`]).
 ///
 /// The binders are threaded rather than assumed into the [`Context`], because `Context::assume` bumps the mutation stamp that validates the memoization caches. A seeding walk that assumed instead would invalidate them at every binder it descended through.
-pub(crate) fn is_prop_in(
+fn is_prop_in(
     context: &mut Context,
     opened: &mut Vec<(Free, Term)>,
     type_: &Term,
+    reader: &'static str,
 ) -> Result<bool, Error> {
     Sort::of_in(context, opened, type_)
-        .map(|sort| sort.is_prop())
+        .map(|sort| sort.is_prop_to(context, reader))
         .map_err(|error| {
             Error::from_reduce(error, |refusal| {
                 Error::reduce_exhausted(type_.clone(), refusal)
@@ -106,7 +107,10 @@ pub(crate) fn hold_prop(
     type_: &Term,
     site: Option<Extent>,
 ) -> Result<bool, Error> {
-    Ok(match quality_of(context, type_)? {
+    let quality = quality_of(context, type_)?;
+    probe_open_sort(context, "hold_prop", quality);
+
+    Ok(match quality {
         Quality::Prop => true,
         quality @ Quality::Meta(_) => context.same_quality_at(quality, Quality::Prop, site),
         Quality::Type | Quality::Param(_) => false,
@@ -118,7 +122,10 @@ pub(crate) fn proof_position(
     context: &mut Context,
     type_: &Term,
 ) -> Result<Option<&'static str>, Error> {
-    Ok(match quality_of(context, type_)? {
+    let quality = quality_of(context, type_)?;
+    probe_open_sort(context, "proof_position", quality);
+
+    Ok(match quality {
         Quality::Prop => Some("a proof"),
         Quality::Param(_) => Some("a value at a sort left to a caller"),
         Quality::Type | Quality::Meta(_) => None,
@@ -170,7 +177,7 @@ pub(crate) fn is_erasable_in(
             opened.truncate(mark);
             result
         }
-        _ => is_prop_in(context, opened, type_),
+        _ => is_prop_in(context, opened, type_, "is_erasable_in"),
     }
 }
 
@@ -201,7 +208,7 @@ pub(crate) fn is_proof_in(
             opened.truncate(mark);
             result
         }
-        _ => is_prop_in(context, opened, type_),
+        _ => is_prop_in(context, opened, type_, "is_proof_in"),
     }
 }
 
