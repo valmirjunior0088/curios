@@ -227,6 +227,14 @@ impl Module {
         self.functions.get(id)
     }
 
+    /// Whether a closure call passing `arguments` may become a known call of `function`: it takes that many parameters.
+    ///
+    /// A closure is called with as many arguments as its function takes, so a call whose closure is known to be a function of another arity stands where no run arrives. Such a call is written wherever a value decides a result's type: the result is a thunk in one arm and a function in another, one continuation applies it either way, and a copy of that continuation specialized to one arm keeps the other arm's application. The pass that learns the closure makes that call [`Node::Unreachable`] rather than a known call, which the verifier refuses and every reader of a known callee's parameters would misread. A function not defined yet is not judged.
+    pub(crate) fn applies(&self, function: FunctionId, arguments: usize) -> bool {
+        self.function(function)
+            .is_none_or(|definition| definition.params.len() == arguments)
+    }
+
     pub fn continuation(&self, id: ContinuationId) -> Option<&Continuation> {
         self.continuations.get(id)
     }

@@ -326,14 +326,16 @@ pub(crate) fn uncurry_returns(module: &mut Module) -> bool {
                 && let [Atom::Fun(returned)] = edge.args.as_slice()
             {
                 let returned = *returned;
-                module.set_node(
-                    node_id,
-                    Node::ApplyFun {
+                // A function of another arity than the application every caller makes is handed back where no run arrives — see [`Module::applies`].
+                let absorbed = match module.applies(returned, carried.len()) {
+                    true => Node::ApplyFun {
                         callee: Callee::Known(returned),
                         args: carried.clone(),
                         return_to: sentinel,
                     },
-                );
+                    false => Node::Unreachable,
+                };
+                module.set_node(node_id, absorbed);
             }
         }
     }

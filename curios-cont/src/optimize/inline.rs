@@ -185,8 +185,31 @@ pub(crate) fn inline_continuation(
         return false;
     }
 
-    for &node in &substitution_nodes {
-        let node = module.node_mut(node).unwrap();
+    // The closure calls a substituted function cannot be a call of — see [`Module::applies`].
+    let unreachable = substitution_nodes
+        .iter()
+        .copied()
+        .filter(|node| {
+            matches!(
+                module.node(*node),
+                Some(Node::ApplyFun {
+                    callee: Callee::Closure(value),
+                    args,
+                    ..
+                }) if matches!(
+                    substitutions.get(value),
+                    Some(Atom::Fun(function)) if !module.applies(*function, args.len())
+                )
+            )
+        })
+        .collect::<BTreeSet<_>>();
+
+    for &id in &substitution_nodes {
+        let node = module.node_mut(id).unwrap();
+        if unreachable.contains(&id) {
+            *node = Node::Unreachable;
+            continue;
+        }
         visit_atoms_mut(node, &mut |atom| {
             if let Atom::Value(value) = atom
                 && let Some(replacement) = substitutions.get(value)
@@ -347,7 +370,22 @@ pub(crate) fn inline_call(
     };
     let mut cloned_nodes = BTreeMap::new();
     for (&old, node) in &nodes {
-        cloned_nodes.insert(node_map[&old], clone_node(node, &map));
+        // A closure call an argument makes a call of a function of another arity is copied as what it is — see [`Module::applies`].
+        let copy = match node {
+            Node::ApplyFun {
+                callee: Callee::Closure(value),
+                args,
+                ..
+            } if matches!(
+                values.get(value),
+                Some(Atom::Fun(function)) if !module.applies(*function, args.len())
+            ) =>
+            {
+                Node::Unreachable
+            }
+            _ => clone_node(node, &map),
+        };
+        cloned_nodes.insert(node_map[&old], copy);
     }
 
     for (&old, continuation) in &continuation_defs {

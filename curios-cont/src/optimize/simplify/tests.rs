@@ -301,6 +301,46 @@ fn rewrite_atoms_remaps_and_devirtualizes_a_closure_callee() {
     );
 }
 
+/// A value that decides a result's type leaves a closure applied both ways, and a copy specialized to one arm keeps the other arm's application: a closure known to be a function of two parameters, forced as a thunk. No run arrives there, and a known call would misstate what the callee takes to every pass that reads it.
+#[test]
+fn a_closure_call_of_a_function_of_another_arity_is_unreachable() {
+    let mut module = Module::new();
+    let ret = module.reserve_continuation();
+    let closure = module.add_value(Some("closure".into()));
+    let first = module.add_value(Some("first".into()));
+    let second = module.add_value(Some("second".into()));
+    let target = module.reserve_function();
+    let target_return = module.reserve_continuation();
+    let body = module.add_node(Node::ApplyCont(Edge {
+        target: target_return,
+        args: vec![Atom::Value(first)],
+    }));
+    module.define_function(
+        target,
+        Function {
+            debug_name: Some("target".into()),
+            params: vec![first, second],
+            return_cont: target_return,
+            body,
+            droppable: false,
+        },
+    );
+    let forced = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(closure),
+        args: vec![],
+        return_to: ret,
+    });
+
+    assert!(rewrite_atoms(
+        &mut module,
+        &BTreeMap::from([(closure, Atom::Fun(target))]),
+    ));
+    assert!(
+        matches!(module.node(forced), Some(Node::Unreachable)),
+        "a call no run arrives at is left as one"
+    );
+}
+
 /// `main(a)`: `t1 = (a, 1); p = t1.0; t2 = (p, 2); q = t2.0; return q`. One sweep forwards both projections and the return carries `a` — not `p`, which the same sweep deletes — because the replacements are collapsed through each other before anything is rewritten.
 #[test]
 fn forwards_a_chain_of_projections_in_one_sweep() {

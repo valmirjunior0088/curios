@@ -192,6 +192,17 @@ fn constant_args_leave_no_formatter_in_cont() {
     );
 }
 
+/// A format the evaluator declines, one past its step budget, is left to the Cont optimizer, which specializes the formatter itself: the program compiles, and prints the format.
+#[test]
+fn a_format_past_the_evaluators_budget_still_prints() {
+    let text = "a".repeat(2000);
+
+    assert_eq!(
+        run(&format!(r#"/std/Fmt/print("{text}")"#)),
+        text.into_bytes()
+    );
+}
+
 /// Runtime arguments: the parse of the literal directive spine still runs at compile time — the residual is the specialized first-order chain.
 #[test]
 fn runtime_args_leave_no_formatter_in_cont() {

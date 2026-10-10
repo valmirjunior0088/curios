@@ -8,8 +8,29 @@ use {
 };
 
 pub(crate) fn rewrite_atoms(module: &mut Module, known: &BTreeMap<ValueId, Atom>) -> bool {
+    // The closure calls a known function cannot be a call of, found before the nodes are borrowed — see [`Module::applies`].
+    let unreachable = module
+        .live_nodes()
+        .filter_map(|(id, node)| match node {
+            Node::ApplyFun {
+                callee: Callee::Closure(value),
+                args,
+                ..
+            } => match known.get(value) {
+                Some(Atom::Fun(function)) if !module.applies(*function, args.len()) => Some(id),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
     let mut changed = false;
-    for (_, node) in module.live_nodes_mut() {
+    for (id, node) in module.live_nodes_mut() {
+        if unreachable.contains(&id) {
+            *node = Node::Unreachable;
+            changed = true;
+            continue;
+        }
+
         visit_atoms_mut(node, &mut |atom| {
             if let Atom::Value(value) = atom
                 && let Some(replacement) = known.get(value)
@@ -183,8 +204,32 @@ pub(crate) fn forward_calls(module: &mut Module) -> bool {
         return false;
     }
 
+    // The jumps whose function cannot be called as the continuation calls it — see [`Module::applies`].
+    let unreachable = module
+        .live_nodes()
+        .filter_map(|(id, node)| {
+            let Node::ApplyCont(edge) = node else {
+                return None;
+            };
+            let (params, position, args, _) = calling.get(&edge.target)?;
+            if params.len() != edge.args.len() {
+                return None;
+            }
+            let Atom::Fun(function) = edge.args[*position] else {
+                return None;
+            };
+
+            (!module.applies(function, args.len())).then_some(id)
+        })
+        .collect::<BTreeSet<_>>();
+
     let mut changed = false;
-    for (_, node) in module.live_nodes_mut() {
+    for (id, node) in module.live_nodes_mut() {
+        if unreachable.contains(&id) {
+            *node = Node::Unreachable;
+            changed = true;
+            continue;
+        }
         let Node::ApplyCont(edge) = node else {
             continue;
         };
