@@ -786,10 +786,6 @@ impl fmt::Display for Displayed<'_> {
                         f,
                         "\n  {key} is not a declared `induct` or `struct`, and a derivation writes out a declaration's constructors and nothing else; write the body"
                     ),
-                    Underivable::Proposition => write!(
-                        f,
-                        "\n  {key} is a proposition, whose values erase; write the body"
-                    ),
                     Underivable::Concept => {
                         write!(f, "\n  {key} is a concept's record; write the body")
                     }

@@ -18,6 +18,10 @@ pub let trans(@A: Type, @x: A, @y: A, @z: A, p: Eq()(x, y), q: Eq()(y, z)) -> Eq
 pub let cong(@A: Type, @B: Type, @x: A, @y: A, f: (A) -> B, p: Eq()(x, y)) -> Eq()(f(x), f(y)) =
     match p | refl() => Eq/refl() end;
 
---- A `P(x)` carried to `P(y)` along an equality.
-pub let subst(@A: Type, @x: A, @y: A, P: (A) -> Type, p: Eq()(x, y), v: P(x)) -> P(y) =
+--- A proof of `P(x)` carried to `P(y)` along an equality.
+pub let subst(@A: Type, @x: A, @y: A, P: (A) -> Prop, p: Eq()(x, y), v: P(x)) -> P(y) =
+    match p | refl() => v end;
+
+--- A value of `P(x)` carried to `P(y)` along an equality: `subst` where `P` is a family of data.
+pub let transp(@A: Type, @x: A, @y: A, P: (A) -> Type, p: Eq()(x, y), v: P(x)) -> P(y) =
     match p | refl() => v end;

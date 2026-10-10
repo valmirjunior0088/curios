@@ -75,7 +75,7 @@ pub(super) const PRODUCTIVE_SHAPE: &str = r#"
 
     let Shape(f : F) -> Type =
         match f
-        | stop() => /std/Bool/False
+        | stop() => {}
         | more(rest) => Sink(Shape(rest))
         end;
 

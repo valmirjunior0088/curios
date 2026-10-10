@@ -227,20 +227,7 @@ fn proofs_and_implicit_payloads_take_no_part_in_equality() {
 }
 
 #[test]
-fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
-    let proposition = r#"
-        use /std/{Str};
-        use /std/ops/{Eql};
-        induct Attested: pub Prop | yes() end
-        satisfy Eql(Attested) { .. }
-        /std/print("")
-        "#;
-    let report = error(proposition);
-    assert!(
-        report.contains("cannot derive 'Eql' for Attested\n  Attested is a proposition, whose values erase; write the body"),
-        "{report}"
-    );
-
+fn the_eql_derivation_shares_the_provenance() {
     let premise = r#"
         use /std/{Str};
         use /std/ops/{Eql};
@@ -294,18 +281,6 @@ fn the_standard_library_derives_option_result_and_order() {
 
 #[test]
 fn an_ineligible_key_is_refused_by_its_shape() {
-    let proposition = r#"
-        use /std/{Str, Spell};
-        induct Attested: pub Prop | yes() end
-        satisfy Spell(Attested) { .. }
-        /std/print("")
-        "#;
-    let report = error(proposition);
-    assert!(
-        report.contains("cannot derive 'Spell' for Attested\n  Attested is a proposition, whose values erase; write the body"),
-        "{report}"
-    );
-
     let concept = r#"
         use /std/{Nat, Str, Spell};
         pub concept Tag(A: Type): pub Type {

@@ -1507,7 +1507,7 @@ fn a_family_the_budget_cannot_read_at_its_scrutinee_propagates_the_refusal() {
     assert!(read.is_err_and(|spent| spent.is_exhausted()));
 }
 
-// A function type's codomain is decided at below past a domain that waits. `(x: ?0(0)) -> Prop ≤ (x: Bool) -> Type`: the domain is an equation that waits on `?0` and is all the run surrenders, the codomain being `Prop` below `Type`. As an equation the pair is refused outright.
+// A function type's codomain is decided at below past a domain that waits. `(x: ?0(0)) -> Prop ≤ (x: Bool) -> Prop` at a larger level: the domain is an equation that waits on `?0` and is all the run surrenders, the codomain being a level bound. With `Type` for the upper codomain the pair is refused outright, at below as at equal: no proposition stands where a type is wanted.
 #[test]
 fn a_codomain_is_decided_at_below_past_a_domain_that_waits() {
     let mut context = context();
@@ -1523,13 +1523,17 @@ fn a_codomain_is_decided_at_below_past_a_domain_that_waits() {
         )],
         Term::prop(),
     );
-    let upper = Term::func_type(
-        [(
-            context.fresh(Some("x")),
-            Term::intrinsic(Intrinsic::BoolType),
-        )],
-        Term::type_ground(),
-    );
+    let over = |context: &mut Context, codomain: Term| {
+        Term::func_type(
+            [(
+                context.fresh(Some("x")),
+                Term::intrinsic(Intrinsic::BoolType),
+            )],
+            codomain,
+        )
+    };
+    let upper = over(&mut context, Term::prop_at(Level::constant(1)));
+    let into_a_type = over(&mut context, Term::type_ground());
 
     let below = subsume_outcome(&mut context, &lower, &upper, None);
     let Ok(Outcome::Blocked(goals)) = below else {
@@ -1538,11 +1542,13 @@ fn a_codomain_is_decided_at_below_past_a_domain_that_waits() {
     assert_eq!(goals.len(), 1);
     assert_eq!(goals[0].relation, Relation::Equal);
 
-    let equal = convert_outcome(&mut context, &Term::type_ground(), &lower, &upper);
+    let below = subsume_outcome(&mut context, &lower, &into_a_type, None);
+    assert!(matches!(below, Ok(Outcome::Mismatch(_))), "{below:?}");
+    let equal = convert_outcome(&mut context, &Term::type_ground(), &lower, &into_a_type);
     assert!(matches!(equal, Ok(Outcome::Mismatch(_))), "{equal:?}");
 }
 
-// Two sorts at below are the level bound and at equal the level equation: `Type 0 ≤ Type 1` holds, and `Type 1 ≤ Type 0` is refused where the levels close.
+// Two sorts of one kind at below are the level bound and at equal the level equation: `Type 0 ≤ Type 1` and `Prop 0 ≤ Prop 1` hold, and `Type 1 ≤ Type 0` is refused where the levels close. Two sorts of two kinds are refused either way round: no proposition stands where a type is wanted.
 #[test]
 fn two_sorts_at_below_are_a_level_bound() {
     let mut context = context();
@@ -1554,8 +1560,17 @@ fn two_sorts_at_below_are_a_level_bound() {
         Ok(Outcome::Converts)
     ));
     assert!(matches!(
-        subsume_outcome(&mut context, &Term::prop(), &small, None),
+        subsume_outcome(
+            &mut context,
+            &Term::prop(),
+            &Term::prop_at(Level::constant(1)),
+            None
+        ),
         Ok(Outcome::Converts)
+    ));
+    assert!(matches!(
+        subsume_outcome(&mut context, &Term::prop(), &small, None),
+        Ok(Outcome::Mismatch(_))
     ));
     assert!(matches!(
         subsume_outcome(&mut context, &small, &Term::prop(), None),

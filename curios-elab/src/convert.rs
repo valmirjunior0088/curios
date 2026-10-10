@@ -600,7 +600,9 @@ impl Convert {
         Ok(true)
     }
 
-    /// The relation's own rules, for a problem at below, both sides read forced as the kernel's `subsumes` reads them: two sorts add `lower ≤ upper`, `Prop` below any `Type`, and two function types of one plicity vector pose each domain as an equation and their codomains at below. Answers whether they decided the problem.
+    /// The relation's own rules, for a problem at below, both sides read forced as the kernel's `subsumes` reads them: two `Type`s and two `Prop`s add `lower ≤ upper`, and two function types of one plicity vector pose each domain as an equation and their codomains at below. Answers whether they decided the problem. A `Prop` against a `Type` is none of them, so it goes on as the equation it is not.
+    ///
+    /// **A classifier admits either sort.** `Type` at a level the elaborator invented for a type it left to inference — an unannotated binder's, a motive's result, a parked term's — states no sort: it stands where the type's own sort is still to be read, and a proposition is such a type as any other is. So `Prop u` is below it, a level bound. The kernel has no such rule and needs none: a classifier is the type of a metavariable or what a term is checked against, and no elaborated term holds one. Where the elaborator read a sort off a classifier before the type was known, it read `Type`, which is the conservative answer for a proposition and decides nothing the kernel does not decide again.
     ///
     /// Any other pair is the equation it is, taken from its written spelling through every step an equation takes: that is sufficient for a subsumption, and it is the whole of one wherever neither side can come to a sort or a function type. A problem those steps leave waiting on a metavariable keeps the relation it was asked at, so it resumes here.
     fn decide_below(
@@ -613,7 +615,7 @@ impl Convert {
         let upper = reduce_forced(context, that.clone())?;
 
         match (&*lower, &*upper) {
-            (below @ (Subterm::Prop(lower) | Subterm::Type(lower)), Subterm::Type(upper))
+            (below @ Subterm::Type(lower), Subterm::Type(upper))
             | (below @ Subterm::Prop(lower), Subterm::Prop(upper)) => {
                 // What is put below is named for the report: a proposition's level and a type's are told apart by nothing else on the path.
                 let kind = match below {
@@ -629,6 +631,25 @@ impl Convert {
                         UniverseConstraintOrigin {
                             extent: self.extent,
                             kind,
+                            declaration: None,
+                            binder: None,
+                        },
+                    )
+                    .map_err(ReduceError::Universe)?;
+
+                Ok(true)
+            }
+            (Subterm::Prop(lower), Subterm::Type(upper))
+                if context.universes().classifies(upper) =>
+            {
+                context
+                    .universes_mut()
+                    .add_leq(
+                        lower.clone(),
+                        upper.clone(),
+                        UniverseConstraintOrigin {
+                            extent: self.extent,
+                            kind: UniverseConstraintKind::PropositionCumulativity,
                             declaration: None,
                             binder: None,
                         },
@@ -914,7 +935,7 @@ impl Convert {
             return Ok(false);
         }
 
-        // Recover the declared types from the registry so each argument compares at its own type rather than a flat `Type`. When an index is a proof, that type is a proposition and irrelevance applies — a stuck `Eq(@P)(p, q)` converts with `Eq(@P)(p, p)`. Falls back to `Type` if the inductive is somehow absent or arity-mismatched.
+        // Recover the declared types from the registry so each argument compares at its own type rather than a flat `Type`. When an index is a proof, that type is a proposition and irrelevance applies — two instances of a family indexed by a proof convert whatever the proofs. Falls back to `Type` if the inductive is somehow absent or arity-mismatched.
         let arity = match context.induct_decl(&this.name).cloned() {
             Some(induct_decl) => Some(instantiate_bound_at(
                 context,
@@ -1907,10 +1928,6 @@ impl Convert {
             return Ok(None);
         };
 
-        if Self::waits_at_prop(context, &metavar, rigid, standing)? {
-            return Ok(Some(Solved::Postponed));
-        }
-
         // The body at levels of its own where the pair is asked at below, as a bare metavariable's candidate is ([`Self::sorts_of_its_own`]), minted in the transaction that offers it.
         let mark = context.solution_mark();
         let own = match standing {
@@ -2122,7 +2139,7 @@ impl Convert {
         Ok(fresh)
     }
 
-    /// [`Self::solve`] with a candidate read off a problem's rigid side, at levels of its own: a family among them taken at an occurrence of its own ([`Self::family_at_its_own_occurrence`]), and, where the problem is asked at below, a side that ends in a `Type` taken with that sort at a level of its own ([`Self::sorts_of_its_own`]). The levels are minted and the candidate offered in one transaction, so one `solve` postpones or refuses leaves no level standing with no term to hold it.
+    /// [`Self::solve`] with a candidate read off a problem's rigid side, at levels of its own: a family among them taken at an occurrence of its own ([`Self::family_at_its_own_occurrence`]), and, where the problem is asked at below, a side that ends in a sort taken with that sort at a level of its own ([`Self::sorts_of_its_own`]). The levels are minted and the candidate offered in one transaction, so one `solve` postpones or refuses leaves no level standing with no term to hold it.
     fn solve_rigid(
         &mut self,
         context: &mut Context,
@@ -2160,48 +2177,9 @@ impl Convert {
         solved
     }
 
-    /// Whether a problem at below that has `metavar` over `rigid` waits: `rigid` ends in `Prop`, and some term is still reading its parts for `metavar` ([`Context::settle_bounds`](crate::Context::settle_bounds)).
+    /// `term` with the sort it ends in at a level of its own, where it ends in one: a `Type` or a `Prop`, or a function type whose codomain ends in one, each read forced as the relation reads it. `None` where it ends in anything else, and the candidate is then the term as it stands.
     ///
-    /// `Prop ≤ ?m` has two solutions, the proposition and any `Type` over it, and the first thing `?m` meets cannot tell them apart: solved to `Prop` there, a `Type` met after it is refused, and a call, a list literal or a match is admitted by the order of its parts. A `Type` has a level to leave open ([`Self::sorts_of_its_own`]); `Prop` is no level, so the problem itself waits, at below, for the parts still to be read.
-    fn waits_at_prop(
-        context: &mut Context,
-        metavar: &Metavar,
-        rigid: &Term,
-        standing: Option<Standing>,
-    ) -> Result<bool, ReduceError> {
-        if standing != Some(Standing::Over) || !context.awaits(metavar.id) {
-            return Ok(false);
-        }
-        let waits = Self::ends_in_prop(context, rigid)?;
-        if waits {
-            // How often a term's parts are read past a proposition its metavariable met first.
-            curios_profile::sample!("convert::waits_at_prop", 1);
-        }
-
-        Ok(waits)
-    }
-
-    /// Whether `term` ends in `Prop`: the sort, or a function type whose codomain does, each read forced as the relation reads it.
-    fn ends_in_prop(context: &mut Context, term: &Term) -> Result<bool, ReduceError> {
-        let forced = reduce_forced(context, term.clone())?;
-        match &*forced {
-            Subterm::Prop(_) => Ok(true),
-            Subterm::FuncType(FuncType { telescope }) => {
-                let mut cursor = telescope.cursor();
-                while cursor.entry().is_some() {
-                    cursor.advance_fresh(|hint| context.fresh(hint));
-                }
-                let codomain = cursor.body().expect("a cursor past every entry");
-
-                Self::ends_in_prop(context, &codomain)
-            }
-            _ => Ok(false),
-        }
-    }
-
-    /// `term` with each `Type` it ends in at a level of its own, where it ends in one: a sort, or a function type whose codomain ends in one, each read forced as the relation reads it. `None` where it ends in anything else, and the candidate is then the term as it stands.
-    ///
-    /// A metavariable met at below is held to an inequality, and the other side's own sort is only the nearest solution of it. Solved to that, `S` in `both(@S, f: (Bool) -> S, g: (Bool) -> S)` is the first argument's sort and the second is held to it: the call is admitted in one order and refused in the other, and a declaration that makes it bounds its own callers by that order. The fresh level is bounded by the one it copies in the problem's direction, so the problem holds as asked and a later bound moves the copy alone, the declaration's closing taking the join. It stands for the `Type` the program would have written at the implicit and takes that level's provenance ([`UniverseSolver::fresh_beside`](crate::UniverseSolver::fresh_beside)), so the call elaborates to what it does with `@Type` written. Rocq's `refresh_universes` gives an evar met under cumulativity the same copy, for a universe that cannot move.
+    /// A metavariable met at below is held to an inequality, and the other side's own sort is only the nearest solution of it. Solved to that, `S` in `both(@S, f: (Bool) -> S, g: (Bool) -> S)` is the first argument's sort and the second is held to it: the call is admitted in one order and refused in the other, and a declaration that makes it bounds its own callers by that order. The fresh level is bounded by the one it copies in the problem's direction, so the problem holds as asked and a later bound moves the copy alone, the declaration's closing taking the join. It stands for the sort the program would have written at the implicit and takes that level's provenance ([`UniverseSolver::fresh_beside`](crate::UniverseSolver::fresh_beside)), so the call elaborates to what it does with `@Type` or `@Prop` written. The copy is a sort of the kind it copies: a proposition stands for no type, so a metavariable met at `Prop` is a `Prop`. Rocq's `refresh_universes` gives an evar met under cumulativity the same copy, for a universe that cannot move.
     ///
     /// Each reading is under the refinements `metavar` was born under and no others, for the reason [`Self::solve_at_birth`] gives. The caller holds the transaction: a level minted and bounded here goes with a candidate `solve` does not commit.
     fn sorts_of_its_own(
@@ -2222,10 +2200,18 @@ impl Convert {
         };
 
         match &*forced {
-            Subterm::Type(level) => {
+            sort @ (Subterm::Type(level) | Subterm::Prop(level)) => {
+                // What is put below is named for the report, as the relation's own rule names it.
+                let (kind, at): (_, fn(Level) -> Term) = match sort {
+                    Subterm::Prop(_) => (
+                        UniverseConstraintKind::PropositionCumulativity,
+                        Term::prop_at,
+                    ),
+                    _ => (UniverseConstraintKind::Cumulativity, Term::type_at),
+                };
                 let origin = UniverseConstraintOrigin {
                     extent: self.extent,
-                    kind: UniverseConstraintKind::Cumulativity,
+                    kind,
                     declaration: None,
                     binder: None,
                 };
@@ -2241,7 +2227,7 @@ impl Convert {
                     .add_leq(lower, upper, origin)
                     .map_err(ReduceError::Universe)?;
 
-                Ok(Some(Term::type_at(own)))
+                Ok(Some(at(own)))
             }
             Subterm::FuncType(FuncType { telescope }) => {
                 let mut binders = Vec::with_capacity(telescope.len());
@@ -2574,11 +2560,6 @@ impl Convert {
                         continue;
                     }
                     let standing = (relation == Relation::Below).then_some(Standing::Over);
-                    // `Prop ≤ ?m` has two solutions, and what tells them apart is still to be read: it waits for the term that minted `?m` ([`Self::waits_at_prop`]).
-                    if Self::waits_at_prop(context, &metavar, &this, standing)? {
-                        self.blocked.push(raw_problem(&type_));
-                        continue;
-                    }
                     match self.solve_at_birth(context, &metavar, &this, &this_raw, standing)? {
                         Solved::Done => continue,
                         Solved::Postponed => {

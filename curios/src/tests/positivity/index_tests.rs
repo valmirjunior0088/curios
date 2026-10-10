@@ -84,17 +84,16 @@ fn an_index_domain_over_the_declaration_is_reachable_only_by_storing_its_witness
 
 // The other skipped index position, and the one that stays admitted: a constructor's index *targets*. `labelled` ignores the telescope's terminal, so the recursive occurrence in `c`'s target is never walked and `Bad`'s diagonal comes out `Unused`.
 //
-// That is sound for the same reason as the binder types, and it is worth stating because the declaration looks alarming: an index is not stored. `c()` carries nothing, and eliminating a `Bad(t)` refines the motive's `t` to the target — which makes `(Bad(Nat)) -> False` a *goal* the arm must discharge, never a value the match hands back. The declaration is consistent, and `Bad(Nat)` is simply an empty type, no constructor targeting that index.
+// That is sound for the same reason as the binder types, and it is worth stating because the declaration looks alarming: an index is not stored. `c()` carries nothing, and eliminating a `Bad(t)` refines the motive's `t` to the target — which makes `(Bad(Nat)) -> Bool` a *goal* the arm must discharge, never a value the match hands back. The declaration is consistent, and `Bad(Nat)` is simply an empty type, no constructor targeting that index.
 //
 // It is here as the counterweight to the two rejections above: the skip is not a hole to be plugged by walking index positions, and a change that started walking them would reject this.
 #[test]
 fn a_recursive_occurrence_in_an_index_target_is_admitted() {
     let source = r#"
-        use /std/{Nat};
-        use /std/Bool/{False};
+        use /std/{Nat, Bool};
         
         induct Bad : (t : Type) -> pub Type
-        | c() : ((Bad(Nat)) -> False)
+        | c() : ((Bad(Nat)) -> Bool)
         end
 
         /std/print("indexed")

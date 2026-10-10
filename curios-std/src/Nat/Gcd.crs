@@ -30,7 +30,7 @@ pub let step(a: Nat, b: Nat, @ok: Holds(0 < b), below: Gcd(b, a % b)) -> Gcd(a, 
 ---
 --- A descent on `b`: a step hands on `b` and `a % b`, and a remainder is below its divisor by reduction. On closed operands it computes where a type mentions it.
 pub let of(a: Nat, b: Nat) -> Gcd(a, b) =
-    Nat/descend(
+    Nat/recurse(
         (y: Nat) => y,
         (y: Nat) => (x: Nat) -> Gcd(x, y),
         (y, ih) =>

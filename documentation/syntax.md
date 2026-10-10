@@ -217,7 +217,7 @@ Adjacent constant atoms lower to a single packed constant rather than a chain of
 
 `Type` is the sort of computational types. `Prop` is the sort of proof-irrelevant propositions.
 
-Although the surface spelling is always the nullary term `Type` or `Prop`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A proposition is sized as a type is: one that quantifies over a type, or holds a value of one, sits at that type's level, so no proposition quantifies over the propositions of its own level. A type accepted at one level is also accepted where a higher level is required, a proposition where a type of its level is, and a value of an `induct` or a `struct` whose level only sizes its parameters is accepted at every such level: a function answering `Result(E, Nat)` is sequenced with `!` in a region that answers `Result(E, Type)`.
+Although the surface spelling is always the nullary term `Type` or `Prop`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A proposition is sized as a type is: one that quantifies over a type, or holds a value of one, sits at that type's level, so no proposition quantifies over the propositions of its own level. A type accepted at one level is also accepted where a higher level is required, and a proposition among propositions likewise. No proposition is accepted where a type is required, nor a type where a proposition is: a predicate is no family of types, and a function over `(A: Type)` takes no proposition for `A`. A value of an `induct` or a `struct` whose level only sizes its parameters is accepted at every such level: a function answering `Result(E, Nat)` is sequenced with `!` in a region that answers `Result(E, Type)`.
 
 All inhabitants of the same proposition are definitionally irrelevant, so a proof does its thinking at compile time and then weighs nothing at runtime. Eliminating a proposition into a computational result is restricted: the proposition must be empty, or have one constructor whose payloads are each non-informative or fixed by the family's indices — which is what lets an `Eq` proof be matched to produce data. Proofs may always be eliminated to prove another proposition. Why the sorts are shaped this way is [`Prop` is strict, proof-irrelevant, and definitionally K](design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md) and [A universe level is implicit, cumulative, and settles by where it stands](design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md).
 
@@ -1109,7 +1109,7 @@ and (@A: Type, use Eql(A), use Ord(A)) => Ord(Tree(A)) {
 }
 ```
 
-The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied, representation-transparent where the witness is declared, and not a proposition. An implicit payload or a hidden field is inferred by the re-parsed text and takes no part, and a payload that is itself a type is refused; every other goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group. A missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
+The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied and representation-transparent where the witness is declared. An implicit payload or a hidden field is inferred by the re-parsed text and takes no part, and a payload that is itself a type is refused; every other goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group. A missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
 
 | Concept | The body the compiler writes | A proof payload |
 | --- | --- | --- |
@@ -1228,7 +1228,7 @@ pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
     end;
 ```
 
-The standard equality operations include reflexivity, symmetry, transitivity, congruence, and substitution. `Eq` is propositional equality; `Eql` is the value-level concept used by `==` and `!=`.
+The standard equality operations include reflexivity, symmetry, transitivity and congruence, and the two that carry something along an equation: `Eq/subst` takes a proof of `P(x)` to one of `P(y)`, and `Eq/transp` a value, where `P` is a family of types. `Eq` is propositional equality; `Eql` is the value-level concept used by `==` and `!=`.
 
 ### Bounds from the facts in scope
 

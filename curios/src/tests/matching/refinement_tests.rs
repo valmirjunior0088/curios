@@ -159,13 +159,13 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
 #[test]
 fn the_false_arm_of_a_comparison_proves_its_dual() {
     let source = r#"
-        use /std/{Nat, Option};
+        use /std/{Nat, Evidence};
         use /std/Bool/{True, Holds};
 
-        let at_least(n : Nat, m : Nat) -> Option(Holds(m <= n)) =
+        let at_least(n : Nat, m : Nat) -> Evidence(Holds(m <= n)) =
             match n < m
-            | true => Option/none()
-            | false => Option/some(True/qed())
+            | true => Evidence/none()
+            | false => Evidence/some(True/qed())
             end;
 
         let shown(n : Nat, m : Nat) -> Nat =
@@ -180,19 +180,19 @@ fn the_false_arm_of_a_comparison_proves_its_dual() {
 #[test]
 fn the_false_arm_of_a_comparison_proves_its_dual_across_the_successor_seam() {
     let source = r#"
-        use /std/{Nat, Int, Option};
+        use /std/{Nat, Int, Evidence};
         use /std/Bool/{True, Holds};
 
-        let above(n : Nat) -> Option(Holds(5 <= n)) =
+        let above(n : Nat) -> Evidence(Holds(5 <= n)) =
             match n <= 4
-            | true => Option/none()
-            | false => Option/some(True/qed())
+            | true => Evidence/none()
+            | false => Evidence/some(True/qed())
             end;
 
-        let below(i : Int) -> Option(Holds(i <= +4)) =
+        let below(i : Int) -> Evidence(Holds(i <= +4)) =
             match +5 <= i
-            | true => Option/none()
-            | false => Option/some(True/qed())
+            | true => Evidence/none()
+            | false => Evidence/some(True/qed())
             end;
 
         let shown(n : Nat, i : Int) -> Nat =

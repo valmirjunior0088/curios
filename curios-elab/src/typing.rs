@@ -16,8 +16,7 @@ use {
     curios_core::{
         Advance, Apply, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
         Intrinsic, Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope,
-        Spelling, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseRole, Visit,
+        Spelling, Subterm, Telescope, Term, Transient, Visit,
     },
     std::{
         cell::RefCell,
@@ -278,7 +277,7 @@ fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term>
     Some(sequenced.traverse(&mut visit))
 }
 
-/// Hold `term`, of type `inferred`, to the type `expected`: the subsumption relation `A ≤ B`, as `curios_cert`'s `subsumes` decides it — `Prop ≤ Type v`, `Type u ≤ Type v` under the level algebra, `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'`, and conversion otherwise. See `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`.
+/// Hold `term`, of type `inferred`, to the type `expected`: the subsumption relation `A ≤ B`, as `curios_cert`'s `subsumes` decides it — `Type u ≤ Type v` and `Prop u ≤ Prop v` under the level algebra, `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'`, and conversion otherwise. See `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`.
 ///
 /// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Domains stay invariant, as they do in the kernel: reading one covariantly would hand a function that takes only small arguments a large one.
 ///
@@ -477,22 +476,6 @@ impl Context<'_> {
                 retry_one(self, parked)?;
             }
         }
-    }
-
-    /// The term that awaited bounds since `mark` has read its parts: stop awaiting them, and decide what still waits on one.
-    ///
-    /// A metavariable met at `Prop` from below has two solutions, the proposition and any `Type` over it, and the sorts met after it are what tells them apart, so while the term that minted it reads its parts the problem waits at below. A part that is a `Type` solves the metavariable and the wake finds `Prop` below it; an equation solves it outright. What is left when the parts are read is retried here, and with its metavariable awaited no longer it is the equation the same problem is where nothing awaits: `Prop`, where no part raised it. See `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`.
-    pub(crate) fn settle_bounds(&mut self, mark: usize) -> Result<(), Error> {
-        let awaited = self.stop_awaiting(mark);
-        // Nothing parks inside an oracle, so nothing waits there.
-        if awaited.is_empty() || self.parking_suppressed() {
-            return Ok(());
-        }
-        for parked in self.take_bounds_on(&awaited) {
-            retry_one(self, parked)?;
-        }
-
-        self.retry_parked()
     }
 
     /// Retry every currently parked problem once without requiring the store to become empty. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked.
@@ -1133,7 +1116,7 @@ impl MotiveShape<'_> {
         scrutinee_type
     }
 
-    /// This shape's motive type, `(ī' : Ī(p̄)) -> I(p̄, ī') -> Type`, which a *written* motive is checked against. The codomain is `Type` rather than a sort variable because `Prop ⊑ Type` cumulativity already admits a proposition-valued motive at the checking boundary (`expect`).
+    /// This shape's motive type, `(ī' : Ī(p̄)) -> I(p̄, ī') -> Type`, which a *written* motive is checked against. The codomain is a classifier ([`Context::fresh_classifier_type`]), which states no sort: a motive into `Prop` and one into `Type` both stand under it at the checking boundary (`expect`).
     fn motive_type(&self, context: &mut Context) -> Term {
         let mut binders = Vec::with_capacity(self.arity());
 
@@ -1155,13 +1138,8 @@ impl MotiveShape<'_> {
         };
 
         binders.push((context.fresh(None), scrutinee_type));
-        let level = context.fresh_universe(
-            UniverseRole::Flexible,
-            Some(UniverseConstraintOrigin::new(
-                UniverseConstraintKind::Other("motive result".into()),
-            )),
-        );
-        Term::func_type(binders, Term::type_at(level))
+        let classifier = context.fresh_classifier_type("motive result");
+        Term::func_type(binders, classifier)
     }
 }
 

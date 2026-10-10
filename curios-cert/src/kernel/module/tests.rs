@@ -380,14 +380,40 @@ fn a_definition_marked_a_proof_at_no_proposition_is_refused() {
     ));
 }
 
-/// A statement declared at a `Type` may reduce to a proposition, which subsumption admits there, and its proof is one: the mark is read off what the statement reduces to wherever the sort it is typed at is not `Prop`. `((T: Type) => T)(Fam)` is typed at `Type` and is `Fam`.
+/// A statement that reduces to a proposition is typed at `Prop` as written, and its proof is one: the mark is read off the sort the statement is typed at, with the statement unreduced. `((T: Prop) => T)(Fam)` is typed at `Prop` and is `Fam`. The same redex over `Type` is no statement of a proposition at all: no proposition stands where a type is wanted.
 #[test]
-fn a_definition_marked_a_proof_at_a_type_that_reduces_to_a_proposition_is_admitted() {
+fn a_definition_marked_a_proof_at_a_statement_that_reduces_to_a_proposition_is_admitted() {
     let mut kernel = kernel();
     family(&mut kernel, Term::prop(), Term::tuple_type_unit());
     let t = Free::local(1, Some("T"));
+    let over = |sort: Term| {
+        Term::apply(
+            Term::func([(t, sort)], Term::free_var(&t)),
+            [Term::induct_type(
+                fam(),
+                Vec::<Term>::new(),
+                Vec::<Term>::new(),
+            )],
+        )
+    };
+    assert!(matches!(
+        check_definition(
+            &mut kernel,
+            &Free::local(2, Some("at_a_type")),
+            &over(Term::type_ground()),
+            &Term::variant(
+                fam(),
+                Vec::<Term>::new(),
+                "mk",
+                [Term::tuple(Vec::<Term>::new())],
+            ),
+            true,
+            &UniverseContext::empty(),
+        ),
+        Err(Error::Mismatch { .. }),
+    ));
     let statement = Term::apply(
-        Term::func([(t, Term::type_ground())], Term::free_var(&t)),
+        Term::func([(t, Term::prop())], Term::free_var(&t)),
         [Term::induct_type(
             fam(),
             Vec::<Term>::new(),

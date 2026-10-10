@@ -1068,10 +1068,12 @@ fn check_fields(
 ///
 /// ```text
 /// Type u ≤ Type v          when the level algebra proves u ≤ v
-/// Prop   ≤ Type v          a proposition stands wherever a type is wanted
+/// Prop u ≤ Prop v          when the level algebra proves u ≤ v
 /// Π(x:A).B ≤ Π(x:A').B'    when A ≡ A' and, under x, B ≤ B'
 /// A      ≤ B              otherwise, when A ≡ B
 /// ```
+///
+/// **No proposition stands where a type is wanted.** `Prop u ≤ Type v` is no rule: a term at a `Type`, a variable among them, is then no proposition under any substitution, so whether a type is a proposition is a fact about the type that an arm's solution cannot change. With the rule, `F(c)` that is a proposition at `true` and data at `false` has its inhabitants made one inside the arm that fixes `c` and apart outside it.
 ///
 /// **Domains are invariant, codomains cumulative.** Comparing domains by conversion rather than contravariantly is the choice Coq makes, and it is the freely-revisable side of the fork: widening to contravariance later accepts strictly more, so it breaks nothing already accepted, while shipping contravariance and withdrawing it would break programs.
 ///
@@ -1083,9 +1085,9 @@ fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<boo
     let upper = kernel.reduce_forced(expected.clone())?;
 
     match (&*lower, &*upper) {
-        (Subterm::Type(lower), Subterm::Type(upper)) => return Ok(kernel.level_leq(lower, upper)),
-        // `Prop : Type 0`, and a proposition is admitted wherever a type is.
-        (Subterm::Prop(lower), Subterm::Type(upper) | Subterm::Prop(upper)) => {
+        // Each sort is cumulative in its own levels, and neither stands for the other.
+        (Subterm::Type(lower), Subterm::Type(upper))
+        | (Subterm::Prop(lower), Subterm::Prop(upper)) => {
             return Ok(kernel.level_leq(lower, upper));
         }
         // Plicity is part of a function type's identity, exactly as in `convert`: `(A) -> A` and `(@A) -> A` have different calling conventions, so a difference there is a mismatch and not a codomain question.

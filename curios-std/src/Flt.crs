@@ -2,8 +2,8 @@ pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes,
     of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Result, Bytes, List, Ordering, Show, Spell, Ord,
-    Dyadic, Parse, Vec, Eq};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Evidence, Result, Bytes, List, Ordering, Show,
+    Spell, Ord, Dyadic, Parse, Vec, Eq};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -121,10 +121,10 @@ let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
     end(ok);
 
 --- The procedure that decides `FiniteNonZero(f)`.
-pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
-    match is_finite(f) && Bool/not(is_zero(f)): (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
+pub let finite_non_zero(f: Flt) -> Evidence(FiniteNonZero(f)) =
+    match is_finite(f) && Bool/not(is_zero(f)): (r) => Evidence(Holds(r))
+    | true => Evidence/some(True/qed())
+    | false => Evidence/none()
     end;
 
 --- IEEE's `remainder` (§5.3.1): `x - n · y` for the integer `n` nearest `x / y`, ties to even, which is exact. A zero answer has `x`'s sign; an infinite `x` or a zero `y` is invalid, and an infinite `y` leaves `x`. Unlike `rem`, which truncates the quotient, the answer is at most half of `y` in magnitude.
@@ -331,17 +331,17 @@ pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
     end;
 
 --- The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
-pub let finite(f: Flt) -> Option(Finite(f)) =
-    match -inf.0 < f && f < +inf.0: (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
+pub let finite(f: Flt) -> Evidence(Finite(f)) =
+    match -inf.0 < f && f < +inf.0: (r) => Evidence(Holds(r))
+    | true => Evidence/some(True/qed())
+    | false => Evidence/none()
     end;
 
 --- The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
-pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
-    match f >= +0.0 && f < +inf.0: (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
+pub let non_neg(f: Flt) -> Evidence(NonNeg(f)) =
+    match f >= +0.0 && f < +inf.0: (r) => Evidence(Holds(r))
+    | true => Evidence/some(True/qed())
+    | false => Evidence/none()
     end;
 
 --- `f` truncated toward zero, or `none` unless it is a non-negative number.
@@ -365,7 +365,7 @@ let Scaled: Type =
 
 --- `s` raised by tens until `rpm` is no longer above it, and `k` by one each time. A positive scale grows under each ten, so every step leaves less of `rpm` above it, and the walk descends on what is left: it is what lets `to_str` stand in a type with no count beside it.
 let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =
-    Nat/descend(
+    Nat/recurse(
         (gap: Nat) => gap,
         (gap: Nat) =>
             (s: Nat, k: Int, @positive: Holds(0 < s), @within: Holds(rpm - s <= gap)) -> Scaled,
@@ -391,7 +391,7 @@ let scale_down(
     @above: Holds(0 < mp),
     @below: Holds(0 < mm),
 ) -> Lowered =
-    Nat/descend(
+    Nat/recurse(
         (gap: Nat) => gap,
         (gap: Nat) =>
             (
@@ -429,7 +429,7 @@ let generate(
     @scale: Holds(0 < s),
     @below: Holds(0 < mm),
 ) -> List(Nat) =
-    Nat/descend(
+    Nat/recurse(
         (gap: Nat) => gap,
         (gap: Nat) =>
             (

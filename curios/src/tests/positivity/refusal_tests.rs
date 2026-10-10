@@ -196,9 +196,9 @@ fn a_non_strict_occurrence_borrowed_through_a_struct_parameter_is_rejected() {
 fn a_negative_occurrence_behind_an_alias_is_rejected() {
     rejected_by(
         r#"
-        use /std/Bool/{False};
+        use /std/{Bool};
 
-        let Neg(X : Type) -> Type = (X) -> False;
+        let Neg(X : Type) -> Type = (X) -> Bool;
 
         induct Bad : pub Type
         | c(Neg(Bad))
@@ -214,9 +214,9 @@ fn a_negative_occurrence_behind_an_alias_is_rejected() {
 fn a_non_strict_occurrence_behind_an_alias_is_rejected() {
     rejected_by(
         r#"
-        use /std/Bool/{False};
+        use /std/{Bool};
 
-        let Neg(X : Type) -> Type = (X) -> False;
+        let Neg(X : Type) -> Type = (X) -> Bool;
 
         induct Bad : pub Type
         | c(Neg(Neg(Bad)))
@@ -233,11 +233,10 @@ fn a_non_strict_occurrence_behind_an_alias_is_rejected() {
 fn a_negative_occurrence_under_a_covariant_intrinsic_is_rejected() {
     rejected_by(
         r#"
-        use /std/{List};
-        use /std/Bool/{False};
+        use /std/{List, Bool};
 
         induct Bad : pub Type
-        | c(List((Bad) -> False))
+        | c(List((Bad) -> Bool))
         end
 
         /std/print("unreachable")
@@ -252,11 +251,10 @@ fn a_negative_occurrence_behind_a_decided_type_level_match_is_rejected() {
     rejected_by(
         r#"
         use /std/{Bool};
-        use /std/Bool/{False};
 
         let Pick(b : Bool, X : Type) -> Type =
             match b : (_) => Type
-            | true => (X) -> False
+            | true => (X) -> Bool
             | false => X
             end;
 

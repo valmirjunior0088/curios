@@ -197,7 +197,7 @@ pub let forward(
     step: (at: At(s), again: (p: At(s), progress: Holds(at.offset < p.offset)) -> P(p)) -> P(at),
     at: At(s),
 ) -> P(at) =
-    Nat/descend(
+    Nat/recurse(
         (p: At(s)) => Bytes/len(s.bytes) - p.offset,
         P,
         (at, again) => step(at, (p, progress) => again(p, True/proved())),
@@ -210,7 +210,7 @@ pub let backward(
     step: (at: At(s), again: (p: At(s), progress: Holds(p.offset < at.offset)) -> P(p)) -> P(at),
     at: At(s),
 ) -> P(at) =
-    Nat/descend((p: At(s)) => p.offset, P, step, at);
+    Nat/recurse((p: At(s)) => p.offset, P, step, at);
 
 --- A position in `a` stays one with `rest` appended, when a character may begin at the front of `rest`.
 let starts_before(

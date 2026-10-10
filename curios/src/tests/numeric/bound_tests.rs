@@ -285,9 +285,7 @@ fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
     );
 }
 
-// `Nat/descend` over the identity measure is course-of-values induction at a `Type`-valued motive, and cumulativity lets a `Prop`-valued claim ride it: `below` proves `Lt(n, n + 3)` through it and the proof discharges `List/get`'s bound, an erased position. The second use computes: a step that reads the hypothesis two steps down is a recursion the successor's principle cannot express, and `descend` carries it on a bound the measure fits under.
-//
-// The proof is consumed where erasure deletes it; `tests::erasure` pins the other route, a proof bound by a value-level `let`, which runs a `Type`-valued combinator with a step erased to a function returning the unit constant.
+// `Nat/descend` over the identity measure is course-of-values induction, and `Nat/recurse` the same recursion at a family of data: `below` proves `Lt(n, n + 3)` through the first and the proof discharges `List/get`'s bound, an erased position. The second computes: a step that reads the hypothesis two steps down is a recursion the successor's principle cannot express, and `recurse` carries it on a bound the measure fits under.
 #[test]
 fn recursion_on_a_bound_serves_a_proposition_and_a_computation() {
     assert_eq!(
@@ -297,7 +295,7 @@ fn recursion_on_a_bound_serves_a_proposition_and_a_computation() {
         let below(n: Nat) -> Holds(n < n + 3) =
             Nat/descend((k: Nat) => k, (k) => Holds(k < k + 3), (k, ih) => True/qed(), n);
         let fib(n: Nat) -> Nat =
-            Nat/descend(
+            Nat/recurse(
                 (k: Nat) => k,
                 (k) => Nat,
                 (k, ih) =>

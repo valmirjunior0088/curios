@@ -102,7 +102,7 @@ The Curios standard library: the `/std` package as it is authored, in `src/` bes
 
 ### A measure descends on a bound
 
-**Decision.** A recursion that descends on a measure and on no structure is `/std/Nat/descend(measure, P, step, s)`: the step is handed a hypothesis that recurs at any state whose measure is below its own, with the proof that it is, and the recursion itself is structural, on a number the measure fits under, which starts as the measure. Over the identity it is course-of-values recursion on `Nat`. `Gcd` descends on its second operand, `Flt`'s scaling and digit generation on the gap they close, `Bytes/of_nat`'s injectivity on the number, and a walk over a text's positions on the bytes left ahead or the offset behind (`Str/At/forward`, `backward`). `/std` declares no accessibility predicate.
+**Decision.** A recursion that descends on a measure and on no structure is `/std/Nat/recurse(measure, P, step, s)`, and an induction that does is `/std/Nat/descend`, the same definition over a family of propositions, a motive being a family of one sort ([Subsumption is a relation, not a traversal order](../documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md)). The step is handed a hypothesis that recurs at any state whose measure is below its own, with the proof that it is, and the recursion itself is structural, on a number the measure fits under, which starts as the measure. Over the identity it is course-of-values recursion on `Nat`. `Gcd` recurs on its second operand, `Flt`'s scaling and digit generation on the gap they close, and a walk over a text's positions on the bytes left ahead or the offset behind (`Str/At/forward`, `backward`); `Bytes/of_nat`'s injectivity descends on the number. `/std` declares no accessibility predicate.
 
 **Rationale.**
 
@@ -110,7 +110,7 @@ The Curios standard library: the `/std` package as it is authored, in `src/` bes
 - **No proof is read.** A recursion on an accessibility proof takes the proof apart at each step, so a checker running it in a type reduces the lemma that proved the relation well-founded, and the theory would have to let a proposition holding a proof reach data ([`Prop` is strict, proof-irrelevant, and definitionally K](../documentation/design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md)).
 - **It erases to the loop it reads as.** The wrapper does not recurse, so inlining it at a call fuses the step into the loop, and what runs carries the bound beside the state.
 
-**Rejected.** An accessibility predicate with a fixpoint over it, which `/std` had: the two reasons above. Fuel a caller supplies, with an `Option` where it runs out: `descend` takes its bound from the measure, so no caller states one and no result is partial. A principle per measure, one for an offset and one for a remainder: each is `descend` at a measure, written where it is used.
+**Rejected.** An accessibility predicate with a fixpoint over it, which `/std` had: the two reasons above. Fuel a caller supplies, with an `Option` where it runs out: the recursion takes its bound from the measure, so no caller states one and no result is partial. A principle per measure, one for an offset and one for a remainder: each is `recurse` or `descend` at a measure, written where it is used.
 
 ### A screen is a size-indexed frame and a layout is a typed pane tree
 

@@ -67,8 +67,8 @@ use {
         Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl,
         Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, Probe, RecGroup,
         ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
-        Variance, WitnessKey, WitnessOrigin, instantiate_universe_levels_scoped,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, Variance,
+        WitnessKey, WitnessOrigin, instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -2503,15 +2503,6 @@ impl<'s> Context<'s> {
         self.underway.attempt.universe_solver.abandon_speculation();
     }
 
-    pub(crate) fn fresh_universe(
-        &mut self,
-        role: UniverseRole,
-        origin: Option<UniverseConstraintOrigin>,
-    ) -> Level {
-        let meta = self.universes_mut().fresh(role, origin);
-        Level::meta(meta)
-    }
-
     /// A fresh level standing for `beside` at an occurrence of its own ([`UniverseSolver::fresh_beside`]).
     pub(crate) fn fresh_universe_beside(
         &mut self,
@@ -2523,14 +2514,14 @@ impl<'s> Context<'s> {
             .map(Level::meta)
     }
 
+    /// The sort of a type left to inference: `Type` at a classifier's level ([`UniverseSolver::fresh_classifier`]), which states no sort, so a proposition is admitted under it as a type is.
     pub(crate) fn fresh_classifier_type(&mut self, kind: &str) -> Term {
-        let level = self.fresh_universe(
-            UniverseRole::Flexible,
-            Some(UniverseConstraintOrigin::new(
+        let level = self
+            .universes_mut()
+            .fresh_classifier(Some(UniverseConstraintOrigin::new(
                 UniverseConstraintKind::Other(kind.into()),
-            )),
-        );
-        Term::type_at(level)
+            )));
+        Term::type_at(Level::meta(level))
     }
 
     pub(crate) fn default_universes(&mut self, terms: &[&Term]) -> Result<Vec<Term>, Error> {
@@ -2712,32 +2703,6 @@ impl<'s> Context<'s> {
     /// [`Solutions::take_checking`].
     pub(crate) fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
         self.underway.attempt.solutions.take_checking(placeholder)
-    }
-
-    /// How many metavariables are awaited: the mark a term takes before it awaits any ([`Context::settle_bounds`]).
-    pub(crate) fn awaited_mark(&self) -> usize {
-        self.underway.attempt.solutions.awaited_mark()
-    }
-
-    /// Await bounds for `id` until the term that minted it has read its parts: met at `Prop` from below meanwhile, it waits.
-    pub(crate) fn await_bounds(&mut self, id: MetavarId) {
-        self.underway.attempt.solutions.await_bounds(id);
-    }
-
-    /// Whether some term is still reading its parts for `id`.
-    pub(crate) fn awaits(&self, id: MetavarId) -> bool {
-        self.underway.attempt.solutions.awaits(id)
-    }
-
-    /// Stop awaiting everything awaited since `mark`, and hand it back.
-    pub(crate) fn stop_awaiting(&mut self, mark: usize) -> Vec<MetavarId> {
-        self.underway.attempt.solutions.stop_awaiting(mark)
-    }
-
-    /// Take the problems parked at below that watch one of `ids`.
-    pub(crate) fn take_bounds_on(&mut self, ids: &[MetavarId]) -> Vec<ParkedProblem> {
-        self.typing.caches.note_write();
-        self.underway.attempt.solutions.take_bounds_on(ids)
     }
 
     pub(crate) fn parked_len(&self) -> usize {

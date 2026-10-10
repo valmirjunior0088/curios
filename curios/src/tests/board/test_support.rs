@@ -327,18 +327,19 @@ pub(super) const A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM: &st
         "#;
 
 pub(super) const TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH: &str = r#"
-        use /std/{Eq};
         use /std/Bool/{False};
+
+        induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
 
         induct Two : pub Prop
         | a()
         | b()
         end
 
-        let absurd(h : Eq()(Two/a(), Two/b())) -> False =
+        let absurd(h : Same()(Two/a(), Two/b())) -> False =
             match h end;
 
-        let forged : False = absurd(Eq/refl());
+        let forged : False = absurd(Same/same());
 
         /std/print("FORGED")
         "#;
@@ -426,16 +427,18 @@ pub(super) const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
         "#;
 
 pub(super) const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
-        use /std/{Eq, List};
+        use /std/{List, Evidence};
         use /std/Bool/{True};
 
-        let all_equal(@X : Prop, x : X, y : X) -> Eq()(x, y) =
-            Eq/refl();
+        induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
 
-        let one : List(True) = [True/qed()];
-        let none : List(True) = [];
+        let all_equal(@X : Prop, x : X, y : X) -> Same()(x, y) =
+            Same/same();
 
-        let bad : Eq()(one, none) =
+        let one : List(Evidence(True)) = [Evidence/some(True/qed())];
+        let none : List(Evidence(True)) = [];
+
+        let bad : Same()(one, none) =
             all_equal(one, none);
 
         /std/print("FORGED")
@@ -443,27 +446,29 @@ pub(super) const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
 
 /// The witness's lemma at a *genuine* proposition, which must stay accepted: `all_equal` is sound, and a fix that closed the hole by refusing `Prop`-abstracted binders would take this with it.
 pub(super) const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str = r#"
-        use /std/{Nat, Eq};
+        use /std/{Nat};
+
+        induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
 
         induct Two : pub Prop
         | a()
         | b()
         end
 
-        let all_equal(@X : Prop, x : X, y : X) -> Eq()(x, y) =
-            Eq/refl();
+        let all_equal(@X : Prop, x : X, y : X) -> Same()(x, y) =
+            Same/same();
 
-        let same : Eq()(Two/a(), Two/b()) =
+        let same : Same()(Two/a(), Two/b()) =
             all_equal(Two/a(), Two/b());
 
         /std/print(Nat/to_str(1))
         "#;
 
-pub(super) const A_LIST_OF_PROOFS_IS_STILL_A_LIST: &str = r#"
-        use /std/{Nat, List};
+pub(super) const A_LIST_OF_EVIDENCE_IS_STILL_A_LIST: &str = r#"
+        use /std/{Nat, List, Evidence};
         use /std/Bool/{True};
 
-        let one : List(True) = [True/qed()];
+        let one : List(Evidence(True)) = [Evidence/some(True/qed())];
 
         /std/print(Nat/to_str(List/len(one)))
         "#;
@@ -732,20 +737,22 @@ pub(super) const TWO_NEUTRALS_AT_A_STRUCT_OF_A_PROOF_STAY_APART: &str = r#"
 pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_DECLARED_A_PROPOSITION: &str = r#"
         use /std/{Eq, Nat, Bool};
 
+        induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
+
         struct Proved: pub Prop { p: Eq()(0, 0) }
 
-        let two_neutrals(r : Proved, s : Proved) -> Eq(@(Proved))(r, s) = Eq/refl();
+        let two_neutrals(r : Proved, s : Proved) -> Same()(r, s) = Same/same();
 
         let by_a_cast(F : (Proved) -> Type, r : Proved, s : Proved, x : F(r)) -> F(s) = x;
 
         let two_applications(f : (Nat) -> Proved, g : (Nat) -> Proved, n : Nat)
-            -> Eq(@(Proved))(f(n), g(n))
-            = Eq/refl();
+            -> Same()(f(n), g(n))
+            = Same/same();
 
         let two_stuck_matches(b : Bool, r : Proved, s : Proved)
-            -> Eq(@(Proved))(match b: (_) => Proved | true => r | false => r end,
-                             match b: (_) => Proved | true => s | false => s end)
-            = Eq/refl();
+            -> Same()(match b: (_) => Proved | true => r | false => r end,
+                      match b: (_) => Proved | true => s | false => s end)
+            = Same/same();
 
         /std/print(Nat/to_str(1))
         "#;
@@ -809,12 +816,14 @@ pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART_INSIDE_
 pub(super) const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
         use /std/{Eq, Nat, Bool};
 
+        induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
+
         struct Outer: pub Prop { inner: Inner, p: Eq()(0, 0) }
         and Inner: pub Prop { p: Eq()(0, 0) }
 
-        let at_a_member(r : Inner, s : Inner) -> Eq(@(Inner))(r, s) = Eq/refl();
+        let at_a_member(r : Inner, s : Inner) -> Same()(r, s) = Same/same();
 
-        let at_a_member_that_holds_another(r : Outer, s : Outer) -> Eq(@(Outer))(r, s) = Eq/refl();
+        let at_a_member_that_holds_another(r : Outer, s : Outer) -> Same()(r, s) = Same/same();
 
         let by_a_cast(F : (Inner) -> Type, r : Inner, s : Inner, x : F(r)) -> F(s) = x;
 
@@ -1069,7 +1078,9 @@ pub(super) const A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA:
 pub(super) const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
         use /std/{Eq, Nat};
 
-        let same(g : (Nat) -> Eq()(0, 0), h : (Nat) -> Eq()(0, 0)) -> Eq()(g, h) = Eq/refl();
+        induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
+
+        let same(g : (Nat) -> Eq()(0, 0), h : (Nat) -> Eq()(0, 0)) -> Same()(g, h) = Same/same();
 
         /std/print(Nat/to_str(1))
         "#;
@@ -1338,7 +1349,7 @@ pub(super) const A_CAST_ALONG_A_HYPOTHESIS_THE_ALGEBRA_EQUATES_IS_ITS_ARGUMENT: 
         use /std/{Eq, Nat};
 
         let along(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-            -> Eq()(Eq/subst(P, p, v), v) = Eq/refl();
+            -> Eq()(Eq/transp(P, p, v), v) = Eq/refl();
 
         /std/print(Nat/to_str(1))
         "#;
@@ -1347,10 +1358,10 @@ pub(super) const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str =
         use /std/{Eq, Nat};
 
         let through_a_let(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-            -> Eq()(Eq/subst(P, (let q = p; q), v), v) = Eq/refl();
+            -> Eq()(Eq/transp(P, (let q = p; q), v), v) = Eq/refl();
 
         let through_a_function(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-            -> Eq()(Eq/subst(P, ((q : Eq()(a + b, b + a)) => q)(p), v), v) = Eq/refl();
+            -> Eq()(Eq/transp(P, ((q : Eq()(a + b, b + a)) => q)(p), v), v) = Eq/refl();
 
         /std/print(Nat/to_str(1))
         "#;
@@ -1373,15 +1384,15 @@ pub(super) const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
             | k + 1; ih => Eq/cong((m : Nat) => m + 1, ih)
             end;
 
-        let _closed : Eq()(Eq/subst((_) => Nat, slow(100000000000), 7), 7) = Eq/refl();
+        let _closed : Eq()(Eq/transp((_) => Nat, slow(100000000000), 7), 7) = Eq/refl();
 
-        let _open(n : Nat, v : Nat) -> Eq()(Eq/subst((_) => Nat, slow(n), v), v) = Eq/refl();
+        let _open(n : Nat, v : Nat) -> Eq()(Eq/transp((_) => Nat, slow(n), v), v) = Eq/refl();
 
         let inner(@x : Nat, @y : Nat, e : Eq()(x + 1, y + 1)) -> Nat = match e | refl(@z) => z end;
         let widen(n : Nat) -> Eq()(n + 1, n + 1) = Eq/cong((m : Nat) => m + 1, slow(n));
         let _named : Eq()(inner(widen(100000000000)), 100000000001) = Eq/refl();
 
-        /std/print(Nat/to_str(Eq/subst((_) => Nat, slow(100000000000), 7)))
+        /std/print(Nat/to_str(Eq/transp((_) => Nat, slow(100000000000), 7)))
         "#;
 
 pub(super) const AN_ARM_THAT_NAMES_A_PINNED_PAYLOAD_READS_THE_INDEX: &str = r#"
@@ -1421,16 +1432,20 @@ pub(super) const A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS: &str = r#"
 pub(super) const AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE: &str = r#"
         use /std/{Eq, Nat};
 
-        let k(@x: Eq()(0, 0), _: Eq()(x, x)) -> Nat = 1;
+        induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
 
-        let f(h : (A : Prop) -> A, w : Eq()(h(Eq()(0, 0)), h(Eq()(0, 0)))) -> Nat =
+        let k(@x: Eq()(0, 0), _: Same()(x, x)) -> Nat = 1;
+
+        let f(h : (A : Prop) -> A, w : Same()(h(Eq()(0, 0)), h(Eq()(0, 0)))) -> Nat =
             k(match h(Eq()(0, 0)) | refl(@_) => w end);
 
         /std/print(Nat/to_str(1))
         "#;
 
 pub(super) const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
-        use /std/{Eq, Nat};
+        use /std/{Nat};
+
+        induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
 
         induct T: pub Prop
         | t()
@@ -1438,8 +1453,8 @@ pub(super) const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
 
         let spin(n : Nat) -> T = match n : (_) => T | 0 => T/t() | k + 1; ih => ih end;
 
-        let within(y : T, w : Eq(@T)(y, y)) -> Nat =
-            let _v : Eq(@T)(spin(100000000000), y) = w;
+        let within(y : T, w : Same(@T)(y, y)) -> Nat =
+            let _v : Same(@T)(spin(100000000000), y) = w;
             0;
 
         /std/print(Nat/to_str(1))
@@ -1492,7 +1507,7 @@ pub(super) const THE_SAME_PAIR_DECLARED_APART_CERTIFIES: &str = r#"
         "#;
 
 pub(super) const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
-        use /std/{Eq, Nat, Option, Str};
+        use /std/{Eq, Nat, Evidence, Str};
 
         induct P : pub Prop | mk() end
         struct S : pub Type { n : Nat, p : P }
@@ -1500,7 +1515,7 @@ pub(super) const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
 
         let field(n : Nat, p : P, q : P) -> Eq()(S { n = n, p = p }, S { n = n, p = q }) = Eq/refl();
         let payload(n : Nat, p : P, q : P) -> Eq()(W/wrap(n, p), W/wrap(n, q)) = Eq/refl();
-        let some(p : P, q : P) -> Eq()(Option/some(p), Option/some(q)) = Eq/refl();
+        let some(p : P, q : P) -> Eq()(Evidence/some(p), Evidence/some(q)) = Eq/refl();
         let assoc(a : Str, b : Str, c : Str)
             -> Eq()(Str/concat(Str/concat(a, b), c), Str/concat(a, Str/concat(b, c))) = Eq/refl();
 

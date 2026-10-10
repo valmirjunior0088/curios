@@ -286,7 +286,7 @@ fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
 
         let Shape(f : F) -> Type =
             match f
-            | stop() => /std/Bool/False
+            | stop() => {{}}
             | more(rest) => Sink(Shape(rest))
             end;
 
@@ -326,7 +326,7 @@ fn the_entrypoint_expression_is_not_a_blind_spot() {
 fn a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted() {
     rejected(
         r#"
-        let Bad : Type = (Bad) -> /std/Bool/False;
+        let Bad : Prop = (Bad) -> /std/Bool/False;
 
         let delta(x : Bad) -> /std/Bool/False = x(x);
 
@@ -345,7 +345,7 @@ fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
         let consume(u : {}) -> {} = u;
 
         consume(
-            let forge(x : (let Bad : Type = (Bad) -> /std/Bool/False; Bad)) -> {} = ();
+            let forge(x : (let Bad : Prop = (Bad) -> /std/Bool/False; Bad)) -> {} = ();
             ()
         )
         "#,
@@ -525,14 +525,14 @@ fn the_library_recursion_on_a_bound_serves_a_proof() {
     assert_eq!(run(source), b"b");
 }
 
-// The same recursion at a motive that is a type depending on its argument: `pick(n)` has type `Shape(n)`, the unit type at zero and `Nat` above it. Written in a type, `pick(5)` puts `descend` and its local loop under obligation (T), and the checkers reduce it on the bound to `4` with no proof read; the running program computes the same value with the bound's proofs erased.
+// The same recursion at a motive that is a type depending on its argument: `pick(n)` has type `Shape(n)`, the unit type at zero and `Nat` above it. Written in a type, `pick(5)` puts `recurse` and its local loop under obligation (T), and the checkers reduce it on the bound to `4` with no proof read; the running program computes the same value with the bound's proofs erased.
 #[test]
 fn the_library_recursion_on_a_bound_computes_at_a_dependent_motive() {
     let source = r#"
         use /std/{Nat, Eq};
         let Shape(n: Nat) -> Type = match n | 0 => {} | _ + 1 => Nat end;
         let pick(n: Nat) -> Shape(n) =
-            Nat/descend((k: Nat) => k, Shape, (k, _) => match k | 0 => () | kp + 1 => kp end, n);
+            Nat/recurse((k: Nat) => k, Shape, (k, _) => match k | 0 => () | kp + 1 => kp end, n);
         let _computed: Eq()(pick(5), 4) = Eq/refl();
         /std/print(Nat/to_str(pick(5)))
         "#;

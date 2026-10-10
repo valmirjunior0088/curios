@@ -62,12 +62,12 @@ pub(super) const ELIMINATION: Part = Part {
                 Witness {
                     what: "a guard decided by proof irrelevance under one case of a split, and answered after the split",
                     proof: Proof::Program(A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS),
-                    expect: refused![elaborator],
+                    expect: refused![elaborator: curios_elab::Error::TypeMismatch { .. }],
                 },
                 Witness {
                     what: "the same guard settled where its operands are proofs and answered where they are not, as a term",
                     proof: Proof::Module(a_guard_settled_where_its_operands_are_proofs),
-                    expect: refused![kernel],
+                    expect: refused![kernel: curios_cert::Error::Mismatch { .. }],
                 },
                 Witness {
                     what: "a guard decided by the unit type's one inhabitant under one case of a split, and answered after the split",

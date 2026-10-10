@@ -1047,7 +1047,7 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
 
 /// A struct's *parameters* compare at the declaration's outer telescope too, so a parameter at a proposition is discharged without being read.
 ///
-/// It is the parameter-side twin of the field rule above: a family's indices, a struct's parameters and a constructor's are all compared at their declared types, so `Wrap(P, p)` and `Wrap(P, q)` are one type exactly as `Eq(@P)(p, q)` and `Eq(@P)(p, p)` are. Nothing in `/std` forces it; it holds because the rule is the same rule.
+/// It is the parameter-side twin of the field rule above: a family's indices, a struct's parameters and a constructor's are all compared at their declared types, so `Wrap(P, p)` and `Wrap(P, q)` are one type exactly as two instances of a family indexed by a proof are. Nothing in `/std` forces it; it holds because the rule is the same rule.
 #[test]
 fn a_struct_parameter_at_a_proposition_is_not_read() {
     let mut kernel = kernel();

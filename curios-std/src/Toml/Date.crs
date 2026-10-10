@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Option};
+use /std/{Nat, Bool, Option, Evidence};
 use /std/Bool/{True, Holds};
 
 let leap(year: Nat) -> Bool =
@@ -46,10 +46,10 @@ pub struct Date: pub Type {
 pub let of(year: Nat, month: Nat, day: Nat, @ok: Valid(year, month, day)) -> Date =
     Date { year = year, month = month, day = day };
 
-let try_valid(year: Nat, month: Nat, day: Nat) -> Option(Valid(year, month, day)) =
-    match sound(year, month, day): (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
+let try_valid(year: Nat, month: Nat, day: Nat) -> Evidence(Valid(year, month, day)) =
+    match sound(year, month, day): (r) => Evidence(Holds(r))
+    | true => Evidence/some(True/qed())
+    | false => Evidence/none()
     end;
 
 --- The date, decided: `none` where the three spell no day.

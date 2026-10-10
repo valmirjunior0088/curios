@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Option};
+use /std/{Nat, Bool, Option, Evidence};
 use /std/Bool/{True, Holds};
 
 let sound(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Bool =
@@ -32,10 +32,10 @@ let try_valid(
     minute: Nat,
     second: Nat,
     nanosecond: Nat,
-) -> Option(Valid(hour, minute, second, nanosecond)) =
-    match sound(hour, minute, second, nanosecond): (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
+) -> Evidence(Valid(hour, minute, second, nanosecond)) =
+    match sound(hour, minute, second, nanosecond): (r) => Evidence(Holds(r))
+    | true => Evidence/some(True/qed())
+    | false => Evidence/none()
     end;
 
 --- The time, decided: `none` where the four spell none.

@@ -1260,42 +1260,42 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
     ));
 }
 
-// A goal parked at below resumes at below. `Prop ≤ ?0` waits on `?0`; solved to `Type`, the retry finds `Prop` below it, where an equation would compare `Prop` with `Type` and refuse.
+// A goal parked at below resumes at below. `Type 0 ≤ ?0` waits on `?0`; solved to `Type 1`, the retry finds `Type 0` below it, where an equation would compare the two levels and refuse.
 #[test]
 fn a_goal_parked_at_below_resumes_at_below() {
     let mut context = context();
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
     context.park(
         ParkedWork::Conversion(Problem {
             type_: Term::type_ground(),
-            this: Term::prop(),
+            this: Term::type_ground(),
             that: Term::hole(0),
             binders: Binders::default(),
             relation: Relation::Below,
         }),
         Term::hole(0),
     );
-    context.solve_metavar(MetavarId(0), Term::type_ground());
+    context.solve_metavar(MetavarId(0), Term::type_at(Level::constant(1)));
 
     assert!(context.drain_parked().is_ok());
 }
 
-// Control: the same goal parked as an equation is refused once `?0` is `Type`.
+// Control: the same goal parked as an equation is refused once `?0` is `Type 1`.
 #[test]
 fn a_goal_parked_at_equal_resumes_at_equal() {
     let mut context = context();
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
     context.park(
         ParkedWork::Conversion(Problem {
             type_: Term::type_ground(),
-            this: Term::prop(),
+            this: Term::type_ground(),
             that: Term::hole(0),
             binders: Binders::default(),
             relation: Relation::Equal,
         }),
         Term::hole(0),
     );
-    context.solve_metavar(MetavarId(0), Term::type_ground());
+    context.solve_metavar(MetavarId(0), Term::type_at(Level::constant(1)));
 
     assert!(context.drain_parked().is_err());
 }
@@ -1382,76 +1382,51 @@ fn a_function_type_met_from_below_takes_its_codomain_at_a_level_of_its_own() {
     assert!(context.universes_mut().finalize([], [], []).is_ok());
 }
 
-// A metavariable met at `Prop` from below waits while a term still reads its parts for it.
+// A metavariable met at `Prop` from below is a `Prop`, at a level of its own over the one it met, so a larger proposition met after it is below it too and the levels close.
 #[test]
-fn an_awaited_metavariable_met_at_a_proposition_waits() {
+fn a_metavariable_met_at_a_proposition_from_below_is_a_proposition_at_a_level_of_its_own() {
     let mut context = context();
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
-    context.await_bounds(MetavarId(0));
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
 
-    let outcome = subsume_outcome(&mut context, &Term::prop(), &Term::hole(0), None);
-    assert!(matches!(outcome, Ok(Outcome::Blocked(_))), "{outcome:?}");
-    assert_eq!(context.metavar_solution(MetavarId(0)), None);
-}
-
-// Control: one nothing awaits is the proposition it met, as it was.
-#[test]
-fn a_metavariable_nothing_awaits_is_the_proposition_it_met() {
-    let mut context = context();
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
-
-    let outcome = subsume_outcome(&mut context, &Term::prop(), &Term::hole(0), None);
-    assert!(matches!(outcome, Ok(Outcome::Converts)), "{outcome:?}");
-    assert_eq!(context.metavar_solution(MetavarId(0)), Some(&Term::prop()));
-}
-
-// A `Type` met after the proposition solves the metavariable, and the proposition that waited is below it.
-#[test]
-fn a_type_met_after_a_proposition_raises_the_awaited_metavariable() {
-    let mut context = context();
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
-    context.await_bounds(MetavarId(0));
-
-    let Ok(Outcome::Blocked(goals)) =
-        subsume_outcome(&mut context, &Term::prop(), &Term::hole(0), None)
-    else {
-        panic!("a proposition under an awaited metavariable waits");
-    };
-    for goal in goals {
-        context.park(ParkedWork::Conversion(goal), Term::hole(0));
-    }
+    let small = Term::prop();
+    let large = Term::prop_at(Level::constant(1));
     assert!(matches!(
-        subsume_outcome(&mut context, &Term::type_ground(), &Term::hole(0), None),
+        subsume_outcome(&mut context, &small, &Term::hole(0), None),
         Ok(Outcome::Converts)
     ));
     assert!(matches!(
         context
             .metavar_solution(MetavarId(0))
             .map(|solution| &**solution),
-        Some(Subterm::Type(_))
+        Some(Subterm::Prop(_))
     ));
-
-    assert!(context.settle_bounds(0).is_ok());
-    assert!(context.drain_parked().is_ok());
+    assert!(matches!(
+        subsume_outcome(&mut context, &large, &Term::hole(0), None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(context.universes_mut().finalize([], [], []).is_ok());
 }
 
-// Where nothing raised it, the term that stops awaiting it takes the proposition, the answer an unawaited one is given at once.
+// No proposition stands where a type is wanted, so a `Type` met after the proposition is refused, and so is the proposition met after a `Type`: the metavariable is a sort of the kind it met first.
 #[test]
-fn an_awaited_metavariable_nothing_raised_settles_at_the_proposition() {
-    let mut context = context();
-    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
-    context.await_bounds(MetavarId(0));
+fn a_type_and_a_proposition_met_from_below_are_refused_in_either_order() {
+    let met = |first: Term, second: Term| {
+        let mut context = context();
+        context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
+        assert!(matches!(
+            subsume_outcome(&mut context, &first, &Term::hole(0), None),
+            Ok(Outcome::Converts)
+        ));
 
-    let Ok(Outcome::Blocked(goals)) =
-        subsume_outcome(&mut context, &Term::prop(), &Term::hole(0), None)
-    else {
-        panic!("a proposition under an awaited metavariable waits");
+        subsume_outcome(&mut context, &second, &Term::hole(0), None)
     };
-    for goal in goals {
-        context.park(ParkedWork::Conversion(goal), Term::hole(0));
-    }
 
-    assert!(context.settle_bounds(0).is_ok());
-    assert_eq!(context.metavar_solution(MetavarId(0)), Some(&Term::prop()));
-    assert!(context.drain_parked().is_ok());
+    assert!(matches!(
+        met(Term::prop(), Term::type_ground()),
+        Ok(Outcome::Mismatch(_))
+    ));
+    assert!(matches!(
+        met(Term::type_ground(), Term::prop()),
+        Ok(Outcome::Mismatch(_))
+    ));
 }

@@ -80,6 +80,10 @@ pub use List/{let List};
 pub mod Option;
 pub use Option/{let Option};
 
+--- What a decision found: the proof where the proposition held, and nothing where it did not. The procedure that decides a bound answers one, and its caller holds the proof in the arm that matched it.
+pub mod Evidence;
+pub use Evidence/{let Evidence};
+
 --- Success or failure, the failure first, so the family is its own short-circuiting monad: `!` on one is early return.
 ---
 --- A `Result` region performs nothing; a fallible action is a `Try`.

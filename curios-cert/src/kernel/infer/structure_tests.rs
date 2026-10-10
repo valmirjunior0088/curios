@@ -14,7 +14,7 @@ use {
 ///
 /// `Sort::of` routes a parameterized former through `sort_of_intrinsic`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/tests.rs` states: a list has a length and a cell has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule must agree: reporting the *element's* sort as the former's would infer `List(P)` at `Prop` while `Sort::of(List(P))` says `Type 0`.
 ///
-/// Only one of those can be right, and the disagreement is a closed inhabitant of `False`. `Prop` is the type of propositions, so a former admitted there stands wherever one is wanted: at `(X : Prop, x : X, y : X) -> Eq(@X)(x, y)` — reflexivity discharges it, since irrelevance identifies any two inhabitants of `X` — instantiating `X` at `List(P)` yields `Eq(@List(P))([p], [])` for a one-element list against the empty one. Congruence through `List/len` carries that to `Eq()(1, 0)`, and transport turns `()` into a proof of `False`.
+/// Only one of those can be right, and the disagreement is a closed inhabitant of `False`. `Prop` is the type of propositions, so a former admitted there stands wherever one is wanted: at `(X : Prop, x : X, y : X) -> Same(@X)(x, y)`, an equation between two proofs of `X` — its one constructor discharges it, since irrelevance identifies any two inhabitants of `X` — instantiating `X` at `List(P)` yields `Same(@List(P))([p], [])` for a one-element list against the empty one. Congruence through `List/len` carries that to `1` and `0`, and transport turns `()` into a proof of `False`.
 ///
 /// `curios/src/tests/board`'s `a_list_of_proofs_is_not_a_proposition` is the surface program.
 ///

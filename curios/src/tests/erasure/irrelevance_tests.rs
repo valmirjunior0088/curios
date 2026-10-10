@@ -4,16 +4,17 @@ use crate::tests::{error, run};
 
 #[test]
 fn prop_irrelevance_equates_distinct_proofs() {
-    // Definitional proof irrelevance: `Le` is a strict proposition, so any two proofs of `Le(a, b)` are convertible — `refl` checks at `Eq()(p, q)` even though `p` and `q` are distinct binders. Without the `Prop` short-circuit in `convert`, `refl : Eq()(p, p)` would not check against `Eq()(p, q)`.
+    // Definitional proof irrelevance: `Le` is a strict proposition, so any two proofs of `Le(a, b)` are convertible — `same` checks at `Same()(p, q)` even though `p` and `q` are distinct binders. Without the `Prop` short-circuit in `convert`, `same : Same()(p, p)` would not check against `Same()(p, q)`. `Same` is the equation between two proofs, which `/std/Eq`, an equation between two values of a type, does not state.
     let source = r#"
-        use /std/{Str, Eq, Nat, Io};
+        use /std/{Str, Nat, Io};
+        induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
         induct Le: (Nat, Nat) -> pub Prop
         | z(@n : Nat): (0, n)
         | s(@a : Nat, @b : Nat, prev : Le(a, b)): (a + 1, b + 1)
         end
         let irrelevant(a : Nat, b : Nat, p : Le(a, b), q : Le(a, b))
-            -> Eq()(p, q) =
-            Eq/refl();
+            -> Same()(p, q) =
+            Same/same();
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;

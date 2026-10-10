@@ -36,7 +36,7 @@ fn a_function_types_domain_is_invariant() {
     );
 }
 
-/// The other half of the same fork, and the direction the language needs: under a binder the codomains are still compared cumulatively, `Prop` included.
+/// The other half of the same fork, and the direction the language needs: under a binder the codomains are still compared cumulatively, each sort in its own levels, and a proposition stands for no type there either.
 #[test]
 fn a_function_types_codomain_is_cumulative() {
     let mut kernel = kernel();
@@ -59,14 +59,18 @@ fn a_function_types_codomain_is_cumulative() {
         ),
         Ok(false),
     );
-    // A proposition stands wherever a type is wanted, under a binder as at the head.
+    assert_eq!(
+        subsumes(&mut kernel, &pi(Term::prop()), &pi(Term::prop_at(one()))),
+        Ok(true),
+    );
+    // No proposition stands where a type is wanted, under a binder as at the head.
     assert_eq!(
         subsumes(&mut kernel, &pi(Term::prop()), &pi(Term::type_ground())),
-        Ok(true),
+        Ok(false),
     );
 }
 
-/// The control for both fixtures above: the same three verdicts at the head, where no telescope is walked at all. A `subsumes` that had stopped descending into function types would pass those two and fail these.
+/// The control for both fixtures above: the same verdicts at the head, where no telescope is walked at all. A `subsumes` that had stopped descending into function types would pass those two and fail these.
 #[test]
 fn the_head_rules_still_decide_a_bare_sort() {
     let mut kernel = kernel();
@@ -80,8 +84,16 @@ fn the_head_rules_still_decide_a_bare_sort() {
         Ok(false),
     );
     assert_eq!(
-        subsumes(&mut kernel, &Term::prop(), &Term::type_ground()),
+        subsumes(&mut kernel, &Term::prop(), &Term::prop_at(one())),
         Ok(true),
+    );
+    assert_eq!(
+        subsumes(&mut kernel, &Term::prop(), &Term::type_ground()),
+        Ok(false),
+    );
+    assert_eq!(
+        subsumes(&mut kernel, &Term::type_ground(), &Term::prop()),
+        Ok(false),
     );
 }
 

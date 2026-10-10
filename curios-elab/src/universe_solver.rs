@@ -52,6 +52,8 @@ struct UniverseMeta {
     provenance: Provenance,
     origin: Option<UniverseConstraintOrigin>,
     solution: Option<Level>,
+    /// Whether the elaborator invented this level for the sort of a type it left to inference ([`UniverseSolver::fresh_classifier`]).
+    classifier: bool,
 }
 
 /// Where a universe meta came from, which decides which member of an identified pair represents it and how finalization settles it.
@@ -663,6 +665,7 @@ impl UniverseSolver {
                     provenance: Provenance::Chosen,
                     origin: None,
                     solution: None,
+                    classifier: false,
                 })
                 .collect(),
             constraints: ConstraintStore::default(),
@@ -684,6 +687,7 @@ impl UniverseSolver {
                 provenance: seed.role.into(),
                 origin: seed.origin.clone(),
                 solution: None,
+                classifier: false,
             })
             .collect();
         self.next_meta = seeds.len();
@@ -709,8 +713,38 @@ impl UniverseSolver {
             provenance,
             origin,
             solution: None,
+            classifier: false,
         });
         id
+    }
+
+    /// Mint the level of a classifier: the sort the elaborator gives a type it left to inference, an unannotated binder's, an elided motive's result, a parked term's.
+    ///
+    /// A classifier states no sort. `Type` at this level stands where the type's own sort is still to be read, so a proposition is admitted under it where none is under a `Type` a program wrote ([`Self::classifies`]). It is a level like any other in every other respect, invented and so minimized.
+    pub fn fresh_classifier(&mut self, origin: Option<UniverseConstraintOrigin>) -> UniverseMetaId {
+        let id = self.mint(Provenance::Inferred, origin);
+        self.metas[id.0].classifier = true;
+        id
+    }
+
+    /// Whether `level`, as a term spells it, is a classifier's and nothing else's: one level, invented for a type left to inference, and identified with no level a program wrote or an occurrence holds.
+    ///
+    /// Read off the level as written and what it was solved to, a step at a time: a classifier identified with a level that is none is represented by it (`default_shape_equal`), and that step answers no. One the declaration's closing settled, to a constant or to a parameter of its scheme, is a classifier still: what its level came to says nothing of a sort either.
+    pub fn classifies(&self, level: &Level) -> bool {
+        let mut level = level;
+        loop {
+            let Some(entry) = bare_meta(level).and_then(|meta| self.metas.get(meta.0)) else {
+                return false;
+            };
+            if !entry.classifier {
+                return false;
+            }
+            match &entry.solution {
+                None => return true,
+                Some(solution) if bare_meta(solution).is_some() => level = solution,
+                Some(solution) => return solution.metas().next().is_none(),
+            }
+        }
     }
 
     /// Mint a level that stands for `beside` at an occurrence of its own: with the provenance of the level `beside` is, where it is one level, and an invented classifier's otherwise. A copy of a chosen level is a level a caller chooses, as the `Type` written in its place would be; a copy of a constant or of a maximum is nobody's until a position holds it.
@@ -1117,6 +1151,12 @@ impl UniverseSolver {
         let (from, to) = match of_a.cmp(&of_b) {
             std::cmp::Ordering::Less => (a, b),
             std::cmp::Ordering::Greater => (b, a),
+            // A classifier never represents a level that is none: what a program wrote keeps what it states.
+            std::cmp::Ordering::Equal
+                if self.metas[b.0].classifier && !self.metas[a.0].classifier =>
+            {
+                (b, a)
+            }
             std::cmp::Ordering::Equal if of_a == Provenance::Inferred => (a, b),
             std::cmp::Ordering::Equal => (b, a),
         };

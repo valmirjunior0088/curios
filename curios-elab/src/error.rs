@@ -102,8 +102,6 @@ pub enum Watched {
 pub enum Underivable {
     /// Not a registered `induct` or `struct`: an intrinsic carrier, a tuple or function shape, a variable, or a stuck head.
     NotDeclared,
-    /// A `Prop`-sorted declaration, whose values erase and spell nothing.
-    Proposition,
     /// A concept's own record type.
     Concept,
     /// A payload or field whose type is a sort: it is a type, which no value spells.

@@ -1792,8 +1792,8 @@ impl AtTwoLevels {
             &w,
             &Term::func_type([(x, nat_type.clone()), (y, nat_type.clone())], nat_type),
         );
-        let this = context.fresh_universe(UniverseRole::Flexible, None);
-        let that = context.fresh_universe(UniverseRole::Flexible, None);
+        let this = Level::meta(context.universes_mut().fresh(UniverseRole::Flexible, None));
+        let that = Level::meta(context.universes_mut().fresh(UniverseRole::Flexible, None));
         let over = |level: &Level, left: &Free, right: &Free| {
             Term::apply(
                 Term::free_var(&w),

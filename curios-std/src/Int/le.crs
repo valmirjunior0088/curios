@@ -1,5 +1,5 @@
 pub use /sys/Int/{le};
-use /std/{Nat, Int, Bool, Option, Eq};
+use /std/{Nat, Int, Bool, Evidence, Eq};
 use /std/Bool/{True, Holds};
 
 -- The floors the order laws stand on, stated over abstract naturals, where the comparison decides them by comparing preimages; a law instantiates one at the naturals its hypotheses name, and the instance reduces to the comparison the law concludes.
@@ -17,10 +17,10 @@ pub let refl(n: Int) -> Holds(n <= n) =
     True/qed();
 
 --- The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
-pub let try(a: Int, b: Int) -> Option(Holds(a <= b)) =
-    match a <= b: (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
+pub let try(a: Int, b: Int) -> Evidence(Holds(a <= b)) =
+    match a <= b: (r) => Evidence(Holds(r))
+    | true => Evidence/some(True/qed())
+    | false => Evidence/none()
     end;
 
 --- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.

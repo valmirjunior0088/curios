@@ -245,14 +245,14 @@ fn a_function_of_only_proofs_is_called_with_nothing() {
     );
 }
 
-// The seam in the other direction, which course-of-values induction reaches at a `Type`-valued motive, as `Nat/descend` carries. `app`'s declaration keeps `f`, whose declared type is `Type`-valued, but the call in `pf` instantiates `P` at a proposition, so the application side erases the lambda as the proof it has become — and `app` applies what it was handed. A proof bound in a statement position runs regardless of sort, so the slot has to hold something applicable: `kept_operand` fills it with a function of the declared arity returning the unit constant, where a bare unit would trap.
+// A proof-valued function is a parameter of its callee's telescope like any other. `app` keeps `f`, the call in `pf` hands it a lambda that erases as the proof it is, and `app` applies what it was handed. A proof bound in a statement position runs regardless of sort, so the slot has to hold something applicable: `kept_operand` fills it with a function of the declared arity returning the unit constant, where a bare unit would trap.
 #[test]
-fn a_prop_instantiation_of_a_type_valued_parameter_is_erased_on_both_sides() {
+fn a_proof_valued_function_in_a_kept_slot_is_applicable() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str};
         use /std/Bool/{True, Holds};
-        let app(P: (Nat) -> Type, f: (k: Nat) -> P(k), n: Nat) -> P(n) = f(n);
+        let app(P: (Nat) -> Prop, f: (k: Nat) -> P(k), n: Nat) -> P(n) = f(n);
         let pf(n: Nat) -> Holds(n <= n) = app((k) => Holds(k <= k), (k) => True/qed(), n);
         let _: Holds(3 <= 3) = pf(3);
         /std/print("ok")

@@ -1045,8 +1045,8 @@ fn a_rollback_that_withdrew_a_level_constraint_clears_what_a_question_may_rest_o
     let mut context = context();
     let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
     let sum = Term::intrinsic(Intrinsic::nat_add(literal(1), literal(2)));
-    let this = context.fresh_universe(UniverseRole::Flexible, None);
-    let that = context.fresh_universe(UniverseRole::Flexible, None);
+    let this = Level::meta(context.universes_mut().fresh(UniverseRole::Flexible, None));
+    let that = Level::meta(context.universes_mut().fresh(UniverseRole::Flexible, None));
     let equate = |context: &mut Context| {
         context
             .universes_mut()

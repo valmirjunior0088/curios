@@ -441,7 +441,7 @@ fn decimal_is_ascii_carries_its_proof() {
         let single(c : Nat, ok : Eq()(step(c, Scan/lead()), Scan/lead()))
             -> Valid(x[Nat/to_byte(c % 256)]) =
             let r : Utf8(step(c, Scan/lead()), x[]) =
-                Eq/subst((sc) => Utf8(sc, x[]), Eq/sym(ok), Utf8/stop());
+                Eq/transp((sc) => Utf8(sc, x[]), Eq/sym(ok), Utf8/stop());
             Utf8/more(c, Scan/lead(), x[], r);
 
         let digit(d : Nat) -> { c : Nat, ok : Eq()(step(c, Scan/lead()), Scan/lead()) } =

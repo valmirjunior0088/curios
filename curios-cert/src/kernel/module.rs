@@ -26,7 +26,7 @@ use {
 ///
 /// A universe-polymorphic definition is checked *generically*, at its own parameters rather than at any instance. That is the right reading — a scheme is valid exactly when its body checks with its parameters held abstract — and it is also the only one available, since the kernel sees no use sites.
 ///
-/// `proof` is the definition's mark ([`curios_core::Definition::proof`]), held to its type one way, as a binder's is ([`hold_proof`]): a name marked a proof at a type that is no proposition is refused, since a judgment reads what such a name unfolds to, and one left unmarked unfolds and is refused nowhere. The sort this check types the statement at answers where it is `Prop`, with nothing run. A statement declared at a `Type` may still reduce to a proposition, which subsumption admits there, so any other sort is read as a binder's type is.
+/// `proof` is the definition's mark ([`curios_core::Definition::proof`]), held to its type one way, as a binder's is ([`hold_proof`]): a name marked a proof at a type that is no proposition is refused, since a judgment reads what such a name unfolds to, and one left unmarked unfolds and is refused nowhere. The sort this check types the statement at answers, with nothing run: no proposition stands at a `Type`, so a statement typed at one reduces to none.
 pub(crate) fn check_definition(
     kernel: &mut Kernel,
     name: &Free,
@@ -39,8 +39,8 @@ pub(crate) fn check_definition(
     kernel.assume_universes(universes);
 
     let sort = infer_type(kernel, type_)?;
-    if !sort.is_prop() {
-        hold_proof(kernel, proof, type_)?;
+    if proof && !sort.is_prop() {
+        return Err(Error::NoProof(type_.clone()));
     }
     check(kernel, body, type_)?;
 

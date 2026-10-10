@@ -174,7 +174,7 @@ impl Sort {
 ///
 /// **Only a declaration's word is taken.** The head is a name this kernel defined, whose type it checked the body against before it stored either. A projection of a group the term itself carries states a claim nothing here has checked, and a member of the group being checked is a binder assumed at one: each is classified by what it reduces to, and [`Sort::classify`]'s neutral arm reads such a claim only where reduction leaves the spine standing.
 ///
-/// **Only `Prop` is answered.** A proposition is admitted where a `Type` is declared — `let P(n: Nat) -> Type = Eq()(n, n)` — so a head declared into `Type` does not say its application is none, and such a type is reduced as before. Nothing is admitted the other way: a body at `Type` is refused under a declared `Prop`.
+/// **Only `Prop` is answered.** A head declared into `Type` says its application is no proposition, no proposition standing where a `Type` is declared, and says nothing more: which type it is, and at which level, is its reduct's to say, so such a type is reduced as before.
 pub(crate) fn declared_into_prop(
     kernel: &mut Kernel,
     type_: &Term,

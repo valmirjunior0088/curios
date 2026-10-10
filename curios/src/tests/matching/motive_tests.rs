@@ -11,7 +11,7 @@ use crate::tests::{error, run};
 fn a_motive_may_name_a_top_level_family() {
     let source = r#"
         use /std/{Nat, Eq};
-        let discriminates(s : Nat, t : Nat, q : Eq()(s, t)) -> Type = Eq()(t, s);
+        let discriminates(s : Nat, t : Nat, q : Eq()(s, t)) -> Prop = Eq()(t, s);
         let flip(@x : Nat, @y : Nat, p : Eq()(x, y)) -> Eq()(y, x) =
             match p : discriminates
             | refl(@z) => Eq/refl()

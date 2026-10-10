@@ -1,5 +1,5 @@
 pub use /sys/Nat/{le};
-use /std/{Nat, Bool, Option, Eq};
+use /std/{Nat, Bool, Evidence, Eq};
 use /std/Bool/{True, Holds};
 
 --- `n <= n`.
@@ -11,10 +11,10 @@ pub let add_r(a: Nat, k: Nat) -> Holds(a <= a + k) =
     True/qed();
 
 --- The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
-pub let try(a: Nat, b: Nat) -> Option(Holds(a <= b)) =
-    match a <= b: (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
+pub let try(a: Nat, b: Nat) -> Evidence(Holds(a <= b)) =
+    match a <= b: (r) => Evidence(Holds(r))
+    | true => Evidence/some(True/qed())
+    | false => Evidence/none()
     end;
 
 --- `a < b` gives `a <= b`.

@@ -653,35 +653,7 @@ pub(crate) fn refused_scrutinee(term: &Term, type_: Term) -> Error {
 }
 
 /// Elaborate a match over its elaborated scrutinee, by the eliminator its cases name.
-///
-/// Where the match infers its own type, an elided motive is the hole every arm is checked against, and the match awaits bounds for it until its arms are read ([`Context::settle_bounds`]): a proposition one arm answers holds no later arm to it.
 fn eliminate(
-    context: &mut Context,
-    m: &Match,
-    term: &Term,
-    mode: Mode,
-    scrutinee: Scrutinee,
-) -> Result<(Term, Term), Error> {
-    let awaited = context.awaited_mark();
-    if matches!(mode, Mode::Infer)
-        && let MatchResult::Family(motive) = &m.result
-        && is_elided_motive(motive)
-        && let Subterm::Metavar(metavar) = &**motive.body()
-    {
-        context.await_bounds(metavar.id);
-    }
-    let eliminated = eliminate_by_cases(context, m, term, mode, scrutinee).and_then(|eliminated| {
-        context.settle_bounds(awaited)?;
-
-        Ok(eliminated)
-    });
-    context.stop_awaiting(awaited);
-
-    eliminated
-}
-
-/// [`eliminate`]'s dispatch on the cases.
-fn eliminate_by_cases(
     context: &mut Context,
     m: &Match,
     term: &Term,

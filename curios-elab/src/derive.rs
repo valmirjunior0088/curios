@@ -4,7 +4,7 @@
 //!
 //! **The blessed set is one value.** Which concepts derive, and their specific method and renderer names, are one row of `curios_utilities::DerivationSyntax` — read here to pick the writer, and read by `curios-text`'s `order_flat_items` to supply the hard edges the transient hides. `Spell` also uses the registry's shared string vocabulary; both its writer and the scheduler receive that same entry.
 //!
-//! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island and not `Prop`-sorted, its parameters and indices given by the key. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` extent.
+//! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island, its parameters and indices given by the key. A proposition is no key: every concept with a derivation is over a `Type`, where none stands. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` extent.
 //!
 //! **Payloads.** Every derivation reads a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each explicit payload classified by its type under the binders before it. A payload that is itself a type is refused; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method — `Spell/spell`, `Eql/eql`, `Ord/ord` — applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. An implicit payload is bound and never named. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
 //!
@@ -144,9 +144,6 @@ fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
                 .instantiate_induct_decl_at(&decl, universes)
                 .map_err(Error::from)?;
             transparent(context, site, name, &decl.module, decl.rep_public)?;
-            if matches!(&*decl.result_sort, Subterm::Prop(_)) {
-                return Err(site.refuse(Underivable::Proposition));
-            }
             Ok(Subject::Induct {
                 name: *name,
                 decl,
@@ -168,9 +165,6 @@ fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
                 .instantiate_struct_decl_at(&decl, universes)
                 .map_err(Error::from)?;
             transparent(context, site, name, &decl.module, decl.rep_public)?;
-            if matches!(&*decl.result_sort, Subterm::Prop(_)) {
-                return Err(site.refuse(Underivable::Proposition));
-            }
             Ok(Subject::Struct {
                 name: *name,
                 decl,

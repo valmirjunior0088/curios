@@ -1,4 +1,4 @@
-//! A structural type's runtime shape is its telescope's: a function takes a parameter for each binder and an anonymous tuple holds a field for each member, whatever a binder's type is read as. Each program makes a value at one reading of its type and uses it at another, a substitution or a refinement apart, where one reads a binder as a proof or a type and the other as a variable. With a binder dropped by either reading, the first four print `1`, the fifth stops the compiler in `curios-cont`'s verifier, and the tuples trap.
+//! A structural type's runtime shape is its telescope's: a function takes a parameter for each binder and an anonymous tuple holds a field for each member, whatever a binder's type is read as. Each program makes a value at one reading of its type and uses it at another, a substitution or a refinement apart, where one reads a binder as a type and the other as a variable. With a binder dropped by either reading, the first three print `1`, the fourth stops the compiler in `curios-cont`'s verifier, and the tuple traps.
 
 use crate::tests::run;
 
@@ -9,18 +9,6 @@ fn a_function_written_at_a_universe_is_called_at_a_variable() {
         use /std/{Nat};
         let apply(@A: Type, h: (A, Nat) -> Nat, a: A) -> Nat = h(a, 41);
         /std/print(Nat/to_str(apply((t, n) => n + 1, Nat)))
-        "#;
-    assert_eq!(run(source), b"42");
-}
-
-// The same with a proposition where the type went: a proof is a value of a `Type` variable to the callee.
-#[test]
-fn a_function_written_at_a_proposition_is_called_at_a_variable() {
-    let source = r#"
-        use /std/{Nat};
-        use /std/Bool/{True};
-        let apply(@A: Type, h: (A, Nat) -> Nat, a: A) -> Nat = h(a, 41);
-        /std/print(Nat/to_str(apply((p, n) => n + 1, True/qed())))
         "#;
     assert_eq!(run(source), b"42");
 }
@@ -71,18 +59,6 @@ fn a_tuple_built_at_a_universe_is_read_at_a_variable() {
         use /std/{Nat};
         let second(@A: Type, p: {A, Nat}) -> Nat = p.1;
         /std/print(Nat/to_str(second((Nat, 41))))
-        "#;
-    assert_eq!(run(source), b"41");
-}
-
-// A tuple holding a proof beside a number is two fields to a reader that knows the first only as a variable.
-#[test]
-fn a_tuple_built_at_a_proposition_is_read_at_a_variable() {
-    let source = r#"
-        use /std/{Nat};
-        use /std/Bool/{True};
-        let second(@A: Type, p: {A, Nat}) -> Nat = p.1;
-        /std/print(Nat/to_str(second((True/qed(), 41))))
         "#;
     assert_eq!(run(source), b"41");
 }
