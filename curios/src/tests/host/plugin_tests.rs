@@ -276,14 +276,14 @@ fn a_run_shorter_than_its_bytes_returns_padded_to_them() {
     );
 }
 
-/// A declaration nothing claims is refused naming it, because a manifest that has not caught up with a source file is the ordinary way to arrive here.
+/// A declaration a program reaches that neither a module nor the host answers is refused before the program starts, naming it.
 #[test]
-fn a_declaration_no_export_claims_is_refused() {
+fn a_declaration_nothing_answers_is_refused_where_a_program_reaches_it() {
     let refusal = run_against(
         r#"
         foreign double : (Nat) -> Nat;
         foreign unclaimed : (Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte((double(21)! + unclaimed(1)!) % 256))!;
         /std/Io/pure(())
         "#,
         &[("double", "/double")],
@@ -296,20 +296,42 @@ fn a_declaration_no_export_claims_is_refused() {
     );
 }
 
-/// A claim naming a declaration the program does not hold, which is the same manifest drift seen from the other side.
+/// A program asks for what it reaches: a declaration nothing calls needs no implementation, and a claim on a row the program does not reach is a claim nothing asks about. Whether a package's claim names a declaration at all is held where its unit is compiled, which `curios-pipeline`'s `a_claim_is_held_to_a_declaration_of_its_own_unit` pins.
 #[test]
-fn a_claim_naming_no_declaration_is_refused() {
-    let refusal = run_against(
+fn a_declaration_nothing_reaches_asks_for_no_implementation() {
+    let code = run_against(
         r#"
         foreign double : (Nat) -> Nat;
+        foreign unclaimed : (Nat) -> Nat;
         let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
         /std/Io/pure(())
         "#,
         &[("double", "/double"), ("echo", "/absent")],
     )
-    .expect_err("a claim answering nothing");
+    .expect("execution succeeded");
 
-    assert!(refusal.contains("`/absent`"), "{refusal}");
+    assert_eq!(code, 42);
+}
+
+/// An export is held to its declaration where the two are linked, so a module that answers another type is refused before the program runs and not at the first call that reaches it.
+#[test]
+fn an_export_of_another_type_is_refused_before_the_program_runs() {
+    let refusal = run_against(
+        r#"
+        foreign flip : (Byte) -> Byte;
+        let _ = /std/proc/exit(@{}, flip(0)!)!;
+        /std/Io/pure(())
+        "#,
+        &[("double", "/flip")],
+    )
+    .expect_err("an export of another type");
+
+    assert!(
+        refusal.contains(
+            "exports `double` as (i64) -> (i64), and `/flip` crosses to a module as (i32) -> (i32)"
+        ),
+        "{refusal}"
+    );
 }
 
 /// A claim on an export the module does not have, refused listing what it does — so a typo is read off the message rather than guessed at.

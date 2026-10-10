@@ -1267,6 +1267,7 @@ where
             curios_profile::profile!("cache::get" => cache.and_then(|cache| cache.get(source)));
         if let Some(unit) = hit {
             progress(Progress::Reused(&source.prefix()));
+            answered(source, &unit)?;
             produced.push(unit);
             continue;
         }
@@ -1311,10 +1312,37 @@ where
             curios_profile::profile!("cache::put" => cache.put(source, &unit));
         }
 
+        answered(source, &unit)?;
         produced.push(unit);
     }
 
     Ok(produced)
+}
+
+/// Hold what `source`'s package says a module answers to the rows `unit` declares, a unit compiled now or restored alike.
+///
+/// A manifest names a declaration from its package's own root, so a claim lies under the unit's prefix by its spelling. Whether it names a `foreign` is asked here, of the rows the unit itself holds, so a manifest that has not caught up with a source file is refused where its unit is compiled and before the program that would reach the row.
+fn answered(source: &UnitSource<'_>, unit: &Unit) -> Result<(), CompileError> {
+    for (declaration, row) in source.answered() {
+        if unit.foreigns().get(declaration).is_none() {
+            let declared = unit
+                .foreigns()
+                .iter()
+                .map(|function| format!("`{}`", function.name()))
+                .collect::<Vec<_>>();
+
+            return Err(CompileError::failure(format!(
+                "the foreign row {row:?} says an export answers `{declaration}`, and {} declares no such `foreign`: {}",
+                source.prefix().join(),
+                match declared.is_empty() {
+                    true => "it declares none".to_string(),
+                    false => format!("it declares {}", declared.join(", ")),
+                },
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 /// What the fold is doing, for a caller that reports it.

@@ -30,6 +30,8 @@ pub struct RootSource {
     documented: Option<(Qualifier, Option<String>)>,
     /// The prefixes this unit declared a dependency on, and so the only ones its names may resolve into — `None` when nothing declared any, which is every caller with no manifest to read one out of. See [`RootSource::declaring`].
     declares: Option<Vec<Qualifier>>,
+    /// The `foreign` declarations a module of this unit's package answers, each by its qualified name beside the manifest row that says so. See [`RootSource::answering`].
+    answers: Vec<(String, String)>,
     /// Text consulted before the disk for every file this source would read. See [`Overlay`].
     overlay: Overlay,
     /// Every file this source has read, by the canonical path it was read from. See [`RootSource::reads`].
@@ -147,6 +149,7 @@ impl RootSource {
             bases,
             documented: None,
             declares: None,
+            answers: Vec::new(),
             overlay: Overlay::default(),
             reads: RefCell::new(BTreeMap::new()),
             opened: None,
@@ -186,6 +189,21 @@ impl RootSource {
     /// The prefixes this source declared a dependency on, when it declared any.
     pub(crate) fn declared(&self) -> Option<&[Qualifier]> {
         self.declares.as_deref()
+    }
+
+    /// This source with the `foreign` declarations its package's manifest says a module answers, each by its qualified name beside the manifest row that names it.
+    ///
+    /// **A claim is held where the unit is.** A manifest spells a declaration from its package's own root, so a claim names nothing outside the package; whether it names a declaration at all is the unit's to say, and the fold asks every unit it compiles or restores. A claim on no declaration is refused there, against the rows the unit holds, and not by predicting a qualified name from a source position.
+    pub fn answering(self, claims: impl IntoIterator<Item = (String, String)>) -> Self {
+        Self {
+            answers: claims.into_iter().collect(),
+            ..self
+        }
+    }
+
+    /// The declarations this source's package says a module answers, as [`RootSource::answering`] was handed them.
+    pub fn answered(&self) -> &[(String, String)] {
+        &self.answers
     }
 
     /// This source with `overlay` consulted before the disk on every read.

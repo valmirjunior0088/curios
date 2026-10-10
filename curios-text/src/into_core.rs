@@ -2152,6 +2152,11 @@ impl<'a> UnitSource<'a> {
         self.visible.as_deref()
     }
 
+    /// The `foreign` declarations this unit's package says a module answers, each beside the manifest row that says so ([`RootSource::answering`]).
+    pub fn answered(&self) -> &[(String, String)] {
+        self.source.answered()
+    }
+
     /// The prefix this unit claims, as a name to report it by — `/json` for a mounted package.
     ///
     /// The root for the entry, which owns the empty prefix: a caller that wants to *name* the entry knows what was asked for and this does not, so it supplies its own.

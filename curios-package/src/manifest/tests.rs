@@ -393,7 +393,7 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
             hash = "f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
             [foreign.exports]
-            SHA256_Digest = "/crypto/digest/sha256"
+            SHA256_Digest = "digest/sha256"
 
             [[foreign]]
             name = "blake3"
@@ -419,6 +419,31 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
         package.foreign[1].module,
         Module::Fetched("https://example.com/libblake3.wasm".to_string())
     );
+}
+
+/// A row's exports answer its own package's declarations: each is named from the package's root, so a claim on another package's row, or on the standard library's, has no spelling. A path a manifest once wrote in full is refused with the spelling it has now, and one that leads elsewhere with why it names nothing here.
+#[test]
+fn an_export_answers_a_declaration_named_from_its_own_package() {
+    const ROW: &str = "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\npath = \"m.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.exports]\n";
+
+    for (claim, expected) in [
+        (
+            "/crypto/digest/sha256",
+            "this one is written `digest/sha256`",
+        ),
+        ("/std/rand/rand_bytes", "is no declaration of crypto"),
+        ("/other/give", "is no declaration of crypto"),
+        ("/cryptography/give", "is no declaration of crypto"),
+        ("digest//sha256", "it is empty"),
+        ("digest/let", "it is a keyword"),
+        ("../other/give", "it is no identifier"),
+    ] {
+        let refusal = format!("{ROW}answer = \"{claim}\"\n")
+            .parse::<Manifest>()
+            .expect_err("a claim outside the package");
+
+        assert!(refusal.contains(expected), "{claim}: {refusal}");
+    }
 }
 
 /// Every wrong combination of the delivery fields, each refused by name rather than by whichever shape was tried second.

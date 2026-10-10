@@ -116,7 +116,7 @@ curios compile scratch.crs -o s  # a loose program, which has nowhere else to go
 
 Dispatched through the same code as `run`, so the two cannot drift apart. A declared executable is written under the store beside the governing manifest, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
 
-**The result is self-contained, including its `foreign` implementations.** Every [`[[foreign]]`](#the-manifest) module the program's package graph declares is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the store or the package at run time, and the executable is the only file that has to travel.
+**The result is self-contained, including its `foreign` implementations.** Every [`[[foreign]]`](#the-manifest) module that answers a declaration the program reaches is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the store or the package at run time, and the executable is the only file that has to travel.
 
 ## `document`
 
@@ -337,14 +337,16 @@ path = "foreign/libsha2.wasm"    # or `url`, never both
 hash = "f1:9c3a…"                # either way
 
 [foreign.exports]
-SHA256_Digest = "/crypto/digest/sha256"
+SHA256_Digest = "digest/sha256"  # in the package `crypto`: `/crypto/digest/sha256`
 ```
 
 `path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both, and the carried case is the one it matters most for: a fetched module is obviously unvouched-for until it is checked, while a carried one *looks* covered by the tree hash its consumer pinned — and is, when the package came from git. But the entry package is hashed against nothing and `path` and `member` dependencies are deliberately unpinned, which is exactly where a locally built module lives.
 
 `f1:` is plain SHA-256 over the file's bytes, so `sha256sum` computes it and a release's checksum file already states it. A delivery that fails its hash is refused naming both digests, whichever way it arrived.
 
-`[foreign.exports]` maps each export of that module to the declaration it answers, by fully qualified name. It is total: every `foreign` a compilation holds is named by exactly one entry across every row in the package graph, and a declaration nothing claims is refused naming it. Export names are local to their module, so two rows may export the same name; the declaration paths are what must not collide.
+`[foreign.exports]` maps each export of that module to the declaration it answers. A module answers its own package's declarations: each is a `foreign` of the package's library, named from the package's root and spelled plainly, as an executable's `path` is, so a row of another package or of the standard library has no spelling here. A path written in full, `/crypto/digest/sha256`, is refused with the spelling it has; an entry that names no `foreign` the library declares is refused where the library is compiled, listing the ones it does; and a package with no `lib.crs` has no declaration for a module to answer. Export names are local to their module, so two rows may export the same name; the declaration paths are what must not collide.
+
+A `foreign` no entry names is the host's to answer. A program asks only for what it reaches: a declaration nothing calls needs no implementation, and one a program reaches that neither a module nor the host answers is refused before the program starts, naming it. An export is held to its declaration when the two are linked, so a module that answers another type is refused there as well.
 
 | Umbrella key | Is |
 | --- | --- |

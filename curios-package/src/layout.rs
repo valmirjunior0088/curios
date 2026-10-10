@@ -118,13 +118,31 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
     stems(package, library.as_ref())?;
 
     if !present {
+        // A module answers declarations of its package's library, so with no library there is none for a row's exports to answer — and no unit to hold the claim to.
+        if let Some(foreign) = package
+            .foreign
+            .iter()
+            .find(|foreign| !foreign.exports.is_empty())
+        {
+            return Err(format!(
+                "the foreign row {:?} of {} names declarations its exports answer, and the package has no `{LIBRARY}` to declare them in: a module answers its own package's declarations",
+                foreign.name, package.name
+            ));
+        }
+
         return Ok(None);
     }
 
-    // The library is what a package documents, described as the manifest describes it.
+    // The library is what a package documents, described as the manifest describes it, and what its modules answer: each claim travels with the unit, which is where it is held to a declaration.
     let source = RootSource::mounted(&package.name, RootKind::Ordinary, header, directory)
         .declaring(declared(package))
-        .documented(&package.name, package.description.as_deref());
+        .documented(&package.name, package.description.as_deref())
+        .answering(package.foreign.iter().flat_map(|foreign| {
+            foreign
+                .exports
+                .values()
+                .map(|declaration| (declaration.clone(), foreign.name.clone()))
+        }));
 
     apart(package, directory, &source)?;
 

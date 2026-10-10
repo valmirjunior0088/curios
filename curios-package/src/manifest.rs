@@ -252,7 +252,7 @@ impl Document {
 
         let mut foreign = Vec::new();
         for row in self.foreign.unwrap_or_default() {
-            foreign.push(row.foreign(&foreign)?);
+            foreign.push(row.foreign(&name, &foreign)?);
         }
 
         Ok(Package {
@@ -417,7 +417,7 @@ pub struct Foreign {
     ///
     /// **Stated for a carried module too, and that is the case it matters most for.** A fetched one is obviously unvouched-for until it is checked. A carried one *looks* covered by the tree hash its consumer pinned — and is, when the package was fetched from git. But the entry package is hashed against nothing, and `source = "path"` and `member` dependencies are deliberately unpinned, because live code has no pin. That is exactly where a locally built module lives, so without this the common case is the unchecked one.
     pub hash: FileHash,
-    /// Which declaration each export answers, as `export name -> fully qualified path`. Total by rule rather than by convenience: every `foreign` a compilation holds is named by exactly one entry, and the refusal for an uncovered one is what carries a reader to this table.
+    /// Which declaration each export answers, as `export name -> fully qualified path`. The manifest names each from the package's own root, and the qualified path is made of it and the package's name where the row is read (`own_declaration`), so every path here lies under the package's prefix. A row no entry names is the host's to answer, or is refused by name where a program reaches it.
     pub exports: BTreeMap<String, String>,
 }
 
@@ -469,8 +469,8 @@ impl Foreign {
 }
 
 impl ForeignRow {
-    /// This row as a declared provider, against the ones already declared before it.
-    fn foreign(self, declared: &[Foreign]) -> Result<Foreign, String> {
+    /// This row as a declared provider of the package `package`, against the ones already declared before it.
+    fn foreign(self, package: &str, declared: &[Foreign]) -> Result<Foreign, String> {
         let Self {
             name,
             path,
@@ -510,14 +510,51 @@ impl ForeignRow {
             ));
         };
 
+        let exports = exports
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(export, declaration)| {
+                Ok((export, own_declaration(package, &declaration, &name)?))
+            })
+            .collect::<Result<_, String>>()?;
+
         Ok(Foreign {
             name: name.clone(),
             module,
             hash: FileHash::parse(&hash)
                 .map_err(|refusal| format!("the foreign row {name:?}: {refusal}"))?,
-            exports: exports.unwrap_or_default(),
+            exports,
         })
     }
+}
+
+/// The qualified name of the declaration `spelled` names in the library of the package `package`, for the foreign row `row`.
+///
+/// **A module answers its own package's declarations, and the spelling is what makes that so.** The path is read from the package's root, plain and relative as an executable's is, so every declaration it can name lies under the package's own prefix: a claim on another package's row, or on the standard library's, has no spelling, and nothing later has to hold a claim to its claimant. An absolute path is refused here, where the manifest is read.
+fn own_declaration(package: &str, spelled: &str, row: &str) -> Result<String, String> {
+    if let Some(absolute) = spelled.strip_prefix('/') {
+        let own = absolute
+            .strip_prefix(package)
+            .and_then(|rest| rest.strip_prefix('/'));
+
+        return Err(match own {
+            Some(relative) => format!(
+                "the foreign row {row:?} says an export answers `{spelled}`; a declaration is named from the package's own root, so this one is written `{relative}`"
+            ),
+            None => format!(
+                "the foreign row {row:?} says an export answers `{spelled}`, which is no declaration of {package}; a module answers its own package's declarations, each named from the package's root, as `digest/sha256` names `/{package}/digest/sha256`"
+            ),
+        });
+    }
+
+    for segment in spelled.split('/') {
+        canonical(
+            segment,
+            &format!("segment of the declaration {spelled:?} the foreign row {row:?} names"),
+        )?;
+    }
+
+    Ok(format!("/{package}/{spelled}"))
 }
 
 /// A path a row names inside its own package, refused where it is not one — the rule an executable's `path` keeps, stated once for both.

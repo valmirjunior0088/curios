@@ -160,7 +160,7 @@ fn a_compiled_executable_carries_the_modules_answering_its_foreign_declarations(
     fs::write(
         package.join("curios.toml"),
         format!(
-            "name = \"ffi\"\n\n[[foreign]]\nname = \"probe\"\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.exports]\ndouble = \"/ffi/double\"\n",
+            "name = \"ffi\"\n\n[[foreign]]\nname = \"probe\"\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.exports]\ndouble = \"double\"\n",
             digest(&wasm)
         ),
     )
