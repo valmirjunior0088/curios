@@ -1,4 +1,4 @@
-//! What a fold recomputes from rows: the per-span aggregates, the distributions beside them, the two things only a stream can say — what a truncated file still yields, and what a killed run was inside — and which files one rotated stream is.
+//! What a fold recomputes from rows: the per-span aggregates, the distributions beside them, the two things only a stream can say — what a stream cut short still yields, and what a killed run was inside — and a filed stream read back from its path.
 
 use {super::*, curios_utilities::test_support::Temporary, std::fs};
 
@@ -131,7 +131,7 @@ fn an_event_site_folds_into_its_distribution() {
     assert_eq!(sample.mean(), 5.0);
 }
 
-// A rotation discards the older file, so the surviving one opens in the middle of a span's life. Nothing is invented: an exit with no entry contributes no duration, and a span whose creation went with the discarded file is still named by the callsite its id carries.
+// A reader handed part of a stream meets one that opens in the middle of a span's life. Nothing is invented: an exit with no entry contributes no duration, and a span whose creation is not among the rows is still named by the callsite its id carries.
 #[test]
 fn a_stream_that_opens_mid_life_folds_what_it_can() {
     let report = folded(
@@ -378,7 +378,7 @@ fn the_report_lists_the_slowest_instances_with_their_fields() {
     );
 }
 
-// A rotation can discard the entry of a span whose children survive, and nothing is invented for it: the children keep their own time, and the exit the stream never saw entered credits no one.
+// The rows a reader holds can lack the entry of a span whose children they hold, and nothing is invented for it: the children keep their own time, and the exit the stream never saw entered credits no one.
 #[test]
 fn a_span_whose_parent_entered_before_the_stream_opened_keeps_its_own_time() {
     let report = folded(
@@ -424,31 +424,16 @@ fn an_escaped_field_reads_back_as_it_was_written() {
     assert_eq!(report.summaries[0].group.as_deref(), Some("a\tb\nc\\d"));
 }
 
-// The pair a rotation leaves is one stream, and `fold_at` is what knows it: both files reach the report, the discarded one first. A reader that opened only the surviving file would *also* succeed — a truncated stream folds by design — and would report half the run as the whole of it, which is why this is asserted rather than left to the caller.
+// A filed stream is read back from the path it was filed at: the one file is the whole of it.
 #[test]
-fn a_rotated_pair_folds_as_one_stream() {
-    let directory = Temporary::new("profile", "rotated-pair");
+fn a_filed_stream_folds_from_its_path() {
+    let directory = Temporary::new("profile", "filed");
     fs::create_dir_all(&directory).expect("the directory is created");
     let path = directory.join("profile.tsv");
 
-    fs::write(predecessor(&path), standalone("discarded", 400)).expect("the predecessor is filed");
-    fs::write(&path, standalone("surviving", 900)).expect("the current file is filed");
+    fs::write(&path, standalone("only", 700)).expect("the stream is filed");
 
-    let report = fold_at(&path).expect("the pair folds");
-
-    assert_eq!(names(&report), ["surviving", "discarded"]);
-}
-
-// A run that never grew past its cap has no predecessor, which is the ordinary ending rather than a missing half: the one file is the whole stream.
-#[test]
-fn a_stream_that_never_rotated_folds_without_a_predecessor() {
-    let directory = Temporary::new("profile", "never-rotated");
-    fs::create_dir_all(&directory).expect("the directory is created");
-    let path = directory.join("profile.tsv");
-
-    fs::write(&path, standalone("only", 700)).expect("the current file is filed");
-
-    let report = fold_at(&path).expect("the lone file folds");
+    let report = fold_at(&path).expect("the file folds");
 
     assert_eq!(names(&report), ["only"]);
 }

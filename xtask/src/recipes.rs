@@ -195,7 +195,7 @@ impl BuildProfile {
 ///
 /// **The compiler is not asked to profile anything.** A `profile` build files every span and event it makes, whatever subcommand ran, so this recipe selects a subject rather than a mode.
 ///
-/// **Two invocations of one binary, and this recipe knows only the path.** Folding is not the profiled run's last step, because a stream is worth reading exactly when the run did not finish and such a run never reaches its last step — so the read is a separate pass. It is a pass the *compiler* makes rather than this crate, because which files one rotated stream occupies is the writer's decision, and restating it here would be a second spelling of a convention nothing checks. What this crate spells is the destination, once, and hands it to both halves.
+/// **Two invocations of one binary, and this recipe knows only the path.** Folding is not the profiled run's last step, because a stream is worth reading exactly when the run did not finish and such a run never reaches its last step — so the read is a separate pass. It is a pass the *compiler* makes rather than this crate, because the stream's format is the writer's, and a reader here would be a second spelling of it that nothing checks. What this crate spells is the destination, once, and hands it to both halves.
 ///
 /// **Debug unless asked otherwise.** `curios` has no feature but `profile`, so the debug build is the one `--all-features` already made while iterating, and a question asked of a change costs the change; `--profile release` is for a figure a specification quotes, which is the shipped compiler's.
 pub(crate) fn profile(source: &Path, build: BuildProfile) -> Result<(), String> {
@@ -218,6 +218,51 @@ pub(crate) fn profile(source: &Path, build: BuildProfile) -> Result<(), String> 
     println!("\nstream: {stream}");
 
     Ok(())
+}
+
+/// The half of the prelude's build [`profile_prelude`] runs under a recorder.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub(crate) enum PreludeHalf {
+    /// `/sys` and `/std` lowered, elaborated, erased and archived: `curios-prelude-archive`'s build.
+    Elaboration,
+    /// The archived images walked by the kernel: `curios-prelude`'s build.
+    Certification,
+}
+
+impl PreludeHalf {
+    /// The package whose build this half is, and the program beside its build script that runs the half under a recorder.
+    fn program(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Elaboration => ("curios-prelude-archive", "profile-elaboration"),
+            Self::Certification => ("curios-prelude", "profile-certification"),
+        }
+    }
+}
+
+/// Run one half of the prelude's build under a recorder, its stream filed at `stream`.
+///
+/// **A program is asked, and no build is.** The prelude's two build scripts record nothing: a build script takes no argument, so nothing can ask one. Each half's work is a module its build script shares with a program standing beside it, which runs that work again under `curios-profile`'s recorder, into a directory of its own, and prints the fold of what it filed.
+///
+/// **Release**, which compiles the compiler's front half at the level a build script's copy is compiled at under either profile, so the program measures what the build runs.
+///
+/// `stream` is taken from where the recipe was run, as a path typed there means, and handed on whole: cargo runs the program from the workspace root.
+pub(crate) fn profile_prelude(half: PreludeHalf, stream: &Path) -> Result<(), String> {
+    let (package, program) = half.program();
+    let stream =
+        std::path::absolute(stream).map_err(|error| format!("{}: {error}", stream.display()))?;
+
+    cargo(&[
+        "run",
+        "--release",
+        "--package",
+        package,
+        "--bin",
+        program,
+        "--features",
+        "profile",
+        "--",
+        &stream.to_string_lossy(),
+    ])
 }
 
 pub(crate) fn clean() -> Result<(), String> {

@@ -52,7 +52,7 @@ use {
 };
 
 #[cfg(feature = "profile")]
-use curios_profile::{Destination, ROTATION_CAP, fold_at, install};
+use curios_profile::{Destination, fold_at, install};
 
 /// File every span and event this invocation makes at `path`.
 ///
@@ -65,12 +65,7 @@ use curios_profile::{Destination, ROTATION_CAP, fold_at, install};
 /// A failure to open is reported and the invocation proceeds. The alternative is refusing to compile because a measurement could not be filed, which inverts which of the two the caller asked for. Success says nothing: the caller named the path, so it has nothing to be told.
 #[cfg(feature = "profile")]
 fn install_profiling(path: PathBuf) {
-    let destination = Destination::Rotating {
-        path,
-        cap: ROTATION_CAP,
-    };
-
-    if let Err(error) = install(destination) {
+    if let Err(error) = install(Destination::File(path)) {
         eprintln!("profiling unavailable: {error}");
     }
 }
@@ -561,7 +556,7 @@ fn dispatch() -> Result<(), Failure> {
             )?,
             Query::Server { elaboration } => serve(elaboration.budget, manifest)?,
         },
-        // The path is taken as it was given: `--profile` spells no default, so the only path that exists is the one a caller chose, and reading it back means naming that one rather than deriving a second. Which files it stands for is `curios-profile`'s to answer, not this crate's.
+        // The path is taken as it was given: `--profile` spells no default, so the only path that exists is the one a caller chose, and reading it back means naming that one rather than deriving a second.
         #[cfg(feature = "profile")]
         Mode::Profile { stream } => {
             let report =

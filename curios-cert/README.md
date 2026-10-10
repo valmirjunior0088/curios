@@ -80,17 +80,17 @@ The Curios certifier: the kernel deciding, from a finished term alone, whether t
 
 ## Measuring the certifier
 
-`cargo xtask clippy` builds `curios-prelude` with `--all-features`, and its build script certifies the fixed prelude under a record stream filed at `curios-prelude/.artifacts/profile.tsv`; elaboration's is `curios-prelude-archive/.artifacts/profile.tsv`. The walk carries three kinds of span:
+`cargo xtask profile-prelude certification <PATH>` certifies the fixed prelude under a record stream filed at `PATH`, the work of `curios-prelude`'s build script run by the program beside it; `cargo xtask profile-prelude elaboration <PATH>` does as much for the elaboration. The walk carries three kinds of span:
 
 - **per item:** `certify_declaration`, grouped by `Item::describe` as the elaborator's `declaration` span is, so one item's cost in each checker is found under one key;
 - **per stage:** `universe_verdict`; `totals::seeded`, for what a unit mounted without a record leaves a walk to classify, and `check_positions` for (T) and (V); `check_entrypoint`; `check_induct_decl` and `check_struct_decl`; the shared `positivity_vectors` and `variance_vectors`, once for each declaration that declares a registry entry. The residue and escape checks are `recheck_module`'s self time;
 - **per judgment:** `convert`, with `convert::enter` where a goal enters the recursion history and `convert::unfolded_retry` for the one unfolding granted before a structural refusal; `reduce` and `reduce_forced`, the second past its memo so a hit costs no row; `Sort::of`; `entails`; and the shared analyses' `grade`, `decide` and `invert_with`. Typing is `certify_declaration`'s self time. The `nat::*` and `truth::decide_bool` rows are `curios-core`'s folds over the carriers' algebra.
 
-Fold the stream with `cargo run --all-features --package curios -- profile curios-prelude/.artifacts/profile.tsv` and read the self columns, which attribute each nanosecond and byte to the innermost span. The stream is an instrumented debug build script's, so durations are inflated and call counts and allocation are the stable figures. An item's cost in the kernel is read beside its cost in the elaborator by summing each stream's per-item span by group and joining the two:
+The recipe prints the stream's fold, which `cargo run --all-features --package curios -- profile <PATH>` prints again: read the self columns, which attribute each nanosecond and byte to the innermost span. The stream is an instrumented program's, so durations are inflated and call counts and allocation are the stable figures. An item's cost in the kernel is read beside its cost in the elaborator by summing each stream's per-item span by group and joining the two, `$elaboration` and `$certification` being the two paths the recipe was handed:
 
 ```sh
 per_item() { awk -F'\t' -v span="$1" '$1=="D"{n[$2]=$4} $1=="S"&&n[$3]==span{g="";for(i=5;i<=NF;i++)if(substr($i,1,6)=="group=")g=substr($i,7);of[$2]=g} $1=="E"&&($2 in of){at[$2]=$4} $1=="X"&&($2 in at){t[of[$2]]+=$4-at[$2];delete at[$2]} END{for(g in t)printf "%.1f\t%s\n",t[g]/1e6,g}' "$2" | sort -t$'\t' -k2; }
-join -t$'\t' -1 2 -2 2 <(per_item declaration curios-prelude-archive/.artifacts/profile.tsv) <(per_item certify_declaration curios-prelude/.artifacts/profile.tsv) | sort -t$'\t' -k3 -rn | head
+join -t$'\t' -1 2 -2 2 <(per_item declaration "$elaboration") <(per_item certify_declaration "$certification") | sort -t$'\t' -k3 -rn | head
 ```
 
 The columns are the item, its elaboration milliseconds and its certification milliseconds; `Item::describe` names every witness of a module alike, so a module's witnesses share one row.

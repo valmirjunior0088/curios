@@ -1,4 +1,4 @@
-//! What the writer puts in the file: the row shapes, the fields a span and an event carry, the escaping, and the rotation that leaves the surviving file readable on its own.
+//! What the writer puts in the file: the row shapes, the fields a span and an event carry, the escaping, and a filed stream kept whole and started over.
 
 use {
     super::*,
@@ -154,77 +154,69 @@ fn a_boundary_carries_the_allocator_readings() {
     );
 }
 
-// The file that survives a rotation opens with the header and the whole callsite table, so it is readable without the one that was discarded. That is the property that makes rotation preferable to a cap: a hang's tail is what names the loop it is stuck in.
+// A filed stream is one file and holds every row its run wrote, however many: nothing is set aside while the run goes on, so what a reader counts in the file is what happened. The directories that lead to the file are made with it.
 #[test]
-fn a_rotation_restates_the_header_and_the_callsite_table() {
-    let directory = Temporary::new("profile", "rotation");
-    std::fs::create_dir_all(&directory).expect("a temporary directory");
-    let path = directory.join("profile.tsv");
+fn a_filed_stream_keeps_every_row_its_run_wrote() {
+    const SPANS: usize = 2_000;
+    let directory = Temporary::new("profile", "whole");
+    let path = directory.join("nested").join("profile.tsv");
 
-    trace(
-        Destination::Rotating {
-            path: path.clone(),
-            cap: 256,
-        },
-        || {
-            for _ in 0..200 {
-                let _span = tracing::trace_span!("churn").entered();
-            }
-        },
-    )
-    .expect("a rotating destination opens");
+    trace(Destination::File(path.clone()), || {
+        for _ in 0..SPANS {
+            let _span = tracing::trace_span!("churn").entered();
+        }
+    })
+    .expect("a file destination opens");
 
-    let mut current = String::new();
+    let mut rows = String::new();
     File::open(&path)
-        .expect("the current file")
-        .read_to_string(&mut current)
-        .expect("the current file reads");
+        .expect("the stream's file")
+        .read_to_string(&mut rows)
+        .expect("the stream reads");
 
-    let mut previous = path.clone().into_os_string();
-    previous.push(".prev");
-    assert!(PathBuf::from(&previous).exists(), "a previous file");
-
-    assert!(current.starts_with("H\t1\t"), "{current}");
     assert!(
-        current.lines().any(|row| row.starts_with("D\t0\t")),
-        "the table is restated: {current}"
+        rows.starts_with("H\t1\t"),
+        "the stream opens with its header"
+    );
+    assert_eq!(
+        kinds(&rows).iter().filter(|kind| **kind == "S").count(),
+        SPANS
+    );
+    assert_eq!(
+        std::fs::read_dir(path.parent().expect("the file has a directory"))
+            .expect("the directory lists")
+            .count(),
+        1,
+        "the stream is the one file"
     );
 }
 
-// A stream is the current file and its predecessor, read back as one run. An earlier run's predecessor left beside a new current file would be folded in front of it — a certification's rows reported ahead of the next one's — so opening a stream starts the pair over, and a run that never rotates folds as itself alone.
+// A file destination starts its stream over: an earlier run's rows left at the path would be folded in front of this run's, a certification's reported ahead of the next one's.
 #[test]
-fn opening_a_rotating_stream_discards_an_earlier_run_s_predecessor() {
-    let directory = Temporary::new("profile", "stale-predecessor");
+fn opening_a_file_destination_starts_the_stream_over() {
+    let directory = Temporary::new("profile", "started-over");
     std::fs::create_dir_all(&directory).expect("a temporary directory");
     let path = directory.join("profile.tsv");
-    let stale = predecessor(&path);
     std::fs::write(
-        &stale,
+        &path,
         "D\t0\tcurios_cert\tearlier\n\
          S\t1\t0\t0\n\
          E\t1\t0\t0\t0\t0\t0\t0\n\
          X\t1\t0\t500\t0\t0\t0\t0\n\
          C\t1\t0\t500\n",
     )
-    .expect("an earlier run's predecessor");
+    .expect("an earlier run's stream");
 
-    trace(
-        Destination::Rotating {
-            path: path.clone(),
-            cap: ROTATION_CAP,
-        },
-        || {
-            let _span = tracing::trace_span!("later").entered();
-        },
-    )
-    .expect("a rotating destination opens");
+    trace(Destination::File(path.clone()), || {
+        let _span = tracing::trace_span!("later").entered();
+    })
+    .expect("a file destination opens");
 
-    assert!(!stale.exists(), "the earlier predecessor is gone");
     let names = crate::fold_at(&path)
         .expect("the stream folds")
         .summaries
         .into_iter()
         .map(|summary| summary.name)
         .collect::<Vec<_>>();
-    assert_eq!(names, vec!["later".to_owned()]);
+    assert_eq!(names, ["later"]);
 }

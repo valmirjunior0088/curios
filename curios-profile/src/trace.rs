@@ -17,16 +17,16 @@
 //!
 //! **A span carries no state.** The callsite index is packed into the span id, so `enter` recovers a span's identity from the id alone and this subscriber keeps nothing per span — no registry, no extensions, no map. That is why `D` rows exist: the name is stated once and referred to by index thereafter.
 //!
-//! **Every file stands alone.** A rotation re-emits the header and every `D` row seen so far, so the surviving file is readable without the one that was discarded — which is the point of rotating rather than capping, since a hang's tail is what names the loop it is stuck in.
+//! **A stream is one file, whole.** Every row is flushed as it is written, so a run that is killed has filed all it did up to the kill, and nothing a run wrote is discarded while it goes on: a stream grows for as long as its run records, and what bounds it is whoever asked for it.
 
 use {
-    crate::{allocated_bytes, allocation_count, fold_at, live_bytes, peak_bytes},
+    crate::{allocated_bytes, allocation_count, live_bytes, peak_bytes},
     std::{
         collections::HashMap,
         fmt,
         fs::{self, File},
         io::{self, Write},
-        path::{Path, PathBuf},
+        path::PathBuf,
         sync::{
             Mutex,
             atomic::{AtomicU64, Ordering},
@@ -51,32 +51,12 @@ const SEQUENCE_BITS: u32 = u64::BITS - CALLSITE_BITS;
 
 const SEQUENCE_MASK: u64 = (1 << SEQUENCE_BITS) - 1;
 
-/// The size at which a [`Destination::Rotating`] stream is rotated, keeping the current file and its predecessor. One constant for every caller rather than a choice each makes: it bounds what an endless run may write, which is not a thing a caller has a reason to choose, and the destination is the only part of a measurement that is the caller's.
-pub const ROTATION_CAP: u64 = 512 * 1024 * 1024;
-
 /// Where a trace is written.
 pub enum Destination {
-    /// One writer that is never rotated: standard output, or a buffer a caller folds back in the same process.
+    /// A writer its caller holds: standard output, or a buffer a caller folds back in the same process.
     Stream(Box<dyn Write + Send>),
-    /// A file at `path` and its predecessor at `path` with `.prev` appended, each closed at `cap` bytes.
-    ///
-    /// Rotation keeps the tail. A compile that has to be killed is stuck in whatever it was doing last, so the rows worth keeping are the newest ones; what a discarded file held is recoverable from the source, and what the surviving one holds is not.
-    Rotating {
-        /// The file rows are written to.
-        path: PathBuf,
-        /// The size at which the current file becomes `.prev` and a fresh one opens.
-        cap: u64,
-    },
-}
-
-/// The file a rotation moved the previous rows to: `path` with `.prev` appended.
-///
-/// Spelled here because rotation is this module's decision, and read back through [`fold_at`](crate::fold_at) so nothing derives it a second time; `fold_at` says what a restatement would cost.
-pub(crate) fn predecessor(path: &Path) -> PathBuf {
-    let mut previous = path.to_path_buf().into_os_string();
-    previous.push(".prev");
-
-    PathBuf::from(previous)
+    /// The file at this path, made with the directories that lead to it and started over where one stands.
+    File(PathBuf),
 }
 
 /// Run `operation` with a record-writing subscriber on the current thread.
@@ -87,36 +67,6 @@ pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::
     let result = tracing::subscriber::with_default(recorder, operation);
 
     Ok(result)
-}
-
-/// Run a build script's `operation` under a record stream filed at `.artifacts/profile.tsv` beside the crate being built, then fold the stream and report where it landed, on one `cargo:warning` line.
-///
-/// **The one path this crate names, because a build script has no caller to take one from.** Every other capture is handed its destination; a build script is run by Cargo, whose arguments say nothing about profiling. The path is the repository's rule for a build product that outlives its build — `.artifacts/` beside its owner — applied to the crate `CARGO_MANIFEST_DIR` names, so each build script files beside itself and no two collide. That variable says *where*, never *whether*: the calling crate's `profile` feature is what decides a stream is filed at all.
-///
-/// The fold runs after `operation` returns and reads the file back, so a build that hangs has still filed every row it made; the report is for the build that finished. A stream that cannot be opened fails the build, as it would any build script whose feature asked for it.
-pub fn trace_build_script<T>(operation: impl FnOnce() -> T) -> T {
-    let manifest = std::env::var_os("CARGO_MANIFEST_DIR")
-        .expect("Cargo runs a build script with `CARGO_MANIFEST_DIR` set");
-    let path = PathBuf::from(manifest)
-        .join(".artifacts")
-        .join("profile.tsv");
-
-    let result = trace(
-        Destination::Rotating {
-            path: path.clone(),
-            cap: ROTATION_CAP,
-        },
-        operation,
-    )
-    .expect("the build profile opens");
-
-    let report = fold_at(&path).expect("the build profile folds");
-    println!(
-        "cargo:warning=build profile written to {} (peak {:.1} MiB)",
-        path.display(),
-        report.peak as f64 / (1024.0 * 1024.0),
-    );
-    result
 }
 
 /// Record every span and event of this process, for a binary with no closure to wrap.
@@ -137,7 +87,7 @@ type Callsite = u32;
 
 /// A span id carries its callsite in its high bits, so [`Subscriber::enter`] — which is handed an id and nothing else — can name the span without this subscriber storing anything per span.
 ///
-/// The sequence is masked into the low bits and starts at one, so no id is ever zero, which `tracing` forbids. Wrapping would need 2^40 spans in one capture; the prelude build emits about a million (count the `S` rows of `curios-prelude-archive/.artifacts/profile.tsv`).
+/// The sequence is masked into the low bits and starts at one, so no id is ever zero, which `tracing` forbids. Wrapping would need 2^40 spans in one capture; the prelude's elaboration emits about three million (counted at `374325495`: the `S` rows of the stream `cargo xtask profile-prelude elaboration <PATH>` files).
 fn pack(callsite: Callsite, sequence: u64) -> u64 {
     ((callsite as u64) << SEQUENCE_BITS) | (sequence & SEQUENCE_MASK).max(1)
 }
@@ -283,55 +233,34 @@ impl Subscriber for Recorder {
     }
 }
 
-/// The open file and what a rotation has to restate: the callsite table, so the file that survives is readable on its own.
+/// The open stream.
 struct Sink {
     writer: Box<dyn Write + Send>,
-    /// The path and cap of a rotating destination; `None` for a stream, which is never rotated.
-    rotate: Option<(PathBuf, u64)>,
-    /// Every callsite named so far, indexed by the number it was named with, so a rotation can state them again.
-    defined: Vec<(String, String)>,
-    written: u64,
 }
 
 impl Sink {
     fn new(destination: Destination) -> io::Result<Self> {
-        let (writer, rotate): (Box<dyn Write + Send>, _) = match destination {
-            Destination::Stream(writer) => (writer, None),
-            Destination::Rotating { path, cap } => {
-                // The directory is made here rather than by each caller, so a caller naming a path — `trace_build_script`'s, or `--profile`'s — need not know which of its components exist.
+        let writer: Box<dyn Write + Send> = match destination {
+            Destination::Stream(writer) => writer,
+            Destination::File(path) => {
+                // The directory is made here rather than by each caller, so a caller naming a path, as `--profile` does, need not know which of its components exist.
                 if let Some(parent) = path.parent() {
                     fs::create_dir_all(parent)?;
                 }
 
-                // A stream is the current file and its predecessor, and `fold_at` reads the two as one run. Truncating the current file alone would leave an earlier run's predecessor to be folded in front of this one's rows, so the pair is started over together.
-                match fs::remove_file(predecessor(&path)) {
-                    Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
-                    _ => {}
-                }
-                let file = File::create(&path)?;
-
-                (Box::new(file), Some((path, cap)))
+                Box::new(File::create(&path)?)
             }
         };
 
-        let mut sink = Self {
-            writer,
-            rotate,
-            defined: Vec::new(),
-            written: 0,
-        };
+        let mut sink = Self { writer };
         sink.header();
 
         Ok(sink)
     }
 
-    /// Bytes handed to the writer, which is what a rotation is measured in. A failed write is counted as nothing and dropped; [`trace`] says why it is not raised.
-    ///
-    /// Every row is flushed as it is written. A buffer is lost to anything that ends the process without unwinding — a stack overflow, an abort, a `SIGKILL` — and those are the runs whose last rows are worth the most, so a row reaches the file before the step after it runs.
+    /// Every row is flushed as it is written. A buffer is lost to anything that ends the process without unwinding — a stack overflow, an abort, a `SIGKILL` — and those are the runs whose last rows are worth the most, so a row reaches the file before the step after it runs. A failed write is dropped; [`trace`] says why it is not raised.
     fn put(&mut self, row: &str) {
-        if self.writer.write_all(row.as_bytes()).is_ok() {
-            self.written += row.len() as u64;
-        }
+        let _ = self.writer.write_all(row.as_bytes());
         let _ = self.writer.flush();
     }
 
@@ -345,11 +274,6 @@ impl Sink {
     }
 
     fn define(&mut self, callsite: Callsite, target: &str, name: &str) {
-        self.defined.push((target.to_string(), name.to_string()));
-        self.state(callsite, target, name);
-    }
-
-    fn state(&mut self, callsite: Callsite, target: &str, name: &str) {
         let row = format!("D\t{callsite}\t{}\t{}\n", escape(target), escape(name));
         self.put(&row);
     }
@@ -357,13 +281,11 @@ impl Sink {
     fn span(&mut self, kind: u8, id: u64, callsite: Callsite, at: u128, fields: &str) {
         let row = format!("{}\t{id}\t{callsite}\t{at}{fields}\n", kind as char);
         self.put(&row);
-        self.settle();
     }
 
     fn event(&mut self, callsite: Callsite, at: u128, fields: &str) {
         let row = format!("V\t{callsite}\t{at}{fields}\n");
         self.put(&row);
-        self.settle();
     }
 
     /// An entry or an exit, with the four readings a fold differences into what the span retained, took and reached.
@@ -377,50 +299,12 @@ impl Sink {
             peak_bytes(),
         );
         self.put(&row);
-        self.settle();
     }
 
     /// A close, which carries no readings: nothing happens between a span's last exit and its close.
     fn closed(&mut self, id: u64, callsite: Callsite, at: u128) {
         let row = format!("C\t{id}\t{callsite}\t{at}\n");
         self.put(&row);
-        self.settle();
-    }
-
-    /// Rotate if the file has grown past its cap.
-    fn settle(&mut self) {
-        if self
-            .rotate
-            .as_ref()
-            .is_some_and(|&(_, cap)| self.written >= cap)
-        {
-            self.turn();
-        }
-    }
-
-    /// Close the current file as `.prev` and open a fresh one carrying the header and the whole callsite table.
-    fn turn(&mut self) {
-        let Some((path, _)) = self.rotate.clone() else {
-            return;
-        };
-
-        // The writer must let go of the file before it is renamed, so it is replaced by a sink for the length of the rename.
-        let _ = self.writer.flush();
-        self.writer = Box::new(io::sink());
-        let _ = fs::rename(&path, predecessor(&path));
-
-        let Ok(file) = File::create(&path) else {
-            return;
-        };
-        self.writer = Box::new(file);
-        self.written = 0;
-        self.header();
-
-        for (callsite, (target, name)) in std::mem::take(&mut self.defined).into_iter().enumerate()
-        {
-            self.state(callsite as Callsite, &target, &name);
-            self.defined.push((target, name));
-        }
     }
 }
 

@@ -14,7 +14,7 @@ The figures are of a question about a copy of `/std`, compiled over the archived
 
 **A unit's header is parsed twice before any unit is compiled.** For the stems its package's root claims (`package_source`, `curios-package/src/layout.rs`), from the disk and outside the parse memo by design, and for whether the unit declares the file asked about (`RootSource::declares_module`): `lib.crs` is 63,068 of the 63,131 allocations the unedited question parses. A file an edit touched is parsed whole besides, which is [A parse allocates for what it builds](../surface/201-a-parse-allocates-for-what-it-builds.md)'s.
 
-**A void attempt is forgotten.** An attempt that read a declaration not yet elaborated is made again, and the next compile of the same unit finds the same order again: a whole compile of the prelude voids 45 (the `demand::void` samples of the profile the prelude's build files, `curios-prelude-archive/.artifacts/profile.tsv`).
+**A void attempt is forgotten.** An attempt that read a declaration not yet elaborated is made again, and the next compile of the same unit finds the same order again: a whole compile of the prelude voids 45 (the `demand::void` samples of the profile `cargo xtask profile-prelude elaboration <PATH>` files).
 
 ## Refinement
 

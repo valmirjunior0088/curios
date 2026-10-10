@@ -160,7 +160,7 @@ impl Module {
     ///
     /// Every other rule applies unchanged: an entry contributes no rule of its own, it is one more block walked after the items, so what a fragment cannot be checked against is exactly the one clause that asks for it. That is worth a second entry point rather than a silent skip, because the fragment is the thing that gets *stored*: a unit's erased forms are serialized without ever passing through [`ErsdBuilder::finalize`](crate::ErsdBuilder::finalize), and without this the first walk over those bytes is the verification of a later program linked from them, which reports the fault against that program.
     ///
-    /// What it costs is the `verify_fragment` rows of the profile the prelude's elaborating build files, one for each item: `cargo build --package curios-prelude --features profile`, then `curios-prelude-archive/.artifacts/profile.tsv`.
+    /// What it costs is the `verify_fragment` rows of the profile the prelude's elaborating build files, one for each item: `cargo xtask profile-prelude elaboration <PATH>`.
     pub fn verify_fragment(&self) -> Result<(), VerifyError> {
         curios_profile::profile!("verify_fragment");
         self.assert_structure(Entry::Absent);

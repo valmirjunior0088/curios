@@ -4,16 +4,16 @@
 //!
 //! **Self time is derived the same way, from the order the rows arrive in.** Each exit credits its extent to the span it was entered inside, so a span's own share is its extent less what its children took. That needs no new row: nesting is already in the stream, as the order of the `E` and `X` rows on the one thread a stream's spans nest on.
 //!
-//! **A truncated stream folds.** Rotation discards the older file, so the surviving one can open in the middle of a span's life: an entry with no creation, an exit with no entry, a span that never closes. Each is taken for what it says and nothing is invented — an unpaired exit is ignored, a span with no creation is named by the callsite its id carries, and a span still entered when the rows run out is reported in [`ProfileReport::open`], which is what a killed run was inside.
+//! **A stream cut short folds.** A killed run's rows stop in the middle of a span's life, and a reader handed part of a file meets one that opens there: an entry with no creation, an exit with no entry, a span that never closes. Each is taken for what it says and nothing is invented — an unpaired exit is ignored, a span with no creation is named by the callsite its id carries, and a span still entered when the rows run out is reported in [`ProfileReport::open`], which is what a killed run was inside.
 //!
-//! **Each destination has its reader.** [`fold_at`] is [`Destination::Rotating`](crate::Destination::Rotating)'s: it takes the same base path that destination took and opens the file set that path implies, the discarded rows first — the callsite table is restated at the head of each file, so concatenating them is well defined. [`fold`] is [`Destination::Stream`](crate::Destination::Stream)'s, for rows a caller already holds, such as a buffer folded back in the same process.
+//! **Each destination has its reader.** [`fold_at`] is [`Destination::File`](crate::Destination::File)'s: it takes the path that destination took and reads the file there. [`fold`] is [`Destination::Stream`](crate::Destination::Stream)'s, for rows a caller already holds, such as a buffer folded back in the same process.
 
 use {
-    crate::{escape, predecessor},
+    crate::escape,
     std::{
         collections::BTreeMap,
         fs::File,
-        io::{self, BufRead, BufReader, Read},
+        io::{self, BufRead, BufReader},
         path::Path,
         time::Duration,
     },
@@ -141,18 +141,11 @@ pub fn fold(rows: impl BufRead) -> io::Result<ProfileReport> {
     Ok(state.finish())
 }
 
-/// Recompute a report from the stream filed at `path`, its discarded predecessor first.
+/// Recompute a report from the stream filed at `path`.
 ///
-/// The mirror of [`Destination::Rotating`](crate::Destination::Rotating). That destination takes a base path and decides for itself which files the stream occupies; reading one back takes the same base path and lets the same code decide again, so the convention is spelled once. A caller that opened the pair by hand would be restating it — and since a truncated stream folds without complaint, a restatement that drifted would report half a run as a whole one rather than failing.
-///
-/// A missing predecessor is the ordinary case of a run that never grew past one file, not an error; the error is the current file's alone.
+/// The mirror of [`Destination::File`](crate::Destination::File): that destination took a path, and reading its stream back takes the same one.
 pub fn fold_at(path: &Path) -> io::Result<ProfileReport> {
-    let discarded: Box<dyn Read> = match File::open(predecessor(path)) {
-        Ok(file) => Box::new(file),
-        Err(_) => Box::new(io::empty()),
-    };
-
-    fold(BufReader::new(discarded.chain(File::open(path)?)))
+    fold(BufReader::new(File::open(path)?))
 }
 
 impl ProfileReport {

@@ -7,9 +7,6 @@ use {
     std::{ffi::OsString, path::PathBuf, sync::LazyLock},
 };
 
-#[cfg(feature = "profile")]
-use curios_profile::ROTATION_CAP;
-
 /// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
 
@@ -190,7 +187,7 @@ pub(crate) enum Mode {
     Profile {
         #[arg(
             value_name = "PATH",
-            help = "The stream to read, as it was spelled to --profile; its rotated predecessor is found beside it"
+            help = "The stream to read, as it was spelled to --profile"
         )]
         stream: PathBuf,
     },
@@ -395,10 +392,7 @@ pub(crate) struct Cli {
         long = "profile",
         value_name = "PATH",
         global = true,
-        help = format!(
-            "Write one record per span and event to PATH, rotating at {} MiB",
-            ROTATION_CAP / (1024 * 1024)
-        )
+        help = "Write one record per span and event to PATH"
     )]
     pub(crate) profile: Option<PathBuf>,
 

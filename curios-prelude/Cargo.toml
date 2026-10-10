@@ -10,7 +10,21 @@ build = "build.rs"
 workspace = true
 
 [features]
-profile = ["curios-prelude-archive/profile", "curios-cert/profile", "curios-profile/enabled"]
+profile = [
+    "curios-prelude-archive/profile",
+    "curios-cert/profile",
+    "curios-profile/enabled",
+    "dep:curios-cert",
+    "dep:curios-elab",
+    "dep:curios-profile",
+    "dep:curios-text",
+]
+
+# The program that is asked for the certification's profile: the build script's work under a recorder, to a path it is handed. It stands beside `build.rs` so the two share `certify.rs` as a module.
+[[bin]]
+name = "profile-certification"
+path = "profile.rs"
+required-features = ["profile"]
 
 [dependencies]
 curios-prelude-archive = { workspace = true }
@@ -21,6 +35,11 @@ curios-archive = { workspace = true, features = ["enabled"] }
 curios-core = { workspace = true, features = ["archive"] }
 curios-document = { workspace = true }
 curios-unit = { workspace = true }
+# For `profile-certification` alone, which certifies as the build script does.
+curios-cert = { workspace = true, features = ["archive"], optional = true }
+curios-elab = { workspace = true, features = ["archive"], optional = true }
+curios-profile = { workspace = true, optional = true }
+curios-text = { workspace = true, features = ["archive"], optional = true }
 
 # The certifying half of the prelude's build: `curios-prelude-archive`
 # elaborates and serializes the image, and this script restores it and runs the
@@ -30,6 +49,5 @@ curios-archive = { workspace = true, features = ["enabled"] }
 curios-cert = { workspace = true, features = ["archive"] }
 curios-core = { workspace = true, features = ["archive"] }
 curios-elab = { workspace = true, features = ["archive"] }
-curios-profile = { workspace = true }
 curios-prelude-archive = { workspace = true }
 curios-text = { workspace = true, features = ["archive"] }

@@ -16,7 +16,14 @@ profile = [
     "curios-elab/profile",
     "curios-ersd/profile",
     "curios-unit/profile",
+    "dep:curios-std",
 ]
+
+# The program that is asked for the elaboration's profile: the build script's work under a recorder, to a path it is handed. It stands beside `build.rs` so the two share `elaborate.rs` as a module.
+[[bin]]
+name = "profile-elaboration"
+path = "profile.rs"
+required-features = ["profile"]
 
 [dependencies]
 curios-profile = { workspace = true }
@@ -27,6 +34,8 @@ curios-text = { workspace = true, features = ["archive"] }
 curios-elab = { workspace = true, features = ["archive"] }
 curios-unit = { workspace = true, features = ["archive"] }
 curios-archive = { workspace = true, features = ["enabled"] }
+# For `profile-elaboration` alone, which reads the library's sources as the build script does.
+curios-std = { workspace = true, optional = true }
 
 # Deliberately absent: `curios-cert`. Elaborating the prelude does not depend on
 # the kernel, and Cargo's rebuild granularity is the build script — so a crate
@@ -41,7 +50,6 @@ curios-utilities = { workspace = true, features = ["archive"] }
 curios-core = { workspace = true, features = ["archive"] }
 curios-elab = { workspace = true, features = ["archive"] }
 curios-ersd = { workspace = true, features = ["archive"] }
-curios-profile = { workspace = true }
 curios-text = { workspace = true, features = ["archive"] }
 curios-std = { workspace = true }
 curios-unit = { workspace = true, features = ["archive"] }

@@ -47,7 +47,7 @@ Working specification for deciding what erases through no engine that elaborates
 
 - **Nothing moves.** Every item of `/std` erases to the form it has: the prelude's images, `sys.rkyv` and `std.rkyv` as `curios-prelude-archive`'s build writes them under `target/`, are byte for byte the ones the commit before writes. Counted.
 - **A head only conversion shows is read.** `curios`'s `tests::erasure::head_tests` hold four programs whose callee has a function type through a question to conversion: two spellings of one call, an arm's equation met at another spelling, two calls differing in a proof, a function beside its expansion.
-- **What erasure asks of conversion.** The profile the prelude's elaboration files, `curios-prelude-archive/.artifacts/profile.tsv`, written by a build with every feature on: a `D` row names a callsite, an `S` row opens a span of one and a `C` row closes it. The figure is the `S` rows of `reduce::asked_classes` and of `reduce::asked_scrutinee` between an `erase_unit` span's `S` and its `C`. Counted.
+- **What erasure asks of conversion.** The profile `cargo xtask profile-prelude elaboration <PATH>` files: a `D` row names a callsite, an `S` row opens a span of one and a `C` row closes it. The figure is the `S` rows of `reduce::asked_classes` and of `reduce::asked_scrutinee` between an `erase_unit` span's `S` and its `C`. Counted.
 - **Plain reduction.** `Retyping::new` makes its context plain (`Asking::set_plain`), the release compiler is built, and the images it writes are compared with the ones the unchanged tree writes; the four programs above are then run through it. Counted.
 
 ## Design decisions this overturns or corrects

@@ -367,7 +367,7 @@ fn kernel_memo_parity() {
 /// cargo test --release --package curios-prelude-archive -- --ignored --nocapture stored_prelude_measurements
 /// ```
 ///
-/// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the build script's own `profile.tsv` and need no probe, and the witness inventory is a term walk this does not do.
+/// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the stream `cargo xtask profile-prelude elaboration <PATH>` files and need no probe, and the witness inventory is a term walk this does not do.
 ///
 /// A range is two runs, and the spread between them is part of the figure.
 ///
@@ -483,7 +483,7 @@ fn stored_prelude_measurements() {
         }
 
         println!(
-            "\nNot measured here: the elaboration figures, which the build script already writes to `OUT_DIR/profile.tsv` (retake with `cargo build --release --package curios-prelude --features profile`), and the witness inventory, which is a term walk.\n"
+            "\nNot measured here: the elaboration figures, which `cargo xtask profile-prelude elaboration <PATH>` files, and the witness inventory, which is a term walk.\n"
         );
     });
 }

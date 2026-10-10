@@ -295,7 +295,7 @@ curios profile .curios/profile.tsv
 
 Reads back a stream [`--profile`](#flags) filed and writes its summary to stdout: the spans by total time, the magnitude sites beneath them, and — for a run that never returned — the stack it was inside when it stopped.
 
-Present only in a compiler built with the `profile` feature, the same one that carries the flag. The two halves of one format ship in one binary, so neither can drift from the other, and `PATH` is spelled as it was spelled to `--profile`: the rotated predecessor beside it is found rather than named, because which files one stream occupies is the writer's to answer.
+Present only in a compiler built with the `profile` feature, the same one that carries the flag. The two halves of one format ship in one binary, so neither can drift from the other, and `PATH` is spelled as it was spelled to `--profile`.
 
 **Reading is a separate pass, not the profiled run's last step.** A stream is worth reading exactly when the run did not finish — a hang, a kill, a trap — and such a run never reaches its last step. Folding there would serve every case but the one profiling exists for.
 
@@ -401,7 +401,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version, so a bug report can say which compiler produced the output |
-| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it. [`profile`](#profile) reads the stream back |
+| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH` — present only in a compiler built with the `profile` feature, and inert without it. [`profile`](#profile) reads the stream back |
 
 The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; `--help` prints the default this build carries, which is why no number is written here.
 

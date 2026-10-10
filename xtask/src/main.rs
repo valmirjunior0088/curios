@@ -174,6 +174,17 @@ enum Recipe {
         profile: BuildProfile,
     },
 
+    #[command(
+        about = "Run one half of the prelude's build under a recorder, and fold what it filed"
+    )]
+    ProfilePrelude {
+        #[arg(value_enum, value_name = "HALF", help = "The half of the build to run")]
+        half: PreludeHalf,
+
+        #[arg(value_name = "PATH", help = "Where the stream is filed")]
+        stream: PathBuf,
+    },
+
     #[command(about = "Install editors/grammar's dependencies from its lock file")]
     GrammarInstall,
 
@@ -236,6 +247,7 @@ fn main() -> ExitCode {
             source,
             profile: build,
         } => profile(&source, build),
+        Recipe::ProfilePrelude { half, stream } => profile_prelude(half, &stream),
         Recipe::GrammarInstall => grammar(&["clean-install"]),
         Recipe::GrammarTest => grammar(&["test"]),
         Recipe::VscodeInstall => vscode(&["clean-install"]),
