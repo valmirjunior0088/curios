@@ -43,11 +43,9 @@ pub(super) fn count(wat: &str, needle: &str) -> usize {
     wat.matches(needle).count()
 }
 
-/// The refusal calls a module makes besides its closing halt's: a fixture halts with the value it computed, whose narrowing to the wire can refuse whatever the operation under test did, and the halt refuses a host that returns from it.
+/// The refusal calls a module makes besides its closing halt's: a fixture halts with the value it computed, whose narrowing to the wire can refuse whatever the operation under test did.
 pub(super) fn refusals_besides_the_exit(wat: &str) -> usize {
-    count(wat, "call $refuse/")
-        - count(wat, "call $refuse/nat_wire")
-        - count(wat, "call $refuse/host_reply")
+    count(wat, "call $refuse/") - count(wat, "call $refuse/nat_wire")
 }
 
 pub(super) fn nat(value: u32) -> curios_cont::Atom {

@@ -305,32 +305,6 @@ impl Lower for Vec<Vec<u8>> {
     }
 }
 
-/// A host's reply to a row a unit declared: encoded as its type states and written slot by slot. What [`Replied`] does for a builtin, without a table row to hold the reply to — the declaration is the row, and the guest's own reading of it is where a reply is held.
-pub(crate) struct Answered<R>(pub(crate) R);
-
-impl<R: WireReply> Lower for Answered<R> {
-    fn shape() -> Vec<WireType> {
-        R::results("value")
-            .into_iter()
-            .map(|(_, wire_type)| wire_type)
-            .collect()
-    }
-
-    fn lower(
-        self,
-        caller: &mut Caller<'_, ()>,
-        results: &mut [Val],
-    ) -> Result<(), wasmtime::Error> {
-        let values = match self.0.encode() {
-            Encoded::Reply(values) => values,
-            Encoded::Terminate(code) => return Err(wasmtime::Error::from(ExitTrap(code))),
-            Encoded::Refused(sentence) => return Err(wasmtime::Error::msg(sentence)),
-        };
-
-        written(values, caller, results)
-    }
-}
-
 /// Write a reply's values into the slots they cross in, each as its wire type crosses.
 fn written(
     values: Vec<WireValue>,

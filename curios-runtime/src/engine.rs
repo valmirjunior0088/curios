@@ -1,8 +1,7 @@
 use {
     super::{
-        Answered, Handle, HostOps, Lift, Lower, Mode, Poll, Replied, SerialFlow, SerialOp,
-        SerialParity, StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type,
-        words_array_type,
+        Handle, HostOps, Lift, Lower, Mode, Poll, Replied, SerialFlow, SerialOp, SerialParity,
+        StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type, words_array_type,
     },
     curios_abi::{
         ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireOperand,
@@ -326,6 +325,20 @@ impl Provided {
             .insert(name, (Li::shape(), Lo::shape(), trampoline));
     }
 
+    /// Replace what answers the row declared as `name` with a trampoline that marshals for itself — how a test puts a reply in front of the guest that no checked answer would give.
+    #[cfg(feature = "test-support")]
+    pub(crate) fn replace_raw<F>(&mut self, name: &str, f: F)
+    where
+        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
+    {
+        let (_, _, trampoline) = self
+            .rows
+            .get_mut(name)
+            .unwrap_or_else(|| panic!("this host answers no `{name}`"));
+
+        *trampoline = Arc::new(f);
+    }
+
     /// Define the `ffi` import named `name` into `linker`, held to `declared` where the program's rows describe it.
     fn link(
         &self,
@@ -379,34 +392,37 @@ impl Provided {
     }
 }
 
-/// What `host` answers of the rows the standard library declares: each under the module that reads it, labelled as the host's own method is, so `handle_read` is one spelling in `/std/Handle`, here and in every host. Each import lifts its operands as the method types them, calls it and lowers the reply as its type encodes it.
-pub(crate) fn host_rows<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> Provided {
-    let mut provided = Provided::default();
+/// Answer every row of the table under the name the standard library declares it by ([`HostOp::declared`]). Each import is bound as [`sys_impls`] binds it, lifted as the row types its operands and its reply held to the row through [`Replied`].
+macro_rules! declare_host_rows {
+    ($(
+        $(#[doc = $doc:literal])*
+        $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty as $subject:ident / $label:ident { $($contract:tt)* }
+    )*) => {
+        /// What `host` answers of the rows the standard library declares.
+        pub(crate) fn host_rows<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> Provided {
+            let mut provided = Provided::default();
 
-    // One row: the `/std` module it is declared in, and the method that answers it.
-    macro_rules! answer {
-        ($module:literal, $name:ident($($p:ident: $t:ty),*)) => {
-            provided.answer(
-                concat!("/std/", $module, "/", stringify!($name)).to_string(),
-                {
-                    let host = Arc::clone(&host);
+            $(
+                provided.answer(
+                    HostOp::$variant.declared(),
+                    {
+                        let host = Arc::clone(&host);
 
-                    move |($($p,)*): ($($t,)*)| Answered(host.$name($($p),*))
-                },
-            );
-        };
-    }
+                        move |($($p,)*): ($($t,)*)| {
+                            let operands = [$(WireOperand::measure(&$p)),*];
 
-    answer!("Handle", handle_read(h: Handle, n: u64));
-    answer!("File", file_open(path: Vec<u8>, mode: Mode));
-    answer!("proc", proc_env(name: Vec<u8>));
-    answer!("proc", proc_exit(code: u8));
-    answer!("time/Timestamp", clock_wall());
-    answer!("time/Instant", clock_mono());
-    answer!("rand", rand_bytes(n: u64));
+                            Replied::new(HostOp::$variant, operands, || host.$name($($p),*))
+                        }
+                    },
+                );
+            )*
 
-    provided
+            provided
+        }
+    };
 }
+
+for_each_host_op!(declare_host_rows);
 
 /// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap. Made only when a [`Termination`](curios_abi::Termination) reply is encoded, so a host method answering the row cannot return into the guest.
 #[derive(Debug)]

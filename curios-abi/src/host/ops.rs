@@ -266,6 +266,51 @@ impl HostOp {
         self.row().label
     }
 
+    /// The `/std` module that declares the row as a `foreign`: the one that reads it. Exhaustive, so a row added to the table without a declaration to answer does not compile.
+    fn module(self) -> &'static str {
+        match self {
+            HostOp::HandleRead
+            | HostOp::HandleWrite
+            | HostOp::HandleFlush
+            | HostOp::HandleFinish
+            | HostOp::HandlePoll
+            | HostOp::HandleClose => "Handle",
+            HostOp::FileOpen => "File",
+            HostOp::FileStat
+            | HostOp::FileRemove
+            | HostOp::FileRename
+            | HostOp::DirList
+            | HostOp::DirCreate
+            | HostOp::DirRemove
+            | HostOp::ProcCwd => "fs",
+            HostOp::DnsLookup | HostOp::DnsResolve => "tcp/resolve",
+            HostOp::SocketOpen => "tcp",
+            HostOp::SocketConnect | HostOp::SocketFinishConnect | HostOp::TlsStart => "tcp/Socket",
+            HostOp::SocketBind
+            | HostOp::SocketListen
+            | HostOp::SocketAccept
+            | HostOp::SocketSetReuseaddr
+            | HostOp::TlsServerConfig
+            | HostOp::TlsStartServer => "tcp/Listener",
+            HostOp::ClockWall => "time/Timestamp",
+            HostOp::ClockMono => "time/Instant",
+            HostOp::RandBytes => "rand",
+            HostOp::ProcArgs | HostOp::ProcEnv | HostOp::ProcExit => "proc",
+            HostOp::TtyRaw | HostOp::TtySize => "Tty",
+            HostOp::SerialOpen
+            | HostOp::SerialControl
+            | HostOp::SerialDrain
+            | HostOp::SerialList => "Serial",
+            HostOp::ProcSpawn => "Command",
+            HostOp::ProcWait | HostOp::ProcKill => "Command/Child",
+        }
+    }
+
+    /// The name the standard library declares the row by, which is the name a program imports it under: its module, then the host's own method name, so `handle_read` is one spelling in `/std/Handle` and in every host.
+    pub fn declared(self) -> String {
+        format!("/std/{}/{}", self.module(), self.name())
+    }
+
     /// The row's operands and results, as they cross.
     pub fn signature(self) -> &'static WireSignature {
         &self.row().signature

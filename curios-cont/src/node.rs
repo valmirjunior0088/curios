@@ -200,7 +200,7 @@ pub enum Node {
         args: Vec<Atom>,
         return_to: ContinuationId,
     },
-    /// A call to a host row that diverges — `proc/exit` — with its wire operands. Terminal like [`Node::Panic`]: it has no continuation, so no pass can give one to it, and the emitter refuses as [`Panic::HostReply`] should a host return anyway.
+    /// A call to a host row that diverges — `proc/exit` — with its wire operands. Terminal like [`Node::Panic`]: it has no continuation, so no pass can give one to it, and the emitter writes nothing a return could reach.
     Halt {
         function: Arc<ForeignFunction>,
         args: Vec<Atom>,
@@ -226,22 +226,19 @@ pub enum Panic {
     FltDecode,
     /// A recursive value read while its own initializer is still running — a cycle the eager verifier could not see through a closure, met by forcing.
     Cycle,
-    /// A host answered a call with a value outside that call's contract — a `Byte` past 255 among them. Decided by the emitter where it lowers the call, so the host that answered is at fault and never the program.
-    HostReply,
     /// An arm the theory proved impossible was taken: a compiler bug, never the program's.
     Invariant,
 }
 
 impl Panic {
     /// Every class, in declaration order: the order the emitter writes the refusal helpers a module reaches.
-    pub const ALL: [Panic; 8] = [
+    pub const ALL: [Panic; 7] = [
         Panic::NatWire,
         Panic::IntWire,
         Panic::Capacity,
         Panic::OutOfBounds,
         Panic::FltDecode,
         Panic::Cycle,
-        Panic::HostReply,
         Panic::Invariant,
     ];
 }
@@ -255,7 +252,6 @@ impl fmt::Display for Panic {
             Panic::OutOfBounds => "bounds",
             Panic::FltDecode => "flt",
             Panic::Cycle => "cycle",
-            Panic::HostReply => "host_reply",
             Panic::Invariant => "invariant",
         })
     }

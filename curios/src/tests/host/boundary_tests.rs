@@ -1,18 +1,13 @@
-//! The guest's own checks of a host's reply: a host that answers outside its row — a status the row never answers, a success its checks refuse, a value its wire type cannot be — is refused by the program itself, whichever host it is, while a failure's inert padding is accepted. Each reply is written raw, past the native adapter, which would refuse it first.
+//! What a program makes of a host's reply. A reply is a value of its wire type because whatever answered the row lowered it as one, so the program checks nothing where it receives one: the library reads the status as the outcome it names, whatever the status, and a failure's padding reaches no reader. Each reply here is written raw, past the native adapter, to show what that reading does with it.
 
 use {
-    crate::{tests::compile, to_compiled},
-    curios_abi::{ChildExit, HostOp, status},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    crate::tests::compile,
+    curios_abi::{HostOp, status},
     curios_runtime::{
         ForeignBindings, MockHost,
-        test_support::{RawValue, raw_reply, run_raw},
+        test_support::{RawValue, run_raw},
     },
-    curios_text::{Entrypoint, RootSource},
 };
-
-/// The sentence the guest refuses a reply outside its row with.
-const REFUSED: &str = "the host answered a call with a value outside that call's contract";
 
 /// Run `source` against `host`, except that `op` answers `reply` raw on every call.
 fn answering(source: &str, host: MockHost, op: HostOp, reply: Vec<RawValue>) -> Result<u8, String> {
@@ -21,14 +16,12 @@ fn answering(source: &str, host: MockHost, op: HostOp, reply: Vec<RawValue>) -> 
     run_raw(&compiled, host, vec![(op, reply)], ForeignBindings::empty())
 }
 
-fn refused(result: Result<u8, String>) {
-    let error = result.expect_err("the reply is refused");
+/// What `source` wrote when `op` answered `reply` raw on every call.
+fn written(source: &str, op: HostOp, reply: Vec<RawValue>) -> Vec<u8> {
+    let (host, io) = MockHost::builder().build();
 
-    assert!(error.contains(REFUSED), "{error}");
-}
-
-fn mock() -> MockHost {
-    MockHost::builder().build().0
+    answering(source, host, op, reply).expect("the reply is the program's to read");
+    io.output()
 }
 
 const OPEN: &str = r#"
@@ -39,316 +32,119 @@ const OPEN: &str = r#"
     end
 "#;
 
-/// `file/open` is not marked as blocking, so `would_block` is no status it answers.
+/// A failure's padding is inert: the empty token beside a failing status is never read as a handle, and the program reads the failure.
 #[test]
-fn a_status_the_row_never_answers_is_refused() {
-    refused(answering(
-        OPEN,
-        mock(),
-        HostOp::FileOpen,
-        vec![RawValue::Nat(status::WOULD_BLOCK), RawValue::Bytes(vec![])],
-    ));
+fn a_failure_s_padding_reaches_no_reader() {
+    assert_eq!(
+        written(
+            OPEN,
+            HostOp::FileOpen,
+            vec![RawValue::Nat(status::NOT_FOUND), RawValue::Bytes(vec![])],
+        ),
+        b"not_found"
+    );
 }
 
-/// The errno lane ends at the largest errno an OS reports; a status in it is an ordinary failure the program handles, and one past it is no status at all.
+/// The reader has no status it cannot read: one an open is not expected to answer is the failure it names all the same.
 #[test]
-fn the_errno_lane_ends_where_an_errno_can() {
-    let (host, io) = MockHost::builder().build();
-    let inside = answering(
-        OPEN,
-        host,
-        HostOp::FileOpen,
-        vec![
-            RawValue::Nat(status::OTHER_BASE + 5),
-            RawValue::Bytes(vec![]),
-        ],
+fn a_status_a_row_is_not_expected_to_answer_is_the_failure_it_names() {
+    assert_eq!(
+        written(
+            OPEN,
+            HostOp::FileOpen,
+            vec![RawValue::Nat(status::WOULD_BLOCK), RawValue::Bytes(vec![])],
+        ),
+        b"would_block"
+    );
+}
+
+/// A status past every named one, and past the largest errno an operating system reports, is still a failure, carried as the number it is.
+#[test]
+fn a_status_no_failure_is_named_by_is_carried_as_its_number() {
+    let past = status::ERRNO_MAX + 1;
+
+    assert_eq!(
+        written(
+            OPEN,
+            HostOp::FileOpen,
+            vec![
+                RawValue::Nat(status::OTHER_BASE + past),
+                RawValue::Bytes(vec![])
+            ],
+        ),
+        format!("other({past})").into_bytes()
+    );
+}
+
+/// A closed code is read by the library, which has no kind for a code it does not know: the stat fails, and no kind is made up.
+#[test]
+fn a_file_kind_no_code_names_fails_the_stat() {
+    assert_eq!(
+        written(
+            r#"
+            let r = /std/Try/run(/std/fs/stat(/std/Path/of_str("a")))!;
+            match r
+            | success(_) => /std/print("a kind")
+            | failure(e) => /std/print(/std/Show/show(e))
+            end
+            "#,
+            HostOp::FileStat,
+            vec![
+                RawValue::Nat(status::OK),
+                RawValue::Nat(7),
+                RawValue::Nat(0),
+                RawValue::Nat(0),
+                RawValue::Nat(0),
+            ],
+        ),
+        b"other(0)"
+    );
+}
+
+/// A write the host accepts nothing of would be resent for ever, so the library reads it as a failure and its loop ends.
+#[test]
+fn a_write_that_accepts_nothing_is_a_failure() {
+    let code = answering(
+        r#"
+        use /std/{Io, Async, Handle, proc};
+        let r = Async/Write/write(@Io, @Handle, Handle/stdout, x[0x41])!;
+        match r | success(_) => proc/exit(@{}, 0) | failure(_) => proc/exit(@{}, 7) end
+        "#,
+        MockHost::builder().build().0,
+        HostOp::HandleWrite,
+        vec![RawValue::Nat(status::OK), RawValue::Nat(0)],
     );
 
-    assert!(inside.is_ok(), "{inside:?}");
-    assert!(!io.output().is_empty());
-
-    refused(answering(
-        OPEN,
-        mock(),
-        HostOp::FileOpen,
-        vec![
-            RawValue::Nat(status::OTHER_BASE + status::ERRNO_MAX + 1),
-            RawValue::Bytes(vec![]),
-        ],
-    ));
+    assert_eq!(code, Ok(7));
 }
 
+/// Nothing resumes after `exit`, so the program holds no code for a return from it: a host whose `exit` returns traps where it lands.
 #[test]
-fn a_success_with_the_empty_token_is_refused() {
-    refused(answering(
-        OPEN,
-        mock(),
-        HostOp::FileOpen,
-        vec![RawValue::Nat(status::OK), RawValue::Bytes(vec![])],
-    ));
-}
-
-/// A failure's padding is inert: the empty token that no success may carry is exactly what a failure answers beside its status, and the program reads the failure.
-#[test]
-fn a_failure_s_padding_is_accepted_though_no_success_could_carry_it() {
-    let (host, io) = MockHost::builder().build();
-
-    answering(
-        OPEN,
-        host,
-        HostOp::FileOpen,
-        vec![RawValue::Nat(status::NOT_FOUND), RawValue::Bytes(vec![])],
-    )
-    .expect("the failure is the program's to handle");
-    assert_eq!(io.output(), b"not_found");
-}
-
-#[test]
-fn a_read_past_its_request_is_refused() {
-    let (host, _) = MockHost::builder().stdin_lines(["hello"]).build();
-
-    refused(answering(
-        "
-        let _ = /std/Io/read(/std/Io/stdin, 8)!;
-        /std/Io/pure(())
-        ",
-        host,
-        HostOp::HandleRead,
-        vec![RawValue::Nat(status::OK), RawValue::Bytes(vec![b'x'; 9])],
-    ));
-}
-
-/// The second read waits for its chunk, so the program polls standard input — and a poll's answer is one mask per handle, each within the readiness bits.
-const POLLING: &str = "
-    let _ = /std/Io/read(/std/Io/stdin, 8)!;
-    let _ = /std/Io/read(/std/Io/stdin, 8)!;
-    /std/Io/pure(())
-";
-
-fn chunked() -> MockHost {
-    MockHost::builder()
-        .stdin_chunks(vec![b"a".as_slice(), b"b".as_slice()])
-        .build()
-        .0
-}
-
-#[test]
-fn a_poll_mask_outside_the_readiness_bits_is_refused() {
-    refused(answering(
-        POLLING,
-        chunked(),
-        HostOp::HandlePoll,
-        vec![RawValue::Bytes(vec![0b1_0000])],
-    ));
-}
-
-#[test]
-fn a_poll_that_answers_for_other_handles_is_refused() {
-    refused(answering(
-        POLLING,
-        chunked(),
-        HostOp::HandlePoll,
-        vec![RawValue::Bytes(vec![])],
-    ));
-}
-
-#[test]
-fn a_clock_past_a_second_of_nanoseconds_is_refused() {
-    refused(answering(
-        "
-        let _ = /std/time/Instant/now()!;
-        /std/Io/pure(())
-        ",
-        mock(),
-        HostOp::ClockMono,
-        vec![RawValue::Nat(0), RawValue::Nat(1_000_000_000)],
-    ));
-}
-
-#[test]
-fn a_file_kind_outside_its_codes_is_refused() {
-    refused(answering(
-        r#"
-        let _ = /std/Try/run(/std/fs/stat(/std/Path/of_str("a")))!;
-        /std/Io/pure(())
-        "#,
-        mock(),
-        HostOp::FileStat,
-        vec![
-            RawValue::Nat(status::OK),
-            RawValue::Nat(7),
-            RawValue::Nat(0),
-            RawValue::Nat(0),
-            RawValue::Nat(0),
-        ],
-    ));
-}
-
-/// A child ends by a code or by a signal, never by both.
-#[test]
-fn a_child_that_ended_both_ways_is_refused() {
-    let (host, _) = MockHost::builder()
-        .children([("done", "", "", ChildExit::Code(0))])
-        .build();
-
-    refused(answering(
-        r#"
-        use /std/{Try, Async, Io, Command};
-        use /std/Command/{Child};
-        let program: Try(Async, Io/Error, {}) =
-            let child = Command/spawn(Command/new("done", []))!;
-            let _ = Child/wait(child)!;
-            Try/pure(());
-        let fiber: Async({}) =
-            let _ = Try/run(program)!;
-            Async/pure(());
-        Async/run(fiber)
-        "#,
-        host,
-        HostOp::ProcWait,
-        vec![
-            RawValue::Nat(status::OK),
-            RawValue::Nat(3),
-            RawValue::Nat(9),
-        ],
-    ));
-}
-
-/// A spawn whose standard output is wired by `stdout`, printing the pipes the child came back with.
-fn spawning(stdout: &str) -> String {
-    format!(
-        r#"
-        use /std/{{Str, Option, Try, Io, Command}};
-        use /std/Command/{{Child, Stdio}};
-        let held(p: Option(Command/Pipe)) -> Str = match p | some(_) => "pipe" | none() => "none" end;
-        let spawned: Try(Io, Io/Error, Child) =
-            Command/spawn(Command {{ ..Command/new("x", []), stdout = Stdio/{stdout}() }});
-        let r = Try/run(spawned)!;
-        match r
-        | success(c) => /std/print(Str/join(" ", [held(Child/stdin(c)), held(Child/stdout(c)), held(Child/stderr(c))]))
-        | failure(_) => /std/print("failed")
-        end
-        "#
-    )
-}
-
-/// A spawn answers the parent's end of a stream exactly when the call piped it, and the program holds a pipe for exactly those: a handle for a stream the call did not pipe, or the empty token for one it did, is refused.
-#[test]
-fn a_spawn_answers_a_stream_exactly_when_it_was_piped() {
-    let spawn = |stdout: &[u8]| {
-        vec![
-            RawValue::Nat(status::OK),
-            RawValue::Bytes(vec![7]),
-            RawValue::Bytes(vec![]),
-            RawValue::Bytes(stdout.to_vec()),
-            RawValue::Bytes(vec![]),
-        ]
-    };
-    let (host, io) = MockHost::builder().build();
-
-    answering(&spawning("piped"), host, HostOp::ProcSpawn, spawn(&[8]))
-        .expect("the reply keeps its row");
-    assert_eq!(io.output(), b"none pipe none");
-
-    refused(answering(
-        &spawning("inherit"),
-        mock(),
-        HostOp::ProcSpawn,
-        spawn(&[8]),
-    ));
-    refused(answering(
-        &spawning("piped"),
-        mock(),
-        HostOp::ProcSpawn,
-        spawn(&[]),
-    ));
-}
-
-/// Nothing resumes after `exit`, so a host whose `exit` returns has broken its contract and cannot resume the program.
-#[test]
-fn a_host_that_returns_from_exit_is_refused() {
-    refused(answering(
+fn a_host_that_returns_from_exit_traps() {
+    let error = answering(
         "/std/proc/exit(@{}, 3)",
-        mock(),
+        MockHost::builder().build().0,
         HostOp::ProcExit,
         vec![],
-    ));
+    )
+    .expect_err("nothing follows the call");
+
+    assert!(error.contains("unreachable"), "{error}");
 }
 
-/// A reply is checked when the call is made, whatever the program does with it afterwards: one it discards is held to its row as one it reads is.
-#[test]
-fn a_discarded_reply_is_still_checked() {
-    refused(answering(
-        r#"
-        let _ = /std/rand/bytes(4)!;
-        /std/print("done")
-        "#,
-        mock(),
-        HostOp::RandBytes,
-        vec![RawValue::Bytes(vec![0; 3])],
-    ));
-}
-
-/// A description that is never performed makes no call, so the reply that would have been refused is never asked for.
+/// A description that is never performed makes no call.
 #[test]
 fn an_io_never_performed_asks_the_host_nothing() {
     let (host, io) = MockHost::builder().build();
-
-    answering(
+    let compiled = compile(
         r#"
-        use /std/{Io, Bytes};
-        let unused: Io(Bytes) = /std/rand/bytes(4);
+        use /std/{Io};
+        let unused: Io({}) = /std/print("performed");
         /std/print("done")
         "#,
-        host,
-        HostOp::RandBytes,
-        vec![RawValue::Bytes(vec![0; 3])],
-    )
-    .expect("the call is never made");
-    assert_eq!(io.output(), b"done");
-}
-
-/// Run `source`, whose `foreign` row `name` answers `reply` raw, as an embedder's own binding would answer it.
-fn embedded(source: &str, name: &str, reply: Vec<RawValue>) -> Result<u8, String> {
-    let entrypoint = source
-        .parse::<Entrypoint>()
-        .expect("failed to parse source");
-    let (module, foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
     )
     .expect("the program compiles");
-    let compiled = to_compiled(&module).expect("the module compiles");
-    let mut bindings = ForeignBindings::new(foreigns);
 
-    raw_reply(&mut bindings, name, reply);
-
-    run_raw(&compiled, mock(), vec![], bindings)
-}
-
-/// An embedder's row is held to what its wire types can be: a `Bool` is `0` or `1`, and so is every element of a `List(Bool)`.
-#[test]
-fn an_embedder_s_bool_past_one_is_refused() {
-    let flag = r#"
-        foreign flag : (Nat) -> Bool;
-        let b = flag(1)!;
-        /std/proc/exit(@{}, match b | true => 1 | false => 0 end)
-    "#;
-
-    assert_eq!(embedded(flag, "/flag", vec![RawValue::Word(1)]), Ok(1));
-    refused(embedded(flag, "/flag", vec![RawValue::Word(2)]));
-
-    let flags = r#"
-        foreign flags : (Nat) -> List(Bool);
-        let _ = flags(1)!;
-        /std/Io/pure(())
-    "#;
-
-    assert_eq!(
-        embedded(flags, "/flags", vec![RawValue::Words(vec![0, 1])]),
-        Ok(0)
-    );
-    refused(embedded(flags, "/flags", vec![RawValue::Words(vec![0, 2])]));
+    run_raw(&compiled, host, vec![], ForeignBindings::empty()).expect("the program runs");
+    assert_eq!(io.output(), b"done");
 }

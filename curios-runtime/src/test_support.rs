@@ -201,7 +201,7 @@ pub fn raw_reply(bindings: &mut ForeignBindings, name: &str, values: Vec<RawValu
     });
 }
 
-/// Run `compiled` under `host`, except that each builtin row in `raw` answers its values on every call, raw — the checked adapter bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`Compiled::run`]'s does.
+/// Run `compiled` under `host`, except that each of the host's rows in `raw` answers its values on every call, raw — the checked adapter bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`Compiled::run`]'s does.
 pub fn run_raw<H: HostOps + Send + Sync + 'static>(
     compiled: &Compiled,
     host: H,
@@ -209,10 +209,10 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
     bindings: ForeignBindings,
 ) -> Result<u8, String> {
     let host = Arc::new(host);
-    let mut impls = sys_impls(Arc::clone(&host));
+    let mut provided = host_rows(Arc::clone(&host));
 
     for (op, values) in raw {
-        impls.replace_raw(op.name(), move |caller, _, results| {
+        provided.replace_raw(&op.declared(), move |caller, _, results| {
             write_raw(caller, &values, results)
         });
     }
@@ -220,8 +220,8 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
     instantiate(
         shared_engine(),
         &compiled.0,
-        impls,
+        sys_impls(host),
         bindings,
-        host_rows(host),
+        provided,
     )
 }

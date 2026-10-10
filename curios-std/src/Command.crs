@@ -79,27 +79,40 @@ let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =
     | false => Result/failure(Io/Error/other(/sys/errno/inval))
     end;
 
-let piped(handle: Handle) -> Pipe =
-    Pipe { handle };
+--- Start a program from its arguments, a working directory, environment entries and a `/sys/stdio_mode` code for each standard stream: `ok` beside the child's handle and a handle for each stream, or the status of the failure.
+foreign proc_spawn: (List(Bytes), Bytes, List(Bytes), Nat, Nat, Nat) -> {
+    status: Nat,
+    child: Handle,
+    stdin: Handle,
+    stdout: Handle,
+    stderr: Handle};
+
+--- The parent's end of a stream wired as `s`: the pipe the host answered where the stream was piped, and none where it was not, whose slot names nothing.
+let end_of(s: Stdio, handle: Handle) -> Option(Pipe) =
+    match s | piped() => Option/some(Pipe { handle }) | _ => Option/none() end;
 
 --- Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends. The child arrives with a pipe for each stream `cmd` piped, in the one call that starts it. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
 pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
     let _ = env_checked(cmd.env)!;
+    let reply =
+        proc_spawn(
+            [Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)],
+            match cmd.cwd | some(p) => Path/to_bytes(p) | none() => x[] end,
+            List/map(cmd.env, env_entry),
+            stdio_of(cmd.stdin),
+            stdio_of(cmd.stdout),
+            stdio_of(cmd.stderr))!;
     let spawned =
-        Io/Error/of_result(
-            /sys/proc/spawn(
-                [Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)],
-                match cmd.cwd | some(p) => Path/to_bytes(p) | none() => x[] end,
-                List/map(cmd.env, env_entry),
-                stdio_of(cmd.stdin),
-                stdio_of(cmd.stdout),
-                stdio_of(cmd.stderr))!)!;
+        match reply.status == /sys/status/ok
+        | true => Result/success(reply)
+        | false => Result/failure(Io/Error/of(reply.status))
+        end!;
     Try/pure(
         Child {
             handle = spawned.child,
-            stdin = Option/map(spawned.stdin, piped),
-            stdout = Option/map(spawned.stdout, piped),
-            stderr = Option/map(spawned.stderr, piped) });
+            stdin = end_of(cmd.stdin, spawned.stdin),
+            stdout = end_of(cmd.stdout, spawned.stdout),
+            stderr = end_of(cmd.stderr, spawned.stderr) });
 
 let drain(p: Option(Pipe)) -> Async(Result(Io/Error, Bytes)) =
     match p | some(p) => Async/read_all(p) | none() => Async/pure(Result/success(x[])) end;

@@ -1,6 +1,6 @@
 use /std/{Nat, Bytes, Io};
 
---- Exactly so many random bytes.
+--- So many random bytes.
 foreign rand_bytes: (Nat) -> Bytes;
 
 --- `n` bytes from the operating system's generator.

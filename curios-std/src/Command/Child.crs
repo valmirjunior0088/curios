@@ -22,26 +22,40 @@ let close_pipes(c: Child) -> Io({}) =
     let _ = close_pipe(c.stdout)!;
     close_pipe(c.stderr);
 
+--- How this child ended: `ok` beside its exit code and the signal that ended it, or the status of the failure.
+foreign proc_wait: (Handle) -> {status: Nat, code: Nat, signal: Nat};
+
+--- End this child: `ok`, or the status of the failure.
+foreign proc_kill: (Handle) -> Nat;
+
+--- The child ended if it still runs. A child the host could not signal is left as it is.
+let killed(c: Child) -> Io({}) =
+    let _ = proc_kill(c.handle)!;
+    Io/pure(());
+
 --- End the child if it still runs, and close its pipes.
 pub let kill(c: Child) -> Io({}) =
-    let _ = /sys/proc/kill(c.handle)!;
+    let _ = killed(c)!;
     close_pipes(c);
 
 --- How the child ended, parking until it does. The pipes are closed with it, so read what it wrote before waiting for it.
 pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
     let _ = Async/park([Async/Wait/ready(c.handle, Interest/readable)])!;
-    let r = /sys/proc/wait(c.handle)!;
+    let reply = proc_wait(c.handle)!;
     let _ = close_pipes(c)!;
-    let ended = Io/Error/of_result(r)!;
-    Try/pure(
-        match ended.signal == 0
-        | true => Exit/exited(ended.code)
-        | false => Exit/signaled(ended.signal)
-        end);
+    match reply.status == /sys/status/ok
+    | true =>
+        Try/pure(
+            match reply.signal == 0
+            | true => Exit/exited(reply.code)
+            | false => Exit/signaled(reply.signal)
+            end)
+    | false => Try/raise(Io/Error/of(reply.status))
+    end;
 
 -- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.
 let release(c: Child) -> Io({}) =
-    let _ = /sys/proc/kill(c.handle)!;
+    let _ = killed(c)!;
     let _ = Handle/close(c.handle)!;
     close_pipes(c);
 

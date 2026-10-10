@@ -6,7 +6,7 @@ pub struct Instant: Type {
     elapsed: Duration,
 }
 
---- The monotonic clock: what has elapsed since a fixed origin, of which only a difference means anything.
+--- The monotonic clock: seconds since a fixed origin, and the nanoseconds within the second.
 foreign clock_mono: {secs: Nat, nanos: Nat};
 
 --- The clock now.

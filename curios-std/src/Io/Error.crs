@@ -1,4 +1,4 @@
-use /std/{Nat, Str, List, Result, Show};
+use /std/{Nat, Str, List, Show};
 
 --- Why a host operation failed: a named status, or `other` with the errno it carries.
 pub induct Error: pub Type
@@ -64,7 +64,3 @@ pub let of(status: Nat) -> Error =
         errors,
         Error/other(status - /sys/status/other_base),
         (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end);
-
---- `r` with its failure read as the error its status names: how a fallible host operation's answer reaches the standard library.
-pub let of_result(@A: Type, r: Result(Nat, A)) -> Result(Error, A) =
-    Result/map_failure(r, of);

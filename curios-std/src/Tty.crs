@@ -24,18 +24,30 @@ satisfy Show(Size) {
     show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),
 }
 
+--- Put this terminal in raw mode, or restore it: `ok`, or the status of the failure.
+foreign tty_raw: (Handle, Bool) -> Nat;
+
+--- This terminal's dimensions: `ok` beside its columns and its rows, or the status of the failure.
+foreign tty_size: (Handle) -> {status: Nat, cols: Nat, rows: Nat};
+
 --- Raw mode on `t`, or off.
 pub let raw(t: Tty, on: Bool) -> Try(Io, Io/Error, {}) =
-    let _ = Io/Error/of_result(/sys/tty/raw(t.0, on)!)!;
-    Try/pure(());
+    let status = tty_raw(t.0, on)!;
+    match status == /sys/status/ok
+    | true => Try/pure(())
+    | false => Try/raise(Io/Error/of(status))
+    end;
 
 --- The terminal's size now.
 pub let size(t: Tty) -> Try(Io, Io/Error, Size) =
-    let s = Io/Error/of_result(/sys/tty/size(t.0)!)!;
-    Try/pure(Size { cols = s.cols, rows = s.rows });
+    let reply = tty_size(t.0)!;
+    match reply.status == /sys/status/ok
+    | true => Try/pure(Size { cols = reply.cols, rows = reply.rows })
+    | false => Try/raise(Io/Error/of(reply.status))
+    end;
 
 let restore(t: Tty) -> Io({}) =
-    Io/bind(/sys/tty/raw(t.0, false), (_) => Io/pure(()));
+    Io/bind(tty_raw(t.0, false), (_) => Io/pure(()));
 
 --- Raw mode on `t` around `body`, restored whichever way the body ends.
 pub let with_raw(@A: Type, t: Tty, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =

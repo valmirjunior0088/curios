@@ -1,4 +1,15 @@
-use /std/{Handle};
+use /std/{Bytes, Try, Io, Handle};
+
+--- Create a socket for the family of this address: `ok` beside its handle, or the status of the failure.
+foreign socket_open: (Bytes) -> {status: Nat, handle: Handle};
+
+-- Declared here and not in a module beneath, since a connecting socket and a listener both open one.
+let opened(addr: Bytes) -> Try(Io, Io/Error, Handle) =
+    let reply = socket_open(addr)!;
+    match reply.status == /sys/status/ok
+    | true => Try/pure(reply.handle)
+    | false => Try/raise(Io/Error/of(reply.status))
+    end;
 
 --- A host and a port as the address the socket operations take.
 pub mod resolve;

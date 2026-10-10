@@ -18,7 +18,7 @@ use {
     super::{
         BigHelper, Chunk, ImmediateLayout, RopeData, Scope, Table, block, br, br_if, call, cast,
         concrete_val, declare_helper, either, field_get, field_set, get, i32_const, i32_type,
-        i64_const, i64_type, null, repeat, set, wasm, when,
+        i64_const, i64_type, null, repeat, set, wasm,
     },
     curios_abi::{WireLeaf, WireType},
     curios_num::Grain,
@@ -1852,71 +1852,6 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 (i, curios_wasm::ValType::Num(curios_wasm::NumType::I32)),
                 (x, Table::top_type(true)),
             ],
-            instrs,
-        );
-    }
-
-    /// `$reply/masks (ref $bytes, i32) -> i32`: `1` when no byte of `bytes` holds a bit outside `allowed`, `0` at the first that does — the loop half of a check on a host's reply, which the call site refuses on.
-    pub(crate) fn emit_reply_masks_func(&mut self, func_name: curios_wasm::FuncName) {
-        let bytes = curios_wasm::LocalName::from("bytes");
-        let allowed = curios_wasm::LocalName::from("allowed");
-        let i = curios_wasm::LocalName::from("i");
-
-        let body = vec![
-            get(&bytes),
-            get(&i),
-            curios_wasm::Instr::ArrayGetU {
-                type_name: self.table.bytes_type(),
-            },
-            get(&allowed),
-            i32_const(-1),
-            curios_wasm::Instr::I32Xor,
-            curios_wasm::Instr::I32And,
-            when(vec![i32_const(0), curios_wasm::Instr::Return]),
-        ];
-        let instrs = each(&i, &bytes, body)
-            .into_iter()
-            .chain([i32_const(1)])
-            .collect();
-
-        self.add_helper(
-            func_name,
-            vec![
-                (bytes, concrete_val(self.table.bytes_type(), false)),
-                (allowed, i32_type()),
-            ],
-            i32_type(),
-            vec![(i, i32_type())],
-            instrs,
-        );
-    }
-
-    /// `$reply/bools (ref $words) -> i32`: `1` when every word of a host's `List(Bool)` is `0` or `1`, `0` at the first that is not.
-    pub(crate) fn emit_reply_bools_func(&mut self, func_name: curios_wasm::FuncName) {
-        let words = curios_wasm::LocalName::from("words");
-        let i = curios_wasm::LocalName::from("i");
-        let words_type = self.table.scalars_type(WireLeaf::Bool);
-
-        let body = vec![
-            get(&words),
-            get(&i),
-            curios_wasm::Instr::ArrayGet {
-                type_name: words_type.clone(),
-            },
-            i32_const(1),
-            curios_wasm::Instr::I32GtU,
-            when(vec![i32_const(0), curios_wasm::Instr::Return]),
-        ];
-        let instrs = each(&i, &words, body)
-            .into_iter()
-            .chain([i32_const(1)])
-            .collect();
-
-        self.add_helper(
-            func_name,
-            vec![(words, concrete_val(words_type, false))],
-            i32_type(),
-            vec![(i, i32_type())],
             instrs,
         );
     }

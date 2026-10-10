@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, List, Result, Path, Try, Io, Show};
+use /std/{Nat, Bool, List, Option, Path, Try, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
 
@@ -28,12 +28,40 @@ satisfy Show(Kind) {
         end,
 }
 
-let kind_of(code: Nat) -> Kind =
+--- What is at this path: `ok` beside its kind, one of `/sys/file_kind`'s codes, its size in bytes and when its contents last changed, or the status of the failure.
+foreign file_stat: (Bytes) -> {
+    status: Nat,
+    kind: Nat,
+    size: Nat,
+    mtime_secs: Nat,
+    mtime_nanos: Nat};
+
+--- Remove the file at this path: `ok`, or the status of the failure.
+foreign file_remove: (Bytes) -> Nat;
+
+--- Rename what is at the first path to the second: `ok`, or the status of the failure.
+foreign file_rename: (Bytes, Bytes) -> Nat;
+
+--- The names in the directory at this path: `ok` beside them, or the status of the failure.
+foreign dir_list: (Bytes) -> {status: Nat, names: List(Bytes)};
+
+--- Create the directory at this path: `ok`, or the status of the failure.
+foreign dir_create: (Bytes) -> Nat;
+
+--- Remove the directory at this path: `ok`, or the status of the failure.
+foreign dir_remove: (Bytes) -> Nat;
+
+--- The process's working directory: `ok` beside its path, or the status of the failure.
+foreign proc_cwd: {status: Nat, path: Bytes};
+
+--- The kind a code of `file_stat`'s names, where it names one.
+let kind_of(code: Nat) -> Option(Kind) =
     choose
-    | code == /sys/file_kind/file => Kind/file()
-    | code == /sys/file_kind/directory => Kind/directory()
-    | code == /sys/file_kind/symlink => Kind/symlink()
-    | _ => Kind/other()
+    | code == /sys/file_kind/file => Option/some(Kind/file())
+    | code == /sys/file_kind/directory => Option/some(Kind/directory())
+    | code == /sys/file_kind/symlink => Option/some(Kind/symlink())
+    | code == /sys/file_kind/other => Option/some(Kind/other())
+    | _ => Option/none()
     end;
 
 --- What `stat` reports.
@@ -45,18 +73,29 @@ pub struct Metadata: pub Type {
     mtime: Timestamp,
 }
 
-let outcome(r: Result(Nat, {})) -> Try(Io, Io/Error, {}) =
-    let _ = Io/Error/of_result(r)!;
-    Try/pure(());
+--- The outcome a row's bare status names.
+let outcome(status: Nat) -> Try(Io, Io/Error, {}) =
+    match status == /sys/status/ok
+    | true => Try/pure(())
+    | false => Try/raise(Io/Error/of(status))
+    end;
 
---- What is at `path`.
+--- What is at `path`. A kind the host names by no code this library knows is a failure no errno names.
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
-    let s = Io/Error/of_result(/sys/file/stat(Path/to_bytes(path))!)!;
-    Try/pure(
-        Metadata {
-            kind = kind_of(s.kind),
-            size = s.size,
-            mtime = Timestamp/of_unix(s.mtime_secs, s.mtime_nanos) });
+    let reply = file_stat(Path/to_bytes(path))!;
+    match reply.status == /sys/status/ok
+    | true =>
+        match kind_of(reply.kind)
+        | some(kind) =>
+            Try/pure(
+                Metadata {
+                    kind = kind,
+                    size = reply.size,
+                    mtime = Timestamp/of_unix(reply.mtime_secs, reply.mtime_nanos) })
+        | none() => Try/raise(Io/Error/other(0))
+        end
+    | false => Try/raise(Io/Error/of(reply.status))
+    end;
 
 let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     let r = Try/run(stat(path))!;
@@ -79,33 +118,39 @@ pub let is_dir(path: Path) -> Try(Io, Io/Error, Bool) =
 
 --- The entries' names, each a `Path` that `Path/join` puts back under `path`.
 pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
-    let names = Io/Error/of_result(/sys/dir/list(Path/to_bytes(path))!)!;
-    Try/pure(List/map(names, Path/of_bytes));
+    let reply = dir_list(Path/to_bytes(path))!;
+    match reply.status == /sys/status/ok
+    | true => Try/pure(List/map(reply.names, Path/of_bytes))
+    | false => Try/raise(Io/Error/of(reply.status))
+    end;
 
 --- A directory at `path`, whose parent must exist.
 pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
-    let r = /sys/dir/create(Path/to_bytes(path))!;
-    outcome(r);
+    let status = dir_create(Path/to_bytes(path))!;
+    outcome(status);
 
 --- Remove the empty directory at `path`.
 pub let remove_dir(path: Path) -> Try(Io, Io/Error, {}) =
-    let r = /sys/dir/remove(Path/to_bytes(path))!;
-    outcome(r);
+    let status = dir_remove(Path/to_bytes(path))!;
+    outcome(status);
 
 --- Remove the file at `path`.
 pub let remove_file(path: Path) -> Try(Io, Io/Error, {}) =
-    let r = /sys/file/remove(Path/to_bytes(path))!;
-    outcome(r);
+    let status = file_remove(Path/to_bytes(path))!;
+    outcome(status);
 
 --- Move what is at `from` to `to`.
 pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
-    let r = /sys/file/rename(Path/to_bytes(from), Path/to_bytes(to))!;
-    outcome(r);
+    let status = file_rename(Path/to_bytes(from), Path/to_bytes(to))!;
+    outcome(status);
 
 --- The working directory.
 pub let cwd: Try(Io, Io/Error, Path) =
-    let p = Io/Error/of_result(/sys/proc/cwd!)!;
-    Try/pure(Path/of_bytes(p));
+    let reply = proc_cwd!;
+    match reply.status == /sys/status/ok
+    | true => Try/pure(Path/of_bytes(reply.path))
+    | false => Try/raise(Io/Error/of(reply.status))
+    end;
 
 --- A directory at `path` and every missing parent; one that already exists is left as it is.
 pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =

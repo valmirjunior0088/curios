@@ -2,6 +2,7 @@
 
 use {
     crate::with_prelude,
+    curios_abi::HostOp,
     curios_std::{std_directory, std_source},
     curios_text::{Formatted, SYNTAX, prepare_prelude, sys_source},
     std::{fs, path::PathBuf},
@@ -84,4 +85,37 @@ fn every_authored_source_is_lint_clean() {
         lints.len(),
         lints.join("\n\n")
     );
+}
+
+/// **The standard library declares every row a host answers, as the host answers it.**
+///
+/// A host's rows are `foreign` declarations of `/std`, linked by name. One declared in another module than `curios-abi` states, or at another signature, is a program that does not link, found only by the program that reaches the row; this finds it for every row.
+#[test]
+fn the_library_declares_every_row_a_host_answers() {
+    with_prelude(|units| {
+        let declared = units[1].foreigns();
+
+        for op in HostOp::ALL {
+            let name = op.declared();
+            let row = declared
+                .get(&name)
+                .unwrap_or_else(|| panic!("`/std` declares no `{name}`"));
+            let (written, stated) = (row.signature(), op.signature());
+            let results = match op.diverges() {
+                true => written.results.is_never(),
+                false => written.results == stated.results,
+            };
+
+            assert!(
+                written.params == stated.params && results,
+                "`{name}` is declared {written:?}, and the host answers {stated:?}"
+            );
+        }
+
+        assert_eq!(
+            declared.iter().count(),
+            HostOp::ALL.len(),
+            "`/std` declares a row no host answers"
+        );
+    });
 }

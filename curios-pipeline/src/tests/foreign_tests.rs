@@ -70,7 +70,7 @@ fn a_program_is_handed_the_rows_it_reaches() {
 }
 
 #[test]
-fn sys_and_foreign_calls_import_under_separate_namespaces() {
+fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under() {
     // Must actually run both — an unforced description is pruned before codegen ever sees it (see the note above).
     let module = compile(
         r#"
@@ -87,8 +87,8 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     assert!(
         imports
             .iter()
-            .any(|(namespace, name, _)| namespace == "sys" && name == "handle_write"),
-        "expected a sys.handle_write import, got {imports:?}"
+            .any(|(namespace, name, _)| namespace == "ffi" && name == "/std/Handle/handle_write"),
+        "expected an ffi./std/Handle/handle_write import, got {imports:?}"
     );
     assert!(
         imports

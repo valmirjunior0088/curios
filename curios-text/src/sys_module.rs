@@ -1023,6 +1023,7 @@ fn code_modules() -> Vec<SysModule> {
                 pub_let("not_directory", nat(), nat_lit(status::NOT_DIRECTORY)),
                 pub_let("reset", nat(), nat_lit(status::CONNECTION_RESET)),
                 pub_let("other_base", nat(), nat_lit(status::OTHER_BASE)),
+                pub_let("errno_max", nat(), nat_lit(status::ERRNO_MAX)),
             ],
         ),
         SysModule::ops(
