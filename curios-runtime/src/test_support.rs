@@ -8,7 +8,7 @@
 //!
 //! Calls are untyped, and deliberately: they type-check dynamically against the module's declared signatures, so a call succeeding *is* the assertion that the emitted shapes are right.
 //!
-//! It also runs a compiled program against replies no adapter would write: [`run_raw`](crate::test_support::run_raw) answers chosen rows of the host's, and [`raw_reply`](crate::test_support::raw_reply) an embedder's own, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the standard library's reading of a reply is put under test past what a host's types let it answer.
+//! It also runs a compiled program against replies no adapter would write: [`run_raw`](crate::test_support::run_raw) answers chosen rows of the host's, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the standard library's reading of a reply is put under test past what a host's types let it answer.
 
 use {
     super::{
