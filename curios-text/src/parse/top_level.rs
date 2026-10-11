@@ -11,12 +11,12 @@ use {
         Module, Name, StructField, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
         TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, UseGroup, WitnessField, declared,
         parse_declared_label, parse_doc, parse_identifier_raw, parse_term, parse_whitespace,
-        text_after, word_after,
+        reserved_keyword, text_after, word_after,
     },
     curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_parse::{
-        Mark, Parser, commit, fail, fail_from, lazy, many0, mark, not_ahead, pure,
-        sep_by0_trailing, sep_by1_trailing, spanned, tagging, take_exact,
+        Mark, Parser, ParserError, commit, fail, fail_from, lazy, many0, mark, not_ahead, pure,
+        raise, refusal, sep_by0_trailing, sep_by1_trailing, spanned, tagging, take_exact,
     },
     curios_utilities::{Plicity, Qualifier, is_keyword},
     std::iter,
@@ -154,24 +154,55 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
         })
 }
 
-// One labelled field of a braced result: `status: Nat`. The label is read as written — it is the tuple type's, and `documentation/syntax.md` makes a tuple's labels part of its identity, so nothing may invent one or reorder the field it names.
-fn parse_wire_field<'a>() -> Parser<'a, (String, WireType)> {
-    parse_identifier()
-        .and_drop(parse_literal(":"))
-        .and(lazy(parse_wire_type))
-        .map(|(label, type_)| (label.to_string(), type_))
+/// What refuses `_` where a result's field is labelled: a tuple type reads `_` as no label, and a row's results are read by their labels alone.
+const WIRE_FIELD_IS_LABELLED: &str = "a result's field is read by its label, so `_` cannot stand for one: write a name, as in `status: Nat`";
+
+/// A field of a braced result as it is read: its label and type, beside the report that refuses the label as one an earlier field has, made where the label stands for [`wire_fields`] to raise.
+type WireField = ((String, WireType), ParserError);
+
+// The label of a result's field, read as a tuple type's is — `documentation/syntax.md` makes a tuple's labels part of its identity — so a name, no keyword and no `_`, each refused at the word: left to the declaration's type, the refusal is the elaborator's and holds no position.
+fn parse_wire_label<'a>() -> Parser<'a, (String, ParserError)> {
+    mark()
+        .and(parse_identifier_raw)
+        .flat_map(|(start, word)| match word {
+            "_" => commit(fail_from(&start, WIRE_FIELD_IS_LABELLED)),
+            word if is_keyword(word) => commit(fail_from(&start, reserved_keyword(word))),
+            word => refusal(
+                &start,
+                format!("a result names each of its fields once: '{word}' labels an earlier one"),
+            )
+            .map(move |repeated| (word.to_string(), repeated)),
+        })
+        .and_drop(parse_whitespace)
 }
 
-// The results a braced field list denotes, in the order written, or why it denotes none: a tuple type's labels are part of its identity, so this may not drop the label a single field carries.
-fn wire_fields(fields: Vec<(String, WireType)>) -> Result<WireResults, String> {
+// One labelled field of a braced result: `status: Nat`. The label is kept as written, so nothing may invent one or reorder the field it names.
+fn parse_wire_field<'a>() -> Parser<'a, WireField> {
+    parse_wire_label()
+        .and_drop(parse_literal(":"))
+        .and(lazy(parse_wire_type))
+        .map(|((label, repeated), type_)| ((label, type_), repeated))
+}
+
+// The results a braced field list denotes, in the order written, or the report of why it denotes none: a tuple type's labels are part of its identity, so this may not drop the label a single field carries, nor take a label twice.
+fn wire_fields<'a>(fields: Vec<WireField>) -> Parser<'a, WireResults> {
     // A row forwards one result through as itself, so `{x: T}` would name a one-field tuple no row can carry — and the label would be dropped rather than kept, which is a different type from the one written.
-    if let [(label, _)] = fields.as_slice() {
-        return Err(format!(
+    if let [((label, _), _)] = fields.as_slice() {
+        return fail(format!(
             "a result is spelled bare rather than in braces when there is one of it: write the type itself, not `{{{label}: …}}`"
         ));
     }
 
-    Ok(WireResults::of(fields))
+    let mut read: Vec<(String, WireType)> = Vec::new();
+    for ((label, type_), repeated) in fields {
+        if read.iter().any(|(earlier, _)| *earlier == label) {
+            return raise(repeated);
+        }
+
+        read.push((label, type_));
+    }
+
+    pure(WireResults::of(read))
 }
 
 // A result: a bare wire type, a braced field list naming the tuple type the row yields, or `Never`. `{}` is no result at all — the unit *type*, which is what a result position holds; `()` is the unit value and never appears here.
@@ -179,11 +210,8 @@ fn parse_wire_results<'a>() -> Parser<'a, WireResults> {
     parse_literal("{")
         .and_keep(sep_by0_trailing(parse_wire_field, || parse_literal(",")))
         .and_drop(parse_literal("}"))
-        .flat_map(|fields| match wire_fields(fields) {
-            Ok(results) => pure(results),
-            // A brace has been read, so nothing else could have been meant: the refusal is the diagnosis rather than a backtrack into a vaguer one.
-            Err(message) => commit(fail(message)),
-        })
+        // A brace has been read, so nothing else could have been meant: the refusal is the diagnosis rather than a backtrack into a vaguer one.
+        .flat_map(|fields| commit(wire_fields(fields)))
         .or(parse_wire_never())
         .or(parse_wire_type().map(WireResults::single))
 }

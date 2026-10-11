@@ -187,6 +187,35 @@ fn top_foreign_refuses_a_single_result_in_braces() {
     );
 }
 
+/// A result's labels are a tuple type's, so a keyword, `_` and a label written twice are each refused, and at the label: the declaration's type is built with no extent, so a refusal left to it holds no position.
+#[test]
+fn top_foreign_reads_a_results_labels_as_a_tuple_types() {
+    for (source, expected, caret) in [
+        (
+            "foreign g(Nat) -> {a: Nat, a: Nat};",
+            "a result names each of its fields once: 'a' labels an earlier one",
+            "                           ^",
+        ),
+        (
+            "foreign g(Nat) -> {_: Nat, b: Nat};",
+            "a result's field is read by its label, so `_` cannot stand for one",
+            "                   ^",
+        ),
+        (
+            "foreign g(Nat) -> {status: Nat, let: Bytes};",
+            "'let' is a reserved keyword, so it cannot be a name",
+            "                                ^^^",
+        ),
+    ] {
+        let report = source.parse::<Module>().unwrap_err().format();
+        assert!(report.contains(expected), "{source:?} reported {report}");
+        assert!(
+            report.ends_with(&format!("    1 | {source}\n      | {caret}")),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
 /// A reference may take any slot, and several may: the results cross in the order written, since `{a: Nat, b: Bytes}` and `{b: Bytes, a: Nat}` are two tuple types and the one declared is the one the program gets.
 #[test]
 fn top_foreign_keeps_references_in_the_slots_written() {
