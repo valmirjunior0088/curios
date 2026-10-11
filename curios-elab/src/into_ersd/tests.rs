@@ -1864,3 +1864,90 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
     assert!(!unfolds("lemma"));
     assert!(unfolds("two"));
 }
+
+/// A record of two fields at one type, `levels` deep: a graph of `levels` nodes over a tree of two to the `levels` leaves. Its binders are minted from `mint`, so two such types name no binder in common.
+fn doubled_record(levels: u32, mint: u32) -> Term {
+    (0..levels).fold(Term::intrinsic(Intrinsic::NatType), |type_, level| {
+        let first = Free::local(mint + 2 * level, None);
+        let second = Free::local(mint + 2 * level + 1, None);
+
+        Term::tuple_type([(first, type_.clone()), (second, type_)])
+    })
+}
+
+/// Erasure answers a term that shares in the term's own size: sixty levels that each hold the one below twice, a tree no walk per path finishes, as `walk_tests` puts the crate's other walks to one. A function at the doubling type, as a program's entry and as a definition; a chain of sixty projections out of a value at it; and sixty definitions that each pair the one before with itself, projected, whose type is its tail's with every binding substituted (`Lowering::type_of`).
+///
+/// Mutation-checked: with a type read again where `Lowering::type_of` kept one, the row of definitions does not return, and with the type a lambda is checked at walked once per occurrence, none of the other three does.
+#[test]
+fn erasure_answers_a_doubling_term_in_its_own_size() {
+    let nat_type = || Term::intrinsic(Intrinsic::NatType);
+    let doubled = doubled_record(60, 5_000);
+
+    let identity = |mint: u32| {
+        let a = Free::local(mint, Some("a"));
+        (
+            Term::func([(a, doubled.clone())], Term::free_var(&a)),
+            Term::func_type([(a, doubled.clone())], doubled.clone()),
+        )
+    };
+    let (entry, entry_type) = identity(4_000);
+    let (held, held_type) = identity(4_001);
+
+    let b = Free::local(4_002, Some("b"));
+    let chain = (0..60).fold(Term::free_var(&b), |head, _| Term::proj(head, 0usize));
+
+    // `(let x0 = (n, n); let x1 = (x0, x0); …; x59).0`, each definition stated at its own doubling type: the projection's head is the whole chain, whose type is read by substituting every binding.
+    let n = Free::local(4_003, Some("n"));
+    let names = (0..60u32)
+        .map(|level| Free::local(4_100 + level, Some("x")))
+        .collect::<Vec<_>>();
+    let mut paired = Term::free_var(&names[59]);
+    for level in (0..60u32).rev() {
+        let below = match level {
+            0 => Term::free_var(&n),
+            _ => Term::free_var(&names[level as usize - 1]),
+        };
+        paired = Term::let_(
+            &names[level as usize],
+            doubled_record(level + 1, 10_000 + 200 * level),
+            Term::tuple([below.clone(), below]),
+            paired,
+        );
+    }
+    let paired = Term::proj(paired, 0usize);
+
+    let rows = [
+        (
+            "a function at a doubling type",
+            try_erase(&module(Vec::new(), entry), entry_type).is_ok(),
+        ),
+        (
+            "a definition at a doubling type",
+            try_erase(
+                &module(vec![definition("held", held_type, held)], nat_lit(7)),
+                nat_type(),
+            )
+            .is_ok(),
+        ),
+        (
+            "a projection chain out of a doubling type",
+            try_erase(
+                &module(Vec::new(), Term::func([(b, doubled.clone())], chain)),
+                Term::func_type([(b, doubled.clone())], nat_type()),
+            )
+            .is_ok(),
+        ),
+        (
+            "sixty definitions that each pair the one before",
+            try_erase(
+                &module(Vec::new(), Term::func([(n, nat_type())], paired)),
+                Term::func_type([(n, nat_type())], doubled_record(59, 30_000)),
+            )
+            .is_ok(),
+        ),
+    ];
+
+    for (row, erased) in rows {
+        assert!(erased, "{row} did not erase");
+    }
+}
