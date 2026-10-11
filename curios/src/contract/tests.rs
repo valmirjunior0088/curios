@@ -15,7 +15,6 @@ const TARGET: &str = "TARGET";
 ///
 /// A function rather than a `const`, because the set the tree actually holds is feature-dependent — `profile` carries a command of its own — and `#[cfg]` does not reach an element of an array literal. What [`every_command_the_parser_knows_is_in_the_table`] compares this against is the tree clap built for *this* build, so the table has to vary exactly as that tree does or one of the two builds would be checked against the other's surface.
 fn commands() -> Vec<&'static [&'static str]> {
-    #[allow(unused_mut)]
     let mut lines: Vec<&'static [&'static str]> = vec![
         &["run", TARGET],
         &["compile", TARGET],
@@ -55,8 +54,9 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["wonder", "server"],
     ];
 
-    #[cfg(feature = "profile")]
-    lines.push(&["profile", "stream.tsv"]);
+    if cfg!(feature = "profile") {
+        lines.push(&["profile", "stream.tsv"]);
+    }
 
     lines
 }
@@ -324,17 +324,16 @@ fn table(root: &Path) -> String {
 /// The section a profiling build adds, written the way [`table`] writes an [`Accepts::Nothing`] command: one header and the single row that says it resolves nothing.
 ///
 /// Separate from [`EXPECTED`] for the reason [`commands`] is a function — the surface varies with the feature, so the expectation must vary with it, or one build would be held to the other's surface.
-#[cfg(feature = "profile")]
 const PROFILE_EXPECTED: &str =
     "profile stream.tsv — Nothing, store None, leaves Nothing, options none\n  takes no subject\n";
 
 /// What [`table`] must read for the tree *this* build holds.
 fn expected() -> String {
-    #[allow(unused_mut)]
     let mut expected = String::from(EXPECTED);
 
-    #[cfg(feature = "profile")]
-    expected.push_str(PROFILE_EXPECTED);
+    if cfg!(feature = "profile") {
+        expected.push_str(PROFILE_EXPECTED);
+    }
 
     expected
 }
