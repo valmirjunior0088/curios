@@ -67,32 +67,32 @@ fn assert_stream(io: &MockIo) {
 ///
 /// ## Last reading
 ///
-/// Host: Apple M4 Pro (12 cores), `aarch64-apple-darwin`, Darwin `25.6.0`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration.
+/// Taken at `7f2ce2cfd`. Host: AMD Ryzen 7 5800X3D (8 cores), `x86_64-unknown-linux-gnu`, Linux `7.2.8`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration.
 ///
 /// All times below are milliseconds. Sample 0 is the warmup and is excluded from the medians.
 ///
 /// | Workload | Sample | Compile | Run | Output bytes |
 /// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_io` | 0 (warmup) | 825.605 | 1.093 | 6 |
-/// | `monad_io` | 1 | 739.081 | 0.631 | 6 |
-/// | `monad_io` | 2 | 737.592 | 0.638 | 6 |
-/// | `monad_io` | 3 | 737.749 | 0.657 | 6 |
-/// | `monad_io` | 4 | 736.749 | 0.635 | 6 |
-/// | `monad_io` | 5 | 735.665 | 0.651 | 6 |
-/// | `stream_copy` | 0 (warmup) | 405.444 | 27.936 | 512000 |
-/// | `stream_copy` | 1 | 400.891 | 28.058 | 512000 |
-/// | `stream_copy` | 2 | 401.952 | 27.990 | 512000 |
-/// | `stream_copy` | 3 | 401.136 | 27.904 | 512000 |
-/// | `stream_copy` | 4 | 398.554 | 28.260 | 512000 |
-/// | `stream_copy` | 5 | 400.747 | 28.003 | 512000 |
-/// | `tui` | 0 (warmup) | 2948.593 | 23.655 | 11368 |
-/// | `tui` | 1 | 2984.907 | 21.664 | 11368 |
-/// | `tui` | 2 | 2980.737 | 22.910 | 11368 |
-/// | `tui` | 3 | 2965.527 | 21.523 | 11368 |
-/// | `tui` | 4 | 2950.161 | 22.683 | 11368 |
-/// | `tui` | 5 | 2942.890 | 20.914 | 11368 |
+/// | `monad_io` | 0 (warmup) | 774.568 | 0.678 | 6 |
+/// | `monad_io` | 1 | 739.563 | 0.487 | 6 |
+/// | `monad_io` | 2 | 741.815 | 0.543 | 6 |
+/// | `monad_io` | 3 | 732.098 | 0.543 | 6 |
+/// | `monad_io` | 4 | 740.488 | 0.575 | 6 |
+/// | `monad_io` | 5 | 735.256 | 0.582 | 6 |
+/// | `stream_copy` | 0 (warmup) | 229.056 | 9.442 | 512000 |
+/// | `stream_copy` | 1 | 235.066 | 9.552 | 512000 |
+/// | `stream_copy` | 2 | 232.696 | 9.285 | 512000 |
+/// | `stream_copy` | 3 | 231.756 | 9.094 | 512000 |
+/// | `stream_copy` | 4 | 231.513 | 9.118 | 512000 |
+/// | `stream_copy` | 5 | 230.088 | 9.264 | 512000 |
+/// | `tui` | 0 (warmup) | 4238.025 | 38.755 | 11368 |
+/// | `tui` | 1 | 4151.307 | 47.739 | 11368 |
+/// | `tui` | 2 | 4142.871 | 40.005 | 11368 |
+/// | `tui` | 3 | 4155.403 | 43.182 | 11368 |
+/// | `tui` | 4 | 4173.060 | 39.693 | 11368 |
+/// | `tui` | 5 | 4186.951 | 40.203 | 11368 |
 ///
-/// Measured medians: `monad_io` compile **737.592 ms**, run **0.638 ms**; `stream_copy` compile **400.891 ms**, run **28.003 ms**; `tui` compile **2965.527 ms**, run **21.664 ms**. All eighteen samples passed their behavior and closed-span assertions; each workload produced the same output length in every sample.
+/// Measured medians: `monad_io` compile **739.563 ms**, run **0.543 ms**; `stream_copy` compile **231.756 ms**, run **9.264 ms**; `tui` compile **4155.403 ms**, run **40.203 ms**. All eighteen samples passed their behavior and closed-span assertions; each workload produced the same output length in every sample.
 #[test]
 #[ignore = "measurement: captures compilation and execution costs"]
 fn host_boundary_measurements() {
