@@ -408,6 +408,35 @@ pub(super) fn function_with<'a>(functions: &'a [Function<'a>], needle: &str) -> 
     found
 }
 
+/// The declaration of the `family` row alone, from its `(type` to the parenthesis that closes it. The display puts a recursion group on one line, so the line that names a row holds every other row's fields beside its own.
+pub(super) fn row_declaration<'a>(wat: &'a str, family: &str) -> &'a str {
+    let name = format!("$/{family}");
+    let start = wat
+        .match_indices("(type $row/")
+        .map(|(at, _)| at)
+        .find(|&at| {
+            wat[at..]
+                .split_whitespace()
+                .nth(1)
+                .is_some_and(|row| row.ends_with(&name))
+        })
+        .unwrap_or_else(|| panic!("the {family} family declares a row"));
+
+    let mut depth = 0usize;
+    for (offset, byte) in wat[start..].bytes().enumerate() {
+        match byte {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            _ => continue,
+        }
+        if depth == 0 {
+            return &wat[start..=start + offset];
+        }
+    }
+
+    panic!("the {family} row's declaration closes")
+}
+
 /// The innermost `loop … end` enclosing the (unique) `needle`: walk backward from the needle with block/loop/if-vs-`end` nesting to the enclosing `loop ` opener, then balance forward to its matching `end`. `block`/`loop`/`if` are the only `end`-terminated openers the emitter produces.
 pub(super) fn loop_containing<'a>(wat: &'a str, needle: &str) -> &'a str {
     assert_eq!(

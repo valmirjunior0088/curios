@@ -5,24 +5,23 @@ use {
     crate::tests::{cont_optm_module, emits, run},
 };
 
-/// A structural tuple's fields stay `(ref null any)`, which is what makes the representation analysis's locals-only scope *observable* rather than merely intended: it reaches locals and block parameters, never a heap layout, because a field is a contract between an allocation site and every reader of it rather than one function's private decision. A row's typed slots are the door's decision, made from the recorded shape; a scalar tuple field appearing here means the analysis's scope leaked.
+/// The tree's payloads stay `(ref null any)` in its row, which is what makes the representation analysis's locals-only scope *observable* rather than merely intended: it reaches locals and block parameters, never a heap layout, because a field is a contract between an allocation site and every reader of it rather than one function's private decision. A row's typed slots are the door's decision, made from the recorded shape, and here it types the tag alone; a scalar payload appearing here means the analysis's scope leaked.
 #[test]
 fn trees_constructor_payloads_stay_boxed() {
     let wat = wat(TREES);
 
-    let scalar_fields = wat
-        .lines()
-        .filter(|line| line.contains("(type $tuple/") || line.trim().starts_with("(field "))
-        .filter(|line| line.contains("(field $") && !line.contains("(ref null any)"))
-        .collect::<Vec<_>>();
-
+    let declaration = row_declaration(&wat, "Tree");
+    // A node's number and its two subtrees, which a leaf's number shares a slot of.
+    let payloads = declaration.matches("(field $").count() - 1;
     assert!(
-        scalar_fields.is_empty(),
-        "tuple payloads are uniformly boxed: {scalar_fields:?}"
+        declaration.contains("(field $0 i8)")
+            && payloads == 3
+            && declaration.matches("(ref null any)").count() == payloads,
+        "the tree's payloads are uniformly boxed beside its tag: {declaration}"
     );
 }
 
-/// The leaf constructor rides its payload — the immediate encoding. `build`'s leaf arm returns the payload with no allocation, so its body holds exactly one construction (the node's), and `sum` discriminates leaf from node with `ref.test (ref i31)` in place of a tag read — with only one boxed constructor the tag is never read, so no `$tuple/1` cast survives in `sum`.
+/// The leaf constructor rides its payload — the immediate encoding. `build`'s leaf arm returns the payload with no allocation, so its body holds exactly one construction (the node's), and `sum` discriminates leaf from node with `ref.test (ref i31)` in place of a tag read — with only one boxed constructor the tag is never read, so no read of the row's packed tag survives in `sum`.
 ///
 /// # What it last measured, and how to retake it
 ///
@@ -45,8 +44,8 @@ fn trees_leaf_rides_its_payload() {
         sum.body
     );
     assert!(
-        !sum.body.contains("$tuple/1"),
-        "no tag read survives in sum: {}",
+        sum.body.contains("struct.get $row/") && !sum.body.contains("struct.get_u $row/"),
+        "sum reads the node's payloads and never its tag: {}",
         sum.body
     );
 
@@ -399,13 +398,16 @@ fn a_monomorphic_slot_carries_its_own_type() {
 
     let wat = wat(source);
 
-    let declaration = wat
-        .lines()
-        .find(|line| line.contains("(type $row/") && line.contains("Chain"))
-        .expect("the Chain family declares a type");
+    let declaration = row_declaration(&wat, "Chain");
+    let row = declaration
+        .split_whitespace()
+        .nth(1)
+        .expect("a declaration names its type");
     assert!(
-        declaration.contains("i8") && declaration.contains("i32"),
-        "the tag packs into a byte and the `Nat` payload is a raw scalar: {declaration}"
+        declaration.contains("(field $0 i8)")
+            && declaration.contains(&format!("(field $1 (ref null {row}))"))
+            && declaration.contains("(field $2 (ref null any))"),
+        "the tag packs into a byte, the tail is the family's own row and the `Nat` a uniform reference: {declaration}"
     );
 
     let functions = functions(&wat);
