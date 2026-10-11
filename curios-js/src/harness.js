@@ -4,7 +4,7 @@
 //
 // A handle crosses as its token's bytes, and this harness keys a token on the hex of exactly those bytes, never on a number decoded from them: the empty token is not stdin's `00`, a padded `0100` is not stdout's `01`, and a token longer than any number stays itself.
 //
-// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. A handle this host never minted names nothing, and answers NOT_FOUND as a closed one does on every host.
+// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
 
 /** Thrown by the `proc_exit` import to unwind the wasm stack with an exit code. */
 export class ExitSignal extends Error {
