@@ -262,12 +262,21 @@ fn module_pool(
     pool
 }
 
-/// Whether a term of type `type_` may stand where `goal_type` is wanted, with nothing committed: what `check` would say of it, so a candidate that fits by subsumption — a predicate where a family into `Type` is wanted — is offered.
-fn fits(context: &mut Context, type_: &Term, goal_type: &Term) -> bool {
+/// Run `attempt` as a transaction of its own and take back every solution it committed, whatever it answers: an attempt asks, and what it found is materialized in its answer before the solutions go.
+fn retracted<T>(context: &mut Context, attempt: impl FnOnce(&mut Context) -> T) -> T {
     let mark = context.solution_mark();
-    let outcome = subsume_outcome(context, type_, goal_type, None);
+    let answer = attempt(context);
     context.rollback_solutions(mark);
     context.end_solutions(mark);
+
+    answer
+}
+
+/// Whether a term of type `type_` may stand where `goal_type` is wanted, with nothing committed: what `check` would say of it, so a candidate that fits by subsumption — a predicate where a family into `Type` is wanted — is offered.
+fn fits(context: &mut Context, type_: &Term, goal_type: &Term) -> bool {
+    let outcome = retracted(context, |context| {
+        subsume_outcome(context, type_, goal_type, None)
+    });
 
     matches!(outcome, Ok(Outcome::Converts))
 }
@@ -291,147 +300,130 @@ fn apply_fit(
     };
     let params = &head_func_type.telescope;
     let plicities = head_func_type.plicities();
+    let plicities = plicities.as_slice();
 
-    let mark = context.solution_mark();
-    let mut args: Vec<(Term, Term)> = Vec::new();
-    let mut cursor = params.cursor();
-    while let Some((_, domain)) = cursor.entry() {
-        let arg = context.fresh_hole_metavar(domain.clone(), None);
-        cursor.advance(arg.clone());
-        args.push((arg, domain));
-    }
-    let output = cursor.body().expect("a cursor past every entry");
-
-    let fit = apply_fit_within(
-        context, telescope, head, &args, &plicities, &output, goal_type, hole,
-    );
-    context.rollback_solutions(mark);
-    context.end_solutions(mark);
-    fit
-}
-
-/// The body of [`apply_fit`], inside its transaction.
-#[allow(clippy::too_many_arguments)]
-fn apply_fit_within(
-    context: &mut Context,
-    telescope: &[(Free, Term)],
-    head: &Term,
-    args: &[(Term, Term)],
-    plicities: &[Plicity],
-    output: &Term,
-    goal_type: &Term,
-    hole: &Term,
-) -> Option<(Term, usize)> {
-    let unsolved = |context: &Context, arg: &Term| {
-        zonk_solved_term_metas(context, arg)
-            .any_metavar(&mut |id| context.metavar_solution(id).is_none())
-    };
-
-    // A lemma whose result type is headed by one of its own parameters — `subst`'s `P(y)` — meets any goal at all once its proof slot is filled, by the imitation `P := (_) => goal`. Such a fit says nothing unless the conversion decides it outright, so an undecided one is refused below. The head is the whole application spine's: `Eq(@B)(f(x), f(y))` is headed by `Eq`, and the `@B` its first call carries is an argument like any other.
-    let mut spine = output;
-    while let Subterm::Apply(Apply { head: inner, .. }) = &**spine {
-        spine = inner;
-    }
-    let flex_result = spine
-        .metavars()
-        .into_iter()
-        .any(|id| args.iter().any(|(arg, _)| arg.metavars().contains(&id)));
-
-    // The goal first: what it pins, it pins.
-    let mut outcome = subsume_outcome(context, output, goal_type, None).ok()?;
-    if matches!(outcome, Outcome::Mismatch(_)) {
-        return None;
-    }
-
-    // Then the scope, for each explicit slot still open, in slot order. A binder fits a slot when its type converts to the slot's domain and the slot's metavariable then converts to the binder — two committed conversions, so the domain's own metavariables (`x` and `y` in `p : Eq()(x, y)`) pin from the hypothesis and the output is re-probed below with them in hand.
-    let mut filled = false;
-    for (arg, domain) in args
-        .iter()
-        .zip(plicities)
-        .filter_map(|(slot, plicity)| (*plicity == Plicity::Explicit).then_some(slot))
-    {
-        if !unsolved(context, arg) {
-            continue;
+    retracted(context, |context| {
+        let mut args: Vec<(Term, Term)> = Vec::new();
+        let mut cursor = params.cursor();
+        while let Some((_, domain)) = cursor.entry() {
+            let arg = context.fresh_hole_metavar(domain.clone(), None);
+            cursor.advance(arg.clone());
+            args.push((arg, domain));
         }
-        for (name, type_) in telescope {
-            if !name.nameable() {
+        let args = args.as_slice();
+        let output = &cursor.body().expect("a cursor past every entry");
+
+        let unsolved = |context: &Context, arg: &Term| {
+            zonk_solved_term_metas(context, arg)
+                .any_metavar(&mut |id| context.metavar_solution(id).is_none())
+        };
+
+        // A lemma whose result type is headed by one of its own parameters — `subst`'s `P(y)` — meets any goal at all once its proof slot is filled, by the imitation `P := (_) => goal`. Such a fit says nothing unless the conversion decides it outright, so an undecided one is refused below. The head is the whole application spine's: `Eq(@B)(f(x), f(y))` is headed by `Eq`, and the `@B` its first call carries is an argument like any other.
+        let mut spine = output;
+        while let Subterm::Apply(Apply { head: inner, .. }) = &**spine {
+            spine = inner;
+        }
+        let flex_result = spine
+            .metavars()
+            .into_iter()
+            .any(|id| args.iter().any(|(arg, _)| arg.metavars().contains(&id)));
+
+        // The goal first: what it pins, it pins.
+        let mut outcome = subsume_outcome(context, output, goal_type, None).ok()?;
+        if matches!(outcome, Outcome::Mismatch(_)) {
+            return None;
+        }
+
+        // Then the scope, for each explicit slot still open, in slot order. A binder fits a slot when its type converts to the slot's domain and the slot's metavariable then converts to the binder — two committed conversions, so the domain's own metavariables (`x` and `y` in `p : Eq()(x, y)`) pin from the hypothesis and the output is re-probed below with them in hand.
+        let mut filled = false;
+        for (arg, domain) in args
+            .iter()
+            .zip(plicities)
+            .filter_map(|(slot, plicity)| (*plicity == Plicity::Explicit).then_some(slot))
+        {
+            if !unsolved(context, arg) {
                 continue;
             }
-            let trial = context.solution_mark();
-            let domain = zonk_solved_term_metas(context, domain);
-            let binder = Term::free_var(name);
-            let fits = matches!(
-                subsume_outcome(context, type_, &domain, None),
-                Ok(Outcome::Converts)
-            ) && matches!(
-                convert_outcome(context, &domain, arg, &binder),
-                Ok(Outcome::Converts)
-            );
-            if fits {
+            for (name, type_) in telescope {
+                if !name.nameable() {
+                    continue;
+                }
+                let trial = context.solution_mark();
+                let domain = zonk_solved_term_metas(context, domain);
+                let binder = Term::free_var(name);
+                let fits = matches!(
+                    subsume_outcome(context, type_, &domain, None),
+                    Ok(Outcome::Converts)
+                ) && matches!(
+                    convert_outcome(context, &domain, arg, &binder),
+                    Ok(Outcome::Converts)
+                );
+                if fits {
+                    context.end_solutions(trial);
+                    filled = true;
+                    break;
+                }
+                context.rollback_solutions(trial);
                 context.end_solutions(trial);
-                filled = true;
-                break;
-            }
-            context.rollback_solutions(trial);
-            context.end_solutions(trial);
-        }
-    }
-    if filled || matches!(outcome, Outcome::Blocked(_)) {
-        outcome = subsume_outcome(context, output, goal_type, None).ok()?;
-    }
-
-    let mut holes = 0usize;
-    let mut pinned = 0usize;
-    let mut hole_ids = BTreeSet::new();
-    let kept: Vec<Term> = args
-        .iter()
-        .zip(plicities)
-        .filter_map(|(slot, plicity)| {
-            let (arg, _) = slot;
-            let arg = zonk_solved_term_metas(context, arg);
-            match (plicity, unsolved(context, &arg)) {
-                // Hidden slots re-infer on paste, solved or not.
-                (Plicity::Implicit | Plicity::Witness, _) => None,
-                (Plicity::Explicit, true) => {
-                    holes += 1;
-                    hole_ids.extend(arg.metavars());
-                    Some(hole.clone())
-                }
-                (Plicity::Explicit, false) => {
-                    pinned += 1;
-                    Some(arg)
-                }
-            }
-        })
-        .collect();
-
-    match outcome {
-        Outcome::Converts => {}
-        // Undecided on exactly the open slots is the advisory refinement; undecided on anything else — a hidden slot the goal never reached — is a fit nothing distinguishes from a mismatch.
-        Outcome::Blocked(goals) => {
-            if holes == 0 || flex_result {
-                return None;
-            }
-            let blockers: BTreeSet<_> = goals
-                .iter()
-                .flat_map(|goal| [&goal.this, &goal.that, &goal.type_])
-                .flat_map(|term| zonk_solved_term_metas(context, term).metavars())
-                .filter(|id| context.metavar_solution(*id).is_none())
-                .collect();
-            if blockers.is_empty() || !blockers.is_subset(&hole_ids) {
-                return None;
             }
         }
-        Outcome::Mismatch(_) => return None,
-    }
+        if filled || matches!(outcome, Outcome::Blocked(_)) {
+            outcome = subsume_outcome(context, output, goal_type, None).ok()?;
+        }
 
-    // An explicit parameter list nothing pinned is an arity, not a suggestion.
-    if holes > 0 && pinned == 0 {
-        return None;
-    }
+        let mut holes = 0usize;
+        let mut pinned = 0usize;
+        let mut hole_ids = BTreeSet::new();
+        let kept: Vec<Term> = args
+            .iter()
+            .zip(plicities)
+            .filter_map(|(slot, plicity)| {
+                let (arg, _) = slot;
+                let arg = zonk_solved_term_metas(context, arg);
+                match (plicity, unsolved(context, &arg)) {
+                    // Hidden slots re-infer on paste, solved or not.
+                    (Plicity::Implicit | Plicity::Witness, _) => None,
+                    (Plicity::Explicit, true) => {
+                        holes += 1;
+                        hole_ids.extend(arg.metavars());
+                        Some(hole.clone())
+                    }
+                    (Plicity::Explicit, false) => {
+                        pinned += 1;
+                        Some(arg)
+                    }
+                }
+            })
+            .collect();
 
-    let built = zonk_solved_term_metas(context, &Term::apply(head.clone(), kept));
-    Some((built, holes))
+        match outcome {
+            Outcome::Converts => {}
+            // Undecided on exactly the open slots is the advisory refinement; undecided on anything else — a hidden slot the goal never reached — is a fit nothing distinguishes from a mismatch.
+            Outcome::Blocked(goals) => {
+                if holes == 0 || flex_result {
+                    return None;
+                }
+                let blockers: BTreeSet<_> = goals
+                    .iter()
+                    .flat_map(|goal| [&goal.this, &goal.that, &goal.type_])
+                    .flat_map(|term| zonk_solved_term_metas(context, term).metavars())
+                    .filter(|id| context.metavar_solution(*id).is_none())
+                    .collect();
+                if blockers.is_empty() || !blockers.is_subset(&hole_ids) {
+                    return None;
+                }
+            }
+            Outcome::Mismatch(_) => return None,
+        }
+
+        // An explicit parameter list nothing pinned is an arity, not a suggestion.
+        if holes > 0 && pinned == 0 {
+            return None;
+        }
+
+        let built = zonk_solved_term_metas(context, &Term::apply(head.clone(), kept));
+        Some((built, holes))
+    })
 }
 
 /// Pool 1: constructor fits for an inductive goal, and the literal shape for a struct goal.
