@@ -128,6 +128,38 @@ fn plugin() -> Vec<u8> {
         vec![local(0), Instr::I32Const { value: 1 }, Instr::I32Add],
     );
 
+    // A recursion with no end: the export calls itself, so only the engine's limit stops it.
+    export(
+        &mut module,
+        "spin",
+        vec![],
+        vec![i64_type()],
+        vec![Instr::Call {
+            func_name: FuncName::from("spin"),
+        }],
+    );
+
+    // An export that traps where it stands.
+    export(
+        &mut module,
+        "boom",
+        vec![],
+        vec![i64_type()],
+        vec![Instr::Unreachable],
+    );
+
+    // A byte-string answer past the end of the one page the module's memory holds.
+    export(
+        &mut module,
+        "far",
+        vec![],
+        vec![i32_type(), i32_type()],
+        vec![
+            Instr::I32Const { value: 65530 },
+            Instr::I32Const { value: 100 },
+        ],
+    );
+
     // A byte string crossing: the `(ptr, len)` pair handed straight back, which is what proves the write and the read back agree on where the bytes are.
     export(
         &mut module,
@@ -172,7 +204,7 @@ fn run_linked(source: &str, modules: Vec<DeclaredModule>) -> Result<u8, String> 
     )
     .expect("compile succeeded");
 
-    let bindings = plugin_bindings(foreigns.clone(), modules)?;
+    let bindings = plugin_bindings(&foreigns, modules)?;
     let (system, _io) = MockHost::builder().build();
 
     run_wasm(&module, foreigns, system, bindings)
@@ -399,5 +431,93 @@ fn a_declaration_two_modules_claim_is_refused() {
     )
     .expect_err("one declaration, two answers");
 
-    assert!(refusal.contains("`/double` is claimed twice"), "{refusal}");
+    assert!(
+        refusal.contains(
+            "`/double` is claimed twice: by `double` of the module \"probe\" of fixture, and by `double` of the module \"probe\" of fixture"
+        ),
+        "{refusal}"
+    );
+}
+
+/// Two exports of one module named for one declaration are refused by both their names: the claim that is second says which export made it, beside the first.
+#[test]
+fn a_declaration_two_exports_claim_is_refused_naming_both() {
+    let refusal = run_against(
+        r#"
+        foreign double(Nat) -> Nat;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+        /std/Io/pure(())
+        "#,
+        &[("double", "/double"), ("ones", "/double")],
+    )
+    .expect_err("one declaration, two answers");
+
+    assert!(
+        refusal.contains(
+            "`/double` is claimed twice: by `double` of the module \"probe\" of fixture, and by `ones` of the module \"probe\" of fixture"
+        ),
+        "{refusal}"
+    );
+}
+
+/// A module's trap ends the run as a refusal that says who trapped, in which export, and what the engine said of it: a trap's own display is its frames, so the cause is carried in the sentence.
+#[test]
+fn a_modules_trap_names_the_module_the_export_and_the_cause() {
+    let refusal = run_against(
+        r#"
+        foreign boom() -> Nat;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(boom()! % 256))!;
+        /std/Io/pure(())
+        "#,
+        &[("boom", "/boom")],
+    )
+    .expect_err("the export traps");
+
+    assert!(
+        refusal.contains("the module \"probe\" of fixture failed in `boom`: wasm trap: wasm `unreachable` instruction executed"),
+        "{refusal}"
+    );
+}
+
+/// A byte string a module answers past the end of its own memory is refused by the module's name and the export's, as a `Byte` answered past 255 is.
+#[test]
+fn an_answer_past_a_modules_memory_names_the_module_and_the_export() {
+    let refusal = run_against(
+        r#"
+        foreign far() -> Bytes;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(/std/Bytes/len(far()!) % 256))!;
+        /std/Io/pure(())
+        "#,
+        &[("far", "/far")],
+    )
+    .expect_err("the answer is past the memory");
+
+    assert!(
+        refusal.contains("the module \"probe\" of fixture answered `far` with 100 bytes at 65530, past the end of its memory"),
+        "{refusal}"
+    );
+}
+
+/// A module's recursion with no end stops on the engine's trap wherever in the program it is called from: the module is an instance in the program's own store, so the limit set where the program was entered bounds its frames too. Here it is called from the last element of a walk two million frames deep; in a store of its own it would be handed the whole limit again below that frame, of a stack that holds it once, and the process would abort with no trap.
+#[test]
+fn a_modules_recursion_from_a_deep_frame_stops_on_the_engines_trap() {
+    let refusal = run_against(
+        r#"
+        use /std/{Io, List, Nat};
+        foreign spin() -> Nat;
+        let numbers = List/range(0, 2000000);
+        let walked = List/traverse(numbers, (n: Nat) => match n == 1999999 | true => spin() | false => Io/pure(n) end)!;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(List/len(walked) % 256))!;
+        /std/Io/pure(())
+        "#,
+        &[("spin", "/spin")],
+    )
+    .expect_err("a recursion with no end cannot answer");
+
+    assert!(
+        refusal.contains(
+            "the module \"probe\" of fixture failed in `spin`: wasm trap: call stack exhausted"
+        ),
+        "{refusal}"
+    );
 }

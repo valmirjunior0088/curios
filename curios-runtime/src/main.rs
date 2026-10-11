@@ -37,7 +37,7 @@ fn main() -> ExitCode {
             })
             .collect();
 
-        let bindings = plugin_bindings(bundle.foreigns.clone(), declared)?;
+        let bindings = plugin_bindings(&bundle.foreigns, declared)?;
 
         // SAFETY: the payload is what this executable's own tail carries, appended by the compiler that embedded this launcher.
         let program = unsafe { Compiled::deserialize(&bundle.program, bundle.foreigns) }?;

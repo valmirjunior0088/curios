@@ -1,7 +1,8 @@
 use {
     super::{
-        Handle, HostOps, Lift, Mode, Poll, Replied, Reply, SerialFlow, SerialOp, SerialParity,
-        StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type, words_array_type,
+        Handle, HostOps, Lift, Mode, Plugin, Poll, Replied, Reply, SerialFlow, SerialOp,
+        SerialParity, StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type,
+        words_array_type,
     },
     curios_abi::{
         Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireOperand,
@@ -141,7 +142,7 @@ pub enum Returned {
 
 impl Returned {
     /// What a declaration states of the same: its results' wire types, their labels being the guest's alone, or that its call does not return.
-    fn declared(returns: &WireReturn) -> Self {
+    pub(crate) fn declared(returns: &WireReturn) -> Self {
         match returns {
             WireReturn::Answers(results) => Returned::Values(results.types()),
             WireReturn::Never => Returned::Never,
@@ -202,8 +203,15 @@ impl Answers {
     }
 
     /// Answer the row declared as `name` with a trampoline that marshals for itself, stating what it takes and comes back with.
-    fn answer_raw<F>(&mut self, name: String, params: Vec<WireType>, returned: Returned, f: F)
-    where
+    ///
+    /// [`answer`](Self::answer) is the door for an implementation written against Rust types, where the signature is known where the closure is written and `Lift`/`Lower` pick themselves from it. A module's is not: its marshalling is decided by a [`WireSignature`](curios_abi::WireSignature) read at run time, so the closure has to see the raw slots and choose.
+    pub(crate) fn answer_raw<F>(
+        &mut self,
+        name: String,
+        params: Vec<WireType>,
+        returned: Returned,
+        f: F,
+    ) where
         F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
     {
         let answer = Answer {
@@ -260,6 +268,8 @@ impl Answers {
 #[derive(Clone, Default)]
 pub struct ForeignBindings {
     pub(crate) answers: Answers,
+    /// The modules resolved for the program, each instantiated into the program's own store where a run begins, and answering there the rows it was resolved for.
+    pub(crate) modules: Vec<Arc<Plugin>>,
 }
 
 impl ForeignBindings {
@@ -276,23 +286,6 @@ impl ForeignBindings {
         F: Fn(Li) -> Lo + Send + Sync + 'static,
     {
         self.answers.answer(name.to_string(), f);
-    }
-
-    /// Answer the row `row` with a trampoline that marshals for itself, crossing as the row declares.
-    ///
-    /// [`define`](Self::define) is the door for an implementation written against Rust types, where the signature is known where the closure is written and `Lift`/`Lower` pick themselves from it. A plugin's is not: its marshalling is decided by a [`WireSignature`](curios_abi::WireSignature) read at run time, so the closure has to see the raw slots and choose. `pub(crate)` because those slots are wasmtime's vocabulary, which nothing above this crate names.
-    pub(crate) fn define_raw<F>(&mut self, row: &ForeignFunction, f: F)
-    where
-        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
-    {
-        let signature = row.signature();
-
-        self.answers.answer_raw(
-            row.name().to_string(),
-            signature.params.clone(),
-            Returned::declared(&signature.returns),
-            f,
-        );
     }
 }
 
@@ -524,7 +517,16 @@ fn entered<E: Ended>(
     bindings: ForeignBindings,
     host: Answers,
 ) -> Result<E, String> {
-    let bindings = bindings.answers;
+    let mut store = Store::new(engine, ());
+
+    // A module is instantiated into the program's own store, ahead of the program, and answers its rows there beside an embedder's.
+    let ForeignBindings {
+        answers: mut bindings,
+        modules,
+    } = bindings;
+    for module in &modules {
+        module.instantiate(&mut store, &mut bindings)?;
+    }
     bindings.admit(foreigns)?;
 
     let mut linker = Linker::new(engine);
@@ -576,8 +578,6 @@ fn entered<E: Ended>(
             }
         }
     }
-
-    let mut store = Store::new(engine, ());
 
     let instance = linker
         .instantiate(&mut store, module)

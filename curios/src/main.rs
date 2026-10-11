@@ -204,7 +204,7 @@ fn bindings_of(root: Option<&Path>, foreigns: ForeignStore) -> Result<ForeignBin
         })
         .collect();
 
-    plugin_bindings(foreigns, declared)
+    plugin_bindings(&foreigns, declared)
 }
 
 fn dispatch() -> Result<(), Failure> {
