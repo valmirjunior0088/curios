@@ -154,6 +154,38 @@ struct Declared<'a> {
     manifest: &'a Path,
 }
 
+/// One target's test program as it is compiled: the units it stands on, its entry with the loader that entry's `mod` lines resolve through, the text the entry was parsed from and the file it is, and the tail that schedules the tests.
+struct Tests<'a> {
+    units: &'a [RootSource],
+    entrypoint: &'a Entrypoint,
+    loader: &'a RootSource,
+    text: &'a str,
+    entry: &'a Path,
+    tail: EntryTail,
+}
+
+/// Where a target's test payload is filed and whom its compilation is reported under: the store, the package and the name reserved in it for the payload, the subject a progress line names and the manifest a report names.
+struct Filing<'a> {
+    store: Option<&'a Verdicts>,
+    package: &'a str,
+    reserved: &'a str,
+    subject: &'a Subject,
+    manifest: Option<&'a Path>,
+}
+
+impl<'a> Filing<'a> {
+    /// A loose target's: filed nowhere and under no package, reported under `subject` alone.
+    fn nowhere(subject: &'a Subject) -> Self {
+        Self {
+            store: None,
+            package: "",
+            reserved: "",
+            subject,
+            manifest: None,
+        }
+    }
+}
+
 /// What a filter met among the tests of the targets compiled so far: whether any stood at or under it, and the paths of the tests it passed over, which a filter that matched nothing is answered with.
 #[derive(Default)]
 struct Met {
@@ -242,17 +274,21 @@ impl Run<'_> {
         let store = self.access.filed(declared.root);
         let (records, cwasm, foreigns) = tests_payload(
             self.budget,
-            units,
-            &Entrypoint::trivial(),
-            &RootSource::none(),
-            LIBRARY_KEY,
-            &library,
-            store.as_ref(),
-            declared.package,
-            "tests/",
-            EntryTail::LastUnitTests,
-            &subject,
-            Some(declared.manifest),
+            Tests {
+                units,
+                entrypoint: &Entrypoint::trivial(),
+                loader: &RootSource::none(),
+                text: LIBRARY_KEY,
+                entry: &library,
+                tail: EntryTail::LastUnitTests,
+            },
+            Filing {
+                store: store.as_ref(),
+                package: declared.package,
+                reserved: "tests/",
+                subject: &subject,
+                manifest: Some(declared.manifest),
+            },
         )?;
         self.refused(store.as_ref());
 
@@ -283,17 +319,21 @@ impl Run<'_> {
         let (entrypoint, loader, source) = open(Some(entry))?;
         let (records, cwasm, foreigns) = tests_payload(
             self.budget,
-            units,
-            &entrypoint,
-            &loader,
-            &source.text,
-            entry,
-            store.as_ref(),
-            declared.package,
-            &format!("tests/{name}"),
-            EntryTail::Tests,
-            &subject,
-            Some(declared.manifest),
+            Tests {
+                units,
+                entrypoint: &entrypoint,
+                loader: &loader,
+                text: &source.text,
+                entry,
+                tail: EntryTail::Tests,
+            },
+            Filing {
+                store: store.as_ref(),
+                package: declared.package,
+                reserved: &format!("tests/{name}"),
+                subject: &subject,
+                manifest: Some(declared.manifest),
+            },
         )?;
         self.refused(store.as_ref());
 
@@ -316,17 +356,15 @@ impl Run<'_> {
     ) -> Result<(), CompileError> {
         let (records, cwasm, foreigns) = tests_payload(
             self.budget,
-            &[unit],
-            &Entrypoint::trivial(),
-            &RootSource::none(),
-            LIBRARY_KEY,
-            invoked,
-            None,
-            "",
-            "",
-            EntryTail::LastUnitTests,
-            subject,
-            None,
+            Tests {
+                units: &[unit],
+                entrypoint: &Entrypoint::trivial(),
+                loader: &RootSource::none(),
+                text: LIBRARY_KEY,
+                entry: invoked,
+                tail: EntryTail::LastUnitTests,
+            },
+            Filing::nowhere(subject),
         )?;
 
         // A loose target has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
@@ -342,17 +380,15 @@ impl Run<'_> {
     ) -> Result<(), CompileError> {
         let (records, cwasm, foreigns) = tests_payload(
             self.budget,
-            &[],
-            &entrypoint,
-            &loader,
-            &source.text,
-            invoked,
-            None,
-            "",
-            "",
-            EntryTail::Tests,
-            subject,
-            None,
+            Tests {
+                units: &[],
+                entrypoint: &entrypoint,
+                loader: &loader,
+                text: &source.text,
+                entry: invoked,
+                tail: EntryTail::Tests,
+            },
+            Filing::nowhere(subject),
         )?;
 
         // A loose target has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
@@ -367,7 +403,7 @@ impl Run<'_> {
             .or_else(|| store.and_then(Verdicts::refused));
     }
 
-    /// Run the tests of one compiled target the filter selects.
+    /// Run every record of one compiled target the filter selects, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the unit's tally, which is folded into the run's. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
     fn selected(
         &mut self,
         records: &[TestRecord],
@@ -377,17 +413,70 @@ impl Run<'_> {
         root: Option<&Path>,
         foreigns: &ForeignStore,
     ) -> Result<(), CompileError> {
-        run_selected(
-            records,
-            cwasm,
-            entry,
-            subject,
-            self.filter,
-            &mut self.totals,
-            &mut self.met,
-            root,
-            foreigns,
-        )
+        let filter = self.filter;
+        let selected = records
+            .iter()
+            .enumerate()
+            .filter(|(_, record)| filter.is_none_or(|prefix| under(&record.path, prefix)))
+            .collect::<Vec<_>>();
+
+        // A unit with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.
+        if selected.is_empty() {
+            if filter.is_some() {
+                self.met
+                    .passed
+                    .extend(records.iter().map(|record| record.path.clone()));
+            }
+            return Ok(());
+        }
+        self.met.any = true;
+
+        // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
+        let compiled = unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }
+            .map_err(CompileError::failure)?;
+
+        step(Heading::Testing, subject);
+        // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/proc/args` promises opaque byte strings.
+        let argv0 = entry.as_os_str().as_encoded_bytes().to_vec();
+        let mut unit = Totals::default();
+
+        // Resolved once for the unit: its manifests are walked and its modules compiled here, and each test below is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's.
+        let bindings = bindings_of(root, foreigns).map_err(CompileError::failure)?;
+
+        for (index, record) in selected {
+            let arguments = vec![argv0.clone(), index.to_string().into_bytes()];
+
+            match compiled.run_test(OsHost::with_args(arguments), bindings.clone()) {
+                // The guest printed `path: passed` and answered that the test held.
+                Ok(TestEnd::Answered(true)) => unit.passed += 1,
+                // The guest printed `path: failed` and its report, and answered that the test did not hold; the body as written is what only the records know.
+                Ok(TestEnd::Answered(false)) => {
+                    unit.failed += 1;
+                    body(record);
+                }
+                // The test exited on its own, before the scheduler could report — its line is written here, whatever the code: a verdict is answered, never exited with.
+                Ok(TestEnd::Exited(code)) => {
+                    unit.exited += 1;
+                    println!("{}: exited {code}", record.path);
+                    body(record);
+                }
+                Err(trap) => {
+                    unit.trapped += 1;
+                    println!("{}: trapped", record.path);
+                    for line in trap.lines() {
+                        println!("  {line}");
+                    }
+                    body(record);
+                }
+            }
+        }
+
+        let mut line = Line::nested(Heading::Tested, subject);
+        line.outcome(&unit.line());
+        eprintln!();
+        self.totals.add(&unit);
+
+        Ok(())
     }
 
     /// The end of the run: a store's refusal said once, a filter that matched nothing refused by name, and the count line.
@@ -411,22 +500,27 @@ impl Run<'_> {
     }
 }
 
-/// The records and machine code of one target compiled as a test program — from `store` when nothing it was made from has changed, and compiled and filed there otherwise. Without a store, compiled and filed nowhere.
-#[allow(clippy::too_many_arguments)]
+/// The records and machine code of one target compiled as a test program — from the filing's store when nothing it was made from has changed, and compiled and filed there otherwise. Without a store, compiled and filed nowhere.
 fn tests_payload(
     budget: u64,
-    units: &[RootSource],
-    entrypoint: &Entrypoint,
-    loader: &RootSource,
-    text: &str,
-    entry: &Path,
-    store: Option<&Verdicts>,
-    package: &str,
-    reserved: &str,
-    tail: EntryTail,
-    subject: &Subject,
-    manifest: Option<&Path>,
+    tests: Tests<'_>,
+    filing: Filing<'_>,
 ) -> Result<(Vec<TestRecord>, Vec<u8>, ForeignStore), CompileError> {
+    let Tests {
+        units,
+        entrypoint,
+        loader,
+        text,
+        entry,
+        tail,
+    } = tests;
+    let Filing {
+        store,
+        package,
+        reserved,
+        subject,
+        manifest,
+    } = filing;
     let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
     let program = Program {
         package,
@@ -478,83 +572,6 @@ fn under(path: &str, prefix: &str) -> bool {
 
     path.strip_prefix(prefix)
         .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
-}
-
-/// Run every record `filter` selects, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the unit's tally, which is folded into `totals`. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
-#[allow(clippy::too_many_arguments)]
-fn run_selected(
-    records: &[TestRecord],
-    cwasm: &[u8],
-    entry: &Path,
-    subject: &Subject,
-    filter: Option<&str>,
-    totals: &mut Totals,
-    met: &mut Met,
-    root: Option<&Path>,
-    foreigns: &ForeignStore,
-) -> Result<(), CompileError> {
-    let selected = records
-        .iter()
-        .enumerate()
-        .filter(|(_, record)| filter.is_none_or(|prefix| under(&record.path, prefix)))
-        .collect::<Vec<_>>();
-
-    // A unit with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.
-    if selected.is_empty() {
-        if filter.is_some() {
-            met.passed
-                .extend(records.iter().map(|record| record.path.clone()));
-        }
-        return Ok(());
-    }
-    met.any = true;
-
-    // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
-    let compiled =
-        unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }.map_err(CompileError::failure)?;
-
-    step(Heading::Testing, subject);
-    // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/proc/args` promises opaque byte strings.
-    let argv0 = entry.as_os_str().as_encoded_bytes().to_vec();
-    let mut unit = Totals::default();
-
-    // Resolved once for the unit: its manifests are walked and its modules compiled here, and each test below is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's.
-    let bindings = bindings_of(root, foreigns).map_err(CompileError::failure)?;
-
-    for (index, record) in selected {
-        let arguments = vec![argv0.clone(), index.to_string().into_bytes()];
-
-        match compiled.run_test(OsHost::with_args(arguments), bindings.clone()) {
-            // The guest printed `path: passed` and answered that the test held.
-            Ok(TestEnd::Answered(true)) => unit.passed += 1,
-            // The guest printed `path: failed` and its report, and answered that the test did not hold; the body as written is what only the records know.
-            Ok(TestEnd::Answered(false)) => {
-                unit.failed += 1;
-                body(record);
-            }
-            // The test exited on its own, before the scheduler could report — its line is written here, whatever the code: a verdict is answered, never exited with.
-            Ok(TestEnd::Exited(code)) => {
-                unit.exited += 1;
-                println!("{}: exited {code}", record.path);
-                body(record);
-            }
-            Err(trap) => {
-                unit.trapped += 1;
-                println!("{}: trapped", record.path);
-                for line in trap.lines() {
-                    println!("  {line}");
-                }
-                body(record);
-            }
-        }
-    }
-
-    let mut line = Line::nested(Heading::Tested, subject);
-    line.outcome(&unit.line());
-    eprintln!();
-    totals.add(&unit);
-
-    Ok(())
 }
 
 /// The failing declaration's body as written, indented beneath the report — absent when no span survived to slice it from.
