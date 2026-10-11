@@ -88,7 +88,41 @@ pub enum WireShape {
     Reference(WireReference),
 }
 
+/// What a wire type crosses the boundary as at the Wasm level, in either direction: the one statement the emitter types an import by and a runtime answers it by, so the two ends have no mapping of their own to keep alike.
+///
+/// A scalar is the number it is. A reference is a flat payload, an array the guest forces a value to on the way out and embeds back on the way in: bytes for the two packed grains and for a handle's token, and for a list one element a value, a scalar as a lone one crosses and a reference as its own payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Carrier {
+    /// A raw `i64`: a `Nat` or an `Int`.
+    I64,
+    /// A raw `i32`: a `Bool` or a `Byte`.
+    I32,
+    /// A raw `f64`: an `Flt`.
+    F64,
+    /// An array of `i8`: a `Bytes`, a `Bits`, or the token a `Handle` is.
+    Bytes,
+    /// An array of `i64`: a list of `Nat` or of `Int`.
+    Longs,
+    /// An array of `i32`: a list of `Bool`.
+    Words,
+    /// An array of references, each the payload its element crosses as: a list of `Bytes`, `Bits` or `Handle`.
+    Elems,
+}
+
 impl WireType {
+    /// What this type crosses the boundary as.
+    pub fn carrier(self) -> Carrier {
+        match self {
+            WireType::Nat | WireType::Int => Carrier::I64,
+            WireType::Bool | WireType::Byte => Carrier::I32,
+            WireType::Flt => Carrier::F64,
+            WireType::Bytes | WireType::Bits | WireType::Handle => Carrier::Bytes,
+            WireType::List(WireLeaf::Nat | WireLeaf::Int) => Carrier::Longs,
+            WireType::List(WireLeaf::Bool) => Carrier::Words,
+            WireType::List(WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle) => Carrier::Elems,
+        }
+    }
+
     /// How this type crosses the boundary.
     pub fn shape(self) -> WireShape {
         match self {

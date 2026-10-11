@@ -308,6 +308,36 @@ fn lift_bytes_array(
         .collect()
 }
 
+/// A run of bits as a binding takes and answers one: the packed bytes a `Bits` crosses as. A binding states it where its row states `Bits`, as it states `Vec<u8>` where the row states `Bytes`, so the two grains are two types on this side of the wire as they are on the guest's.
+///
+/// The wire carries no bit count. A run whose length is no multiple of eight arrives padded to its bytes, and the guest seals what a binding answers at eight bits a byte.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bits(pub Vec<u8>);
+
+impl Lift for Bits {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Bits]
+    }
+
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Vec::<u8>::lift(caller, params).map(Bits)
+    }
+}
+
+/// `List(Bits)` lifts each element as the packed bytes it crosses as.
+impl Lift for Vec<Bits> {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::List(WireLeaf::Bits)]
+    }
+
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok(lift_bytes_array(caller, &params[0])?
+            .into_iter()
+            .map(Bits)
+            .collect())
+    }
+}
+
 /// `List(Bytes)` lifts each element as the `Bytes` it is — `proc_spawn`'s argument and environment lists.
 impl Lift for Vec<Vec<u8>> {
     fn shape() -> Vec<WireType> {

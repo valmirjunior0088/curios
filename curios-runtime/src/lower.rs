@@ -1,5 +1,5 @@
 use {
-    super::{ExitTrap, Handle},
+    super::{Bits, ExitTrap, Handle},
     curios_abi::{Encoded, HostOp, WireLeaf, WireReply, WireType, WireValue},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
@@ -260,6 +260,39 @@ impl Lower for Vec<u8> {
         ));
 
         Ok(())
+    }
+}
+
+/// A `Bits` result, as the packed bytes it crosses as.
+impl Lower for Bits {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Bits]
+    }
+
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        self.0.lower(caller, results)
+    }
+}
+
+/// `List(Bits)`, each run as the packed bytes it crosses as.
+impl Lower for Vec<Bits> {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::List(WireLeaf::Bits)]
+    }
+
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        self.into_iter()
+            .map(|Bits(bytes)| bytes)
+            .collect::<Vec<_>>()
+            .lower(caller, results)
     }
 }
 

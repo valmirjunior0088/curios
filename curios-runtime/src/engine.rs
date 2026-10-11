@@ -4,7 +4,7 @@ use {
         StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type, words_array_type,
     },
     curios_abi::{
-        ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireOperand,
+        Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireOperand,
         WireType, for_each_host_op,
     },
     std::{
@@ -85,7 +85,7 @@ pub fn shared_engine() -> &'static Engine {
     &ENGINE
 }
 
-/// The wasmtime type of one host import, derived from its `WireSignature` — the same derivation `curios-emit` applies to the module's import section, so the two ends cannot drift (and wasmtime validates them against each other at instantiation). Scalars cross raw in both directions — `i64` for a `Nat` or `Int`, `i32` for a `Bool` or a `Byte`, `f64` for an `Flt` — and the guest boxes a result; `Bytes`/`Bits`/`Handle` are the concrete i8-array, a list of `Nat` or `Int` the `i64` longs array, a list of `Bool` the `i32` words array, any other `List` the anyref-element array — wasmtime-universe mirrors of curios-emit's `bytes_sub_type`/`longs_sub_type`/`words_sub_type`/`elems_sub_type` (the flat payloads every reference crosses the boundary as); keep the two ends in sync.
+/// The wasmtime type of one host import, derived from its `WireSignature`: each type as the carrier `WireType::carrier` states, which is the statement `curios-emit` types the module's import section by, and wasmtime validates the two against each other at instantiation. A scalar is the raw number, and the guest boxes a result; an array carrier is this engine's own registration of the payload type the emitter declares (`bytes_sub_type`, `longs_sub_type`, `words_sub_type`, `elems_sub_type`).
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let signature = function.signature();
 
@@ -111,14 +111,14 @@ fn wire_func_type(engine: &Engine, params: &[WireType], results: &[WireType]) ->
         HeapType::ConcreteArray(words_array_type(engine)),
     ));
     // Raw in both directions: a host hands back a number and the guest boxes it, so nothing here needs to know a layout curios-emit defines.
-    let val_type = |wire_type: &WireType| match wire_type {
-        WireType::Nat | WireType::Int => ValType::I64,
-        WireType::Bool | WireType::Byte => ValType::I32,
-        WireType::Flt => ValType::F64,
-        WireType::Bytes | WireType::Bits | WireType::Handle => bytes_ref.clone(),
-        WireType::List(WireLeaf::Nat | WireLeaf::Int) => longs_ref.clone(),
-        WireType::List(WireLeaf::Bool) => words_ref.clone(),
-        WireType::List(_) => list_ref.clone(),
+    let val_type = |wire_type: &WireType| match wire_type.carrier() {
+        Carrier::I64 => ValType::I64,
+        Carrier::I32 => ValType::I32,
+        Carrier::F64 => ValType::F64,
+        Carrier::Bytes => bytes_ref.clone(),
+        Carrier::Longs => longs_ref.clone(),
+        Carrier::Words => words_ref.clone(),
+        Carrier::Elems => list_ref.clone(),
     };
 
     FuncType::new(
@@ -164,19 +164,10 @@ impl ForeignBindings {
             .get(name)
             .unwrap_or_else(|| panic!("'{name}' is not in the foreign store"))
             .signature();
-        let params = signature
-            .params
-            .iter()
-            .map(|wire_type| codec(*wire_type))
-            .collect::<Vec<_>>();
-        let results = signature
-            .returns
-            .types()
-            .into_iter()
-            .map(codec)
-            .collect::<Vec<_>>();
+        let params = &signature.params;
+        let results = signature.returns.types();
 
-        assert_eq!(Li::shape(), params, "'{name}' takes {params:?}");
+        assert_eq!(&Li::shape(), params, "'{name}' takes {params:?}");
         assert_eq!(Lo::shape(), results, "'{name}' answers {results:?}");
 
         let trampoline: Trampoline = Arc::new(move |mut caller, params, results| {
@@ -249,15 +240,6 @@ impl ForeignBindings {
     }
 }
 
-/// The wire type whose codec reads `wire_type`: a `Bits` value crosses as the packed bytes a `Bytes` codec reads, and is sealed at its length by the guest rather than the host, so a binding reads it as `Bytes` — and every other type is read by its own codec.
-fn codec(wire_type: WireType) -> WireType {
-    match wire_type {
-        WireType::Bits => WireType::Bytes,
-        WireType::List(WireLeaf::Bits) => WireType::List(WireLeaf::Bytes),
-        other => other,
-    }
-}
-
 /// What a host answers of the rows a unit declares, by the name each is declared under: the wire types its implementation takes and answers, as its Rust types state them, and its trampoline.
 ///
 /// A program's `ffi` import is linked here where no binding answers it, so a row the standard library declares is answered by the host as a row a package declares is answered by its module. An implementation is held to the program's declaration where it is linked, and a disagreement is a refusal naming the row.
@@ -312,8 +294,6 @@ impl Provided {
 
         if let Some(function) = declared {
             let signature = function.signature();
-            let crossing =
-                |types: &[WireType]| types.iter().copied().map(codec).collect::<Vec<_>>();
             let spelled = |types: &[WireType]| {
                 types
                     .iter()
@@ -322,9 +302,7 @@ impl Provided {
                     .join(", ")
             };
 
-            if crossing(&signature.params) != *params
-                || crossing(&signature.returns.types()) != *results
-            {
+            if signature.params != *params || signature.returns.types() != *results {
                 return Err(format!(
                     "this host answers `{name}` as ({}) -> ({}), and the program declares it ({}) -> ({})",
                     spelled(params),

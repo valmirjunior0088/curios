@@ -5,7 +5,7 @@ use {
         EmissionValue, EmissionValueName, FltHelper, LoadAs, call, concrete_val, get, i64_const,
         refuse_func_name, tee, when,
     },
-    curios_abi::{ForeignFunction, Namespace, WireLeaf, WireType},
+    curios_abi::{Carrier, ForeignFunction, Namespace, WireLeaf, WireType},
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, HashMap, HashSet},
@@ -595,22 +595,19 @@ impl<'a> Table<'a> {
         self.list_rope_type.clone()
     }
 
-    /// The wasm-level type a value of the given wire type crosses the host boundary as, in either direction: a `Nat` or `Int` as a raw `i64`, a `Bool` as a raw `i32`, `Flt` as a raw `f64`, references as their concrete non-nullable heap type (a handle is its `Bytes` token).
+    /// The wasm-level type a value of the given wire type crosses the host boundary as, in either direction: the carrier `WireType::carrier` states, a scalar as its raw number and a reference as the concrete non-nullable heap type of its payload.
     ///
     /// **A scalar crosses as the number it is, both ways.** Going out, the call site narrows a `Nat` or `Int` through `LoadAs::WireNat`/`LoadAs::WireInt`, refusing past the wire, reads a `Bool` as its word and an `Flt` out of its box. Coming back, the guest boxes what the host answered (`Context::host_instrs`), because every box is a layout this crate defines: an `Flt`'s `$flt` struct, and a `Nat` or `Int` past the i31 the boxed magnitude. A host that minted either would be a second crate needing that layout, and one that could mint only the i31 would have to refuse a result past it.
     pub(crate) fn wire_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
-        match wire_type {
-            WireType::Nat | WireType::Int => curios_wasm::ValType::Num(curios_wasm::NumType::I64),
-            WireType::Bool | WireType::Byte => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-            WireType::Flt => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
-            WireType::Bytes | WireType::Bits | WireType::Handle => {
-                concrete_val(self.bytes_type(), false)
-            }
+        match wire_type.carrier() {
+            Carrier::I64 => curios_wasm::ValType::Num(curios_wasm::NumType::I64),
+            Carrier::I32 => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+            Carrier::F64 => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
+            Carrier::Bytes => concrete_val(self.bytes_type(), false),
             // A list of scalars is one flat element per value, narrowed and boxed by the guest as a scalar is; a list of references is their flat payloads.
-            WireType::List(leaf @ (WireLeaf::Nat | WireLeaf::Int | WireLeaf::Bool)) => {
-                concrete_val(self.scalars_type(*leaf), false)
-            }
-            WireType::List(_) => concrete_val(self.elems_type(), false),
+            Carrier::Longs => concrete_val(self.longs_type(), false),
+            Carrier::Words => concrete_val(self.words_type.clone(), false),
+            Carrier::Elems => concrete_val(self.elems_type(), false),
         }
     }
 

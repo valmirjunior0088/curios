@@ -2,7 +2,7 @@
 
 use {
     super::{ForeignBindings, host_rows, shared_engine},
-    crate::MockHost,
+    crate::{Bits, MockHost},
     curios_abi::{
         ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults, WireReturn, WireSignature,
         WireType,
@@ -63,9 +63,9 @@ fn every_host_answer_crosses_as_its_row() {
     }
 }
 
-/// A `Bits` value crosses as the packed bytes a `Bytes` value does, so the codec that reads one reads the other.
+/// A binding states `Bits` where its row does: the grains are two types on both sides of the wire, though one payload crosses for either.
 #[test]
-fn a_bits_row_is_read_by_the_bytes_codec() {
+fn a_bits_row_is_bound_by_a_bits_value() {
     let mut store = ForeignStore::new();
 
     store.register(ForeignFunction {
@@ -76,5 +76,5 @@ fn a_bits_row_is_read_by_the_bytes_codec() {
         },
     });
 
-    ForeignBindings::new(store).define("/echo", |runs: Vec<Vec<u8>>| runs);
+    ForeignBindings::new(store).define("/echo", |runs: Vec<Bits>| runs);
 }

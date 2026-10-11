@@ -3,7 +3,7 @@
 use {
     crate::tests::{run, run_text},
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{ForeignBindings, MockHost, SocketEvent},
+    curios_runtime::{Bits, ForeignBindings, MockHost, SocketEvent},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::test_support::Temporary,
 };
@@ -459,7 +459,7 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
 
 /// A `List(Bits)` in both directions, which is the one `Bits` path a plugin cannot reach — `crossing` refuses every list — so the deep force and embed the grain needed are exercised here or nowhere.
 ///
-/// **The host closure is `Vec<Vec<u8>>`, the same type a `List(Bytes)` binds through.** That is the claim being made rather than an economy: the grains share a payload, so the marshalling needed no new `Lift` or `Lower`, and what differs is only the length each embedded element is sealed at. The run is sixteen bits so it returns as it went, the padding case being pinned in `plugin_tests`.
+/// **The host closure is `Vec<Bits>`, where a `List(Bytes)` binds through `Vec<Vec<u8>>`.** The grains share a payload and are two types on both sides of the wire, so a binding states the one its row does, and what differs in the crossing is only the length each embedded element is sealed at. The run is sixteen bits so it returns as it went, the padding case being pinned in `plugin_tests`.
 #[test]
 fn a_list_of_bit_runs_crosses_in_both_directions() {
     let source = r#"
@@ -483,7 +483,7 @@ fn a_list_of_bit_runs_crosses_in_both_directions() {
     .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::new(foreigns);
-    bindings.define("/echo", |runs: Vec<Vec<u8>>| runs);
+    bindings.define("/echo", |runs: Vec<Bits>| runs);
 
     let (system, _io) = MockHost::builder().build();
     let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");
