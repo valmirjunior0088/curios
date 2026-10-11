@@ -18,7 +18,10 @@ type Chain = Option<Box<Node>>;
 fn build(n: u64, mut x: u64) -> Chain {
     let mut acc: Chain = None;
     for _ in 0..n {
-        acc = Some(Box::new(Node { value: x, next: acc }));
+        acc = Some(Box::new(Node {
+            value: x,
+            next: acc,
+        }));
         x = (75 * x) % 65537;
     }
     acc
@@ -29,7 +32,10 @@ fn step(mut rest: Chain) -> Chain {
     while let Some(node) = rest {
         let node = *node;
         rest = node.next;
-        acc = Some(Box::new(Node { value: (75 * node.value + 13) % 65537, next: acc }));
+        acc = Some(Box::new(Node {
+            value: (75 * node.value + 13) % 65537,
+            next: acc,
+        }));
     }
     acc
 }

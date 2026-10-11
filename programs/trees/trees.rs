@@ -8,7 +8,11 @@ fn build(d: u64, v: u64) -> Tree {
     if d == 0 {
         Tree::Leaf(v)
     } else {
-        Tree::Node(v, Box::new(build(d - 1, v * 2)), Box::new(build(d - 1, v * 2 + 1)))
+        Tree::Node(
+            v,
+            Box::new(build(d - 1, v * 2)),
+            Box::new(build(d - 1, v * 2 + 1)),
+        )
     }
 }
 
