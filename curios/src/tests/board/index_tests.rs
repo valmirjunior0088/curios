@@ -87,6 +87,37 @@ fn two_proofs_forced_on_one_binder_do_not_clash() {
     );
 }
 
+// The same conflict met from the scrutinee's side. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, one variable twice, so no position clashes on its own and the unifier's first direction, which reads a variable as what may yet be the target, decides nothing. Its second direction solves `n` to each target, and the two forcings clash as two forcings of one binder do: no value of `Two(n, n)` is `mk()`, whatever `n` is. Both checkers ask both directions of an absent arm, by the call a written arm is specialized by, so an arm may be left out exactly where the kernel would type none of it — a goal the case would refine among them, where a written arm has no body, and a clash that stands behind a position the first direction gave up on.
+#[test]
+fn a_variable_of_the_indices_forced_two_ways_excuses_the_arm() {
+    assert_eq!(
+        run(A_VARIABLE_OF_THE_INDICES_FORCED_TWO_WAYS_EXCUSES_THE_ARM),
+        b"ok"
+    );
+}
+
+// The control that direction is most dangerous without, and the exploit it would be. `Two/a()` and `Two/b()` are proofs, so `Apart/apart()` inhabits `Apart(x, x)` for every `x` by irrelevance; reading the two forcings of `x` as a clash would make `absurd` total on an inhabited type and `forged` a closed inhabitant of `False`. The forcings convert at `Two`, so the deletion rule keeps one before a clash is asked for, and the walk that would answer the clash reads the family's sort before its tags. The second fixture puts the proofs one constructor down, under a relevant `Wrap`, where the two forcings convert through their payloads.
+#[test]
+fn two_proofs_forced_on_one_variable_of_the_indices_do_not_clash() {
+    rejected_by(
+        TWO_PROOFS_FORCED_ON_ONE_VARIABLE_OF_THE_INDICES_DO_NOT_CLASH,
+        "is not provably impossible at the scrutinee's indices",
+    );
+    rejected_by(
+        TWO_PROOFS_UNDER_A_CONSTRUCTOR_FORCED_ON_ONE_VARIABLE_DO_NOT_CLASH,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// A variable forced twice to one value is forced once. `Two(m, m + 1)` against `(0, 1)` solves `m` to `0` from either position, so the case is reachable, at `m` zero, and its arm stays mandatory: excused, `absurd(0, Two/mk())` would be a closed inhabitant of `False`.
+#[test]
+fn a_variable_of_the_indices_forced_to_one_value_twice_does_not_clash() {
+    rejected_by(
+        A_VARIABLE_OF_THE_INDICES_FORCED_TO_ONE_VALUE_TWICE_DOES_NOT_CLASH,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
 // Short of a definite clash the pair is dropped and the arm stays mandatory. A variable may yet be `red()`.
 #[test]
 fn an_open_forcing_does_not_clash() {

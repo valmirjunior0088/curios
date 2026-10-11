@@ -6,9 +6,7 @@ use {
         reduce_with, refine_head, resolved_for_display, same_uncommitted, stuck_on_metavar,
         unreachable_arm,
     },
-    curios_analysis::{
-        Invert, invert_indices, retyped, scrutinee_solution, solve_indices, wholly_pinned,
-    },
+    curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
     curios_core::{
         Advance, Arity, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType,
         Intrinsic, IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Quality, Scope,
@@ -965,7 +963,7 @@ fn elaborate_induct_match(
                 return Err(Error::match_case_missing(name.symbol(), tag.to_string()));
             }
 
-            // Inversion — checker-verified omission: a missing arm is accepted iff first-order inversion of the scrutinee's actual indices against this case's targets finds a *definite* clash. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
+            // Inversion — checker-verified omission: a missing arm is accepted iff first-order unification of the scrutinee's actual indices against this case's targets finds a *definite* clash, in either direction — the answer a written arm is checked under, so an arm may be left out exactly where the kernel would type none of it. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
             let telescope = induct_decl
                 .instantiate(tag, &params)
                 .expect("constructor instantiates at its inductive's parameters");
@@ -977,7 +975,7 @@ fn elaborate_induct_match(
             // The case is opened as a written arm's is, its binders assumed, because inversion reconciles a binder forced twice *at its type*: `refl(@z) : (z, z)` against `Eq()(false, true)` is decided by what `false` and `true` are at `Bool`, and a binder that is only a name has no type to be asked at.
             let inversion = context.with_frame(|context| {
                 let ix_c = assume_payload(context, telescope, &labels);
-                invert_indices(context, &actual_indices, &ix_c, &labels)
+                solve_indices(context, &actual_indices, &ix_c, &labels)
             })?;
 
             match inversion {

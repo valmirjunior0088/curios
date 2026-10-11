@@ -326,6 +326,89 @@ pub(super) const A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM: &st
         /std/print("ok")
         "#;
 
+pub(super) const A_VARIABLE_OF_THE_INDICES_FORCED_TWO_WAYS_EXCUSES_THE_ARM: &str = r#"
+        use /std/{Bool, Eq, Nat};
+
+        induct Two : (a : Nat, b : Nat) -> Type
+        | mk() : (0, 1)
+        end
+
+        induct Tagged : (x : {Nat, Bool}) -> Type
+        | mk() : ((0, false))
+        end
+
+        let neither(n : Nat, x : Two(n, n)) -> Nat =
+            match x end;
+
+        let refined(n : Nat, h : Eq()(n, 7), x : Two(n, n)) -> Eq()(n, 7) =
+            match x end;
+
+        let behind(n : Nat, x : Tagged((n, true))) -> Nat =
+            match x end;
+
+        /std/print("ok")
+        "#;
+
+pub(super) const TWO_PROOFS_FORCED_ON_ONE_VARIABLE_OF_THE_INDICES_DO_NOT_CLASH: &str = r#"
+        use /std/Bool/{False};
+
+        induct Two : pub Prop
+        | a()
+        | b()
+        end
+
+        induct Apart : (x : Two, y : Two) -> pub Type
+        | apart() : (Two/a(), Two/b())
+        end
+
+        let absurd(x : Two, h : Apart(x, x)) -> False =
+            match h end;
+
+        let forged : False = absurd(Two/a(), Apart/apart());
+
+        /std/print("FORGED")
+        "#;
+
+pub(super) const TWO_PROOFS_UNDER_A_CONSTRUCTOR_FORCED_ON_ONE_VARIABLE_DO_NOT_CLASH: &str = r#"
+        use /std/Bool/{False};
+
+        induct Two : pub Prop
+        | a()
+        | b()
+        end
+
+        induct Wrap : pub Type
+        | wrap(p : Two)
+        end
+
+        induct Apart : (x : Wrap, y : Wrap) -> pub Type
+        | apart() : (Wrap/wrap(Two/a()), Wrap/wrap(Two/b()))
+        end
+
+        let absurd(w : Wrap, h : Apart(w, w)) -> False =
+            match h end;
+
+        let forged : False = absurd(Wrap/wrap(Two/a()), Apart/apart());
+
+        /std/print("FORGED")
+        "#;
+
+pub(super) const A_VARIABLE_OF_THE_INDICES_FORCED_TO_ONE_VALUE_TWICE_DOES_NOT_CLASH: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{False};
+
+        induct Two : (a : Nat, b : Nat) -> Type
+        | mk() : (0, 1)
+        end
+
+        let absurd(m : Nat, x : Two(m, m + 1)) -> False =
+            match x end;
+
+        let forged : False = absurd(0, Two/mk());
+
+        /std/print("FORGED")
+        "#;
+
 pub(super) const TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH: &str = r#"
         use /std/Bool/{False};
 

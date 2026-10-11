@@ -738,6 +738,67 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
     }
 }
 
+/// One variable of the scrutinee's indices forced to two values that clash makes the case impossible as two forcings of one binder do, so the arm may be omitted — and at a proposition they do not, so it may not.
+///
+/// The mirror of the fixture above. The targets are closed, `apart() : (a(), b())`, and it is the scrutinee's indices that name one variable twice, `(x, x)`. The unifier's first direction decides nothing of it, a variable being what may yet be either target; the second solves `x` to each target and asks whether the two can be one value. At a relevant carrier they cannot, so no value of `Apart(x, x)` is `apart()` and the omission stands. At a `Prop` carrier they convert, `apart()` inhabits `Apart(x, x)` for every `x`, and the omitted arm is one the elimination cannot prove absent.
+///
+/// Mutation-checked: with absence asked of the first direction alone, the relevant half demands the arm.
+#[test]
+fn an_outer_variable_forced_two_ways_excuses_the_arm() {
+    for (label, carrier_sort, omission_stands) in [
+        (
+            "a relevant carrier, whose two constructors a program tells apart",
+            Term::type_ground(),
+            true,
+        ),
+        (
+            "a proposition, whose two inhabitants irrelevance identifies",
+            Term::prop(),
+            false,
+        ),
+    ] {
+        let mut kernel = kernel();
+        let carrier = declare_at(
+            &mut kernel,
+            "Bit",
+            carrier_sort,
+            Vec::new(),
+            vec![nullary_at("a", Vec::new()), nullary_at("b", Vec::new())],
+        );
+        let bit = Term::induct_type(carrier, Vec::<Term>::new(), Vec::<Term>::new());
+        let inhabitant =
+            |tag: &str| Term::variant(carrier, Vec::<Term>::new(), tag, Vec::<Term>::new());
+
+        let family = declare_at(
+            &mut kernel,
+            "Apart",
+            Term::type_ground(),
+            vec![bit.clone(), bit.clone()],
+            vec![nullary_at("apart", vec![inhabitant("a"), inhabitant("b")])],
+        );
+
+        // No arm for `apart`, at two indices that are one variable.
+        let x = binder(61, "x");
+        kernel.assume(&x, &bit);
+        let term = eliminate_at(
+            &mut kernel,
+            &family,
+            vec![Term::free_var(&x), Term::free_var(&x)],
+            nat_type(),
+            Vec::new(),
+        );
+
+        let verdict = infer(&mut kernel, &term);
+        match omission_stands {
+            true => assert!(verdict.is_ok(), "{label}: the omitted arm was demanded"),
+            false => assert!(
+                matches!(verdict, Err(Error::MissingArm { .. })),
+                "{label}: the omitted arm was excused"
+            ),
+        }
+    }
+}
+
 /// `Same : (Nat, Nat) -> Prop | same(z : Nat) : (z, z)`, the shape of an equality: one constructor, its payload both of its indices.
 fn same(kernel: &mut Kernel) -> Global {
     let z = binder(0, "z");

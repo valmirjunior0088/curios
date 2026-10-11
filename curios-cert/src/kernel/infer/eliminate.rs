@@ -30,8 +30,8 @@ mod tests;
 use {
     super::check,
     crate::{
-        Counted, Error, InductAt, Kernel, Sort, another_case, invert_indices, retyped,
-        scrutinee_solution, solve_indices, wholly_pinned,
+        Counted, Error, InductAt, Kernel, Sort, another_case, retyped, scrutinee_solution,
+        solve_indices, wholly_pinned,
     },
     curios_analysis::Invert,
     curios_core::{
@@ -61,7 +61,7 @@ pub(super) fn check_induct_arms(
         return Ok(());
     }
 
-    // Coverage: an absent arm must justify its absence. With no catch-all, every constructor with no arm must be *impossible* at the scrutinee's indices — its targets must clash with the actuals, decided by the same shared unifier that specializes the present arms. A case the unifier merely cannot decide is a refusal, not a pass: undecided is not absent.
+    // Coverage: an absent arm must justify its absence. With no catch-all, every constructor with no arm must be *impossible* at the scrutinee's indices — its targets must clash with the actuals, decided by the call of the shared unifier that specializes the present arms, both its directions, so an arm may be absent exactly where one written is typed by no rule. A case the unifier merely cannot decide is a refusal, not a pass: undecided is not absent.
     for (tag, _) in &at.declaration().constructors {
         if cases.iter().any(|(present, _)| present == tag) {
             continue;
@@ -73,7 +73,7 @@ pub(super) fn check_induct_arms(
 
         let outcome = kernel.scoped(|kernel| {
             open_payload(kernel, signature, |kernel, binders, _payload, targets| {
-                invert_indices(kernel, &family.indices, targets, binders)
+                solve_indices(kernel, &family.indices, targets, binders)
             })
         });
 
@@ -215,7 +215,7 @@ pub(super) fn unless_never_taken(
     Err(refusal)
 }
 
-/// Whether the arm of a case split at `value` is one reduction never takes: the scrutinee already is a literal or a constructed value, and the unifier that excuses an absent arm ([`invert_indices`]) finds it in a definite clash with `value`. Such an arm is not typed.
+/// Whether the arm of a case split at `value` is one reduction never takes: the scrutinee already is a literal or a constructed value of another case than `value` ([`another_case`]). Such an arm is not typed.
 ///
 /// **Nothing reads it.** A value is its case under every substitution, so a case split over one is its one arm wherever it stands: reduction opens no other, and conversion compares none, since the elimination is never stuck. Typing the arm would establish a term no rule reads, and would refuse one that was typed already: an arm is typed under the equation between its scrutinee and its case, an equation between two values is recorded nowhere ([`records_case_equation`](curios_analysis::records_case_equation)), and the result an arm is checked at puts a case in its scrutinee's place through the goal ([`MatchResult::at`]), an elimination of that scrutinee inside the goal among it. A proof that stood under that elimination's other arm, resting on its guard, then stands under a literal.
 ///

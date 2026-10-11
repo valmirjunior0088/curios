@@ -13,7 +13,7 @@ pub(crate) use {
     curios_analysis::{
         another_case, answers, answers_classed, case_target_indices, connectives_agree,
         connectives_agree_classed, convert_classed, convert_intrinsics, could_reduce_to, decide,
-        grade, invert_indices, member_arities, nonzero_by, pinned_instance, positivity_vectors,
+        grade, member_arities, nonzero_by, pinned_instance, positivity_vectors,
         records_case_equation, retyped, scrutinee_solution, solve_indices, spine, variance_vectors,
         wholly_pinned, yields_a_sort,
     },
