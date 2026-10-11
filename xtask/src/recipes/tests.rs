@@ -56,6 +56,12 @@ fn a_filter_comes_last() {
     assert_eq!(arguments.last(), Some(&"universes"));
 }
 
+#[test]
+fn a_lint_goes_on_past_a_crate_that_fails() {
+    assert!(linting(None).contains(&KEEP_GOING));
+    assert!(linting(Some("curios-core")).contains(&KEEP_GOING));
+}
+
 /// The workspace is checked as it ships: no step of it turns every feature on, which is `instrumented`'s.
 #[test]
 fn a_workspace_step_names_no_feature() {

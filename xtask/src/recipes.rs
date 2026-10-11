@@ -142,11 +142,17 @@ impl Step {
             },
             Step::WorkspaceTest => cargo(&testing(package, request.filter.as_deref())),
             Step::WorkspaceDoctest => cargo(&doctesting(package)),
-            Step::InstrumentedLint => {
-                cargo(&["clippy", "--workspace", "--all-targets", "--all-features"])
-            }
+            Step::InstrumentedLint => cargo(&[
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--all-features",
+                KEEP_GOING,
+            ]),
             Step::DocsBuild => docs_build(),
-            Step::CompilerBuild => cargo(&["build", "--release", "--package", "curios"]),
+            Step::CompilerBuild => {
+                cargo(&["build", "--release", "--package", "curios", KEEP_GOING])
+            }
             // Whoever narrows the run asks about a package's tests or one test's, which the cache of another crate's build script is not.
             Step::WorkspaceBinaryenCache => match (package, request.filter.as_deref()) {
                 (None, None) => binaryen_cache(),
@@ -177,6 +183,9 @@ impl Step {
 /// The package the launcher is built from, under its default features alone.
 const LAUNCHER: &str = "curios-runtime";
 
+/// What a step that compiles several of the workspace's crates hands cargo: go on past a crate that fails, so one run reports every crate's errors rather than the first's. A test run says the same of its tests with nextest's own flag.
+const KEEP_GOING: &str = "--keep-going";
+
 /// The triple Zed loads an extension for.
 const EXTENSION_TRIPLE: &str = "wasm32-wasip2";
 
@@ -189,6 +198,7 @@ fn launcher_build() -> Result<(), String> {
         LAUNCHER,
         "--target",
         HOST_TRIPLE,
+        KEEP_GOING,
     ])?;
 
     file_with_inputs(
@@ -273,12 +283,12 @@ fn biome_linting(tree: Tree) -> Result<(), String> {
     biome(tree, &["lint", "--error-on-warnings"])
 }
 
-/// The `cargo clippy` command line for one selection: every target, as the workspace ships. Warnings are denied by the workspace's lint table, so no flag says so here.
+/// The `cargo clippy` command line for one selection: every target, as the workspace ships, past a crate that fails. Warnings are denied by the workspace's lint table, so no flag says so here.
 fn linting(package: Option<&str>) -> Vec<&str> {
     ["clippy"]
         .into_iter()
         .chain(scope(package))
-        .chain(["--all-targets"])
+        .chain(["--all-targets", KEEP_GOING])
         .collect()
 }
 
@@ -314,6 +324,7 @@ fn bundle_build() -> Result<(), String> {
         "curios-js",
         "--target",
         BROWSER_TRIPLE,
+        KEEP_GOING,
     ])?;
 
     bindgen_web(
@@ -330,7 +341,7 @@ fn docs_build() -> Result<(), String> {
         "--no-deps",
         "--document-private-items",
         "--all-features",
-        "--keep-going",
+        KEEP_GOING,
     ])?;
 
     let landing = target_directory().join("doc").join("index.html");
