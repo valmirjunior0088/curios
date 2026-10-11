@@ -1084,10 +1084,7 @@ fn code_modules() -> Vec<SysModule> {
         ),
         SysModule::ops(
             "errno",
-            vec![
-                pub_let("badf", nat(), nat_lit(u64::from(errno::EBADF))),
-                pub_let("inval", nat(), nat_lit(u64::from(errno::EINVAL))),
-            ],
+            vec![pub_let("inval", nat(), nat_lit(u64::from(errno::EINVAL)))],
         ),
     ]
 }

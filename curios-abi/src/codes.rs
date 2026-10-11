@@ -114,7 +114,7 @@ pub mod stdio {
     pub const STDERR: u32 = 2;
 }
 
-/// The errnos named here rather than passed through from an operating system, each the value both release targets give it: what a host with no operating system of its own — the mock host, the browser — answers in one's place, and what the standard library raises for an argument it refuses before the call. Mirrored by `/sys/errno`, so a portable failure is one status whichever side names it.
+/// The errnos named here rather than passed through from an operating system, each the value both release targets give it: what a host with no operating system of its own — the mock host, the browser — answers in one's place, and what the standard library raises for an argument it refuses before the call. `/sys/errno` mirrors the one the standard library raises, so that failure is one status whichever side names it.
 pub mod errno {
     /// A stream used in a direction it is not open for: reading `stdout` or `stderr`, writing `stdin`, or using a file against its open mode.
     pub const EBADF: u32 = 9;
