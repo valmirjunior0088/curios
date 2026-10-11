@@ -16,9 +16,9 @@ Invoking this command is standing authorization for exactly two kinds of commit:
 
 A proof of `False`, and nothing else. It is shown by a witness, never by a story about a rule being wrong: a source program whose tail is the proof, or, where no program reaches the rule, a module built by hand with the term it closes with, put to the kernel. The witness supplies the term and the board states the type, so a false equation or a declaration wrongly admitted is driven all the way to `False` before it is a find. Both are written in the part's board file and put by `cargo xboard report`.
 
-What stops short of `False` is not a ticket: a term a checker admits that its rule should refuse, a program compiled to do what its source does not say, a refusal of something sound, an effect outside `Io` that proves nothing. Each goes where `/hunt-warts` files a find, and is proposed in the closing report with its text exactly as it would be written and why it belongs there; nobody here commits it.
+What stops short of `False` is not a ticket: a term a checker admits that its rule should refuse, a program compiled to do what its source does not say, a refusal of something sound, an effect outside `Io` that proves nothing. Each goes where `.claude/rules/findings.md` says a find goes, and is proposed in the closing report with its text exactly as it would be written and why it belongs there; nobody here commits it.
 
-A program the elaborator admits and the kernel refuses is refused: a compilation fails closed. The kernel is what is trusted, so a module it admits at `False` is a find whatever the elaborator makes of its source, and a sound program the elaborator refuses is a wrong refusal, which is `/hunt-warts`'s.
+A program the elaborator admits and the kernel refuses is refused: a compilation fails closed. The kernel is what is trusted, so a module it admits at `False` is a find whatever the elaborator makes of its source, and a sound program the elaborator refuses is a wrong refusal, which is `/hunt-findings`'s.
 
 ## Read first
 
