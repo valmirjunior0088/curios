@@ -363,6 +363,23 @@ fn a_claim_on_a_missing_export_is_refused_listing_what_there_is() {
     );
 }
 
+/// A `Nat` a plugin answers with every bit set arrives as `2⁶⁴ - 1`: the result crosses as an `i64` and the guest reads it unsigned, so no answer the integer holds arrives as another number.
+#[test]
+fn a_nat_answered_with_every_bit_set_is_read_unsigned() {
+    let code = run_against(
+        r#"
+        foreign ones : Nat;
+        let answered = ones!;
+        let _ = /std/proc/exit(@{}, match answered == 18446744073709551615 | true => 9 | false => 1 end)!;
+        /std/Io/pure(())
+        "#,
+        &[("ones", "/ones")],
+    )
+    .expect("execution succeeded");
+
+    assert_eq!(code, 9, "the answer arrived whole");
+}
+
 /// A row written with an empty operand list is a function of no operand: it is called where its description is wanted, and the call crosses with nothing, as the row written with no list does.
 #[test]
 fn a_row_written_with_an_empty_operand_list_is_called() {
