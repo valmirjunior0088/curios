@@ -166,20 +166,20 @@ fn split_return_measurements() {
 ///
 /// # Which instrument sees what
 ///
-/// **Peak memory cannot see a transient allocation, and it is not a shortcoming of the measurement.** The return protocol removes roughly one five-field object per character; running `programs/parse_digits.crs` at 1000000 with that pass toggled and nothing else changed gives a maximum resident set of 5 734 400 bytes without it and 5 767 168 bytes with it — flat. Transient garbage never accumulates, so its cost is allocation *work* rather than footprint, and that lands on the clock. Retention is the opposite: `trees` holds what it builds, and its resident set moves from 5.77 MB at depth 18 to 271.68 MB at depth 21 on nothing but what it keeps.
+/// **Peak memory cannot see a transient allocation, and it is not a shortcoming of the measurement.** The return protocol removes roughly one five-field object per character, and running `programs/parse_digits.crs` at 1000000 with that pass toggled and nothing else changed leaves its maximum resident set flat. Transient garbage never accumulates, so its cost is allocation *work* rather than footprint, and that lands on the clock. Retention is the opposite: `trees` holds what it builds, and its resident set moves from 21.14 MB at depth 18, about what `parse_digits` reads below, to 138.76 MB at depth 21 on nothing but what it keeps.
 ///
 /// So: **time for a change to transient allocation, resident set for a change to retention, emitted size for a change that copies.** Reaching for the wrong one reports a confident null.
 ///
-/// # The baseline, taken at `82cb8ef7`
+/// # The baseline, taken at `7f2ce2cfd`
 ///
-/// Native binaries built with `cargo run --package curios -- compile <program> -o <path>`, timed with `/usr/bin/time -l`. The binary embeds the runtime launcher, so its absolute size is mostly launcher and only the *difference* between two builds is compiled code.
+/// Native binaries built with `cargo run --release --package curios -- compile <program> -o <path>`, each run five times under `/usr/bin/time` on x86-64 Linux, the median read. The binary embeds the runtime launcher, so its absolute size is mostly launcher and only the *difference* between two builds is compiled code.
 ///
 /// | Program | Input | `user` | Max RSS | Binary |
 /// | --- | --- | --- | --- | --- |
-/// | `parse_digits` | 1000000 | 0.92 s | 5 767 168 B | 3 786 408 B |
-/// | `trees` | 21 | 0.23 s | 271 679 488 B | 3 786 504 B |
+/// | `parse_digits` | 1000000 | 0.20 s | 20 992 000 B | 5 140 109 B |
+/// | `trees` | 21 | 0.17 s | 138 760 192 B | 5 136 045 B |
 ///
-/// What this test itself prints is the third unit — the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. Taken at `447fbb0a1`: `lcg` 23530, `trees` 24667, `higher-order` 23905, `direct/escaping` 23669, `function-only` 23088, `mutual-recursion` 23259, `split-return` 29800 bytes. The baseline above is `82cb8ef7`'s and has not been retaken, so the two are not read against each other.
+/// What this test itself prints is the third unit — the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. Taken at the same commit: `lcg` 22499, `trees` 23606, `higher-order` 22887, `direct/escaping` 22624, `function-only` 22043, `mutual-recursion` 22190, `split-return` 29002 bytes, so the three units are read together.
 #[test]
 #[ignore = "measurement, counted: reports emitted size rather than asserting"]
 fn copy_growth_measurements() {

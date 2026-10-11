@@ -1302,17 +1302,17 @@ end
 ///
 /// # What it last printed
 ///
-/// Over the fourteen-program corpus, the three workloads, and the TOML driver:
+/// Over the fourteen-program corpus, the three workloads, and the TOML driver, taken at `7f2ce2cfd`:
 ///
 /// ```text
-/// == death-birth totals: 1168 tuple sites, 0 constructed-width pairs, 509 projected-width pairs, 24 under /std/Map; 136/256 extends linear
+/// == death-birth totals: 2418 tuple sites, 0 constructed-width pairs, 802 projected-width pairs, 0 under /std/Map; 200/282 extends linear
 /// ```
 ///
-/// with `chain` at 16 pairs of 46 sites, `spines` at 24 of 59 with 9 under `/std/Map`, and the TOML driver at 313 of 470 with 70 of its 125 extends linear.
+/// with `chain` at 13 pairs of 86 sites, `spines` at 14 of 106 with none under `/std/Map`, and the TOML driver at 604 of 1075 with 93 of its 137 extends linear.
 ///
 /// # The reading
 ///
-/// Taken at `447fbb0a1`. The population is real and pervasive — 813 of 2219 constructions stand beside a dying matching-width value, well outside the workloads alone. It is also *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. The map-spine substrate concentrates in `/std/Map`'s `insert`/`insert_node`/`replace` and the TOML decoder's build and scan functions, the decoder alone holding three fifths of all pairs. And 262 of 340 rope extends are linearly threaded — the base's only use is the extend that consumes it.
+/// The population is real and pervasive — 802 of 2418 tuple sites stand beside a dying matching-width value, well outside the workloads alone. It is also *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. None of it stands under `/std/Map`, in `spines` or anywhere else: the TOML driver alone holds 604 of the 802, three quarters of all pairs. And 200 of 282 rope extends are linearly threaded — the base's only use is the extend that consumes it.
 #[test]
 #[ignore = "measurement, counted: surveys the corpus rather than asserting"]
 fn death_birth_census() {

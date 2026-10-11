@@ -350,35 +350,21 @@ fn boxed_field_read_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken at `447fbb0a1`, release, x86-64 Linux:
+/// Taken at `7f2ce2cfd`, release, x86-64 Linux:
 ///
 /// ```text
-/// families holding a family-typed field: 18
-///   free: 12 families, 12 slots typed at no width cost
-///   paid: 6 families, 9 slots typed for 8 slots of width
-///   /std/Map/Node/Node           4 slots -> 5 slots, 0 typed -> 2 typed   PAID
-///   /std/Io/Chunk/Chunk          2 slots -> 2 slots, 0 typed -> 0 typed   FREE
+/// families holding a family-typed field: 4
+///   free: 3 families, 2 slots typed at no width cost
+///   paid: 1 families, 2 slots typed for 1 slots of width
 ///   /std/Flt/exact/Mode          2 slots -> 2 slots, 0 typed -> 1 typed   FREE
-///   /std/Async/Step              3 slots -> 3 slots, 0 typed -> 1 typed   FREE
-///   /std/Toml/Error/Error        4 slots -> 5 slots, 2 typed -> 3 typed   PAID
-///   /std/Cli/Kind                3 slots -> 3 slots, 1 typed -> 2 typed   FREE
-///   /std/Cli/Values              5 slots -> 5 slots, 2 typed -> 3 typed   FREE
-///   /std/Cli/Cli                 6 slots -> 6 slots, 2 typed -> 3 typed   FREE
-///   /std/Cli/Outcome             2 slots -> 4 slots, 0 typed -> 2 typed   PAID
-///   /std/Cli/Slots               5 slots -> 5 slots, 3 typed -> 4 typed   FREE
-///   /std/Cli/Cluster             4 slots -> 5 slots, 2 typed -> 3 typed   PAID
-///   /std/Cli/Chosen              3 slots -> 5 slots, 1 typed -> 3 typed   PAID
-///   /std/Fmt/Fmt                 3 slots -> 3 slots, 0 typed -> 1 typed   FREE
-///   /std/Test/Test               2 slots -> 3 slots, 0 typed -> 1 typed   PAID
-///   /std/Tui/Layout/Sizes        8 slots -> 8 slots, 1 typed -> 3 typed   FREE
-///   /std/Tui/input/Step          3 slots -> 3 slots, 0 typed -> 1 typed   FREE
-///   /std/Toml/build/Act          2 slots -> 2 slots, 0 typed -> 1 typed   FREE
-///   /std/Toml/decode/Stmt        3 slots -> 3 slots, 1 typed -> 2 typed   FREE
+///   /std/Map/Node/Node           4 slots -> 5 slots, 0 typed -> 2 typed   PAID
+///   /std/Io/Chunk                2 slots -> 2 slots, 0 typed -> 0 typed   FREE
+///   /std/Map/Node/Inserted       3 slots -> 3 slots, 0 typed -> 1 typed   FREE
 /// ```
 ///
-/// **What the figures decide.** `/std/Map/Node/Node` — the family a typed fork's children `(ref null $node)` would serve — is the *worst* row in this table: four slots to six, a half again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Against the `trees` finding that live bytes convert to time under an all-live collector, that is a trade to decline, and the door declines it.
+/// **What the figures decide.** `/std/Map/Node/Node` — the family a typed fork's children `(ref null $node)` would serve — is the one paid row in this table: four slots to five, a quarter again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Against the `trees` finding that live bytes convert to time under an all-live collector, that is a trade to decline, and the door declines it.
 ///
-/// What the door does instead is admit the free column, by an exact criterion rather than a judgement: type a family's reference slots iff the row's width is unchanged. Eight slots qualify here, on the command-line, formatting, scheduler, layout and TOML families rather than on anything the corpus allocates in bulk, so **the corpus gain is nil** and this rule is not justified by a measurement — it is justified by generalizing to code the corpus does not contain, at a runtime cost that is zero by construction. A product needs no such test: one writer can never widen a row, so its reference fields always type.
+/// What the door does instead is admit the free column, by an exact criterion rather than a judgement: type a family's reference slots iff the row's width is unchanged. Two slots qualify here, on `/std/Flt/exact/Mode` and on `/std/Map/Node/Inserted`, an insert's answer, which the optimized `spines` module never builds, rather than on anything the corpus allocates in bulk, so **the corpus gain is nil** and this rule is not justified by a measurement — it is justified by generalizing to code the corpus does not contain, at a runtime cost that is zero by construction. A product needs no such test: one writer can never widen a row, so its reference fields always type.
 #[test]
 #[ignore = "measurement, counted: reports the split rather than asserting"]
 fn family_slot_probe() {
