@@ -230,11 +230,12 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
                 level: level.clone(),
             },
         )),
-        // The reduct is not what is reported: it spells a recursive name as its group, which the display form gives back its name.
+        // The reduct is not what is reported: it spells a recursive name as its group, which the display form gives back its name. Located here, at the term written where a type is wanted: the refusal is raised once its elaboration has returned, so no frame of that term is left to place it.
         _ => Err(Error::type_mismatch(
             resolved_for_display(context, &inferred),
             Term::type_ground(),
-        )),
+        )
+        .at_opt(term.extent())),
     }
 }
 

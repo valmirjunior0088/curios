@@ -300,6 +300,25 @@ fn a_mismatch_over_an_applied_head_is_located() {
 }
 
 #[test]
+fn a_term_that_is_no_type_where_one_is_wanted_is_located_at_itself() {
+    // The refusal is raised once the term's own elaboration has returned, so no frame of that term is left to place it: unplaced there, it takes the place of the nearest term around it, the first statement of the chain the annotation stands in, and none at all where the annotation opens the chain.
+    let source = r#"
+        use /std/{Nat, Byte};
+        let first = 1;
+        let pair: (Byte, Byte) = (1, 2);
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(source).unwrap_err();
+
+    assert!(
+        error.contains("inferred: {Type, Type}")
+            && error.contains("let pair: (Byte, Byte) = (1, 2);"),
+        "located elsewhere: {error}"
+    );
+}
+
+#[test]
 fn an_abstract_witness_folds_back_to_its_operator() {
     // Under a `use Add(A)` parameter the projection is stuck on a witness that is a *binderso no amount of reduction reaches the operator: the fold must resolve it through the concept the binder's declared type names, or the report spells `a + a` as `(#6561).0(a, a)`.
     let source = r#"
