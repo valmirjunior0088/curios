@@ -3,11 +3,13 @@
 use {
     super::*,
     curios_cert::{
-        Error, Globals, certify_module, recheck_module_measured, recheck_module_verdicts_uncached,
+        Error, Globals, certify_module, infer, recheck_module_measured,
+        recheck_module_verdicts_uncached,
     },
     curios_core::{
-        Bound, Cases, Certification, Enter, Global, Item, Match, Subterm, Telescope, Term,
-        Variance, Visit, Zonked,
+        Bound, Cases, Certification, Enter, Exhaustion, Free, FuncType, Global, Intrinsic, Item,
+        Match, Nat, Quality, Reducer, Subterm, Telescope, Term, Variance, Visit, Zonked,
+        instantiate_qualities,
     },
     curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_unit},
     curios_text::SYNTAX,
@@ -352,6 +354,142 @@ fn kernel_memo_parity() {
             };
             certifications.push(cached.certification);
         }
+    });
+}
+
+/// The closed values a parameter at `domain`, reduced, is put at: both cases of a `Bool` and the first two of a `Nat`, each as its literal and as a spelling that computes to it and is no value as it stands. None for a parameter at any other type.
+fn values_at(domain: &Term) -> Vec<Term> {
+    let spelled = |literal: Term, identity: fn(Term) -> Intrinsic| {
+        [literal.clone(), Term::intrinsic(identity(literal))]
+    };
+
+    match &**domain {
+        Subterm::Intrinsic(Intrinsic::BoolType) => [false, true]
+            .into_iter()
+            .flat_map(|case| {
+                spelled(Term::intrinsic(Intrinsic::Bool(case)), |literal| {
+                    Intrinsic::BoolXor(literal, Term::intrinsic(Intrinsic::Bool(false)))
+                })
+            })
+            .collect(),
+        Subterm::Intrinsic(Intrinsic::NatType) => [0usize, 1]
+            .into_iter()
+            .flat_map(|case| {
+                spelled(Term::intrinsic(Intrinsic::Nat(Nat::new(case))), |literal| {
+                    Intrinsic::NatMul(literal, Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))))
+                })
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Each parameter's type as `telescope` states it, the parameters before it standing as binders of this walk's own.
+fn domains(telescope: &Telescope<Term>) -> Vec<Term> {
+    let mut cursor = telescope.cursor();
+    let mut domains = Vec::new();
+    while let Some((hint, domain)) = cursor.entry() {
+        let index = u32::try_from(domains.len()).expect("a telescope within reach");
+        domains.push(domain);
+        cursor.advance(Term::free_var(&Free::local(index, hint)));
+    }
+
+    domains
+}
+
+/// The function type `telescope` states with its parameter at `position` standing at `value` and that binder gone: every other parameter under its mark, typed as the parameters before it and `value` leave it.
+fn at_a_value(telescope: &Telescope<Term>, position: usize, value: &Term) -> Term {
+    let mut cursor = telescope.cursor();
+    let mut kept = Vec::new();
+    let mut kept_proofs = Vec::new();
+
+    for (index, proof) in telescope.proofs().into_iter().enumerate() {
+        let (hint, domain) = cursor.entry().expect("a telescope has an entry a mark");
+        let mark = cursor.mark().expect("a telescope has a mark an entry");
+        if index == position {
+            cursor.advance(value.clone());
+            continue;
+        }
+        // Bound again where the type is rebuilt, so the index is this walk's alone.
+        let binder = Free::local(
+            u32::try_from(index).expect("a telescope within reach"),
+            hint,
+        );
+        cursor.advance(Term::free_var(&binder));
+        kept.push((mark, binder, domain));
+        kept_proofs.push(proof);
+    }
+    let result = cursor.body().expect("a cursor past every entry");
+
+    Subterm::FuncType(FuncType {
+        telescope: Telescope::build_marked(kept, result).with_proofs(&kept_proofs),
+    })
+    .into()
+}
+
+/// What the kernel types at a variable it types at every value put in that variable's place: every declared type of the prelude, at each closed value of each of its `Bool` and `Nat` parameters ([`values_at`]), is typed by the kernel that certified its root.
+///
+/// The elaborator writes such a type wherever it derives one — a `let` it leaves unannotated, a lambda's domain, a match's goal — and types none of them, so a declared type the kernel refuses at a value is a program it refuses after the elaborator accepted it. A refusal for the budget is no violation: the instance is one a compilation affords or does not.
+///
+/// **Over the prelude it holds what is written later, and shows nothing of the rule.** With the kernel typing every arm, one under a scrutinee that already is another case among them, it reports no instance either: no declared type of the prelude holds an arm that rests on a parameter's case. The programs known to break the property are `curios`'s `tests::matching::instance_tests`, and the arm rule's own fixtures are `curios-cert`'s.
+#[test]
+fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
+    with_prelude(|prelude| {
+        let mut certifications = Vec::new();
+        let mut typed = 0usize;
+        let mut refused = Vec::new();
+
+        for root in prelude {
+            let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
+            let certification = {
+                let globals = certified(prelude, &certifications);
+                let (rechecked, mut kernel) =
+                    recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+                assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
+
+                for definition in root.core().items.iter().flat_map(Item::definitions) {
+                    let Subterm::FuncType(FuncType { telescope }) = &*definition.type_ else {
+                        continue;
+                    };
+                    for (position, domain) in domains(telescope).into_iter().enumerate() {
+                        kernel.restore_budget();
+                        let Ok(domain) = kernel.reduce(domain) else {
+                            continue;
+                        };
+                        for value in values_at(&domain) {
+                            let instance = at_a_value(telescope, position, &value);
+                            // At each sort the declaration leaves to its caller, as the walk that certified it judges it.
+                            let universes = &definition.universe_context;
+                            for sorts in Quality::assignments(universes.quality_count) {
+                                kernel.restore_budget();
+                                kernel.assume_universes(universes);
+                                typed += 1;
+                                match infer(&mut kernel, &instantiate_qualities(&instance, &sorts))
+                                {
+                                    Ok(_) => {}
+                                    Err(error) if error.is_exhausted() => {}
+                                    Err(error) => refused.push(format!(
+                                        "{} at {value} in place of parameter {}: {error:?}",
+                                        definition.name,
+                                        position + 1,
+                                    )),
+                                }
+                            }
+                        }
+                    }
+                }
+
+                rechecked.certification
+            };
+            certifications.push(certification);
+        }
+
+        assert!(
+            refused.is_empty(),
+            "{} of {typed} instances refused:\n{}",
+            refused.len(),
+            refused.join("\n"),
+        );
     });
 }
 
