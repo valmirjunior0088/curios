@@ -1,5 +1,5 @@
 use {
-    super::{Lookup, PublicInterface, Reach, Scoped, visible_binding, visible_child},
+    super::{Lookup, PublicInterface, Reach, Scoped, named, visible_binding, visible_child},
     crate::{Error, Label, Lint, Name, OrderedMap},
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
@@ -225,16 +225,7 @@ impl FlatItem {
     pub(super) fn free_vars(&self) -> HashSet<curios_core::Global> {
         self.lets()
             .iter()
-            .flat_map(|let_| {
-                // Construction head names (`Struct`/`Variant`/type-former normal forms) are reachability edges too — a body that *builds* a struct (the string-literal meta-emitter's `/std/Str/Str`) must keep its backing type-former and field-type definitions alive even though no `Var` names them. See `Subterm::construction_names`.
-                let_.type_
-                    .free_vars()
-                    .into_iter()
-                    .chain(let_.body.free_vars())
-                    .filter_map(|name| name.as_global().cloned())
-                    .chain(let_.type_.construction_names())
-                    .chain(let_.body.construction_names())
-            })
+            .flat_map(|let_| named(&let_.type_).chain(named(&let_.body)))
             .collect()
     }
 

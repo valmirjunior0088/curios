@@ -455,6 +455,21 @@ fn a_type_only_its_constructor_reaches_is_used() {
     );
 }
 
+/// A literal names its structure in its head, which is no variable: the entry tail that builds one reaches the declaration as a definition that builds one does.
+#[test]
+fn a_structure_only_the_entry_tails_literal_builds_is_used() {
+    assert_eq!(
+        lints(
+            r#"
+        struct Point : Type { x : Type }
+        let origin = Point { x = Type };
+        origin
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
 #[test]
 fn a_definition_used_only_by_itself_is_dead() {
     assert_eq!(

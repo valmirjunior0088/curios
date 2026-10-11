@@ -5,7 +5,7 @@
 //! A private module none of whose declarations is reachable is reported once, at the `mod`, and its members are not: the fix is one deletion, and one line says so.
 
 use {
-    super::{FlatItem, LoweredItem, ModuleInfo, PublicInterface, Scoped, owner_of},
+    super::{FlatItem, LoweredItem, ModuleInfo, PublicInterface, Scoped, named, owner_of},
     crate::Lint,
     curios_utilities::{Mount, Qualifier, Span},
     std::collections::{BTreeSet, HashMap, HashSet},
@@ -67,10 +67,8 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
     }
     if let Some(entry) = entry {
         let terms = std::iter::once(&entry.body).chain(entry.type_.as_ref());
-        for global in terms.flat_map(|term| term.free_vars_shared().iter()) {
-            if let Some(global) = global.as_global() {
-                root(global, &mut pending);
-            }
+        for global in terms.flat_map(named) {
+            root(&global, &mut pending);
         }
     }
 

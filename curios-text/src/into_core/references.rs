@@ -71,6 +71,11 @@ fn written_under_its_name(let_: &FlatLet) -> bool {
         .is_some_and(|path| path.without_last() == let_.island)
 }
 
+/// Every definition `term` names: the globals it refers to, and the head of every construction in it. A construction's head is no variable — a structure literal, a variant and a type former's normal form hold their name in the node (`Subterm::construction_names`) — so a term that *builds* a structure names it without referring to it. The edges of the `unused-declaration` lint are these, from an item's terms and from the entrypoint's alike.
+pub(super) fn named(term: &curios_core::Term) -> impl Iterator<Item = curios_core::Global> {
+    globals(term.free_vars()).chain(term.construction_names())
+}
+
 /// The top-level definitions among `names`. A binder is nobody's dependency: it is introduced and discharged inside the very signature being read.
 pub(super) fn globals(
     names: impl IntoIterator<Item = curios_core::Free>,
