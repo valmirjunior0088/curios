@@ -97,3 +97,41 @@ fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under()
         "expected an ffi./frobnicate import, got {imports:?}"
     );
 }
+
+/// A declaration that writes an operand list is a function of its operands, an empty list included, and one that writes none is the call's description: each is typed as it was written, and neither stands where the other is wanted. A row that does not return writes its list, which the type it yields joins, so it is called once.
+#[test]
+fn an_operand_list_declares_a_function_and_no_list_a_description() {
+    typecheck(
+        r#"
+            foreign listed : () -> Nat;
+            foreign bare : Nat;
+            foreign gone : () -> Never;
+            let called : /std/Io(/std/Nat) = listed();
+            let held : () -> /std/Io(/std/Nat) = listed;
+            let description : /std/Io(/std/Nat) = bare;
+            let ended : /std/Io(/std/Nat) = gone();
+            /std/Io/pure(())
+        "#,
+    )
+    .expect("each is used as it was declared");
+
+    let refusal = typecheck(
+        r#"
+            foreign listed : () -> Nat;
+            let description : /std/Io(/std/Nat) = listed;
+            /std/Io/pure(())
+        "#,
+    )
+    .expect_err("a function of no operand is no description");
+    assert!(refusal.contains("type mismatch"), "{refusal}");
+
+    let refusal = typecheck(
+        r#"
+            foreign bare : Nat;
+            let called : /std/Io(/std/Nat) = bare();
+            /std/Io/pure(())
+        "#,
+    )
+    .expect_err("a description is no function");
+    assert!(refusal.contains("applied a non-function"), "{refusal}");
+}

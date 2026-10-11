@@ -42,6 +42,24 @@ fn declaration_zero_arg_populates_the_store() {
     assert!(function.signature().params.is_empty());
 }
 
+// A list written empty and no list are two declarations and one row on the wire: neither hands the host an operand, so the import is the same.
+#[test]
+fn an_empty_operand_list_crosses_as_no_operand() {
+    let (_, _, foreigns) = super::into_core(
+        &"foreign clock : () -> Nat; foreign wall : Nat; 0"
+            .parse::<Entrypoint>()
+            .unwrap(),
+        &RootSource::none(),
+        syntax(),
+    )
+    .unwrap();
+
+    let clock = foreigns.get("/clock").expect("clock registered");
+    let wall = foreigns.get("/wall").expect("wall registered");
+    assert!(clock.signature().params.is_empty());
+    assert_eq!(clock.signature(), wall.signature());
+}
+
 #[test]
 fn declaration_call_lowers() {
     // Declaring and calling a foreign function lowers end to end (`run` panics on failure) — the `Intrinsic::Foreign` body `foreign_signature` builds is well typed against the same wire-typed signature the call site checks against.

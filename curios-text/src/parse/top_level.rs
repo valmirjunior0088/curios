@@ -7,11 +7,11 @@ use {
         parse_tuple_field_prefix, parse_type, raised,
     },
     crate::{
-        CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
-        Module, Name, StructField, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
-        TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, UseGroup, WitnessField, declared,
-        parse_declared_label, parse_doc, parse_identifier_raw, parse_term, parse_whitespace,
-        text_after, word_after,
+        CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, ForeignSignature, FuncTypeParam,
+        GroupItem, Label, Module, Name, StructField, Term, TopCase, TopConcept, TopForeign,
+        TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, UseGroup,
+        WireAnswer, WitnessField, declared, parse_declared_label, parse_doc, parse_identifier_raw,
+        parse_term, parse_whitespace, text_after, word_after,
     },
     curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_parse::{
@@ -163,7 +163,7 @@ fn parse_wire_field<'a>() -> Parser<'a, (String, WireType)> {
 }
 
 // The results a braced field list denotes, in the order written, or why it denotes none: a tuple type's labels are part of its identity, so this may not drop the label a single field carries.
-fn wire_fields(fields: Vec<(String, WireType)>) -> Result<WireResults, String> {
+fn wire_fields(fields: Vec<(String, WireType)>) -> Result<WireAnswer, String> {
     // A row forwards one result through as itself, so `{x: T}` would name a one-field tuple no row can carry — and the label would be dropped rather than kept, which is a different type from the one written.
     if let [(label, _)] = fields.as_slice() {
         return Err(format!(
@@ -171,19 +171,30 @@ fn wire_fields(fields: Vec<(String, WireType)>) -> Result<WireResults, String> {
         ));
     }
 
-    Ok(WireResults::of(fields))
+    Ok(WireAnswer::of(fields))
 }
 
-// A result: a bare wire type, or a braced field list naming the tuple type the row yields. `{}` is no result at all — the unit *type*, which is what a result position holds; `()` is the unit value and never appears here.
-fn parse_wire_results<'a>() -> Parser<'a, WireResults> {
+// A braced field list naming the tuple type the row yields. `{}` is no result at all — the unit *type*, which is what a result position holds; `()` is the unit value and never appears here.
+fn parse_wire_fields<'a>() -> Parser<'a, WireAnswer> {
     parse_literal("{")
         .and_keep(sep_by0_trailing(parse_wire_field, || parse_literal(",")))
         .and_drop(parse_literal("}"))
         .flat_map(|fields| match wire_fields(fields) {
-            Ok(results) => pure(results),
+            Ok(answer) => pure(answer),
             // A brace has been read, so nothing else could have been meant: the refusal is the diagnosis rather than a backtrack into a vaguer one.
             Err(message) => commit(fail(message)),
         })
+}
+
+// What a call that returns answers with: a braced field list, or a bare wire type. It is the whole of what a signature with no operand list states, which is why `Never` has no spelling there.
+fn parse_wire_answer<'a>() -> Parser<'a, WireAnswer> {
+    parse_wire_fields().or(parse_wire_type().map(WireAnswer::single))
+}
+
+// What follows an operand list's `->`: what the call answers with, or `Never`.
+fn parse_wire_results<'a>() -> Parser<'a, WireResults> {
+    parse_wire_fields()
+        .map(WireResults::from)
         .or(parse_wire_never())
         .or(parse_wire_type().map(WireResults::single))
 }
@@ -196,18 +207,15 @@ fn parse_wire_never<'a>() -> Parser<'a, WireResults> {
     })
 }
 
-// `(T, T, ...) -> R` (a foreign function) or a bare `R` (a zero-argument foreign, like `/std/time/Timestamp`'s `clock_wall`). An operand is its wire type alone and so is a bare result, while a braced result names its fields, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.
-pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
+// `(T, T, ...) -> R`, a function of the operands its list writes, none included, or a bare `R`, the call's description itself (`/std/time/Timestamp`'s `clock_wall`): two forms, kept apart as written, so `() -> R` and `R` are two declarations. `Never` follows a list and nothing else, so the bare form reads an answer, which has none. An operand is its wire type alone and so is a bare result, while a braced result names its fields, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.
+pub(super) fn parse_wire_signature<'a>() -> Parser<'a, ForeignSignature> {
     parse_literal("(")
         .and_keep(sep_by0_trailing(parse_wire_type, || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("->"))
         .and(lazy(parse_wire_results))
-        .map(|(params, results)| WireSignature { params, results })
-        .or(parse_wire_results().map(|results| WireSignature {
-            params: vec![],
-            results,
-        }))
+        .map(|(params, results)| ForeignSignature::Func(WireSignature { params, results }))
+        .or(parse_wire_answer().map(ForeignSignature::Name))
 }
 
 // `foreign name : T;` — a name and a wire signature with no body, bound to a host-provided implementation at link time. Mirrors `parse_top_let`, but ends after the signature instead of parsing `= body`.

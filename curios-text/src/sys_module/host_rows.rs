@@ -8,7 +8,9 @@ use {
     super::{
         Decl, bin, bool_, byte, flt, handle, int, io_of, list_of, name, nat, record, type_, unit,
     },
-    crate::{FuncType, FuncTypeParam, LetSignature, Subterm, Term, TopForeign},
+    crate::{
+        ForeignSignature, Func, FuncType, FuncTypeParam, LetSignature, Subterm, Term, TopForeign,
+    },
     curios_abi::{ForeignFunction, ForeignStore, ResultShape, WireType},
     curios_num::Grain,
     curios_utilities::Plicity,
@@ -46,12 +48,22 @@ fn function_over(domains: Vec<Term>, output: Term) -> Term {
     .into()
 }
 
-/// The declaration a `foreign` row surfaces as: it binds the row itself, at the function type its operands and result state ([`Subterm::ForeignRow`]), since a declaration writes no operand name a call could be written over.
+/// The function of no operand whose answer is `body`: what a declaration that writes an empty operand list binds.
+fn thunk(body: Term) -> Term {
+    Subterm::Func(Func {
+        params: Vec::new(),
+        body,
+    })
+    .into()
+}
+
+/// The declaration a `foreign` row surfaces as: it binds the row itself, at the type its declaration states ([`Subterm::ForeignRow`]), since a declaration writes no operand name a call could be written over.
 ///
 /// The result is an `Io`, and this one site is what makes that true of every row — a call across the wire is a host effect whoever declared it. The raw result shape (unit, bare type, named record) comes off the `WireSignature`, and a row that does not return yields the type its call is handed, taken as an implicit operand ahead of its wire operands, which the lowering opens a binder for.
 ///
-/// A row with no parameters becomes a *constant* rather than a nullary function, which is not a case here but a consequence of handing [`Decl`] an empty telescope — see `Decl::signature`.
-pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
+/// **A written operand list is a function of its operands, and no list is the description itself.** `foreign clock: () -> Nat;` binds a `() -> Io(Nat)`, called `clock()`, and `foreign clock: Nat;` an `Io(Nat)`: the two cross the wire alike and are two declarations, as the list was written or was not. A row that does not return always writes its list, which the type it yields joins, so `() -> Never` is `(@A: Type) -> Io(A)`.
+pub(super) fn host_fn(function: &Arc<ForeignFunction>, declaration: &TopForeign) -> Decl {
+    let vis_pub = declaration.vis_pub;
     let signature = function.signature();
     let row = Term::from(Subterm::ForeignRow(Arc::clone(function)));
 
@@ -91,17 +103,25 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
         ),
     };
     let output = io_of(result);
+    // The row lowers as the function of its operands, and as the call itself where it takes none, so an empty list written is the one shape the declaration wraps for itself.
+    let (output, body) = match &declaration.signature {
+        ForeignSignature::Name(_) => (output, row),
+        ForeignSignature::Func(written) if written.params.is_empty() => {
+            (function_over(Vec::new(), output), thunk(row))
+        }
+        ForeignSignature::Func(written) => (
+            function_over(written.params.iter().map(wire_type).collect(), output),
+            row,
+        ),
+    };
 
     Decl {
         doc: None,
         vis_pub,
         label: function.label().to_string(),
         params: Vec::new(),
-        output: match signature.params.is_empty() {
-            true => output,
-            false => function_over(signature.params.iter().map(wire_type).collect(), output),
-        },
-        body: row,
+        output,
+        body,
     }
 }
 
@@ -115,12 +135,12 @@ pub(crate) fn foreign_signature(
     let function = ForeignFunction {
         name,
         label: declaration.label.to_string(),
-        signature: declaration.signature.clone(),
+        signature: declaration.signature.wire(),
     };
 
     foreigns.register(function.clone());
 
-    host_fn(&Arc::new(function), declaration.vis_pub)
+    host_fn(&Arc::new(function), declaration)
         .into_let()
         .signature
 }

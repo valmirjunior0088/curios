@@ -4,12 +4,13 @@ mod tests;
 use {
     super::{
         Apply, Argument, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Doc,
-        Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
-        Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern,
-        MatchPatternField, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj,
-        ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase,
-        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse,
-        TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
+        Field, ForeignSignature, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam,
+        GroupItem, Infix, Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Literal,
+        Match, MatchPattern, MatchPatternField, NatLiteral, NatPattern, NumLit, Pattern,
+        PatternField, Proj, ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm,
+        Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
+        TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup,
+        WitnessField,
     },
     crate::op_precedence,
     curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
@@ -1554,18 +1555,20 @@ fn print_wire_results(results: &WireResults) -> Printer {
     }
 }
 
-fn print_wire_signature(signature: WireSignature) -> Printer {
-    let WireSignature { params, results } = signature;
-
-    if params.is_empty() {
-        return print_wire_results(&results);
+/// A `foreign` declaration's signature as it writes it: the result alone where it writes no operand list, and the list ahead of it where it writes one, empty or not.
+fn print_wire_signature(signature: &ForeignSignature) -> Printer {
+    match signature {
+        ForeignSignature::Name(answer) => print_wire_results(answer.results()),
+        ForeignSignature::Func(WireSignature { params, results }) => flat([
+            listed(
+                "(",
+                params.iter().copied().map(print_wire_type).collect(),
+                ")",
+            ),
+            pure(" -> "),
+            print_wire_results(results),
+        ]),
     }
-
-    flat([
-        listed("(", params.into_iter().map(print_wire_type).collect(), ")"),
-        pure(" -> "),
-        print_wire_results(&results),
-    ])
 }
 
 fn print_top_foreign(item: TopForeign) -> Printer {
@@ -1575,7 +1578,7 @@ fn print_top_foreign(item: TopForeign) -> Printer {
         pure("foreign "),
         pure(item.label),
         pure(": "),
-        print_wire_signature(item.signature),
+        print_wire_signature(&item.signature),
         pure(";"),
     ])
 }
@@ -2144,6 +2147,6 @@ pub(crate) fn print_foreign_head(item: &TopForeign) -> Printer {
         pure("foreign "),
         pure(item.label.clone()),
         pure(": "),
-        print_wire_signature(item.signature.clone()),
+        print_wire_signature(&item.signature),
     ])
 }

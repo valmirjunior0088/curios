@@ -87,10 +87,10 @@ fn top_foreign_without_pub() {
             doc: None,
             vis_pub: false,
             label: "frobnicate".into(),
-            signature: WireSignature {
+            signature: ForeignSignature::Func(WireSignature {
                 params: vec![WireType::Nat, WireType::Bytes],
                 results: WireResults::single(WireType::Nat),
-            },
+            }),
         })]
     );
 }
@@ -106,10 +106,10 @@ fn top_foreign_with_pub() {
             doc: None,
             vis_pub: true,
             label: "frobnicate".into(),
-            signature: WireSignature {
+            signature: ForeignSignature::Func(WireSignature {
                 params: vec![WireType::Nat, WireType::Bytes],
                 results: WireResults::single(WireType::Nat),
-            },
+            }),
         })]
     );
 }
@@ -122,10 +122,7 @@ fn top_foreign_zero_arg() {
             doc: None,
             vis_pub: false,
             label: "clock".into(),
-            signature: WireSignature {
-                params: vec![],
-                results: WireResults::single(WireType::Nat),
-            },
+            signature: ForeignSignature::Name(WireAnswer::single(WireType::Nat)),
         })]
     );
 }
@@ -142,10 +139,10 @@ fn top_foreign_takes_no_result() {
             doc: None,
             vis_pub: false,
             label: "close".into(),
-            signature: WireSignature {
+            signature: ForeignSignature::Func(WireSignature {
                 params: vec![WireType::Handle],
                 results: WireResults::none(),
-            },
+            }),
         })]
     );
 }
@@ -162,13 +159,13 @@ fn top_foreign_takes_a_tuple_of_results() {
             doc: None,
             vis_pub: false,
             label: "read".into(),
-            signature: WireSignature {
+            signature: ForeignSignature::Func(WireSignature {
                 params: vec![WireType::Handle, WireType::Nat],
                 results: WireResults::of(vec![
                     ("status".to_string(), WireType::Nat),
                     ("bytes".to_string(), WireType::Bytes),
                 ]),
-            },
+            }),
         })]
     );
 }
@@ -199,14 +196,14 @@ fn top_foreign_keeps_references_in_the_slots_written() {
             doc: None,
             vis_pub: false,
             label: "f".into(),
-            signature: WireSignature {
+            signature: ForeignSignature::Func(WireSignature {
                 params: vec![WireType::Nat],
                 results: WireResults::of(vec![
                     ("bytes".to_string(), WireType::Bytes),
                     ("status".to_string(), WireType::Nat),
                     ("rest".to_string(), WireType::List(WireLeaf::Bytes)),
                 ]),
-            },
+            }),
         })]
     );
 }
@@ -263,13 +260,13 @@ fn top_foreign_list_of_leaf() {
             doc: None,
             vis_pub: false,
             label: "frobnicate".into(),
-            signature: WireSignature {
+            signature: ForeignSignature::Func(WireSignature {
                 params: vec![
                     WireType::List(WireLeaf::Bytes),
                     WireType::List(WireLeaf::Handle)
                 ],
                 results: WireResults::single(WireType::List(WireLeaf::Nat)),
-            },
+            }),
         })]
     );
 }
@@ -307,6 +304,10 @@ fn foreign_declaration_round_trips() {
         "foreign exited : {ok: Bool, code: Byte};",
         "foreign wall : {secs: Nat, nanos: Nat};",
         "foreign read : (Handle, Nat) -> {status: Nat, bytes: Bytes};",
+        "foreign abort : (Byte) -> Never;",
+        "pub foreign gone : () -> Never;",
+        "foreign clock : () -> Nat;",
+        "foreign wall : () -> {secs: Nat, nanos: Nat};",
     ] {
         let module = source.parse::<Module>().unwrap();
 
@@ -316,6 +317,56 @@ fn foreign_declaration_round_trips() {
             "round-trip failed for {source:?}"
         );
     }
+}
+
+/// A written operand list declares a function of its operands, an empty one included, and no list the call's description itself: the two are two declarations, and each prints back as it was written.
+#[test]
+fn top_foreign_with_an_empty_operand_list_is_no_bare_result() {
+    let listed = "foreign clock : () -> Nat;".parse::<Module>().unwrap();
+    let bare = "foreign clock : Nat;".parse::<Module>().unwrap();
+
+    assert_eq!(
+        listed.items,
+        vec![TopItem::Foreign(TopForeign {
+            doc: None,
+            vis_pub: false,
+            label: "clock".into(),
+            signature: ForeignSignature::Func(WireSignature {
+                params: vec![],
+                results: WireResults::single(WireType::Nat),
+            }),
+        })]
+    );
+    assert_ne!(listed, bare);
+    assert!(listed.to_string().contains("() -> Nat"), "{listed}");
+    assert!(!bare.to_string().contains("()"), "{bare}");
+}
+
+/// `Never` follows an operand list and stands nowhere else, so a signature with no list has none to write: a bare `Never` is no wire result, refused as any word that is no wire type is, and a row that does not return and takes no operand writes its empty list.
+#[test]
+fn top_foreign_has_no_never_without_an_operand_list() {
+    let refusal = "foreign gone : Never;"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+
+    assert!(refusal.contains("expected a wire type"), "{refusal}");
+    assert!(refusal.contains("found 'Never'"), "{refusal}");
+    assert_eq!(
+        "foreign gone : () -> Never;"
+            .parse::<Module>()
+            .unwrap()
+            .items,
+        vec![TopItem::Foreign(TopForeign {
+            doc: None,
+            vis_pub: false,
+            label: "gone".into(),
+            signature: ForeignSignature::Func(WireSignature {
+                params: vec![],
+                results: WireResults::never(),
+            }),
+        })]
+    );
 }
 
 #[test]

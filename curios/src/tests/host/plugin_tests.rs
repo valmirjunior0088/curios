@@ -101,6 +101,15 @@ fn plugin() -> Vec<u8> {
         vec![local(0), Instr::I64Const { value: 2 }, Instr::I64Mul],
     );
 
+    // A scalar answer with every bit set: `-1` as the `i64` it crosses as, which a `Nat` reads as the largest the wire carries.
+    export(
+        &mut module,
+        "ones",
+        vec![],
+        vec![i64_type()],
+        vec![Instr::I64Const { value: -1 }],
+    );
+
     // A byte crossing: `255 - b`, so both ends of the range come back as the other.
     export(
         &mut module,
@@ -352,4 +361,21 @@ fn a_claim_on_a_missing_export_is_refused_listing_what_there_is() {
         refusal.contains("double"),
         "the refusal lists what it exports: {refusal}"
     );
+}
+
+/// A row written with an empty operand list is a function of no operand: it is called where its description is wanted, and the call crosses with nothing, as the row written with no list does.
+#[test]
+fn a_row_written_with_an_empty_operand_list_is_called() {
+    let code = run_against(
+        r#"
+        foreign ones : () -> Nat;
+        let answered = ones()!;
+        let _ = /std/proc/exit(@{}, match answered == 18446744073709551615 | true => 9 | false => 1 end)!;
+        /std/Io/pure(())
+        "#,
+        &[("ones", "/ones")],
+    )
+    .expect("execution succeeded");
+
+    assert_eq!(code, 9, "the call answered");
 }

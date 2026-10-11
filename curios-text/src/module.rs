@@ -5,7 +5,7 @@ use {
         clear_comments, parse_file_head, parse_optional_term, parse_program_end, parse_term,
         parse_top_item, print_module_items, print_term, take_comments,
     },
-    curios_abi::WireSignature,
+    curios_abi::{WireResults, WireSignature, WireType},
     curios_parse::{
         Parser, ParserError, Recovered, commit, fail, is_blank, lazy, many0, raise, recover,
         run_parser, spanned, take_eof,
@@ -119,13 +119,62 @@ pub struct TopLet {
     pub signature: LetSignature,
 }
 
-/// A `foreign` declaration: a name and a wire signature, bound to a host-provided implementation at link time rather than a Curios definition. `signature` is parsed directly as a [`WireSignature`] (`(Nat, Bytes) -> Nat`) — a closed grammar of the six wire types, not an ordinary Curios type — so there is no name resolution to do and no `= body` form.
+/// A `foreign` declaration: a name and a wire signature, bound to a host-provided implementation at link time rather than a Curios definition. The signature is read by the wire's own grammar (`(Nat, Bytes) -> Nat`) — a closed vocabulary, not an ordinary Curios type — so there is no name resolution to do and no `= body` form.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopForeign {
     pub doc: Option<Doc>,
     pub vis_pub: bool,
     pub label: Label,
-    pub signature: WireSignature,
+    pub signature: ForeignSignature,
+}
+
+/// What a `foreign` declaration states after its name, kept as written, which is what prints it back. Where the list is empty the two forms cross the wire alike, and they are two declarations.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ForeignSignature {
+    /// `R`, with no operand list: the declaration is the call's description itself, an `Io(R)`. Its result is one a call answers with, so a declaration with no list has no `Never` to state.
+    Name(WireAnswer),
+    /// `(T, …) -> R`: a function of the operands its list writes, none included, so `() -> R` is a `() -> Io(R)`. The one form whose result may be `Never`.
+    Func(WireSignature),
+}
+
+impl ForeignSignature {
+    /// What crosses the wire for the row: no operand where no list was written, as where an empty one was.
+    pub fn wire(&self) -> WireSignature {
+        match self {
+            ForeignSignature::Name(answer) => WireSignature {
+                params: Vec::new(),
+                results: answer.results().clone(),
+            },
+            ForeignSignature::Func(signature) => signature.clone(),
+        }
+    }
+}
+
+/// The results of a call that returns: every shape [`WireResults`] takes but the one that says a call does not. Made of a wire type or of a braced list's fields and of nothing else, so no value of it is `Never`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WireAnswer(WireResults);
+
+impl WireAnswer {
+    /// One result, crossing as itself.
+    pub fn single(wire_type: WireType) -> Self {
+        Self(WireResults::single(wire_type))
+    }
+
+    /// The results a braced field list writes, in the order written: none for an empty list, which is the unit type.
+    pub fn of(fields: Vec<(String, WireType)>) -> Self {
+        Self(WireResults::of(fields))
+    }
+
+    /// The results as a wire signature holds them.
+    pub fn results(&self) -> &WireResults {
+        &self.0
+    }
+}
+
+impl From<WireAnswer> for WireResults {
+    fn from(answer: WireAnswer) -> Self {
+        answer.0
+    }
 }
 
 /// One payload binder of an `induct` case. The name is optional (`success(A)` stays positional); it is required when a later payload type or the case target mentions the binder. `plicity` is plain or `@` — implicit at the value-constructor function, named (`cons(@m : Nat, …)`, `m` recoverable from a later payload's type) or not (`at(n : Nat, @Holds(0 < n))`); the parser refuses `use` here. Erasure is sort-driven, so no per-field mark is kept.
