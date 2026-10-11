@@ -30,15 +30,14 @@ mod tests;
 use {
     super::check,
     crate::{
-        Counted, Error, InductAt, Kernel, Sort, invert_indices, retyped, scrutinee_solution,
-        solve_indices, wholly_pinned,
+        Counted, Error, InductAt, Kernel, Sort, another_case, invert_indices, retyped,
+        scrutinee_solution, solve_indices, wholly_pinned,
     },
     curios_analysis::Invert,
     curios_core::{
-        Atom, Bound, Free, InductArm, InductType, Intrinsic, MatchResult, Nat, ReduceError,
-        Subterm, Telescope, Term, Variant,
+        Atom, Bound, Free, InductArm, InductType, MatchResult, ReduceError, Subterm, Telescope,
+        Term, Variant,
     },
-    std::slice,
 };
 
 /// Check every arm of an elimination of `scrutinee_type` at `result`.
@@ -183,7 +182,7 @@ fn check_arm(
 ///
 /// **A fold is never asked.** Its reduct holds the fold at the tail, so a value of either case takes the identity arm in the end: `match 3 : (_) => P | 0 => … | k + 1; ih => ih end` is its identity arm, which skipped would inhabit any `P` untyped. The callers ask for an arm taken once, at the scrutinee itself.
 ///
-/// **The scrutinee is read as it stands and never computed.** Computing it would decide more — an elimination over `0 < 0` is its `false` arm — and typing must not evaluate a term that runs, which may be the whole program. [`stands_as_a_case`] is that gate and no part of the answer.
+/// **The scrutinee is read as it stands and never computed.** Computing it would decide more — an elimination over `0 < 0` is its `false` arm — and typing must not evaluate a term that runs, which may be the whole program. The shared [`another_case`] answers of a term as it stands.
 pub(super) fn never_taken(
     kernel: &mut Kernel,
     scrutinee: &Term,
@@ -191,31 +190,8 @@ pub(super) fn never_taken(
     binders: &[Free],
 ) -> Result<bool, Error> {
     let scrutinee = kernel.by_value(scrutinee);
-    if !stands_as_a_case(&scrutinee) {
-        return Ok(false);
-    }
 
-    Ok(matches!(
-        invert_indices(
-            kernel,
-            slice::from_ref(&scrutinee),
-            slice::from_ref(value),
-            binders
-        )?,
-        Invert::Impossible
-    ))
-}
-
-/// Whether `term` already is a value that names its case: a constructed value, or a literal of a carrier an elimination reads.
-fn stands_as_a_case(term: &Term) -> bool {
-    match &**term {
-        Subterm::Variant(_) => true,
-        Subterm::Intrinsic(Intrinsic::Bool(_) | Intrinsic::Bin(..) | Intrinsic::List { .. }) => {
-            true
-        }
-        Subterm::Intrinsic(Intrinsic::Nat(_)) => Nat::is_zero(&Nat::decompose(term).1),
-        _ => false,
-    }
+    another_case(kernel, &scrutinee, value, binders)
 }
 
 /// Teach an arm that its scrutinee **is** this case's value, which is what specializes the context the body is checked in.

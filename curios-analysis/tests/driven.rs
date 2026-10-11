@@ -9,8 +9,9 @@
 use {
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_analysis::{
-        Answered, Declarations, Invert, Judge, PositivityRefusal, answers, answers_classed,
-        group_totality, invert_indices, positivity_vectors, solve_indices, test_support::SYNTAX,
+        Answered, Declarations, Invert, Judge, PositivityRefusal, another_case, answers,
+        answers_classed, group_totality, invert_indices, positivity_vectors, solve_indices,
+        test_support::SYNTAX,
     },
     curios_cert::Kernel,
     curios_core::{
@@ -1447,6 +1448,107 @@ fn an_outer_variable_forced_twice_clashes_only_where_its_forcings_are_told_apart
         let outcome =
             solve_indices(&mut kernel, &actuals, &targets, &[]).expect("the kernel answers");
         assert_eq!(matches!(outcome, Invert::Impossible), impossible, "{label}");
+    }
+}
+
+/// A value is another case than an arm's where it names a case as it stands and the unifier that excuses an absent arm finds the two in a definite clash. Both checkers know an arm no reduction takes by this: the kernel types none, and the elaborator words its refusal of one.
+///
+/// The controls are what the rule must not answer: the arm's own case, a term that names no case as it stands — a variable, a successor over one — and two constructors of a proposition, which conversion holds to be one value.
+#[test]
+fn a_value_is_another_case_only_where_it_names_one_that_clashes() {
+    let mut kernel = kernel();
+    let relevant = declare(&mut kernel, "Relevant", Term::type_ground());
+    let proposition = declare(&mut kernel, "Proposition", Term::prop());
+    let n = Free::local(900, Some("n"));
+    let pred = Free::local(901, Some("pred"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    kernel.assume(&n, &nat_type);
+    kernel.assume(&pred, &nat_type);
+
+    let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    let bool_ = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let successor = |of: &Free| Term::intrinsic(Intrinsic::nat_add(Term::free_var(of), nat(1)));
+    let constructed = |family: Global, tag: &str| {
+        Term::variant(family, Vec::<Term>::new(), tag, Vec::<Term>::new())
+    };
+
+    for (label, scrutinee, case, binders, expected) in [
+        (
+            "a literal against the other literal",
+            bool_(false),
+            bool_(true),
+            Vec::new(),
+            true,
+        ),
+        (
+            "a literal against itself",
+            bool_(true),
+            bool_(true),
+            Vec::new(),
+            false,
+        ),
+        (
+            "zero against a successor",
+            nat(0),
+            successor(&pred),
+            vec![pred],
+            true,
+        ),
+        (
+            "a positive literal against zero",
+            nat(2),
+            nat(0),
+            Vec::new(),
+            true,
+        ),
+        (
+            "a positive literal against a successor",
+            nat(2),
+            successor(&pred),
+            vec![pred],
+            false,
+        ),
+        (
+            "a successor over a variable against zero",
+            successor(&n),
+            nat(0),
+            Vec::new(),
+            false,
+        ),
+        (
+            "a variable against a literal",
+            Term::free_var(&n),
+            nat(0),
+            Vec::new(),
+            false,
+        ),
+        (
+            "two constructors of a relevant family",
+            constructed(relevant, "a"),
+            constructed(relevant, "b"),
+            Vec::new(),
+            true,
+        ),
+        (
+            "one constructor of a relevant family",
+            constructed(relevant, "a"),
+            constructed(relevant, "a"),
+            Vec::new(),
+            false,
+        ),
+        (
+            "two constructors of a proposition",
+            constructed(proposition, "a"),
+            constructed(proposition, "b"),
+            Vec::new(),
+            false,
+        ),
+    ] {
+        assert_eq!(
+            another_case(&mut kernel, &scrutinee, &case, &binders).expect("the kernel answers"),
+            expected,
+            "{label}",
+        );
     }
 }
 

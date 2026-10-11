@@ -1,17 +1,17 @@
-//! What both checkers share about an arm's case equation: which spellings of a scrutinee carry one, how far a dispatch is opened to resolve its spelling, which recorded equation a probe could reach, and which terms an equation answers.
+//! What both checkers share about an arm's case equation: which spellings of a scrutinee carry one, which value of a scrutinee is another case than an arm's, how far a dispatch is opened to resolve its spelling, which recorded equation a probe could reach, and which terms an equation answers.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{Driver, intrinsics_agree},
+    crate::{Driver, Invert, Judge, intrinsics_agree, invert_indices},
     curios_algebra::{Carrier, Operation},
     curios_core::{
-        Classes, Cost, Declaration, Free, Intrinsic, ReduceError, Reducer, Subterm, Term, atoms_of,
-        classable, classed,
+        Classes, Cost, Declaration, Free, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term,
+        atoms_of, classable, classed,
     },
     curios_utilities::SyntaxRegistry,
-    std::mem,
+    std::{mem, slice},
 };
 
 /// How many application layers a dispatched scrutinee is opened through to reach the spelling it resolves to: each step consumes one layer of an elaborated dispatch, and a spine that has not settled in this many is not a dispatch.
@@ -26,6 +26,42 @@ pub const RESOLVED_SPELLING_LAYERS: usize = 16;
 /// **Both checkers call it, and the elaborator on the kernel's spelling.** An equation one checker records and the other does not reads one arm two ways, and the arm is always a dead one: a proof the elaborator accepted there, under a guard over a top-level name, a global's projection, a local definition of a closed term or a dispatch whose method ignores its locals, is one the kernel refuses.
 pub fn records_case_equation(spelling: &Term) -> bool {
     spelling.has_local_free()
+}
+
+/// Whether `scrutinee`, read as reduction leaves it, is a value of another case than `case`: a literal or a constructed value that the unifier excusing an absent arm ([`invert_indices`]) finds in a definite clash with `case`. An arm at `case` under such a scrutinee is one no reduction takes. `binders` are the case's own, which the unifier may solve; a case's value names each of them once, so the answer is the same where none is named.
+///
+/// **Both checkers read it, each over what its own reduction answers.** The kernel types no such arm. The elaborator types every arm a reader wrote, and words its refusal of one by this.
+pub fn another_case<J: Judge>(
+    judge: &mut J,
+    scrutinee: &Term,
+    case: &Term,
+    binders: &[Free],
+) -> Result<bool, J::Error> {
+    if !stands_as_a_case(scrutinee) {
+        return Ok(false);
+    }
+
+    Ok(matches!(
+        invert_indices(
+            judge,
+            slice::from_ref(scrutinee),
+            slice::from_ref(case),
+            binders
+        )?,
+        Invert::Impossible
+    ))
+}
+
+/// Whether `term` already is a value that names its case: a constructed value, or a literal of a carrier an elimination reads.
+fn stands_as_a_case(term: &Term) -> bool {
+    match &**term {
+        Subterm::Variant(_) => true,
+        Subterm::Intrinsic(Intrinsic::Bool(_) | Intrinsic::Bin(..) | Intrinsic::List { .. }) => {
+            true
+        }
+        Subterm::Intrinsic(Intrinsic::Nat(_)) => Nat::is_zero(&Nat::decompose(term).1),
+        _ => false,
+    }
 }
 
 /// Whether `candidate` could be the term `key` reduces to, as conversion reads a term — tested without reducing anything. `proofs` is the binders `candidate` names that are themselves proofs.

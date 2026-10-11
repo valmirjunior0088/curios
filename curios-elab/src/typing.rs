@@ -11,7 +11,8 @@ use {
         subsume_outcome, synth_neutral, zonk_solved_term_metas,
     },
     curios_analysis::{
-        RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation, scrutinee_solution,
+        RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
+        scrutinee_solution,
     },
     curios_core::{
         Advance, Apply, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
@@ -1087,7 +1088,9 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
 pub(crate) fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) -> Option<Term> {
     let spelled = Unfolding::everything(&*context).term(head);
     let case = reduce_with(context, &spelled).ok()?;
-    another_case(&case, value).then_some(case)
+    another_case(context, &case, value, &[])
+        .ok()?
+        .then_some(case)
 }
 
 /// The guard of an arm around this one that the arm at `value` contradicts, with the case that guard always is there: where `head` is a variable, an equation in force — or one the arm already withholds — whose scrutinee names no local once the variable is spelled as `value`, and which computes to another case than the one its arm assumed. The arm is then never taken, and a proof resting on that guard fails in it, since the equation answers nothing there ([`Context::kernel_spelling`], and the withholding `Context::refine` does).
@@ -1115,24 +1118,12 @@ pub(crate) fn contradicted_guard(
         let Ok(case) = reduce_with(context, &spelled) else {
             continue;
         };
-        if another_case(&case, &entry.value) {
+        if another_case(context, &case, &entry.value, &[]).is_ok_and(|another| another) {
             return Some((entry.original, case));
         }
     }
 
     None
-}
-
-/// Whether `case`, a literal or a constructed value, is another case than `value`.
-fn another_case(case: &Term, value: &Term) -> bool {
-    match (&**case, &**value) {
-        (
-            Subterm::Intrinsic(this @ (Intrinsic::Bool(_) | Intrinsic::Nat(_))),
-            Subterm::Intrinsic(that @ (Intrinsic::Bool(_) | Intrinsic::Nat(_))),
-        ) => this != that,
-        (Subterm::Variant(this), Subterm::Variant(that)) => this.tag != that.tag,
-        _ => false,
-    }
 }
 
 /// The spellings a scrutinee that is neither a variable nor a projection is met by, each with the term it was registered from: as written, and resolved through a concept dispatch where it has one.
