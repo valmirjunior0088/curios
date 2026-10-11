@@ -165,33 +165,23 @@ export async function run(config) {
     tls_server_config: deniedHandle,
     tls_start_server: denied,
     socket_set_reuseaddr: reuseaddr,
-    // Readiness in the playground: the standard streams are always ready — stdin is at its end, which a read answers at once, and the output streams accept everything — and any other handle names nothing, so it reports `ERR`, which wakes whatever waits on it to find `NOT_FOUND`. The timeout is ignored, since nothing here can become ready later, and the browser cannot sleep inside a synchronous import anyway. A call whose interests do not pair one with each handle, or that asks for readiness no guest can ask for, is malformed and refused.
-    // The masks cross as one byte per handle, in the handles' order.
-    handle_poll: (handles, events, _timeout) => {
-      const count = bridge.list_len(handles);
-      const interest = decodeBytes(events);
+    // Readiness in the playground: the standard streams are always ready — stdin is at its end, which a read answers at once, and the output streams accept everything — and any other handle names nothing, so it reports its failure in whichever list it stands, which wakes whatever waits on it into the call that says why.
+    // A list's reports cross as one byte per handle, in the list's order.
+    handle_poll: (readers, writers, _timeout) => {
+      const reported = (handles) => {
+        const count = bridge.list_len(handles);
+        const reports = new Uint8Array(count);
 
-      if (interest.length !== count) {
-        throw new Error(
-          `handle_poll: ${count} handles, but ${interest.length} interests`,
-        );
-      }
-
-      const ready = new Uint8Array(count);
-
-      for (let i = 0; i < count; i += 1) {
-        if ((interest[i] & ~event.INTEREST) !== 0) {
-          throw new Error(
-            `handle_poll: ${interest[i]} asks for readiness a guest cannot`,
-          );
+        for (let i = 0; i < count; i += 1) {
+          reports[i] = standard.has(keyOf(bridge.list_get(handles, i)))
+            ? event.READY
+            : event.ERR;
         }
 
-        ready[i] = standard.has(keyOf(bridge.list_get(handles, i)))
-          ? interest[i]
-          : event.ERR;
-      }
+        return encodeBytes(reports);
+      };
 
-      return encodeBytes(ready);
+      return [reported(readers), reported(writers)];
     },
     handle_close: () => {},
     // Nothing is held back in the playground — every write is delivered as it is made — so a standard stream's flush has nothing to drain, and no other handle exists here.

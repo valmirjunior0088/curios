@@ -393,26 +393,12 @@ fn written(
     Ok(())
 }
 
-/// A host's call as its binding answers it: the reply, or the refusal of a call whose operands broke a requirement of the row, in which case the host was never asked.
+/// A host's reply to one call of the row `op`, as its binding answers it.
 ///
 /// Lowering writes the reply as its type encodes it, which is what makes it a value of the row's wire types. The guest reads it unchecked, and nothing here holds it to more than its type: what a row promises beyond that is its host's to keep, and the hosts' own tests' to hold.
 pub(crate) struct Replied<R> {
-    op: HostOp,
-    reply: Result<R, String>,
-}
-
-impl<R: WireReply> Replied<R> {
-    /// Admit `operands` to `op`'s requirements, and answer the call only if they hold.
-    pub(crate) fn new<const N: usize>(
-        op: HostOp,
-        operands: [Option<u64>; N],
-        call: impl FnOnce() -> R,
-    ) -> Self {
-        Self {
-            op,
-            reply: op.admit(&operands).map(|()| call()),
-        }
-    }
+    pub(crate) op: HostOp,
+    pub(crate) reply: R,
 }
 
 impl<R: WireReply> Reply for Replied<R> {
@@ -431,7 +417,7 @@ impl<R: WireReply> Reply for Replied<R> {
         let refused =
             |sentence: String| wasmtime::Error::msg(format!("{}: {sentence}", self.op.declared()));
 
-        let values = match self.reply.map_err(refused)?.encode() {
+        let values = match self.reply.encode() {
             Encoded::Reply(values) => values,
             // A termination is the guest-exit trap, which unwinds the call and which `instantiate` catches for its code: the one way a host ends the instance, so no implementation of a diverging row can return into the guest.
             Encoded::Terminate(code) => return Err(wasmtime::Error::from(ExitTrap(code))),

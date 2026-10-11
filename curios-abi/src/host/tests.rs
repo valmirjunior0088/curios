@@ -1,11 +1,11 @@
 use {
     super::{
-        ClosedCode, Failure, FileKind, ForeignFunction, ForeignStore, HostOp, Mode, Poll,
-        ResultShape, SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf, WireResults,
-        WireReturn, WireSignature, WireType,
+        ClosedCode, Failure, FileKind, ForeignFunction, ForeignStore, HostOp, Mode, ResultShape,
+        SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf, WireResults, WireReturn,
+        WireSignature, WireType,
     },
-    crate::{event, status},
-    std::{collections::BTreeSet, fmt::Debug},
+    crate::status,
+    std::fmt::Debug,
 };
 
 /// The results `op` answers with, for a row that returns.
@@ -77,23 +77,6 @@ fn result_records_keep_their_labels() {
         ["status", "child", "stdin", "stdout", "stderr"]
     );
     assert_eq!(labels(HostOp::ProcWait), ["status", "code", "signal"]);
-}
-
-/// Every row is well-formed: it names each operand once, since a requirement finds an operand by its name, and its names stand beside what crosses, one for each operand.
-#[test]
-fn rows_are_well_formed() {
-    for &op in HostOp::ALL {
-        let signature = op.signature();
-        let names: BTreeSet<_> = op.operands().iter().collect();
-
-        assert_eq!(
-            names.len(),
-            op.operands().len(),
-            "{} repeats an operand name",
-            op.name()
-        );
-        assert_eq!(op.operands().len(), signature.params.len(), "{op:?}");
-    }
 }
 
 /// Results cross in the order they are written, whatever their shapes: a single result of any type, a row's status before its payload, and references in any slot — two of them, or one before a scalar — each read back where it stands.
@@ -195,7 +178,6 @@ fn exit_is_the_one_row_that_diverges() {
 
     let exit = diverging[0].signature();
     assert_eq!(exit.params, [WireType::Byte]);
-    assert_eq!(diverging[0].operands(), ["code"]);
     assert!(exit.returns.types().is_empty());
     assert_eq!(
         HostOp::HandleClose.signature().returns,
@@ -248,12 +230,4 @@ fn a_closed_code_reads_back_its_variant_and_nothing_past_it() {
     round_trips::<SerialParity>();
     round_trips::<SerialFlow>();
     round_trips::<SerialOp>();
-}
-
-/// A poll's interest is the bits a guest may ask for, and nothing a host alone reports.
-#[test]
-fn an_interest_outside_read_and_write_is_malformed() {
-    assert!(Poll::interest(event::READ | event::WRITE).is_some());
-    assert!(Poll::interest(event::ERR).is_none());
-    assert!(Poll::interest(0b1_0000).is_none());
 }

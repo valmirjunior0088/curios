@@ -49,9 +49,11 @@ fn trees_leaf_rides_its_payload() {
         sum.body
     );
 
+    // The program's own: a function of the standard library the module links may recurse twice as well.
     let build = functions
         .iter()
-        .filter(|f| f.name.starts_with("$func/") && !f.body.contains("1000003"))
+        .filter(|f| f.name.starts_with("$func/") && !f.name.contains("$/std/"))
+        .filter(|f| !f.body.contains("1000003"))
         .find(|f| f.self_calls() >= 2)
         .expect("build recurses directly on both subtrees");
     assert_eq!(

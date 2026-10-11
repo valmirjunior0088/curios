@@ -2,7 +2,7 @@
 
 use {
     curios_abi::{
-        ChildExit, ChildHandles, Failure, FileStat, Handle, HostOp, HostOps, Mode, Poll, Refusal,
+        ChildExit, ChildHandles, Failure, FileStat, Handle, HostOp, HostOps, Mode, Polled, Refusal,
         SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
         for_each_host_op,
     },

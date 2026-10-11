@@ -1,8 +1,8 @@
 //! The single authored table of the host's operations, and what `curios-abi` derives from it.
 //!
-//! `for_each_host_op!` is the one place a host operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then a brace group of what its types cannot say: `module`, the `/std` module that declares it; `yields`, the label a lone value crosses under beside a status, which a row states exactly where its reply has one, since the reply's type takes the label or takes none ([`WireReply::Label`]); and `requires`, what its operands must hold before the call ([`Requirement`]), naming the operands it reads. The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape what crosses beside them — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
+//! `for_each_host_op!` is the one place a host operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then a brace group of what its types cannot say: `module`, the `/std` module that declares it, and `yields`, the label a lone value crosses under beside a status, which a row states exactly where its reply has one, since the reply's type takes the label or takes none ([`WireReply::Label`]). The types say the rest, and they are all a call is held to: no row asks of its operands what their types do not state. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape what crosses beside them — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
 //!
-//! **Every row shares three clauses beside its own.** A handle that names nothing, or a resource of a kind that cannot do the operation at all, fails `NotFound` and leaves every resource as it was; a stream used in a direction it is not open for — reading `stdout` or `stderr`, writing `stdin`, or a file against its open mode — fails with `EBADF` through the errno lane, on every host. Every operand is copied in and every reply copied out, so no host keeps a reference to guest memory across a call. A malformed operand is refused by the host's adapter. A reply is lowered from its own type, which is what makes it a value of the row's wire types, and nothing checks it further: what a row's rustdoc promises beyond its types is its host's to keep, and the hosts' own tests hold them to it.
+//! **Every row shares three clauses beside its own.** A handle that names nothing, or a resource of a kind that cannot do the operation at all, fails `NotFound` and leaves every resource as it was; a stream used in a direction it is not open for — reading `stdout` or `stderr`, writing `stdin`, or a file against its open mode — fails with `EBADF` through the errno lane, on every host. Every operand is copied in and every reply copied out, so no host keeps a reference to guest memory across a call. An operand that is no value of its type is refused by the host's adapter. A reply is lowered from its own type, which is what makes it a value of the row's wire types, and nothing checks it further: what a row's rustdoc promises beyond its types is its host's to keep, and the hosts' own tests hold them to it.
 //!
 //! The table is an exported X-macro: invoked with the name of a callback macro, it applies that callback to every row. `curios-abi` applies one, generating the [`HostOp`] enum, the roster its accessors read and the [`HostOps`] trait; `curios-runtime` applies its own to bind every import to its method, so the bindings are read off the table too. A callback matches the row grammar and passes each type through untouched — none maps a type to anything — which keeps the table's vocabulary the type system's rather than a macro's.
 //!
@@ -12,14 +12,14 @@
 
 use {
     super::{
-        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Poll, Refusal, Requirement,
-        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
-        WireOperand, WireReply, WireSignature,
+        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Polled, Refusal, SerialFlow,
+        SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, WireOperand, WireReply,
+        WireSignature,
     },
     std::sync::LazyLock,
 };
 
-/// The one authored table of the host's operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply { module: path, yields: label, requires: [..] }`, `yields` there where the reply's type takes a label and `requires` optional: the variant is the row's [`HostOp`], the method name the [`HostOps`] method and the label `module` declares the row by, and the brace group holds what the types cannot say.
+/// The one authored table of the host's operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply { module: path, yields: label }`, `yields` there where the reply's type takes a label: the variant is the row's [`HostOp`], the method name the [`HostOps`] method and the label `module` declares the row by, and the brace group holds what the types cannot say.
 ///
 /// Exported so `curios-runtime` can generate its bindings from the rows it binds, and hidden because nothing else should read the table as tokens: every other consumer reads [`HostOp`] and [`HostOps`]. A callback must have in scope every type it expands, since the rows expand where the callback does.
 #[doc(hidden)]
@@ -78,8 +78,8 @@ macro_rules! for_each_host_op {
             /// Set socket `h`'s `SO_REUSEADDR` flag; set before `socket_bind`.
             SocketSetReuseaddr: fn socket_set_reuseaddr(h: Handle, on: bool) -> Result<(), Failure> { module: tcp/Listener }
 
-            /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle, each within the interest it asked for plus `ERR` and `HUP`; a handle that is unknown — closed, say — has no descriptor, or names a descriptor the system calls invalid reports `ERR`, so its waiter wakes into the call that says why. Each distinct descriptor is polled once, whatever number of handles name it, and an interruption is retried against a deadline taken at the call. A poll the system refuses outright refuses the call, naming the error.
-            HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Result<Vec<Poll>, Refusal> { module: Handle, requires: [SameLength { a: handles, b: events }] }
+            /// The readiness oracle. Wait until a handle of `readers` is ready to read or one of `writers` to write, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Answers a report for each handle of each list, in the list's order: whether it is ready for what its list waits on, and, asked or not, that it failed or that its peer hung up. A handle that is unknown — closed, say — has no descriptor, or names a descriptor the system calls invalid reports its failure, so its waiter wakes into the call that says why. A handle may stand in both lists and in either more than once: each distinct descriptor is polled once, and each standing is answered for its own list. An interruption is retried against a deadline taken at the call, and a poll the system refuses outright refuses the call, naming the error.
+            HandlePoll: fn handle_poll(readers: Vec<Handle>, writers: Vec<Handle>, timeout: i64) -> Result<Polled, Refusal> { module: Handle }
 
             /// Close `h`. Closing an unknown handle is a no-op.
             HandleClose: fn handle_close(h: Handle) -> () { module: Handle }
@@ -170,7 +170,6 @@ macro_rules! declare_host_rows {
         $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty {
             module: $($module:ident)/+ $(,)?
             $(yields: $yields:ident $(,)?)?
-            $(requires: [$($requirement:ident { $($requirement_field:ident: $requirement_operand:ident),* $(,)? }),* $(,)?] $(,)?)?
         }
     )*) => {
         /// A host operation, one variant per row of the table, named as the row names it: the variant is the method name in CamelCase, and `a_variant_is_its_method_name_in_camel_case` holds the two spellings together.
@@ -193,12 +192,10 @@ macro_rules! declare_host_rows {
                     Row {
                         name: stringify!($name),
                         module: concat!($(stringify!($module), "/"),+),
-                        operands: vec![$(stringify!($p)),*],
                         signature: WireSignature {
                             params: vec![$(<$t as WireOperand>::WIRE),*],
                             returns: <$r as WireReply>::shape().returns(yields_label!($($yields)?)),
                         },
-                        requirements: vec![$($(Requirement::$requirement { $($requirement_field: stringify!($requirement_operand)),* }),*)?],
                     },
                 )*]
             });
@@ -220,9 +217,7 @@ struct Row {
     name: &'static str,
     /// The `/std` module that declares the row, each segment closed by its slash.
     module: &'static str,
-    operands: Vec<&'static str>,
     signature: WireSignature,
-    requirements: Vec<Requirement>,
 }
 
 impl HostOp {
@@ -243,28 +238,5 @@ impl HostOp {
     /// The row's operands and results, as they cross.
     pub fn signature(self) -> &'static WireSignature {
         &self.row().signature
-    }
-
-    /// The name each operand is written under, in the order they cross: what the row's requirements read an operand by.
-    pub fn operands(self) -> &'static [&'static str] {
-        &self.row().operands
-    }
-
-    /// The position of the operand the row names `name`: the one lookup a requirement's reader makes.
-    pub fn operand(self, name: &str) -> usize {
-        self.operands()
-            .iter()
-            .position(|operand| *operand == name)
-            .unwrap_or_else(|| {
-                panic!(
-                    "`{}` reads an operand `{name}` it does not take",
-                    self.name()
-                )
-            })
-    }
-
-    /// What the row's operands must hold before the host is asked.
-    pub fn requirements(self) -> &'static [Requirement] {
-        &self.row().requirements
     }
 }

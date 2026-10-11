@@ -348,11 +348,9 @@ let sweep_parked(ss: List(Slot)) -> Io(List(Slot)) =
         end
     end;
 
---- The parked waiters a poll finds ready, and the rest. The poll answers one report per handle in the handles' order, so each waiter is walked beside its own report; one that no report reaches has nothing reported, and stays parked.
+--- The parked waiters a poll finds ready, and the rest. The poll answers one report per wait in the waits' order, so each waiter is walked beside its own report; one that no report reaches has nothing reported, and stays parked.
 let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parked)}) =
-    let handles = List/map(blocked, (p: Parked) => p.handle);
-    let events = List/map(blocked, (p: Parked) => p.interest);
-    let reports = Handle/poll(handles, events, timeout)!;
+    let reports = Handle/poll(List/map(blocked, (p: Parked) => (p.handle, p.interest)), timeout)!;
     let walk(
         rest: List(Parked),
         reports: List(Readiness),

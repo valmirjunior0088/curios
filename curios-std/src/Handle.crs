@@ -18,41 +18,59 @@ pub use Interest/{let Interest};
 pub mod Readiness;
 pub use Readiness/{let Readiness};
 
-let to_mask(i: Interest) -> Byte =
-    let readable: Byte = match i.readable | true => /sys/event/read | false => 0 end;
-    let writable: Byte = match i.writable | true => /sys/event/write | false => 0 end;
-    readable || writable;
+let flagged(report: Byte, flag: Byte) -> Bool =
+    Byte/to_nat(report && flag) > 0;
 
-let flagged(mask: Byte, flag: Byte) -> Bool =
-    Byte/to_nat(mask && flag) > 0;
+--- The handles of `waits` that are waited on to read, in their order.
+let readers(waits: List({Handle, Interest})) -> List(Handle) =
+    match waits
+    | [] => []
+    | [w, ..rest] =>
+        match w.1.readable | true => [w.0, ..readers(rest)] | false => readers(rest) end
+    end;
 
-let of_mask(mask: Byte) -> Readiness =
+--- The handles of `waits` that are waited on to write, in their order.
+let writers(waits: List({Handle, Interest})) -> List(Handle) =
+    match waits
+    | [] => []
+    | [w, ..rest] =>
+        match w.1.writable | true => [w.0, ..writers(rest)] | false => writers(rest) end
+    end;
+
+--- The next report of a list for a wait that stands in it, beside the reports after it; a wait that does not stand there takes none, and a list that has run out reports nothing.
+let taken(stands: Bool, reports: Bytes) -> {Byte, Bytes} =
+    match stands
+    | false => (0, reports)
+    | true => match reports | x[] => (0, x[]) | x[r, ..rest] => (r, rest) end
+    end;
+
+--- What a poll reports of one wait: each direction fired where that list's report says ready, and the handle failed or hung up where either list's says so.
+let of_reports(read: Byte, wrote: Byte) -> Readiness =
     Readiness {
         fired =
             Interest {
-                readable = flagged(mask, /sys/event/read),
-                writable = flagged(mask, /sys/event/write) },
-        failed = flagged(mask, /sys/event/err),
-        hung_up = flagged(mask, /sys/event/hup) };
+                readable = flagged(read, /sys/event/ready),
+                writable = flagged(wrote, /sys/event/ready) },
+        failed = flagged(read || wrote, /sys/event/err),
+        hung_up = flagged(read || wrote, /sys/event/hup) };
 
---- A poll's masks cross as one byte per handle, in the handles' order.
-let to_masks(interests: List(Interest)) -> Bytes =
-    match interests | [] => x[] | [i, ..rest] => x[to_mask(i), ..to_masks(rest)] end;
+--- One report for each wait, in the waits' order: a wait takes the next report of each list it stands in.
+let reports(waits: List({Handle, Interest}), readable: Bytes, writable: Bytes) -> List(Readiness) =
+    match waits
+    | [] => []
+    | [w, ..rest] =>
+        let read = taken(w.1.readable, readable);
+        let wrote = taken(w.1.writable, writable);
+        [of_reports(read.0, wrote.0), ..reports(rest, read.1, wrote.1)]
+    end;
 
-let of_masks(masks: Bytes) -> List(Readiness) =
-    match masks | x[] => [] | x[m, ..rest] => [of_mask(m), ..of_masks(rest)] end;
+--- Wait for so many milliseconds on the first handles to read and the second to write: a byte of what is reported for each handle of each list, in the list's order.
+foreign handle_poll(List(Handle), List(Handle), Int) -> {readable: Bytes, writable: Bytes};
 
---- Wait on these handles for so many milliseconds, an event mask beside each: the events each is ready for, a mask a handle.
-foreign handle_poll(List(Handle), Bytes, Int) -> Bytes;
-
---- Wait until a handle is ready for the interest beside it, or until `timeout` milliseconds pass; a negative timeout waits forever and zero answers at once.
-pub let poll(
-    handles: List(Handle),
-    interests: List(Interest),
-    timeout: Int,
-) -> Io(List(Readiness)) =
-    let masks = handle_poll(handles, to_masks(interests), timeout)!;
-    Io/pure(of_masks(masks));
+--- Wait until a handle is ready for the interest beside it, or until `timeout` milliseconds pass; a negative timeout waits forever and zero answers at once. One report answers each wait, in the waits' order.
+pub let poll(waits: List({Handle, Interest}), timeout: Int) -> Io(List(Readiness)) =
+    let polled = handle_poll(readers(waits), writers(waits), timeout)!;
+    Io/pure(reports(waits, polled.readable, polled.writable));
 
 --- A successful read's bytes as the chunk they are, or the end of the stream where there are none: a read of a positive count that answers nothing is the end, as a zero-byte `read(2)` is.
 let answered(b: Bytes) -> Io/Chunk =
@@ -117,7 +135,7 @@ let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
     | failure(s) =>
         choose
         | s == /sys/status/would_block =>
-            let _ = poll([h], [Interest/readable], -1)!;
+            let _ = poll([(h, Interest/readable)], -1)!;
             read_waiting(h, n, @positive)
         | _ => Io/pure(Io/Chunk/error(Io/Error/of(s)))
         end
@@ -135,7 +153,7 @@ let write_waiting(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
     | failure(s) =>
         choose
         | s == /sys/status/would_block =>
-            let _ = poll([h], [Interest/writable], -1)!;
+            let _ = poll([(h, Interest/writable)], -1)!;
             write_waiting(h, b)
         | _ => Io/pure(Result/failure(Io/Error/of(s)))
         end
@@ -149,7 +167,7 @@ let flush_waiting(h: Handle) -> Io(Result(Io/Error, {})) =
     | failure(s) =>
         choose
         | s == /sys/status/would_block =>
-            let _ = poll([h], [Interest/writable], -1)!;
+            let _ = poll([(h, Interest/writable)], -1)!;
             flush_waiting(h)
         | _ => Io/pure(Result/failure(Io/Error/of(s)))
         end

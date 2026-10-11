@@ -1,12 +1,12 @@
 use {
-    super::{Handle, Mode, Poll, SerialFlow, SerialOp, SerialParity, StdioMode},
+    super::{Handle, Mode, SerialFlow, SerialOp, SerialParity, StdioMode},
     curios_abi::{ClosedCode, WireLeaf, WireType},
     wasmtime::{Caller, Val},
 };
 
 /// Decoding one host-import argument list out of wasmtime `Val`s — the inbound half of the FFI boundary (`Lower` is the outbound half). `ForeignBindings::define` and the `sys`-tier glue compose each trampoline from `Li::lift`/`Lo::lower`, so a host implementation is written against plain Rust types (`u64`, `Vec<u8>`, [`Handle`], tuples) and never touches a `Val`.
 ///
-/// A value the guest's type does not admit — a `Bool` word past `1`, a closed code outside its table, an interest bit a guest cannot ask for — is refused rather than read as something nearby: the call fails, naming what it was handed.
+/// A value the guest's type does not admit — a `Bool` word past `1`, a closed code outside its table — is refused rather than read as something nearby: the call fails, naming what it was handed.
 pub trait Lift: Sized {
     /// The wire types this decodes, in order: what a run holds a binding's operands to against its row.
     fn shape() -> Vec<WireType>;
@@ -264,26 +264,6 @@ impl Lift for Vec<u8> {
     }
 }
 
-/// `handle_poll`'s `events`: a `Bytes` with one interest mask per handle, each within the bits a guest may ask for.
-impl Lift for Vec<Poll> {
-    fn shape() -> Vec<WireType> {
-        vec![WireType::Bytes]
-    }
-
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Vec::<u8>::lift(caller, params)?
-            .into_iter()
-            .map(|bits| {
-                Poll::interest(bits).ok_or_else(|| {
-                    wasmtime::Error::msg(format!(
-                        "{bits:#06b} asks for readiness no guest can ask for"
-                    ))
-                })
-            })
-            .collect()
-    }
-}
-
 /// Read a `List(Bytes)` host-import argument: a `params[0]` anyref array whose elements are themselves `Bytes` (i8 arrays). The inbound dual of `lower.rs`'s `Vec<Vec<u8>>` lowering; `List(Handle)` rides this shape, a handle being its token's bytes.
 fn lift_bytes_array(
     caller: &mut Caller<'_, ()>,
@@ -349,7 +329,7 @@ impl Lift for Vec<Vec<u8>> {
     }
 }
 
-/// `List(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — `handle_poll`'s `handles` array.
+/// `List(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — each of `handle_poll`'s two lists.
 impl Lift for Vec<Handle> {
     fn shape() -> Vec<WireType> {
         vec![WireType::List(WireLeaf::Handle)]

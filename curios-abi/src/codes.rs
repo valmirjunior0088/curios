@@ -32,16 +32,14 @@ pub mod status {
     pub const ERRNO_MAX: u64 = i32::MAX as u64;
 }
 
-/// `handle_poll` interest/readiness flags — a bitmask of one byte, mirrored by `/sys/event`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
+/// What `handle_poll` reports of one handle of one of its lists — a bitmask of one byte, mirrored by `/sys/event`. A poll states its interest by the list a handle stands in, so no flag asks for anything: all three are a host's to report.
 pub mod event {
-    /// The handle is (or should be watched to become) readable.
-    pub const READ: u8 = 0b0001;
-    /// The handle is (or should be watched to become) writable.
-    pub const WRITE: u8 = 0b0010;
-    /// The handle is in an error state. Result-only: reported even when never requested.
-    pub const ERR: u8 = 0b0100;
-    /// The peer hung up. Result-only, like `ERR`.
-    pub const HUP: u8 = 0b1000;
+    /// The handle is ready for what its list waits on: to read, in the readers', and to write, in the writers'.
+    pub const READY: u8 = 0b001;
+    /// The handle is in an error state, or names nothing a poll can watch.
+    pub const ERR: u8 = 0b010;
+    /// The peer hung up.
+    pub const HUP: u8 = 0b100;
 }
 
 /// `file_open` modes, mirrored by `/sys/open_mode` and the guest's `/std/File/Mode`.

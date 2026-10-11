@@ -127,15 +127,8 @@ let said(r: Readiness) -> Str =
     | _ => "none"
     end;
 let h = token()!;
-let rs = Handle/poll([h, Handle/stdout, Handle/stdin], [Interest/readable, Interest/writable, Interest/readable], 0)!;
+let rs = Handle/poll([(h, Interest/readable), (Handle/stdout, Interest/writable), (Handle/stdin, Interest/readable)], 0)!;
 print(Str/join(" ", List/map(rs, said)))
-`;
-
-const UNEQUAL = `
-use /std/{Handle};
-use /std/Handle/{Interest};
-let _ = Handle/poll([Handle/stdin], [Interest/readable, Interest/writable], 0)!;
-/std/print("polled")
 `;
 
 const HOOKS = `
@@ -379,13 +372,12 @@ test("a stream used against its direction fails with EBADF, and a handle this ho
   assert.equal(stdout, "other(9) other(9) eof not_found");
 });
 
-test("a poll reports ERR for a handle it does not know, and refuses interests that do not pair with the handles", async () => {
+test("a poll reports a failure for a handle it does not know, beside the streams ready for what each was waited on", async () => {
   const { stdout } = await execute(POLL, {
     foreign: { "/token": () => Uint8Array.of(9) },
   });
 
   assert.equal(stdout, "err write read");
-  await stopped(UNEQUAL, {}, /handle_poll: 1 handles, but 2 interests/);
 });
 
 test("listing a directory is denied rather than refused", async () => {

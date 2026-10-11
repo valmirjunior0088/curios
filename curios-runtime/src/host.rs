@@ -1,10 +1,10 @@
 //! The native adapter's own concerns, and the contract it speaks in.
 //!
-//! The wire contract — the [`Handle`]/[`Failure`]/[`Poll`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], a [`Poll`] mask to and from the platform `poll` flags (whose raw values differ per platform), and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
+//! The wire contract — the [`Handle`]/[`Failure`]/[`Readiness`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], the platform's `poll` flags to a [`Readiness`] (whose raw values differ per platform), and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
 pub use curios_abi::{
-    ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, HostOps, Mode, Poll, Refusal,
-    SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
+    ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, HostOps, Mode, Polled, Readiness,
+    Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
 };
 
 use {
@@ -90,31 +90,12 @@ pub(crate) fn failure_from_error(error: Error) -> Failure {
     }
 }
 
-/// Map a [`Poll`] interest mask to the platform `poll` flags. Only `READ`/ `WRITE` are settable interests; the result-only `ERR`/`HUP` are never requested.
-pub(crate) fn poll_to_flags(events: Poll) -> PollFlags {
-    let mut flags = PollFlags::empty();
-
-    if events.bits() & event::READ != 0 {
-        flags |= PollFlags::IN;
-    }
-
-    if events.bits() & event::WRITE != 0 {
-        flags |= PollFlags::OUT;
-    }
-
-    flags
-}
-
-/// Map the platform `revents` back to a [`Poll`] readiness mask, including the result-only `ERR`/`HUP` the kernel reports whether or not they were asked for. A descriptor the kernel calls invalid (`POLLNVAL`) reports `ERR`: its waiter wakes into the call that says why rather than waiting on a descriptor that cannot become ready.
-pub(crate) fn poll_from_flags(flags: PollFlags) -> Poll {
+/// What the platform's `revents` say of a descriptor to one standing of it in a poll, which watched it for `watched`: ready where any flag watched on the standing's behalf fired, and, asked or not, the failure and the hang-up the kernel reports. A descriptor the kernel calls invalid (`POLLNVAL`) reports its failure: its waiter wakes into the call that says why rather than waiting on a descriptor that cannot become ready.
+pub(crate) fn readiness(flags: PollFlags, watched: PollFlags) -> Readiness {
     let mut bits = 0;
 
-    if flags.contains(PollFlags::IN) {
-        bits |= event::READ;
-    }
-
-    if flags.contains(PollFlags::OUT) {
-        bits |= event::WRITE;
+    if flags.intersects(watched) {
+        bits |= event::READY;
     }
 
     if flags.intersects(PollFlags::ERR | PollFlags::NVAL) {
@@ -125,7 +106,7 @@ pub(crate) fn poll_from_flags(flags: PollFlags) -> Poll {
         bits |= event::HUP;
     }
 
-    Poll::from_bits(bits)
+    Readiness::from_bits(bits)
 }
 
 #[cfg(test)]

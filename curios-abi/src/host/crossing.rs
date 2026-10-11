@@ -1,12 +1,12 @@
 //! How each Rust type a host's row is written in crosses the wire — the knowledge the table's rows read off their types rather than spell as columns.
 //!
-//! An operand type states the [`WireType`] it arrives as and, where a row's requirements read it, its measure ([`WireOperand`]). A payload states the slots a success fills, how it fills them, and the padding a reply without it fills them with ([`WirePayload`]). A reply type, built around a payload, states what crosses back, short of the one label its row states, and encodes the whole reply ([`WireReply`]): a bare payload crosses as its own slots; `Result<T, Failure>` puts a status ahead of them, as do `Result<Option<T>, Failure>`, a stream whose `None` is its end, and `Option<T>`, a lookup whose `None` is absence; `Result<T, Refusal>` crosses as its payload, its host free to refuse the call instead; and [`Termination`] crosses nothing, its row one that does not return. The generic shapes are disjoint because no `Option` or `Result` is a payload, which coherence holds rather than a comment.
+//! An operand type states the [`WireType`] it arrives as ([`WireOperand`]). A payload states the slots a success fills, how it fills them, and the padding a reply without it fills them with ([`WirePayload`]). A reply type, built around a payload, states what crosses back, short of the one label its row states, and encodes the whole reply ([`WireReply`]): a bare payload crosses as its own slots; `Result<T, Failure>` puts a status ahead of them, as do `Result<Option<T>, Failure>`, a stream whose `None` is its end, and `Option<T>`, a lookup whose `None` is absence; `Result<T, Refusal>` crosses as its payload, its host free to refuse the call instead; and [`Termination`] crosses nothing, its row one that does not return. The generic shapes are disjoint because no `Option` or `Result` is a payload, which coherence holds rather than a comment.
 //!
 //! A reply encodes to the [`WireValue`]s it crosses with, in slot order ([`Encoded`]), which the runtime writes into wasm values: this leaf names no wasm value, and the table's types agree with the bindings built from them by construction, since both are read off the same row.
 
 use {
     super::{
-        ChildExit, ChildHandles, ClosedCode, Failure, FileStat, Handle, Mode, Poll, Refusal,
+        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Polled, Readiness, Refusal,
         SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf,
         WireResults, WireReturn, WireType,
     },
@@ -17,14 +17,9 @@ use {
 #[cfg(test)]
 mod tests;
 
-/// A type an operand of a host's row is written in: the wire type it arrives as, and the measure a requirement reads.
+/// A type an operand of a host's row is written in: the wire type it arrives as.
 pub trait WireOperand {
     const WIRE: WireType;
-
-    /// What a row's requirements read of the operand — a count's value, a buffer's or a list's length, a mode's code — or `None` for an operand none reads.
-    fn measure(&self) -> Option<u64> {
-        None
-    }
 }
 
 impl WireOperand for Handle {
@@ -33,10 +28,6 @@ impl WireOperand for Handle {
 
 impl WireOperand for u64 {
     const WIRE: WireType = WireType::Nat;
-
-    fn measure(&self) -> Option<u64> {
-        Some(*self)
-    }
 }
 
 impl WireOperand for i64 {
@@ -53,35 +44,14 @@ impl WireOperand for u8 {
 
 impl WireOperand for Vec<u8> {
     const WIRE: WireType = WireType::Bytes;
-
-    fn measure(&self) -> Option<u64> {
-        Some(self.len() as u64)
-    }
 }
 
 impl WireOperand for Vec<Vec<u8>> {
     const WIRE: WireType = WireType::List(WireLeaf::Bytes);
-
-    fn measure(&self) -> Option<u64> {
-        Some(self.len() as u64)
-    }
 }
 
 impl WireOperand for Vec<Handle> {
     const WIRE: WireType = WireType::List(WireLeaf::Handle);
-
-    fn measure(&self) -> Option<u64> {
-        Some(self.len() as u64)
-    }
-}
-
-/// The masks of a poll cross as one byte each.
-impl WireOperand for Vec<Poll> {
-    const WIRE: WireType = WireType::Bytes;
-
-    fn measure(&self) -> Option<u64> {
-        Some(self.len() as u64)
-    }
 }
 
 impl WireOperand for Mode {
@@ -90,10 +60,6 @@ impl WireOperand for Mode {
 
 impl WireOperand for StdioMode {
     const WIRE: WireType = WireType::Nat;
-
-    fn measure(&self) -> Option<u64> {
-        Some(self.code())
-    }
 }
 
 impl WireOperand for SerialParity {
@@ -278,20 +244,28 @@ impl WirePayload for Vec<Vec<u8>> {
     }
 }
 
-/// Poll masks cross as one `Bytes`, byte `i` the mask of handle `i`, each within the bits a host may report.
-impl WirePayload for Vec<Poll> {
-    type Label = &'static str;
+/// A poll's reports cross as two `Bytes`, one for each of its lists, byte `i` the report of that list's handle `i`.
+impl WirePayload for Polled {
+    type Label = ();
 
-    fn slots() -> PayloadSlots<&'static str> {
-        PayloadSlots::Value(WireType::Bytes, identity)
+    fn slots() -> PayloadSlots<()> {
+        PayloadSlots::Fields(
+            ("readable", WireType::Bytes),
+            ("writable", WireType::Bytes),
+            Vec::new(),
+        )
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
-        values.push(WireValue::Bytes(self.into_iter().map(Poll::bits).collect()));
+        values.extend(
+            [self.readable, self.writable].map(|reports| {
+                WireValue::Bytes(reports.into_iter().map(Readiness::bits).collect())
+            }),
+        );
     }
 
     fn pad(values: &mut Vec<WireValue>) {
-        values.push(WireValue::Bytes(Vec::new()));
+        values.extend([WireValue::Bytes(Vec::new()), WireValue::Bytes(Vec::new())]);
     }
 }
 

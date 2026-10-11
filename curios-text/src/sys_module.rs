@@ -1024,8 +1024,7 @@ fn code_modules() -> Vec<SysModule> {
         SysModule::ops(
             "event",
             vec![
-                pub_let("read", byte(), byte_lit(event::READ)),
-                pub_let("write", byte(), byte_lit(event::WRITE)),
+                pub_let("ready", byte(), byte_lit(event::READY)),
                 pub_let("err", byte(), byte_lit(event::ERR)),
                 pub_let("hup", byte(), byte_lit(event::HUP)),
             ],

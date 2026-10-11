@@ -1,11 +1,10 @@
 //! The semantic Rust types a host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Poll`] a byte of flags, a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
+//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Readiness`] a byte of flags, a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`], [`ChildHandles`] and [`Polled`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, the platform's `poll` flags to a `Readiness` — live with the adapter (`curios-runtime`), not here.
 
 use {
     crate::{
-        event, file_kind, open_mode, serial_flow, serial_op, serial_parity, status, stdio,
-        stdio_mode,
+        file_kind, open_mode, serial_flow, serial_op, serial_parity, status, stdio, stdio_mode,
     },
     curios_num::Natural,
     std::num::NonZeroU32,
@@ -110,36 +109,37 @@ impl Default for TokenMint {
     }
 }
 
-/// A `handle_poll` event mask — the interest a guest registers for a handle, and the readiness the host reports back. The one bitfield in the host design: a set of flags riding a byte, mirroring the guest's per-handle `Byte`, so the masks for a call cross as one `Bytes` with a byte per handle. The mapping to platform `POLLIN`/`POLLOUT`/… (whose raw values differ per platform) is the native adapter's concern.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Poll(u8);
+/// What a poll reports of one handle of one of its lists: whether the handle is ready for what that list waits on, and the two a host reports of a handle whatever it was asked — that it failed, and that its peer hung up. A set of flags riding a byte, the one bitfield in the host design, so a list's reports cross as one `Bytes` with a byte per handle. The mapping to the platform's `POLLIN`/`POLLOUT`/… (whose raw values differ per platform) is the native adapter's concern.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Readiness(u8);
 
-impl Poll {
-    /// The bits a guest may ask for: readiness to read and to write.
-    pub const INTEREST: u8 = event::READ | event::WRITE;
-
-    /// The bits a host may report: the interest bits, and the result-only `ERR` and `HUP`.
-    pub const READINESS: u8 = Self::INTEREST | event::ERR | event::HUP;
-
-    /// The empty mask — no interest, or no readiness.
-    pub const fn empty() -> Self {
+impl Readiness {
+    /// Nothing to report: the handle is not ready, and nothing is wrong with it.
+    pub const fn none() -> Self {
         Self(0)
     }
 
-    /// The interest a guest's byte asks for, or `None` for a bit outside [`INTEREST`](Self::INTEREST): readiness it cannot ask for is a malformed argument rather than a request the host may drop.
-    pub fn interest(bits: u8) -> Option<Self> {
-        (bits & !Self::INTEREST == 0).then_some(Self(bits))
-    }
-
-    /// The mask a byte of the guest's `Bytes` holds.
-    pub fn from_bits(bits: u8) -> Self {
+    /// The report a byte holds.
+    pub const fn from_bits(bits: u8) -> Self {
         Self(bits)
     }
 
     /// The raw bits, one byte of the `Bytes` lowered back to the guest.
-    pub fn bits(self) -> u8 {
+    pub const fn bits(self) -> u8 {
         self.0
     }
+
+    /// Whether anything is reported: readiness, a failure or a hang-up, any of which wakes whoever waits on the handle.
+    pub const fn is_any(self) -> bool {
+        self.0 != 0
+    }
+}
+
+/// What a poll answers: a report for each handle it waited on to read and one for each it waited on to write, each list in its handles' order. The interest is the list a handle stands in, so nothing pairs a handle with a mask and no two operands have a length to share.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Polled {
+    pub readable: Vec<Readiness>,
+    pub writable: Vec<Readiness>,
 }
 
 /// Why a fallible host operation failed, mirrored by `/std/Io/Error`'s `of`. It names failures only: success and a stream's end are the shape of the reply that carries it ([`WireReply`](super::WireReply)), so no host can answer a success beside a failure's padding. Each named failure has a fixed wire code; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).

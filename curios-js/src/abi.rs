@@ -2,7 +2,7 @@
 
 use {
     crate::set,
-    curios_abi::{Handle, HostOp, Poll, errno, event, file_kind, status, stdio_mode},
+    curios_abi::{Handle, HostOp, errno, event, file_kind, status, stdio_mode},
     js_sys::Object,
     wasm_bindgen::JsValue,
 };
@@ -100,12 +100,7 @@ pub(crate) fn abi() -> Object {
     set(
         &object,
         "event",
-        &masks(&[
-            ("READ", event::READ),
-            ("WRITE", event::WRITE),
-            ("ERR", event::ERR),
-            ("INTEREST", Poll::INTEREST),
-        ]),
+        &masks(&[("READY", event::READY), ("ERR", event::ERR)]),
     );
     set(
         &object,

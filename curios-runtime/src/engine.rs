@@ -1,12 +1,11 @@
 use {
     super::{
-        Handle, HostOps, Lift, Mode, Plugin, Poll, Replied, Reply, SerialFlow, SerialOp,
-        SerialParity, StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type,
-        words_array_type,
+        Handle, HostOps, Lift, Mode, Plugin, Replied, Reply, SerialFlow, SerialOp, SerialParity,
+        StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type, words_array_type,
     },
     curios_abi::{
-        Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireOperand,
-        WireReturn, WireType, for_each_host_op,
+        Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireReturn,
+        WireType, for_each_host_op,
     },
     std::{
         collections::{HashMap, hash_map::Entry},
@@ -416,7 +415,7 @@ fn link(
         .map_err(|error| format!("failed to define {name}: {error}"))
 }
 
-/// Answer every row of the table under the name the standard library declares it by ([`HostOp::declared`]). Each import lifts its operands as the row types them, measures the ones its requirements read, calls the method once they hold, and lowers the reply through [`Replied`]. Generated from the rows it binds, so no row goes unanswered, none is answered twice, and no answer's types can differ from the row's.
+/// Answer every row of the table under the name the standard library declares it by ([`HostOp::declared`]). Each import lifts its operands as the row types them, calls the method, and lowers the reply through [`Replied`]. Generated from the rows it binds, so no row goes unanswered, none is answered twice, and no answer's types can differ from the row's.
 macro_rules! declare_host_rows {
     ($(
         $(#[doc = $doc:literal])*
@@ -432,10 +431,9 @@ macro_rules! declare_host_rows {
                     {
                         let host = Arc::clone(&host);
 
-                        move |($($p,)*): ($($t,)*)| {
-                            let operands = [$(WireOperand::measure(&$p)),*];
-
-                            Replied::new(HostOp::$variant, operands, || host.$name($($p),*))
+                        move |($($p,)*): ($($t,)*)| Replied {
+                            op: HostOp::$variant,
+                            reply: host.$name($($p),*),
                         }
                     },
                 );

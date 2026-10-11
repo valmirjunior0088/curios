@@ -2,9 +2,9 @@ use {
     super::{OsResolver, Running, SerialPort, Slot, Spawned, Table, os_child, serial_devices},
     crate::{
         ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps, Mode,
-        Poll, Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp,
-        TtySize, failure_from_error, lookup_address, names_a_variable, poll_from_flags,
-        poll_to_flags, serial_frame, serial_speed,
+        Polled, Readiness, Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination,
+        Timestamp, TtySize, failure_from_error, lookup_address, names_a_variable, readiness,
+        serial_frame, serial_speed,
     },
     curios_abi::event,
     rustix::{
@@ -530,10 +530,10 @@ impl HostOps for OsHost {
 
     fn handle_poll(
         &self,
-        handles: Vec<Handle>,
-        events: Vec<Poll>,
+        readers: Vec<Handle>,
+        writers: Vec<Handle>,
         timeout_ms: i64,
-    ) -> Result<Vec<Poll>, Refusal> {
+    ) -> Result<Polled, Refusal> {
         // The deadline is taken at the call, so a retried interruption does not restart the wait. A negative timeout waits forever, and so does one past what an `Instant` can hold.
         let deadline = u64::try_from(timeout_ms)
             .ok()
@@ -544,70 +544,81 @@ impl HostOps for OsHost {
         // Keep the stdio owners alive for the duration of the borrow: each `PollFd` holds a `BorrowedFd` into one of these (or into the table).
         let (in_handle, out_handle, err_handle) = (stdin(), stdout(), stderr());
 
-        // One entry per distinct descriptor, asking for the union of every slot's interest in it, so a descriptor several handles name is polled once and never counts against the system's limit twice. Each slot remembers its entry, its own interest, and the guest's where `rustls`'s replaced it. A handle that is unknown — closed, say — or names a resource with no descriptor is never polled and reports `ERR`, which wakes whoever waits on it into the call that reports why, rather than leaving it parked on readiness that cannot come.
-        let mut watched: Vec<(BorrowedFd<'_>, Poll)> = Vec::new();
-        let mut slots = Vec::with_capacity(handles.len());
-        let mut results = vec![Poll::empty(); handles.len()];
+        // One entry per distinct descriptor, watched for the union of what every standing of it asks, so a descriptor several handles name is polled once and never counts against the system's limit twice.
+        let mut watched: Vec<(BorrowedFd<'_>, PollFlags)> = Vec::new();
+        // Each standing of a handle in a list: whether the list is the writers', its place there, the descriptor that answers it, and the flags watched on its behalf.
+        let mut standings = Vec::with_capacity(readers.len() + writers.len());
+        let mut polled = Polled {
+            readable: vec![Readiness::none(); readers.len()],
+            writable: vec![Readiness::none(); writers.len()],
+        };
 
-        for (slot, (handle, &requested)) in handles.iter().zip(&events).enumerate() {
-            let resolved = match handle {
-                Handle::Stdin => Some((in_handle.as_fd(), requested)),
-                Handle::Stdout => Some((out_handle.as_fd(), requested)),
-                Handle::Stderr => Some((err_handle.as_fd(), requested)),
-                Handle::Other(_) => table.get(handle).and_then(|resource| match resource {
-                    OsResource::File(file) => Some((file.as_fd(), requested)),
-                    // A connecting socket is watched for `WRITE`, which is what the kernel reports once the connect has settled either way.
-                    OsResource::Connected(socket)
-                    | OsResource::Connecting(socket)
-                    | OsResource::Unconnected(socket)
-                    | OsResource::Listener(socket) => Some((socket.as_fd(), requested)),
-                    // The lookup's pipe read end: `READ`-ready once the worker has written its wakeup byte, which is the completion signal.
-                    OsResource::Resolving { done, .. } => Some((done.as_fd(), requested)),
-                    OsResource::Descriptor(fd) => Some((fd.as_fd(), requested)),
-                    OsResource::Serial(port) => Some((port.as_fd(), requested)),
-                    // The reaper's pipe read end: `READ`-ready once the child's end is recorded, which is when `proc_wait` answers.
-                    OsResource::Child { running, .. } => Some((running.done.as_fd(), requested)),
-                    // A TLS stream is watched through its socket, for the interest `rustls` itself has while the handshake is under way and the guest's own afterwards; the config token has no descriptor.
-                    OsResource::ClientTls(stream) => {
-                        Some((stream.sock.as_fd(), tls_interest(&stream.conn, requested)))
+        for (writing, asked, handles) in [
+            (false, PollFlags::IN, &readers),
+            (true, PollFlags::OUT, &writers),
+        ] {
+            for (slot, handle) in handles.iter().enumerate() {
+                let resolved = match handle {
+                    Handle::Stdin => Some((in_handle.as_fd(), asked)),
+                    Handle::Stdout => Some((out_handle.as_fd(), asked)),
+                    Handle::Stderr => Some((err_handle.as_fd(), asked)),
+                    Handle::Other(_) => table.get(handle).and_then(|resource| match resource {
+                        OsResource::File(file) => Some((file.as_fd(), asked)),
+                        // A connecting socket is ready to write once the connect has settled either way, which is what the kernel reports.
+                        OsResource::Connected(socket)
+                        | OsResource::Connecting(socket)
+                        | OsResource::Unconnected(socket)
+                        | OsResource::Listener(socket) => Some((socket.as_fd(), asked)),
+                        // The lookup's pipe read end: ready to read once the worker has written its wakeup byte, which is the completion signal.
+                        OsResource::Resolving { done, .. } => Some((done.as_fd(), asked)),
+                        OsResource::Descriptor(fd) => Some((fd.as_fd(), asked)),
+                        OsResource::Serial(port) => Some((port.as_fd(), asked)),
+                        // The reaper's pipe read end: ready to read once the child's end is recorded, which is when `proc_wait` answers.
+                        OsResource::Child { running, .. } => Some((running.done.as_fd(), asked)),
+                        // A TLS stream is watched through its socket, for what `rustls` itself needs while the handshake is under way and for the guest's own interest afterwards; the config token has no descriptor.
+                        OsResource::ClientTls(stream) => {
+                            Some((stream.sock.as_fd(), tls_watch(&stream.conn, asked)))
+                        }
+                        OsResource::ServerTls(stream) => {
+                            Some((stream.sock.as_fd(), tls_watch(&stream.conn, asked)))
+                        }
+                        OsResource::TlsConfig(_) => None,
+                    }),
+                };
+
+                let Some((fd, watch)) = resolved else {
+                    let reports = match writing {
+                        true => &mut polled.writable,
+                        false => &mut polled.readable,
+                    };
+                    reports[slot] = Readiness::from_bits(event::ERR);
+
+                    continue;
+                };
+
+                let entry = match watched
+                    .iter()
+                    .position(|(known, _)| known.as_raw_fd() == fd.as_raw_fd())
+                {
+                    Some(entry) => {
+                        watched[entry].1 |= watch;
+
+                        entry
                     }
-                    OsResource::ServerTls(stream) => {
-                        Some((stream.sock.as_fd(), tls_interest(&stream.conn, requested)))
+                    None => {
+                        watched.push((fd, watch));
+
+                        watched.len() - 1
                     }
-                    OsResource::TlsConfig(_) => None,
-                }),
-            };
+                };
 
-            let Some((fd, interest)) = resolved else {
-                results[slot] = Poll::from_bits(event::ERR);
-
-                continue;
-            };
-
-            let entry = match watched
-                .iter()
-                .position(|(known, _)| known.as_raw_fd() == fd.as_raw_fd())
-            {
-                Some(entry) => {
-                    watched[entry].1 = Poll::from_bits(watched[entry].1.bits() | interest.bits());
-
-                    entry
-                }
-                None => {
-                    watched.push((fd, interest));
-
-                    watched.len() - 1
-                }
-            };
-
-            // Where the watched interest is not the guest's own, readiness is reported in the guest's terms: the guest parked for what it asked, and a wake on what `rustls` needed is a wake for it too — reported as the substituted bits alone, the guest would look for its own, see nothing, and re-poll a socket that answers at once, forever.
-            let translated = (interest != requested).then_some(requested);
-            slots.push((slot, entry, interest, translated));
+                standings.push((writing, slot, entry, watch));
+            }
         }
 
         let mut polls = watched
             .iter()
-            .map(|(fd, interest)| PollFd::from_borrowed_fd(*fd, poll_to_flags(*interest)))
+            .map(|(fd, watch)| PollFd::from_borrowed_fd(*fd, *watch))
             .collect::<Vec<_>>();
 
         // An interruption is not readiness, so the poll resumes for what is left of the wait; any other failure is the system refusing the poll itself, which no readiness report can say, so the call is refused naming it.
@@ -633,18 +644,17 @@ impl HostOps for OsHost {
             }
         }
 
-        // Each slot reads its own interest out of what its descriptor reported, with the result-only `ERR` and `HUP` beside it.
-        for (slot, entry, interest, translated) in slots {
-            let ready = poll_from_flags(polls[entry].revents()).bits()
-                & (interest.bits() | event::ERR | event::HUP);
+        // Each standing reads what was watched on its behalf out of what its descriptor reported. Where that is not the list's own flag — a TLS stream waiting on what `rustls` needs — the standing is ready all the same: the guest parked for what it asked, and a wake on what `rustls` needed is a wake for it.
+        for (writing, slot, entry, watch) in standings {
+            let report = readiness(polls[entry].revents(), watch);
 
-            results[slot] = match translated {
-                Some(requested) if ready != 0 => Poll::from_bits(ready | requested.bits()),
-                _ => Poll::from_bits(ready),
-            };
+            match writing {
+                true => polled.writable[slot] = report,
+                false => polled.readable[slot] = report,
+            }
         }
 
-        Ok(results)
+        Ok(polled)
     }
 
     fn handle_close(&self, io: Handle) {
@@ -1149,14 +1159,20 @@ fn finish_tls<Data>(conn: &mut ConnectionCommon<Data>, sock: &mut Socket) -> Res
     finish(sock)
 }
 
-/// The interest to watch a TLS stream's socket for. While the handshake is under way `rustls`'s own demand replaces the guest's: a socket is nearly always writable, so a fiber that parked on `WRITE` to send its request would spin while `rustls` was in fact waiting to read the server's reply. Afterwards the guest's interest stands, plus `WRITE` whenever `rustls` still holds records to push.
-fn tls_interest(conn: &rustls::CommonState, requested: Poll) -> Poll {
-    let read = if conn.wants_read() { event::READ } else { 0 };
-    let write = if conn.wants_write() { event::WRITE } else { 0 };
+/// What a TLS stream's socket is watched for on behalf of a standing that asked for `asked`. While the handshake is under way `rustls`'s own demand replaces the guest's: a socket is nearly always writable, so a fiber that parked to write its request would spin while `rustls` was in fact waiting to read the server's reply. Afterwards the guest's interest stands, beside readiness to write whenever `rustls` still holds records to push.
+fn tls_watch(conn: &rustls::CommonState, asked: PollFlags) -> PollFlags {
+    let read = match conn.wants_read() {
+        true => PollFlags::IN,
+        false => PollFlags::empty(),
+    };
+    let write = match conn.wants_write() {
+        true => PollFlags::OUT,
+        false => PollFlags::empty(),
+    };
 
     match conn.is_handshaking() {
-        true => Poll::from_bits(read | write),
-        false => Poll::from_bits(requested.bits() | write),
+        true => read | write,
+        false => asked | write,
     }
 }
 
