@@ -52,6 +52,14 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 **Rejected.** The mapping at each end with a comment to keep them alike; the Wasm types themselves in this crate, which would make the contract depend on one engine's vocabulary.
 
+### A wire code is one row
+
+**Decision.** `codes.rs` states each wire code once, as a row of one table: its constant and value, the name the guest reads it by where the guest reads it at all, and, for a status that names a failure, the `Failure` it is the code of. The modules of constants, `Failure::code` and `Failure::NAMED`, and `code_sets`, from which the compiler mints `/sys`'s code modules and the browser builds its tables, are projections of those rows. `/sys/status` also holds the codes of the named failures as a list, and `/std/Io/Error` proves that it names every one of them.
+
+**Rationale.** A code is agreed on by three parties with no call to carry it. Written at each — a constant, a `/sys` declaration beside it, a JavaScript key — it agrees only while each author copies the others, and a status added on the host's side is an `other` on the guest's until someone notices. One row has one value and one guest name; a failure the table gives no code does not compile, and a failure the library gives no case does not elaborate.
+
+**Rejected.** The mirrors written by hand beside the constants, each a second copy of a mapping nothing checks for completeness; a test that lists the named codes over again to compare them.
+
 ### A function is its import name, a host's row a variant, and the namespace is an enum
 
 **Decision.** A `ForeignFunction` is what a `foreign` declaration states — the fully qualified name it is declared under and its `WireSignature` — and it compares by that name, which is its import under `ffi` and the one name it has. A term that calls across the wire carries one beside the declaration that states it, whoever answers the call, and a report spells the call as a call of that declaration. `Namespace` is a two-variant enum: `ffi` for every row, and `sys` for `panic` alone. A `HostOp` is the host's side of the rows the standard library declares, and no program carries one: a variant is the row it names, its method, module, signature and requirements read back from the table, and it is its method name in CamelCase (`a_variant_is_its_method_name_in_camel_case`).

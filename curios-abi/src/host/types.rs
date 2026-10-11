@@ -3,9 +3,7 @@
 //! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Readiness`] a byte of flags, a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`], [`ChildHandles`] and [`Polled`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, the platform's `poll` flags to a `Readiness` — live with the adapter (`curios-runtime`), not here.
 
 use {
-    crate::{
-        file_kind, open_mode, serial_flow, serial_op, serial_parity, status, stdio, stdio_mode,
-    },
+    crate::{file_kind, open_mode, serial_flow, serial_op, serial_parity, stdio, stdio_mode},
     curios_num::Natural,
     std::num::NonZeroU32,
 };
@@ -142,7 +140,7 @@ pub struct Polled {
     pub writable: Vec<Readiness>,
 }
 
-/// Why a fallible host operation failed, mirrored by `/std/Io/Error`'s `of`. It names failures only: success and a stream's end are the shape of the reply that carries it ([`WireReply`](super::WireReply)), so no host can answer a success beside a failure's padding. Each named failure has a fixed wire code; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
+/// Why a fallible host operation failed, mirrored by `/std/Io/Error`'s `of`. It names failures only: success and a stream's end are the shape of the reply that carries it ([`WireReply`](super::WireReply)), so no host can answer a success beside a failure's padding. Each named failure has a fixed wire code, stated beside the status it names in the table of codes (`codes.rs`), which is where [`Failure::code`] is read off; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](crate::status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Failure {
     NotFound,
@@ -164,25 +162,6 @@ pub enum Failure {
     ConnectionReset,
     /// An otherwise-unrecognized failure, carrying the OS errno that produced it.
     Other(u32),
-}
-
-impl Failure {
-    /// The wire code the guest decodes. The named failures have fixed tags; `Other(errno)` lowers as [`OTHER_BASE`](status::OTHER_BASE) plus its carried errno, keeping the errno lane disjoint from the named tags.
-    pub fn code(self) -> u64 {
-        match self {
-            Failure::NotFound => status::NOT_FOUND,
-            Failure::PermissionDenied => status::PERMISSION_DENIED,
-            Failure::AlreadyExists => status::ALREADY_EXISTS,
-            Failure::ConnectionRefused => status::CONNECTION_REFUSED,
-            Failure::WouldBlock => status::WOULD_BLOCK,
-            Failure::TlsError => status::TLS_ERROR,
-            Failure::NotEmpty => status::NOT_EMPTY,
-            Failure::IsDirectory => status::IS_DIRECTORY,
-            Failure::NotDirectory => status::NOT_DIRECTORY,
-            Failure::ConnectionReset => status::CONNECTION_RESET,
-            Failure::Other(errno) => status::OTHER_BASE + u64::from(errno),
-        }
-    }
 }
 
 /// Why a host cannot answer a row that has no failure lane — memory it cannot find, entropy it cannot draw, a poll the system refuses. The call is refused, naming this, rather than answered with a value the host does not have; a row whose failures a guest handles has [`Failure`] instead.

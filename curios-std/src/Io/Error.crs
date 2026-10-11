@@ -1,4 +1,5 @@
 use /std/{Nat, Str, List, Show};
+use /std/Bool/{True, Holds};
 
 --- Why a host operation failed: a named status, or `other` with the errno it carries.
 pub induct Error: pub Type
@@ -64,3 +65,9 @@ pub let of(status: Nat) -> Error =
         errors,
         Error/other(status - /sys/status/other_base),
         (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end);
+
+-- Every failure the wire names is a case here: a status the wire's list gains is refused until `errors` names it.
+let _every_failure_the_wire_names_is_a_case: Holds(
+    List/all(/sys/status/failures, (status: Nat) =>
+        match of(status) | other(_) => false | _ => true end)) =
+    True/qed();

@@ -25,10 +25,7 @@ use {
         Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Subterm, TopCase, TopInduct,
         TopItem,
     },
-    curios_abi::{
-        errno, event, file_kind, open_mode, serial_flow, serial_op, serial_parity, status, stdio,
-        stdio_mode,
-    },
+    curios_abi::{CodeCarrier, Failure, code_sets, stdio},
     curios_num::{Grain, Natural, Rounding},
     curios_utilities::SyntaxRegistry,
 };
@@ -995,93 +992,39 @@ fn handle_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     ]
 }
 
-/// The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source. Each is named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode`, `serial_parity`, `serial_flow`, `serial_op`, and `errno` for the errnos a failure the standard library raises itself carries — as `curios-abi`'s `codes` names them, and all are lowercase because no type backs them.
+/// The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source. Each module is one set of `curios-abi`'s table of codes (`code_sets`), named as the set is, and holds each code the table gives a name the guest reads it by, at that name: nothing here spells a code or its name a second time. A set whose codes the guest reads by no name mints no module.
+///
+/// `/sys/status` holds one value more, `failures`: the code of every failure the table names, in its order. The standard library names each as a case of `/std/Io/Error`, and its own test holds it to the list, so a status the table gains is a case the library is refused until it has.
 fn code_modules() -> Vec<SysModule> {
-    vec![
-        // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.
-        SysModule::ops(
-            "status",
-            vec![
-                pub_let("ok", nat(), nat_lit(status::OK)),
-                pub_let("eof", nat(), nat_lit(status::EOF)),
-                pub_let("not_found", nat(), nat_lit(status::NOT_FOUND)),
-                pub_let(
-                    "permission_denied",
-                    nat(),
-                    nat_lit(status::PERMISSION_DENIED),
+    code_sets()
+        .into_iter()
+        .filter(|set| !set.codes.is_empty())
+        .map(|set| {
+            let minted = set.codes.iter().map(|code| match set.carrier {
+                CodeCarrier::Nat => pub_let(code.guest, nat(), nat_lit(code.value)),
+                CodeCarrier::Byte => pub_let(
+                    code.guest,
+                    byte(),
+                    byte_lit(u8::try_from(code.value).expect("a code read as a byte fits one")),
                 ),
-                pub_let("exists", nat(), nat_lit(status::ALREADY_EXISTS)),
-                pub_let("refused", nat(), nat_lit(status::CONNECTION_REFUSED)),
-                pub_let("would_block", nat(), nat_lit(status::WOULD_BLOCK)),
-                pub_let("tls", nat(), nat_lit(status::TLS_ERROR)),
-                pub_let("not_empty", nat(), nat_lit(status::NOT_EMPTY)),
-                pub_let("is_directory", nat(), nat_lit(status::IS_DIRECTORY)),
-                pub_let("not_directory", nat(), nat_lit(status::NOT_DIRECTORY)),
-                pub_let("reset", nat(), nat_lit(status::CONNECTION_RESET)),
-                pub_let("other_base", nat(), nat_lit(status::OTHER_BASE)),
-            ],
-        ),
-        SysModule::ops(
-            "event",
-            vec![
-                pub_let("ready", byte(), byte_lit(event::READY)),
-                pub_let("err", byte(), byte_lit(event::ERR)),
-                pub_let("hup", byte(), byte_lit(event::HUP)),
-            ],
-        ),
-        SysModule::ops(
-            "open_mode",
-            vec![
-                pub_let("read", nat(), nat_lit(open_mode::READ)),
-                pub_let("write", nat(), nat_lit(open_mode::WRITE)),
-                pub_let("append", nat(), nat_lit(open_mode::APPEND)),
-            ],
-        ),
-        SysModule::ops(
-            "file_kind",
-            vec![
-                pub_let("file", nat(), nat_lit(file_kind::FILE)),
-                pub_let("directory", nat(), nat_lit(file_kind::DIRECTORY)),
-                pub_let("symlink", nat(), nat_lit(file_kind::SYMLINK)),
-                pub_let("other", nat(), nat_lit(file_kind::OTHER)),
-            ],
-        ),
-        SysModule::ops(
-            "stdio_mode",
-            vec![
-                pub_let("inherit", nat(), nat_lit(stdio_mode::INHERIT)),
-                pub_let("pipe", nat(), nat_lit(stdio_mode::PIPE)),
-                pub_let("null", nat(), nat_lit(stdio_mode::NULL)),
-            ],
-        ),
-        SysModule::ops(
-            "serial_parity",
-            vec![
-                pub_let("none", nat(), nat_lit(serial_parity::NONE)),
-                pub_let("even", nat(), nat_lit(serial_parity::EVEN)),
-                pub_let("odd", nat(), nat_lit(serial_parity::ODD)),
-            ],
-        ),
-        SysModule::ops(
-            "serial_flow",
-            vec![
-                pub_let("none", nat(), nat_lit(serial_flow::NONE)),
-                pub_let("hardware", nat(), nat_lit(serial_flow::HARDWARE)),
-            ],
-        ),
-        SysModule::ops(
-            "serial_op",
-            vec![
-                pub_let("dtr", nat(), nat_lit(serial_op::DTR)),
-                pub_let("rts", nat(), nat_lit(serial_op::RTS)),
-                pub_let("discard_input", nat(), nat_lit(serial_op::DISCARD_INPUT)),
-            ],
-        ),
-        SysModule::ops(
-            "errno",
-            vec![pub_let("inval", nat(), nat_lit(u64::from(errno::EINVAL)))],
-        ),
-    ]
+            });
+            let failures = (set.name == "status").then(|| {
+                pub_let(
+                    "failures",
+                    intrinsic(Intrinsic::ListType(nat())),
+                    intrinsic(Intrinsic::List {
+                        element: nat(),
+                        items: Failure::NAMED
+                            .iter()
+                            .map(|failure| nat_lit(failure.code()))
+                            .collect(),
+                    }),
+                )
+            });
+
+            SysModule::ops(set.name, minted.chain(failures).collect())
+        })
+        .collect()
 }
 
 /// Every module `/sys` declares before the host's rows join them: the carriers in the order the root lists them, each holding its type former and the intrinsic operations over it, and hoisting the type to the root.

@@ -4,7 +4,7 @@ use {
         SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf, WireResults, WireReturn,
         WireSignature, WireType,
     },
-    crate::status,
+    crate::{code_sets, status},
     std::fmt::Debug,
 };
 
@@ -19,23 +19,33 @@ fn answers(op: HostOp) -> &'static WireResults {
 /// Every named code sits below `OTHER_BASE` and the errno passthrough lowers at or above it, so a raw OS errno — including the errno-less `Other(0)` — can never decode as `OK` or a named failure.
 #[test]
 fn errno_lane_is_disjoint_from_named_codes() {
-    let named = [
-        status::OK,
-        status::EOF,
-        status::NOT_FOUND,
-        status::PERMISSION_DENIED,
-        status::ALREADY_EXISTS,
-        status::CONNECTION_REFUSED,
-        status::WOULD_BLOCK,
-        status::TLS_ERROR,
-        status::NOT_EMPTY,
-        status::IS_DIRECTORY,
-        status::NOT_DIRECTORY,
-        status::CONNECTION_RESET,
-    ];
+    let named = [status::OK, status::EOF]
+        .into_iter()
+        .chain(Failure::NAMED.iter().map(|failure| failure.code()));
 
-    assert!(named.iter().all(|&code| code < status::OTHER_BASE));
+    assert!(named.into_iter().all(|code| code < status::OTHER_BASE));
     assert_eq!(Failure::Other(0).code(), status::OTHER_BASE);
+}
+
+/// A status the guest reads is the success, the end of a stream, the base of the errno lane or a failure it names: the table gives every other status a failure, so none crosses that `Failure` cannot answer.
+#[test]
+fn every_status_the_guest_reads_is_a_named_failure_or_one_of_three() {
+    let statuses = code_sets()
+        .into_iter()
+        .find(|set| set.name == "status")
+        .expect("the table holds the statuses");
+    let failures = Failure::NAMED
+        .iter()
+        .map(|failure| failure.code())
+        .collect::<Vec<_>>();
+
+    for code in statuses.codes {
+        assert!(
+            ["ok", "eof", "other_base"].contains(&code.guest) || failures.contains(&code.value),
+            "`{}` names no failure",
+            code.constant
+        );
+    }
 }
 
 /// Result labels are the record fields the guest projects (`.status`, `.secs`, …) — renaming one is a standard-library break, so the multi-result shapes are pinned.

@@ -2,7 +2,7 @@
 
 use {
     crate::set,
-    curios_abi::{Handle, HostOp, errno, event, file_kind, status, stdio_mode},
+    curios_abi::{CodeCarrier, Failure, Handle, HostOp, code_sets, errno},
     js_sys::Object,
     wasm_bindgen::JsValue,
 };
@@ -60,48 +60,37 @@ fn rows() -> Object {
 /// The wire codes as a JS object: the `status`/`file_kind`/`stdio_mode` code tables as `BigInt`s, the `event` masks as numbers, the `stdio` tokens as hex, and `rows`, the name the standard library declares each host row under beside the method that answers it.
 pub(crate) fn abi() -> Object {
     let object = Object::new();
-    set(
-        &object,
-        "status",
-        &codes(&[
-            ("OK", status::OK),
-            ("EOF", status::EOF),
-            ("NOT_FOUND", status::NOT_FOUND),
-            ("PERMISSION_DENIED", status::PERMISSION_DENIED),
-            ("ALREADY_EXISTS", status::ALREADY_EXISTS),
-            ("CONNECTION_REFUSED", status::CONNECTION_REFUSED),
-            ("WOULD_BLOCK", status::WOULD_BLOCK),
-            ("TLS_ERROR", status::TLS_ERROR),
-            ("NOT_EMPTY", status::NOT_EMPTY),
-            ("IS_DIRECTORY", status::IS_DIRECTORY),
-            ("NOT_DIRECTORY", status::NOT_DIRECTORY),
-            ("EBADF", status::OTHER_BASE + u64::from(errno::EBADF)),
-        ]),
-    );
-    set(
-        &object,
-        "file_kind",
-        &codes(&[
-            ("FILE", file_kind::FILE),
-            ("DIRECTORY", file_kind::DIRECTORY),
-            ("SYMLINK", file_kind::SYMLINK),
-            ("OTHER", file_kind::OTHER),
-        ]),
-    );
-    set(
-        &object,
-        "stdio_mode",
-        &codes(&[
-            ("INHERIT", stdio_mode::INHERIT),
-            ("PIPE", stdio_mode::PIPE),
-            ("NULL", stdio_mode::NULL),
-        ]),
-    );
-    set(
-        &object,
-        "event",
-        &masks(&[("READY", event::READY), ("ERR", event::ERR)]),
-    );
+
+    // Each table is a set of `curios-abi`'s table of codes, every code the guest reads under its constant's name, so a code has one value on both sides of the wire by being read from one row.
+    for group in code_sets() {
+        let entries = group.codes.iter().map(|code| (code.constant, code.value));
+
+        let table = match (group.name, group.carrier) {
+            // A failure the harness answers by an errno of its own crosses in the status lane, as any host's does.
+            ("status", _) => Some(codes(
+                &entries
+                    .chain([("EBADF", Failure::Other(errno::EBADF).code())])
+                    .collect::<Vec<_>>(),
+            )),
+            ("file_kind" | "stdio_mode", _) => Some(codes(&entries.collect::<Vec<_>>())),
+            (_, CodeCarrier::Byte) => Some(masks(
+                &entries
+                    .map(|(constant, value)| {
+                        let flag = u8::try_from(value).expect("a code read as a byte fits one");
+
+                        (constant, flag)
+                    })
+                    .collect::<Vec<_>>(),
+            )),
+            // The harness answers no row that takes or reports a code of any other set.
+            _ => None,
+        };
+
+        if let Some(table) = table {
+            set(&object, group.name, &table);
+        }
+    }
+
     set(
         &object,
         "stdio",
