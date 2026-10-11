@@ -19,14 +19,11 @@ use {
         Answered, Context, Error, Established, Foreign, GoalSite, Question, Same, Traces,
         concepts_alike, entries_alike, inducts_alike, structs_alike,
     },
-    curios_core::{
-        DefinitionKind, Enter, Extent, Global, Item, Module, Nominal, Places, Term, Trace,
-    },
+    curios_core::{DefinitionKind, Global, Item, Module, Nominal, Places, Trace},
     curios_utilities::recurse,
     std::{
         cell::RefCell,
-        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-        ops::ControlFlow,
+        collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
     },
 };
@@ -98,26 +95,6 @@ fn read_again(over: Over<'_>, question: &Question) -> bool {
     ) {
         (Some(then), Ok(now)) => *then == now,
         _ => false,
-    }
-}
-
-/// The first position written anywhere in `term`, outermost first, each node of its graph visited once.
-///
-/// Where a report about a declaration is placed: the position of a declaration's label does not reach Core, and a signature the lowering synthesized around what was written, a function sugar's, has none of its own.
-fn first_written(term: &Term) -> Option<Extent> {
-    let found = term.try_walk(
-        &mut HashSet::new(),
-        |seen: &mut HashSet<Term>, term| match term.extent() {
-            Some(extent) => ControlFlow::Break(extent),
-            None if seen.insert(term.clone()) => ControlFlow::Continue(Enter::Descend),
-            None => ControlFlow::Continue(Enter::Skip(())),
-        },
-        |_, _, _| (),
-    );
-
-    match found {
-        ControlFlow::Break(extent) => Some(extent),
-        ControlFlow::Continue(()) => None,
     }
 }
 
@@ -365,12 +342,8 @@ impl<'a> Demand<'a> {
                         .map(|member| &module.items[member])
                         .collect::<Vec<_>>();
                     let item = &module.items[first(&declaration)];
-                    // Placed in the first member as written: at its signature, or in it where the lowering synthesized the signature around what was written.
-                    let site = item.definitions().first().and_then(|definition| {
-                        first_written(&definition.type_).or_else(|| first_written(&definition.body))
-                    });
+                    // Placed at the first member's name, as any report with no position of its own is.
                     let error = Error::declaration_cycle(&members)
-                        .at_opt(site)
                         .in_declaration(item.declared_names().into_iter().copied());
                     self.survivors.refuse(ItemStamp(first(&declaration)), error);
                 }

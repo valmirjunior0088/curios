@@ -7,6 +7,7 @@ use {
         UniverseMetaId, UniverseParam, test_support::declaring,
     },
     curios_utilities::Qualifier,
+    std::collections::BTreeMap,
 };
 
 fn context() -> Context<'static> {
@@ -307,7 +308,14 @@ fn a_budget_spent_under_a_binder_is_reported_over_a_term_that_prints() {
 
     assert!(
         refused
-            .format_with(&lowered_module(nat()), &[], &SYNTAX, &[])
+            .format(&Reading {
+                module: &lowered_module(nat()),
+                scope: &[],
+                syntax: &SYNTAX,
+                unbound: &BTreeMap::new(),
+                spellings: None,
+                anchors: &[],
+            })
             .contains("ran out"),
     );
     let Error::ReduceExhausted { term, .. } = &refused else {

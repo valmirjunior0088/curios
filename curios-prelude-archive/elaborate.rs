@@ -6,8 +6,8 @@ use {
     curios_core::{Anchors, Global, Item, Module, Sharing, Zonked, validate_stored_identities},
     curios_document::Documentation,
     curios_elab::{
-        Context, DEFAULT_STEP_BUDGET, ErasedUnit, Erasures, Established, elaborate_and_zonk_unit,
-        erase_unit, validate_lowered_universe_seeds, validate_universes,
+        Context, DEFAULT_STEP_BUDGET, ErasedUnit, Erasures, Established, Reading,
+        elaborate_and_zonk_unit, erase_unit, validate_lowered_universe_seeds, validate_universes,
     },
     curios_std::std_source,
     curios_text::{
@@ -16,7 +16,7 @@ use {
     curios_unit::{Record, Uncertified, framed},
     curios_utilities::{Qualifier, Report, Source, digest},
     std::{
-        collections::BTreeSet,
+        collections::{BTreeMap, BTreeSet},
         fs,
         path::{Path, PathBuf},
         sync::Arc,
@@ -104,12 +104,14 @@ fn reported(
         .map(|unit| unit.lexicon(&SYNTAX))
         .collect::<Vec<_>>();
 
-    error.format_with(
+    error.format(&Reading {
         module,
-        &lexicons.iter().collect::<Vec<_>>(),
-        &SYNTAX,
-        &[anchors],
-    )
+        scope: &lexicons.iter().collect::<Vec<_>>(),
+        syntax: &SYNTAX,
+        unbound: &BTreeMap::new(),
+        spellings: None,
+        anchors: &[anchors],
+    })
 }
 
 /// Elaborate, validate, erase and hash-cons one lowered root into the unit its image is, against what the roots before it established.

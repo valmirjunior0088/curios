@@ -9,7 +9,7 @@ use {
     },
     crate::Error,
     curios_core::Bound,
-    curios_utilities::Qualifier,
+    curios_utilities::{Qualifier, Span},
     std::collections::{BTreeMap, BTreeSet, HashSet},
 };
 
@@ -168,22 +168,39 @@ fn audit_dependencies(
 /// Audit every declared signature and every exposed representation against the audience of the item carrying it. This runs after lowering because registry telescopes contain the complete signatures and transparent aliases have become canonical free-variable references. Re-export entries retain their representation provenance through the fixed point, so no `pub use` can upgrade an opaque declaration.
 ///
 /// The declared type of every definition is audited here rather than during lowering: only the converged interface graph knows where a name ends up visible, so a signature naming an item re-exported out of a private child is accepted, while one naming something its own consumers cannot reach is not.
+///
+/// A refusal is placed at the name of the item that exposes: the declaration's own, or, for a binding a module re-exports, the declaration it stands for where this unit wrote it. `placed` gives the span an extent of one of the unit's declarations lies on.
 pub(super) fn audit_public_exposures(
     public: &Scoped<'_, PublicInterface>,
     audiences: AudienceScope<'_>,
     items: &[FlatItem],
     facts: &[&LoweredItem],
     scope: NominalScope<'_>,
+    placed: &dyn Fn(&curios_core::Extent) -> Option<Span>,
 ) -> Result<(), Error> {
     curios_profile::profile!("audit_public_exposures");
     let aliases = aliases(items, facts);
     let sources = alias_sources(&aliases);
 
-    let definitions = items
-        .iter()
-        .zip(facts)
-        .flat_map(|(item, lowered)| item.declared().zip(&lowered.definitions));
-    for ((name, _, island), declared) in definitions {
+    let definitions = || {
+        items
+            .iter()
+            .zip(facts)
+            .flat_map(|(item, lowered)| item.declared().zip(&lowered.definitions))
+    };
+    // Read where a refusal is raised, and by no audit that passes.
+    let named = |path: Qualifier| {
+        let name = curios_core::Global::Authored(path);
+        let (_, declared) = definitions().find(|((declared, _, _), _)| *declared == name)?;
+
+        placed(declared.label.as_ref()?)
+    };
+    let at = |error: Error, place: Option<Span>| match place {
+        Some(span) => error.at(span),
+        None => error,
+    };
+
+    for ((name, _, island), declared) in definitions() {
         // Only definitions the source actually wrote. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and is audited through the declaration that produced it.
         //
         // A witness has no authored path at all, which is the same answer arrived at structurally: "who can see this by its name" is not a question an anonymous declaration has. Its reach is the coherence check's.
@@ -201,7 +218,8 @@ pub(super) fn audit_public_exposures(
             &exposure,
             &name.path(),
             declared.signature.iter().copied(),
-        )?;
+        )
+        .map_err(|error| at(error, declared.label.as_ref().and_then(placed)))?;
     }
 
     // By module and by label, so the exposure reported is the first the names give and not the first a hash's order does.
@@ -216,6 +234,12 @@ pub(super) fn audit_public_exposures(
             };
             let item = module.with(label).join();
             let exposure = audiences.module(module);
+            let exposed = |error| {
+                at(
+                    error,
+                    named(module.with(label)).or_else(|| named(entry.target)),
+                )
+            };
 
             for alias in traversed {
                 if let Some(dependencies) = &alias.dependencies {
@@ -225,13 +249,15 @@ pub(super) fn audit_public_exposures(
                         &exposure,
                         &item,
                         dependencies.iter().copied(),
-                    )?;
+                    )
+                    .map_err(exposed)?;
                 }
             }
 
             if let Some(induct_decl) = scope.induct(&nominal) {
                 let nominal_dependencies = globals(induct_decl.arity.free_vars());
-                audit_dependencies(audiences, &sources, &exposure, &item, nominal_dependencies)?;
+                audit_dependencies(audiences, &sources, &exposure, &item, nominal_dependencies)
+                    .map_err(exposed)?;
 
                 if induct_decl.rep_public {
                     audit_dependencies(
@@ -245,7 +271,8 @@ pub(super) fn audit_public_exposures(
                                 .iter()
                                 .flat_map(|(_, case)| case.telescope.free_vars()),
                         ),
-                    )?;
+                    )
+                    .map_err(exposed)?;
                 }
             } else if let Some(struct_decl) = scope.struct_(&nominal) {
                 // The parameter domains alone: `arity.free_vars()` would reach the fields it terminates in, and the two are audited under different rules — parameters belong to the nominal type's public face, fields to its representation.
@@ -261,7 +288,8 @@ pub(super) fn audit_public_exposures(
                     &exposure,
                     &item,
                     globals(param_dependencies),
-                )?;
+                )
+                .map_err(exposed)?;
 
                 if struct_decl.rep_public {
                     audit_dependencies(
@@ -270,7 +298,8 @@ pub(super) fn audit_public_exposures(
                         &exposure,
                         &item,
                         globals(struct_decl.fields().free_vars()),
-                    )?;
+                    )
+                    .map_err(exposed)?;
                 }
             }
         }

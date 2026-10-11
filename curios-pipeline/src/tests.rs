@@ -18,6 +18,7 @@ mod inference_tests;
 mod lint_tests;
 mod order_tests;
 mod paste_back_tests;
+mod placement_tests;
 mod suggestion_tests;
 mod tuple_tests;
 mod unit_tests;

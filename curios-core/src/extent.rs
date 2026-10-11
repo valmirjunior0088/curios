@@ -4,6 +4,8 @@
 //!
 //! **Where an anchor's text lies is the lowering's to say**, for the text it lowered: [`Anchors`] holds, for each text of each anchor of a unit, the source it lies in, where it begins and ends there, and its stamp. An extent is resolved against it where a report is made ([`Anchors::resolve`]), and a report is the only reader a position has.
 //!
+//! **A definition is placed by its name where nothing in it is.** A refusal about a declaration as a whole holds no position: a cycle, a signature the lowering built around what was written, an obligation decided over its final terms. The table holds where each definition's name was written ([`Anchors::label`]), so such a report still lands on the declaration it is about.
+//!
 //! **A declaration is anchored by its name, and one without a name by its module.** A `satisfy` declaration is anonymous, and the name it is known by is read off its signature once every item is lowered, so its terms are written under the anchor its module's unnamed declarations share and told apart by their texts' stamps: a text is found by its anchor and its stamp together.
 //!
 //! **An extent of a text that has since changed resolves to the declaration.** A term may outlive the text it was written in: a declaration a recompile keeps, a signature another declaration's term was instantiated from. Its extent then carries the stamp of the earlier text, which no text of its anchor answers to, and it resolves to where the declaration now stands rather than to offsets that no longer lie on what they were taken from — where the anchor has one text, which a named declaration's does. Otherwise it resolves to nothing, as an anchor no table holds does, and its report goes unplaced.
@@ -14,6 +16,7 @@
 mod tests;
 
 use {
+    crate::Global,
     curios_utilities::{Qualifier, Source, Span, Table, intern},
     std::{
         cell::RefCell,
@@ -190,15 +193,30 @@ struct Sited {
     end: usize,
 }
 
-/// Where each text of each anchor of one unit lies: what an [`Extent`] is resolved against.
+/// Where each text of each anchor of one unit lies, and where each of the unit's definitions is named: what an [`Extent`] is resolved against, and where a report about a definition is placed when it holds no position of its own.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Anchors {
     /// By anchor and then by stamp, so an anchor's texts are neighbours, and ordered by what is anchored, so a stored table is the same bytes whichever process wrote it.
     texts: BTreeMap<(Anchor, u32), Sited>,
+    /// Where each definition's name was written, for the ones a name was written for: a constructor's tag and a method's label as much as a `let`'s, the head of a `satisfy` for the witness it declares.
+    labels: BTreeMap<Global, Extent>,
 }
 
 impl Anchors {
+    /// Record that `name` was written at `label`.
+    pub fn name(&mut self, name: Global, label: Extent) {
+        self.labels.insert(name, label);
+    }
+
+    /// The span `name` was written at, by the first of `anchors` that names it: a unit's own table, then those of the units in its scope. `None` for a definition no name was written for, and for one whose text has since changed past resolving.
+    pub fn label(anchors: &[&Anchors], name: &Global) -> Option<Span> {
+        anchors
+            .iter()
+            .find_map(|anchors| anchors.labels.get(name))?
+            .resolved(anchors)
+    }
+
     /// Record that `span` covers a text of `anchor`, and hand back that text as a lowering takes extents within it. A text recorded again lies where it was recorded last.
     pub fn site(&mut self, anchor: Anchor, span: &Span) -> Within {
         let stamp = stamp(&span.source.text[span.start..span.end]);

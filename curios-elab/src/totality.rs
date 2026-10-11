@@ -18,11 +18,11 @@ use {
     super::{Context, ErasedSite, Error, proof_position, zonk},
     curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
-        Definition, Enter, Entrypoint, Global, Item, Module, Rec, RecGroup, RecItem, Subterm, Term,
-        Totality,
+        Definition, Enter, Entrypoint, Extent, Global, Item, Module, Rec, RecGroup, RecItem,
+        Subterm, Term, Totality,
     },
     std::{
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         ops::ControlFlow,
         rc::Rc,
     },
@@ -49,6 +49,33 @@ pub fn record_definition_totality(
     };
     context.record_definition_totality(&definition.name, totality);
     Ok(())
+}
+
+/// Where `term` names `name`: the first occurrence that kept a position, outermost first, each node of its graph visited once, and the term's own position where no occurrence kept one. An occurrence at universe levels is its instance, which carries the position the name was written at.
+///
+/// Where a totality refusal is placed: at the name it blames, which the reader can change, rather than at the whole of the position that reaches it.
+fn occurrence(term: &Term, name: &Global) -> Option<Extent> {
+    let found = term.try_walk(
+        &mut HashSet::new(),
+        |seen: &mut HashSet<Term>, term| {
+            let named = match &**term {
+                Subterm::Var(var) => var.as_free(),
+                Subterm::Instance(instance) => instance.head.head_name(),
+                _ => None,
+            };
+            match (named.and_then(|free| free.as_global()), term.extent()) {
+                (Some(named), Some(extent)) if named == name => ControlFlow::Break(extent),
+                _ if seen.insert(term.clone()) => ControlFlow::Continue(Enter::Descend),
+                _ => ControlFlow::Continue(Enter::Skip(())),
+            }
+        },
+        |_, _, _| (),
+    );
+
+    match found {
+        ControlFlow::Break(extent) => Some(extent),
+        ControlFlow::Continue(()) => term.extent(),
+    }
 }
 
 /// The first global `term` names by spelling whose recorded totality is not total — the syntactic reading behind [`check_written_type_totality`], shared with the bound site that re-reports an exhausted discharge by the same name.
@@ -98,7 +125,8 @@ pub fn check_written_type_totality(
             erased: Erased::Type,
             site,
             offender: Some(offender),
-        }),
+        }
+        .at_opt(occurrence(type_, &offender))),
     }
 }
 
@@ -190,13 +218,13 @@ pub fn recorded_totality(module: &Module) -> BTreeMap<Global, Totality> {
     recorded
 }
 
-/// Every way the given positions fail to be total, with the site of each.
+/// Every way the given positions fail to be total, with the site of each and where it was written, for a position that kept one.
 ///
 /// Two ways, and a position can fail either: it names a definition classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`stamp_totality`]), so what a position reaches through a total definition is total, and the definitions it names are all there is to ask.
 fn faults(
     context: &mut Context,
     positions: &[Position],
-) -> Result<Vec<(ErasedSite, Fault)>, Error> {
+) -> Result<Vec<(ErasedSite, Fault, Option<Extent>)>, Error> {
     curios_profile::sample!("totality::faults_positions", positions.len());
     let named = seeds(positions)
         .into_iter()
@@ -212,12 +240,16 @@ fn faults(
     let mut memo = LocalMemo::new();
     for position in positions {
         if locally_partial(context, &position.term, &mut memo)? {
-            faults.push((ErasedSite::clone(&position.site), Fault::Inline));
+            faults.push((
+                ErasedSite::clone(&position.site),
+                Fault::Inline,
+                position.term.extent(),
+            ));
         }
     }
     // One named fault per offending definition, attributed to the first position that names it.
     for name in named {
-        let site = positions
+        let position = positions
             .iter()
             .find(|position| {
                 position
@@ -227,9 +259,12 @@ fn faults(
                     .filter_map(|free| free.as_global())
                     .any(|global| *global == name)
             })
-            .map(|position| ErasedSite::clone(&position.site))
             .expect("a seed is a name some position writes");
-        faults.push((site, Fault::Named(name)));
+        faults.push((
+            ErasedSite::clone(&position.site),
+            Fault::Named(name),
+            occurrence(&position.term, &name),
+        ));
     }
     Ok(faults)
 }
@@ -377,16 +412,15 @@ fn checked_proof_positions(
 fn report(context: &mut Context, positions: &[Position], erased: Erased) -> Result<(), Error> {
     match faults(context, positions)?.into_iter().next() {
         None => Ok(()),
-        Some((site, Fault::Named(name))) => Err(Error::PartialInErasedPosition {
+        Some((site, fault, extent)) => Err(Error::PartialInErasedPosition {
             erased,
             site,
-            offender: Some(name),
-        }),
-        Some((site, Fault::Inline)) => Err(Error::PartialInErasedPosition {
-            erased,
-            site,
-            offender: None,
-        }),
+            offender: match fault {
+                Fault::Named(name) => Some(name),
+                Fault::Inline => None,
+            },
+        }
+        .at_opt(extent)),
     }
 }
 

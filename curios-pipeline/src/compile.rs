@@ -9,7 +9,7 @@ use {
     },
     curios_core::{Anchors, Consumption, Free, Global, Intrinsic, Program, Term, Zonked},
     curios_elab::{
-        Context, Erasures, Established, FinalizedProgram, Tail, elaborate_and_zonk_entry,
+        Context, Erasures, Established, FinalizedProgram, Reading, Tail, elaborate_and_zonk_entry,
         elaborate_and_zonk_program, elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit,
         erase_program, erase_unit, validate_entry_universes,
     },
@@ -208,13 +208,32 @@ pub fn recheck_measured<T>(
 }
 
 /// Where a report about the unit lowered as `text` is placed: the unit's own declarations first, then those of the units in its scope.
-pub(crate) fn anchors_of<'a>(
-    text: &'a PreparedText,
-    predecessors: Predecessors<'a>,
-) -> Vec<&'a Anchors> {
+fn anchors_of<'a>(text: &'a PreparedText, predecessors: Predecessors<'a>) -> Vec<&'a Anchors> {
     std::iter::once(text.anchors())
         .chain(predecessors.anchors())
         .collect()
+}
+
+/// What elaboration or erasure refused `module` with, as a compilation reports it: every member read against one set of tables, so a name is spelled and a declaration placed alike whichever stage refused. `text` is the lowering the refused terms came from and `predecessors` the units it was lowered against, whose tables say how a name is written and where a declaration lies; `lexicons` are those of every unit `module` was read over, which is the lowering's own unit too where `module` is a term elaborated over it.
+pub(crate) fn elaborator_refusal(
+    error: &curios_elab::Error,
+    module: &curios_core::Module,
+    lexicons: &[&curios_core::Lexicon],
+    text: &PreparedText,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+) -> CompileError {
+    let spellings = Rc::new(text.spellings(&predecessors.text()));
+    let reading = Reading {
+        module,
+        scope: lexicons,
+        syntax,
+        unbound: text.unbound(),
+        spellings: Some(&spellings),
+        anchors: &anchors_of(text, predecessors),
+    };
+
+    CompileError::of(error, |member| member.reports(&reading))
 }
 
 /// The kernel's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
@@ -262,11 +281,11 @@ impl fmt::Display for Refused {
     }
 }
 
-/// One erasure obligation the elaborator raised over a program it built: its error as raised, and the diagnostic a compilation prints for it.
+/// One erasure obligation the elaborator raised over a program it built: its error as raised, and the reports a compilation makes of it, each with its place.
 #[derive(Debug)]
 pub struct Obligation {
     pub error: curios_elab::Error,
-    pub reported: String,
+    pub reported: Vec<Report>,
 }
 
 /// A program type-checked and not yet put to the kernel.
@@ -432,7 +451,7 @@ where
             false => Err(CompileError::Failure(
                 obligations
                     .into_iter()
-                    .map(|obligation| Report::unlocated(obligation.reported))
+                    .flat_map(|obligation| obligation.reported)
                     .collect(),
             )),
         })
@@ -571,20 +590,20 @@ where
              obligations,
          }| (module, entry, obligations),
     );
+    // What a report of this program is read against, each table made by the first report that reads one.
+    let reading = || Reading {
+        module: &lowered.module,
+        scope: &lexicons,
+        syntax,
+        unbound: &unbound,
+        spellings: Some(&*spellings),
+        anchors: &anchors,
+    };
     // The error is kept as raised beside what it renders to: rendering is where its variant is lost.
     let (error, elaborated) = match elaborated {
         Ok(built) => (None, Ok(built)),
         Err(error) => {
-            let reported = CompileError::of(&error, |member| {
-                member.reports_with_hints(
-                    &lowered.module,
-                    &lexicons,
-                    syntax,
-                    &unbound,
-                    &spellings,
-                    &anchors,
-                )
-            });
+            let reported = CompileError::of(&error, |member| member.reports(&reading()));
 
             (Some(Box::new(error)), Err(reported))
         }
@@ -595,14 +614,7 @@ where
     let obligations = obligations
         .into_iter()
         .map(|error| Obligation {
-            reported: error.format_with_hints(
-                &lowered.module,
-                &lexicons,
-                syntax,
-                &unbound,
-                &spellings,
-                &anchors,
-            ),
+            reported: error.reports(&reading()),
             error,
         })
         .collect();
@@ -722,12 +734,14 @@ impl Entered {
             &self.program,
         )
         .map_err(|error| {
-            CompileError::Failure(error.reports_with(
+            elaborator_refusal(
+                &error,
                 &self.program.as_program().module,
                 &scope.lexicons(syntax),
+                self.lowering(),
+                predecessors,
                 syntax,
-                &anchors_of(self.lowering(), predecessors),
-            ))
+            )
         })?;
         for unit in scope.units() {
             linked.mark_total(unit.certification());
@@ -932,17 +946,14 @@ fn close_over(
                 Ok(entry)
             })
             .map_err(|error| {
-                let spellings = Rc::new(lowered.spellings(&predecessors.text()));
-                CompileError::of(&error, |member| {
-                    member.reports_with_hints(
-                        &own,
-                        &scope.lexicons(syntax),
-                        syntax,
-                        lowered.unbound(),
-                        &spellings,
-                        &anchors_of(lowered, predecessors),
-                    )
-                })
+                elaborator_refusal(
+                    &error,
+                    &own,
+                    &scope.lexicons(syntax),
+                    lowered,
+                    predecessors,
+                    syntax,
+                )
             });
     findings.credit(&context.credited());
 
@@ -1092,7 +1103,6 @@ pub(crate) fn compile_lowered(
     mut lowered: PreparedText,
     closing: Option<Closing<'_>>,
 ) -> Result<(Unit, Option<curios_core::Entrypoint>), CompileError> {
-    let text = predecessors.text();
     let cores = predecessors.cores();
     let (tail, mut elaborated, mut refused) = match closing {
         Some(Closing {
@@ -1124,17 +1134,14 @@ pub(crate) fn compile_lowered(
     let walked = with_broken(
         lowered.broken(),
         walked.map_err(|error| {
-            let spellings = Rc::new(lowered.spellings(&text));
-            CompileError::of(&error, |member| {
-                member.reports_with_hints(
-                    lowered.core(),
-                    &predecessors.lexicons(syntax),
-                    syntax,
-                    lowered.unbound(),
-                    &spellings,
-                    &anchors_of(&lowered, predecessors),
-                )
-            })
+            elaborator_refusal(
+                &error,
+                lowered.core(),
+                &predecessors.lexicons(syntax),
+                &lowered,
+                predecessors,
+                syntax,
+            )
         }),
     );
     // Whatever elaboration said: a lint is no part of its verdict.
@@ -1169,14 +1176,16 @@ pub(crate) fn compile_lowered(
     let erased = predecessors.erased();
     let scope = Erasures::of(&cores, &erased).keeping(&kept).fixed(&fixed);
     let ersd = erase_unit(budget, *syntax, scope, &core).map_err(|error| {
-        let reports = error.reports_with(
+        let refusal = elaborator_refusal(
+            &error,
             core.as_module(),
             &predecessors.lexicons(syntax),
+            &lowered,
+            predecessors,
             syntax,
-            &anchors_of(&lowered, predecessors),
         );
 
-        refuse(&lowered, CompileError::Failure(reports))
+        refuse(&lowered, refusal)
     })?;
 
     let core = core.into_module();

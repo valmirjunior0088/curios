@@ -1254,7 +1254,7 @@ fn process_items(
                 lowered.tests.push(name);
                 lowered.items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Test,
-                    span: None,
+                    span: test.label.span().cloned(),
                     name,
                     island: context.island(),
                     type_,
@@ -1546,7 +1546,7 @@ fn process_items(
                         let ctor_body = curios_core::Term::func_marked(param_tys, inject);
 
                         lowered.items.push(FlatItem::Let(FlatLet {
-                            span: None,
+                            span: c.label.span().cloned(),
                             kind: curios_core::DefinitionKind::InductiveConstructor {
                                 owner: context.prefixed(&u.label),
                                 tag: curios_core::Atom::from(c.label.as_str()),
@@ -1877,7 +1877,7 @@ fn process_items(
                         };
 
                         lowered.items.push(FlatItem::Let(FlatLet {
-                            span: None,
+                            span: label.span().cloned(),
                             kind: curios_core::DefinitionKind::ConceptMethod {
                                 owner: context.prefixed(&concept.label),
                             },
@@ -1958,7 +1958,7 @@ fn process_items(
                         let signature = lower.signature(&signature);
                         let item = FlatLet {
                             kind: curios_core::DefinitionKind::Witness,
-                            span: None,
+                            span: declared.clone(),
                             name,
                             island: context.island(),
                             // Without a telescope the type is the application itself, which carries this span already.
@@ -2413,6 +2413,7 @@ fn into_core_unit_within(
         &flat_items,
         &facts,
         NominalScope::new(predecessors, &induct_decls, &struct_decls),
+        &|extent| shared.anchoring.resolved(extent),
     )?;
 
     let dead = unused_declarations(&Declarations {
@@ -2425,6 +2426,17 @@ fn into_core_unit_within(
         own: &own,
         mod_spans: &mod_spans,
     });
+
+    // Where each definition is named, by the name it leaves the lowering under, which for a witness is the one its signature gave it above.
+    let definitions = flat_items
+        .iter()
+        .zip(&facts)
+        .flat_map(|(item, lowered)| item.declared().zip(&lowered.definitions));
+    for ((name, _, _), declared) in definitions {
+        if let Some(label) = declared.label {
+            shared.anchoring.name(name, label);
+        }
+    }
 
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
     //

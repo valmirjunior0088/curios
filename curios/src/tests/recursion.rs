@@ -142,7 +142,7 @@ fn an_undeclared_cycle_is_refused_with_the_way_out() {
         report.contains("'f' and 'g' need one another") && report.contains("'let ... and ...'"),
         "expected the cycle named with its way out:\n{report}"
     );
-    // Placed in the first member as written, in the sugar spelling whose synthesized type has no position of its own.
+    // Placed at the first member's name: a cycle is about its declarations as wholes, and holds no position of its own.
     assert!(
         report.contains("let f(n : Nat) -> Nat = g(n);"),
         "expected the snippet at `f`'s declaration:\n{report}"

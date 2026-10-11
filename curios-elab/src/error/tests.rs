@@ -78,7 +78,7 @@ fn a_batch_renders_one_report_per_member() {
         refusal().at(second),
     ]);
 
-    let reports = batch.reports(&Rc::new(Spelling::default()), &BTreeMap::new(), &[&anchors]);
+    let reports = batch.located(&Rc::new(Spelling::default()), &BTreeMap::new(), &[&anchors]);
 
     assert_eq!(reports.len(), 2);
     assert!(reports[0].message.starts_with("while elaborating /first:"));

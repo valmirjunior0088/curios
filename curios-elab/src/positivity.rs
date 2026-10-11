@@ -34,12 +34,18 @@ pub(crate) fn decide_polarities(context: &mut Context, published: &Published) ->
     let vectors =
         positivity_vectors(context, Declarations::of(&inducts, &structs)).map_err(|refusal| {
             match refusal {
-                PositivityRefusal::NotPositive(refusal) => Error::not_strictly_positive(
-                    refusal.name,
-                    refusal.part,
-                    refusal.type_,
-                    refusal.polarity,
-                ),
+                // Placed at the offending part's type as written, where the published telescope kept its position.
+                PositivityRefusal::NotPositive(refusal) => {
+                    let written = refusal.type_.extent();
+
+                    Error::not_strictly_positive(
+                        refusal.name,
+                        refusal.part,
+                        refusal.type_,
+                        refusal.polarity,
+                    )
+                    .at_opt(written)
+                }
                 PositivityRefusal::Exhausted { name, error } => error.in_declaration([name]),
             }
         })?;

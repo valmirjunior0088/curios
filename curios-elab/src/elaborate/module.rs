@@ -1334,9 +1334,13 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
         .settle_checked(recorded)
         .map_err(|error| error.in_declaration(declared.iter().copied()))?;
     // An attempt that read something unfinished is void whatever it concludes, so nothing is decided of what it published.
+    // An obligation the item breaks is the item's as much as a refusal of it is, and is reported under its name.
     let obligations = match context.needs_nothing() {
         true => settle_published(context, &mut published, recorded)
-            .map_err(|error| error.in_declaration(declared.iter().copied()))?,
+            .map_err(|error| error.in_declaration(declared.iter().copied()))?
+            .into_iter()
+            .map(|error| error.in_declaration(declared.iter().copied()))
+            .collect(),
         false => Vec::new(),
     };
 

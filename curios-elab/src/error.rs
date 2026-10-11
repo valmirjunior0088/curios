@@ -1554,69 +1554,34 @@ impl Error {
         Rc::new(build_rename(&names, spelling))
     }
 
-    /// Render this error with source-style names, shortening global names against `module`'s symbols together with those of `scope`, the lexicon each unit in scope keeps (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here or [`Error::format_with_hints`], so every axis is set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
+    /// Render this error for its reader: [`Error::reports`], rendered.
+    pub fn format(&self, reading: &Reading<'_>) -> String {
+        Report::render_all(&self.reports(reading))
+    }
+
+    /// This error as data, and the primitive [`Error::format`] renders: every error is one report at its innermost extent, except a goal batch, which is one report *per goal* at that goal's own occurrence — a goal's identity is its source location, and a consumer placing each where it was written needs them apart. Rendering the list is exactly the text the compile path prints, so the located form and the printed form cannot drift.
     ///
-    /// `anchors` are where the declarations an error's positions lie in were written, the unit's own first and then its scope's: an error holds extents of declarations ([`curios_core::Extent`]), and this is where one becomes a line of a file.
-    pub fn format_with(
-        &self,
-        module: &Module,
-        scope: &[&Lexicon],
-        syntax: &SyntaxRegistry,
-        anchors: &[&Anchors],
-    ) -> String {
-        Report::render_all(&self.reports_with(module, scope, syntax, anchors))
-    }
+    /// Every elaboration error reaching a reader comes through here, so every axis of its spelling is set in one place: a global is named source-style, shortened against the unit's symbols together with those of its scope (axis (b)), the qualified-name universe an error's globals are spelled relative to, and axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
+    pub fn reports(&self, reading: &Reading<'_>) -> Vec<Report> {
+        let spelling = report_spelling(reading.module, reading.scope, reading.syntax);
+        let spelling = match reading.spellings {
+            Some(spellings) => {
+                // A report's reader stands in one of this unit's definitions, and resolution reads that definition's module.
+                let islands = reading
+                    .module
+                    .items
+                    .iter()
+                    .flat_map(Item::definitions)
+                    .map(|definition| (definition.name, definition.island))
+                    .collect();
+                let names = ReaderNames::new(Rc::clone(spellings), islands);
 
-    /// [`Error::format_with`] as data: one [`Report`] per thing said, located. See [`Error::reports_with_hints`].
-    pub fn reports_with(
-        &self,
-        module: &Module,
-        scope: &[&Lexicon],
-        syntax: &SyntaxRegistry,
-        anchors: &[&Anchors],
-    ) -> Vec<Report> {
-        self.reports(
-            &Rc::new(report_spelling(module, scope, syntax)),
-            &BTreeMap::new(),
-            anchors,
-        )
-    }
+                spelling.with_reader_names(Rc::new(names))
+            }
+            None => spelling,
+        };
 
-    /// [`Error::format_with`], with two tables of the text stage's. `unbound` is what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it; an `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it. `spellings` is how each of the unit's names can be written and where — the imports each definition's `use` lines brought into scope, and the absolute paths each global is reachable by with who may write them — so a global displays as resolution would find it from where the report's reader stands rather than as its shortest unambiguous suffix, which is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported). Both tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where, the second by pointer, since every member of a batch is rendered against the one table.
-    pub fn format_with_hints(
-        &self,
-        module: &Module,
-        scope: &[&Lexicon],
-        syntax: &SyntaxRegistry,
-        unbound: &BTreeMap<Free, Vec<Qualifier>>,
-        spellings: &Rc<Spellings>,
-        anchors: &[&Anchors],
-    ) -> String {
-        Report::render_all(
-            &self.reports_with_hints(module, scope, syntax, unbound, spellings, anchors),
-        )
-    }
-
-    /// [`Error::format_with_hints`] as data, and the primitive it renders: every error is one report at its innermost extent, except a goal batch, which is one report *per goal* at that goal's own occurrence — a goal's identity is its source location, and a consumer placing each where it was written needs them apart. Rendering the list is exactly the text the compile path prints, so the located form and the printed form cannot drift.
-    pub fn reports_with_hints(
-        &self,
-        module: &Module,
-        scope: &[&Lexicon],
-        syntax: &SyntaxRegistry,
-        unbound: &BTreeMap<Free, Vec<Qualifier>>,
-        spellings: &Rc<Spellings>,
-        anchors: &[&Anchors],
-    ) -> Vec<Report> {
-        // A report's reader stands in one of this unit's definitions, and resolution reads that definition's module.
-        let islands = module
-            .items
-            .iter()
-            .flat_map(Item::definitions)
-            .map(|definition| (definition.name, definition.island))
-            .collect();
-        let names = ReaderNames::new(Rc::clone(spellings), islands);
-        let spelling = report_spelling(module, scope, syntax).with_reader_names(Rc::new(names));
-        self.reports(&Rc::new(spelling), unbound, anchors)
+        self.located(&Rc::new(spelling), reading.unbound, reading.anchors)
     }
 
     /// The lines an `unbound variable` report adds from the text stage's table, or `None` for any other error or an unknown binder — one [`Qualifier::reach_hint`] per candidate, the line the text stage's `unresolved qualifier` report spells its own candidates with.
@@ -1648,10 +1613,10 @@ impl Error {
         (!lines.is_empty()).then(|| lines.join("\n"))
     }
 
-    /// One report per rendered error, at the innermost extent attached to it — or one per goal for a goal batch, each at its own occurrence, under whatever declaration prefix the wrappers add — and for a batch of refusals, every member's reports in order.
+    /// One report per rendered error, at the innermost extent attached to it, and at the name of the declaration it arose in where it has none — or one per goal for a goal batch, each at its own occurrence, under whatever declaration prefix the wrappers add — and for a batch of refusals, every member's reports in order.
     ///
     /// [`Error::at`] is first-wins *per wrapper*, so the innermost extent is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser extent outermost. Locating therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner extent silently.
-    fn reports(
+    fn located(
         &self,
         spelling: &Rc<Spelling>,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
@@ -1661,7 +1626,7 @@ impl Error {
         if let Self::Batch(errors) = self {
             return errors
                 .iter()
-                .flat_map(|error| error.reports(spelling, unbound, anchors))
+                .flat_map(|error| error.located(spelling, unbound, anchors))
                 .collect();
         }
 
@@ -1675,6 +1640,13 @@ impl Error {
             )
         };
 
+        // A report lands on what it is about: the position stamped on it, and where it has none, or one whose text is gone, the name of the declaration it arose in.
+        let placed = |extent: Option<&Extent>, owner: Option<Global>| {
+            extent
+                .and_then(|extent| extent.resolved(anchors))
+                .or_else(|| Anchors::label(anchors, &owner?))
+        };
+
         if let Self::Goals(goals) = self.unwrapped() {
             // The line naming the declaration is spelled for a reader standing in it, as every other report's is.
             let prefix = self.declaration_prefix(&for_reader(self.owner(), Rc::default()));
@@ -1683,7 +1655,7 @@ impl Error {
                 .map(|goal| {
                     let spelling = for_reader(goal.owner, Rc::clone(&goal.witnesses));
                     Report {
-                        span: goal.extent.and_then(|extent| extent.resolved(anchors)),
+                        span: placed(goal.extent.as_ref(), goal.owner),
                         message: format!("{prefix}{}", goal_text(goal, &spelling)),
                     }
                 })
@@ -1703,9 +1675,7 @@ impl Error {
             body.push_str(&suggestion);
         }
         vec![Report {
-            span: self
-                .innermost_extent()
-                .and_then(|extent| extent.resolved(anchors)),
+            span: placed(self.innermost_extent(), self.owner()),
             message: body,
         }]
     }
@@ -1999,7 +1969,24 @@ fn report_spelling(module: &Module, scope: &[&Lexicon], syntax: &SyntaxRegistry)
         .with_string_literals(Global::Authored(syntax.string.string.qualifier()))
 }
 
-/// The faithful rendering: core's own names, every universe shown. Diagnostics go through [`Error::format_with`], which supplies a [`Spelling`].
+/// What a report is read against: the unit its error arose in, and the tables that say how a name is written and where a declaration lies.
+///
+/// **One value, made where a refusal is reported**, so every report of a unit is read against the same tables whichever stage refused it: an erasure refusal names a declaration as an elaboration refusal does. The tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where.
+pub struct Reading<'a> {
+    /// The unit the error arose in: its symbols are what a global is shortened against first.
+    pub module: &'a Module,
+    /// The lexicon each unit in scope keeps.
+    pub scope: &'a [&'a Lexicon],
+    pub syntax: &'a SyntaxRegistry,
+    /// What each unresolved bare name could have meant, keyed by the binder the name lowered to and valued by the absolute paths of the public bindings in scope that carry it. An `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it.
+    pub unbound: &'a BTreeMap<Free, Vec<Qualifier>>,
+    /// How each of the unit's names can be written and where: the imports each definition's `use` lines brought into scope, and the absolute paths each global is reachable by with who may write them. With it a global displays as resolution would find it from where the report's reader stands, rather than as its shortest unambiguous suffix, which is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported). By pointer, since every member of a batch is rendered against the one table. `None` where no lowering's tables stand behind the unit: a root of the prelude as its build refuses it, a module built by hand.
+    pub spellings: Option<&'a Rc<Spellings>>,
+    /// Where the declarations an error's positions lie in were written, the unit's own first and then its scope's: an error holds extents of declarations ([`curios_core::Extent`]), and this is where one becomes a line of a file.
+    pub anchors: &'a [&'a Anchors],
+}
+
+/// The faithful rendering: core's own names, every universe shown. Diagnostics go through [`Error::format`], which supplies a [`Spelling`].
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Displayed(self, Rc::new(Spelling::default()), &[]).fmt(f)

@@ -48,6 +48,30 @@ struct PubUse {
     group: UseGroup,
 }
 
+impl PubUse {
+    // A refusal of this `pub use`, placed at the half of it the refusal is about: the selector it names, where this `use` wrote one of that label, and the path otherwise, which is all a glob writes.
+    fn placed(&self, error: Error) -> Error {
+        let selector = match (&error, &self.group) {
+            (
+                Error::ExportConflict { label }
+                | Error::CyclicReExport { label }
+                | Error::NoSuchUseTarget { label, .. },
+                UseGroup::Named(items),
+            ) => items
+                .iter()
+                .map(GroupItem::label)
+                .find(|item| item.as_str() == label)
+                .and_then(|item| item.span()),
+            _ => None,
+        };
+
+        match selector.or(self.name.span()) {
+            Some(span) => error.at(span.clone()),
+            None => error,
+        }
+    }
+}
+
 // === Visibility ==============================================================
 //
 // One rule governs both namespaces: a declaration written without `pub` in module `M` is visible exactly within `M`'s subtree, and a `pub` one is additionally visible wherever `M` itself is. Reachability is therefore the conjunction along a path, which the callers obtain by walking hop by hop.
@@ -510,7 +534,8 @@ fn fixed_point(
                     target,
                     representation,
                 };
-                changed |= insert(public, &use_.module, ns, label, entry)?;
+                changed |= insert(public, &use_.module, ns, label, entry)
+                    .map_err(|error| use_.placed(error))?;
             }
         }
 
@@ -641,7 +666,8 @@ fn classify_dead(
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     for use_ in pub_uses {
-        let provider = resolve_provider(public, table, reach, &use_.module, &use_.name)?;
+        let provider = resolve_provider(public, table, reach, &use_.module, &use_.name)
+            .map_err(|error| use_.placed(error))?;
 
         let interface = public.get(&provider).expect("seeded module");
 
@@ -671,9 +697,9 @@ fn classify_dead(
 
                     if !resolved {
                         let ns = if in_binding { Ns::Binding } else { Ns::Module };
-                        return Err(classify_label(
+                        return Err(use_.placed(classify_label(
                             public, table, reach, pub_uses, &provider, ns, label,
-                        ));
+                        )));
                     }
                 }
             }

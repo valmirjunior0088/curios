@@ -12,6 +12,7 @@ use {
     },
     curios_pipeline::{DEFAULT_STEP_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
     curios_text::{RootSource, SYNTAX},
+    curios_utilities::Report,
     std::fmt,
 };
 
@@ -195,7 +196,7 @@ pub(crate) fn put_program(source: &str) -> Answer {
                 .into_iter()
                 .map(|obligation| Refusal::Elaborator {
                     error: obligation.error,
-                    reported: obligation.reported,
+                    reported: Report::render_all(&obligation.reported),
                 })
                 .chain(verdicts.into_iter().map(Refusal::Kernel))
                 .collect(),

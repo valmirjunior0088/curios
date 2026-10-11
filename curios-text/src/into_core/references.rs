@@ -23,7 +23,7 @@ pub(crate) struct LoweredItem {
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub(crate) struct Declared {
-    /// Where its name was written, in the text of its declaration: what the `unused-declaration` lint underlines. `None` for a definition the compiler named — a constructor, a method wrapper, a witness, a test — and for one that was built rather than written.
+    /// Where its name was written, in the text of its declaration: what the `unused-declaration` lint underlines, and what the unit's anchors place a report about it by (`curios_core::Anchors::label`). `None` for a definition that was built rather than written.
     pub label: Option<curios_core::Extent>,
     /// The top-level definitions its declared type names, in the order a term lists its free variables. Taken of a definition written under its own name alone, the only kind the audit asks of.
     pub signature: Vec<curios_core::Global>,

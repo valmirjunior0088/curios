@@ -124,13 +124,18 @@ impl Anchoring {
     pub(super) fn resolved(&self, extent: &curios_core::Extent) -> Option<Span> {
         self.anchors.borrow().resolve(extent)
     }
+
+    /// Record that `name` was written at `label`: where a report about it is placed when nothing in it is.
+    pub(super) fn name(&self, name: curios_core::Global, label: curios_core::Extent) {
+        self.anchors.borrow_mut().name(name, label);
+    }
 }
 
 #[derive(Clone)]
 pub(super) struct FlatLet {
     pub name: curios_core::Global,
     pub kind: curios_core::DefinitionKind,
-    /// Where the declaration's name was written — what the `unused-declaration` lint underlines. `None` for a definition the compiler named: a constructor, a method wrapper, a witness, a test, or a `foreign` row the prelude synthesized.
+    /// Where the definition's name was written: what the `unused-declaration` lint underlines, and where a report about the definition is placed when it holds no position of its own. A constructor's is its tag, a method wrapper's its field's label, a test's its name, and a witness's the concept application its `satisfy` states. `None` for one that was built rather than written, a `foreign` row the prelude synthesized among them, and for one a later lowering keeps, whose place was taken where it was lowered.
     pub span: Option<Span>,
     pub island: Qualifier,
     pub type_: curios_core::Term,

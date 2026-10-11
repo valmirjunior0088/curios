@@ -5,7 +5,9 @@
 //! **A declaration lowered again is elaborated again.** Nothing compares two lowerings: an edit that leaves a declaration's meaning alone costs that declaration's elaboration, and what it comes to is compared part by part with what the baseline holds, by whatever read it.
 
 use {
-    crate::{Closing, CompileError, anchors_of, globals_after, kernel_refusal, with_broken},
+    crate::{
+        Closing, CompileError, elaborator_refusal, globals_after, kernel_refusal, with_broken,
+    },
     curios_cert::{Baseline, Rechecked, certify_module_over},
     curios_core::{Entrypoint, Module, Zonked},
     curios_elab::{
@@ -15,7 +17,7 @@ use {
     curios_text::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::SyntaxRegistry,
-    std::{collections::BTreeSet, rc::Rc},
+    std::collections::BTreeSet,
 };
 
 /// Compile one unit against `predecessors` over `baseline`: lower whole, then elaborate, judge and erase what does not stand.
@@ -49,7 +51,6 @@ pub(crate) fn compile_lowered_over(
     moved: &[bool],
     closing: Option<Closing<'_>>,
 ) -> Result<(Unit, Option<Entrypoint>), CompileError> {
-    let text = predecessors.text();
     let cores = predecessors.cores();
     let (tail, mut elaborated, mut refused) = match closing {
         Some(Closing {
@@ -102,17 +103,14 @@ pub(crate) fn compile_lowered_over(
     let walked = with_broken(
         lowered.broken(),
         walked.map_err(|error| {
-            let spellings = Rc::new(lowered.spellings(&text));
-            CompileError::of(&error, |member| {
-                member.reports_with_hints(
-                    lowered.core(),
-                    &predecessors.lexicons(syntax),
-                    syntax,
-                    lowered.unbound(),
-                    &spellings,
-                    &anchors_of(&lowered, predecessors),
-                )
-            })
+            elaborator_refusal(
+                &error,
+                lowered.core(),
+                &predecessors.lexicons(syntax),
+                &lowered,
+                predecessors,
+                syntax,
+            )
         }),
     );
     // What the proofs written now read, whatever elaboration said: a lint is no part of its verdict.
@@ -173,14 +171,16 @@ pub(crate) fn compile_lowered_over(
         },
     )
     .map_err(|error| {
-        let reports = error.reports_with(
+        let refusal = elaborator_refusal(
+            &error,
             core.as_module(),
             &predecessors.lexicons(syntax),
+            &lowered,
+            predecessors,
             syntax,
-            &anchors_of(&lowered, predecessors),
         );
 
-        refuse(&lowered, CompileError::Failure(reports))
+        refuse(&lowered, refusal)
     })?;
 
     Ok((
