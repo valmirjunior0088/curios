@@ -233,18 +233,19 @@ impl Plugin {
         let instantiated = Instantiated { memory, allocator };
 
         for (index, row) in self.rows.iter().enumerate() {
-            let function = instance
-                .get_func(&mut *store, &row.export)
-                .ok_or_else(|| missing(&row.export))?;
-            let released = instance.get_func(&mut *store, &format!("cabi_post_{}", row.export));
+            let entry = Entry {
+                function: instance
+                    .get_func(&mut *store, &row.export)
+                    .ok_or_else(|| missing(&row.export))?,
+                released: instance.get_func(&mut *store, &format!("cabi_post_{}", row.export)),
+            };
             let plugin = Arc::clone(self);
             let instantiated = instantiated.clone();
             let entered: Trampoline = Arc::new(move |mut caller, given, answered| {
                 plugin.rows[index].call(
                     &plugin.subject,
                     &instantiated,
-                    function,
-                    released,
+                    entry,
                     &mut caller,
                     given,
                     answered,
@@ -260,6 +261,13 @@ impl Plugin {
 
         Ok(())
     }
+}
+
+/// A row's export as an instance holds it: the function a call enters, and the post-return a module following the canonical ABI exports beside it, which releases the area the function answered in.
+#[derive(Clone, Copy)]
+struct Entry {
+    function: Func,
+    released: Option<Func>,
 }
 
 /// A module's instance in the store of the program that calls it: its memory and the allocator every byte string goes through. Both are handles into that store, so a call reaches the instance through the caller it arrives with.
@@ -516,18 +524,17 @@ impl Row {
         })
     }
 
-    /// One call of the row: the operands marshalled out of the guest and into the module's memory, `function` entered, and what it answers marshalled back.
-    #[allow(clippy::too_many_arguments)]
+    /// One call of the row: the operands marshalled out of the guest and into the module's memory, `entry` entered, and what it answers marshalled back.
     fn call(
         &self,
         subject: &Subject,
         instantiated: &Instantiated,
-        function: Func,
-        released: Option<Func>,
+        entry: Entry,
         caller: &mut Caller<'_, ()>,
         given: &[Val],
         answers: &mut [Val],
     ) -> wasmtime::Result<()> {
+        let Entry { function, released } = entry;
         let export = self.export.as_str();
 
         // Guest -> plugin. A byte string is lifted out of its GC array and written through the plugin's allocator; a scalar is read straight off its slot.
