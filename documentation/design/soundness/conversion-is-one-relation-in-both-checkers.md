@@ -21,6 +21,7 @@
 **The rules have one statement and one order in both checkers:**
 
 - **Two calls of one definition, by their spines, first**: on the pair as posed, whatever spells its sides, through a curried spine. It keeps two calls folded; no verdict follows it.
+- **The same member of two recursive groups, by the groups as binders, before either is unfolded**: member for member their types and their bodies under one shared set of binders, bare or at the head of two calls, whose spines follow ([Conversion recurrence](conversion-recurrence.md)). It unfolds no member, and a pair it does not hold goes on.
 - **A goal's type read forced**: a member of a declaration group and a call of a recursive definition are opened before any rule reads the type's shape.
 - **Eta by the goal's type, ahead of structure**: both sides applied at a function type, both projected at a Σ with a field, whatever their shapes.
 - **Two neutrals at a proposition, and by nothing else their type says**: at a goal whose type is a proposition, and at the proposition a lookup gives both where a child is compared with no type, two terms convert unread. At every other type two neutrals convert by their heads and spines: the Σ with no field has no eta, a nominal struct has none by its type, and neither is expanded against the other. Two eliminations that state the instance they eliminate are compared by it, the instances first and the scrutinees at the instance, with no lookup.

@@ -695,10 +695,21 @@ impl Convert {
             return Ok(false);
         }
 
+        self.enqueue(Term::type_ground(), this.head.clone(), that.head.clone());
+        self.compare_spines(context, this, that)?;
+
+        Ok(true)
+    }
+
+    /// The arguments of two applications of one length, each pair posed at the type the left head's telescope gives it: what is left of two applications whose heads are posed, or held one.
+    fn compare_spines(
+        &mut self,
+        context: &mut Context,
+        this: Apply,
+        that: Apply,
+    ) -> Result<(), ReduceError> {
         // Recover the real argument types from the head's function type so η fires at the correct type (e.g. a unit-typed argument is compared at `()`, where proof irrelevance makes distinct neutrals equal). Falls back to `Term::type_ground()` when the head's type is unavailable.
         let param_types = apply_param_types(context, &self.binders, &this.head, &this.arguments)?;
-
-        self.enqueue(Term::type_ground(), this.head, that.head);
 
         for (i, (a, b)) in this
             .arguments
@@ -714,7 +725,37 @@ impl Convert {
             self.enqueue(type_, a, b);
         }
 
-        Ok(true)
+        Ok(())
+    }
+
+    /// Whether two projections of one index of two recursive groups are one, the groups compared as the binders they are ([`Self::compare_rec`]): member for member their types and their bodies, every member of both opened at one shared label, so no member is unfolded and nothing recurs. It is asked in a run of its own, so a pair it does not hold leaves nothing behind and goes on to what its caller does next, and only where neither group binds a universe of its own, as the kernel asks it.
+    fn two_groups(
+        context: &mut Context,
+        binders: &Binders,
+        this: &Term,
+        that: &Term,
+    ) -> Result<bool, ReduceError> {
+        let (Some((this_group, _)), Some((that_group, _))) =
+            (this.as_rec_proj(), that.as_rec_proj())
+        else {
+            return Ok(false);
+        };
+        if this_group.universe_context().width() != 0 || that_group.universe_context().width() != 0
+        {
+            return Ok(false);
+        }
+
+        let mark = context.solution_mark();
+        let held = matches!(
+            convert_under(context, binders, &Term::type_ground(), this, that)?,
+            Outcome::Converts
+        );
+        match held {
+            true => context.end_solutions(mark),
+            false => context.rollback_solutions(mark),
+        }
+
+        Ok(held)
     }
 
     /// The first-order approximation for two applications of one global definition, taken on the raw spellings before either side is reduced. Reduction would unfold a `let`-defined head into its body on both sides — `trim(?t)` becomes a `match` stuck on `?t` — and lose the equation the spines state outright, `?t := X`. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds; this is the same rule for a head that does not survive, so what a program's unification does cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and the corpus fixture's `/big_nat/trim` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value. The attempt is bracketed: a solution it committed on the way to a verdict it did not reach is rolled back, so the fallthrough starts where the attempt did.
@@ -2751,6 +2792,15 @@ impl Convert {
                             this_a.head.clone(),
                             that_a.head.clone(),
                         );
+                    }
+
+                    // The same member of two groups whose skeletons part is one member where the groups are one as binders, and its two calls are then their spines. Sufficient and never necessary: a pair the comparison does not hold goes on to the delta step below.
+                    if instances == Some(LevelQuestion::Distinct)
+                        && this_a.arguments.len() == that_a.arguments.len()
+                        && Self::two_groups(context, &self.binders, &this_a.head, &that_a.head)?
+                    {
+                        self.compare_spines(context, this_a, that_a)?;
+                        continue;
                     }
 
                     match (this_head, that_head) {

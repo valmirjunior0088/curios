@@ -532,9 +532,9 @@ fn a_solution_holding_a_call_whose_body_holds_a_proof_the_elaborator_wrote_is_th
     .expect("the two sides are one call");
 }
 
-/// A local recursive function elaborated again is itself. A local group has no name a solution could take, so `Eq/refl`'s implicit holds a copy of `of`'s group, and re-validating it elaborates the group again: each rebuilt match keeps the goal it holds, where the type it is checked at converts with it. Given the goal its arm specializes the second time, the copy is a second term to conversion, which unfolds the two side by side over arguments that grow until the budget is spent.
+/// A local recursive function elaborated again is itself. A local group has no name a solution could take, so `Eq/refl`'s implicit holds a copy of `of`'s group, and re-validating it elaborates the group again: each rebuilt match keeps the goal it holds, where the type it is checked at converts with it. Given the goal its arm specializes the second time, the copy is a second term to conversion, which holds the two groups one where their members convert under shared binders, and unfolds neither.
 ///
-/// Mutation-checked: with a rebuilt match taking the type it is checked at, the program runs out of steps.
+/// Mutation-checked: with a rebuilt match taking the type it is checked at, the program is still accepted, the copy and the group compared as the binders they are; with that comparison gone as well, it runs out of steps.
 #[test]
 fn a_local_recursive_function_elaborated_again_is_itself() {
     typecheck_within(

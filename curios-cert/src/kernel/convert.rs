@@ -4,7 +4,7 @@
 //!
 //! The rules, in the order they are tried:
 //!
-//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **One definition's spines.** Two applications of one definition are compared argument by argument before either is unfolded; agreeing spines decide the goal and disagreeing ones decide nothing. 3. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type with a field both are projected and compared componentwise. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. The Σ with no field has no eta, and a nominal struct has none by its type — its literal opens one, where it holds a field that is no proof — so no type but a proposition makes two neutrals one: that a type has one inhabitant by its shape is read nowhere, since a substitution can make it so of a type it was not so of. 4. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children.
+//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **One definition's spines.** Two applications of one definition are compared argument by argument before either is unfolded; agreeing spines decide the goal and disagreeing ones decide nothing. 3. **Two groups as binders.** The same member of two recursive groups is one where the groups are: member for member their types and their bodies convert under one shared set of binders, with no member unfolded. 4. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type with a field both are projected and compared componentwise. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. The Σ with no field has no eta, and a nominal struct has none by its type — its literal opens one, where it holds a field that is no proof — so no type but a proposition makes two neutrals one: that a type has one inhabitant by its shape is read nowhere, since a substitution can make it so of a type it was not so of. 5. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children.
 //!
 //! # Termination, and the recurrence rule
 //!
@@ -20,7 +20,7 @@
 //!
 //! # Where a child has no type of its own, and why refusing is the safe direction
 //!
-//! Some child positions are handed no type: a stuck elimination's scrutinee, its motive and its arms' bodies, and a projection's or an instance's head are compared at `Type`. Nothing a type directs is forfeited there. Between two sides a lookup types — a neutral by its head, a stuck elimination by its result at its scrutinee, a constructor's value by its declaration (`looked_up`) — what the type directs is read off it (`by_their_own_type`): that it is a proposition. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`) — and two literals are compared by their parts. And a binder a motive or an arm opens is opened at the type its position gives it, read off the scrutinee's looked-up type (`motive_binders`, `ground_cases`), so a lookup under it reads what the elimination's typing read. The stand-in `Type` is what such a binder keeps where no lookup types the scrutinee, which no checked term reaches and which can only refuse. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one or a projection of a `rec` group, and an application or a record projection of one, and a stuck elimination, each read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`). An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets a family indexed by two proofs of a `P : Prop`, `Same(@P)(p, q)`, convert with `Same(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded and ahead of eta by the goal's type, as the elaborator compares them (`one_definition_by_its_spines`), which keeps the two calls folded: unfolded first a proof argument lands in a stuck scrutinee, where the type a lookup gives it is what equates it, and after eta the pair is no application of the definition at its head. A nominal node, a type or a value of it, compares its levels where its family is invariant in them and at nothing where it is irrelevant (`Kernel::instances_eq`). Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), every one of them, the equation a definition's instance takes, and two different groups are refused; two instances of a family's former that part in a level are left to the nodes they build (`projects_a_former`).
+//! Some child positions are handed no type: a stuck elimination's scrutinee, its motive and its arms' bodies, and a projection's or an instance's head are compared at `Type`. Nothing a type directs is forfeited there. Between two sides a lookup types — a neutral by its head, a stuck elimination by its result at its scrutinee, a constructor's value by its declaration (`looked_up`) — what the type directs is read off it (`by_their_own_type`): that it is a proposition. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`) — and two literals are compared by their parts. And a binder a motive or an arm opens is opened at the type its position gives it, read off the scrutinee's looked-up type (`motive_binders`, `ground_cases`), so a lookup under it reads what the elimination's typing read. The stand-in `Type` is what such a binder keeps where no lookup types the scrutinee, which no checked term reaches and which can only refuse. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one or a projection of a `rec` group, and an application or a record projection of one, and a stuck elimination, each read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`). An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets a family indexed by two proofs of a `P : Prop`, `Same(@P)(p, q)`, convert with `Same(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded and ahead of eta by the goal's type, as the elaborator compares them (`one_definition_by_its_spines`), which keeps the two calls folded: unfolded first a proof argument lands in a stuck scrutinee, where the type a lookup gives it is what equates it, and after eta the pair is no application of the definition at its head. A nominal node, a type or a value of it, compares its levels where its family is invariant in them and at nothing where it is irrelevant (`Kernel::instances_eq`). Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), every one of them, the equation a definition's instance takes, and the same member of two groups is decided by the groups compared as binders, before either is unfolded (`two_groups`); two instances of a family's former that part in a level are left to the nodes they build (`projects_a_former`).
 //!
 //! Where a lookup gives no type, the direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. A refusal can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
@@ -165,7 +165,10 @@ fn compare(
         let assumed = history.assumed;
 
         // Two calls of one definition by their spines, on the pair as posed and ahead of eta by the goal's type. Eta hands on each call applied to a binder or projected, which is no call of a definition at its head, so tried after it the spines would never be compared at a function or a record type.
-        let outcome = match one_definition_by_its_spines(kernel, history, this, that)? {
+        // Then the same member of two recursive groups by the groups as binders, before `by_the_type` forces either into what it unfolds to.
+        let outcome = match one_definition_by_its_spines(kernel, history, this, that)?
+            || two_groups(kernel, history, this, that)?
+        {
             true => Ok(true),
             false => by_the_type(kernel, history, type_, this, that),
         };
@@ -330,6 +333,68 @@ fn one_definition_by_its_spines(
     };
 
     Ok(one_head && compare_arguments(kernel, history, left, right)?)
+}
+
+/// Whether `this` and `that` are the same member of two recursive groups that are one as binders: the groups have one shape, and member for member their types convert and then their bodies at those types, every member of both opened at one shared binder.
+///
+/// **It is the congruence of a binder.** Two groups whose members convert under one set of binders are one group, as two lambdas whose bodies convert under one binder are one function. A member is an opaque local while the groups are compared, so none is unfolded and nothing recurs: the rule is sound alone, and a pair it does not hold is left to the rules after it, which unfold. Two calls of the pair reach it through their heads, which [`structural`] compares before their spines.
+///
+/// Groups are matched by position, which is what makes one index of two a pair, and only where neither binds a universe of its own: a level under a group's binder is no level of the declaration the comparison is judged in.
+fn two_groups(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, Error> {
+    let (Some((left, left_index)), Some((right, right_index))) =
+        (this.as_rec_proj(), that.as_rec_proj())
+    else {
+        return Ok(false);
+    };
+    if left_index != right_index
+        || left.length() != right.length()
+        || left.universe_context().width() != 0
+        || right.universe_context().width() != 0
+    {
+        return Ok(false);
+    }
+    let (left, right) = (left.clone(), right.clone());
+
+    kernel.scoped(|kernel| {
+        let names = (0..left.length())
+            .map(|_| kernel.fresh(None))
+            .collect::<Vec<_>>();
+        let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
+        let members = members.iter().collect::<Vec<_>>();
+
+        // Every member is assumed before any type is compared, since one member's type may name any other, and at the left group's types: the right group's are held to them next.
+        for (name, member) in names.iter().zip(left.iter()) {
+            kernel.assume(name, &member.type_.open(&members));
+        }
+        for (left, right) in left.iter().zip(right.iter()) {
+            if !ground(
+                kernel,
+                history,
+                &left.type_.open(&members),
+                &right.type_.open(&members),
+            )? {
+                return Ok(false);
+            }
+        }
+        for (left, right) in left.iter().zip(right.iter()) {
+            if !compare(
+                kernel,
+                history,
+                &left.type_.open(&members),
+                &left.body.open(&members),
+                &right.body.open(&members),
+            )? {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    })
 }
 
 /// Eta at a function type: apply both sides to the same fresh binders and compare the results at the codomain.
@@ -692,7 +757,7 @@ fn structural(
             Ok(results && ground_cases(kernel, history, left, scrutinee.as_ref(), &right.cases)?)
         }
 
-        // A folded recursive call, and a `rec` that forcing declined to unfold. Two projections of one group are compared up to their universe instance, the levels decided by entailment; two different groups are refused here without a retry, because the interesting case — a cycle that unfolds without disagreeing — is handled by the recurrence rule above, not here. A `rec` whose tail computes something is *not* this case, and falls through to the delta step below.
+        // A folded recursive call, and a `rec` that forcing declined to unfold. Two projections of one group are compared up to their universe instance, the levels decided by entailment; two different groups are refused here without a retry: whether they are one as binders was asked before either was forced ([`two_groups`]), and a cycle that unfolds without disagreeing is the recurrence rule's, not this arm's. A `rec` whose tail computes something is *not* this case, and falls through to the delta step below.
         (Subterm::Rec(_), Subterm::Rec(_))
             if this.as_rec_proj().is_some() && that.as_rec_proj().is_some() =>
         {

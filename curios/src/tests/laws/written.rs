@@ -1280,6 +1280,28 @@ fn two_calls_of_a_recursive_function_that_differ_are_refused() {
     assert!(typecheck(&solved).is_err());
 }
 
+/// What the rows over two recursions are stated under: one recursion written with its step's sum both ways, and the second spelling again from another base case.
+const TWO_RECURSIONS: &str = "use /std/{Nat, Eq, Io};\nlet f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(k) + 2 end;\nlet h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + h(k) end;\nlet based(n: Nat) -> Nat = match n | 0 => 1 | k + 1 => 2 + based(k) end;";
+
+#[test]
+fn two_recursive_functions_whose_bodies_convert_are_one() {
+    // `f` and `h` are one recursion whose step no spelling relates, `f(k) + 2` against `2 + h(k)`, and an unfolding of both poses the same two calls again under fresh binders. Each checker compares the two groups as the binders they are, at the head of two calls and bare, and unfolds neither. `based` parts from them in its base case, where the same comparison refuses it and the unfolding it is left to meets the two base cases.
+    let name = "two recursive functions";
+    let rows = [
+        ("n: Nat", "Eq()(f(n), h(n))"),
+        ("", "Eq()(f, h)"),
+        ("n: Nat", "Eq()(f(n), based(n))"),
+        ("", "Eq()(f, based)"),
+    ]
+    .map(|(binders, claim)| (binders.to_owned(), claim.to_owned()));
+    if let Err(failures) = closes(TWO_RECURSIONS, &rows[..2]) {
+        panic!("{}", failures.join("\n"));
+    }
+    let mut found = misplaced(TWO_RECURSIONS, name, &rows, 2);
+    found.extend(misplaced_by_the_kernel(TWO_RECURSIONS, name, &rows, 2));
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
 #[test]
 fn a_step_taken_through_an_annotation_is_one_the_kernel_takes_in_one() {
     // The elaborator compares a value's type with a `let`'s annotation and the annotation with the result type, each pair leaving one unpaired factor; the kernel compares the first type with the last, which leaves two. Both accept at every order only where conversion is transitive over them.

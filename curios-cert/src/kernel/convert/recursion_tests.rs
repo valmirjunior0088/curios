@@ -140,6 +140,86 @@ fn a_folded_recursive_call_converts_without_unfolding_forever() {
     );
 }
 
+/// `rec f : (n: Nat) -> Nat = (n) => match n | 0 => base | pred + 1 => f(pred) + by; f`, its step's sum written `f(pred) + by` or, commuted, `by + f(pred)`: one recursion in two spellings no rename relates.
+fn stepping(base: usize, by: usize, commuted: bool) -> Term {
+    let member = binder(60, "f");
+    let (n, motive, pred, ih) = (
+        binder(61, "n"),
+        binder(62, "m"),
+        binder(63, "pred"),
+        binder(64, "ih"),
+    );
+    let call = Term::apply(Term::free_var(&member), [Term::free_var(&pred)]);
+    let step = match commuted {
+        false => Intrinsic::nat_add(call, nat(by)),
+        true => Intrinsic::nat_add(nat(by), call),
+    };
+
+    Term::rec(
+        [(
+            member,
+            Term::func_type([(n, nat_type())], nat_type()),
+            Term::func(
+                [(n, nat_type())],
+                Term::nat_match(
+                    Term::free_var(&n),
+                    Some(&motive),
+                    nat_type(),
+                    nat(base),
+                    &pred,
+                    &ih,
+                    Term::intrinsic(step),
+                ),
+            ),
+        )],
+        Term::free_var(&member),
+    )
+}
+
+/// Two recursive groups are compared as the binders they are: the same member of two groups is one where, member for member, their types and their bodies convert under one shared set of binders. The two here are one recursion whose step is `f(pred) + 2` in one and `2 + f(pred)` in the other, so no spelling relates them, and an unfolding of both poses the same two calls under fresh binders without end. They are compared bare, at their function type, and as two calls, whose heads are compared before their spines. The elaborator's twin shares the name.
+///
+/// Mutation-checked: with the comparison removed the budget, small here, runs out on both; with it holding any two groups of one shape, `two_groups_whose_bodies_part_are_apart` fails.
+#[test]
+fn two_groups_whose_bodies_convert_are_one() {
+    let mut kernel = Kernel::new(10_000, SYNTAX);
+    let x = binder(90, "x");
+    kernel.assume(&x, &nat_type());
+    let (left, right) = (stepping(0, 2, false), stepping(0, 2, true));
+    let function = Term::func_type([(binder(91, "n"), nat_type())], nat_type());
+
+    assert_eq!(convert(&mut kernel, &function, &left, &right), Ok(true));
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &nat_type(),
+            &Term::apply(left, [Term::free_var(&x)]),
+            &Term::apply(right, [Term::free_var(&x)]),
+        ),
+        Ok(true),
+    );
+}
+
+/// The control: two groups of one shape whose base cases part are two functions, bare and at the head of two calls. The comparison refuses them at the base case, and so does the unfolding it leaves them to, a fold's base case being compared before its step.
+#[test]
+fn two_groups_whose_bodies_part_are_apart() {
+    let mut kernel = Kernel::new(10_000, SYNTAX);
+    let x = binder(90, "x");
+    kernel.assume(&x, &nat_type());
+    let (left, right) = (stepping(0, 2, false), stepping(1, 2, true));
+    let function = Term::func_type([(binder(91, "n"), nat_type())], nat_type());
+
+    assert_eq!(convert(&mut kernel, &function, &left, &right), Ok(false));
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &nat_type(),
+            &Term::apply(left, [Term::free_var(&x)]),
+            &Term::apply(right, [Term::free_var(&x)]),
+        ),
+        Ok(false),
+    );
+}
+
 /// Conversion keeps the constant function apart from the identity whatever index the local it mentions was minted at.
 ///
 /// A positive control for capture-avoidance. Eta at a function type opens a binder that would alias a free local the kernel could mint again — `(x) => y` and `(x) => x` become the same term the moment the opened binder *is* `y` — so `y` is assumed at each of the first identities a fresh kernel hands out, one of which is the binder the comparison opens. `Kernel::assume` raises the counter past it, so that binder is another. Mutation-checked: an `assume` that leaves the counter alone makes the two convertible.

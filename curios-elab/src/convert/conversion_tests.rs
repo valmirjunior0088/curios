@@ -491,6 +491,80 @@ fn distinct_recursive_heads_with_differing_bodies_is_false() {
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
 }
 
+/// `rec f : (n: Nat) -> Nat = (n) => match n | 0 => base | pred + 1 => f(pred) + by; f`, its step's sum written `f(pred) + by` or, commuted, `by + f(pred)`: one recursion in two spellings no rename relates.
+fn stepping(context: &mut Context, base: usize, by: usize, commuted: bool) -> Term {
+    let member = context.fresh(Some("f"));
+    let n = context.fresh(Some("n"));
+    let motive = context.fresh(Some("m"));
+    let pred = context.fresh(Some("pred"));
+    let ih = context.fresh(Some("ih"));
+    let call = Term::apply(Term::free_var(&member), [Term::free_var(&pred)]);
+    let step = match commuted {
+        false => Intrinsic::nat_add(call, nat(by)),
+        true => Intrinsic::nat_add(nat(by), call),
+    };
+
+    Term::rec(
+        [(
+            member,
+            Term::func_type([(n, nat_type())], nat_type()),
+            Term::func(
+                [(n, nat_type())],
+                Term::nat_match(
+                    Term::free_var(&n),
+                    Some(&motive),
+                    nat_type(),
+                    nat(base),
+                    &pred,
+                    &ih,
+                    Term::intrinsic(step),
+                ),
+            ),
+        )],
+        Term::free_var(&member),
+    )
+}
+
+/// Two recursive groups are compared as the binders they are: the same member of two groups is one where, member for member, their types and their bodies convert under one shared set of labels. The two here are one recursion whose step is `f(pred) + 2` in one and `2 + f(pred)` in the other. They are compared bare, and as two calls, whose heads are compared in a run of its own before their spines are posed. The kernel's twin shares the name.
+#[test]
+fn two_groups_whose_bodies_convert_are_one() {
+    let mut context = context();
+    let a = context.fresh(Some("a"));
+    let this = stepping(&mut context, 0, 2, false);
+    let that = stepping(&mut context, 0, 2, true);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+    assert_eq!(
+        conv(
+            &mut context,
+            &Term::apply(this, [Term::free_var(&a)]),
+            &Term::apply(that, [Term::free_var(&a)]),
+        ),
+        Ok(true),
+    );
+}
+
+/// The control: two groups of one shape whose base cases part are two functions, bare and at the head of two calls, where the delta step the comparison leaves them to meets the two base cases.
+///
+/// Mutation-checked: with the comparison holding any two groups of one shape, the two calls convert.
+#[test]
+fn two_groups_whose_bodies_part_are_apart() {
+    let mut context = context();
+    let a = context.fresh(Some("a"));
+    let this = stepping(&mut context, 0, 2, false);
+    let that = stepping(&mut context, 1, 2, true);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+    assert_eq!(
+        conv(
+            &mut context,
+            &Term::apply(this, [Term::free_var(&a)]),
+            &Term::apply(that, [Term::free_var(&a)]),
+        ),
+        Ok(false),
+    );
+}
+
 #[test]
 fn growing_recursive_unfolding_spends_the_budget() {
     // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, which a budget well under the shipped default shows as surely and sooner.
