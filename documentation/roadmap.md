@@ -20,7 +20,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Arithmetic
 
-- [ ] [An atom is one where conversion says so](roadmap/arithmetic/100-an-atom-is-one-where-conversion-says-so.md) — not refined yet; a commutative operation is no atom of what encloses it, so a verdict follows the order its operands were written in, and two calls of a universe-polymorphic definition under `&&`, `||` or `!=` are never one atom
+- [ ] [An atom is one where conversion says so](roadmap/arithmetic/100-an-atom-is-one-where-conversion-says-so.md) — an operation one reader reads is no atom of the reader above it, so a verdict follows the order its operands were written in, in conversion, a stuck fold, an arm's equation and the bound prover alike; each reader states an atom's identity for itself, so two calls of a universe-polymorphic definition commuted or repeated are two atoms wherever a reader compares them as written; and two calls apart in an instance and in an argument that converts are never asked about
 - [ ] [Exact rationals and their laws](roadmap/arithmetic/200-exact-rationals.md) — no canonical rational library, executable binary64 conversions, exact decimals or library proofs
 - [ ] [Alternate floating-point exception handling](roadmap/arithmetic/201-flt-exception-handling.md) — IEEE 754's remaining §8 policies, and per-operation substitution and recording
 - [ ] [Correctly rounded elementary functions](roadmap/arithmetic/202-flt-elementary-functions.md) — the §9.2 functions are absent, and fuel and exhaustion need a contract
