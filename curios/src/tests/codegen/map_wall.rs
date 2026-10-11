@@ -68,7 +68,7 @@ pub(super) fn timed(compiled: &Compiled, n: u64) -> f64 {
 ///
 /// # What it last printed
 ///
-/// Taken at `447fbb0a1`, release, x86-64 Linux, seven readings in one sitting: 1067, 1069, 1070, 1076, 1089, 1095, 1097 ns/insert, median 1076. This sitting read unimodally, inside ±1.4%; an earlier one on another box read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
+/// Taken at `7f2ce2cfd`, release, x86-64 Linux, seven readings in one sitting: 665, 666, 670, 671, 672, 684, 686 ns/insert, median 671. This sitting read unimodally, inside ±1.6%; an earlier one on another box read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
 ///
 /// # What the design rests on
 ///
@@ -158,7 +158,18 @@ end
 ///
 /// The control folds a constant where the probe folds the lengths of `Hash/hash` of this step's key and of the last's, so the delta is two encodings and two immediate `len`s — read it as a slight upper bound on the key class. An insert into a `Map(Nat, V)` builds those two, the map holding its keys and deriving their encodings where it compares them, so the share arithmetic is direct against `map_wall_spines_slope`'s figure read in the same sitting.
 ///
-/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `Node/insert`, `bits/bit`, `bits/crit`, `Node/lookup`, `Node/wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// # What it last printed
+///
+/// Taken at `7f2ce2cfd`, release, x86-64 Linux, seven readings in the sitting `map_wall_spines_slope`'s were taken in, the first of which printed:
+///
+/// ```text
+/// outputs at N=1000: encoded "927554", control "925689"
+///   encoded 43 ns/iter, control 5 ns/iter, key construction 38 ns/insert
+/// ```
+///
+/// Over the seven: encoded 41, 41, 42, 43, 43, 43, 44, median 43; control 3, 5, 5, 5, 6, 6, 7, median 5; key construction 35, 36, 37, 38, 38, 38, 40, median 38 ns/insert. The two encodings an insert builds are 38 of its 671 nanoseconds, under 6%.
+///
+/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the optimized `spines` module's ten surviving `br_table`s, as `wonder stage wasm-optm` prints it at that commit, five sit in `main`, three in text decoding (`/std/Str/scan_from` and `/std/Str/At/next`) and two in `/std/Map/Node/insert` itself, none in `bits/bit`, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {
