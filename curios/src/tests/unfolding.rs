@@ -248,7 +248,7 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 ///
 /// **The allocation counts are identical**, which says more than the wall clocks: the two spellings hand the fixpoint the same module, so what it does with them cannot differ. `evaluate_closed_terms`, the pass this measurement is about, is never the cost; what it *produces* can be, because the fixpoint below it prices the module it is handed — `tests::fixpoint` carries that measurement.
 #[test]
-#[ignore = "measurement: reports what a spelling costs rather than asserting"]
+#[ignore = "measurement, mixed: reports what a spelling costs rather than asserting"]
 fn combinator_sharing_measurements() {
     println!("rules  inner            bind copies  functions  compile");
     for inner in [Inner::None, Inner::InBlock, Inner::Hoisted] {

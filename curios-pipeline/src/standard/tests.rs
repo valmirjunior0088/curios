@@ -105,7 +105,7 @@ fn elaborated_over(
 
 /// What a question about the standard library costs after an edit to one declaration: how many names are lowered again and how many elaborated again, and the time each phase takes, for a leaf and for a hub. A measurement, so it reports rather than asserts, and its timings are the profile it was built under.
 #[test]
-#[ignore = "measurement: lowers the standard library and recompiles it over the archive, reporting what is done again and per-phase timings"]
+#[ignore = "measurement, mixed: lowers the standard library and recompiles it over the archive, reporting what is done again and per-phase timings"]
 fn std_recompile_census() {
     let directory = std_directory();
 
@@ -168,7 +168,7 @@ fn std_recompile_census() {
 
 /// Whether the standard library compiles to one unit: its tree compiled whole twice in one process, the two stored units compared byte for byte, and where they differ, the parts and the items that do. A measurement, since each compile is the whole library; counted, and it asserts, since a second unit is the fault it is here to name.
 #[test]
-#[ignore = "measurement: compiles the standard library whole twice and compares the two stored units byte for byte"]
+#[ignore = "measurement, counted: compiles the standard library whole twice and compares the two stored units byte for byte"]
 fn std_unit_reproduction() {
     with_prelude(|prelude| {
         let [sys, _] = prelude else {
@@ -234,7 +234,7 @@ fn std_unit_reproduction() {
 
 /// Whether the standard library compiled over a baseline is the unit it is compiled whole: for a leaf edit and for a hub, its edited tree compiled whole and over the archived unit, the two compared as each is stored. A measurement, since each edit compiles the library whole; counted, and it asserts, since a second unit is the fault it is here to name.
 #[test]
-#[ignore = "measurement: for a leaf edit and a hub, compiles the edited standard library whole and over the archive and compares the two stored units byte for byte"]
+#[ignore = "measurement, counted: for a leaf edit and a hub, compiles the edited standard library whole and over the archive and compares the two stored units byte for byte"]
 fn std_recompile_reproduction() {
     let directory = std_directory();
 
@@ -276,7 +276,7 @@ fn std_recompile_reproduction() {
 
 /// How the standard library's stored unit divides between its parts: the bytes of each archived alone, and how long each takes to restore out of them. What only a recompile of the unit reads is its baseline half, and the rest is what every compilation after the unit restores. A measurement, so it reports rather than asserts; mixed, its bytes counted and its times the median of five readings with their span, the profile it was built under.
 #[test]
-#[ignore = "measurement: archives each part of the standard library's unit alone and reports its bytes and how long it takes to restore"]
+#[ignore = "measurement, mixed: archives each part of the standard library's unit alone and reports its bytes and how long it takes to restore"]
 fn std_image_division() {
     with_prelude(|prelude| {
         let [_, std] = prelude else {
@@ -473,7 +473,7 @@ fn std_image_division() {
 
 /// Whether a declaration the prover's vocabulary comes to read is elaborated again with no lemma of the library on offer, as a whole compile elaborates it. `/std/Eq/sym`, a lemma of the vocabulary, is made to name `/std/Str/At/skip`, whose proofs the prover writes: compiled whole, `skip` is then asked for before the lemmas are offered. Compiled over the archive, `skip`'s text stands and its trace says the lemmas were on offer, so the walk elaborates it again where it now stands. The two compiles answer alike: with one stored unit, or with the same reports. A measurement, since each compile is the library's; it asserts, the two answers being one claim.
 #[test]
-#[ignore = "measurement: makes a lemma of the prover's vocabulary read a declaration, compiles the standard library whole and over the archive, and compares the two answers"]
+#[ignore = "measurement, counted: makes a lemma of the prover's vocabulary read a declaration, compiles the standard library whole and over the archive, and compares the two answers"]
 fn std_vocabulary_reach_reproduction() {
     let directory = std_directory();
 
@@ -633,7 +633,7 @@ const PADDINGS: [usize; 2] = [0, 1];
 
 /// What each declaration of the standard library elaborates to where it alone is elaborated again: the library as its sources lower it, compiled over the archived unit with every declaration but one offered as kept, so the walk elaborates that one and keeps the others by their traces. The declaration is compared with what the archive holds for it, and so is what it asked; what else the walk elaborated again is counted. And again with unrelated authored definitions elaborated beside it, which nothing it reads distinguishes. A declaration is a function of what it reads exactly when this reports nothing (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`). A measurement, so it reports rather than asserts.
 #[test]
-#[ignore = "measurement: lowers the standard library and compiles it over the archive once for each of its declarations, that declaration alone elaborated again, reporting the ones that come out different"]
+#[ignore = "measurement, counted: lowers the standard library and compiles it over the archive once for each of its declarations, that declaration alone elaborated again, reporting the ones that come out different"]
 fn std_replay_census() {
     with_prelude(|prelude| {
         let [sys, std] = prelude else {
@@ -747,7 +747,7 @@ fn std_replay_census() {
 
 /// What a type former of the prelude holds that its entry does not spell: each former of `/sys` and `/std` spelled again from the entry it carries ([`Definition::former`]) and compared, part by part, with the one the archive holds. What elaboration stamps on a definition is compared with what the entry gives for it: a former calls nothing, so it is total, and a former that is no member of a group holds each level as its entry does, a member of one storing no vector. A former is a function of its entry exactly where this reports nothing, and what it reports is what deriving every former would have to account for. A measurement, so it reports rather than asserts; counted.
 #[test]
-#[ignore = "measurement: spells each type former of the prelude from the entry it carries and reports the parts that differ from the stored one"]
+#[ignore = "measurement, counted: spells each type former of the prelude from the entry it carries and reports the parts that differ from the stored one"]
 fn std_former_derivation() {
     /// How much of a differing term a line shows.
     const SHOWN: usize = 400;

@@ -83,7 +83,7 @@ pub(super) fn assert_listing(io: &MockIo) {
 ///
 /// All twelve captures passed the behavior and closed-span assertions, terminal restoration and all three screen clears included.
 #[test]
-#[ignore = "measurement: captures compilation and execution costs"]
+#[ignore = "measurement, timed: captures compilation and execution costs"]
 fn coordination_measurements() {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -80,7 +80,7 @@ impl std::io::Write for Rows {
 ///
 /// **A sweep's own per-candidate walks are a cost of the same shape, one level down.** A split re-scanning the module for the nodes carrying edges into its continuation, rather than reading the index its sweep builds once, would pay that scan once per candidate. What a split still walks per candidate is the `replace_atom` that redirects its parameter to the head rebuild.
 #[test]
-#[ignore = "measurement: reports what each pass of the fixpoint costs rather than asserting"]
+#[ignore = "measurement, mixed: reports what each pass of the fixpoint costs rather than asserting"]
 fn fixpoint_pass_measurements() {
     let entrypoint = TOML_DRIVER.parse::<Entrypoint>().expect("driver parses");
     // The stream goes to a buffer and is folded back here: this test wants the aggregate, which is one consumer of the rows.

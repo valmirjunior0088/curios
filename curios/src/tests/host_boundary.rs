@@ -94,7 +94,7 @@ fn assert_stream(io: &MockIo) {
 ///
 /// Measured medians: `monad_io` compile **739.563 ms**, run **0.543 ms**; `stream_copy` compile **231.756 ms**, run **9.264 ms**; `tui` compile **4155.403 ms**, run **40.203 ms**. All eighteen samples passed their behavior and closed-span assertions; each workload produced the same output length in every sample.
 #[test]
-#[ignore = "measurement: captures compilation and execution costs"]
+#[ignore = "measurement, timed: captures compilation and execution costs"]
 fn host_boundary_measurements() {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)

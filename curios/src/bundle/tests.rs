@@ -49,7 +49,7 @@ fn the_embedded_launcher_stays_slim() {
 ///
 /// Re-run this after bumping wasmtime or changing the release profile: the string markers depend on panic-location paths surviving, which `strip = true` would not change (they are `.rodata` literals, not symbols) but a toolchain change might.
 #[test]
-#[ignore = "measurement: reports the launcher's figures rather than asserting"]
+#[ignore = "measurement, counted: reports the launcher's figures rather than asserting"]
 fn launcher_guard_positive_control() {
     let counts = BACKEND_MARKERS.map(|marker| {
         let hits = LAUNCHER

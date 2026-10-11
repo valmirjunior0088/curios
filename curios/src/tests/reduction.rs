@@ -218,7 +218,7 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 /// /usr/bin/time -l target/release/curios compile bytes_growing_6400.crs -o out
 /// ```
 #[test]
-#[ignore = "measurement: reports what a type-level accumulation costs rather than asserting"]
+#[ignore = "measurement, mixed: reports what a type-level accumulation costs rather than asserting"]
 fn type_level_sequence_cost_measurements() {
     type Build = fn(usize) -> String;
     // Each carrier carries its own ladder, because one ladder cannot show both shapes: a packed byte copy is a `memcpy` and an element copy is a reference-count increment per element, so `List` reaches the same construction volume two orders of magnitude sooner. Both ladders stop where the default budget does — the floors below are linear in the iteration count, so the last rung of each is about the largest that still elaborates.
@@ -304,7 +304,7 @@ fn type_level_sequence_cost_measurements() {
 ///
 /// **A memo hit is free in both checkers.** A kernel charging a hit the whole recorded cost of the computation it replaced would refuse for exhaustion, at 8–16× the elaborator's floor, programs the elaborator accepts within its budget — and since the compile path puts one budget to both and meets the larger, that is the number a user would meet, with no disagreement about any rule.
 #[test]
-#[ignore = "measurement: reports what a memo hit costs the kernel rather than asserting"]
+#[ignore = "measurement, counted: reports what a memo hit costs the kernel rather than asserting"]
 fn kernel_memo_charge_measurements() {
     type Build = fn(usize) -> String;
     let carriers: [(&str, [usize; 4], Build); 2] = [
@@ -535,7 +535,7 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 ///
 /// **The `Bytes` row is the control**: the same bytes with no proof over them cost each checker under 1 300 units, so a `Str` literal's units are its validity's.
 #[test]
-#[ignore = "measurement: reports what a Str literal costs rather than asserting"]
+#[ignore = "measurement, counted: reports what a Str literal costs rather than asserting"]
 fn str_literal_cost_measurements() {
     println!(
         "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
@@ -603,7 +603,7 @@ fn str_literal_cost_measurements() {
 ///
 /// **A `match` at a binder is paid in guarded depth**: three levels more than applying on the elaborator and six more on the kernel, a frame each, which is most of what its row adds. A `match` at a literal costs what applying does.
 #[test]
-#[ignore = "measurement: reports what a combinator web costs each checker rather than asserting"]
+#[ignore = "measurement, counted: reports what a combinator web costs each checker rather than asserting"]
 fn combinator_web_cost_measurements() {
     println!(
         "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",

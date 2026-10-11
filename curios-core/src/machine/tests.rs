@@ -682,7 +682,7 @@ fn an_arm_that_names_its_payload_is_bound_to_what_the_host_states() {
 
 /// What the three fold shapes spend per element, printed rather than asserted — the assertions live in the budget bounds of the ordinary tests above. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.
 #[test]
-#[ignore = "measurement: reports what the machine spends per element rather than asserting"]
+#[ignore = "measurement, counted: reports what the machine spends per element rather than asserting"]
 fn spend_probe() {
     let sizes: Vec<usize> = match std::env::var_os("CURIOS_MACHINE_TRACE") {
         Some(_) => vec![3],

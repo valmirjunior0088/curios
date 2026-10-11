@@ -384,7 +384,7 @@ fn kernel_memo_parity() {
 ///
 /// The heaviest declaration's figure counts the closed machine re-deriving within a run — the trade that buys a closed fold's check back a thousandfold — and at sixty times under the default budget it decides nothing.
 #[test]
-#[ignore = "measurement: reports timings over the stored image rather than asserting"]
+#[ignore = "measurement, mixed: reports timings and counts over the stored image rather than asserting"]
 fn stored_prelude_measurements() {
     // A restore happens once per thread, so a *cold* one needs a thread that has not had one — measuring it on this thread would measure a thread-local read.
     let cold = thread::spawn(|| {
