@@ -1,0 +1,14 @@
+{
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**/*.js",
+      "**/*.mjs",
+      "**/*.json",
+      "**/*.css",
+      "!**/package-lock.json",
+      "!editors/grammar/src"
+    ]
+  },
+  "formatter": { "indentStyle": "space", "indentWidth": 2 }
+}

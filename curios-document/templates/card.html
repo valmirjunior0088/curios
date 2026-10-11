@@ -2,9 +2,9 @@
 {%- import "signature.html" as sig -%}
 {%- import "prose.html" as words -%}
 <article class="card" id="{{ card.anchor }}">
-    <header><span class="kind">{{ card.keyword }}</span>
+    <header><span class="tag">{{ card.keyword }}</span>
         {%- if !card.name.is_empty() -%}
-            <span class="name">{{ card.name }}</span>
+            <span class="title">{{ card.name }}</span>
         {%- endif -%}
         {%- for badge in card.badges -%}
             <span class="badge {{ badge.tone }}">{{ badge.label }}</span>

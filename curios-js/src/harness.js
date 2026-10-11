@@ -367,9 +367,9 @@ export async function run(config) {
     const [make, put] = lists[element];
     const list = make(value.length);
 
-    value.forEach((item, i) =>
-      put(list, i, lower(element, item, `${what}[${i}]`, fail)),
-    );
+    value.forEach((item, i) => {
+      put(list, i, lower(element, item, `${what}[${i}]`, fail));
+    });
 
     return list;
   };

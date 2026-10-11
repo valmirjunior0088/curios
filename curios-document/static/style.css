@@ -160,16 +160,16 @@ main {
 .search .clear[hidden] {
     display: none;
 }
-/* Without script the field never shows, and the tree keeps the top edge the field would have carried. */
-.search[hidden] ~ nav {
-    padding-top: 16px;
-}
 .tree label {
     display: none;
 }
 .tree nav {
     display: flex;
     flex-direction: column;
+}
+/* Without script the field never shows, and the tree keeps the top edge the field would have carried. */
+.search[hidden] ~ nav {
+    padding-top: 16px;
 }
 .results {
     display: none;
@@ -319,7 +319,7 @@ h2 {
     padding: 12px 16px;
     border-bottom: 1px solid var(--edge-soft);
 }
-.card header .kind {
+.card header .tag {
     padding: 4px 8px;
     border-radius: 2px;
     background: var(--amber-wash);
@@ -328,7 +328,7 @@ h2 {
     letter-spacing: 0.1em;
     color: var(--amber);
 }
-.card header .name {
+.card header .title {
     font-family: var(--mono);
     font-size: 15px;
     color: var(--ink);
@@ -502,9 +502,6 @@ footer img {
     .tree nav {
         display: none;
     }
-    .tree .toggle:checked ~ nav {
-        display: flex;
-    }
     /* Under the top bar the footer has no column to sit under, so it is centred. */
     footer {
         justify-content: center;
@@ -520,6 +517,9 @@ footer img {
         overflow-y: auto;
         background: var(--rail);
         border-bottom: 1px solid var(--edge);
+    }
+    .tree .toggle:checked ~ nav {
+        display: flex;
     }
     .card,
     .signature .member,

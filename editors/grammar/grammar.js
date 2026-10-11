@@ -3,7 +3,7 @@
 // The surface grammar of `documentation/syntax.md`, mirrored from `curios-text/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, or a `choose` bind arm's refutability.
 
 // An identifier is a nonempty run of Unicode alphanumerics and `_` (`curios_utilities::is_identifier`).
-const IDENTIFIER = /[\p{Alphabetic}\p{N}_]+/;
+const IDENTIFIER = /[\p{Alphabetic}\p{N}_]+/u;
 
 // Higher binds tighter, every level left-associative (`curios_text::op_precedence`).
 const PRECEDENCE = {

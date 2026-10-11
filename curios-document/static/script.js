@@ -1,8 +1,8 @@
 // What a page cannot do for itself. A new page's rail starts at the top, so the module it is about is scrolled into view; and the search field, hidden until here so a page is complete without script, ranks the bundle's index — every module, declaration and member, loaded by the script before this one — and shows the hits as rows in place of the tree.
-(function () {
-    var tree = document.querySelector(".tree");
-    var current = document.querySelector(".tree a.current");
-    var toggle = document.getElementById("rail-toggle");
+(() => {
+    const tree = document.querySelector(".tree");
+    const current = document.querySelector(".tree a.current");
+    const toggle = document.getElementById("rail-toggle");
     function reveal() {
         if (current) {
             current.scrollIntoView({ block: "center" });
@@ -11,40 +11,40 @@
     reveal();
     // Folded at a narrow width, the tree is not laid out at load, so it is scrolled when it opens instead.
     if (toggle) {
-        toggle.addEventListener("change", function () {
+        toggle.addEventListener("change", () => {
             if (toggle.checked) {
                 reveal();
             }
         });
     }
 
-    var form = document.querySelector(".search");
-    var field = form && form.querySelector("input");
-    var eraser = form && form.querySelector(".clear");
-    var results = document.querySelector(".results");
-    var nav = document.querySelector(".tree nav");
-    var label = document.querySelector(".tree label");
+    const form = document.querySelector(".search");
+    const field = form?.querySelector("input");
+    const eraser = form?.querySelector(".clear");
+    const results = document.querySelector(".results");
+    const nav = document.querySelector(".tree nav");
+    const label = document.querySelector(".tree label");
     if (!tree || !form || !field || !results || !nav || !window.curiosIndex) {
         return;
     }
 
-    var root = document.documentElement.dataset.root || "";
-    var LIMIT = 30;
+    const root = document.documentElement.dataset.root || "";
+    const LIMIT = 30;
 
     // A row's label is what a reader types: a member as owner/member, a declaration as its name, a module as its whole path; the rest of the path is where it lives.
-    var corpus = window.curiosIndex.map(function (row) {
-        var kind = row[0],
+    const corpus = window.curiosIndex.map((row) => {
+        const kind = row[0],
             path = row[1],
             href = row[2];
-        var segments = path.split("/");
-        var keep =
+        const segments = path.split("/");
+        const keep =
             kind === "mod"
                 ? segments.length
                 : kind === "case" || kind === "field" || kind === "method"
                   ? 2
                   : 1;
-        var label = segments.slice(segments.length - keep).join("/");
-        var where =
+        const label = segments.slice(segments.length - keep).join("/");
+        const where =
             kind === "mod"
                 ? ""
                 : segments.slice(0, segments.length - keep).join("/");
@@ -58,8 +58,8 @@
         };
     });
 
-    var hits = [];
-    var chosen = -1;
+    let hits = [];
+    let chosen = -1;
 
     function narrow() {
         return label && getComputedStyle(label).display !== "none";
@@ -67,11 +67,11 @@
 
     // Exact label, then label prefix, then label substring, then path substring; ties by label length, then the index's own order, which lists a parent before its children.
     function search(query) {
-        var scored = [];
-        for (var i = 0; i < corpus.length; i++) {
-            var entry = corpus[i];
-            var at = entry.lower.indexOf(query);
-            var score;
+        const scored = [];
+        for (let i = 0; i < corpus.length; i++) {
+            const entry = corpus[i];
+            const at = entry.lower.indexOf(query);
+            let score;
             if (at === 0 && entry.lower.length === query.length) score = 0;
             else if (at === 0) score = 1;
             else if (at > 0) score = 2;
@@ -79,18 +79,16 @@
             else continue;
             scored.push({ entry: entry, score: score, at: at, order: i });
         }
-        scored.sort(function (a, b) {
-            return (
+        scored.sort((a, b) => (
                 a.score - b.score ||
                 a.entry.label.length - b.entry.label.length ||
                 a.order - b.order
-            );
-        });
+            ));
         return scored.slice(0, LIMIT);
     }
 
     function span(className, text) {
-        var element = document.createElement("span");
+        const element = document.createElement("span");
         element.className = className;
         element.textContent = text;
         return element;
@@ -100,23 +98,23 @@
         results.textContent = "";
         chosen = -1;
         if (hits.length === 0) {
-            var none = document.createElement("div");
+            const none = document.createElement("div");
             none.className = "none";
             none.textContent = "No match";
             results.appendChild(none);
         }
-        hits.forEach(function (hit) {
-            var entry = hit.entry;
-            var row = document.createElement("a");
+        hits.forEach((hit) => {
+            const entry = hit.entry;
+            const row = document.createElement("a");
             row.className = "entry";
             row.href = entry.href;
             row.appendChild(span("kind", entry.kind));
-            var text = span("label", "");
+            const text = span("label", "");
             if (hit.at >= 0) {
                 text.appendChild(
                     document.createTextNode(entry.label.slice(0, hit.at)),
                 );
-                var mark = document.createElement("mark");
+                const mark = document.createElement("mark");
                 mark.textContent = entry.label.slice(
                     hit.at,
                     hit.at + query.length,
@@ -149,7 +147,7 @@
     }
 
     function choose(index) {
-        var rows = results.querySelectorAll("a");
+        const rows = results.querySelectorAll("a");
         if (chosen >= 0 && rows[chosen]) {
             rows[chosen].removeAttribute("aria-current");
         }
@@ -164,7 +162,7 @@
         if (eraser) {
             eraser.hidden = field.value === "";
         }
-        var query = field.value.trim().toLowerCase();
+        const query = field.value.trim().toLowerCase();
         if (query === "") {
             clear();
             return;
@@ -182,8 +180,8 @@
     }
 
     field.addEventListener("input", update);
-    field.addEventListener("keydown", function (event) {
-        var live = tree.classList.contains("live");
+    field.addEventListener("keydown", (event) => {
+        const live = tree.classList.contains("live");
         if (event.key === "ArrowDown") {
             event.preventDefault();
             if (live) {
@@ -192,7 +190,7 @@
                 if (toggle && narrow()) {
                     toggle.checked = true;
                 }
-                var first = nav.querySelector("a");
+                const first = nav.querySelector("a");
                 if (first) {
                     first.focus();
                 }
@@ -204,8 +202,8 @@
             }
         } else if (event.key === "Enter") {
             event.preventDefault();
-            var rows = results.querySelectorAll("a");
-            var target = rows[chosen >= 0 ? chosen : 0];
+            const rows = results.querySelectorAll("a");
+            const target = rows[chosen >= 0 ? chosen : 0];
             if (live && target) {
                 follow(target.href);
             }
@@ -219,21 +217,21 @@
         }
     });
     if (eraser) {
-        eraser.addEventListener("click", function () {
+        eraser.addEventListener("click", () => {
             field.value = "";
             update();
             field.focus();
         });
     }
-    results.addEventListener("click", function (event) {
-        var row = event.target.closest("a");
+    results.addEventListener("click", (event) => {
+        const row = event.target.closest("a");
         if (row) {
             event.preventDefault();
             follow(row.href);
         }
     });
-    nav.addEventListener("click", function (event) {
-        var row = event.target.closest("a");
+    nav.addEventListener("click", (event) => {
+        const row = event.target.closest("a");
         if (
             row &&
             toggle &&
@@ -243,8 +241,8 @@
             toggle.checked = false;
         }
     });
-    document.addEventListener("keydown", function (event) {
-        var editing =
+    document.addEventListener("keydown", (event) => {
+        const editing =
             event.target.isContentEditable ||
             /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
         if (
@@ -259,7 +257,7 @@
             field.select();
         }
     });
-    form.addEventListener("submit", function (event) {
+    form.addEventListener("submit", (event) => {
         event.preventDefault();
     });
 
