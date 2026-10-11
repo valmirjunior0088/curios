@@ -56,6 +56,15 @@ pub(super) struct CallsMark {
     frames: usize,
 }
 
+/// What the recorder held when a walk that may be refused began, for [`Calls::take_back`] to return to.
+pub(super) struct Recorded {
+    /// For each frame open then, how many calls it held and how many parameters its caller had bound.
+    frames: Vec<(usize, usize)>,
+    partial: usize,
+    spine_head: bool,
+    parameters: bool,
+}
+
 impl Calls {
     pub(super) fn mark(&self) -> CallsMark {
         CallsMark {
@@ -71,6 +80,38 @@ impl Calls {
         self.frames.truncate(mark.frames);
 
         established
+    }
+
+    /// What the recorder holds now, for a walk that may be refused to be taken back to.
+    pub(super) fn recorded(&self) -> Recorded {
+        Recorded {
+            frames: self
+                .frames
+                .iter()
+                .map(|frame| {
+                    let bound = frame.caller.as_ref().map_or(0, |(_, bound)| bound.len());
+                    (frame.calls.len(), bound)
+                })
+                .collect(),
+            partial: self.partial,
+            spine_head: self.spine_head,
+            parameters: self.parameters,
+        }
+    }
+
+    /// Take back what a refused walk recorded since `recorded`: the calls it added to the frames that stood open, the parameters it bound, the groups it counted as not descending, and the two flags, which a refusal leaves as the judgment it interrupted had set them. Asked once the walk's bracket has closed the frames the walk opened ([`Calls::retract`]), so the frames left are the ones `recorded` counted.
+    ///
+    /// A group's verdict, and the terms whose typing closed a group that does not descend, stay: each is filed under what it is about and is true of it however the walk around it ended.
+    pub(super) fn take_back(&mut self, recorded: Recorded) {
+        for (frame, (calls, bound)) in self.frames.iter_mut().zip(recorded.frames) {
+            frame.calls.truncate(calls);
+            if let Some((_, parameters)) = &mut frame.caller {
+                parameters.truncate(bound);
+            }
+        }
+        self.partial = recorded.partial;
+        self.spine_head = recorded.spine_head;
+        self.parameters = recorded.parameters;
     }
 
     /// Whether the judgment about to run types a spine head, clearing the flag for the ones after it.

@@ -365,23 +365,12 @@ fn the_arm_a_literal_scrutinee_takes_is_typed() {
     assert!(infer(&mut kernel, &term).is_err());
 }
 
-/// A scrutinee that is no case yet has every arm typed, a call over a literal among them: `not(false)` computes to `true`, and typing computes no scrutinee, which may be the program.
-#[test]
-fn an_arm_under_a_scrutinee_that_is_no_case_as_it_stands_is_typed() {
-    let mut kernel = kernel();
-    let c = binder(80, "c");
+/// `not : (Bool) -> Bool`, as the function it is.
+fn not() -> Term {
+    let c = binder(86, "c");
     let bool_type = Term::intrinsic(Intrinsic::BoolType);
-    let wrong = Term::intrinsic(Intrinsic::Bool(true));
-    let over =
-        |scrutinee: Term| Term::bool_match(scrutinee, None, nat_type(), nat(0), wrong.clone());
 
-    let stuck = kernel.scoped(|kernel| {
-        kernel.assume(&c, &bool_type);
-        infer(kernel, &over(Term::free_var(&c)))
-    });
-    assert!(stuck.is_err());
-
-    let not = Term::func(
+    Term::func(
         [(c, bool_type.clone())],
         Term::bool_match(
             Term::free_var(&c),
@@ -390,9 +379,117 @@ fn an_arm_under_a_scrutinee_that_is_no_case_as_it_stands_is_typed() {
             Term::intrinsic(Intrinsic::Bool(true)),
             Term::intrinsic(Intrinsic::Bool(false)),
         ),
+    )
+}
+
+/// The `Nat` elimination of `scrutinee` whose `false` arm is `0` and whose `true` arm is `in_true`.
+fn nat_by(scrutinee: Term, in_true: Term) -> Term {
+    Term::bool_match(scrutinee, None, nat_type(), nat(0), in_true)
+}
+
+/// A `Bool` where a `Nat` is wanted: what an arm holds that no rule types as it is written.
+fn wrong() -> Term {
+    Term::intrinsic(Intrinsic::Bool(true))
+}
+
+/// A scrutinee that is no case as it stands has every arm typed, and a refused one is no arm of the elimination only where the scrutinee computes to another case. Over a variable the `Bool` in the `true` arm of a `Nat` result is refused. Over `not(true)`, which computes to `false`, that arm is one no reduction takes. Over `not(false)` it is the arm taken, and its refusal stands.
+///
+/// Mutation-checked: with no refused arm withdrawn, the second elimination is refused; with one withdrawn whatever its scrutinee computes to, the third is accepted.
+#[test]
+fn an_arm_refused_under_a_scrutinee_that_computes_to_another_case_is_not_typed() {
+    let mut kernel = kernel();
+    let c = binder(80, "c");
+    let applied = |argument: bool| Term::apply(not(), [Term::intrinsic(Intrinsic::Bool(argument))]);
+
+    let stuck = kernel.scoped(|kernel| {
+        kernel.assume(&c, &Term::intrinsic(Intrinsic::BoolType));
+        infer(kernel, &nat_by(Term::free_var(&c), wrong()))
+    });
+    assert!(stuck.is_err());
+
+    assert_eq!(
+        infer(&mut kernel, &nat_by(applied(true), wrong())),
+        Ok(nat_type())
     );
-    let computed = Term::apply(not, [Term::intrinsic(Intrinsic::Bool(true))]);
-    assert!(infer(&mut kernel, &over(computed)).is_err());
+    assert!(infer(&mut kernel, &nat_by(applied(false), wrong())).is_err());
+}
+
+/// An arm is typed under the equations around it as its own case restates them, and one of those may be what computes to another case. The outer arm assumes `not(c)` is `true`; inside it the `true` arm of a split on `c` restates that as `not(true)`, which names no local and computes to `false`, so the inner arm is one no reduction takes and the `Bool` it holds is not typed. The inner `false` arm restates it as `not(false)`, which holds, and the same `Bool` there is refused.
+///
+/// Mutation-checked: with the restated equations left out of what an arm assumed, the first elimination is refused.
+#[test]
+fn an_arm_refused_under_an_equation_its_case_closed_is_not_typed() {
+    let nested = |in_false: Term, in_true: Term| {
+        let mut kernel = kernel();
+        let c = binder(80, "c");
+        kernel.assume(&c, &Term::intrinsic(Intrinsic::BoolType));
+        let inner = Term::bool_match(Term::free_var(&c), None, nat_type(), in_false, in_true);
+
+        infer(
+            &mut kernel,
+            &nat_by(Term::apply(not(), [Term::free_var(&c)]), inner),
+        )
+    };
+
+    assert_eq!(nested(nat(0), wrong()), Ok(nat_type()));
+    assert!(nested(wrong(), nat(0)).is_err());
+}
+
+/// A scrutinee that names a local and computes to another case all the same leaves its arm one no reduction takes: `and(not(true), d)` is `false` whatever `d` is, and the `Bool` in its `true` arm is not typed. Its equation is recorded, naming `d`, and answers nothing the arm holds.
+#[test]
+fn an_arm_refused_under_a_scrutinee_that_names_a_local_and_computes_is_not_typed() {
+    let mut kernel = kernel();
+    let (a, b, d) = (binder(87, "a"), binder(88, "b"), binder(80, "d"));
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    kernel.assume(&d, &bool_type);
+    let and = Term::func(
+        [(a, bool_type.clone()), (b, bool_type.clone())],
+        Term::bool_match(
+            Term::free_var(&a),
+            None,
+            bool_type,
+            Term::intrinsic(Intrinsic::Bool(false)),
+            Term::free_var(&b),
+        ),
+    );
+    let scrutinee = Term::apply(
+        and,
+        [
+            Term::apply(not(), [Term::intrinsic(Intrinsic::Bool(true))]),
+            Term::free_var(&d),
+        ],
+    );
+
+    assert_eq!(
+        infer(&mut kernel, &nat_by(scrutinee, wrong())),
+        Ok(nat_type())
+    );
+}
+
+/// A budget that cannot afford to compute the scrutinee withdraws no refusal: the scrutinee counts a literal down to `false`, its `true` arm holds a `Bool` where the result is `Nat`, and the elimination is refused for the budget where the count is past it and accepted where it is not.
+#[test]
+fn a_budget_that_cannot_compute_the_scrutinee_withdraws_no_refusal() {
+    let attempt = |budget: u64| {
+        let mut kernel = Kernel::new(budget, SYNTAX);
+        let ih = binder(84, "ih");
+        let counted = Term::nat_match(
+            nat(50_000),
+            None,
+            Term::intrinsic(Intrinsic::BoolType),
+            Term::intrinsic(Intrinsic::Bool(false)),
+            &binder(83, "pred"),
+            &ih,
+            Term::free_var(&ih),
+        );
+
+        infer(&mut kernel, &nat_by(counted, wrong()))
+    };
+
+    assert!(matches!(
+        attempt(20_000),
+        Err(Error::Reduce(ReduceError::Exhausted { .. }))
+    ));
+    assert_eq!(attempt(1_000_000_000), Ok(nat_type()));
 }
 
 /// A fold is no case split: its reduct holds the fold at the tail, so over the literal `3` it takes its identity arm in the end, and that arm is typed though `3` is another case. Here it holds a `Bool` where the motive is `Nat`.
@@ -407,6 +504,24 @@ fn every_arm_of_a_fold_over_a_literal_is_typed() {
         None,
         nat_type(),
         Term::intrinsic(Intrinsic::Bool(true)),
+        &binder(81, "pred"),
+        &ih,
+        Term::free_var(&ih),
+    );
+
+    assert!(infer(&mut kernel, &fold).is_err());
+}
+
+/// Nor is a fold's refused arm withdrawn where its scrutinee computes: a fold takes its identity arm in the end whatever its scrutinee is, so that arm is typed. The scrutinee here is a product that is no literal as it stands and computes to `3`.
+#[test]
+fn every_arm_of_a_fold_over_a_scrutinee_that_computes_is_typed() {
+    let mut kernel = kernel();
+    let ih = binder(82, "ih");
+    let fold = Term::nat_match(
+        Term::intrinsic(Intrinsic::NatMul(nat(3), nat(1))),
+        None,
+        nat_type(),
+        wrong(),
         &binder(81, "pred"),
         &ih,
         Term::free_var(&ih),

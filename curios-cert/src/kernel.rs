@@ -1037,6 +1037,26 @@ impl<'s> Kernel<'s> {
         outcome
     }
 
+    /// [`Kernel::scoped`] for a walk whose refusal is not its item's last word: where `walk` is refused, what it recorded is taken back, so the kernel stands as if it had not run.
+    ///
+    /// A refusal ordinarily ends the item it is reached in, and what the walk recorded on the way — the calls it graded, the positions it classified, the groups it counted as not descending — is drained with the item. A rule that accepts another way after a refusal has no such end to rely on: what it accepts must be accepted as though the refused way had never been tried, which is what `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md` asks of a rule that does not apply.
+    ///
+    /// **What is not taken back is nothing a later judgment reads as the walk's.** A memo holds an answer that is true of its terms however the walk around them ended, and is cleared where the scope it read moves. The budget spent is spent, which only ever refuses. What was read of the environment is filed for a walk that judged more than it had to, and adoption re-judges on more reads, never fewer.
+    pub(crate) fn tried<T>(
+        &mut self,
+        walk: impl FnOnce(&mut Self) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let calls = self.calls.recorded();
+        let positions = self.positions.recorded();
+        let outcome = self.scoped(walk);
+        if outcome.is_err() {
+            self.calls.take_back(calls);
+            self.positions.take_back(positions);
+        }
+
+        outcome
+    }
+
     /// Assume an arm's case equation: within the arm, `scrutinee` — as written, and as its dispatch resolves — is `value`, definitionally. Assumed inside the arm's [`Kernel::scoped`] bracket, which is what scopes it.
     ///
     /// The resolved spelling is computed before the equation is pushed, so it rests only on the equations outside it, which retract no earlier than it does — the view [`Kernel::settle_refinement`] has to reconstruct by withholding, had for free here. Only a local-bearing scrutinee is resolved, since [`Scope::refine`](scope::Scope) records nothing else, and only one with no head a probe presents already. The resolution is a [`Probe`], as a settlement is: a scrutinee with no value at the type level records the written spelling alone.
@@ -1055,11 +1075,14 @@ impl<'s> Kernel<'s> {
         Ok(())
     }
 
-    /// Restate the equations in force under an arm's solution ([`Scope::restate`](scope::Scope)). Which equations answer has changed where any was restated, so the local-bearing reducts remembered before it go.
-    pub(crate) fn restate_refinements(&mut self, solutions: &[(Free, Term)]) {
-        if self.scope.restate(solutions) {
+    /// Restate the equations in force under an arm's solution, answering the restated ones ([`Scope::restate`](scope::Scope)). Which equations answer has changed where any was restated, so the local-bearing reducts remembered before it go.
+    pub(crate) fn restate_refinements(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {
+        let restated = self.scope.restate(solutions);
+        if !restated.is_empty() {
             self.memos.begin_equations();
         }
+
+        restated
     }
 
     /// The case value `term` is refined to under the written spelling, innermost arm first.

@@ -260,14 +260,14 @@ impl Scope {
         recorded
     }
 
-    /// Restate the equations in force under an arm's solution, answering whether any was: each that names a solved variable — in its key, its resolved spelling or its value — is assumed again with the solution substituted through all three, and stops answering until the arm retracts.
+    /// Restate the equations in force under an arm's solution, answering each as it was restated, its scrutinee and the case it assumes: each that names a solved variable — in its key, its resolved spelling or its value — is assumed again with the solution substituted through all three, and stops answering until the arm retracts.
     ///
     /// **An arm is checked under its solution, and so are the equations it was opened under.** The kernel holds no refinement store, so it substitutes a case's solution through the arm's body, its expectation and the types of the locals it re-types: within the arm a solved variable is spelled as its value. An equation recorded outside still names the variable, so its key is a term the arm never holds, and a guard's fact would be lost at the first match on a variable the guard names. The restated equation is the recorded one at the instance the arm is checked at — what holds of the scrutinee at every value of the variable holds at the one the case fixes — so it is the same hypothesis, read where the arm reads everything else.
     ///
     /// **The recorded equation steps aside rather than standing beside its instance.** Nothing the arm holds names a solved variable, so the recorded spelling answers nothing there; left in force, it would be restated again by every arm inside, and an equation naming the variables of `n` nested matches would stand `2^n` times. Stepping aside, each equation stands once however deep the arms go.
     ///
-    /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again.
-    pub(super) fn restate(&mut self, solutions: &[(Free, Term)]) -> bool {
+    /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again. It is answered whether or not it was recorded: the arm assumes it either way, and an arm refused under one that computes to another case is one no reduction takes.
+    pub(super) fn restate(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {
         assert!(
             self.hidden.is_none(),
             "an arm's solution restated while an equation's reduced spelling was being settled"
@@ -294,11 +294,14 @@ impl Scope {
             }
         }
 
-        let any = !restated.is_empty();
-        for (key, resolved, value) in restated {
-            self.refine(key, resolved, value);
-        }
-        any
+        restated
+            .into_iter()
+            .map(|(key, resolved, value)| {
+                self.refine(key.clone(), resolved, value.clone());
+
+                (key, value)
+            })
+            .collect()
     }
 
     /// The case value the term `term` is refined to under the *written* spelling or its resolved one, innermost arm first.

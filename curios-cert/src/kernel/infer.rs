@@ -562,10 +562,11 @@ fn check_cases(
         }
         let expected = result.at(scrutinee, &[], &[], &value);
 
-        kernel.scoped(|kernel| {
+        let mut assumed = Vec::new();
+        let checked = kernel.tried(|kernel| {
             kernel.assume_guard(scrutinee, &value)?;
             let mut solutions = Vec::new();
-            eliminate::assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
+            assumed = eliminate::assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
             kernel.assume_arm(scrutinee, &value, &solutions)?;
             eliminate::shadow(kernel, &solutions);
 
@@ -574,7 +575,9 @@ fn check_cases(
                 &body.substitute(&solutions),
                 &expected.substitute(&solutions),
             )
-        })
+        });
+
+        eliminate::unless_never_taken(kernel, checked, &assumed, &[])
     };
 
     match cases {
@@ -722,16 +725,22 @@ fn check_free_monoid(
 
             let expected = result.at(scrutinee, &[], &[], &cons_value);
 
-            let mut solutions = Vec::new();
-            eliminate::assume_case_value(kernel, scrutinee, &cons_value, &mut solutions)?;
-            kernel.assume_arm(scrutinee, &size_value, &solutions)?;
-            eliminate::shadow(kernel, &solutions);
+            let mut assumed = Vec::new();
+            let checked = kernel.tried(|kernel| {
+                let mut solutions = Vec::new();
+                assumed =
+                    eliminate::assume_case_value(kernel, scrutinee, &cons_value, &mut solutions)?;
+                kernel.assume_arm(scrutinee, &size_value, &solutions)?;
+                eliminate::shadow(kernel, &solutions);
 
-            check(
-                kernel,
-                &body.substitute(&solutions),
-                &expected.substitute(&solutions),
-            )
+                check(
+                    kernel,
+                    &body.substitute(&solutions),
+                    &expected.substitute(&solutions),
+                )
+            });
+
+            eliminate::unless_never_taken(kernel, checked, &assumed, &names)
         })
     };
 

@@ -69,6 +69,19 @@ impl Positions {
         }
     }
 
+    /// How many positions are recorded and whether a classification has failed, for a walk that may be refused to be taken back to.
+    pub(super) fn recorded(&self) -> (usize, bool) {
+        (self.recorded.len(), self.failure.is_some())
+    }
+
+    /// Take back what a refused walk recorded since `recorded`: its positions, and a classification that failed inside it.
+    pub(super) fn take_back(&mut self, (positions, failed): (usize, bool)) {
+        self.recorded.truncate(positions);
+        if !failed {
+            self.failure = None;
+        }
+    }
+
     /// Take this item's positions and any classification that could not be decided, leaving both empty for the next item.
     pub(super) fn drain(&mut self) -> (Vec<Position>, Option<Error>) {
         (std::mem::take(&mut self.recorded), self.failure.take())

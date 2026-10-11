@@ -7,7 +7,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Subterm, Telescope, Term,
-        Two, UniverseContext, test_support::match_ambient,
+        Totality, Two, UniverseContext, test_support::match_ambient,
     },
     curios_utilities::Qualifier,
 };
@@ -256,4 +256,77 @@ fn a_remembered_type_does_not_outlive_what_an_arm_established() {
     assert_eq!(again, 0, "and a second typing is remembered");
     assert!(inside > 0, "the arm's knowledge is entered");
     assert!(after > 0, "and retracted");
+}
+
+/// A walk refused inside [`Kernel::tried`] leaves the recorder as it found it: the call it graded before the refusal is taken back, and the group closes on the calls of the walks that stood. The call is the control's, `f` at its caller's own argument, so the group that keeps it does not descend, as the same walk in an ordinary bracket leaves it.
+#[test]
+fn a_refused_walk_takes_back_the_calls_it_recorded() {
+    let closes = |tried: bool| {
+        let mut kernel = kernel();
+        let (f, signature) = member();
+        let n = binder(1, "n");
+        let term = group(&f, signature.clone(), &n, nat_type());
+        let Subterm::Rec(rec) = &*term else {
+            unreachable!("a group is a `rec`");
+        };
+
+        kernel.assume(&f, &signature);
+        kernel.assume(&n, &nat_type());
+        kernel.open_group(&rec.group, &[f]);
+        kernel.begin_member(0);
+        kernel.bind_parameter(&n);
+        let refused = |kernel: &mut Kernel| {
+            kernel.record_call(&f, &[Term::free_var(&n)])?;
+            Err::<(), _>(Error::Unclassified(nat(0)))
+        };
+        let outcome = match tried {
+            true => kernel.tried(refused),
+            false => kernel.scoped(refused),
+        };
+        assert!(outcome.is_err());
+
+        kernel.close_group(&rec.group, vec![false])
+    };
+
+    assert_eq!(closes(true), Totality::Total);
+    assert_ne!(closes(false), Totality::Total);
+}
+
+/// An arm that is no arm of its elimination records no call: `f`'s body splits on `not(true)`, and its `true` arm is a function type whose domain calls `f` at the caller's own argument and whose result applies a number, which no rule types. The domain is typed, and its call graded, before the result is refused. The arm is one no reduction takes, the call is taken back with it, and the group descends. The control is the same arm under `not(false)`, where it is the arm taken and its refusal is the group's.
+///
+/// Mutation-checked: with what a refused walk recorded kept, the first group holds the call and does not descend.
+#[test]
+fn an_arm_no_reduction_takes_records_no_call() {
+    let closes = |argument: bool| {
+        let (f, signature) = member();
+        let n = binder(1, "n");
+        let c = binder(5, "c");
+        let bool_type = Term::intrinsic(Intrinsic::BoolType);
+        let not = Term::func(
+            [(c, bool_type.clone())],
+            Term::bool_match(
+                Term::free_var(&c),
+                None,
+                bool_type,
+                Term::intrinsic(Intrinsic::Bool(true)),
+                Term::intrinsic(Intrinsic::Bool(false)),
+            ),
+        );
+        let body = match_ambient(
+            Term::apply(not, [Term::intrinsic(Intrinsic::Bool(argument))]),
+            Term::type_ground(),
+            Cases::Bool {
+                false_case: nat_type(),
+                true_case: Term::func_type(
+                    [(binder(6, "x"), call(&f, Term::free_var(&n)))],
+                    Term::apply(nat(0), [nat(0)]),
+                ),
+            },
+        );
+
+        infer(&mut kernel(), &group(&f, signature, &n, body))
+    };
+
+    assert!(closes(true).is_ok());
+    assert!(closes(false).is_err());
 }

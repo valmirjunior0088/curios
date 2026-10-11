@@ -31,3 +31,130 @@ fn a_result_is_typed_at_an_index_that_rules_an_arm_of_it_out() {
     assert_eq!(run(&at("1")), b"held");
     assert_eq!(run(&at("0")), b"held");
 }
+
+/// `g`, whose bound a guard's arm proves by standing under it.
+const BOUNDED: &str = r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+        let g(c: Bool, @ok: Holds(c)) -> Nat = 1;
+        "#;
+
+// An arm under a scrutinee that computes to another case is not typed. `h`'s result matches on `c`, and its `true` arm holds a proof that `c` holds, which the arm's case is. A `let` at `h(Bool/not(true))` is written at the result at a scrutinee that names no local, so no equation is recorded for the arm, and that computes to `false`; at `Bool/not(false)` the arm is the one taken, and its proof holds by reduction.
+#[test]
+fn a_result_is_typed_at_a_value_that_computes_to_another_case() {
+    let at = |argument: &str| {
+        format!(
+            r#"{BOUNDED}
+        let h(c: Bool) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =
+            match c
+            | false => True/qed()
+            | true => True/qed()
+            end;
+        let used() -> Nat =
+            let x = h({argument});
+            0;
+        /std/print("held")
+        "#
+        )
+    };
+
+    assert_eq!(run(&at("Bool/not(true)")), b"held");
+    assert_eq!(run(&at("Bool/not(false)")), b"held");
+    assert_eq!(run(&at("false")), b"held");
+}
+
+// The same instance wherever the elaborator writes it: as the domain of a lambda checked at an arm's goal, as the goal of a match inside an arm, over a comparison a match on its operand decides, and in a local function elaborated again.
+#[test]
+fn an_arms_goal_is_typed_wherever_it_is_written() {
+    let domain = format!(
+        r#"{BOUNDED}
+        let k(c: Bool) -> (x: Holds((match Bool/not(c) | true => g(Bool/not(c), @True/qed()) | false => 0 end) <= 1)) -> Nat =
+            match c
+            | false => (x) => 0
+            | true => (x) => 1
+            end;
+        /std/print("held")
+        "#
+    );
+    let goal = format!(
+        r#"{BOUNDED}
+        let f(c: Bool, k: Nat) -> Holds((match Bool/not(c) | true => g(Bool/not(c), @True/qed()) | false => 0 end) <= 1) =
+            match c
+            | false => True/proved()
+            | true => match k | 0 => True/qed() | _ + 1 => True/qed() end
+            end;
+        /std/print("held")
+        "#
+    );
+    let comparison = r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+        let positive(n: Nat, @ok: Holds(0 < n)) -> Nat = 1;
+        let f(n: Nat, k: Nat) -> Holds((match 0 < n | true => positive(n, @True/qed()) | false => 0 end) <= 1) =
+            match n
+            | 0 => match k | 0 => True/qed() | _ + 1 => True/qed() end
+            | _ + 1 => True/proved()
+            end;
+        /std/print("held")
+        "#;
+    let again = format!(
+        r#"{BOUNDED}
+        use /std/{{Eq}};
+        let h(c: Bool) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =
+            match c
+            | false => True/qed()
+            | true => True/qed()
+            end;
+        let used(n: Nat) -> Eq()(0, 0) =
+            let of(k: Nat) -> Nat =
+                match k
+                | 0 =>
+                    let x = h(Bool/not(true));
+                    0
+                | m + 1 => of(m)
+                end;
+            let same: Eq()(of(n), of(n)) = Eq/refl();
+            Eq/refl();
+        /std/print("held")
+        "#
+    );
+
+    assert_eq!(run(&domain), b"held");
+    assert_eq!(run(&goal), b"held");
+    assert_eq!(run(comparison), b"held");
+    assert_eq!(run(&again), b"held");
+}
+
+// An arm is typed under the equations around it, and an instance may leave one of those computing to another case. In `h2` the inner arm solves `d`, and the outer equation it restates names no local at `c := true`. In `h3` the scrutinee still names `d` at the instance and computes to `false` all the same, where the proof spells it with its operands the other way round.
+#[test]
+fn a_result_is_typed_where_an_equation_around_an_arm_computes_to_another_case() {
+    let restated = format!(
+        r#"{BOUNDED}
+        let h2(c: Bool, d: Bool) -> Holds((match Bool/not(c) && d | true => (match d | true => g(Bool/not(c) && d, @True/qed()) | false => 0 end) | false => 0 end) <= 1) =
+            match c
+            | true => True/qed()
+            | false => match d | true => True/qed() | false => True/qed() end
+            end;
+        let used(d: Bool) -> Nat =
+            let x = h2(true, d);
+            0;
+        /std/print("held")
+        "#
+    );
+    let respelled = format!(
+        r#"{BOUNDED}
+        let h3(c: Bool, d: Bool) -> Holds((match Bool/not(c) && d | true => g(d && Bool/not(c), @True/qed()) | false => 0 end) <= 1) =
+            match c
+            | true => True/qed()
+            | false => match d | true => True/qed() | false => True/qed() end
+            end;
+        let used(d: Bool) -> Nat =
+            let x = h3(true, d);
+            0;
+        /std/print("held")
+        "#
+    );
+
+    assert_eq!(run(&restated), b"held");
+    assert_eq!(run(&respelled), b"held");
+}

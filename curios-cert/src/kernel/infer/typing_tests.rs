@@ -403,3 +403,29 @@ fn a_remembered_type_does_not_outlive_its_binder() {
     assert_eq!(first, Ok(nat_type()));
     assert_eq!(second, Ok(bool_type()));
 }
+
+/// A walk refused inside [`Kernel::tried`] leaves no position behind: what it recorded before the refusal is taken back, so the judgment after it records what that judgment records alone. The same walk in an ordinary bracket leaves the positions it recorded, and the judgment's are counted after them.
+#[test]
+fn a_refused_walk_takes_back_the_positions_it_recorded() {
+    let refused = |kernel: &mut Kernel| {
+        check(kernel, &nat_type(), &Term::type_ground())?;
+        check(kernel, &nat(0), &bool_type())
+    };
+    let judged = |kernel: &mut Kernel| {
+        check(kernel, &bool_type(), &Term::type_ground()).expect("a type is typed");
+        let (positions, failure) = kernel.take_checked();
+        assert!(failure.is_none());
+
+        positions.len()
+    };
+
+    let alone = judged(&mut kernel());
+
+    let mut tried = kernel();
+    assert!(tried.tried(refused).is_err());
+    assert_eq!(judged(&mut tried), alone);
+
+    let mut scoped = kernel();
+    assert!(scoped.scoped(refused).is_err());
+    assert!(judged(&mut scoped) > alone);
+}

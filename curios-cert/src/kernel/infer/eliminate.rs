@@ -35,8 +35,8 @@ use {
     },
     curios_analysis::Invert,
     curios_core::{
-        Atom, Bound, Free, InductArm, InductType, MatchResult, ReduceError, Subterm, Telescope,
-        Term, Variant,
+        Atom, Bound, Exhaustion, Free, InductArm, InductType, MatchResult, Probe, ReduceError,
+        Reducer, Subterm, Telescope, Term, Variant,
     },
 };
 
@@ -157,23 +157,62 @@ fn check_arm(
                 return Ok(());
             }
 
-            assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
-            // What the call recorder grades under within the arm: the equations just put in force, and the payload binders — an application of one reads as the payload it came from.
-            kernel.assume_arm(scrutinee, &value, &solutions)?;
-            kernel.assume_payloads(binders)?;
+            let mut assumed = Vec::new();
+            let checked = kernel.tried(|kernel| {
+                assumed = assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
+                // What the call recorder grades under within the arm: the equations just put in force, and the payload binders — an application of one reads as the payload it came from.
+                kernel.assume_arm(scrutinee, &value, &solutions)?;
+                kernel.assume_payloads(binders)?;
 
-            let refs = payload.iter().collect::<Vec<_>>();
-            let body = arm.open(&refs).substitute(&solutions);
+                let refs = payload.iter().collect::<Vec<_>>();
+                let body = arm.open(&refs).substitute(&solutions);
 
-            let expected = result
-                .at(scrutinee, &family.indices, targets, &value)
-                .substitute(&solutions);
+                let expected = result
+                    .at(scrutinee, &family.indices, targets, &value)
+                    .substitute(&solutions);
 
-            shadow(kernel, &solutions);
+                shadow(kernel, &solutions);
 
-            check(kernel, &body, &expected)
+                check(kernel, &body, &expected)
+            });
+
+            unless_never_taken(kernel, checked, &assumed, binders)
         })
     })
+}
+
+/// A refused arm's verdict, withdrawn where the arm is one no reduction takes: an equation it assumed, read with the arm's bracket closed, computes to another case than it states.
+///
+/// **The other way an arm taken once is accepted.** An arm is typed under what its case says of the scrutinee, and where that is false the arm is never reached: a scrutinee that reduces to a value of another case, under the equations around the arm, is that value wherever the arm would be taken, so reduction opens another arm and conversion compares none of this one. The two ways are each sound alone, and the order they are tried in decides what a verdict costs: nothing is computed for an arm that types.
+///
+/// **Why an arm that typed where it was written is refused here.** The elaborator writes a type it derived by putting a value in a variable's place — a `let`'s annotation, a lambda's domain, a match's goal — and types none of them. An arm of such a type was typed under an equation over the variable; at the value its scrutinee names no local, so no equation is recorded for it ([`records_case_equation`](curios_analysis::records_case_equation)), or it is one an inner arm's solution closed. Where the scrutinee computes to the arm's own case, what rested on the equation holds by reduction, and where it computes to another the arm is this one.
+///
+/// **`assumed` is every equation the arm assumed**, its own and those its solution restated ([`assume_case_value`]), each computed where the arm's own equations no longer answer: under its own equation a scrutinee is its case, and would refute nothing.
+///
+/// **A spent budget is never withdrawn**, from the arm or from the reduction asked here, and a scrutinee with no value at the type level refutes nothing ([`Probe`]). What the refused arm recorded is taken back by the bracket it was typed in ([`Kernel::tried`]), so an arm withdrawn is one that was not typed.
+pub(super) fn unless_never_taken(
+    kernel: &mut Kernel,
+    checked: Result<(), Error>,
+    assumed: &[(Term, Term)],
+    binders: &[Free],
+) -> Result<(), Error> {
+    let Err(refusal) = checked else {
+        return Ok(());
+    };
+    if refusal.is_exhausted() {
+        return Err(refusal);
+    }
+
+    for (scrutinee, case) in assumed {
+        let Some(reduced) = kernel.reduce_forced(scrutinee.clone()).probed()? else {
+            continue;
+        };
+        if another_case(kernel, &reduced, case, binders)? {
+            return Ok(());
+        }
+    }
+
+    Err(refusal)
 }
 
 /// Whether the arm of a case split at `value` is one reduction never takes: the scrutinee already is a literal or a constructed value, and the unifier that excuses an absent arm ([`invert_indices`]) finds it in a definite clash with `value`. Such an arm is not typed.
@@ -182,7 +221,7 @@ fn check_arm(
 ///
 /// **A fold is never asked.** Its reduct holds the fold at the tail, so a value of either case takes the identity arm in the end: `match 3 : (_) => P | 0 => … | k + 1; ih => ih end` is its identity arm, which skipped would inhabit any `P` untyped. The callers ask for an arm taken once, at the scrutinee itself.
 ///
-/// **The scrutinee is read as it stands and never computed.** Computing it would decide more — an elimination over `0 < 0` is its `false` arm — and typing must not evaluate a term that runs, which may be the whole program. The shared [`another_case`] answers of a term as it stands.
+/// **The scrutinee is read as it stands and not computed here.** Computing it would decide more — an elimination over `0 < 0` is its `false` arm — and typing must not evaluate a term that runs to accept what it accepts without: that is asked only of an arm that was refused ([`unless_never_taken`]). The shared [`another_case`] answers of a term as it stands.
 pub(super) fn never_taken(
     kernel: &mut Kernel,
     scrutinee: &Term,
@@ -207,22 +246,28 @@ pub(super) fn never_taken(
 /// Appends to `solutions` rather than replacing them, so [`check_arm`] can hand over the index equations it has already solved; `value` is substituted through those first, since a case value built from the constructor's payload may mention a binder they pinned. Must be called inside the arm's [`Kernel::scoped`] bracket — that bracket is what scopes the refinement to the arm.
 ///
 /// **The solution reaches the equations already in force.** An arm's body and expectation are substituted, so an equation an outer arm recorded over a variable this case solves would be keyed on a term the arm no longer holds; [`Kernel::restate_refinements`] assumes each such equation again at the solution, for the arm and no longer.
+///
+/// **Answers every equation the arm assumes**, each as its scrutinee and the case it states: its own, where the scrutinee is no variable, and those restated under its solution, recorded or not. They are what [`unless_never_taken`] puts to reduction where the arm is refused.
 pub(super) fn assume_case_value(
     kernel: &mut Kernel,
     scrutinee: &Term,
     value: &Term,
     solutions: &mut Vec<(Free, Term)>,
-) -> Result<(), ReduceError> {
+) -> Result<Vec<(Term, Term)>, ReduceError> {
     let value = value.substitute(solutions);
+    let mut assumed = Vec::new();
 
     match scrutinee_solution(&*kernel, scrutinee, &value) {
         Some(solution) => solutions.push(solution),
-        None => kernel.refine(scrutinee.clone(), value)?,
+        None => {
+            assumed.push((scrutinee.clone(), value.clone()));
+            kernel.refine(scrutinee.clone(), value)?;
+        }
     }
     // The arm is checked with `solutions` substituted through it, so every equation in force — the one just assumed among them, where the index equations solved a variable its scrutinee names — is restated under them.
-    kernel.restate_refinements(solutions);
+    assumed.extend(kernel.restate_refinements(solutions));
 
-    Ok(())
+    Ok(assumed)
 }
 
 /// The most-general solution of `actual indices ~ case targets`, both directions, as one idempotent substitution — the shared [`solve_indices`], which carries the rule. Empty when the equations force nothing, and `None` where they *clash*: the case is one no value of the scrutinee's type is.
