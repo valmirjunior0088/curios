@@ -7,11 +7,10 @@
 //! Every function here is total over reduced terms it does not recognize, reading anything that is not an `IntAdd`, `IntMul` or `Int` literal as an opaque monomial factor, which is what makes `i - i` fold to `0` for a symbolic `i` while `f(i)` stays the symbol it is.
 
 use {
-    super::{Atoms, Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
-    crate::project_erased_universes,
+    super::{Atoms, Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{
-        Cancelled, Combination, Deduction, Progress, Recombination, Summand, Wanted, distribute,
-        distribution_size, signed_cofactor,
+        Cancelled, Carrier, Combination, Deduction, Progress, Recombination, Summand, Wanted,
+        distribute, distribution_size, signed_cofactor,
     },
     curios_num::Integer,
     curios_utilities::recurse,
@@ -102,7 +101,10 @@ fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, Vec
     (!coefficient.is_zero()).then(|| Summand {
         coefficient,
         monomial: curios_algebra::Monomial::product(
-            factors.iter().map(|factor| atoms.numeric(factor)).collect(),
+            factors
+                .iter()
+                .map(|factor| atoms.handle(Carrier::Integer, factor))
+                .collect(),
         ),
         origin: factors,
     })
@@ -234,7 +236,7 @@ fn int_euclid_pair(
 
 /// Whether two monomials' factors are one multiset, a quotient matching a quotient on its dividend and divisor alone, as `Nat::same_monomial` compares them.
 fn int_same_factors(left: &[Term], right: &[Term]) -> bool {
-    let project = project_erased_universes::<Term>;
+    let one = |left: &Term, right: &Term| same_atom(Carrier::Integer, left, right);
     let same = |left: &Term, right: &Term| match (&**left, &**right) {
         (
             Subterm::Intrinsic(Intrinsic::IntDiv {
@@ -247,11 +249,8 @@ fn int_same_factors(left: &[Term], right: &[Term]) -> bool {
                 divisor: right_divisor,
                 ..
             }),
-        ) => {
-            project(left_dividend) == project(right_dividend)
-                && project(left_divisor) == project(right_divisor)
-        }
-        _ => project(left) == project(right),
+        ) => one(left_dividend, right_dividend) && one(left_divisor, right_divisor),
+        _ => one(left, right),
     };
     if left.len() != right.len() {
         return false;

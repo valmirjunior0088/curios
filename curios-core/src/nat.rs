@@ -1,9 +1,8 @@
 use {
-    super::{Atoms, Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
-    crate::project_erased_universes,
+    super::{Atoms, Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{
-        Cancelled, Combination, Deduction, Monomial, Progress, Recombination, Summand, Wanted,
-        distribute, distribution_size,
+        Cancelled, Carrier, Combination, Deduction, Monomial, Progress, Recombination, Summand,
+        Wanted, distribute, distribution_size,
     },
     curios_num::Natural,
     curios_utilities::recurse,
@@ -296,8 +295,13 @@ impl Nat {
         let (coefficient, factor) = Self::literal_factor(summand);
         let (inner, factors) = Self::monomial(&factor);
         let monomial = match inner.is_one() {
-            true => Monomial::product(factors.iter().map(|factor| atoms.numeric(factor)).collect()),
-            false => Monomial::new(vec![atoms.numeric(&factor)]),
+            true => Monomial::product(
+                factors
+                    .iter()
+                    .map(|factor| atoms.handle(Carrier::Natural, factor))
+                    .collect(),
+            ),
+            false => Monomial::new(vec![atoms.handle(Carrier::Natural, &factor)]),
         };
         Summand {
             coefficient,
@@ -421,7 +425,7 @@ impl Nat {
 
     /// One factor against another up to universe instances, as [`Nat::linear`] keys them, and a quotient against a quotient up to its proof.
     fn same_factor(left: &Term, right: &Term) -> bool {
-        let project = project_erased_universes::<Term>;
+        let same = |left: &Term, right: &Term| same_atom(Carrier::Natural, left, right);
         match (&**left, &**right) {
             (
                 Subterm::Intrinsic(Intrinsic::NatDiv {
@@ -434,11 +438,8 @@ impl Nat {
                     divisor: right_divisor,
                     ..
                 }),
-            ) => {
-                project(left_dividend) == project(right_dividend)
-                    && project(left_divisor) == project(right_divisor)
-            }
-            _ => project(left) == project(right),
+            ) => same(left_dividend, right_dividend) && same(left_divisor, right_divisor),
+            _ => same(left, right),
         }
     }
 

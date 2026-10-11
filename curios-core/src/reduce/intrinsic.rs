@@ -40,7 +40,7 @@ use {
         Aligned, Cost, Declaration, Element, Extremum, FUSION_CAP, FreeMonoid, Func, Intrinsic,
         LinearViews, Nat, Operands, Probe, Subterm, Telescope, Term, Words, int_cancel_common,
         int_negate, int_of_nat, int_preimage, int_product, int_sum, int_terms, normalize_concat,
-        peel_bin, peel_first_atom, peel_first_elem,
+        peel_bin, peel_first_atom, peel_first_elem, same_atom,
     },
     curios_algebra::{Carrier, Comparison, Deduction, Half, distribution_size},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
@@ -1173,7 +1173,7 @@ pub fn reduce_intrinsic(
             let right = reducer.reduce_forced(right.clone())?;
 
             // Reflexivity: any value equals itself. Catches a shared variable before the peel, which would otherwise read it as two identical chunks and say the same.
-            if left == right {
+            if same_atom(Carrier::Packed(grain), &left, &right) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Bool(true)));
             }
 

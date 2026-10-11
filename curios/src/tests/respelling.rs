@@ -11,6 +11,11 @@ use super::{
 
 const IMPORTS: &str = "use /std/{Nat, Int, Bool, List, Eq, Io}; use /std/Bool/{Holds, True};";
 
+/// Two recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles.
+const DEFINITIONS: &str =
+    "let count(@T: Type, l: List(T)) -> Nat = match l | [] => 0 | [_, ..t] => count(t) + 1 end;
+let whole(@T: Type, l: List(T)) -> Bool = match l | [] => true | [_, ..t] => whole(t) end;";
+
 /// The binders every cell is stated under. Two proofs of one bound, two functions and a higher-order one give the atoms that convert without being identical.
 const BINDERS: &[Binder] = &[
     Binder {
@@ -189,6 +194,13 @@ const GUARDS: &[Guard] = &[
         dual: None,
         refused: &[],
     },
+    // One call written on each side, apart in a universe instance: a `Bool`'s readers hold the two one atom, as a number's do.
+    Guard {
+        guard: "whole(xs) == flag",
+        respelled: "flag == whole(xs)",
+        dual: None,
+        refused: &[],
+    },
     // What the filter in front of an equation still gives up: `c` stands where reduction erases it, and it is no proof.
     Guard {
         guard: "f(b) < 10",
@@ -311,6 +323,14 @@ const ATOMS: &[Atoms] = &[
         right: "v(j + i)",
         zero: "+0",
         nat: false,
+        refused: &[],
+    },
+    // One call written twice: two instances of a universe-polymorphic definition, which a number's readers hold one atom.
+    Atoms {
+        left: "count(xs)",
+        right: "count(xs)",
+        zero: "0",
+        nat: true,
         refused: &[],
     },
 ];
@@ -470,7 +490,7 @@ fn program(binders: &str, cells: &[&Cell]) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    format!("{IMPORTS}\n{items}\nIo/pure(())")
+    format!("{IMPORTS}\n{DEFINITIONS}\n{items}\nIo/pure(())")
 }
 
 /// What the compiler answers of `cell` alone under `binders`.

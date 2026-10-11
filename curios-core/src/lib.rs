@@ -24,7 +24,7 @@ mod places;
 pub use places::*;
 
 mod atoms;
-use atoms::*;
+pub use atoms::*;
 
 mod linear;
 pub use linear::*;

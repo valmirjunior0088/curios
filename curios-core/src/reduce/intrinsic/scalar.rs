@@ -6,9 +6,9 @@ use {
     super::operand_bound,
     crate::{
         Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, int_exact_quotient, int_is_zero,
-        int_terms,
+        int_terms, same_atom,
     },
-    curios_algebra::{Divided, Half},
+    curios_algebra::{Carrier, Divided, Half},
     curios_num::{Floating, Integer, Natural},
 };
 
@@ -136,7 +136,7 @@ pub(super) fn reduce_int_division(
     let divided = match () {
         _ if int_is_zero(&left) => Some(half.of_zero()),
         _ if right.as_int() == Some(Integer::from(1i32)) => Some(half.by_one()),
-        _ if left == right => Some(half.by_itself()),
+        _ if same_atom(Carrier::Integer, &left, &right) => Some(half.by_itself()),
         _ => None,
     };
     if let Some(divided) = divided {

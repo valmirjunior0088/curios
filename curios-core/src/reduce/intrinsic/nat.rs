@@ -4,7 +4,7 @@
 
 use {
     super::{operand_bound, shift_bound},
-    crate::{Cost, Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
+    crate::{Cost, Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{
         Carrier, Divided, FloorSplit, Half, Observed, Operation, cofactor, euclid_split, floor_law,
         power_of_two,
@@ -231,7 +231,7 @@ pub(super) fn reduce_nat_division(
     let divided = match () {
         _ if Nat::is_zero(&left) => Some(half.of_zero()),
         _ if divisor.as_ref().is_some_and(Natural::is_one) => Some(half.by_one()),
-        _ if left == right => Some(half.by_itself()),
+        _ if same_atom(Carrier::Natural, &left, &right) => Some(half.by_itself()),
         _ => None,
     };
     if let Some(divided) = divided {

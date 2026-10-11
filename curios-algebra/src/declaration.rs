@@ -23,6 +23,13 @@ pub enum Carrier {
     List,
 }
 
+impl Carrier {
+    /// Whether a value of this carrier can hold a type: a list's elements are of any type, a type among them, where a number, a truth value, a byte, a float and a packed sequence of bits or bytes hold none. So a universe level can be part of a list's value, and of no other carrier's.
+    pub fn holds_types(self) -> bool {
+        matches!(self, Carrier::List)
+    }
+}
+
 /// An operation this crate's reasoning gives a meaning to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Operation {

@@ -12,8 +12,8 @@
 
 use {
     super::dual_comparison,
-    crate::{Cost, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term},
-    curios_algebra::{Formula, Node},
+    crate::{Cost, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term, same_atom},
+    curios_algebra::{Carrier, Formula, Node},
     curios_utilities::recurse,
     std::collections::HashMap,
 };
@@ -83,20 +83,23 @@ impl Table {
         })
     }
 
-    /// The atom `leaf` is: one already met, at the polarity it was met at or — where `leaf` is a comparison on a total order — as the negation of its dual, the table `dual_comparison` keeps; otherwise a new one, or `None` past the cap. A `Bool` atom is compared as written, universe levels included: two terms are one atom only where they are one term.
+    /// The atom `leaf` is: one already met, at the polarity it was met at or — where `leaf` is a comparison on a total order — as the negation of its dual, the table `dual_comparison` keeps; otherwise a new one, or `None` past the cap. A `Bool` atom is known as its carrier's atoms are ([`same_atom`]), so two calls apart in a universe instance are one atom.
     fn atom(&mut self, leaf: &Term) -> Option<Node> {
         let dual = match &**leaf {
             Subterm::Intrinsic(comparison) => dual_comparison(comparison).map(Term::intrinsic),
             _ => None,
         };
         for (index, atom) in self.atoms.iter().enumerate() {
-            if atom == leaf {
+            if same_atom(Carrier::Boolean, atom, leaf) {
                 return Some(Node::Atom {
                     index,
                     negated: false,
                 });
             }
-            if dual.as_ref() == Some(atom) {
+            if dual
+                .as_ref()
+                .is_some_and(|dual| same_atom(Carrier::Boolean, dual, atom))
+            {
                 return Some(Node::Atom {
                     index,
                     negated: true,

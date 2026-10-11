@@ -248,7 +248,7 @@ fn side(
                     let factors = factors
                         .iter()
                         .map(|factor| {
-                            let atom = atoms.numeric(factor);
+                            let atom = atoms.handle(Carrier::Natural, factor);
                             nonnegative.push(atom);
                             atom
                         })
@@ -272,11 +272,11 @@ fn side(
                         .iter()
                         .map(|factor| match &**factor {
                             Subterm::Intrinsic(Intrinsic::NatToInt(natural)) => {
-                                let atom = atoms.numeric(natural);
+                                let atom = atoms.handle(Carrier::Natural, natural);
                                 nonnegative.push(atom);
                                 atom
                             }
-                            _ => atoms.numeric(factor),
+                            _ => atoms.handle(Carrier::Integer, factor),
                         })
                         .collect();
                     Summand {

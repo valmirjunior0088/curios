@@ -4,7 +4,7 @@
 
 use {
     super::{compare_int_among, lattice_verdict, nat_bound, nat_dominators, nat_least},
-    crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, project_erased_universes},
+    crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{Carrier, Comparison, Side, apart_modulo},
     curios_num::Natural,
     std::collections::HashMap,
@@ -99,7 +99,7 @@ pub(super) fn compare_nat_among(
     let (left, right) = (Operand::of(left), Operand::of(right));
 
     // The floors decide where one symbolic part stands on both sides, or where a side is bare. Two inners are one part up to universe instances, for the reason [`Nat::cancel_common`] matches summands that way: two occurrences of a polymorphic name carry independently fresh instances, and a level is not part of the answer to "are these the same number".
-    let same = project_erased_universes(&left.inner) == project_erased_universes(&right.inner);
+    let same = same_atom(Carrier::Natural, &left.inner, &right.inner);
     let outcome = Comparison::of_floors(left.side(), right.side(), same);
 
     // A statically bounded side decides against the other side's floor where the floors alone cannot: `bound(l)` below `r`'s floor forces `l < r` for every value either takes, whatever stands above that floor, and `bound(l)` meeting it forces `l <= r`. This is what reduces `x % n < n`, whose left inner is a stuck `NatRem` the structural body has nothing to say about. See `nat_bound` for why each bound holds unconditionally.

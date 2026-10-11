@@ -6,6 +6,7 @@ use {
     super::{
         Atoms, Declaration, Element, Extremum, Intrinsic, Nat, Operands, Sequence, Subterm, Term,
         Words, bin_grain, int_cancellation, int_monomial, int_rebuild_cancelled, list_element,
+        same_atom,
     },
     curios_algebra::{
         Carrier, Conclusion, Deduction, Operation, Stripped, pair_factors, same_leaves,
@@ -99,7 +100,7 @@ pub fn peel_lattice(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     let mut read = |tree: &Intrinsic| {
         this.leaves(&Term::intrinsic(tree.clone()))
             .iter()
-            .map(|leaf| atoms.numeric(leaf))
+            .map(|leaf| atoms.handle(this.carrier, leaf))
             .collect::<Vec<_>>()
     };
     let (left_atoms, right_atoms) = (read(left), read(right));
@@ -121,12 +122,17 @@ pub fn peel_lattice_leaf(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusi
 
     let mut ours = this.leaves(&Term::intrinsic(left.clone()));
     let mut theirs = this.leaves(&Term::intrinsic(right.clone()));
-    ours.retain(|leaf| match theirs.iter().position(|other| other == leaf) {
-        Some(shared) => {
-            theirs.remove(shared);
-            false
+    ours.retain(|leaf| {
+        match theirs
+            .iter()
+            .position(|other| same_atom(this.carrier, other, leaf))
+        {
+            Some(shared) => {
+                theirs.remove(shared);
+                false
+            }
+            None => true,
         }
-        None => true,
     });
     match (ours.as_slice(), theirs.as_slice()) {
         ([ours], [theirs]) => Some(Conclusion::Sufficient((ours.clone(), theirs.clone()))),
@@ -147,10 +153,16 @@ pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
         _ => None,
     };
     match (commuting(left), commuting(right)) {
-        (Some((this, a, b)), Some((that, c, d))) if this == that => Some(match a == d && b == c {
-            true => Deduction::Equal,
-            false => Deduction::Undecided,
-        }),
+        (Some((this, a, b)), Some((that, c, d))) if this == that => {
+            // In either order: two operands that are one atom and no one term stand in place too, where two terms spelled alike never reach a peel.
+            let same = |one: &Term, other: &Term| same_atom(this.0, one, other);
+            Some(
+                match (same(&a, &d) && same(&b, &c)) || (same(&a, &c) && same(&b, &d)) {
+                    true => Deduction::Equal,
+                    false => Deduction::Undecided,
+                },
+            )
+        }
         _ => None,
     }
 }
@@ -166,13 +178,14 @@ pub fn peel_commutative(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusio
     if this != that {
         return None;
     }
-    let (left, right) = if a == c {
+    let same = |one: &Term, other: &Term| same_atom(this.0, one, other);
+    let (left, right) = if same(a, c) {
         (b, d)
-    } else if a == d {
+    } else if same(a, d) {
         (b, c)
-    } else if b == c {
+    } else if same(b, c) {
         (a, d)
-    } else if b == d {
+    } else if same(b, d) {
         (a, c)
     } else {
         return None;
@@ -191,6 +204,7 @@ pub fn peel_monomial(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusion<(
             let (left_coefficient, left_factors) = Nat::monomial(&Term::intrinsic(left.clone()));
             let (right_coefficient, right_factors) = Nat::monomial(&Term::intrinsic(right.clone()));
             paired(
+                Carrier::Natural,
                 (&left_coefficient, &left_factors),
                 (&right_coefficient, &right_factors),
             )
@@ -199,6 +213,7 @@ pub fn peel_monomial(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusion<(
             let (left_coefficient, left_factors) = int_monomial(&Term::intrinsic(left.clone()));
             let (right_coefficient, right_factors) = int_monomial(&Term::intrinsic(right.clone()));
             paired(
+                Carrier::Integer,
                 (&left_coefficient, &left_factors),
                 (&right_coefficient, &right_factors),
             )
@@ -223,11 +238,12 @@ pub fn peel_comparison(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusion
     };
     let (this, left_sides) = sides(left)?;
     let (that, right_sides) = sides(right)?;
-    paired((&this, &left_sides), (&that, &right_sides))
+    paired(this.0, (&this, &left_sides), (&that, &right_sides))
 }
 
-/// Two monomials' factors paired by `curios-algebra`'s `pair_factors` over numeric atoms, each leftover read back as the factor it was on its own side.
+/// Two monomials' factors paired by `curios-algebra`'s `pair_factors` over atoms of `carrier`, each leftover read back as the factor it was on its own side.
 fn paired<C: PartialEq>(
+    carrier: Carrier,
     left: (&C, &[Term]),
     right: (&C, &[Term]),
 ) -> Option<Conclusion<(Term, Term)>> {
@@ -235,7 +251,7 @@ fn paired<C: PartialEq>(
     let mut read = |factors: &[Term]| {
         factors
             .iter()
-            .map(|factor| atoms.numeric(factor))
+            .map(|factor| atoms.handle(carrier, factor))
             .collect::<Vec<_>>()
     };
     let (left_atoms, right_atoms) = (read(left.1), read(right.1));
@@ -250,7 +266,7 @@ fn decide(equal: bool) -> Verdict {
     }
 }
 
-/// `&&` and `||` are each idempotent, commutative and associative, so two conjunctions — or two disjunctions — are one value exactly when they hold the same *set* of leaves under that connective. Each side is flattened to its leaves and the two sets compared by `curios-algebra`'s `same_leaves`, over leaves identified as written: the same set is `Equal`, anything else is `Undecided`, never `Impossible`, since two different leaf sets may still agree as values (`x && y` against `x` when `y` is `true`). `None` for a pair that is not two conjunctions or two disjunctions, so the caller keeps its own handling.
+/// `&&` and `||` are each idempotent, commutative and associative, so two conjunctions — or two disjunctions — are one value exactly when they hold the same *set* of leaves under that connective. Each side is flattened to its leaves and the two sets compared by `curios-algebra`'s `same_leaves`, over leaves identified as `Bool`'s atoms are ([`same_atom`]): the same set is `Equal`, anything else is `Undecided`, never `Impossible`, since two different leaf sets may still agree as values (`x && y` against `x` when `y` is `true`). `None` for a pair that is not two conjunctions or two disjunctions, so the caller keeps its own handling.
 ///
 /// Decided here rather than by a canonical spelling in the fold: a fold that normalizes a tree whole on every step pays for the whole tree at every leaf, where a comparison flattens each side once. A leaf that is convertible but not identical is the caller's shape congruence's, so declining costs reductions and never correctness.
 pub fn peel_bool(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
@@ -264,7 +280,7 @@ pub fn peel_bool(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     let mut read = |leaves: &[Term]| {
         leaves
             .iter()
-            .map(|leaf| atoms.exact(leaf))
+            .map(|leaf| atoms.handle(Carrier::Boolean, leaf))
             .collect::<Vec<_>>()
     };
     let (left_atoms, right_atoms) = (read(&left_leaves), read(&right_leaves));

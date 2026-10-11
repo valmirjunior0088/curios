@@ -10,22 +10,22 @@
 //! 6. the peels, the product-factor and comparison-side pairings first;
 //! 7. where steps 3 to 6 decided nothing, the pair's atoms handed back to be classed ([`Pass::Atoms`]), and steps 3 to 6 read once more with each atom spelled as its class's representative ([`convert_classed`]);
 //! 8. the elaborator's solving views ([`Driver::solving_view`]);
-//! 9. two numbers of one operation compared as numbers;
+//! 9. two applications of one operation compared as values of what they produce;
 //! 10. the congruence, each operand at the type its operation declares.
 //!
 //! **The chain decides; each checker discharges.** What it cannot settle comes back — a residual pair, the congruence's levels and operands, or the atoms it needs classed before it can read on — rather than being compared here, because the two checkers compare differently and must: the elaborator enqueues and may solve, while the kernel compares in order under its active recursion history, whose keys include the goal and so must stay on the path that entered it. Nothing here calls a judgment.
 //!
 //! **Shared on the terms `curios-analysis` already states for itself.** The chain is algebra over the representation — the peels, the laws and the views are `curios-core`'s and `curios-algebra`'s, trusted by both checkers alike — and a second copy of it would be a second transcription of one function rather than a second opinion. What stays each checker's own is what does differ between them: the terms they are handed, how a residual is compared, and how levels are.
 //!
-//! **Two numbers of one operation are one number up to universe instances** (step 9). A number never depends on a level — Core offers no elimination from a type or a level into one — so `len(xs)` at two instances is one number whether it stands alone or inside a sum, as the cancellation already reads it inside one. Left to the congruence, a bare pair would have its operands' levels compared and be refused where they differ.
+//! **Two applications of one operation are one value up to universe instances** (step 9), wherever what they produce is a carrier whose values hold no type. Such a value never depends on a level — Core offers no elimination from a type or a level into one — so `len(xs)` at two instances is one number whether it stands alone or inside a sum, as the cancellation already reads it inside one, and a float's square root of one call at two instances is one float. Left to the congruence, a bare pair would have its operands' levels compared and be refused where they differ.
 
 use {
-    curios_algebra::Conclusion,
+    curios_algebra::{Carrier, Conclusion},
     curios_core::{
         Aligned, Classes, Intrinsic, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm,
         Term, Universes, Var, Visit, align_comparisons, atoms_of, classable, classed, decide_bool,
         int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
-        peel_commutative, peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine,
+        peel_commutative, peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine, same_atom,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -163,7 +163,7 @@ fn chain(
         false => None,
         true => {
             let signature = this.signature(&driver.syntax());
-            if same_number(&signature.produced, &this, &that) {
+            if same_value(&signature.produced, &this, &that) {
                 return Ok(Pass::Settled(Outcome::Equal));
             }
             // A commutative operation's operands are paired by the readers above, never compared by position: the order a term holds them in is a spelling or a hash, and a verdict or a solution that followed it would move with either. What reaches here has no operand paired.
@@ -343,11 +343,14 @@ fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Re
 
     // A fused multiply-add's two factors pair as a commutative operation's operands do, and its addends are compared in place: what is left is two pairs, where a commutative operation leaves one.
     if let Some(operands) = pair_fused(&this, &that) {
-        return Ok(Read::Decided(Outcome::Congruence(Congruence {
-            this_universes: Universes::default(),
-            that_universes: Universes::default(),
-            operands: Some(operands),
-        })));
+        return Ok(Read::Decided(match operands.is_empty() {
+            true => Outcome::Equal,
+            false => Outcome::Congruence(Congruence {
+                this_universes: Universes::default(),
+                that_universes: Universes::default(),
+                operands: Some(operands),
+            }),
+        }));
     }
 
     Ok(Read::Undecided(Box::new((this, that))))
@@ -360,23 +363,30 @@ fn pair_fused(this: &Intrinsic, that: &Intrinsic) -> Option<Vec<Obligation>> {
     if rounding != direction {
         return None;
     }
-    let (left, right) = if a == d {
+    let same = |one: &Term, other: &Term| same_atom(Carrier::Float, one, other);
+    let (left, right) = if same(a, d) {
         (b, e)
-    } else if a == e {
+    } else if same(a, e) {
         (b, d)
-    } else if b == d {
+    } else if same(b, d) {
         (a, e)
-    } else if b == e {
+    } else if same(b, e) {
         (a, d)
     } else {
         return None;
     };
-    let pair = |this: &Term, that: &Term| Obligation {
-        type_: None,
-        this: this.clone(),
-        that: that.clone(),
-    };
-    Some(vec![pair(left, right), pair(c, f)])
+    // A pair that is one atom is no obligation: it is one value already, and a checker handed it would compare two terms.
+    Some(
+        [(left, right), (c, f)]
+            .into_iter()
+            .filter(|(this, that)| !same(this, that))
+            .map(|(this, that)| Obligation {
+                type_: None,
+                this: this.clone(),
+                that: that.clone(),
+            })
+            .collect(),
+    )
 }
 
 /// Step 7: `this` and `that` read once more with each atom spelled as its class's representative — `None` where the partition moved neither side, or the classed pair decided nothing either.
@@ -449,20 +459,26 @@ pub fn connectives_agree_classed(
     }
 }
 
-/// Whether two applications of one operation that produces a `Nat` or an `Int` are one number by the carrier's identity — up to universe instances, as the cancellation reads its summands.
-fn same_number(produced: &Produced, this: &Intrinsic, that: &Intrinsic) -> bool {
+/// Whether two applications of one operation are one value by the identity of the carrier they produce a value of ([`same_atom`]): up to universe instances wherever the carrier's values hold no type, and a number through the cancellation as well, which reads every summand so.
+fn same_value(produced: &Produced, this: &Intrinsic, that: &Intrinsic) -> bool {
     let Produced::Fixed(type_) = produced else {
         return false;
     };
-    let same: fn(&Term, &Term) -> bool = match &**type_ {
-        Subterm::Intrinsic(Intrinsic::NatType) => Nat::same,
-        Subterm::Intrinsic(Intrinsic::IntType) => int_same,
+    let carrier = match &**type_ {
+        Subterm::Intrinsic(Intrinsic::NatType) => Carrier::Natural,
+        Subterm::Intrinsic(Intrinsic::IntType) => Carrier::Integer,
+        Subterm::Intrinsic(Intrinsic::BoolType) => Carrier::Boolean,
+        Subterm::Intrinsic(Intrinsic::ByteType) => Carrier::Byte,
+        Subterm::Intrinsic(Intrinsic::FltType) => Carrier::Float,
+        Subterm::Intrinsic(Intrinsic::BinType(grain)) => Carrier::Packed(*grain),
         _ => return false,
     };
-    same(
-        &Term::intrinsic(this.clone()),
-        &Term::intrinsic(that.clone()),
-    )
+    let (this, that) = (Term::intrinsic(this.clone()), Term::intrinsic(that.clone()));
+    match carrier {
+        Carrier::Natural => Nat::same(&this, &that),
+        Carrier::Integer => int_same(&this, &that),
+        _ => same_atom(carrier, &this, &that),
+    }
 }
 
 fn as_intrinsic(term: &Term) -> Option<Intrinsic> {

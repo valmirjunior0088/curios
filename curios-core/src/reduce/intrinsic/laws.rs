@@ -4,7 +4,7 @@
 
 use {
     super::dual_comparison,
-    crate::{Declaration, Intrinsic, Nat, Subterm, Term, int_is_minus_one, int_is_zero},
+    crate::{Declaration, Intrinsic, Nat, Subterm, Term, int_is_minus_one, int_is_zero, same_atom},
     curios_algebra::{BooleanPair, Carrier, Connected, Nested, Operation, Pair, Reduct},
     curios_num::Integer,
 };
@@ -44,7 +44,7 @@ pub(super) fn bool_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Ter
     let pair = BooleanPair {
         left: left.as_bool(),
         right: right.as_bool(),
-        same: left == right,
+        same: same_atom(Carrier::Boolean, left, right),
         complementary: lattice_or_equality && complementary(left, right),
         nested: match operation {
             Operation::Xor => nested(left, right),
@@ -72,18 +72,18 @@ pub(super) fn bool_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Ter
 /// Where one operand is a `xor` one of whose operands is the other operand, which of its operands is left once the pair cancels — the left `xor` asked first, its second operand before its first.
 fn nested(left: &Term, right: &Term) -> Option<Nested> {
     if let Subterm::Intrinsic(Intrinsic::BoolXor(a, c)) = &**left {
-        if c == right {
+        if same_atom(Carrier::Boolean, c, right) {
             return Some(Nested::LeftFirst);
         }
-        if a == right {
+        if same_atom(Carrier::Boolean, a, right) {
             return Some(Nested::LeftSecond);
         }
     }
     if let Subterm::Intrinsic(Intrinsic::BoolXor(a, c)) = &**right {
-        if c == left {
+        if same_atom(Carrier::Boolean, c, left) {
             return Some(Nested::RightFirst);
         }
-        if a == left {
+        if same_atom(Carrier::Boolean, a, left) {
             return Some(Nested::RightSecond);
         }
     }
@@ -116,8 +116,8 @@ fn complementary(left: &Term, right: &Term) -> bool {
         Subterm::Intrinsic(intrinsic) => dual_comparison(intrinsic).map(Term::intrinsic),
         _ => None,
     };
-    negation(left).is_some_and(|negated| negated == *right)
-        || negation(right).is_some_and(|negated| negated == *left)
+    negation(left).is_some_and(|negated| same_atom(Carrier::Boolean, &negated, right))
+        || negation(right).is_some_and(|negated| same_atom(Carrier::Boolean, &negated, left))
 }
 
 /// The bitwise lattice on ℕ and on ℤ, as `curios-algebra`'s `Operation::bitwise_identity` states it: `0` absorbs `and` and is the unit of `or` and `xor`; `-1` is the unit of `and` and absorbs `or`, at ℤ alone, no natural having every bit set; `and` and `or` are idempotent and `xor` self-cancels. What is read here is whether an operand is zero or `-1` and whether the two are one term.
@@ -132,7 +132,7 @@ pub(super) fn bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<
         Carrier::Natural => Pair {
             left_zero: Nat::is_zero(left),
             right_zero: Nat::is_zero(right),
-            same: left == right,
+            same: same_atom(carrier, left, right),
             ..Pair::default()
         },
         Carrier::Integer => Pair {
@@ -140,7 +140,7 @@ pub(super) fn bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<
             right_zero: int_is_zero(right),
             left_ones: int_is_minus_one(left),
             right_ones: int_is_minus_one(right),
-            same: left == right,
+            same: same_atom(carrier, left, right),
         },
         _ => return None,
     };

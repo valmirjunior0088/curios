@@ -76,22 +76,42 @@ fn by_carrier(rows: &[Row]) -> Vec<(String, Vec<(String, String)>)> {
 
 /// A law as Curios source: its binders — the variables, then a proof for every narrowing it takes — and `Eq()(left, right)`.
 pub(super) fn spell(law: &Law) -> (String, String) {
-    let mut spelling = Spelling::default();
+    spell_over(law, |index, carrier| {
+        let name = name(index, carrier);
+        (name.to_owned(), format!("{name}: {}", type_name(carrier)))
+    })
+}
+
+/// [`spell`] with each variable spelled by `variable`, which answers what stands for it in a term and the binder that is stated under: a law over terms that are no binder of its own, each written wherever its variable is.
+pub(super) fn spell_over(
+    law: &Law,
+    variable: impl Fn(usize, Carrier) -> (String, String),
+) -> (String, String) {
+    let mut spelling = Spelling {
+        proofs: Vec::new(),
+        variable: &|index, carrier| variable(index, carrier).0,
+    };
     let claim = format!(
         "Eq()({}, {})",
         spelling.expr(&law.left),
         spelling.expr(&law.right)
     );
-    let mut variables = Vec::new();
-    collect(&law.left, &mut variables);
-    collect(&law.right, &mut variables);
-    let binders = variables
+    let proofs = spelling.proofs;
+    let binders = variables(law)
         .iter()
-        .map(|(index, carrier)| format!("{}: {}", name(*index, *carrier), type_name(*carrier)))
-        .chain(spelling.proofs)
+        .map(|(index, carrier)| variable(*index, *carrier).1)
+        .chain(proofs)
         .collect::<Vec<_>>()
         .join(", ");
     (binders, claim)
+}
+
+/// The variables a law states, each once, in the order its left side and then its right meet them.
+pub(super) fn variables(law: &Law) -> Vec<(usize, Carrier)> {
+    let mut variables = Vec::new();
+    collect(&law.left, &mut variables);
+    collect(&law.right, &mut variables);
+    variables
 }
 
 fn collect(expr: &Expr, into: &mut Vec<(usize, Carrier)>) {
@@ -140,19 +160,23 @@ pub(super) fn type_name(carrier: Carrier) -> &'static str {
 
 /// `operation` at `carrier` over operands already spelled, for a row whose operands are no variables of the law.
 pub(super) fn applied(carrier: Carrier, operation: Operation, operands: &[String]) -> String {
-    Spelling::default().apply(carrier, operation, operands)
+    Spelling {
+        proofs: Vec::new(),
+        variable: &|index, carrier| name(index, carrier).to_owned(),
+    }
+    .apply(carrier, operation, operands)
 }
 
-/// The spelling of one law's terms, and the proof binders its narrowings asked for.
-#[derive(Default)]
-struct Spelling {
+/// The spelling of one law's terms: the proof binders its narrowings asked for, and what stands for each of its variables.
+struct Spelling<'a> {
     proofs: Vec<String>,
+    variable: &'a dyn Fn(usize, Carrier) -> String,
 }
 
-impl Spelling {
+impl Spelling<'_> {
     fn expr(&mut self, expr: &Expr) -> String {
         match expr {
-            Expr::Var { index, carrier } => name(*index, *carrier).to_owned(),
+            Expr::Var { index, carrier } => (self.variable)(*index, *carrier),
             Expr::Constant { value, carrier } => constant(*value, *carrier).to_owned(),
             Expr::Apply {
                 carrier,

@@ -1219,6 +1219,86 @@ fn every_atom_law_closes_at_every_order_of_its_binders() {
     }
 }
 
+/// What the rows over calls apart in a universe instance are stated under: a family whose level only sizes its parameter, and three recursive definitions over it. Every written call of one takes a level of its own, which nothing ties to another call's and no unfolding settles, a member reproducing its levels at every step.
+const INSTANCES: &str = "use /std/Bool/{True};
+induct Tree(K: Type): Type | tip(K) | join(Tree(K), Tree(K)) end
+let even(@K: Type, t: Tree(K)) -> Bool = match t | tip(_) => true | join(l, r) => even(l) && even(r) end;
+let size(@K: Type, t: Tree(K)) -> Nat = match t | tip(_) => 1 | join(l, r) => size(l) + size(r) end;
+let heft(@K: Type, t: Tree(K)) -> Flt = match t | tip(_) => 1.0 | join(l, r) => heft(l) + heft(r) end;";
+
+/// The binders every instance row is stated under.
+const INSTANCE_BINDERS: &str = "@K: Type, l: Tree(K), r: Tree(K), t: Tree(K)";
+
+/// Equations over calls apart in a universe instance, each closed by `Eq/refl()`. An atom of a carrier whose values hold no type is one up to universe instances, in every reader (`curios_core::same_atom`). A row is stated in a signature, where each call's level is its declaration's to close, so the kernel is handed the calls apart wherever the elaborator held them one by a reader and joined no level: it holds the row by the same reader, or the compilation is refused as the kernel's.
+const INSTANCES_HELD: &[&str] = &[
+    // A call commuted, at each carrier and under each reader that pairs operands: a connective's leaves, the truth table, the symmetric peel, a lattice's leaves, the fused pairing.
+    "Eq()(even(l) && even(r), even(r) && even(l))",
+    "Eq()(even(l) || even(r), even(r) || even(l))",
+    "Eq()(even(l) != even(r), even(r) != even(l))",
+    "Eq()(even(l) == even(r), even(r) == even(l))",
+    "Eq()(even(l) && even(r) && even(t), even(t) && even(l) && even(r))",
+    "Eq()(Bool/not(even(l) && even(r)), Bool/not(even(r)) || Bool/not(even(l)))",
+    "Eq()(Nat/and(size(l), size(r)), Nat/and(size(r), size(l)))",
+    "Eq()(Nat/min(size(l), size(r)), Nat/min(size(r), size(l)))",
+    "Eq()(heft(l) + heft(r), heft(r) + heft(l))",
+    "Eq()(Flt/min(heft(l), heft(r)), Flt/min(heft(r), heft(l)))",
+    "Eq()(Flt/fma(heft(l), heft(r), heft(t)), Flt/fma(heft(r), heft(l), heft(t)))",
+    // A statement written again, each call at a level of its own.
+    "Eq()(even(l) && even(r), even(l) && even(r))",
+    "Eq()(Nat/and(size(l), size(r)), Nat/and(size(l), size(r)))",
+    // A fold over one call written twice, which answers a literal.
+    "Eq()(Bool/xor(even(l), even(l)), false)",
+    "Eq()(even(l) == even(l), true)",
+    "Eq()(Nat/xor(size(l), size(l)), 0)",
+    "Eq()(match even(l) == even(l) | true => 0 | false => 1 end, 0)",
+    // Absorption, a connective against a side that is no operation.
+    "Eq()(even(l) || (even(l) && even(r)), even(l))",
+    // A fold that answers one of the calls: idempotence, over two calls written apart.
+    "Eq()(even(l) && even(l), even(l))",
+    "Eq()(Nat/and(size(l), size(l)), size(l))",
+    "Eq()(Nat/min(size(l), size(l)), size(l))",
+];
+
+/// The controls beside them: calls at other arguments, and other operations.
+const INSTANCES_REFUSED: &[&str] = &[
+    "Eq()(even(l) && even(r), even(l) && even(t))",
+    "Eq()(even(l) && even(r), even(l) || even(r))",
+    "Eq()(Bool/xor(even(l), even(r)), false)",
+    "Eq()(Nat/and(size(l), size(r)), Nat/and(size(l), size(t)))",
+    "Eq()(heft(l) + heft(r), heft(l) + heft(t))",
+];
+
+#[test]
+fn every_law_over_calls_apart_in_a_universe_instance_is_on_the_side_stated() {
+    // Through both checkers, then each side read back off the compiler's own refl-fit line.
+    let header = format!("{IMPORTS}\n{INSTANCES}");
+    let rows = INSTANCES_HELD
+        .iter()
+        .chain(INSTANCES_REFUSED)
+        .map(|claim| (INSTANCE_BINDERS.to_owned(), (*claim).to_owned()))
+        .collect::<Vec<_>>();
+    let held = INSTANCES_HELD.len();
+    if let Err(failures) = closes(&header, &rows[..held]) {
+        panic!(
+            "a law over calls apart in a universe instance no longer closes:\n{}",
+            failures.join("\n")
+        );
+    }
+    let found = misplaced(&header, "calls apart in an instance", &rows, held);
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[test]
+fn a_guard_over_two_calls_states_its_fact_in_either_order() {
+    // An arm's equation answers the terms the readers hold equal to its scrutinee, and they hold a conjunction of two calls one with its commutation written apart.
+    for fact in ["even(l) && even(r)", "even(r) && even(l)"] {
+        let source = format!(
+            "{IMPORTS}\n{INSTANCES}\nlet guarded({INSTANCE_BINDERS}) -> Nat =\n    match even(l) && even(r)\n    | true =>\n        let fact: Holds({fact}) = True/qed();\n        0\n    | false => 1\n    end;\nIo/pure(())"
+        );
+        typecheck(&source).unwrap_or_else(|error| panic!("`{fact}`: {error}"));
+    }
+}
+
 /// The five rounding directions, as `/std/Flt/Rounding` spells them.
 const DIRECTIONS: [&str; 5] = [
     "ties_to_even",
