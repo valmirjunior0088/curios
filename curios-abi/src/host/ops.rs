@@ -1,6 +1,6 @@
 //! The single authored table of the host's operations, and what `curios-abi` derives from it.
 //!
-//! `for_each_host_op!` is the one place a host operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then a brace group of what its types cannot say: `module`, the `/std` module that declares it; `yields`, the label a lone payload crosses under (`value` when omitted); and `requires`, what its operands must hold before the call ([`Requirement`]), naming the operands it reads. The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape what crosses beside them — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
+//! `for_each_host_op!` is the one place a host operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then a brace group of what its types cannot say: `module`, the `/std` module that declares it; `yields`, the label a lone value crosses under beside a status, which a row states exactly where its reply has one, since the reply's type takes the label or takes none ([`WireReply::Label`]); and `requires`, what its operands must hold before the call ([`Requirement`]), naming the operands it reads. The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape what crosses beside them — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
 //!
 //! **Every row shares three clauses beside its own.** A handle that names nothing, or a resource of a kind that cannot do the operation at all, fails `NotFound` and leaves every resource as it was; a stream used in a direction it is not open for — reading `stdout` or `stderr`, writing `stdin`, or a file against its open mode — fails with `EBADF` through the errno lane, on every host. Every operand is copied in and every reply copied out, so no host keeps a reference to guest memory across a call. A malformed operand is refused by the host's adapter. A reply is lowered from its own type, which is what makes it a value of the row's wire types, and nothing checks it further: what a row's rustdoc promises beyond its types is its host's to keep, and the hosts' own tests hold them to it.
 //!
@@ -19,7 +19,7 @@ use {
     std::sync::LazyLock,
 };
 
-/// The one authored table of the host's operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply { module: path, yields: label, requires: [..] }`, the last two clauses optional: the variant is the row's [`HostOp`], the method name the [`HostOps`] method and the label `module` declares the row by, and the brace group holds what the types cannot say.
+/// The one authored table of the host's operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply { module: path, yields: label, requires: [..] }`, `yields` there where the reply's type takes a label and `requires` optional: the variant is the row's [`HostOp`], the method name the [`HostOps`] method and the label `module` declares the row by, and the brace group holds what the types cannot say.
 ///
 /// Exported so `curios-runtime` can generate its bindings from the rows it binds, and hidden because nothing else should read the table as tokens: every other consumer reads [`HostOp`] and [`HostOps`]. A callback must have in scope every type it expands, since the rows expand where the callback does.
 #[doc(hidden)]
@@ -79,7 +79,7 @@ macro_rules! for_each_host_op {
             SocketSetReuseaddr: fn socket_set_reuseaddr(h: Handle, on: bool) -> Result<(), Failure> { module: tcp/Listener }
 
             /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle, each within the interest it asked for plus `ERR` and `HUP`; a handle that is unknown — closed, say — has no descriptor, or names a descriptor the system calls invalid reports `ERR`, so its waiter wakes into the call that says why. Each distinct descriptor is polled once, whatever number of handles name it, and an interruption is retried against a deadline taken at the call. A poll the system refuses outright refuses the call, naming the error.
-            HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Result<Vec<Poll>, Refusal> { module: Handle, yields: revents, requires: [SameLength { a: handles, b: events }] }
+            HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Result<Vec<Poll>, Refusal> { module: Handle, requires: [SameLength { a: handles, b: events }] }
 
             /// Close `h`. Closing an unknown handle is a no-op.
             HandleClose: fn handle_close(h: Handle) -> () { module: Handle }
@@ -91,10 +91,10 @@ macro_rules! for_each_host_op {
             ClockMono: fn clock_mono() -> Timestamp { module: time/Instant }
 
             /// Exactly `n` random bytes. A host that cannot find the memory or the entropy for them refuses the call, naming why, rather than answer fewer.
-            RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> { module: rand, yields: bytes }
+            RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> { module: rand }
 
             /// The process arguments, each an opaque byte string.
-            ProcArgs: fn proc_args() -> Vec<Vec<u8>> { module: proc, yields: argv }
+            ProcArgs: fn proc_args() -> Vec<Vec<u8>> { module: proc }
 
             /// Look up the environment variable `name`: its value, possibly empty, or its absence. A name that is empty or holds `=` or NUL names no variable, and is absent.
             ProcEnv: fn proc_env(name: Vec<u8>) -> Option<Vec<u8>> { module: proc, yields: value }
@@ -153,6 +153,16 @@ macro_rules! for_each_host_op {
     };
 }
 
+/// What a row's `yields` clause hands its reply: the label written, and nothing where the row has no clause. The reply's type takes one or the other ([`WireReply::Label`]).
+macro_rules! yields_label {
+    () => {
+        ()
+    };
+    ($yields:ident) => {
+        stringify!($yields)
+    };
+}
+
 /// Project the table to the [`HostOp`] enum, the roster its accessors read, and the typed host interface.
 macro_rules! declare_host_rows {
     ($(
@@ -186,8 +196,7 @@ macro_rules! declare_host_rows {
                         operands: vec![$(stringify!($p)),*],
                         signature: WireSignature {
                             params: vec![$(<$t as WireOperand>::WIRE),*],
-                            // A lone payload crosses under the label `yields` names, or `value`.
-                            returns: <$r as WireReply>::returns([$(stringify!($yields),)? "value"][0]),
+                            returns: <$r as WireReply>::shape().returns(yields_label!($($yields)?)),
                         },
                         requirements: vec![$($(Requirement::$requirement { $($requirement_field: stringify!($requirement_operand)),* }),*)?],
                     },

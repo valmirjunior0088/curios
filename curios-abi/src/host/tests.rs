@@ -108,12 +108,11 @@ fn results_cross_in_the_order_they_are_written() {
         [WireType::Nat, WireType::Bytes]
     );
 
-    let written = [
+    let mixed = WireResults::record(
         ("head".to_string(), WireType::Bytes),
         ("count".to_string(), WireType::Nat),
-        ("rest".to_string(), WireType::List(WireLeaf::Bytes)),
-    ];
-    let mixed = WireResults::of(written.to_vec());
+        vec![("rest".to_string(), WireType::List(WireLeaf::Bytes))],
+    );
     assert_eq!(
         mixed.types(),
         [
@@ -124,9 +123,9 @@ fn results_cross_in_the_order_they_are_written() {
     );
 }
 
-/// The guest-facing shape is read off the count and nothing else: `handle_close` answers the unit value, `rand_bytes` its bytes bare, `handle_read` a record of its two labelled results.
+/// The guest-facing shape is the one the reply's type states: `handle_close` answers the unit value, `rand_bytes` its bytes bare, `handle_read` a record of its two labelled results.
 #[test]
-fn the_guest_shape_is_read_off_the_result_count() {
+fn the_guest_shape_is_the_one_the_reply_states() {
     let shape = |op: HostOp| answers(op).shape();
 
     assert_eq!(shape(HostOp::HandleClose), ResultShape::Unit);

@@ -20,10 +20,11 @@ fn read() -> Arc<ForeignFunction> {
     row(
         "read",
         vec![WireType::Handle, WireType::Nat],
-        WireResults::of(vec![
+        WireResults::record(
             ("status".to_string(), WireType::Nat),
             ("bytes".to_string(), WireType::Bytes),
-        ]),
+            Vec::new(),
+        ),
     )
 }
 

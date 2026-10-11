@@ -164,10 +164,11 @@ fn top_foreign_takes_a_tuple_of_results() {
             label: "read".into(),
             signature: WireSignature {
                 params: vec![WireType::Handle, WireType::Nat],
-                returns: WireReturn::Answers(WireResults::of(vec![
+                returns: WireReturn::Answers(WireResults::record(
                     ("status".to_string(), WireType::Nat),
                     ("bytes".to_string(), WireType::Bytes),
-                ])),
+                    Vec::new(),
+                )),
             },
         })]
     );
@@ -307,11 +308,11 @@ fn top_foreign_keeps_references_in_the_slots_written() {
             label: "f".into(),
             signature: WireSignature {
                 params: vec![WireType::Nat],
-                returns: WireReturn::Answers(WireResults::of(vec![
+                returns: WireReturn::Answers(WireResults::record(
                     ("bytes".to_string(), WireType::Bytes),
                     ("status".to_string(), WireType::Nat),
-                    ("rest".to_string(), WireType::List(WireLeaf::Bytes)),
-                ])),
+                    vec![("rest".to_string(), WireType::List(WireLeaf::Bytes))],
+                )),
             },
         })]
     );

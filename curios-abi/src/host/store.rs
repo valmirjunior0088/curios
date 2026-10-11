@@ -147,7 +147,7 @@ impl From<WireReference> for WireType {
 
 /// The results of one foreign function, in the order they cross, a scalar or a reference in whatever slot the row gives it.
 ///
-/// The count fixes the guest-facing shape, as [`ResultShape`] states, and a result is labelled only where that shape reads a label: the fields of a record. One result crosses bare, so a name for it is nothing the wire carries, and a declaration writes none. Where a reference stands is no constraint on anyone: the guest waits a row's results out in locals and embeds each reference where it stands, and the runtime lowers each result into its own slot; `README.md` states the decision and what it rejected.
+/// The count fixes the guest-facing shape, as [`ResultShape`] states, and a result is labelled only where that shape reads a label: the fields of a record. One result crosses bare, so a name for it is nothing the wire carries, and a declaration writes none. Each shape has its own constructor, so no label is given where none is kept and a record cannot be built of fewer than two fields. Where a reference stands is no constraint on anyone: the guest waits a row's results out in locals and embeds each reference where it stands, and the runtime lowers each result into its own slot; `README.md` states the decision and what it rejected.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireResults {
@@ -176,15 +176,15 @@ impl WireResults {
         }
     }
 
-    /// `slots` in the order they cross, shaped by their count: none is the unit value, one crosses bare and leaves its label with whoever wrote it, and two or more are the record of the fields they name.
-    pub fn of(mut slots: Vec<(String, WireType)>) -> Self {
-        let slots = match slots.len() {
-            0 => Slots::None,
-            1 => Slots::Single(slots.remove(0).1),
-            _ => Slots::Record(slots),
-        };
-
-        Self { slots }
+    /// The record of the fields named, in the order they cross: `first`, `second`, then `rest`. Two at least, since one result crosses bare and keeps no label.
+    pub fn record(
+        first: (String, WireType),
+        second: (String, WireType),
+        rest: Vec<(String, WireType)>,
+    ) -> Self {
+        Self {
+            slots: Slots::Record([first, second].into_iter().chain(rest).collect()),
+        }
     }
 
     /// How many results cross — the count the guest-facing shape is read off.
@@ -209,7 +209,7 @@ impl WireResults {
         }
     }
 
-    /// The shape the guest sees these results in, read off their count — the one statement of the arity rule the prelude's declaration, the elaborator's and the kernel's types are all built from.
+    /// The shape the guest sees these results in — the one statement of the arity rule the prelude's declaration, the elaborator's and the kernel's types are all built from.
     pub fn shape(&self) -> ResultShape<'_> {
         match &self.slots {
             Slots::None => ResultShape::Unit,

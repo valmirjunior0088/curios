@@ -218,16 +218,6 @@ fn parse_wire_field<'a>() -> Parser<'a, WireField> {
 
 // The results a braced field list denotes, in the order written, or the report of why it denotes none: a tuple type's labels are part of its identity, so this may not drop the label a single field carries, nor take a label twice. `start` is where the fields begin, so a field standing alone is refused where it is written.
 fn wire_fields<'a>(start: &Mark, fields: Vec<WireField>) -> Parser<'a, WireResults> {
-    // A row forwards one result through as itself, so `{x: T}` would name a one-field tuple no row can carry — and the label would be dropped rather than kept, which is a different type from the one written.
-    if let [((label, _), _)] = fields.as_slice() {
-        return fail_from(
-            start,
-            format!(
-                "a result is spelled bare rather than in braces when there is one of it: write the type itself, not `{{{label}: …}}`"
-            ),
-        );
-    }
-
     let mut read: Vec<(String, WireType)> = Vec::new();
     for ((label, type_), repeated) in fields {
         if read.iter().any(|(earlier, _)| *earlier == label) {
@@ -237,7 +227,18 @@ fn wire_fields<'a>(start: &Mark, fields: Vec<WireField>) -> Parser<'a, WireResul
         read.push((label, type_));
     }
 
-    pure(WireResults::of(read))
+    let mut read = read.into_iter();
+    match (read.next(), read.next()) {
+        (None, _) => pure(WireResults::none()),
+        // A row forwards one result through as itself, so `{x: T}` would name a one-field tuple no row can carry — and the label would be dropped rather than kept, which is a different type from the one written.
+        (Some((label, _)), None) => fail_from(
+            start,
+            format!(
+                "a result is spelled bare rather than in braces when there is one of it: write the type itself, not `{{{label}: …}}`"
+            ),
+        ),
+        (Some(first), Some(second)) => pure(WireResults::record(first, second, read.collect())),
+    }
 }
 
 // What a call comes back with: a bare wire type, a braced field list naming the tuple type the row yields, or `Never`. Each form is told by how it begins, and past the arrow one stands or nothing does, so where none begins the refusal says what one is, rather than leaving the first alternative to name its brace.

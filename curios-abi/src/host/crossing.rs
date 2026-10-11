@@ -1,6 +1,6 @@
 //! How each Rust type a host's row is written in crosses the wire — the knowledge the table's rows read off their types rather than spell as columns.
 //!
-//! An operand type states the [`WireType`] it arrives as and, where a row's requirements read it, its measure ([`WireOperand`]). A payload states the labelled slots a success fills, how it fills them, and the padding a reply without it fills them with ([`WirePayload`]). A reply type, built around a payload, states the results it crosses as and encodes the whole reply ([`WireReply`]): a bare payload crosses as its own slots; `Result<T, Failure>` puts a status ahead of them, as do `Result<Option<T>, Failure>`, a stream whose `None` is its end, and `Option<T>`, a lookup whose `None` is absence; `Result<T, Refusal>` crosses as its payload, its host free to refuse the call instead; and [`Termination`] crosses nothing, its row one that does not return. The generic shapes are disjoint because no `Option` or `Result` is a payload, which coherence holds rather than a comment.
+//! An operand type states the [`WireType`] it arrives as and, where a row's requirements read it, its measure ([`WireOperand`]). A payload states the slots a success fills, how it fills them, and the padding a reply without it fills them with ([`WirePayload`]). A reply type, built around a payload, states what crosses back, short of the one label its row states, and encodes the whole reply ([`WireReply`]): a bare payload crosses as its own slots; `Result<T, Failure>` puts a status ahead of them, as do `Result<Option<T>, Failure>`, a stream whose `None` is its end, and `Option<T>`, a lookup whose `None` is absence; `Result<T, Refusal>` crosses as its payload, its host free to refuse the call instead; and [`Termination`] crosses nothing, its row one that does not return. The generic shapes are disjoint because no `Option` or `Result` is a payload, which coherence holds rather than a comment.
 //!
 //! A reply encodes to the [`WireValue`]s it crosses with, in slot order ([`Encoded`]), which the runtime writes into wasm values: this leaf names no wasm value, and the table's types agree with the bindings built from them by construction, since both are read off the same row.
 
@@ -11,6 +11,7 @@ use {
         WireResults, WireReturn, WireType,
     },
     crate::status,
+    std::convert::identity,
 };
 
 #[cfg(test)]
@@ -124,10 +125,75 @@ pub enum Encoded {
     Refused(String),
 }
 
-/// What a successful call carries: the labelled slots it fills, how it fills them, and what a reply without it fills them with.
+/// The slots a payload fills, in the order they cross, as its type states them. `L` is what a row states to label them.
+pub enum PayloadSlots<L> {
+    /// No slot.
+    None,
+    /// One value. It has no label of its own: alone it crosses bare, and beside a status it crosses under the name read off what its row states.
+    Value(WireType, fn(L) -> &'static str),
+    /// Several fields, each under its field's name, which is what the guest projects: the first, the second, then the rest.
+    Fields(
+        (&'static str, WireType),
+        (&'static str, WireType),
+        Vec<(&'static str, WireType)>,
+    ),
+}
+
+fn labelled((label, wire_type): (&'static str, WireType)) -> (String, WireType) {
+    (label.to_string(), wire_type)
+}
+
+impl<L> PayloadSlots<L> {
+    /// The results a reply of the payload alone crosses as.
+    fn alone(self) -> WireResults {
+        match self {
+            PayloadSlots::None => WireResults::none(),
+            PayloadSlots::Value(wire_type, _) => WireResults::single(wire_type),
+            PayloadSlots::Fields(first, second, rest) => WireResults::record(
+                labelled(first),
+                labelled(second),
+                rest.into_iter().map(labelled).collect(),
+            ),
+        }
+    }
+
+    /// The results a reply crosses as that carries a status: the status first, alone where the payload has no slot, then the payload's slots, a lone value under the name `label` gives it.
+    fn after_status(self, label: L) -> WireResults {
+        let status = ("status".to_string(), WireType::Nat);
+
+        match self {
+            PayloadSlots::None => WireResults::single(status.1),
+            PayloadSlots::Value(wire_type, name) => {
+                WireResults::record(status, labelled((name(label), wire_type)), Vec::new())
+            }
+            PayloadSlots::Fields(first, second, rest) => WireResults::record(
+                status,
+                labelled(first),
+                [second].into_iter().chain(rest).map(labelled).collect(),
+            ),
+        }
+    }
+
+    /// The wire type of each slot, in order.
+    fn types(&self) -> Vec<WireType> {
+        match self {
+            PayloadSlots::None => Vec::new(),
+            PayloadSlots::Value(wire_type, _) => vec![*wire_type],
+            PayloadSlots::Fields(first, second, rest) => [first, second]
+                .into_iter()
+                .chain(rest)
+                .map(|(_, wire_type)| *wire_type)
+                .collect(),
+        }
+    }
+}
+
+/// What a successful call carries: the slots it fills, how it fills them, and what a reply without it fills them with.
 pub trait WirePayload: Sized {
-    /// The slots, in the order they cross. A payload of one value fills one slot, labelled `label`; a payload of several fields labels each with its field's name, which is what the guest projects.
-    fn slots(label: &'static str) -> Vec<(String, WireType)>;
+    /// What a row states for every slot to have a label where one is read: a name for a lone value, and nothing for a payload of no slot or of fields that name themselves.
+    type Label;
+
+    fn slots() -> PayloadSlots<Self::Label>;
 
     fn encode(self, values: &mut Vec<WireValue>);
 
@@ -136,8 +202,10 @@ pub trait WirePayload: Sized {
 }
 
 impl WirePayload for () {
-    fn slots(_: &'static str) -> Vec<(String, WireType)> {
-        vec![]
+    type Label = ();
+
+    fn slots() -> PayloadSlots<()> {
+        PayloadSlots::None
     }
 
     fn encode(self, _: &mut Vec<WireValue>) {}
@@ -146,8 +214,10 @@ impl WirePayload for () {
 }
 
 impl WirePayload for u64 {
-    fn slots(label: &'static str) -> Vec<(String, WireType)> {
-        vec![(label.to_string(), WireType::Nat)]
+    type Label = &'static str;
+
+    fn slots() -> PayloadSlots<&'static str> {
+        PayloadSlots::Value(WireType::Nat, identity)
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -160,8 +230,10 @@ impl WirePayload for u64 {
 }
 
 impl WirePayload for Vec<u8> {
-    fn slots(label: &'static str) -> Vec<(String, WireType)> {
-        vec![(label.to_string(), WireType::Bytes)]
+    type Label = &'static str;
+
+    fn slots() -> PayloadSlots<&'static str> {
+        PayloadSlots::Value(WireType::Bytes, identity)
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -175,8 +247,10 @@ impl WirePayload for Vec<u8> {
 
 /// A handle pads as [`Handle::none`], the empty token no host mints, which is why a successful handle is never that token.
 impl WirePayload for Handle {
-    fn slots(label: &'static str) -> Vec<(String, WireType)> {
-        vec![(label.to_string(), WireType::Handle)]
+    type Label = &'static str;
+
+    fn slots() -> PayloadSlots<&'static str> {
+        PayloadSlots::Value(WireType::Handle, identity)
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -189,8 +263,10 @@ impl WirePayload for Handle {
 }
 
 impl WirePayload for Vec<Vec<u8>> {
-    fn slots(label: &'static str) -> Vec<(String, WireType)> {
-        vec![(label.to_string(), WireType::List(WireLeaf::Bytes))]
+    type Label = &'static str;
+
+    fn slots() -> PayloadSlots<&'static str> {
+        PayloadSlots::Value(WireType::List(WireLeaf::Bytes), identity)
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -204,8 +280,10 @@ impl WirePayload for Vec<Vec<u8>> {
 
 /// Poll masks cross as one `Bytes`, byte `i` the mask of handle `i`, each within the bits a host may report.
 impl WirePayload for Vec<Poll> {
-    fn slots(label: &'static str) -> Vec<(String, WireType)> {
-        vec![(label.to_string(), WireType::Bytes)]
+    type Label = &'static str;
+
+    fn slots() -> PayloadSlots<&'static str> {
+        PayloadSlots::Value(WireType::Bytes, identity)
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -218,11 +296,14 @@ impl WirePayload for Vec<Poll> {
 }
 
 impl WirePayload for Timestamp {
-    fn slots(_: &'static str) -> Vec<(String, WireType)> {
-        vec![
-            ("secs".to_string(), WireType::Nat),
-            ("nanos".to_string(), WireType::Nat),
-        ]
+    type Label = ();
+
+    fn slots() -> PayloadSlots<()> {
+        PayloadSlots::Fields(
+            ("secs", WireType::Nat),
+            ("nanos", WireType::Nat),
+            Vec::new(),
+        )
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -235,11 +316,10 @@ impl WirePayload for Timestamp {
 }
 
 impl WirePayload for TtySize {
-    fn slots(_: &'static str) -> Vec<(String, WireType)> {
-        vec![
-            ("cols".to_string(), WireType::Nat),
-            ("rows".to_string(), WireType::Nat),
-        ]
+    type Label = ();
+
+    fn slots() -> PayloadSlots<()> {
+        PayloadSlots::Fields(("cols", WireType::Nat), ("rows", WireType::Nat), Vec::new())
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -253,13 +333,17 @@ impl WirePayload for TtySize {
 
 /// The kind crosses as its [`file_kind`](crate::file_kind) code.
 impl WirePayload for FileStat {
-    fn slots(_: &'static str) -> Vec<(String, WireType)> {
-        vec![
-            ("kind".to_string(), WireType::Nat),
-            ("size".to_string(), WireType::Nat),
-            ("mtime_secs".to_string(), WireType::Nat),
-            ("mtime_nanos".to_string(), WireType::Nat),
-        ]
+    type Label = ();
+
+    fn slots() -> PayloadSlots<()> {
+        PayloadSlots::Fields(
+            ("kind", WireType::Nat),
+            ("size", WireType::Nat),
+            vec![
+                ("mtime_secs", WireType::Nat),
+                ("mtime_nanos", WireType::Nat),
+            ],
+        )
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -278,11 +362,14 @@ impl WirePayload for FileStat {
 
 /// An exit crosses as the pair `(code, signal)`, the field that does not apply zero: `signal` is nonzero exactly when a signal ended the child.
 impl WirePayload for ChildExit {
-    fn slots(_: &'static str) -> Vec<(String, WireType)> {
-        vec![
-            ("code".to_string(), WireType::Nat),
-            ("signal".to_string(), WireType::Nat),
-        ]
+    type Label = ();
+
+    fn slots() -> PayloadSlots<()> {
+        PayloadSlots::Fields(
+            ("code", WireType::Nat),
+            ("signal", WireType::Nat),
+            Vec::new(),
+        )
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -301,10 +388,14 @@ impl WirePayload for ChildExit {
 
 /// A stream the call did not pipe crosses as [`Handle::none`], the padding a failure fills every slot with: which streams a success holds is the call's to say.
 impl WirePayload for ChildHandles {
-    fn slots(_: &'static str) -> Vec<(String, WireType)> {
-        ["child", "stdin", "stdout", "stderr"]
-            .map(|label| (label.to_string(), WireType::Handle))
-            .into()
+    type Label = ();
+
+    fn slots() -> PayloadSlots<()> {
+        PayloadSlots::Fields(
+            ("child", WireType::Handle),
+            ("stdin", WireType::Handle),
+            vec![("stdout", WireType::Handle), ("stderr", WireType::Handle)],
+        )
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
@@ -320,22 +411,47 @@ impl WirePayload for ChildHandles {
     }
 }
 
-/// A row's whole reply: what its call comes back with, and its encoding.
-pub trait WireReply: Sized {
-    /// What the call comes back with, a lone payload's slot labelled `label`: a payload's own slots, a status ahead of them where the reply carries one, or nothing ever for a reply that ends the instance.
-    fn returns(label: &'static str) -> WireReturn;
-
-    fn encode(self) -> Encoded;
+/// What a reply's type states of what crosses back, short of the label a row states for it. `L` is that label.
+pub enum ReplyShape<L> {
+    /// Nothing, ever: the reply ends the instance.
+    Never,
+    /// A payload's slots alone.
+    Alone(WireResults),
+    /// A status, then a payload's slots.
+    AfterStatus(PayloadSlots<L>),
 }
 
-/// The results a reply crosses as that carries a status: the status first, then the payload's slots.
-fn with_status<T: WirePayload>(label: &'static str) -> WireResults {
-    WireResults::of(
-        [("status".to_string(), WireType::Nat)]
-            .into_iter()
-            .chain(T::slots(label))
-            .collect(),
-    )
+impl<L> ReplyShape<L> {
+    /// What the call comes back with, under the label its row states.
+    pub fn returns(self, label: L) -> WireReturn {
+        match self {
+            ReplyShape::Never => WireReturn::Never,
+            ReplyShape::Alone(results) => WireReturn::Answers(results),
+            ReplyShape::AfterStatus(slots) => WireReturn::Answers(slots.after_status(label)),
+        }
+    }
+
+    /// The wire types that cross back, in order, which no label changes.
+    pub fn types(&self) -> Vec<WireType> {
+        match self {
+            ReplyShape::Never => Vec::new(),
+            ReplyShape::Alone(results) => results.types(),
+            ReplyShape::AfterStatus(slots) => {
+                [WireType::Nat].into_iter().chain(slots.types()).collect()
+            }
+        }
+    }
+}
+
+/// A row's whole reply: what its call comes back with, and its encoding.
+pub trait WireReply: Sized {
+    /// What a row states beside the reply's type, in its `yields` clause: the name of a lone value that crosses beside a status, and nothing for every other reply. A row that states a label its reply has no slot for, or none where it has one, hands [`ReplyShape::returns`] the wrong type and does not compile.
+    type Label;
+
+    /// A payload's own slots, a status ahead of them where the reply carries one, or nothing ever for a reply that ends the instance.
+    fn shape() -> ReplyShape<Self::Label>;
+
+    fn encode(self) -> Encoded;
 }
 
 /// A status, then either the payload or its padding.
@@ -351,8 +467,10 @@ fn with_payload<T: WirePayload>(status: u64, payload: Option<T>) -> Encoded {
 }
 
 impl<T: WirePayload> WireReply for T {
-    fn returns(label: &'static str) -> WireReturn {
-        WireReturn::Answers(WireResults::of(T::slots(label)))
+    type Label = ();
+
+    fn shape() -> ReplyShape<()> {
+        ReplyShape::Alone(T::slots().alone())
     }
 
     fn encode(self) -> Encoded {
@@ -364,8 +482,10 @@ impl<T: WirePayload> WireReply for T {
 }
 
 impl<T: WirePayload> WireReply for Result<T, Failure> {
-    fn returns(label: &'static str) -> WireReturn {
-        WireReturn::Answers(with_status::<T>(label))
+    type Label = T::Label;
+
+    fn shape() -> ReplyShape<T::Label> {
+        ReplyShape::AfterStatus(T::slots())
     }
 
     fn encode(self) -> Encoded {
@@ -378,8 +498,10 @@ impl<T: WirePayload> WireReply for Result<T, Failure> {
 
 /// The end of the stream crosses as `EOF` beside the payload's padding.
 impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
-    fn returns(label: &'static str) -> WireReturn {
-        WireReturn::Answers(with_status::<T>(label))
+    type Label = T::Label;
+
+    fn shape() -> ReplyShape<T::Label> {
+        ReplyShape::AfterStatus(T::slots())
     }
 
     fn encode(self) -> Encoded {
@@ -393,8 +515,10 @@ impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
 
 /// Absence crosses as `NOT_FOUND` beside the payload's padding.
 impl<T: WirePayload> WireReply for Option<T> {
-    fn returns(label: &'static str) -> WireReturn {
-        WireReturn::Answers(with_status::<T>(label))
+    type Label = T::Label;
+
+    fn shape() -> ReplyShape<T::Label> {
+        ReplyShape::AfterStatus(T::slots())
     }
 
     fn encode(self) -> Encoded {
@@ -407,8 +531,10 @@ impl<T: WirePayload> WireReply for Option<T> {
 
 /// A value, or a refusal: a row with no failure lane whose host could not answer is refused rather than answered with something the host does not have. The refusal never crosses, so the row returns exactly as its payload does.
 impl<T: WirePayload> WireReply for Result<T, Refusal> {
-    fn returns(label: &'static str) -> WireReturn {
-        WireReturn::Answers(WireResults::of(T::slots(label)))
+    type Label = ();
+
+    fn shape() -> ReplyShape<()> {
+        ReplyShape::Alone(T::slots().alone())
     }
 
     fn encode(self) -> Encoded {
@@ -421,8 +547,10 @@ impl<T: WirePayload> WireReply for Result<T, Refusal> {
 
 /// A diverging call crosses nothing back: its reply ends the instance.
 impl WireReply for Termination {
-    fn returns(_: &'static str) -> WireReturn {
-        WireReturn::Never
+    type Label = ();
+
+    fn shape() -> ReplyShape<()> {
+        ReplyShape::Never
     }
 
     fn encode(self) -> Encoded {
