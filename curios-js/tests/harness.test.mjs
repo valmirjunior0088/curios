@@ -369,6 +369,26 @@ print(Nat/to_str(Bytes/len(b)))
   assert.equal(stdout, "70000");
 });
 
+test("the monotonic clock answers the nanoseconds within a second, a reading just under one included", async (t) => {
+  // The engine's clock read twice: at its origin, then a tenth of a nanosecond under two seconds, which rounded would be a billion nanoseconds and the next second's.
+  const readings = [0, 1999.9999999];
+
+  t.mock.method(globalThis.performance, "now", () =>
+    readings.length > 1 ? readings.shift() : readings[0],
+  );
+
+  const { stdout } = await execute(`
+use /std/{Nat, Str, print};
+use /std/time/{Instant, Duration};
+let a = Instant/now()!;
+let b = Instant/now()!;
+let d = Instant/diff(b, a);
+print(Str/flatten([Nat/to_str(Duration/secs(d)), " ", Nat/to_str(Duration/nanos(d))]))
+`);
+
+  assert.equal(stdout, "1 999999999");
+});
+
 test("an exit ends the run with its code", async () => {
   for (const code of [0, 3, 255]) {
     const outcome = await execute(`
