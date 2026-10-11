@@ -2,7 +2,6 @@
 
 use {
     crate::Unit,
-    curios_abi::ForeignStore,
     curios_core::{Anchors, Lexicon, Module, Places},
     curios_elab::{ErasedUnit, Projection},
     curios_text::PreparedText,
@@ -71,16 +70,6 @@ impl<'a> Predecessors<'a> {
             .iter()
             .map(|unit| unit.text().anchors())
             .collect()
-    }
-
-    /// Every `foreign` row the predecessors declare, in dependency order — the union an embedder binds against.
-    pub fn foreigns(&self) -> ForeignStore {
-        let mut foreigns = ForeignStore::new();
-        for unit in self.units {
-            foreigns.absorb(unit.foreigns());
-        }
-
-        foreigns
     }
 
     /// Whether each predecessor is the compiler's own ([`Unit::fixed`]), in dependency order: what each stage is told beside its view of them, so that nothing records a read of one.

@@ -6,7 +6,7 @@
 //!
 //! The crate owns neither representation it works between, so every name from `curios_cont` and `curios_wasm` is written with its crate.
 
-use {curios_utilities::grown, std::collections::HashMap};
+use {curios_abi::ForeignStore, curios_utilities::grown, std::collections::HashMap};
 
 mod machine;
 use machine::*;
@@ -80,21 +80,29 @@ mod rope_tests;
 mod test_support;
 
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built, its reducible control structurized into blocks and loops and its constant data hoisted, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
-pub fn into_wasm(module: &curios_cont::Module) -> curios_wasm::Module {
+///
+/// The module comes beside the rows its `ffi` imports are declared as, by import name: exactly the rows whose call sites the emitted code holds, which is what a program asks an implementation of. A row a unit declares and nothing calls is not among them.
+pub fn into_wasm(module: &curios_cont::Module) -> (curios_wasm::Module, ForeignStore) {
     // On a segment of its own, as every other stage enters: the emitter below recurses per nested region, and its frames are large enough that a knot's few thousand lines of CPS would outgrow the default test-thread stack.
     grown(|| into_wasm_within(module))
 }
 
-fn into_wasm_within(module: &curios_cont::Module) -> curios_wasm::Module {
+fn into_wasm_within(module: &curios_cont::Module) -> (curios_wasm::Module, ForeignStore) {
     curios_profile::profile!("into_wasm");
     let raw = raw_locals(module);
     let machine = lower(module);
     let mut structured = structurize(&machine);
     hoist_consts(&mut structured);
     let mut wasm_module = curios_wasm::Module::new("module");
-    ModuleEmitter::new(&Table::new(&structured, &raw), &mut wasm_module).emit_module(&structured);
+    let table = Table::new(&structured, &raw);
+    ModuleEmitter::new(&table, &mut wasm_module).emit_module(&structured);
 
-    wasm_module
+    let mut imported = ForeignStore::new();
+    for function in table.host_funcs() {
+        imported.register((*function).clone());
+    }
+
+    (wasm_module, imported)
 }
 
 /// The emission names the representation analysis decided to hold raw, and at which carrier.

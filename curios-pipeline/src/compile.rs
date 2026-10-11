@@ -2,7 +2,7 @@
 
 use {
     super::{Stage, compile_lowered_over, compile_unit_over},
-    curios_abi::{ForeignStore, Namespace},
+    curios_abi::ForeignStore,
     curios_cert::{
         Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
         recheck_program_measured,
@@ -1037,7 +1037,10 @@ pub fn examine_entrypoint(
 }
 
 /// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into Cont, Cont optimization, and wasm emission, observing every stage in order.
-fn lower_from_ersd<O>(mut ersd_module: curios_ersd::Module, observe: &mut O) -> curios_wasm::Module
+fn lower_from_ersd<O>(
+    mut ersd_module: curios_ersd::Module,
+    observe: &mut O,
+) -> (curios_wasm::Module, ForeignStore)
 where
     O: FnMut(Stage<'_>),
 {
@@ -1058,11 +1061,11 @@ where
 
     observe(Stage::ContOptm(&cont_optm_module));
 
-    let wasm_module = into_wasm(&cont_optm_module);
+    let (wasm_module, imported) = into_wasm(&cont_optm_module);
 
     observe(Stage::Wasm(&wasm_module));
 
-    wasm_module
+    (wasm_module, imported)
 }
 
 /// Compile one unit against `predecessors`: lower, elaborate, judge, erase.
@@ -1433,24 +1436,8 @@ where
     let entered = entered?;
     let ersd_module = entered.erased(budget, predecessors, syntax)?;
 
-    // Every unit's rows, the program's own declarations' among them, disjoint by mount, so the union cannot collide.
-    let mut all_foreigns = predecessors.foreigns();
-    all_foreigns.absorb(entered.unit.foreigns());
-
-    let module = lower_from_ersd(ersd_module, &mut observe);
-
-    // What an embedder is handed is the rows the module imports: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
-    let mut reached = ForeignStore::new();
-
-    for function in all_foreigns.iter() {
-        let imported = module.imports().iter().any(|(namespace, name, _)| {
-            namespace == Namespace::Ffi.as_str() && name == function.name()
-        });
-
-        if imported {
-            reached.register((**function).clone());
-        }
-    }
+    // What an embedder is handed is the rows the module imports, which the emitter knows as it writes them: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
+    let (module, reached) = lower_from_ersd(ersd_module, &mut observe);
 
     Ok((module, reached, entered.records))
 }

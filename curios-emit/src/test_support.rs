@@ -39,7 +39,7 @@ pub(super) fn halt_zero() -> curios_cont::Node {
 
 /// The emitted module rendered as WAT text — the public inspection surface (`Module`'s items are private; `Display` is how consumers read it back).
 pub(super) fn wat(module: &curios_cont::Module) -> String {
-    into_wasm(module).to_string()
+    into_wasm(module).0.to_string()
 }
 
 #[track_caller]
