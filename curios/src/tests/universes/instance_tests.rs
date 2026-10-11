@@ -262,3 +262,38 @@ fn a_case_equation_read_at_another_instance_holds_the_two_to_one() {
         assert_eq!(run(&program(inhabitant)), b"4", "{inhabitant}");
     }
 }
+
+/// A recursive definition over a family whose level only sizes its parameter: nothing ties the level a written call takes to another call's.
+const EVEN: &str = r#"
+    use /std/{Bool, Io};
+    use /std/Bool/{Holds};
+    induct Tree(K: Type): Type | tip(K) | join(Tree(K), Tree(K)) end
+    let even(@K: Type, t: Tree(K)) -> Bool =
+        match t | tip(_) => true | join(l, r) => even(l) && even(r) end;
+    "#;
+
+// **A statement is one with itself written again under an operator.** The type `held` is declared at spells its implicit arguments and its operator's witness as the metavariables elaboration solved, and the result type spells them substituted. Read as solved, the two are apart in levels alone, which the shortcut holds one; read as they stand, they reduce to an operation whose operands nothing pairs.
+#[test]
+fn a_statement_is_one_with_itself_written_again_under_an_operator() {
+    for statement in [
+        "Holds(even(l) && even(r))",
+        "Holds(even(l) || even(r))",
+        "Holds(even(l) != even(r))",
+        "Holds(even(l) == even(r))",
+    ] {
+        let source = format!(
+            "{EVEN}\n let p(@K: Type, l: Tree(K), r: Tree(K), held: {statement}) -> {statement} = held;\n Io/pure(())"
+        );
+        typecheck(&source).unwrap_or_else(|error| panic!("`{statement}`: {error}"));
+    }
+
+    // An alias of the statement, and a function that hands its proof back.
+    let aliased = format!(
+        "{EVEN}\n let Both(@K: Type, l: Tree(K), r: Tree(K)) -> Prop = Holds(even(l) && even(r));\n let p(@K: Type, l: Tree(K), r: Tree(K), held: Both(l, r)) -> Both(l, r) = held;\n Io/pure(())"
+    );
+    typecheck(&aliased).expect("an alias of the statement");
+    let handed = format!(
+        "{EVEN}\n let same(@P: Prop, proof: P) -> P = proof;\n let p(@K: Type, l: Tree(K), r: Tree(K), held: Holds(even(l) && even(r))) -> Holds(even(l) && even(r)) = same(held);\n Io/pure(())"
+    );
+    typecheck(&handed).expect("the proof handed back by a function");
+}

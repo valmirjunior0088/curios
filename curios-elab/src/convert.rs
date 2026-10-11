@@ -2539,7 +2539,15 @@ impl Convert {
 
             // Sides differing only in universe levels are decided by identifying the levels, never by erasing them — see `identify_universe_levels` for the rule, its license, and the refuted premise of a projection comparison. Sound at every problem type, universes included: `Type a ~ Type b` gets the same equality constraint the structural arm below would emit, without the descent. A curried head apart in a level its value does not hold is declined, since what it is follows the type this problem goes on to read.
             if this.has_universe_data() || that.has_universe_data() {
-                match identify_universe_levels(context, &this, &that, Curried::Declined)? {
+                // Each side is read as solved. The type a binder was declared at spells its implicit arguments and its operators' witnesses as the metavariables elaboration solved, and the type it is checked against spells them substituted: left as they stand, the two are apart in a spelling, and the question here is whether they are apart in levels alone.
+                let solved_this = zonk_solved_term_metas(context, &this);
+                let solved_that = zonk_solved_term_metas(context, &that);
+                match identify_universe_levels(
+                    context,
+                    &solved_this,
+                    &solved_that,
+                    Curried::Declined,
+                )? {
                     Identification::Identified => continue,
                     Identification::Curried(apart) => {
                         for pair in apart {
