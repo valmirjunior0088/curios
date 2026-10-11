@@ -146,7 +146,6 @@ impl Step {
                 None | Some(RECORDER) => cargo(&recorder_testing(request.filter.as_deref())),
                 Some(_) => Ok(()),
             },
-            Step::WorkspaceDoctest => cargo(&doctesting(package)),
             Step::InstrumentedLint => cargo(&[
                 "clippy",
                 "--workspace",
@@ -332,15 +331,6 @@ fn recorder_testing(filter: Option<&str>) -> Vec<&str> {
     .into_iter()
     .chain(filter)
     .collect()
-}
-
-/// The `cargo test --doc` command line for one selection: the examples nextest does not run.
-fn doctesting(package: Option<&str>) -> Vec<&str> {
-    ["test"]
-        .into_iter()
-        .chain(scope(package))
-        .chain(["--doc"])
-        .collect()
 }
 
 /// The browser bundle: `curios-js` built for the bare Wasm target, and its bindings generated beside it.

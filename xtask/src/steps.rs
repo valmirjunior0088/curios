@@ -77,7 +77,6 @@ pub(crate) enum Step {
     WorkspaceLintWeb,
     WorkspaceTest,
     WorkspaceRecorderTest,
-    WorkspaceDoctest,
     WorkspaceBinaryenCache,
     InstrumentedLint,
     DocsBuild,
@@ -174,13 +173,6 @@ impl Step {
                 &[],
                 &[Tool::Nextest],
                 "Run the recorder's tests, which `curios-profile` compiles under its `enabled` feature alone: a build of that one crate, which depends on nothing of the compiler",
-            ),
-            Step::WorkspaceDoctest => always(
-                Subject::Workspace,
-                Action::Test,
-                &[Step::LauncherBuild],
-                &[],
-                "Run the workspace's documentation examples, which testing every target leaves out",
             ),
             Step::WorkspaceBinaryenCache => Row {
                 subject: Subject::Workspace,

@@ -65,11 +65,7 @@ fn a_lint_goes_on_past_a_crate_that_fails() {
 /// The workspace is checked as it ships: no step of it turns every feature on, which is `instrumented`'s.
 #[test]
 fn a_workspace_step_names_no_feature() {
-    for arguments in [
-        linting(None),
-        testing(None, None),
-        doctesting(Some("curios-core")),
-    ] {
+    for arguments in [linting(None), testing(None, None)] {
         assert!(
             arguments
                 .iter()
