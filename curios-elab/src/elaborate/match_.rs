@@ -1049,15 +1049,33 @@ fn elaborate_induct_match(
             vars.clone(),
         );
 
+        // Why the arm is never taken, where its case's indices clash with the scrutinee's.
+        let mut ruled_out = None;
         let (body_elaborated, held) = context
             .with_frame(|context| {
                 let ix_c = assume_payload(context, telescope, &labels);
                 refine_head(context, &head_elaborated, &ctor_val)?;
 
-                // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the kernel's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved. Refinements never justify the typing (the motive application does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
+                // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the kernel's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved, and an error it raises is reported as one in an arm that may be left out. Refinements never justify the typing (the motive application does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
                 let solutions = match solve_indices(context, &actual_indices, &ix_c, &labels)? {
                     Invert::Solved(solutions) => solutions,
-                    Invert::Impossible => Vec::new(),
+                    Invert::Impossible => {
+                        let case = Term::induct_type_at(
+                            name,
+                            universes.clone(),
+                            params.clone(),
+                            ix_c.clone(),
+                        );
+                        let scrutinee = Term::induct_type_at(
+                            name,
+                            universes.clone(),
+                            params.clone(),
+                            actual_indices.clone(),
+                        );
+                        ruled_out = Some(context.rule_out_arm(case, scrutinee));
+
+                        Vec::new()
+                    }
                 };
                 for (name, solution) in &solutions {
                     context.refine(name, solution);
@@ -1082,7 +1100,10 @@ fn elaborate_induct_match(
                     .collect::<Vec<_>>();
                 check(context, &scope.open(&var_refs), expected).map(|body| (body, held))
             })
-            .map_err(|error| from_arm(context, &head_elaborated, &ctor_val, error))?;
+            .map_err(|error| match &ruled_out {
+                Some(dead) => error.in_dead_arm(dead),
+                None => from_arm(context, &head_elaborated, &ctor_val, error),
+            })?;
 
         // A match on a proposition whose one constructor is wholly pinned writes a payload binder as what the arm's equations hold it to, which is the index that pins it wherever the scrutinee's indices unify with the constructor's. An arm written so names no payload, and on a closed term the match is its body with the proof unreduced. A binder the equations leave open stays named: the arm is typed at it, and reduction binds it to the index when the match fires.
         let body_elaborated = match pinned {

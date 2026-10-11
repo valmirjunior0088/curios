@@ -54,7 +54,7 @@ mod tests;
 
 use {
     super::{
-        Error, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
+        DeadArm, Error, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
         zonk_universe_levels_scoped,
     },
     crate::{
@@ -965,6 +965,14 @@ impl<'s> Context<'s> {
         self.leave_frame();
 
         result
+    }
+
+    /// Say that the arm whose frame is being elaborated is never taken: its case is of type `case` and its scrutinee of type `scrutinee`, one family at indices that clash. The reason stands for that frame and every frame inside it, and an error raised there is reported with it: by the arm where the error propagates ([`Error::in_dead_arm`]), and by the record of an implicit minted there where one nothing solved is reported once the arm has closed.
+    pub(crate) fn rule_out_arm(&mut self, case: Term, scrutinee: Term) -> Rc<DeadArm> {
+        let dead = Rc::new(DeadArm::Indices { case, scrutinee });
+        self.typing.frames.rule_out(Rc::clone(&dead));
+
+        dead
     }
 
     /// [`Frames::assume`], stamping the write.
@@ -2088,6 +2096,9 @@ impl<'s> Context<'s> {
         if let Some(reduct) = reduct {
             self.underway.attempt.solutions.note_reduct(id, reduct);
         }
+        if let Some(dead) = self.typing.frames.dead_arm().cloned() {
+            self.underway.attempt.solutions.note_dead_arm(id, dead);
+        }
         (id, metavar)
     }
 
@@ -2700,6 +2711,9 @@ impl<'s> Context<'s> {
         }
 
         self.install_refinements(&frame.refinements);
+        if let Some(dead) = &frame.dead_arm {
+            self.typing.frames.rule_out(Rc::clone(dead));
+        }
 
         // The witness binders were already re-assumed by the loop above (they are a subset of `assumptions`); only the scope membership is restored here. The enclosing frame's mark truncates it on exit.
         self.typing

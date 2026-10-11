@@ -17,6 +17,27 @@ use {
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
 
+/// Why an arm is never taken, as a report on an error raised in it says: [`Error::InUnreachableArm`]'s reason.
+#[derive(Clone, Debug)]
+pub enum DeadArm {
+    /// The arm's own guard `guard` is always `case`, a case other than the arm's.
+    Guard { guard: Term, case: Term },
+    /// In the arm `guard`, the guard of an arm around it, is always `case`, a case other than the one that arm assumed.
+    EnclosingGuard { guard: Term, case: Term },
+    /// The arm's case is of type `case` and its scrutinee of type `scrutinee`, one family at indices that clash, so the arm may be left out.
+    Indices { case: Term, scrutinee: Term },
+}
+
+impl DeadArm {
+    /// The two terms the reason shows.
+    fn terms(&self) -> [&Term; 2] {
+        match self {
+            Self::Guard { guard, case } | Self::EnclosingGuard { guard, case } => [guard, case],
+            Self::Indices { case, scrutinee } => [case, scrutinee],
+        }
+    }
+}
+
 /// One member of an [`Error::DeclarationCycle`]: a declaration by its name, or a witness, which has none, by the type it is declared at.
 #[derive(Debug)]
 pub enum CycleMember {
@@ -647,12 +668,9 @@ pub enum Error {
         owner: Option<Global>,
         error: Box<Error>,
     },
-    /// An arm whose guard is always a case other than the arm's raised `error`: the arm is dead, which the report says beside what failed, since a proof resting on the guard fails there — no checker records an equation under a spelling that mentions no local.
+    /// An arm that is never taken raised `error`: the arm is dead, which the report says beside what failed, with `dead` as the reason. What the arm rests on fails there: a proof resting on its guard, no checker recording an equation under a spelling that mentions no local, and a fact read off an index its scrutinee does not have, a case whose indices clash being checked with none solved.
     InUnreachableArm {
-        guard: Box<Term>,
-        case: Box<Term>,
-        /// Whether `guard` is the guard of an arm around this one, which this arm's case contradicts, rather than the arm's own.
-        enclosing: bool,
+        dead: Box<DeadArm>,
         error: Box<Error>,
     },
     /// The witness binders in scope where `error` arose, outermost first: the reader position its terms are spelled for, so a `use` argument resolution would restore reads as left out (the printer's axis (h)). A sibling of [`Error::Located`], attached by the same drivers.
@@ -1438,9 +1456,7 @@ impl Error {
     /// Say that the arm this error arose in is dead: its guard `guard` is always `case`, a case other than the arm's.
     pub(crate) fn in_unreachable_arm(self, guard: Term, case: Term) -> Self {
         Self::InUnreachableArm {
-            guard: Box::new(guard),
-            case: Box::new(case),
-            enclosing: false,
+            dead: Box::new(DeadArm::Guard { guard, case }),
             error: Box::new(self),
         }
     }
@@ -1448,9 +1464,15 @@ impl Error {
     /// Say that the arm this error arose in is dead: in it `guard`, the guard of an arm around it, is always `case`, a case other than the one that arm assumed.
     pub(crate) fn under_contradicted_guard(self, guard: Term, case: Term) -> Self {
         Self::InUnreachableArm {
-            guard: Box::new(guard),
-            case: Box::new(case),
-            enclosing: true,
+            dead: Box::new(DeadArm::EnclosingGuard { guard, case }),
+            error: Box::new(self),
+        }
+    }
+
+    /// Say that the arm this error arose in is dead, for `dead`: a reason known where the arm opens, as its indices' clash is, where the two above find theirs once an error is raised.
+    pub(crate) fn in_dead_arm(self, dead: &DeadArm) -> Self {
+        Self::InUnreachableArm {
+            dead: Box::new(dead.clone()),
             error: Box::new(self),
         }
     }
@@ -1723,15 +1745,10 @@ impl Error {
                     error.render_body(spelling, anchors)
                 )
             }
-            Self::InUnreachableArm {
-                guard,
-                case,
-                enclosing,
-                error,
-            } => format!(
+            Self::InUnreachableArm { dead, error } => format!(
                 "{}\n{}",
                 error.render_body(spelling, anchors),
-                unreachable_arm_note(guard, case, *enclosing, spelling)
+                unreachable_arm_note(dead, spelling)
             ),
             error => Displayed(error, Rc::clone(spelling), anchors).to_string(),
         }
@@ -1759,11 +1776,8 @@ impl Error {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InScope { error, .. } => error.collect_terms(out),
-            Self::InUnreachableArm {
-                guard, case, error, ..
-            } => {
-                out.push(guard);
-                out.push(case);
+            Self::InUnreachableArm { dead, error } => {
+                out.extend(dead.terms());
                 error.collect_terms(out);
             }
             Self::Batch(errors) => {

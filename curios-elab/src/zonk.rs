@@ -1102,15 +1102,20 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                             .unwrap_or_else(Term::type_ground);
                         let bound = zonk_term(context, &bound).unwrap_or(bound);
                         // Spelled for the scope the hole was born in, as a goal report's terms are, so a concept method projected off a witness reads as the method's call rather than as the witness's minted name.
-                        Error::uninferred_implicit(
+                        let unsolved = Error::uninferred_implicit(
                             callee(context, &origin.func),
                             origin.binder.clone(),
                             bound,
                             entry.is_some_and(|entry| entry.proposition),
                             entry.and_then(|entry| entry.reduct.clone()),
                             entry.and_then(|entry| entry.refusal.as_deref().cloned()),
-                        )
-                        .in_scope(
+                        );
+                        // Minted in an arm its scrutinee's indices rule out, the hole is one no value reaches, which the report says beside it: the arm closed before this walk.
+                        let unsolved = match entry.and_then(|entry| entry.dead_arm.as_deref()) {
+                            Some(dead) => unsolved.in_dead_arm(dead),
+                            None => unsolved,
+                        };
+                        unsolved.in_scope(
                             entry
                                 .and_then(|entry| entry.witnesses.as_deref())
                                 .unwrap_or_default(),

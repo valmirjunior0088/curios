@@ -591,3 +591,46 @@ fn a_guard_over_a_local_definition_answers_a_term_over_its_value() {
         assert_eq!(run(&source), b"inside", "{guard}");
     }
 }
+
+// An error in an arm its scrutinee's indices rule out says the arm is never taken, and that it may be left out. `zero()` is a `Tag(0)` and the scrutinee a `Tag(1)`, so the arm is checked with no index solved and the bound its body needs has nothing behind it: the report keeps what failed and adds the two types that clash. So does the report on an arm that one variable of the indices forced two ways rules out, `Two(n, n)` against `(0, 1)`, whose goal the case would have refined.
+#[test]
+fn an_error_in_an_arm_the_indices_rule_out_says_the_arm_may_be_left_out() {
+    let literal = error(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+        induct Tag: (Nat) -> Type
+        | zero(): (0)
+        | other(n: Nat): (n + 1)
+        end
+        let needs_zero(n: Nat, @ok: Holds(n == 0)) -> Nat = 7;
+        let w(t: Tag(1)) -> Nat = match t | zero() => needs_zero(1) | other(_) => 0 end;
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        literal.contains("implicit argument 'ok' of 'needs_zero' was not inferred")
+            && literal.contains(
+                "this arm is never taken: its case has type Tag(0) and its scrutinee has type Tag(1)"
+            )
+            && literal.contains("the arm may be left out"),
+        "{literal}"
+    );
+
+    let variable = error(
+        r#"
+        use /std/{Nat, Eq};
+        induct Two: (a: Nat, b: Nat) -> Type
+        | mk(): (0, 1)
+        end
+        let f(n: Nat, h: Eq()(n, 7), x: Two(n, n)) -> Eq()(n, 7) = match x | mk() => h end;
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        variable.contains(
+            "this arm is never taken: its case has type Two(0, 1) and its scrutinee has type Two(n, n)"
+        ) && variable.contains("the arm may be left out"),
+        "{variable}"
+    );
+}

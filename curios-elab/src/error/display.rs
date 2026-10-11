@@ -7,8 +7,8 @@ mod tests;
 
 use {
     super::{
-        BinderSite, Callee, CycleMember, Declined, Erased, Error, GoalReport, ShapeDiagnosis,
-        Underivable, Watched,
+        BinderSite, Callee, CycleMember, DeadArm, Declined, Erased, Error, GoalReport,
+        ShapeDiagnosis, Underivable, Watched,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_algebra::BOOL_ATOM_CAP,
@@ -21,18 +21,24 @@ use {
     std::{collections::HashMap, fmt, rc::Rc},
 };
 
-/// The line a report on a dead arm adds: that the arm is never taken, and the guard and case that say so — the arm's own guard, or where `enclosing`, the guard of an arm around it that the arm's case contradicts.
-pub(super) fn unreachable_arm_note(
-    guard: &Term,
-    case: &Term,
-    enclosing: bool,
-    spelling: &Rc<Spelling>,
-) -> String {
-    let guard = guard.spelled(spelling);
-    let case = case.spelled(spelling);
-    match enclosing {
-        false => format!("  this arm is never taken: its guard {guard} is always {case}"),
-        true => format!("  this arm is never taken: in it the guard {guard} is always {case}"),
+/// What a report on a dead arm adds: that the arm is never taken and what says so — its own guard, the guard of an arm around it that its case contradicts, or its scrutinee's indices, which also say it may be left out.
+pub(super) fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> String {
+    match dead {
+        DeadArm::Guard { guard, case } => format!(
+            "  this arm is never taken: its guard {} is always {}",
+            guard.spelled(spelling),
+            case.spelled(spelling),
+        ),
+        DeadArm::EnclosingGuard { guard, case } => format!(
+            "  this arm is never taken: in it the guard {} is always {}",
+            guard.spelled(spelling),
+            case.spelled(spelling),
+        ),
+        DeadArm::Indices { case, scrutinee } => format!(
+            "  this arm is never taken: its case has type {} and its scrutinee has type {}\n  the arm may be left out",
+            case.spelled(spelling),
+            scrutinee.spelled(spelling),
+        ),
     }
 }
 
@@ -1481,18 +1487,9 @@ impl fmt::Display for Displayed<'_> {
             Error::Located { error, .. } | Error::InScope { error, .. } => {
                 Displayed(error, Rc::clone(spelling), anchors).fmt(f)
             }
-            Error::InUnreachableArm {
-                guard,
-                case,
-                enclosing,
-                error,
-            } => {
+            Error::InUnreachableArm { dead, error } => {
                 Displayed(error, Rc::clone(spelling), anchors).fmt(f)?;
-                write!(
-                    f,
-                    "\n{}",
-                    unreachable_arm_note(guard, case, *enclosing, spelling)
-                )
+                write!(f, "\n{}", unreachable_arm_note(dead, spelling))
             }
             Error::Batch(errors) => {
                 // Every member's own rendering, separated by a blank line as a goal batch's entries are. Nothing is added around them: each member carries its own declaration and location.

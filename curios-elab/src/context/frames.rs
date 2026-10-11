@@ -6,7 +6,7 @@
 
 use {
     super::{Defined, InScope, SharedSpine, SharedTelescope},
-    crate::UniverseStateToken,
+    crate::{DeadArm, UniverseStateToken},
     curios_core::{
         DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
         project_erased_universes,
@@ -169,6 +169,8 @@ pub(crate) struct FrozenFrame {
     pub(crate) assumptions: Vec<(Free, Term)>,
     pub(crate) definitions: Vec<(Free, DefEntry)>,
     pub(crate) refinements: Refinements,
+    /// Why the innermost arm around the problem is never taken, where its indices rule one out ([`Frames::dead_arm`]): a retry mints under the reason its origin stood under.
+    pub(crate) dead_arm: Option<Rc<DeadArm>>,
     /// The `use`-plicity binders in scope at park time (a subset of `assumptions`, in the same binding order). Witness resolution scans these; a retry must see the same instance scope its origin saw.
     pub(crate) witness_binders: Vec<(Free, Term)>,
 }
@@ -271,6 +273,8 @@ pub(crate) struct Frames<'s> {
     ///
     /// The other face of [`Frames::suppress_refinements_below`], and the one the kernel has. A refinement key's *reduced* spelling must rest only on equations that outlive it, which are the frames outside its own: an inner arm's equation retracts first, and the entry's own frame is the equation itself, which a reduction of the key would otherwise meet at its first probe and answer with the case value it is assuming. `curios-cert`'s `Scope::hide_refinements_from` withholds the same span for the same two reasons.
     withhold_refinements_from: Option<usize>,
+    /// Why each frame's arm is never taken, where the frame is an arm its scrutinee's indices rule out — `None` for every other frame. The reason is known where the arm opens, and an implicit bound nothing discharges under it is reported once the arm has closed, so it is kept here for the metavariable born there to take ([`Frames::dead_arm`]).
+    dead_arms: Vec<Option<Rc<DeadArm>>>,
     /// The frame a retry runs in, while one runs — `None` otherwise.
     ///
     /// Every local frame below it is the live context the retry happens to be scheduled inside, which the parked problem never saw: it is hidden from assumptions, the local list, the witness scope and refinements, so the problem is decided in exactly the context it froze and nothing else. Definitions stay visible, because names are unique mints and a definition never changes — a live definition *is* the frozen one.
@@ -303,6 +307,7 @@ impl<'s> Frames<'s> {
             scrutinee_spellings: vec![HashMap::new()],
             suppress_refinements_below: None,
             withhold_refinements_from: None,
+            dead_arms: vec![None],
             retry_floor: None,
             local: Vec::new(),
             local_marks: Vec::new(),
@@ -336,6 +341,7 @@ impl<'s> Frames<'s> {
         self.refinement_projections.push(Recorded::new());
         self.refinement_scrutinees.push(Recorded::new());
         self.scrutinee_spellings.push(HashMap::new());
+        self.dead_arms.push(None);
         self.local_marks.push(self.local.len());
         self.witness_marks.push(self.witness_scope.len());
     }
@@ -351,6 +357,7 @@ impl<'s> Frames<'s> {
         let refinement_projections = self.refinement_projections.pop().unwrap();
         let refinement_scrutinees = self.refinement_scrutinees.pop().unwrap();
         self.scrutinee_spellings.pop().unwrap();
+        self.dead_arms.pop().unwrap();
         self.local.truncate(self.local_marks.pop().unwrap());
         self.witness_scope
             .truncate(self.witness_marks.pop().unwrap());
@@ -361,6 +368,18 @@ impl<'s> Frames<'s> {
                 || !refinement_scrutinees.is_empty(),
             !definitions.is_empty(),
         )
+    }
+
+    /// Say that the frame being elaborated is an arm that is never taken, for `dead`. The reason leaves with the frame.
+    pub(crate) fn rule_out(&mut self, dead: Rc<DeadArm>) {
+        *self.dead_arms.last_mut().expect("the base frame stands") = Some(dead);
+    }
+
+    /// Why the innermost arm around what is being elaborated is never taken, where its indices rule one out: read among the frames a retry sees, as the refinements are, so a parked problem's retry reads its own and not that of an arm it happens to run inside.
+    pub(crate) fn dead_arm(&self) -> Option<&Rc<DeadArm>> {
+        let from = self.retry_floor.unwrap_or(1);
+
+        self.dead_arms[from..].iter().rev().flatten().next()
     }
 
     /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases), so a binder carries no runtime-multiplicity mark.
@@ -1079,6 +1098,7 @@ impl<'s> Frames<'s> {
                 projections: flatten_recorded(&self.refinement_projections[from..]),
                 scrutinees: flatten_recorded(&self.refinement_scrutinees[from..]),
             },
+            dead_arm: self.dead_arm().cloned(),
             witness_binders: self.witness_scope[self.visible_witness_start()..].to_vec(),
         }
     }

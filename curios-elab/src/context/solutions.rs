@@ -4,7 +4,7 @@
 
 use {
     super::{FrozenFrame, SharedRefinements, SharedTelescope},
-    crate::{Mode, Problem, Refusal},
+    crate::{DeadArm, Mode, Problem, Refusal},
     curios_core::{
         Bound, Field, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term,
         WitnessOrigin,
@@ -34,6 +34,8 @@ pub(crate) struct MetaEntry {
     pub reduct: Option<Term>,
     /// Why the procedure that proves a bound from the facts in scope proved nothing, the last time it was asked: the facts it considered and what its search concluded, which the unsolved report states beside the bound and cannot ask for itself.
     pub refusal: Option<Rc<Refusal>>,
+    /// Why the arm an omitted implicit was minted in is never taken, where its scrutinee's indices rule it out: the report an unsolved one becomes is made once the arm has closed, and says so by this.
+    pub dead_arm: Option<Rc<DeadArm>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -199,6 +201,7 @@ impl Solutions {
             proposition: false,
             reduct: None,
             refusal: None,
+            dead_arm: None,
         });
     }
 
@@ -220,6 +223,13 @@ impl Solutions {
     pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.refusal = Some(Rc::new(refusal));
+        }
+    }
+
+    /// Record why the arm `id` was minted in is never taken, for the report the hole becomes.
+    pub(crate) fn note_dead_arm(&mut self, id: MetavarId, dead: Rc<DeadArm>) {
+        if let Some(Some(entry)) = self.entries.get_mut(id.0) {
+            entry.dead_arm = Some(dead);
         }
     }
 

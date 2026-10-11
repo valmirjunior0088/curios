@@ -47,7 +47,7 @@ The first two are known before the arm is typed and cost nothing. The third cost
 
 **A spent budget is never excused, and a fold is never asked.** A refusal for the budget propagates from the arm and from the reduction that would excuse it. Every arm of a fold is typed, a value of either case taking its identity arm in the end.
 
-**The elaborator types an arm a reader wrote.** It has to elaborate one to emit it, so a proof written in a dead arm is refused where it is written, with the note it gets today. That note and the kernel's rule read one predicate of the shared layer, and the note is given for an arm the indices rule out as well, which today is told to supply a proof of `False` ([findings](../tools/000-findings.md)).
+**The elaborator types an arm a reader wrote.** It has to elaborate one to emit it, so a proof written in a dead arm is refused where it is written, with the note it gets today. That note and the kernel's rule read one predicate of the shared layer, and the note is given for an arm the indices rule out as well, with the two types that clash and the word that the arm may be left out.
 
 **`at` reads the scrutinee and the goal with their solved metavariables substituted**, so the occurrences an arm specializes are the ones the two terms hold, whichever was solved first.
 
