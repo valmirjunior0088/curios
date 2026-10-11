@@ -31,6 +31,15 @@ pub(super) struct Lowerer<'a> {
     layout: Layout<'a>,
 }
 
+/// Where a `let` stands in its block: the value it binds, and what follows it — the statements after it, the terminator closing the block and the continuation the block delivers to. What a binding becomes is read off all four together: one nothing follows but its own return delivers straight to the target, and every other opens a continuation for the rest.
+#[derive(Clone, Copy)]
+struct Site<'a> {
+    result: ValueId,
+    rest: &'a [StatementId],
+    terminator: &'a Terminator,
+    target: curios_cont::ContinuationId,
+}
+
 impl<'a> Lowerer<'a> {
     /// Open a lowering over a verified arena module: the two analyses it consults are taken once here, because the module does not change while it runs.
     pub(super) fn new(source: &'a Module) -> Self {
@@ -115,9 +124,15 @@ impl Lowerer<'_> {
             .expect("live statement")
             .clone();
         match statement {
-            Statement::Let { result, rhs } => {
-                self.lower_let(result, &rhs, rest, terminator, target)
-            }
+            Statement::Let { result, rhs } => self.lower_let(
+                &rhs,
+                Site {
+                    result,
+                    rest,
+                    terminator,
+                    target,
+                },
+            ),
             Statement::Functions { functions } => {
                 let functions = self.lower_function_group(&functions);
                 let body = self.lower_statements(rest, terminator, target);
@@ -445,14 +460,13 @@ impl Lowerer<'_> {
         body
     }
 
-    fn lower_let(
-        &mut self,
-        result: ValueId,
-        rhs: &Rhs,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
-    ) -> curios_cont::NodeId {
+    fn lower_let(&mut self, rhs: &Rhs, site: Site<'_>) -> curios_cont::NodeId {
+        let Site {
+            result,
+            rest,
+            terminator,
+            target,
+        } = site;
         match rhs {
             // Aliasing binds an already-computed atom: record the mapping and continue; no Cont node is needed.
             Rhs::Alias(atom) => {
@@ -463,7 +477,7 @@ impl Lowerer<'_> {
             Rhs::Operation {
                 operation,
                 operands,
-            } => self.lower_operation(result, *operation, operands, rest, terminator, target),
+            } => self.lower_operation(*operation, operands, site),
             Rhs::Sequence {
                 operation,
                 operands,
@@ -473,22 +487,18 @@ impl Lowerer<'_> {
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
                 if let SequenceOp::ListBuild = operation {
-                    return self.straight(result, rest, terminator, target, move |bound, next| {
-                        curios_cont::Node::LetValue {
-                            result: bound,
-                            value: curios_cont::ValueExpr::List(args),
-                            next,
-                        }
+                    return self.straight(site, move |bound, next| curios_cont::Node::LetValue {
+                        result: bound,
+                        value: curios_cont::ValueExpr::List(args),
+                        next,
                     });
                 }
                 let op = sequence_intrinsic(*operation, args.len());
-                self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::Node::LetIntrinsic {
-                        result: bound,
-                        op,
-                        args,
-                        next,
-                    }
+                self.straight(site, move |bound, next| curios_cont::Node::LetIntrinsic {
+                    result: bound,
+                    op,
+                    args,
+                    next,
                 })
             }
             Rhs::Apply { callee, arguments } => {
@@ -497,12 +507,10 @@ impl Lowerer<'_> {
                     .iter()
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
-                self.split(result, 1, rest, terminator, target, |return_to| {
-                    curios_cont::Node::ApplyFun {
-                        callee,
-                        args,
-                        return_to,
-                    }
+                self.split(1, site, |return_to| curios_cont::Node::ApplyFun {
+                    callee,
+                    args,
+                    return_to,
                 })
             }
             Rhs::Product { schema, fields } => {
@@ -571,12 +579,10 @@ impl Lowerer<'_> {
                     let value =
                         self.layout
                             .constructor_row(&mut self.emitter.module, *constructor, atoms);
-                    self.straight(result, rest, terminator, target, |result, next| {
-                        curios_cont::Node::LetValue {
-                            result,
-                            value,
-                            next,
-                        }
+                    self.straight(site, |result, next| curios_cont::Node::LetValue {
+                        result,
+                        value,
+                        next,
                     })
                 };
                 self.emitter.wrap_settles(settles, node)
@@ -596,13 +602,11 @@ impl Lowerer<'_> {
                     ),
                 };
                 let product = self.emitter.lower_atom(*product);
-                self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::Node::LetIntrinsic {
-                        result: bound,
-                        op,
-                        args: vec![product],
-                        next,
-                    }
+                self.straight(site, move |bound, next| curios_cont::Node::LetIntrinsic {
+                    result: bound,
+                    op,
+                    args: vec![product],
+                    next,
                 })
             }
             Rhs::MatchVariant {
@@ -610,24 +614,14 @@ impl Lowerer<'_> {
                 scrutinee,
                 arms,
                 default,
-            } => self.lower_match_variant(
-                *family, result, *scrutinee, arms, *default, rest, terminator, target,
-            ),
+            } => self.lower_match_variant(*family, *scrutinee, arms, *default, site),
             Rhs::SwitchBool {
                 scrutinee,
                 if_false,
                 if_true,
             } => {
                 let scrutinee = self.emitter.lower_atom(*scrutinee);
-                self.lower_switch(
-                    result,
-                    scrutinee,
-                    vec![(0, *if_false), (1, *if_true)],
-                    None,
-                    rest,
-                    terminator,
-                    target,
-                )
+                self.lower_switch(scrutinee, vec![(0, *if_false), (1, *if_true)], None, site)
             }
             Rhs::SwitchNat {
                 scrutinee,
@@ -636,37 +630,25 @@ impl Lowerer<'_> {
             } => {
                 let scrutinee = self.emitter.lower_atom(*scrutinee);
                 let arms = cases.iter().map(|case| (case.key, case.block)).collect();
-                self.lower_switch(
-                    result,
-                    scrutinee,
-                    arms,
-                    Some(*default),
-                    rest,
-                    terminator,
-                    target,
-                )
+                self.lower_switch(scrutinee, arms, Some(*default), site)
             }
             Rhs::FoldNat {
                 scrutinee,
                 zero,
                 step,
-            } => self.lower_fold_nat(result, *scrutinee, *zero, step, rest, terminator, target),
+            } => self.lower_fold_nat(*scrutinee, *zero, step, site),
             Rhs::FoldSequence {
                 grain,
                 scrutinee,
                 empty,
                 step,
-            } => self.lower_fold_sequence(
-                result, *grain, *scrutinee, *empty, step, rest, terminator, target,
-            ),
+            } => self.lower_fold_sequence(*grain, *scrutinee, *empty, step, site),
             Rhs::UnconsSequence {
                 grain,
                 scrutinee,
                 empty,
                 cons,
-            } => self.lower_uncons_sequence(
-                result, *grain, *scrutinee, *empty, cons, rest, terminator, target,
-            ),
+            } => self.lower_uncons_sequence(*grain, *scrutinee, *empty, cons, site),
             Rhs::Cell {
                 operation,
                 operands,
@@ -677,7 +659,7 @@ impl Lowerer<'_> {
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
                 if let CellOperation::Poll { some, none } = operation {
-                    let (join, fresh) = self.open_join(result, rest, terminator, target);
+                    let (join, fresh) = self.open_join(site);
                     return self.lower_outcome(
                         join,
                         fresh,
@@ -690,18 +672,13 @@ impl Lowerer<'_> {
                         },
                     );
                 }
-                self.split(
-                    result,
-                    op.result_arity(),
-                    rest,
-                    terminator,
-                    target,
-                    |return_to| curios_cont::Node::Cell {
+                self.split(op.result_arity(), site, |return_to| {
+                    curios_cont::Node::Cell {
                         op,
                         args,
                         return_to,
-                    },
-                )
+                    }
+                })
             }
             Rhs::Channel {
                 operation,
@@ -732,7 +709,7 @@ impl Lowerer<'_> {
                     _ => Vec::new(),
                 };
                 if !outcomes.is_empty() {
-                    let (join, fresh) = self.open_join(result, rest, terminator, target);
+                    let (join, fresh) = self.open_join(site);
                     self.lower_outcome(join, fresh, op.result_arity(), &outcomes, |return_to| {
                         curios_cont::Node::Channel {
                             op,
@@ -741,18 +718,13 @@ impl Lowerer<'_> {
                         }
                     })
                 } else {
-                    self.split(
-                        result,
-                        op.result_arity(),
-                        rest,
-                        terminator,
-                        target,
-                        |return_to| curios_cont::Node::Channel {
+                    self.split(op.result_arity(), site, |return_to| {
+                        curios_cont::Node::Channel {
                             op,
                             args,
                             return_to,
-                        },
-                    )
+                        }
+                    })
                 }
             }
             Rhs::Foreign { foreign, operands } => {
@@ -765,7 +737,7 @@ impl Lowerer<'_> {
                     .iter()
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
-                self.lower_foreign(result, function, args, rest, terminator, target)
+                self.lower_foreign(function, args, site)
             }
             Rhs::Intrinsic {
                 intrinsic,
@@ -779,12 +751,10 @@ impl Lowerer<'_> {
                     .iter()
                     .map(|&operand| self.emitter.lower_atom(operand))
                     .collect();
-                self.split(result, 1, rest, terminator, target, |return_to| {
-                    curios_cont::Node::Intrinsic {
-                        op,
-                        args,
-                        return_to,
-                    }
+                self.split(1, site, |return_to| curios_cont::Node::Intrinsic {
+                    op,
+                    args,
+                    return_to,
                 })
             }
         }
@@ -793,13 +763,16 @@ impl Lowerer<'_> {
     /// Lower a scalar operation to a straight-line `LetIntrinsic`. `Byte` and `Nat` share the runtime carrier, so `ByteToNat` is the identity and `NatToByte` masks to a byte.
     fn lower_operation(
         &mut self,
-        result: ValueId,
         operation: Operation,
         operands: &[Atom],
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
     ) -> curios_cont::NodeId {
+        let Site {
+            result,
+            rest,
+            terminator,
+            target,
+        } = site;
         match operation {
             Operation::ByteToNat => {
                 let atom = self.emitter.lower_atom(operands[0]);
@@ -808,18 +781,16 @@ impl Lowerer<'_> {
             }
             Operation::NatToByte => {
                 let value = self.emitter.lower_atom(operands[0]);
-                self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::Node::LetIntrinsic {
-                        result: bound,
-                        op: curios_cont::Intrinsic::NatAnd,
-                        args: vec![
-                            value,
-                            curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(
-                                0xFFu32,
-                            ))),
-                        ],
-                        next,
-                    }
+                self.straight(site, move |bound, next| curios_cont::Node::LetIntrinsic {
+                    result: bound,
+                    op: curios_cont::Intrinsic::NatAnd,
+                    args: vec![
+                        value,
+                        curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(
+                            0xFFu32,
+                        ))),
+                    ],
+                    next,
                 })
             }
             _ => {
@@ -828,13 +799,11 @@ impl Lowerer<'_> {
                     .iter()
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
-                self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::Node::LetIntrinsic {
-                        result: bound,
-                        op,
-                        args,
-                        next,
-                    }
+                self.straight(site, move |bound, next| curios_cont::Node::LetIntrinsic {
+                    result: bound,
+                    op,
+                    args,
+                    next,
                 })
             }
         }
@@ -843,30 +812,30 @@ impl Lowerer<'_> {
     // === Control splits ==================================================
 
     /// Open a join continuation that receives a control split's single result and runs the rest of the block; every arm delivers to it. A split in tail position — the block's last statement, whose result the block returns — delivers straight to the block's own target instead: no administrative join means a self-call in an arm returns to the function's return continuation and is genuinely tail, which is what lets Cont contify the recursion into a loop (a bodyless return continuation is not a forwarding target, so an eta join there would never collapse).
-    fn open_join(
-        &mut self,
-        result: ValueId,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
-    ) -> (curios_cont::ContinuationId, bool) {
+    fn open_join(&mut self, site: Site<'_>) -> (curios_cont::ContinuationId, bool) {
+        let Site {
+            result,
+            rest,
+            terminator,
+            target,
+        } = site;
         if rest.is_empty()
             && matches!(terminator, Terminator::Return(Atom::Value(returned)) if *returned == result)
         {
             return (target, false);
         }
-        let join = self.open_join_fresh(result, rest, terminator, target);
+        let join = self.open_join_fresh(site);
         (join, true)
     }
 
     /// Open a join unconditionally — the fold loops route their exit through a `Switch` *edge*, and a bodyless return continuation cannot be a switch target, so they never take the tail bypass.
-    fn open_join_fresh(
-        &mut self,
-        result: ValueId,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
-    ) -> curios_cont::ContinuationId {
+    fn open_join_fresh(&mut self, site: Site<'_>) -> curios_cont::ContinuationId {
+        let Site {
+            result,
+            rest,
+            terminator,
+            target,
+        } = site;
         let join = self.emitter.module.reserve_continuation();
         let parameter = self.emitter.bind_value(result);
         let body = self.lower_statements(rest, terminator, target);
@@ -903,18 +872,14 @@ impl Lowerer<'_> {
     /// Lower a scalar switch: each `(key, block)` arm and the optional default becomes a parameterless continuation into the join, selected by one `Switch`.
     ///
     /// A `Switch` reads its scrutinee as a machine word, and a `Nat` narrows to one exactly only below the i31, saturating past it — so a key the i31 does not hold is not a table slot at all. Each such key is decided by an equality test on the default path instead, in key order, which leaves the table indexing only words and the saturated value matching no key.
-    #[allow(clippy::too_many_arguments)]
     fn lower_switch(
         &mut self,
-        result: ValueId,
         scrutinee: curios_cont::Atom,
         arms: Vec<(u32, BlockId)>,
         default: Option<BlockId>,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
     ) -> curios_cont::NodeId {
-        let (join, fresh) = self.open_join(result, rest, terminator, target);
+        let (join, fresh) = self.open_join(site);
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
         let mut cases = BTreeMap::new();
         let mut tested = Vec::new();
@@ -1006,23 +971,19 @@ impl Lowerer<'_> {
     }
 
     /// Lower a variant match: the tag (`RowGet(row, 0)`) selects an arm through a `Switch`; each arm binds its payload from the slots its constructor's fields occupy and delivers to the join. A [`FamilyEncoding::Collapsed`] family has nothing to decide — its single arm (or the default, when the arm is absent) runs unconditionally, inline rather than behind a dispatch.
-    #[allow(clippy::too_many_arguments)]
     fn lower_match_variant(
         &mut self,
         family: FamilyId,
-        result: ValueId,
         scrutinee: Atom,
         arms: &[VariantArm],
         default: Option<BlockId>,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
     ) -> curios_cont::NodeId {
         let scrutinee = self.emitter.lower_atom(scrutinee);
 
         match self.layout.family_encoding(family) {
             FamilyEncoding::Collapsed => {
-                let (join, fresh) = self.open_join(result, rest, terminator, target);
+                let (join, fresh) = self.open_join(site);
                 let body = match arms.first() {
                     Some(arm) => self.lower_collapsed_arm(arm, scrutinee, join),
                     None => {
@@ -1042,20 +1003,17 @@ impl Lowerer<'_> {
                 return self.lower_immediate_match(
                     family,
                     constructor,
-                    result,
                     scrutinee,
                     arms,
                     default,
-                    rest,
-                    terminator,
-                    target,
+                    site,
                 );
             }
             FamilyEncoding::Tagged => {}
         }
 
         let identity = self.layout.row_identity(&mut self.emitter.module, family);
-        let (join, fresh) = self.open_join(result, rest, terminator, target);
+        let (join, fresh) = self.open_join(site);
 
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
         let mut cases = BTreeMap::new();
@@ -1101,20 +1059,16 @@ impl Lowerer<'_> {
     }
 
     /// Lower a match on a [`FamilyEncoding::Immediate`] family: an `IsImmediate` test splits immediate from struct. The immediate side is the bare-payload arm with its binder aliased to the scrutinee; the boxed side keeps the ordinary tagged dispatch minus the immediate case — elided entirely when the family has exactly one boxed constructor, since the test already decided everything.
-    #[allow(clippy::too_many_arguments)]
     fn lower_immediate_match(
         &mut self,
         family: FamilyId,
         immediate: ConstructorId,
-        result: ValueId,
         scrutinee: curios_cont::Atom,
         arms: &[VariantArm],
         default: Option<BlockId>,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
     ) -> curios_cont::NodeId {
-        let (join, fresh) = self.open_join(result, rest, terminator, target);
+        let (join, fresh) = self.open_join(site);
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
 
         let default_cont = default.map(|block| {
@@ -1349,19 +1303,15 @@ impl Lowerer<'_> {
     // === Folds ===========================================================
 
     /// Lower a `Nat` induction to an up-counting loop `i = 0 … n` threading the accumulator: the zero block seeds it, and at each step the arena predecessor/hypothesis binders are the loop index and accumulator.
-    #[allow(clippy::too_many_arguments)]
     fn lower_fold_nat(
         &mut self,
-        result: ValueId,
         scrutinee: Atom,
         zero: BlockId,
         step: &FoldNatStep,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
     ) -> curios_cont::NodeId {
         let head = self.emitter.lower_atom(scrutinee);
-        let join = self.open_join_fresh(result, rest, terminator, target);
+        let join = self.open_join_fresh(site);
 
         let loop_index = self.emitter.module.add_value(None);
         let loop_acc = self.emitter.module.add_value(None);
@@ -1484,20 +1434,16 @@ impl Lowerer<'_> {
     /// Lower a sequence case split to a length dispatch over one peel: zero takes the empty block, anything else peels the head and the suffix after it.
     ///
     /// The reads land *inside* the non-empty arm. Beside the dispatch they would run on the empty sequence too, where both are out of range — a trap where the program has an answer.
-    #[allow(clippy::too_many_arguments)]
     fn lower_uncons_sequence(
         &mut self,
-        result: ValueId,
         grain: SequenceGrain,
         scrutinee: Atom,
         empty: BlockId,
         cons: &UnconsSequenceStep,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
     ) -> curios_cont::NodeId {
         let sequence = self.emitter.lower_atom(scrutinee);
-        let (join, fresh) = self.open_join(result, rest, terminator, target);
+        let (join, fresh) = self.open_join(site);
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
 
         let length = self.emitter.module.add_value(None);
@@ -1564,20 +1510,16 @@ impl Lowerer<'_> {
     }
 
     /// Lower a sequence right fold to a backward loop `i = len … 0`: the empty block seeds the accumulator; each step reads `seq[i - 1]` and the suffix `seq[i ..]` and folds it in.
-    #[allow(clippy::too_many_arguments)]
     fn lower_fold_sequence(
         &mut self,
-        result: ValueId,
         grain: SequenceGrain,
         scrutinee: Atom,
         empty: BlockId,
         step: &FoldSequenceStep,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
     ) -> curios_cont::NodeId {
         let sequence = self.emitter.lower_atom(scrutinee);
-        let join = self.open_join_fresh(result, rest, terminator, target);
+        let join = self.open_join_fresh(site);
 
         let length = self.emitter.module.add_value(None);
         let loop_index = self.emitter.module.add_value(None);
@@ -1729,13 +1671,16 @@ impl Lowerer<'_> {
     /// The continuation is named after the operation it resumes from, read off the node `make` builds rather than passed in: where a call returns to and where an eliminator's arms converge are different things, and calling both of them `join` would leave most of the hints in a dump saying the wrong one.
     fn split(
         &mut self,
-        result: ValueId,
         result_arity: usize,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
         make: impl FnOnce(curios_cont::ContinuationId) -> curios_cont::Node,
     ) -> curios_cont::NodeId {
+        let Site {
+            result,
+            rest,
+            terminator,
+            target,
+        } = site;
         // The same tail bypass as `open_join`: a single-result split whose value the block immediately returns delivers to the block's target.
         if result_arity == 1
             && rest.is_empty()
@@ -1854,21 +1799,22 @@ impl Lowerer<'_> {
     /// Lower a host call. A single-result foreign returns straight to the block's join; a multi-result foreign returns to a resume continuation that packs the results into the record tuple the consuming code projects through.
     fn lower_foreign(
         &mut self,
-        result: ValueId,
         function: Arc<ForeignFunction>,
         args: Vec<curios_cont::Atom>,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
     ) -> curios_cont::NodeId {
+        let Site {
+            result,
+            rest,
+            terminator,
+            target,
+        } = site;
         let arity = function.signature().returns.arity();
         if arity == 1 {
-            return self.split(result, 1, rest, terminator, target, |return_to| {
-                curios_cont::Node::Foreign {
-                    function,
-                    args,
-                    return_to,
-                }
+            return self.split(1, site, |return_to| curios_cont::Node::Foreign {
+                function,
+                args,
+                return_to,
             });
         }
 
@@ -1916,12 +1862,15 @@ impl Lowerer<'_> {
     /// Bind a straight-line result: allocate its Cont value, lower the rest of the block, and emit the node `make` builds in front of it.
     fn straight(
         &mut self,
-        result: ValueId,
-        rest: &[StatementId],
-        terminator: &Terminator,
-        target: curios_cont::ContinuationId,
+        site: Site<'_>,
         make: impl FnOnce(curios_cont::ValueId, curios_cont::NodeId) -> curios_cont::Node,
     ) -> curios_cont::NodeId {
+        let Site {
+            result,
+            rest,
+            terminator,
+            target,
+        } = site;
         let bound = self.emitter.bind_value(result);
         let next = self.lower_statements(rest, terminator, target);
         self.emitter.module.add_node(make(bound, next))
