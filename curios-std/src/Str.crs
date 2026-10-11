@@ -94,29 +94,15 @@ let scalars(min: Nat, max: Nat) -> Bool =
 
 --- Whether a character in flight can only end at a scalar value: `rem` continuation bytes still owed, the next between `lo` and `hi` and any after it between `0x80` and `0xBF`, over the bits `partial` has gathered so far.
 ---
---- The range is stated per remaining count at literal weights — each continuation byte shifts what came before by six bits. No count past three begins a character, so those are refused along with zero.
+--- The range is stated once over the bytes owed past the next: each shifts what came before by six bits, a power of `0x40`, and leaves its own six bits free. No count past three begins a character, so those are refused along with zero.
 let pending(rem: Nat, lo: Nat, hi: Nat, partial: Nat) -> Bool =
     match rem
     | 0 => false
-    | r0 + 1 =>
-        match r0
-        | 0 => scalars(partial * 0x40 + (lo - 0x80), partial * 0x40 + (hi - 0x80))
-        | r1 + 1 =>
-            match r1
-            | 0 =>
-                scalars(
-                    (partial * 0x40 + (lo - 0x80)) * 0x40,
-                    (partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F)
-            | r2 + 1 =>
-                match r2
-                | 0 =>
-                    scalars(
-                        (partial * 0x40 + (lo - 0x80)) * 0x40 * 0x40,
-                        ((partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F)
-                | _ + 1 => false
-                end
-            end
-        end
+    | r + 1 =>
+        r <= 2
+            && scalars(
+                (partial * 0x40 + (lo - 0x80)) * Nat/pow(0x40, r),
+                (partial * 0x40 + (hi - 0x80)) * Nat/pow(0x40, r) + (Nat/pow(0x40, r) - 1))
     end;
 
 --- A range of scalar values narrowed stays one.
