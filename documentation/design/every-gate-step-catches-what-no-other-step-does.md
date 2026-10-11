@@ -1,6 +1,6 @@
 # Every gate step catches what no other step does
 
-**Decision.** The hand-off gate, `cargo xtask gate`, is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated in its row of the step table, `xtask/src/steps.rs`, which is also its help line, and a step added later states its own first. That the steps are one table, and what is read off it, is [`xtask`'s own decision](../../xtask/README.md).
+**Decision.** The hand-off gate, `/run-full-gate` (`.claude/commands/run-full-gate.md`), is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated in its row of the step table, `xtask/src/steps.rs`, which is also its help line, and a step added later states its own first. That the steps are one table, and what is read off it, is [`xtask`'s own decision](../../xtask/README.md).
 
 What a row is too short to say:
 

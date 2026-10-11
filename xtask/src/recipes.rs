@@ -1,21 +1,23 @@
-//! What each step runs, and the four commands that are not steps.
+//! What each step runs, how the steps asked for are run, and the four commands that are not steps.
 //!
-//! [`Step::run`] is an exhaustive match, so a step with a row and nothing to run does not compile. What selects a step is [`main`](crate)'s command line, read off the table in [`steps`](crate::steps).
+//! [`Step::run`] is an exhaustive match, so a step with a row and nothing to run does not compile. What selects a step is [`main`](crate)'s command line, read off the table in [`steps`](crate::steps), and [`perform`] runs what it selected: one after another in the table's order, on the terminal's own streams, each to its end whatever the one before it did, so one run reports every failure rather than the first.
 //!
 //! The vocabulary a step is written in sits beside it: [`places`](crate::places) for where a thing lives, [`commands`](crate::commands) for how a tool is invoked, [`filing`](crate::filing) for how a build product is filed, [`tools`](crate::tools) for what a step needs of a tool cargo does not bring. A command leaves this file when it acquires decisions of its own, as [`installer`](mod@crate::installer) has.
 
 use {
     crate::{
         BIOME, BROWSER_TRIPLE, HOST_TRIPLE, Step, Tree, artifact, ask, bindgen_web, built, cargo,
-        file_with_inputs, grammar, inputs, modified, root, run, target_directory, vscode, zed,
+        file_with_inputs, grammar, inputs, modified, root, run, spelled, target_directory, vscode,
+        zed,
     },
+    clap::ValueEnum,
     std::{fs, io::ErrorKind, path::Path, process::Command},
 };
 
 #[cfg(test)]
 mod tests;
 
-/// What a person narrowed an action by. A bare subject and the gate narrow nothing and write nothing: [`Request::whole`].
+/// What a person narrowed an action by. A bare subject narrows nothing and writes nothing: [`Request::whole`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Request {
     /// Whether a format step writes nothing and fails where a file would change.
@@ -27,7 +29,7 @@ pub(crate) struct Request {
 }
 
 impl Request {
-    /// Nothing narrowed, formatting as a check: what a bare subject and the gate ask of every step.
+    /// Nothing narrowed, formatting as a check: what a bare subject asks of every step.
     pub(crate) fn whole() -> Self {
         Self {
             check: true,
@@ -51,6 +53,71 @@ impl Request {
             filter,
             ..Self::whole()
         }
+    }
+}
+
+/// The base a step's path condition is read against: local `main`, which is where a branch started.
+const BASE: &str = "main";
+
+/// `asked` with every step they are run with first, in the table's order and each once.
+pub(crate) fn closed(asked: &[Step]) -> Vec<Step> {
+    let mut wanted = asked.to_vec();
+    let mut next = 0;
+    while next < wanted.len() {
+        for ensured in wanted[next].row().ensures {
+            if !wanted.contains(ensured) {
+                wanted.push(*ensured);
+            }
+        }
+        next += 1;
+    }
+
+    Step::value_variants()
+        .iter()
+        .copied()
+        .filter(|step| wanted.contains(step))
+        .collect()
+}
+
+/// Why `step` is not to run, where its row's condition says so: nothing it reads differs between [`BASE`] and the working tree. A base that is no revision here spares it too, and says so: a shallow checkout holds nothing to compare with, and the step such a condition guards is one too costly to run on a guess.
+fn spared(step: Step) -> Option<String> {
+    let read = step.row().when?;
+    let mut git = Command::new("git");
+    git.args(["diff", "--name-only", BASE]);
+
+    match ask(git, &[]) {
+        Ok(changed) if changed.lines().any(|path| read.contains(&path)) => None,
+        Ok(_) => Some(format!("nothing it reads changed since {BASE}")),
+        Err(_) => Some(format!(
+            "`{BASE}` is no revision here to compare the working tree with"
+        )),
+    }
+}
+
+/// Run `asked` and what they are run with first, as `request` narrows them. A step a path condition holds back is skipped, and said to be; one lacking a tool it needs is refused with what installs it.
+pub(crate) fn perform(asked: &[Step], request: &Request) -> Result<(), String> {
+    let mut failed = Vec::new();
+
+    for step in closed(asked) {
+        if let Some(reason) = spared(step) {
+            eprintln!("skipped {}: {reason}", spelled(step));
+            continue;
+        }
+
+        let unready = step.row().needs.iter().find_map(|tool| tool.ready().err());
+        let outcome = match unready {
+            Some(refusal) => Err(refusal),
+            None => step.run(request),
+        };
+        if let Err(message) = outcome {
+            eprintln!("{message}");
+            failed.push(spelled(step));
+        }
+    }
+
+    match failed.is_empty() {
+        true => Ok(()),
+        false => Err(format!("failed: {}", failed.join(", "))),
     }
 }
 
@@ -255,7 +322,7 @@ fn bundle_build() -> Result<(), String> {
     )
 }
 
-/// The one spelling of the rustdoc build: the gate's, the check workflow's and the release's, so a broken intra-doc link fails all three the same way. It documents every feature, so an item only a feature compiles has its links read too, and keeps going past a crate that fails, so one run reports every crate's broken links rather than stopping at the first. Private items are documented because these crates state their invariants on `pub(crate)` items, and the root redirect is what makes the tree a site: `target/doc/` has no landing page of its own.
+/// The one spelling of the rustdoc build: a contributor's, the check workflow's and the release's, so a broken intra-doc link fails all three the same way. It documents every feature, so an item only a feature compiles has its links read too, and keeps going past a crate that fails, so one run reports every crate's broken links rather than stopping at the first. Private items are documented because these crates state their invariants on `pub(crate)` items, and the root redirect is what makes the tree a site: `target/doc/` has no landing page of its own.
 fn docs_build() -> Result<(), String> {
     cargo(&[
         "doc",

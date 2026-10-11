@@ -58,12 +58,12 @@ fn every_subject_is_a_subcommand() {
     }
 }
 
-/// A step runs after steps the table holds before it, so the table's order is one the gate can follow and no two steps wait on each other.
+/// What a step is run with first stands before it in the table, so the table's order is one a run can follow.
 #[test]
-fn a_step_is_run_after_steps_the_table_holds_before_it() {
+fn a_step_is_run_with_first_what_the_table_holds_before_it() {
     for (place, step) in Step::value_variants().iter().enumerate() {
         let row = step.row();
-        for before in row.ensures.iter().chain(row.after) {
+        for before in row.ensures {
             let earlier = Step::value_variants()
                 .iter()
                 .position(|other| other == before)

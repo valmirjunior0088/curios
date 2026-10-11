@@ -1,8 +1,8 @@
 //! The repository's steps, as `cargo xtask <subject> [action]`.
 //!
-//! **A step is an action on a subject, and the table of them is the one thing authored.** [`steps`] states every step once: what it is about, what it does, what it is run after, what it needs and the one thing only it catches. A subject's actions, a bare subject's sequence, the gate's order and what the check workflow must run are read off that table, so `/run-full-gate`, the workflow and a contributor run one spelling of each step and no two of them can drift.
+//! **A step is an action on a subject, and the table of them is the one thing authored.** [`steps`] states every step once: what it is about, what it does, what it is run after, what it needs and the one thing only it catches. A subject's actions, a bare subject's sequence and what the check workflow must run are read off that table, so `/run-full-gate`, the workflow and a contributor run one spelling of each step and no two of them can drift.
 //!
-//! **A subject comes first, because a person works on one thing.** `cargo xtask vscode` runs everything about the VS Code extension, each step writing a log of its own; `cargo xtask vscode test` runs one action and streams it. An action a subject does not have is the parser's own error. `cargo xtask gate` is every subject.
+//! **A subject comes first, because a person works on one thing.** `cargo xtask vscode` runs everything about the VS Code extension, one step after another, and `cargo xtask vscode test` one action of it. An action a subject does not have is the parser's own error. No command runs every subject: what runs together is for whoever runs them to decide, and `/run-full-gate` states each subject's command.
 //!
 //! **A step is cargo with flags, and whatever cargo does not do.** Every step spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file or generates the browser bindings, where there is such a thing to do. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
 //!
@@ -14,7 +14,7 @@
 //!
 //! **The test runner is a tool a contributor installs.** A test step runs under `cargo-nextest` and refuses before building when it is absent, naming the command that installs it; why nextest is the README's decision.
 //!
-//! **Four commands are not steps.** `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track. None is part of the gate, so none has a row; each keeps the parameters it had.
+//! **Four commands are not steps.** `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track. None is a step, so none has a row; each keeps the parameters it had.
 //!
 //! **A dependency of nothing.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it.
 
@@ -42,9 +42,6 @@ use subjects::*;
 mod recipes;
 use recipes::*;
 
-mod gate;
-use gate::*;
-
 mod installer;
 use installer::*;
 
@@ -55,9 +52,6 @@ use {
     clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum},
     std::{path::PathBuf, process::ExitCode},
 };
-
-/// The base a step's path condition is read against where the gate is not told one: local `main`, which is where a branch started and, on `main` itself, what nothing has changed since.
-const BASE: &str = "main";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -81,26 +75,6 @@ struct Cli {
 enum Asked {
     #[command(flatten)]
     About(About),
-
-    #[command(
-        about = "Run every step, in the order the table derives, each writing target/gate/<step>.log"
-    )]
-    Gate {
-        #[arg(
-            long,
-            value_name = "REVISION",
-            default_value = BASE,
-            help = "The revision a step's path condition is read against"
-        )]
-        base: String,
-    },
-
-    /// One step by its row's name: how the gate starts each step as a process of its own. Hidden, since a person types the subject and the action.
-    #[command(hide = true)]
-    Step {
-        #[arg(value_enum)]
-        step: Step,
-    },
 
     #[command(
         about = "Render the installer script for one release version under xtask/.artifacts/install.sh"
@@ -206,21 +180,21 @@ enum About {
     },
 }
 
-/// The steps a subject's command line asks for: every step about it where it stands bare, and otherwise one action's, with what the person narrowed it by.
-fn selected<A: Asks>(subject: Subject, action: Option<A>) -> (Vec<Step>, Option<Request>) {
+/// The steps a subject's command line asks for: every step about it where it stands bare, formatting as a check, and otherwise one action's, with what the person narrowed it by.
+fn selected<A: Asks>(subject: Subject, action: Option<A>) -> (Vec<Step>, Request) {
     match action {
-        None => (Step::about(subject), None),
+        None => (Step::about(subject), Request::whole()),
         Some(action) => {
             let (action, request) = action.asked();
 
-            (Step::of(subject, action), Some(request))
+            (Step::of(subject, action), request)
         }
     }
 }
 
 impl About {
     /// The steps the command line asks for, and what narrows them where it names an action.
-    fn steps(self) -> (Vec<Step>, Option<Request>) {
+    fn steps(self) -> (Vec<Step>, Request) {
         match self {
             About::Workspace { action } => selected(Subject::Workspace, action),
             About::Instrumented { action } => selected(Subject::Instrumented, action),
@@ -240,10 +214,7 @@ fn described() -> clap::Command {
     let mut command = Cli::command();
 
     for subject in Subject::value_variants() {
-        let about = format!(
-            "{}: every step about it, each writing a log, or one action of it",
-            subject.is()
-        );
+        let about = format!("{}: every step about it, or one action of it", subject.is());
         command = command.mut_subcommand(spelled(*subject), |described| {
             let mut described = described.about(about);
             for action in Action::value_variants() {
@@ -273,14 +244,12 @@ fn main() -> ExitCode {
         .unwrap_or_else(|error| error.exit())
         .asked;
 
-    // A bare subject is many steps, each a process with a log of its own; one action is streamed.
     let outcome = match asked {
-        Asked::About(about) => match about.steps() {
-            (steps, None) => gate(&steps, BASE),
-            (steps, Some(request)) => perform(&steps, &request, BASE),
-        },
-        Asked::Gate { base } => gate(Step::value_variants(), &base),
-        Asked::Step { step } => step.run(&Request::whole()),
+        Asked::About(about) => {
+            let (steps, request) = about.steps();
+
+            perform(&steps, &request)
+        }
         Asked::Installer { version } => installer(&version),
         Asked::Release { bump } => release(bump.as_deref()),
         Asked::Profile {

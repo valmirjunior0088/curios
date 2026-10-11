@@ -1,6 +1,27 @@
-//! What a workspace step hands cargo for a selection.
+//! What a workspace step hands cargo for a selection, and what a run takes on before it starts anything.
 
-use super::*;
+use {super::*, crate::Subject};
+
+#[test]
+fn a_step_brings_what_it_is_run_with_first() {
+    assert_eq!(
+        closed(&[Step::WorkspaceTest]),
+        [Step::LauncherBuild, Step::WorkspaceTest]
+    );
+    assert_eq!(
+        closed(&[Step::BundleTest]),
+        [Step::BundleBuild, Step::BundleTest]
+    );
+}
+
+/// A bare subject is its steps in the table's order, behind what they are run with first and nothing else.
+#[test]
+fn a_bare_subject_brings_no_step_of_another_but_its_prerequisites() {
+    assert_eq!(
+        closed(&Step::about(Subject::Compiler)),
+        [Step::LauncherBuild, Step::CompilerBuild]
+    );
+}
 
 #[test]
 fn no_selection_is_the_whole_workspace() {

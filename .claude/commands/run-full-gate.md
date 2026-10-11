@@ -1,17 +1,38 @@
 ---
-description: Run the hand-off gate — every step of the table, in the order it derives — and report each step's result
+description: Run the hand-off gate — every subject's command, together as the machine allows — and report each step's result
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash(cargo:*), Bash(git:*), Bash(npm:*), Bash(rg:*), Bash(cp:*)
 ---
 
-The hand-off gate for code. Why the gate holds these steps and no others is `documentation/design/every-gate-step-catches-what-no-other-step-does.md`; what the steps are, what each runs after and what each needs is the table's, `xtask/src/steps.rs`, and `cargo xtask --help` prints it.
+The hand-off gate for code. Why the gate holds these steps and no others is `documentation/design/every-gate-step-catches-what-no-other-step-does.md`; what each subject's steps are is the table's, `xtask/src/steps.rs`, and `cargo xtask <subject> --help` prints them.
+
+## What it runs
+
+Every subject, each by its bare command. A bare subject runs its steps one after another, formatting as a check, goes on past a step that fails, and names the ones that failed where it ends.
+
+| Command | Needs beyond cargo |
+| :--- | :--- |
+| `cargo xtask launcher` | |
+| `cargo xtask workspace` | `cargo-nextest`; `npm`, which fetches Biome |
+| `cargo xtask instrumented` | |
+| `cargo xtask docs` | |
+| `cargo xtask compiler` | |
+| `cargo xtask bundle` | the `wasm32-unknown-unknown` target; Node at the version `.node-version` names |
+| `cargo xtask grammar` | `npm` |
+| `cargo xtask vscode` | `npm` |
+| `cargo xtask zed` | the `wasm32-wasip2` target |
+
+A step that lacks a tool refuses before it builds, naming what installs it.
 
 ## How it runs
 
-`cargo xtask gate`, as one tracked background task writing `cargo xtask gate > <scratchpad>/gate.log 2>&1; echo "EXIT=$?" >> <scratchpad>/gate.log`. It starts each step as a process of its own once the steps it runs after have passed, writes each step's output to `target/gate/<step>.log`, and says in its own log how each ended: `passed`, `FAILED`, `REFUSED` for a tool that is missing, `HELD` for a step whose prerequisite did not pass, `skipped` for the one step a path condition holds back. Every step that can run does, so one run reports every failure.
+What runs together is yours to decide, from what the machine is doing and what the change touched. What constrains it, and nothing else does:
 
-The base a path condition reads is the one the user names, passed as `--base <revision>`, and local `main` otherwise — where the effort is committed on `main` itself, the commit it started from. `origin/main` is never the base: it stands where the last push left it.
+- **`launcher` first, by itself.** Every subject that builds the compiler builds the launcher it embeds before anything else, so none has to wait for it; run first, it is built once rather than by each subject started beside it.
+- **`zed` after `grammar`**, since `zed test` hashes `editors/grammar` as it is on disk and `grammar test` regenerates its `src/`.
+- **`workspace` beside nothing that builds the compiler, where `curios-binaryen/build.rs` differs from local `main`.** Its last step then deletes the Binaryen build `instrumented`, `docs` and `compiler` link, and makes it again from source. Otherwise the step says `skipped`. It compares the working tree with local `main`, so an effort committed on `main` itself is one it cannot see: say so in the report where the script changed there.
+- **Cargo serializes builds that share a directory.** `workspace`, `instrumented` and `docs` build in the root workspace's `target/debug`, so started together they compile in turn, in whatever order they reach the lock. `launcher`, `compiler` and `bundle` build in directories of their own, the Zed steps in `editors/zed`, and the npm subjects build nothing with cargo. Every `cargo xtask` launch takes the `target/debug` lock first, being a `cargo run` in the root workspace.
 
-A `REFUSED` step names what installs the tool it lacks. Do other work until the task's notification arrives, and read the logs then.
+Each command is a tracked background task writing `cargo xtask <subject> > <scratchpad>/gate/<subject>.log 2>&1; echo "EXIT=$?" >> <scratchpad>/gate/<subject>.log`. The exit code is the log's last line, and the line before it names the steps that failed; a task notification's code is the wrapper's. Never detach with `&`, and never add a shell that waits on another. Do other work until the notifications arrive, and read the logs then.
 
 ## When a step fails
 
@@ -29,4 +50,4 @@ Then rerun the failed tests alone, by name, as `cargo xtask workspace test <pack
 
 ## Report
 
-Each step with how it ended, as the gate's log states it; each failure with its cause, the commit that introduced it, and its fix or, where it was left, its evidence; and, where it matters, each step's time by name. Never quote a whole-gate total.
+Each subject with its exit code and the steps it named as failed; each failure with its cause, the commit that introduced it, and its fix or, where it was left, its evidence; and, where it matters, each step's time by name. Never quote a whole-gate total.
