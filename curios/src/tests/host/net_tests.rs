@@ -308,7 +308,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     )
     .expect("compile succeeded");
 
-    let mut bindings = ForeignBindings::new(foreigns.clone());
+    let mut bindings = ForeignBindings::empty();
     bindings.define("/double", |x: u64| x * 2);
 
     let (system, io) = MockHost::builder().build();
@@ -339,7 +339,7 @@ fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
     )
     .expect("compile succeeded");
 
-    let mut bindings = ForeignBindings::new(foreigns.clone());
+    let mut bindings = ForeignBindings::empty();
     bindings.define("/flip", |byte: u8| 255 - byte);
 
     let (system, _io) = MockHost::builder().build();
@@ -373,7 +373,7 @@ fn a_foreign_flt_crosses_raw_in_both_directions() {
     )
     .expect("compile succeeded");
 
-    let mut bindings = ForeignBindings::new(foreigns.clone());
+    let mut bindings = ForeignBindings::empty();
     bindings.define("/halve", |x: f64| x / 2.0);
 
     let (system, _io) = MockHost::builder().build();
@@ -405,7 +405,7 @@ fn a_foreign_flt_may_stand_before_another_result() {
     )
     .expect("compile succeeded");
 
-    let mut bindings = ForeignBindings::new(foreigns.clone());
+    let mut bindings = ForeignBindings::empty();
     bindings.define("/probe", |n: u64| (n as f64 * 2.0, n + 4));
 
     let (system, _io) = MockHost::builder().build();
@@ -442,7 +442,7 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
     )
     .expect("compile succeeded");
 
-    let mut bindings = ForeignBindings::new(foreigns.clone());
+    let mut bindings = ForeignBindings::empty();
     bindings.define("/split", |bytes: Vec<u8>| {
         (
             bytes[..1].to_vec(),
@@ -482,7 +482,7 @@ fn a_list_of_bit_runs_crosses_in_both_directions() {
     )
     .expect("compile succeeded");
 
-    let mut bindings = ForeignBindings::new(foreigns.clone());
+    let mut bindings = ForeignBindings::empty();
     bindings.define("/echo", |runs: Vec<Bits>| runs);
 
     let (system, _io) = MockHost::builder().build();
@@ -516,7 +516,7 @@ fn a_list_of_scalars_crosses_flat_in_both_directions() {
     )
     .expect("compile succeeded");
 
-    let mut bindings = ForeignBindings::new(foreigns.clone());
+    let mut bindings = ForeignBindings::empty();
     bindings.define("/nats", |xs: Vec<u64>| {
         xs.into_iter().map(|x| x * 2).collect::<Vec<u64>>()
     });
@@ -554,7 +554,7 @@ fn a_list_element_past_the_wire_is_refused() {
     )
     .expect("compile succeeded");
 
-    let mut bindings = ForeignBindings::new(foreigns.clone());
+    let mut bindings = ForeignBindings::empty();
     bindings.define("/nats", |xs: Vec<u64>| xs);
 
     let (system, _io) = MockHost::builder().build();

@@ -1,7 +1,7 @@
-//! A binding is held to the row it implements: its operands and results must cross as the row's do, which is checked when it is defined rather than when a program first calls it.
+//! An answer is held to the row it is linked to: its operands and what it comes back with must cross as the program declares them, which is refused where the two are linked rather than when a program first calls the row.
 
 use {
-    super::{ForeignBindings, host_rows, shared_engine},
+    super::{Answers, ForeignBindings, host_rows, link, shared_engine},
     crate::{Bits, MockHost},
     curios_abi::{
         ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults, WireReturn, WireSignature,
@@ -11,70 +11,144 @@ use {
     wasmtime::Linker,
 };
 
-/// An embedder's store of one declared row, `/double: (x: Nat) -> Nat`.
-fn doubling() -> ForeignBindings {
+/// A program's rows of one declaration, `name: (operand) -> result`.
+fn declaring(name: &str, operand: WireType, result: WireType) -> ForeignStore {
     let mut store = ForeignStore::new();
 
     store.register(ForeignFunction {
-        name: "/double".to_string(),
+        name: name.to_string(),
         signature: WireSignature {
-            params: vec![WireType::Nat],
-            returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
+            params: vec![operand],
+            returns: WireReturn::Answers(WireResults::single(result)),
         },
     });
 
-    ForeignBindings::new(store)
+    store
+}
+
+/// A program's rows of `/double: (Nat) -> Nat`.
+fn doubling() -> ForeignStore {
+    declaring("/double", WireType::Nat, WireType::Nat)
+}
+
+/// What linking `name` of `foreigns` answers, over `bindings` and a host that answers nothing.
+fn linked(foreigns: &ForeignStore, bindings: &ForeignBindings, name: &str) -> Result<(), String> {
+    let engine = shared_engine();
+
+    link(
+        &mut Linker::new(engine),
+        engine,
+        foreigns,
+        &bindings.answers,
+        &Answers::default(),
+        name,
+    )
 }
 
 #[test]
-fn a_binding_that_crosses_as_its_row_is_accepted() {
-    doubling().define("/double", |x: u64| x * 2);
+fn an_answer_that_crosses_as_its_row_is_linked() {
+    let mut bindings = ForeignBindings::empty();
+    bindings.define("/double", |x: u64| x * 2);
+
+    linked(&doubling(), &bindings, "/double").expect("the answer crosses as the row");
 }
 
 #[test]
-#[should_panic(expected = "'/double' takes [Nat]")]
-fn a_binding_whose_operands_cross_otherwise_is_refused() {
-    doubling().define("/double", |x: i64| x.unsigned_abs() * 2);
+fn an_answer_whose_operands_cross_otherwise_is_refused() {
+    let mut bindings = ForeignBindings::empty();
+    bindings.define("/double", |x: i64| x.unsigned_abs() * 2);
+
+    assert_eq!(
+        linked(&doubling(), &bindings, "/double").unwrap_err(),
+        "a binding answers `/double` as (Int) -> (Nat), and the program declares it (Nat) -> (Nat)"
+    );
 }
 
 #[test]
-#[should_panic(expected = "'/double' answers [Nat]")]
-fn a_binding_whose_results_cross_otherwise_is_refused() {
-    doubling().define("/double", |x: u64| x.is_multiple_of(2));
+fn an_answer_whose_results_cross_otherwise_is_refused() {
+    let mut bindings = ForeignBindings::empty();
+    bindings.define("/double", |x: u64| x.is_multiple_of(2));
+
+    assert_eq!(
+        linked(&doubling(), &bindings, "/double").unwrap_err(),
+        "a binding answers `/double` as (Nat) -> (Bool), and the program declares it (Nat) -> (Nat)"
+    );
+}
+
+#[test]
+fn a_row_nothing_answers_is_refused_by_name() {
+    assert_eq!(
+        linked(&doubling(), &ForeignBindings::empty(), "/double").unwrap_err(),
+        "no implementation for `/double`: no module answers it, and this host does not"
+    );
+}
+
+/// Recording an answer refuses nothing, so what a binding gets wrong about the program is refused where a run admits its bindings: a row answered twice, and a name the program declares no row for.
+#[test]
+fn a_binding_the_program_cannot_use_is_refused_by_name() {
+    let mut twice = ForeignBindings::empty();
+    twice.define("/double", |x: u64| x * 2);
+    twice.define("/double", |x: u64| x + x);
+
+    assert_eq!(
+        twice.answers.admit(&doubling()).unwrap_err(),
+        "`/double` is answered twice by the bindings of this run"
+    );
+
+    let mut stray = ForeignBindings::empty();
+    stray.define("/double", |x: u64| x * 2);
+    stray.define("/halve", |x: u64| x / 2);
+
+    assert_eq!(
+        stray.answers.admit(&doubling()).unwrap_err(),
+        "a binding answers `/halve`, which the program declares no foreign row for"
+    );
 }
 
 /// Every answer the host gives is generated from its table row, and it crosses as that row states: linking each against the declaration the table describes is the check that the row's operand and reply types lift and lower as its wire signature says, for every row and not only the ones a program reaches.
 #[test]
 fn every_host_answer_crosses_as_its_row() {
     let (host, _io) = MockHost::builder().build();
-    let provided = host_rows(Arc::new(host));
+    let answers = host_rows(Arc::new(host));
     let engine = shared_engine();
     let mut linker = Linker::new(engine);
+    let mut store = ForeignStore::new();
 
     for op in HostOp::ALL {
-        let declared = Arc::new(ForeignFunction {
+        store.register(ForeignFunction {
             name: op.declared(),
             signature: op.signature().clone(),
         });
+    }
 
-        provided
-            .link(&mut linker, engine, &op.declared(), Some(&declared))
-            .unwrap_or_else(|refusal| panic!("{refusal}"));
+    for op in HostOp::ALL {
+        link(
+            &mut linker,
+            engine,
+            &store,
+            &Answers::default(),
+            &answers,
+            &op.declared(),
+        )
+        .unwrap_or_else(|refusal| panic!("{refusal}"));
     }
 }
 
-/// A binding states `Bits` where its row does: the grains are two types on both sides of the wire, though one payload crosses for either.
+/// A binding states `Bits` where its row does: the grains are two types on both sides of the wire, though one payload crosses for either, so an answer written for `Bytes` is no answer to a `Bits` row.
 #[test]
 fn a_bits_row_is_bound_by_a_bits_value() {
-    let mut store = ForeignStore::new();
+    let runs = WireType::List(WireLeaf::Bits);
+    let store = declaring("/echo", runs, runs);
 
-    store.register(ForeignFunction {
-        name: "/echo".to_string(),
-        signature: WireSignature {
-            params: vec![WireType::List(WireLeaf::Bits)],
-            returns: WireReturn::Answers(WireResults::single(WireType::List(WireLeaf::Bits))),
-        },
-    });
+    let mut bindings = ForeignBindings::empty();
+    bindings.define("/echo", |runs: Vec<Bits>| runs);
+    linked(&store, &bindings, "/echo").expect("the answer crosses as the row");
 
-    ForeignBindings::new(store).define("/echo", |runs: Vec<Bits>| runs);
+    let mut bytes = ForeignBindings::empty();
+    bytes.define("/echo", |runs: Vec<Vec<u8>>| runs);
+
+    assert_eq!(
+        linked(&store, &bytes, "/echo").unwrap_err(),
+        "a binding answers `/echo` as (List(Bytes)) -> (List(Bytes)), and the program declares it (List(Bits)) -> (List(Bits))"
+    );
 }

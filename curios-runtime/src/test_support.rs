@@ -194,13 +194,6 @@ fn write_raw(
     Ok(())
 }
 
-/// Implement the `ffi` row `name` in `bindings` by answering `values` on every call, raw: how a test puts an embedder's reply in front of the guest that no typed binding could give.
-pub fn raw_reply(bindings: &mut ForeignBindings, name: &str, values: Vec<RawValue>) {
-    bindings.define_raw(name, move |caller, _, results| {
-        write_raw(caller, &values, results)
-    });
-}
-
 /// Run `compiled` under `host`, except that each of the host's rows in `raw` answers its values on every call, raw — the adapter's lowering bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`Compiled::run`]'s does.
 pub fn run_raw<H: HostOps + Send + Sync + 'static>(
     compiled: &Compiled,
@@ -209,10 +202,10 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
     bindings: ForeignBindings,
 ) -> Result<u8, String> {
     let host = Arc::new(host);
-    let mut provided = host_rows(Arc::clone(&host));
+    let mut answers = host_rows(Arc::clone(&host));
 
     for (op, values) in raw {
-        provided.replace_raw(&op.declared(), move |caller, _, results| {
+        answers.replace_raw(&op.declared(), move |caller, _, results| {
             write_raw(caller, &values, results)
         });
     }
@@ -222,6 +215,6 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
         &compiled.module,
         &compiled.foreigns,
         bindings,
-        provided,
+        answers,
     )
 }

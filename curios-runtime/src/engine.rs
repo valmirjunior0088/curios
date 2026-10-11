@@ -1,14 +1,14 @@
 use {
     super::{
-        Handle, HostOps, Lift, Lower, Mode, Poll, Replied, SerialFlow, SerialOp, SerialParity,
+        Handle, HostOps, Lift, Mode, Poll, Replied, Reply, SerialFlow, SerialOp, SerialParity,
         StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type, words_array_type,
     },
     curios_abi::{
         Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireOperand,
-        WireType, for_each_host_op,
+        WireReturn, WireType, for_each_host_op,
     },
     std::{
-        collections::HashMap,
+        collections::{HashMap, hash_map::Entry},
         error::Error,
         fmt, panic,
         sync::{Arc, LazyLock},
@@ -128,198 +128,218 @@ fn wire_func_type(engine: &Engine, params: &[WireType], results: &[WireType]) ->
     )
 }
 
-/// A type-erased host implementation: the closure wasmtime calls for one import, already wrapped in its [`Lift`]/[`Lower`] plumbing. `Arc`ed so [`ForeignBindings`] can keep the registry while handing wasmtime its own handle.
+/// A type-erased implementation of one import: the closure wasmtime calls, already wrapped in its [`Lift`] and [`Reply`] plumbing.
 type Trampoline =
     Arc<dyn Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
-/// An embedder's side of a foreign registry: for each [`ForeignFunction`] of a store it answers, the trampoline implementing it. An embedder builds one from the [`ForeignStore`] `compile_entrypoint` returned, `define`-ing each row it wants to supply, and a module's exports are bound through the same door. `instantiate` links *pull-based* — it walks the module's imports and defines exactly what the module demands, a binding here ahead of the host's own answer — so an import nothing answers is a clean, named error instead of a stranded wasmtime lookup.
-pub struct ForeignBindings {
-    foreigns: ForeignStore,
-    trampolines: HashMap<String, Trampoline>,
+/// What a call comes back with, as the type of what answers it states: the wire types that cross, in order, or nothing ever.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Returned {
+    Values(Vec<WireType>),
+    Never,
 }
 
-impl ForeignBindings {
-    /// An empty registry over the rows of `foreigns`, the [`ForeignStore`] that `compile_entrypoint` returned for the program: follow with one [`define`](Self::define) per row to answer.
-    pub fn new(foreigns: ForeignStore) -> Self {
-        Self {
-            foreigns,
-            trampolines: HashMap::new(),
+impl Returned {
+    /// What a declaration states of the same: its results' wire types, their labels being the guest's alone, or that its call does not return.
+    fn declared(returns: &WireReturn) -> Self {
+        match returns {
+            WireReturn::Answers(results) => Returned::Values(results.types()),
+            WireReturn::Never => Returned::Never,
         }
     }
+}
 
-    /// No bindings: every row the program reaches is left to the host, which answers the standard library's.
-    pub fn empty() -> Self {
-        Self::new(ForeignStore::new())
-    }
+/// The wire types of a list as a declaration writes them.
+fn spelled(types: &[WireType]) -> String {
+    types
+        .iter()
+        .map(WireType::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
-    /// Implement the store row named `name` with a typed closure. A `foreign` declaration's row is named by its fully qualified name (e.g. `/foo/double`). Every row must be implemented exactly once, only rows can be implemented, and a closure's operand and result types must cross as the row's do — violations are construction bugs, so they panic.
-    pub fn define<Li, Lo, F>(&mut self, name: &str, f: F)
-    where
-        Li: Lift,
-        Lo: Lower,
-        F: Fn(Li) -> Lo + Send + Sync + 'static,
-    {
-        let signature = self
-            .foreigns
-            .get(name)
-            .unwrap_or_else(|| panic!("'{name}' is not in the foreign store"))
-            .signature();
-        let params = &signature.params;
-        let results = signature.returns.types();
-
-        assert_eq!(&Li::shape(), params, "'{name}' takes {params:?}");
-        assert_eq!(Lo::shape(), results, "'{name}' answers {results:?}");
-
-        let trampoline: Trampoline = Arc::new(move |mut caller, params, results| {
-            f(Li::lift(&mut caller, params)?).lower(&mut caller, results)
-        });
-
-        assert!(
-            self.trampolines
-                .insert(name.to_string(), trampoline)
-                .is_none(),
-            "'{name}' is implemented twice"
-        );
-    }
-
-    /// Implement the store row named `name` with a trampoline that marshals for itself.
-    ///
-    /// [`define`](Self::define) is the door for a host implementation written against Rust types, where the signature is known where the closure is written and `Lift`/`Lower` pick themselves from it. A plugin's is not: its marshalling is decided by a [`WireSignature`](curios_abi::WireSignature) read at run time, so the closure has to see the raw slots and choose. `pub(crate)` because those slots are wasmtime's vocabulary, which nothing above this crate names.
-    pub(crate) fn define_raw<F>(&mut self, name: &str, f: F)
-    where
-        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
-    {
-        assert!(
-            self.foreigns.get(name).is_some(),
-            "'{name}' is not in the foreign store"
-        );
-
-        assert!(
-            self.trampolines
-                .insert(name.to_string(), Arc::new(f))
-                .is_none(),
-            "'{name}' is implemented twice"
-        );
-    }
-
-    /// Whether a binding answers the row named `name`: a module's, or an embedder's.
-    fn answers(&self, name: &str) -> bool {
-        self.trampolines.contains_key(name)
-    }
-
-    /// Define the import named `name` into `linker` under `namespace`, typing it from its store row — the pull side of the registry, driven by the module's own import section.
-    fn link(
-        &self,
-        linker: &mut Linker<()>,
-        engine: &Engine,
-        namespace: Namespace,
-        name: &str,
-    ) -> Result<(), String> {
-        let (function, trampoline) = self
-            .foreigns
-            .get(name)
-            .zip(self.trampolines.get(name))
-            .ok_or_else(|| format!("no host implementation registered for {namespace}.{name}"))?;
-
-        let trampoline = Arc::clone(trampoline);
-
-        linker
-            .func_new(
-                namespace.as_str(),
-                name,
-                host_func_type(engine, function),
-                move |caller, params, results| trampoline(caller, params, results),
-            )
-            .map(|_| ())
-            .map_err(|error| format!("failed to define {name}: {error}"))
+impl fmt::Display for Returned {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Returned::Values(types) => write!(formatter, "({})", spelled(types)),
+            Returned::Never => formatter.write_str("Never"),
+        }
     }
 }
 
-/// What a host answers of the rows a unit declares, by the name each is declared under: the wire types its implementation takes and answers, as its Rust types state them, and its trampoline.
-///
-/// A program's `ffi` import is linked here where no binding answers it, so a row the standard library declares is answered by the host as a row a package declares is answered by its module. An implementation is held to the program's declaration where it is linked, and a disagreement is a refusal naming the row.
-#[derive(Default)]
-pub(crate) struct Provided {
-    rows: HashMap<String, (Vec<WireType>, Vec<WireType>, Trampoline)>,
+/// One answer to a row: the wire types it takes and what it comes back with, as its implementation states them, and how it is entered.
+#[derive(Clone)]
+struct Answer {
+    params: Vec<WireType>,
+    returned: Returned,
+    trampoline: Trampoline,
 }
 
-impl Provided {
-    /// Answer the row declared as `name` with a typed closure, as [`ForeignBindings::define`] takes one.
+/// Answers by the name each row is declared under: the one registry a run links from, whoever filled it. An embedder's closures and a package's modules fill one ([`ForeignBindings`]) and a host's own methods another ([`host_rows`]), and nothing tells the two kinds of answer apart but which was asked first.
+#[derive(Clone, Default)]
+pub(crate) struct Answers {
+    rows: HashMap<String, Answer>,
+    /// The names answered more than once, in the order the second answer arrived: what the link refuses, since [`ForeignBindings::define`] refuses nothing.
+    twice: Vec<String>,
+}
+
+impl Answers {
+    /// Answer the row declared as `name` with a typed closure: its operands and its reply are the closure's own types, which the link holds to the row.
     fn answer<Li, Lo, F>(&mut self, name: String, f: F)
     where
         Li: Lift,
-        Lo: Lower,
+        Lo: Reply,
         F: Fn(Li) -> Lo + Send + Sync + 'static,
     {
-        let trampoline: Trampoline = Arc::new(move |mut caller, params, results| {
-            f(Li::lift(&mut caller, params)?).lower(&mut caller, results)
-        });
-
-        self.rows
-            .insert(name, (Li::shape(), Lo::shape(), trampoline));
+        self.answer_raw(
+            name,
+            Li::shape(),
+            Lo::returned(),
+            move |mut caller, params, results| {
+                f(Li::lift(&mut caller, params)?).reply(&mut caller, results)
+            },
+        );
     }
 
-    /// Replace what answers the row declared as `name` with a trampoline that marshals for itself — how a test puts a reply in front of the guest that no checked answer would give.
+    /// Answer the row declared as `name` with a trampoline that marshals for itself, stating what it takes and comes back with.
+    fn answer_raw<F>(&mut self, name: String, params: Vec<WireType>, returned: Returned, f: F)
+    where
+        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
+    {
+        let answer = Answer {
+            params,
+            returned,
+            trampoline: Arc::new(f),
+        };
+
+        match self.rows.entry(name) {
+            Entry::Occupied(taken) => self.twice.push(taken.key().clone()),
+            Entry::Vacant(free) => {
+                free.insert(answer);
+            }
+        }
+    }
+
+    /// Refuse what these answers get wrong about the program whose rows are `foreigns`, whatever it imports: a row answered twice, and an answer under a name the program declares no row for, which would otherwise never be asked and never be missed.
+    fn admit(&self, foreigns: &ForeignStore) -> Result<(), String> {
+        if let Some(name) = self.twice.first() {
+            return Err(format!(
+                "`{name}` is answered twice by the bindings of this run"
+            ));
+        }
+
+        match self
+            .rows
+            .keys()
+            .filter(|name| foreigns.get(name).is_none())
+            .min()
+        {
+            Some(name) => Err(format!(
+                "a binding answers `{name}`, which the program declares no foreign row for"
+            )),
+            None => Ok(()),
+        }
+    }
+
+    /// Replace how the row declared as `name` is entered with a trampoline that marshals for itself — how a test puts a reply in front of the guest that no checked answer would give.
     #[cfg(feature = "test-support")]
     pub(crate) fn replace_raw<F>(&mut self, name: &str, f: F)
     where
         F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
     {
-        let (_, _, trampoline) = self
-            .rows
+        self.rows
             .get_mut(name)
-            .unwrap_or_else(|| panic!("this host answers no `{name}`"));
+            .unwrap_or_else(|| panic!("nothing here answers `{name}`"))
+            .trampoline = Arc::new(f);
+    }
+}
 
-        *trampoline = Arc::new(f);
+/// What answers a program's rows ahead of the host: an embedder's closures and the modules a package declares, each for the row declared under a name. A run links *pull-based* — it walks the program's imports and defines exactly what the program demands, an answer here ahead of the host's own — so an import nothing answers is a clean, named refusal instead of a stranded wasmtime lookup.
+///
+/// Nothing is checked where an answer is recorded. What it is held to is the program's own declaration of the row, which the program carries ([`Compiled`]), so a disagreement is refused where the two meet, at the link, by one comparison for every answer.
+#[derive(Clone, Default)]
+pub struct ForeignBindings {
+    pub(crate) answers: Answers,
+}
+
+impl ForeignBindings {
+    /// No answers of one's own: every row the program reaches is left to the host, which answers the standard library's. Follow with one [`define`](Self::define) for each row to answer ahead of it.
+    pub fn empty() -> Self {
+        Self::default()
     }
 
-    /// Define the `ffi` import named `name` into `linker`, held to `declared` where the program's rows describe it.
-    fn link(
-        &self,
-        linker: &mut Linker<()>,
-        engine: &Engine,
-        name: &str,
-        declared: Option<&Arc<ForeignFunction>>,
-    ) -> Result<(), String> {
-        let Some((params, results, trampoline)) = self.rows.get(name) else {
-            return Err(format!(
-                "no implementation for `{name}`: no module answers it, and this host does not"
-            ));
-        };
-
-        if let Some(function) = declared {
-            let signature = function.signature();
-            let spelled = |types: &[WireType]| {
-                types
-                    .iter()
-                    .map(WireType::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-
-            if signature.params != *params || signature.returns.types() != *results {
-                return Err(format!(
-                    "this host answers `{name}` as ({}) -> ({}), and the program declares it ({}) -> ({})",
-                    spelled(params),
-                    spelled(results),
-                    spelled(&signature.params),
-                    spelled(&signature.returns.types()),
-                ));
-            }
-        }
-
-        let trampoline = Arc::clone(trampoline);
-
-        linker
-            .func_new(
-                Namespace::Ffi.as_str(),
-                name,
-                wire_func_type(engine, params, results),
-                move |caller, params, results| trampoline(caller, params, results),
-            )
-            .map(|_| ())
-            .map_err(|error| format!("failed to define {name}: {error}"))
+    /// Answer the row declared as `name`, its fully qualified name (e.g. `/foo/double`), with a typed closure. The closure's operand and reply types state what it takes and comes back with, and a run refuses, naming the row, an answer that crosses otherwise than the program declares, one that names no row of the program, and a row answered twice.
+    pub fn define<Li, Lo, F>(&mut self, name: &str, f: F)
+    where
+        Li: Lift,
+        Lo: Reply,
+        F: Fn(Li) -> Lo + Send + Sync + 'static,
+    {
+        self.answers.answer(name.to_string(), f);
     }
+
+    /// Answer the row `row` with a trampoline that marshals for itself, crossing as the row declares.
+    ///
+    /// [`define`](Self::define) is the door for an implementation written against Rust types, where the signature is known where the closure is written and `Lift`/`Lower` pick themselves from it. A plugin's is not: its marshalling is decided by a [`WireSignature`](curios_abi::WireSignature) read at run time, so the closure has to see the raw slots and choose. `pub(crate)` because those slots are wasmtime's vocabulary, which nothing above this crate names.
+    pub(crate) fn define_raw<F>(&mut self, row: &ForeignFunction, f: F)
+    where
+        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
+    {
+        let signature = row.signature();
+
+        self.answers.answer_raw(
+            row.name().to_string(),
+            signature.params.clone(),
+            Returned::declared(&signature.returns),
+            f,
+        );
+    }
+}
+
+/// Define the `ffi` import declared as `name` into `linker`: the row as the program declares it, the first answer among `bindings`' and the host's, and the two held to each other. Who answers a row is decided here, by what was linked, and nothing in the program says which.
+fn link(
+    linker: &mut Linker<()>,
+    engine: &Engine,
+    foreigns: &ForeignStore,
+    bindings: &Answers,
+    host: &Answers,
+    name: &str,
+) -> Result<(), String> {
+    let declared = foreigns.get(name).ok_or_else(|| {
+        format!("the program imports `{name}`, which the rows it carries do not describe")
+    })?;
+    let (answer, answerer) = bindings
+        .rows
+        .get(name)
+        .map(|answer| (answer, "a binding"))
+        .or_else(|| host.rows.get(name).map(|answer| (answer, "this host")))
+        .ok_or_else(|| {
+            format!("no implementation for `{name}`: no module answers it, and this host does not")
+        })?;
+
+    let signature = declared.signature();
+    let returned = Returned::declared(&signature.returns);
+
+    if signature.params != answer.params || returned != answer.returned {
+        return Err(format!(
+            "{answerer} answers `{name}` as ({}) -> {}, and the program declares it ({}) -> {returned}",
+            spelled(&answer.params),
+            answer.returned,
+            spelled(&signature.params),
+        ));
+    }
+
+    let trampoline = Arc::clone(&answer.trampoline);
+
+    linker
+        .func_new(
+            Namespace::Ffi.as_str(),
+            name,
+            host_func_type(engine, declared),
+            move |caller, params, results| trampoline(caller, params, results),
+        )
+        .map(|_| ())
+        .map_err(|error| format!("failed to define {name}: {error}"))
 }
 
 /// Answer every row of the table under the name the standard library declares it by ([`HostOp::declared`]). Each import lifts its operands as the row types them, measures the ones its requirements read, calls the method once they hold, and lowers the reply through [`Replied`]. Generated from the rows it binds, so no row goes unanswered, none is answered twice, and no answer's types can differ from the row's.
@@ -329,11 +349,11 @@ macro_rules! declare_host_rows {
         $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty { $($contract:tt)* }
     )*) => {
         /// What `host` answers of the rows the standard library declares.
-        pub(crate) fn host_rows<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> Provided {
-            let mut provided = Provided::default();
+        pub(crate) fn host_rows<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> Answers {
+            let mut answers = Answers::default();
 
             $(
-                provided.answer(
+                answers.answer(
                     HostOp::$variant.declared(),
                     {
                         let host = Arc::clone(&host);
@@ -347,7 +367,7 @@ macro_rules! declare_host_rows {
                 );
             )*
 
-            provided
+            answers
         }
     };
 }
@@ -485,15 +505,15 @@ impl Compiled {
     }
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` supplies the ones a module or an embedder answers, and `provided` the ones the host answers itself.
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` the answers a module or an embedder gives, and `host` the ones the host gives itself.
 pub(crate) fn instantiate<E: Ended>(
     engine: &Engine,
     module: &Module,
     foreigns: &ForeignStore,
     bindings: ForeignBindings,
-    provided: Provided,
+    host: Answers,
 ) -> Result<E, String> {
-    on_guest_stack(move || entered(engine, module, foreigns, bindings, provided))?
+    on_guest_stack(move || entered(engine, module, foreigns, bindings, host))?
 }
 
 /// [`instantiate`], on the thread it is called on.
@@ -502,8 +522,11 @@ fn entered<E: Ended>(
     module: &Module,
     foreigns: &ForeignStore,
     bindings: ForeignBindings,
-    provided: Provided,
+    host: Answers,
 ) -> Result<E, String> {
+    let bindings = bindings.answers;
+    bindings.admit(foreigns)?;
+
     let mut linker = Linker::new(engine);
 
     // The namespaces as the emitter spells them — `curios-abi`'s, read rather than restated, so the two ends of the wire cannot drift on the one string they link on.
@@ -536,16 +559,14 @@ fn entered<E: Ended>(
                     ));
                 }
             },
-            // A module's or an embedder's answer first, and the host's own where there is none: who answers a row is decided here, by what was linked, and nothing in the program says which.
-            FFI => match bindings.answers(import.name()) {
-                true => bindings.link(&mut linker, engine, Namespace::Ffi, import.name())?,
-                false => provided.link(
-                    &mut linker,
-                    engine,
-                    import.name(),
-                    foreigns.get(import.name()),
-                )?,
-            },
+            FFI => link(
+                &mut linker,
+                engine,
+                foreigns,
+                &bindings,
+                &host,
+                import.name(),
+            )?,
             namespace => {
                 return Err(format!(
                     "the module imports {}.{}, but host imports live in {SYS} or {FFI}",

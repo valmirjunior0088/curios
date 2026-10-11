@@ -8,7 +8,7 @@ use {
 ///
 /// A value the guest's type does not admit — a `Bool` word past `1`, a closed code outside its table, an interest bit a guest cannot ask for — is refused rather than read as something nearby: the call fails, naming what it was handed.
 pub trait Lift: Sized {
-    /// The wire types this decodes, in order: what `ForeignBindings::define` holds a binding's operands to against its row.
+    /// The wire types this decodes, in order: what a run holds a binding's operands to against its row.
     fn shape() -> Vec<WireType>;
 
     /// Decode `Self` from the import's incoming `params`, reading any GC arrays through `caller`. Contract: every single-value impl consumes exactly `params[0]` — the alignment the tuple impls rely on to re-slice per component.

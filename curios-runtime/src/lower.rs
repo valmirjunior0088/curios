@@ -1,15 +1,15 @@
 use {
-    super::{Bits, ExitTrap, Handle},
-    curios_abi::{Encoded, HostOp, WireLeaf, WireReply, WireType, WireValue},
+    super::{Bits, ExitTrap, Handle, Returned},
+    curios_abi::{Encoded, HostOp, ReplyShape, WireLeaf, WireReply, WireType, WireValue},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
         StorageType, Val, ValType,
     },
 };
 
-/// Encoding one host-import result list into wasmtime `Val`s — the outbound half of the FFI boundary (`Lift` is the inbound half). Each impl produces the exact shape the generated code expects on that wire type (a scalar as its raw number, `Bytes` as an i8 array, `List` as an anyref-element array), so a host function returns plain Rust values and the trampoline lands them in wasm-typed result slots.
+/// Encoding one host-import result list into wasmtime `Val`s — the outbound half of the FFI boundary (`Lift` is the inbound half), and what a binding's closure answers with ([`Reply`]). Each impl produces the exact shape the generated code expects on that wire type (a scalar as its raw number, `Bytes` as an i8 array, `List` as an anyref-element array), so a host function returns plain Rust values and the trampoline lands them in wasm-typed result slots.
 pub trait Lower {
-    /// The wire types this encodes, in order: what `ForeignBindings::define` holds a binding's results to against its row.
+    /// The wire types this encodes, in order: what a run holds a binding's results to against its row.
     fn shape() -> Vec<WireType>;
 
     /// Encode `self` into the import's `results` slots, allocating any GC values through `caller`. Contract: every single-value impl fills exactly `results[0]` — the alignment the tuple impls rely on to re-slice per component.
@@ -338,6 +338,30 @@ impl Lower for Vec<Vec<u8>> {
     }
 }
 
+/// What an answer's closure comes back with: values that cross, which is every [`Lower`], or a reply of a host's row, which may also end the program.
+pub trait Reply {
+    /// What the answer comes back with, as its type states it: what a run holds to the row's declaration where the two are linked.
+    fn returned() -> Returned;
+
+    /// Carry the answer back across: its values into `results`, or the trap that ends the instance.
+    fn reply(self, caller: &mut Caller<'_, ()>, results: &mut [Val])
+    -> Result<(), wasmtime::Error>;
+}
+
+impl<T: Lower> Reply for T {
+    fn returned() -> Returned {
+        Returned::Values(T::shape())
+    }
+
+    fn reply(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        self.lower(caller, results)
+    }
+}
+
 /// Write a reply's values into the slots they cross in, each as its wire type crosses.
 fn written(
     values: Vec<WireValue>,
@@ -380,12 +404,15 @@ impl<R: WireReply> Replied<R> {
     }
 }
 
-impl<R: WireReply> Lower for Replied<R> {
-    fn shape() -> Vec<WireType> {
-        R::shape().types()
+impl<R: WireReply> Reply for Replied<R> {
+    fn returned() -> Returned {
+        match R::shape() {
+            ReplyShape::Never => Returned::Never,
+            shape => Returned::Values(shape.types()),
+        }
     }
 
-    fn lower(
+    fn reply(
         self,
         caller: &mut Caller<'_, ()>,
         results: &mut [Val],

@@ -404,7 +404,7 @@ fn define_row(
     let export = export.to_string();
     let subject = subject.to_string();
 
-    bindings.define_raw(&declaration, move |mut caller, given, answers| {
+    bindings.define_raw(row, move |mut caller, given, answers| {
         let mut plugin = plugin.lock().map_err(|_| {
             wasmtime::Error::msg(format!("{subject} was left poisoned by an earlier call"))
         })?;
@@ -556,7 +556,7 @@ pub fn plugin_bindings(
 
     // Which row each claim names, and who claimed it — the second half is what lets a duplicate name both claimants.
     let mut claimed: BTreeMap<String, (String, String)> = BTreeMap::new();
-    let mut bindings = ForeignBindings::new(foreigns.clone());
+    let mut bindings = ForeignBindings::empty();
 
     for module in &declared {
         let subject = format!("the module {:?} of {}", module.name, module.package);
