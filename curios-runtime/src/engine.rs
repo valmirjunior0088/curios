@@ -89,7 +89,7 @@ pub fn shared_engine() -> &'static Engine {
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let signature = function.signature();
 
-    wire_func_type(engine, &signature.params, &signature.results.types())
+    wire_func_type(engine, &signature.params, &signature.returns.types())
 }
 
 /// [`host_func_type`] over the wire types alone: what an import that takes `params` and answers `results` is typed as.
@@ -170,7 +170,7 @@ impl ForeignBindings {
             .map(|wire_type| codec(*wire_type))
             .collect::<Vec<_>>();
         let results = signature
-            .results
+            .returns
             .types()
             .into_iter()
             .map(codec)
@@ -323,14 +323,14 @@ impl Provided {
             };
 
             if crossing(&signature.params) != *params
-                || crossing(&signature.results.types()) != *results
+                || crossing(&signature.returns.types()) != *results
             {
                 return Err(format!(
                     "this host answers `{name}` as ({}) -> ({}), and the program declares it ({}) -> ({})",
                     spelled(params),
                     spelled(results),
                     spelled(&signature.params),
-                    spelled(&signature.results.types()),
+                    spelled(&signature.returns.types()),
                 ));
             }
         }

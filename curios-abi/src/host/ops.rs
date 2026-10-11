@@ -187,7 +187,7 @@ macro_rules! declare_host_rows {
                         signature: WireSignature {
                             params: vec![$(<$t as WireOperand>::WIRE),*],
                             // A lone payload crosses under the label `yields` names, or `value`.
-                            results: <$r as WireReply>::results([$(stringify!($yields),)? "value"][0]),
+                            returns: <$r as WireReply>::returns([$(stringify!($yields),)? "value"][0]),
                         },
                         requirements: vec![$($(Requirement::$requirement { $($requirement_field: stringify!($requirement_operand)),* }),*)?],
                     },

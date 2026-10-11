@@ -756,7 +756,13 @@ impl Module {
                         args.len()
                     )));
                 }
-                let results = function.signature().results.len();
+                if function.diverges() {
+                    return Err(VerifyError(format!(
+                        "{id} returns through {}, which does not return",
+                        function.name()
+                    )));
+                }
+                let results = function.signature().returns.arity();
                 let params = self.continuation_arity(
                     current_function,
                     return_cont,

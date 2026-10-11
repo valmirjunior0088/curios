@@ -2,11 +2,19 @@ use {
     super::{
         ClosedCode, Failure, FileKind, ForeignFunction, ForeignStore, HostOp, Mode, Poll,
         ResultShape, SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf, WireResults,
-        WireSignature, WireType,
+        WireReturn, WireSignature, WireType,
     },
     crate::{event, status},
     std::{collections::BTreeSet, fmt::Debug},
 };
+
+/// The results `op` answers with, for a row that returns.
+fn answers(op: HostOp) -> &'static WireResults {
+    match &op.signature().returns {
+        WireReturn::Answers(results) => results,
+        WireReturn::Never => panic!("`{}` does not return", op.name()),
+    }
+}
 
 /// Every named code sits below `OTHER_BASE` and the errno passthrough lowers at or above it, so a raw OS errno — including the errno-less `Other(0)` — can never decode as `OK` or a named failure.
 #[test]
@@ -34,7 +42,7 @@ fn errno_lane_is_disjoint_from_named_codes() {
 #[test]
 fn result_records_keep_their_labels() {
     let labels = |op: HostOp| -> Vec<String> {
-        match op.signature().results.shape() {
+        match answers(op).shape() {
             ResultShape::Record(fields) => fields
                 .into_iter()
                 .map(|(label, _)| label.to_string())
@@ -96,7 +104,7 @@ fn results_cross_in_the_order_they_are_written() {
     assert_eq!(single.types(), [WireType::Bytes]);
 
     assert_eq!(
-        HostOp::HandleRead.signature().results.types(),
+        answers(HostOp::HandleRead).types(),
         [WireType::Nat, WireType::Bytes]
     );
 
@@ -119,7 +127,7 @@ fn results_cross_in_the_order_they_are_written() {
 /// The guest-facing shape is read off the count and nothing else: `handle_close` answers the unit value, `rand_bytes` its bytes bare, `handle_read` a record of its two labelled results.
 #[test]
 fn the_guest_shape_is_read_off_the_result_count() {
-    let shape = |op: HostOp| op.signature().results.shape();
+    let shape = |op: HostOp| answers(op).shape();
 
     assert_eq!(shape(HostOp::HandleClose), ResultShape::Unit);
     assert_eq!(
@@ -147,7 +155,7 @@ fn a_function_is_its_import_name() {
         label: label.to_string(),
         signature: WireSignature {
             params: vec![],
-            results: WireResults::none(),
+            returns: WireReturn::Answers(WireResults::none()),
         },
     };
 
@@ -170,7 +178,7 @@ fn register_rejects_a_duplicate_name() {
         label: "frobnicate".to_string(),
         signature: WireSignature {
             params: vec![],
-            results: WireResults::none(),
+            returns: WireReturn::Answers(WireResults::none()),
         },
     };
     let mut store = ForeignStore::new();
@@ -184,7 +192,7 @@ fn register_rejects_a_duplicate_name() {
 fn exit_is_the_one_row_that_diverges() {
     let diverging = HostOp::ALL
         .iter()
-        .filter(|op| op.signature().results.is_never())
+        .filter(|op| op.signature().returns == WireReturn::Never)
         .collect::<Vec<_>>();
     assert_eq!(
         diverging.iter().map(|op| op.name()).collect::<Vec<_>>(),
@@ -194,8 +202,11 @@ fn exit_is_the_one_row_that_diverges() {
     let exit = diverging[0].signature();
     assert_eq!(exit.params, [WireType::Byte]);
     assert_eq!(diverging[0].operands(), ["code"]);
-    assert!(exit.results.is_empty());
-    assert!(!HostOp::HandleClose.signature().results.is_never());
+    assert!(exit.returns.types().is_empty());
+    assert_eq!(
+        HostOp::HandleClose.signature().returns,
+        WireReturn::Answers(WireResults::none())
+    );
 }
 
 /// A variant is its row's method name in CamelCase — the one spelling the table writes twice, since a macro cannot change an identifier's case — so a row whose two names disagree fails here rather than reading as a different operation.

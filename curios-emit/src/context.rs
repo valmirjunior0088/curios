@@ -940,7 +940,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 output.extend(self.host_call_instrs(function, operands));
 
                 // A scalar result crosses as the number it is and is boxed here, where every box is this crate's to build (see `Table::wire_type`), and a reference crosses as a flat payload and is embedded back into a rope. Both work on the top of the stack only, so a row with a result to box, or a reference below the top, waits its results out in locals of their own and brings them back in order, boxing or embedding each where it stands. A row with neither at most embeds its last result, which is already on top. Nothing is checked on the way: a reply is a value of its wire type because whatever answered the row lowered it as one.
-                let results = signature.results.types();
+                let results = signature.returns.types();
                 let reference = |wire_type: &WireType| match wire_type.shape() {
                     WireShape::Reference(reference) => Some(reference),
                     WireShape::Scalar(_) => None,
@@ -982,7 +982,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     output.extend(self.wire_embed_instrs(reference));
                 }
 
-                match signature.results.len() {
+                match results.len() {
                     0 => self.host_unit_resume(&mut output, resume),
                     1 => self.host_single_resume(&mut output, resume),
                     results => self.host_multi_resume(&mut output, resume, results),

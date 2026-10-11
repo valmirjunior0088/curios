@@ -30,7 +30,7 @@ pub(crate) fn set(target: &Object, key: &str, value: &JsValue) {
     Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");
 }
 
-/// Compile `source` (no external module imports — see `RootSource::none()`) to `{ program, foreigns }`: the wasm module bytes, and the program's own `foreign` rows as plain data, one `{ name, params, results }` each — or a formatted error string on parse/type/lowering failure. `run` takes the object whole, and implements each row through `hooks.foreign`, keyed by the row's `name`.
+/// Compile `source` (no external module imports — see `RootSource::none()`) to `{ program, foreigns }`: the wasm module bytes, and the program's own `foreign` rows as plain data, one `{ name, params, results }` each, `never: true` in place of `results` where a row does not return — or a formatted error string on parse/type/lowering failure. `run` takes the object whole, and implements each row through `hooks.foreign`, keyed by the row's `name`.
 #[wasm_bindgen]
 pub fn compile(source: &str) -> Result<Object, String> {
     let entrypoint = source

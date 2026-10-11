@@ -349,7 +349,7 @@ impl<R: WireReply> Replied<R> {
 
 impl<R: WireReply> Lower for Replied<R> {
     fn shape() -> Vec<WireType> {
-        R::results("value").types()
+        R::returns("value").types()
     }
 
     fn lower(

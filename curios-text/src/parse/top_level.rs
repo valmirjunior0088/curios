@@ -13,7 +13,7 @@ use {
         parse_declared_label, parse_doc, parse_identifier_raw, parse_term, parse_whitespace,
         reserved_keyword, text_after, word_after,
     },
-    curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
+    curios_abi::{WireLeaf, WireResults, WireReturn, WireSignature, WireType},
     curios_parse::{
         Mark, Parser, ParserError, commit, fail, fail_from, lazy, look_ahead, many0, mark,
         not_ahead, pure, raise, refusal, sep_by0_trailing, sep_by1_trailing, spanned, tagging,
@@ -240,9 +240,10 @@ fn wire_fields<'a>(start: &Mark, fields: Vec<WireField>) -> Parser<'a, WireResul
     pure(WireResults::of(read))
 }
 
-// A result: a bare wire type, a braced field list naming the tuple type the row yields, or `Never`. Each form is told by how it begins, and past the arrow a result stands or nothing does, so where none begins the refusal says what one is, rather than leaving the first alternative to name its brace.
-fn parse_wire_results<'a>() -> Parser<'a, WireResults> {
+// What a call comes back with: a bare wire type, a braced field list naming the tuple type the row yields, or `Never`. Each form is told by how it begins, and past the arrow one stands or nothing does, so where none begins the refusal says what one is, rather than leaving the first alternative to name its brace.
+fn parse_wire_return<'a>() -> Parser<'a, WireReturn> {
     parse_wire_record()
+        .map(WireReturn::Answers)
         .or(refuse_wire_unit_value())
         .or(parse_wire_word())
         .or(commit(fail(WIRE_RESULT_EXPECTED)))
@@ -261,20 +262,22 @@ fn parse_wire_record<'a>() -> Parser<'a, WireResults> {
 }
 
 // `()` where a result stands: the unit value, which never stands here. Refused by name, since `{}` is what its writer meant.
-fn refuse_wire_unit_value<'a>() -> Parser<'a, WireResults> {
+fn refuse_wire_unit_value<'a>() -> Parser<'a, WireReturn> {
     mark()
         .and_drop(parse_literal("("))
         .and_drop(take_exact(")"))
         .flat_map(|start| commit(fail_from(&start, WIRE_RESULT_IS_A_TYPE)))
 }
 
-// A result that is one word: `Never`, or a wire type. `Never` says the row answers no value because its call does not return; it is a result alone and no wire type, so it stands in no operand, field or element. The word is looked at before either form reads it, so any other is the wire type's to read, and to refuse in its own sentence.
-fn parse_wire_word<'a>() -> Parser<'a, WireResults> {
+// A return that is one word: `Never`, or a wire type. `Never` says the call does not return; it stands where a result does and is no wire type, so it stands in no operand, field or element. The word is looked at before either form reads it, so any other is the wire type's to read, and to refuse in its own sentence.
+fn parse_wire_word<'a>() -> Parser<'a, WireReturn> {
     look_ahead(parse_identifier_raw)
         .or(pure(""))
         .flat_map(|word| match word {
-            "Never" => parse_identifier().map(|_| WireResults::never()),
-            _ => parse_wire_type().map(WireResults::single),
+            "Never" => parse_identifier().map(|_| WireReturn::Never),
+            _ => parse_wire_type()
+                .map(WireResults::single)
+                .map(WireReturn::Answers),
         })
 }
 
@@ -284,8 +287,8 @@ pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
         .and_keep(sep_by0_trailing(parse_wire_type, || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("->"))
-        .and(lazy(parse_wire_results))
-        .map(|(params, results)| WireSignature { params, results })
+        .and(lazy(parse_wire_return))
+        .map(|(params, returns)| WireSignature { params, returns })
 }
 
 // `foreign name(T, ...) -> R;` — a function with no body, bound to an implementation where the program is linked. The list follows the name as a function definition's does, with no colon: a row's signature is not its type.

@@ -4,7 +4,8 @@ use {
     super::{ForeignBindings, host_rows, shared_engine},
     crate::MockHost,
     curios_abi::{
-        ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults, WireSignature, WireType,
+        ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults, WireReturn, WireSignature,
+        WireType,
     },
     std::sync::Arc,
     wasmtime::Linker,
@@ -19,7 +20,7 @@ fn doubling() -> ForeignBindings {
         label: "double".to_string(),
         signature: WireSignature {
             params: vec![WireType::Nat],
-            results: WireResults::single(WireType::Nat),
+            returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
         },
     });
 
@@ -74,7 +75,7 @@ fn a_bits_row_is_read_by_the_bytes_codec() {
         label: "echo".to_string(),
         signature: WireSignature {
             params: vec![WireType::List(WireLeaf::Bits)],
-            results: WireResults::single(WireType::List(WireLeaf::Bits)),
+            returns: WireReturn::Answers(WireResults::single(WireType::List(WireLeaf::Bits))),
         },
     });
 

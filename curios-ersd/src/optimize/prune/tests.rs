@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_num::Natural,
     std::sync::Arc,
 };
@@ -24,7 +24,7 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
         label: "beep".into(),
         signature: WireSignature {
             params: vec![],
-            results: WireResults::single(WireType::Nat),
+            returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
         },
     });
     let foreign = builder.foreign(row);

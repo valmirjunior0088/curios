@@ -118,7 +118,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 ),
                 curios_wasm::ResultType::from(
                     signature
-                        .results
+                        .returns
                         .types()
                         .iter()
                         .map(|wire_type| self.table.wire_type(wire_type)),

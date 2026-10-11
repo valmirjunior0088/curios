@@ -51,7 +51,7 @@ const describe = (value) => {
 
 /**
  * Run a compiled program. `config` carries:
- * - `compiled`: what `compile` returned — `program`, the module bytes, and `foreigns`, the program's own `foreign` rows as `{ name, params, results }`;
+ * - `compiled`: what `compile` returned — `program`, the module bytes, and `foreigns`, the program's own `foreign` rows as `{ name, params, results }`, `never: true` in place of `results` for a row that does not return;
  * - `bridge`: the bridge module's bytes, from `bridge_bytes`;
  * - `status`, `event`, `stdio`: the wire code tables and the standard streams' tokens from `abi`;
  * - `rows`: from `abi` too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
@@ -392,7 +392,7 @@ export async function run(config) {
     return list;
   };
 
-  // A program's own `foreign` row, implemented by `hook`: the operands decoded into copies the hook owns, and what it answers held to the row's results and copied in — nothing for a row with none, the one value for a row with one, and an object keyed by exactly the results' labels for a row with several. A violation stops the program, naming the row.
+  // A program's own `foreign` row, implemented by `hook`: the operands decoded into copies the hook owns, and what it answers held to the row's results and copied in — nothing for a row with none, the one value for a row with one, and an object keyed by exactly the results' labels for a row with several. A row that does not return is answered by a hook that does not either, which ends the program by throwing. A violation stops the program, naming the row.
   const checked = (row, hook) => (...operands) => {
     const fail = (what) => {
       throw new Error(`ffi ${row.name}: ${what}`);
@@ -401,6 +401,11 @@ export async function run(config) {
     const answer = hook(
       ...row.params.map((type, i) => lifts[type](operands[i], fail)),
     );
+
+    // The guest holds no code for a return from such a row, so a hook that comes back is refused here, by the row's name, and not left to the engine's trap.
+    if (row.never) {
+      return fail("the hook returned, and the row does not return");
+    }
 
     switch (row.results.length) {
       case 0:

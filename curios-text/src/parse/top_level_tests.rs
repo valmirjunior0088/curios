@@ -3,7 +3,7 @@
 use {
     super::test_support::comments_of,
     crate::*,
-    curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
+    curios_abi::{WireLeaf, WireResults, WireReturn, WireSignature, WireType},
     curios_utilities::Plicity,
 };
 
@@ -89,7 +89,7 @@ fn top_foreign_without_pub() {
             label: "frobnicate".into(),
             signature: WireSignature {
                 params: vec![WireType::Nat, WireType::Bytes],
-                results: WireResults::single(WireType::Nat),
+                returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
             },
         })]
     );
@@ -108,7 +108,7 @@ fn top_foreign_with_pub() {
             label: "frobnicate".into(),
             signature: WireSignature {
                 params: vec![WireType::Nat, WireType::Bytes],
-                results: WireResults::single(WireType::Nat),
+                returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
             },
         })]
     );
@@ -124,7 +124,7 @@ fn top_foreign_zero_arg() {
             label: "clock".into(),
             signature: WireSignature {
                 params: vec![],
-                results: WireResults::single(WireType::Nat),
+                returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
             },
         })]
     );
@@ -144,7 +144,7 @@ fn top_foreign_takes_no_result() {
             label: "close".into(),
             signature: WireSignature {
                 params: vec![WireType::Handle],
-                results: WireResults::none(),
+                returns: WireReturn::Answers(WireResults::none()),
             },
         })]
     );
@@ -164,10 +164,10 @@ fn top_foreign_takes_a_tuple_of_results() {
             label: "read".into(),
             signature: WireSignature {
                 params: vec![WireType::Handle, WireType::Nat],
-                results: WireResults::of(vec![
+                returns: WireReturn::Answers(WireResults::of(vec![
                     ("status".to_string(), WireType::Nat),
                     ("bytes".to_string(), WireType::Bytes),
-                ]),
+                ])),
             },
         })]
     );
@@ -307,11 +307,11 @@ fn top_foreign_keeps_references_in_the_slots_written() {
             label: "f".into(),
             signature: WireSignature {
                 params: vec![WireType::Nat],
-                results: WireResults::of(vec![
+                returns: WireReturn::Answers(WireResults::of(vec![
                     ("bytes".to_string(), WireType::Bytes),
                     ("status".to_string(), WireType::Nat),
                     ("rest".to_string(), WireType::List(WireLeaf::Bytes)),
-                ]),
+                ])),
             },
         })]
     );
@@ -374,7 +374,7 @@ fn top_foreign_list_of_leaf() {
                     WireType::List(WireLeaf::Bytes),
                     WireType::List(WireLeaf::Handle)
                 ],
-                results: WireResults::single(WireType::List(WireLeaf::Nat)),
+                returns: WireReturn::Answers(WireResults::single(WireType::List(WireLeaf::Nat))),
             },
         })]
     );
@@ -449,7 +449,7 @@ fn top_foreign_is_written_as_a_function_with_no_body() {
             label: "gone".into(),
             signature: WireSignature {
                 params: vec![],
-                results: WireResults::never(),
+                returns: WireReturn::Never,
             },
         })]
     );

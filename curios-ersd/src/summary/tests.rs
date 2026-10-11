@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     std::sync::Arc,
 };
 
@@ -22,7 +22,7 @@ fn a_self_recursive_function_that(total: bool, effectful: bool) -> Module {
             label: "beep".into(),
             signature: WireSignature {
                 params: vec![],
-                results: WireResults::single(WireType::Nat),
+                returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
             },
         });
         let foreign = builder.foreign(row);

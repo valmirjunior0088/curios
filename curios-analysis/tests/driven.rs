@@ -7,7 +7,7 @@
 //! What stays beside the analyses is everything that needs no checker at all — the polarity lattice's own laws, the size-change matrix algebra, the readings through local definitions. Those are unit tests of pure functions and belong beside them.
 
 use {
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_analysis::{
         Answered, Declarations, Invert, Judge, PositivityRefusal, answers, answers_classed,
         group_totality, invert_indices, positivity_vectors, solve_indices, test_support::SYNTAX,
@@ -730,7 +730,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
                 label: "planted".to_string(),
                 signature: WireSignature {
                     params: Vec::new(),
-                    results: WireResults::single(WireType::Nat),
+                    returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
                 },
             });
             Term::foreign(row, vec![markers.visited()])

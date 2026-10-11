@@ -86,6 +86,11 @@ let _ = Io/write(Io/stdout, b)!;
 Io/write(Io/stdout, r)
 `;
 
+const ABORT = `
+foreign abort(Byte) -> Never;
+abort(3)
+`;
+
 const WRITE = `
 use /std/{Async, Handle, Show, print};
 foreign token() -> Handle;
@@ -157,6 +162,40 @@ test("compile hands back the program beside the foreign rows it reaches as plain
     },
   );
   assert.ok(foreigns.some(({ name }) => name === "/std/Handle/handle_write"));
+});
+
+test("a row that does not return is described as one, and a hook that returns from it stops the program", async () => {
+  assert.deepEqual(
+    compile(ABORT).foreigns.find(({ name }) => name === "/abort"),
+    { name: "/abort", params: ["Byte"], never: true },
+  );
+
+  let handed;
+  await stopped(
+    ABORT,
+    {
+      foreign: {
+        "/abort": (code) => {
+          handed = code;
+        },
+      },
+    },
+    /ffi \/abort: the hook returned, and the row does not return/,
+  );
+  assert.equal(handed, 3);
+
+  // A hook that keeps the row's word ends the program by throwing, and what it threw is the trap.
+  await stopped(
+    ABORT,
+    {
+      foreign: {
+        "/abort": () => {
+          throw new Error("aborted by the hook");
+        },
+      },
+    },
+    /aborted by the hook/,
+  );
 });
 
 test("a Byte crosses whole at 0 and 255, and a hook's answer outside them stops the program", async () => {

@@ -125,6 +125,30 @@ fn verifier_rejects_intrinsic_arity_mismatch() {
     );
 }
 
+/// A call that returns names a row that does: one that does not return has no result for the continuation to bind, and its call is a halt.
+#[test]
+fn verifier_rejects_a_returning_call_through_a_row_that_does_not_return() {
+    let mut module = minimal_module();
+    let Node::Halt { function, args } = halt_zero() else {
+        unreachable!("`halt_zero` is a halt")
+    };
+    let return_to = module.function(FunctionId(0)).unwrap().return_cont;
+    let call = module.add_node(Node::Foreign {
+        function,
+        args,
+        return_to,
+    });
+    module.function_mut(FunctionId(0)).unwrap().body = call;
+
+    assert!(
+        module
+            .verify()
+            .unwrap_err()
+            .0
+            .contains("returns through /exit, which does not return")
+    );
+}
+
 /// The vocabulary clause of `verify_rows`: a value minted as a structural tuple and read as a row — the rebuild a per-function `split_returns` would emit for a class whose only own return edges are tail calls — is refused here, not at the `ref.cast` the emitter would otherwise produce for it. The mirror mismatch, a row read structurally, is refused by the same clause.
 #[test]
 fn verifier_rejects_a_read_in_the_other_vocabulary() {

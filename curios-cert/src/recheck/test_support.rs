@@ -6,7 +6,7 @@
 
 use {
     crate::{Globals, Kernel, Rechecked, Verdict},
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
         InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Nominal, Places,
@@ -879,7 +879,7 @@ pub(super) fn forged_row() -> ForeignFunction {
         label: "forged".to_string(),
         signature: WireSignature {
             params: Vec::new(),
-            results: WireResults::single(WireType::Nat),
+            returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
         },
     }
 }
@@ -1703,7 +1703,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
                 label: "exit".to_string(),
                 signature: WireSignature {
                     params: vec![WireType::Byte],
-                    results: WireResults::never(),
+                    returns: WireReturn::Never,
                 },
             }),
             vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(0))],

@@ -1,7 +1,7 @@
 use {
     super::Projected,
     crate::{reduce::test_support::qed, *},
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Certification, Certified, Definition, DefinitionKind, Entrypoint, Free, Global,
@@ -251,7 +251,7 @@ fn an_exit_seals_the_thunk_that_describes_it() {
                 label: "exit".to_string(),
                 signature: WireSignature {
                     params: vec![WireType::Byte],
-                    results: WireResults::never(),
+                    returns: WireReturn::Never,
                 },
             }),
             vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(3))],

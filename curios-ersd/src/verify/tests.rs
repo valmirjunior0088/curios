@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_num::Natural,
     std::sync::Arc,
 };
@@ -390,7 +390,7 @@ fn an_initializer_that_performs_an_effect_is_rejected() {
         label: "exit".to_string(),
         signature: WireSignature {
             params: vec![WireType::Byte],
-            results: WireResults::never(),
+            returns: WireReturn::Never,
         },
     }));
     let init = builder.seal_block(Terminator::Halt {

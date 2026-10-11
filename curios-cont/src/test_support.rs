@@ -9,7 +9,7 @@ use {
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
         Module, Node, NodeId, ValueExpr, ValueId, function_nodes,
     },
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_num::Natural,
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -25,7 +25,7 @@ pub(super) fn halt(args: Vec<Atom>) -> Node {
             label: "exit".to_string(),
             signature: WireSignature {
                 params: vec![WireType::Byte],
-                results: WireResults::never(),
+                returns: WireReturn::Never,
             },
         }),
         args,

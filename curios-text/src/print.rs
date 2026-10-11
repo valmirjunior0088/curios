@@ -12,7 +12,7 @@ use {
         TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
     },
     crate::op_precedence,
-    curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
+    curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType, stdio},
     curios_num::{Floating, Grain, Natural, Rounding},
     curios_print::{
         Printer, ends, fill, flat, group, hard_line, if_break, indent, line, named, pure, reached,
@@ -1533,7 +1533,6 @@ fn print_wire_type(type_: WireType) -> Printer {
 fn print_wire_results(results: &WireResults) -> Printer {
     match results.shape() {
         ResultShape::Unit => pure("{}"),
-        ResultShape::Never => pure("Never"),
         ResultShape::Single(type_) => print_wire_type(type_),
         ResultShape::Record(fields) => listed(
             "{",
@@ -1562,7 +1561,10 @@ fn print_wire_signature(signature: &WireSignature) -> Printer {
             ")",
         ),
         pure(" -> "),
-        print_wire_results(&signature.results),
+        match &signature.returns {
+            WireReturn::Answers(results) => print_wire_results(results),
+            WireReturn::Never => pure("Never"),
+        },
     ])
 }
 

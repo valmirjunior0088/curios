@@ -12,7 +12,7 @@
 
 use {
     super::{ForeignBindings, Lift, Lower, on_guest_stack, shared_engine},
-    curios_abi::{ForeignFunction, ForeignStore, ResultShape, WireType},
+    curios_abi::{ForeignFunction, ForeignStore, WireReturn, WireType},
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::{Arc, Mutex},
@@ -329,14 +329,13 @@ fn define_row(
         .collect::<Result<Vec<_>, _>>()?;
 
     // Ending the instance is the host's to do: a module reaches no environment, and its own trap is a failure of the call.
-    if signature.results.shape() == ResultShape::Never {
+    let WireReturn::Answers(results) = &signature.returns else {
         return Err(format!(
             "{subject} answers `{declaration}`, which does not return. A foreign module answers a value or none, and only the host ends the program"
         ));
-    }
+    };
 
-    let fields = signature
-        .results
+    let fields = results
         .types()
         .iter()
         .map(|wire| crossing(*wire, subject, &declaration))

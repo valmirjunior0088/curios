@@ -335,7 +335,7 @@ impl Module {
                         return_to,
                         ..
                     } if *return_to == sentinel => {
-                        operation = operation.or(Some(function.signature().results.len()));
+                        operation = operation.or(Some(function.signature().returns.arity()));
                     }
                     Node::Cell { op, return_to, .. } if *return_to == sentinel => {
                         operation = operation.or(Some(op.result_arity()));

@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_num::{Binary, Grain, Natural},
     std::sync::Arc,
 };
@@ -987,7 +987,7 @@ fn a_halt_lowers_to_its_node() {
         label: "exit".to_string(),
         signature: WireSignature {
             params: vec![WireType::Byte],
-            results: WireResults::never(),
+            returns: WireReturn::Never,
         },
     }));
     let entry = builder.seal_block(Terminator::Halt {

@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_num::{Floating, Natural},
     std::sync::Arc,
 };
@@ -424,7 +424,7 @@ fn an_unreached_schema_or_foreign_row_is_not_declared() {
         label: "beep".into(),
         signature: WireSignature {
             params: vec![],
-            results: WireResults::single(WireType::Nat),
+            returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
         },
     }));
 

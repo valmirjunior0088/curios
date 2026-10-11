@@ -1047,7 +1047,7 @@ impl MachineModule {
                         "{owner} foreign call argument count does not match its ABI"
                     )));
                 }
-                verify_block_resume(function, *resume, foreign.signature().results.len())?;
+                verify_block_resume(function, *resume, foreign.signature().returns.arity())?;
             }
             MachineTerminator::ForeignReturn {
                 function: foreign,
@@ -1058,7 +1058,7 @@ impl MachineModule {
                         "{owner} foreign tail call argument count does not match its ABI"
                     )));
                 }
-                tail_returns(owner, function, foreign.signature().results.len())?;
+                tail_returns(owner, function, foreign.signature().returns.arity())?;
             }
             MachineTerminator::Cell { op, args, resume } => {
                 if args.len() != op.operand_arity() {

@@ -177,7 +177,7 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
                 ..
             } => {
                 if let Some(continuation) = module.continuation(*return_to) {
-                    let results = function.signature().results.types();
+                    let results = function.signature().returns.types();
 
                     for (index, &param) in continuation.params.iter().enumerate() {
                         match results.get(index) {

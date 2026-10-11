@@ -161,25 +161,12 @@ enum Slots {
     None,
     Single(WireType),
     Record(Vec<(String, WireType)>),
-    Never,
 }
 
 impl WireResults {
     /// No results: the unit value.
     pub fn none() -> Self {
         Self { slots: Slots::None }
-    }
-
-    /// No result ever: the row's call does not return, which is distinct from a row answering nothing. What a declaration states with `Never`.
-    pub fn never() -> Self {
-        Self {
-            slots: Slots::Never,
-        }
-    }
-
-    /// Whether the row answers no value because its call does not return.
-    pub fn is_never(&self) -> bool {
-        matches!(self.slots, Slots::Never)
     }
 
     /// One result of any wire type, forwarded through as itself — a user `foreign` declaration's bare result, well-formed whatever the type.
@@ -203,20 +190,20 @@ impl WireResults {
     /// How many results cross — the count the guest-facing shape is read off.
     pub fn len(&self) -> usize {
         match &self.slots {
-            Slots::None | Slots::Never => 0,
+            Slots::None => 0,
             Slots::Single(_) => 1,
             Slots::Record(fields) => fields.len(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        matches!(self.slots, Slots::None | Slots::Never)
+        matches!(self.slots, Slots::None)
     }
 
     /// Every result's wire type, in the order they cross.
     pub fn types(&self) -> Vec<WireType> {
         match &self.slots {
-            Slots::None | Slots::Never => Vec::new(),
+            Slots::None => Vec::new(),
             Slots::Single(wire_type) => vec![*wire_type],
             Slots::Record(fields) => fields.iter().map(|(_, wire_type)| *wire_type).collect(),
         }
@@ -233,7 +220,6 @@ impl WireResults {
                     .map(|(label, wire_type)| (label.as_str(), *wire_type))
                     .collect(),
             ),
-            Slots::Never => ResultShape::Never,
         }
     }
 }
@@ -244,16 +230,39 @@ pub enum ResultShape<'a> {
     Unit,
     Single(WireType),
     Record(Vec<(&'a str, WireType)>),
-    /// No value ever: the call does not return.
+}
+
+/// What a call of a row comes back with: the results it answers, or nothing ever. A row that answers no result still returns, and a row that does not return answers none because no call of it ends, so the two are different rows: a declaration writes `{}` for the one and `Never` for the other.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum WireReturn {
+    /// The call returns, with these results.
+    Answers(WireResults),
+    /// The call does not return.
     Never,
 }
 
-/// The signature of one foreign function: what crosses. Each operand is its wire type, in order, and the results are shaped as [`WireResults`] states. An operand has no name here: a declaration's operands are positions.
+impl WireReturn {
+    /// The wire types that cross back, in order: what the row's import is typed as answering. A call that does not return crosses none.
+    pub fn types(&self) -> Vec<WireType> {
+        match self {
+            WireReturn::Answers(results) => results.types(),
+            WireReturn::Never => Vec::new(),
+        }
+    }
+
+    /// How many values cross back.
+    pub fn arity(&self) -> usize {
+        self.types().len()
+    }
+}
+
+/// The signature of one foreign function: what crosses. Each operand is its wire type, in order, and what comes back is a [`WireReturn`]. An operand has no name here: a declaration's operands are positions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireSignature {
     pub params: Vec<WireType>,
-    pub results: WireResults,
+    pub returns: WireReturn,
 }
 
 /// The wasm import namespaces — the closed pair both ends agree on. `Ffi` holds every foreign function, under the name its declaration has, the standard library's among them; `Sys` holds [`PANIC`] alone, the one import no declaration states.
@@ -325,9 +334,9 @@ impl ForeignFunction {
         &self.label
     }
 
-    /// Whether a call never returns: the declaration answers `Never`.
+    /// Whether a call never returns: the declaration states `Never`.
     pub fn diverges(&self) -> bool {
-        self.signature.results.is_never()
+        matches!(self.signature.returns, WireReturn::Never)
     }
 
     /// The operands and results the declaration states.

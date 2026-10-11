@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::{Entrypoint, RootSource},
-    curios_abi::{WireResults, WireType},
+    curios_abi::{WireResults, WireReturn, WireType},
 };
 
 #[test]
@@ -24,8 +24,8 @@ fn declaration_populates_the_store() {
         vec![WireType::Nat, WireType::Bytes]
     );
     assert_eq!(
-        function.signature().results,
-        WireResults::single(WireType::Nat)
+        function.signature().returns,
+        WireReturn::Answers(WireResults::single(WireType::Nat))
     );
 }
 

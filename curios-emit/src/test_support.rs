@@ -6,24 +6,29 @@
 
 use {
     crate::into_wasm,
-    curios_abi::{ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
     std::{collections::BTreeMap, sync::Arc},
 };
 
-/// The row a program declares as `/name`, taking `params` and answering `results`.
-pub(super) fn row(name: &str, params: Vec<WireType>, results: WireResults) -> Arc<ForeignFunction> {
+/// The row a program declares as `/name`, taking `params` and coming back with `returns`.
+fn declared(name: &str, params: Vec<WireType>, returns: WireReturn) -> Arc<ForeignFunction> {
     Arc::new(ForeignFunction {
         name: format!("/{name}"),
         label: name.to_string(),
-        signature: WireSignature { params, results },
+        signature: WireSignature { params, returns },
     })
+}
+
+/// The row a program declares as `/name`, taking `params` and answering `results`.
+pub(super) fn row(name: &str, params: Vec<WireType>, results: WireResults) -> Arc<ForeignFunction> {
+    declared(name, params, WireReturn::Answers(results))
 }
 
 /// A halt reading `args`, through a row that does not return, `/exit: (Byte) -> Never` — the terminal a fixture ends with when what it passes must stay live.
 pub(super) fn halt(args: Vec<curios_cont::Atom>) -> curios_cont::Node {
     curios_cont::Node::Halt {
-        function: row("exit", vec![WireType::Byte], WireResults::never()),
+        function: declared("exit", vec![WireType::Byte], WireReturn::Never),
         args,
     }
 }
@@ -332,7 +337,7 @@ pub(super) fn channel_roundtrip() -> curios_cont::Module {
 /// A host call whose signature has `results` results, resuming into a continuation that binds them all and exits with the first.
 pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cont::Module {
     let arity = function.signature().params.len();
-    let results = function.signature().results.len();
+    let results = function.signature().returns.arity();
 
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();

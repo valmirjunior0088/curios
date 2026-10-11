@@ -8,7 +8,7 @@ use {
     super::{
         ChildExit, ChildHandles, ClosedCode, Failure, FileStat, Handle, Mode, Poll, Refusal,
         SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf,
-        WireResults, WireType,
+        WireResults, WireReturn, WireType,
     },
     crate::status,
 };
@@ -320,10 +320,10 @@ impl WirePayload for ChildHandles {
     }
 }
 
-/// A row's whole reply: the results it crosses as, and its encoding.
+/// A row's whole reply: what its call comes back with, and its encoding.
 pub trait WireReply: Sized {
-    /// The results, a lone payload's slot labelled `label`: a payload's own slots, a status ahead of them where the reply carries one, and none ever for a reply that ends the instance.
-    fn results(label: &'static str) -> WireResults;
+    /// What the call comes back with, a lone payload's slot labelled `label`: a payload's own slots, a status ahead of them where the reply carries one, or nothing ever for a reply that ends the instance.
+    fn returns(label: &'static str) -> WireReturn;
 
     fn encode(self) -> Encoded;
 }
@@ -351,8 +351,8 @@ fn with_payload<T: WirePayload>(status: u64, payload: Option<T>) -> Encoded {
 }
 
 impl<T: WirePayload> WireReply for T {
-    fn results(label: &'static str) -> WireResults {
-        WireResults::of(T::slots(label))
+    fn returns(label: &'static str) -> WireReturn {
+        WireReturn::Answers(WireResults::of(T::slots(label)))
     }
 
     fn encode(self) -> Encoded {
@@ -364,8 +364,8 @@ impl<T: WirePayload> WireReply for T {
 }
 
 impl<T: WirePayload> WireReply for Result<T, Failure> {
-    fn results(label: &'static str) -> WireResults {
-        with_status::<T>(label)
+    fn returns(label: &'static str) -> WireReturn {
+        WireReturn::Answers(with_status::<T>(label))
     }
 
     fn encode(self) -> Encoded {
@@ -378,8 +378,8 @@ impl<T: WirePayload> WireReply for Result<T, Failure> {
 
 /// The end of the stream crosses as `EOF` beside the payload's padding.
 impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
-    fn results(label: &'static str) -> WireResults {
-        with_status::<T>(label)
+    fn returns(label: &'static str) -> WireReturn {
+        WireReturn::Answers(with_status::<T>(label))
     }
 
     fn encode(self) -> Encoded {
@@ -393,8 +393,8 @@ impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
 
 /// Absence crosses as `NOT_FOUND` beside the payload's padding.
 impl<T: WirePayload> WireReply for Option<T> {
-    fn results(label: &'static str) -> WireResults {
-        with_status::<T>(label)
+    fn returns(label: &'static str) -> WireReturn {
+        WireReturn::Answers(with_status::<T>(label))
     }
 
     fn encode(self) -> Encoded {
@@ -407,8 +407,8 @@ impl<T: WirePayload> WireReply for Option<T> {
 
 /// A value, or a refusal: a row with no failure lane whose host could not answer is refused rather than answered with something the host does not have. The refusal never crosses, so the row returns exactly as its payload does.
 impl<T: WirePayload> WireReply for Result<T, Refusal> {
-    fn results(label: &'static str) -> WireResults {
-        WireResults::of(T::slots(label))
+    fn returns(label: &'static str) -> WireReturn {
+        WireReturn::Answers(WireResults::of(T::slots(label)))
     }
 
     fn encode(self) -> Encoded {
@@ -421,8 +421,8 @@ impl<T: WirePayload> WireReply for Result<T, Refusal> {
 
 /// A diverging call crosses nothing back: its reply ends the instance.
 impl WireReply for Termination {
-    fn results(_: &'static str) -> WireResults {
-        WireResults::never()
+    fn returns(_: &'static str) -> WireReturn {
+        WireReturn::Never
     }
 
     fn encode(self) -> Encoded {
