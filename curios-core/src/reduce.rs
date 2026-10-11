@@ -2,28 +2,9 @@ mod intrinsic;
 pub use intrinsic::*;
 
 use {
-    super::{Category, Cost, Extent, Free, Subterm, Term, UniverseError},
-    curios_abi::ForeignFunction,
+    super::{Category, Cost, Extent, Free, Term, UniverseError},
     curios_num::{Integer, Natural},
-    std::sync::Arc,
 };
-
-/// Reduce a host call's operands and rebuild the node.
-///
-/// There is nothing to fold: a foreign call denotes an inert description, so reduction does here exactly what it does for an `Io`-returning intrinsic — evaluate the operands, rebuild, and stop. It sits beside [`reduce_intrinsic`] rather than within it because [`Subterm::Foreign`] is a term former of its own, and every consumer that folds intrinsics must fold this too or leave a host call's operands unevaluated.
-pub fn reduce_foreign(
-    reducer: &mut impl Reducer,
-    function: &Arc<ForeignFunction>,
-    args: &[Term],
-) -> Result<Subterm, ReduceError> {
-    reducer.spend(Cost::collection(args.len() as u64))?;
-
-    let mut reduced = Vec::with_capacity(args.len());
-    for arg in args {
-        reduced.push(reducer.reduce(arg.clone())?);
-    }
-    Ok(Subterm::Foreign(Arc::clone(function), reduced))
-}
 
 /// The failure mode of type-level evaluation: either the declaration's step budget ran out (`Exhausted`) or a partial intrinsic was folded outside its domain, carrying the offending redex's extent. It is deliberately free of any elaboration vocabulary — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -4,7 +4,7 @@
 //!
 //! This is the one statement. The kernel walks it to check, elaboration walks it to elaborate, and congruence walks it to compare each operand *at its own type* rather than at a flat `Type` — which is what lets proof irrelevance fire on a bound through the ordinary gate instead of through a rule about bounds.
 //!
-//! A host call is stated in the same vocabulary. `foreign_signature` reads its demands off the row — the roster's for a builtin, the declaration's own otherwise — so both checkers type a foreign call with the walk they run for an intrinsic, and neither keeps a rule of its own for one.
+//! A host call is stated in the same vocabulary. `foreign_signature` reads its demands off the row its declaration states, so both checkers type a foreign call with the walk they run for an intrinsic, and neither keeps a rule of its own for one.
 //!
 //! **`/sys` reads it too.** The declarations a program actually calls take each parameter's type and plicity, every bound and the result from the row of the node their body builds (`curios-text`'s `sys_module`), so the roster states no type of its own and has none to drift. A row is therefore what everything above it believes, and nothing spells it a second time to catch a slip in it: what a bound *means* is held by a program on each side of its edge, `curios/src/tests/numeric/domain_tests.rs`, where a new bounded row takes a pair.
 //!

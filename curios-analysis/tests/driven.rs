@@ -727,13 +727,16 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             let row = Arc::new(ForeignFunction {
                 name: "/planted".to_string(),
-                label: "planted".to_string(),
                 signature: WireSignature {
                     params: Vec::new(),
                     returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
                 },
             });
-            Term::foreign(row, vec![markers.visited()])
+            Term::foreign(
+                row,
+                Global::Authored(Qualifier::from(["planted"])),
+                vec![markers.visited()],
+            )
         }),
         Specimen::of(&mut markers, |markers| {
             Term::func([(binder(1), markers.visited())], markers.visited())

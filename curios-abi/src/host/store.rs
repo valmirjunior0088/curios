@@ -299,12 +299,11 @@ impl Display for Namespace {
     }
 }
 
-/// One foreign function, as its `foreign` declaration states it: the fully qualified name it imports under in the `ffi` namespace (leading `/`), the label it binds in the guest, and the signature it declared. The pair `(ffi, name)` is the wire ABI the wasm emitter and the runtime linker share. Nothing here says who answers the call — a module, an embedder or the host — which is decided where the program is linked.
+/// One foreign function, as its `foreign` declaration states it: the fully qualified name it is declared under, which is the name it imports under in the `ffi` namespace (leading `/`), and the signature it declared. It has that one name: what a report or a dump spells it by is read off its declaration. The pair `(ffi, name)` is the wire ABI the wasm emitter and the runtime linker share. Nothing here says who answers the call — a module, an embedder or the host — which is decided where the program is linked.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct ForeignFunction {
     pub name: String,
-    pub label: String,
     pub signature: WireSignature,
 }
 
@@ -327,11 +326,6 @@ impl ForeignFunction {
     /// The wasm import name: the declaration's fully qualified name.
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    /// The binding the function surfaces as in the guest.
-    pub fn label(&self) -> &str {
-        &self.label
     }
 
     /// Whether a call never returns: the declaration states `Never`.

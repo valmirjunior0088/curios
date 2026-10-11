@@ -119,8 +119,8 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 
         Subterm::Intrinsic(intrinsic) => infer_intrinsic(kernel, intrinsic),
 
-        // A host call described by its ABI row, typed through the same walk an intrinsic is: each operand checks against what `foreign_signature` demands of it, and the result — unit, a bare value, or a named record, inside `Io` — is read off the same row. The row, not this crate, states the signature, and for a builtin the row is the roster's, reached through the identity the term carries.
-        Subterm::Foreign(function, args) => {
+        // A host call described by its ABI row, typed through the same walk an intrinsic is: each operand checks against what `foreign_signature` demands of it, and the result — unit, a bare value, or a named record, inside `Io` — is read off the same row. The row, not this crate, states the signature.
+        Subterm::Foreign(function, _, args) => {
             let signature = foreign_signature(function, args, |label| kernel.fresh(Some(label)));
 
             if args.len() != signature.operands.len() {

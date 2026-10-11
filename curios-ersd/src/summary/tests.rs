@@ -19,7 +19,6 @@ fn a_self_recursive_function_that(total: bool, effectful: bool) -> Module {
     if effectful {
         let row = Arc::new(ForeignFunction {
             name: "/beep".into(),
-            label: "beep".into(),
             signature: WireSignature {
                 params: vec![],
                 returns: WireReturn::Answers(WireResults::single(WireType::Nat)),

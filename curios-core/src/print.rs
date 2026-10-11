@@ -1218,26 +1218,21 @@ fn print_call(
     frame: Frame,
 ) -> Printer {
     let name = frame.spelling.intrinsic_symbol(path.as_ref());
-    print_named_call(name, implicits, explicits, frame)
-}
-
-/// [`print_call`] under a name already spelled — a host call's, which names its own subject.
-fn print_named_call(
-    name: impl Into<String>,
-    implicits: Vec<Term>,
-    explicits: Vec<Term>,
-    frame: Frame,
-) -> Printer {
-    let arguments = implicits
-        .into_iter()
-        .map(|term| marked_argument(sub(term, frame), Some(&Plicity::Implicit)))
-        .chain(explicits.into_iter().map(|term| sub(term, frame)))
-        .collect::<Vec<_>>();
+    let arguments = marked_arguments(implicits, explicits, frame);
     // A row with no parameters is a constant in `/sys`, not a nullary function, and is named the way a constant is.
     if arguments.is_empty() {
         return pure(name);
     }
     flat([pure(name), listed("(".into(), false, arguments, ")")])
+}
+
+/// The arguments of a call as the surface writes them: the implicit ones under their mark, then the written ones.
+fn marked_arguments(implicits: Vec<Term>, explicits: Vec<Term>, frame: Frame) -> Vec<Printer> {
+    implicits
+        .into_iter()
+        .map(|term| marked_argument(sub(term, frame), Some(&Plicity::Implicit)))
+        .chain(explicits.into_iter().map(|term| sub(term, frame)))
+        .collect()
 }
 
 /// A parameterized intrinsic type former as the surface applies it — `List(Nat)`, never `List Nat`. The same type reaches a report two ways, as the intrinsic node and as its `/sys` global applied, and a reader shown `t : List Nat` beside `xs : List(Nat)` is being told two types where there is one.
@@ -2088,9 +2083,19 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             pure(universe_suffix(&instance.universes, frame.spelling)),
         ]),
         Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),
-        // A call across the wire reads as the name its declaration binds.
-        Subterm::Foreign(function, args) => {
-            print_named_call(function.label().to_string(), vec![], args, frame)
+        // A call across the wire reads as a call of its declaration, spelled as any name is, the type a row that does not return is handed under its mark. A row of no operand is still called.
+        Subterm::Foreign(function, declared, mut args) => {
+            let explicits = args.split_off(usize::from(function.diverges()));
+
+            flat([
+                pure(frame.spelling.symbol(&declared)),
+                listed(
+                    "(".into(),
+                    false,
+                    marked_arguments(args, explicits, frame),
+                    ")",
+                ),
+            ])
         }
         Subterm::FuncType(FuncType { telescope }) => {
             let plicities = telescope.marks();

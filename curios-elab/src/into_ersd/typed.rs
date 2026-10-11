@@ -168,7 +168,7 @@ impl Lowering<'_> {
                     Produced::Sort => context.sort_term(term),
                 }
             }
-            Subterm::Foreign(function, arguments) => {
+            Subterm::Foreign(function, _, arguments) => {
                 let signature =
                     foreign_signature(function, arguments, |label| context.fresh(Some(label)));
                 let Produced::Fixed(type_) = signature.produced else {

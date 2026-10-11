@@ -21,7 +21,6 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     let used = builder.item_value(Some("used".into()), Rhs::Alias(Atom::Constant(two)));
     let row = Arc::new(ForeignFunction {
         name: "/beep".into(),
-        label: "beep".into(),
         signature: WireSignature {
             params: vec![],
             returns: WireReturn::Answers(WireResults::single(WireType::Nat)),

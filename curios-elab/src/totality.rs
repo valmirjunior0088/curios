@@ -467,7 +467,7 @@ fn locally_partial(
             ControlFlow::Continue(Enter::Descend)
         },
         |state, term, mut children| {
-            let partial = matches!(&**term, Subterm::Foreign(function, _) if function.diverges())
+            let partial = matches!(&**term, Subterm::Foreign(function, _, _) if function.diverges())
                 || children.any(|child| child);
             state.1.insert(term.clone(), partial);
             partial

@@ -58,7 +58,6 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
     builder.open_block();
     let row = Arc::new(ForeignFunction {
         name: "/poll".into(),
-        label: "poll".into(),
         signature: WireSignature {
             params: vec![],
             returns: WireReturn::Answers(WireResults::single(WireType::Nat)),

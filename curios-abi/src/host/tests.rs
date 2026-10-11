@@ -146,26 +146,22 @@ fn a_row_is_declared_in_its_module_by_its_method() {
     assert_eq!(HostOp::DnsLookup.declared(), "/std/tcp/resolve/dns_lookup");
 }
 
-/// A function is its import name: neither its label nor its signature participates, since no store holds two under one name.
+/// A function is its import name: its signature does not participate, since no store holds two under one name.
 #[test]
 fn a_function_is_its_import_name() {
-    let declared = |name: &str, label: &str| ForeignFunction {
+    let declared = |name: &str, params: Vec<WireType>| ForeignFunction {
         name: name.to_string(),
-        label: label.to_string(),
         signature: WireSignature {
-            params: vec![],
+            params,
             returns: WireReturn::Answers(WireResults::none()),
         },
     };
 
     assert_eq!(
-        declared("/frobnicate", "frobnicate"),
-        declared("/frobnicate", "frobnicate_again")
+        declared("/frobnicate", vec![]),
+        declared("/frobnicate", vec![WireType::Nat])
     );
-    assert_ne!(
-        declared("/frobnicate", "frobnicate"),
-        declared("/other", "frobnicate")
-    );
+    assert_ne!(declared("/frobnicate", vec![]), declared("/other", vec![]));
 }
 
 /// The import name is the identity every stage links on, so a second row with the same name is a construction bug.
@@ -174,7 +170,6 @@ fn a_function_is_its_import_name() {
 fn register_rejects_a_duplicate_name() {
     let declared = || ForeignFunction {
         name: "/frobnicate".to_string(),
-        label: "frobnicate".to_string(),
         signature: WireSignature {
             params: vec![],
             returns: WireReturn::Answers(WireResults::none()),

@@ -225,12 +225,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         result
     }
 
-    /// The type a `foreign` declaration has and the body it binds, both read off its row: the function of the row's operands, none included, whose call is the row's own. The type is core's reading of the row (`curios_core::wire_term`, `curios_core::foreign_produced`), the one both checkers type the call by, so no second reading of a row stands beside it.
+    /// The type the `foreign` declaration `declared` has and the body it binds, both read off its row: the function of the row's operands, none included, whose call is the row's own and names the declaration. The type is core's reading of the row (`curios_core::wire_term`, `curios_core::foreign_produced`), the one both checkers type the call by, so no second reading of a row stands beside it.
     ///
     /// A row that does not return takes the type its description yields ahead of its operands, an implicit of the same list. No binder has a hint: a declaration writes no operand name, and the binder for what a diverging call yields is the compiler's own.
     pub(super) fn foreign(
         &self,
         function: &Arc<ForeignFunction>,
+        declared: curios_core::Global,
     ) -> (curios_core::Term, curios_core::Term) {
         let (telescope, operands) = self.foreign_telescope(function);
         let produced = curios_core::foreign_produced(function, &operands, |label| {
@@ -241,7 +242,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let (telescope, operands) = self.foreign_telescope(function);
         let body = curios_core::Term::func_marked(
             telescope,
-            curios_core::Term::foreign(Arc::clone(function), operands),
+            curios_core::Term::foreign(Arc::clone(function), declared, operands),
         );
 
         (type_, body)

@@ -421,7 +421,6 @@ fn an_unreached_schema_or_foreign_row_is_not_declared() {
     let _unused_family = builder.family(Some("Unreached".into()));
     let _unused_foreign = builder.foreign(Arc::new(ForeignFunction {
         name: "/beep".into(),
-        label: "beep".into(),
         signature: WireSignature {
             params: vec![],
             returns: WireReturn::Answers(WireResults::single(WireType::Nat)),

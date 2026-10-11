@@ -750,9 +750,9 @@ impl Term {
         Self::from(Subterm::Intrinsic(intrinsic.into()))
     }
 
-    /// A host call against the ABI row `function` describes.
-    pub fn foreign(function: Arc<ForeignFunction>, args: Vec<Term>) -> Self {
-        Self::from(Subterm::Foreign(function, args))
+    /// A host call against the ABI row `function` describes, which the `foreign` declaration `declared` states.
+    pub fn foreign(function: Arc<ForeignFunction>, declared: Global, args: Vec<Term>) -> Self {
+        Self::from(Subterm::Foreign(function, declared, args))
     }
 
     /// A variable occurrence. External callers can only build free variables ([`Var::free`]); bound ones are the scope machinery's business.

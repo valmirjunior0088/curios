@@ -291,7 +291,7 @@ impl<'s> Lowering<'s> {
                 intrinsic::erase_intrinsic(self, context, intrinsic, hint)
             }
             // A host call: each operand erases against the demand elaboration checked it with, `foreign_operands`' reading of the same row. A diverging call's type operand erases with every other type.
-            Subterm::Foreign(function, arguments) => {
+            Subterm::Foreign(function, _, arguments) => {
                 let mut atoms = Vec::with_capacity(arguments.len());
                 for (argument, demand) in arguments.iter().zip(foreign_operands(function)) {
                     match demand {

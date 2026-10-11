@@ -984,7 +984,6 @@ fn a_halt_lowers_to_its_node() {
     let three = nat(&mut builder, 3);
     let exit = builder.foreign(Arc::new(ForeignFunction {
         name: "/exit".to_string(),
-        label: "exit".to_string(),
         signature: WireSignature {
             params: vec![WireType::Byte],
             returns: WireReturn::Never,

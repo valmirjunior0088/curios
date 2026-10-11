@@ -41,7 +41,7 @@ fn calls_a_diverging_row(term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
             None => Enter::Descend,
         },
         |memo, term, mut children| {
-            let diverges = matches!(&**term, Subterm::Foreign(function, _) if function.diverges())
+            let diverges = matches!(&**term, Subterm::Foreign(function, _, _) if function.diverges())
                 || children.any(|child| child);
             memo.insert(term.clone(), diverges);
             diverges

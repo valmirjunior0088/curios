@@ -876,7 +876,6 @@ pub(super) fn instance_of_width(width: usize) -> Module {
 pub(super) fn forged_row() -> ForeignFunction {
     ForeignFunction {
         name: "/forged".to_string(),
-        label: "forged".to_string(),
         signature: WireSignature {
             params: Vec::new(),
             returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
@@ -897,7 +896,11 @@ pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: 
         proof: false,
         variances: Vec::new(),
         type_: claimed.clone(),
-        body: Term::foreign(row, Vec::new()),
+        body: Term::foreign(
+            row,
+            Global::Authored(Qualifier::from(["forged"])),
+            Vec::new(),
+        ),
     };
 
     declaring(
@@ -1700,12 +1703,12 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
         Carried::Exit => Term::foreign(
             Arc::new(ForeignFunction {
                 name: "/exit".to_string(),
-                label: "exit".to_string(),
                 signature: WireSignature {
                     params: vec![WireType::Byte],
                     returns: WireReturn::Never,
                 },
             }),
+            Global::Authored(Qualifier::from(["exit"])),
             vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(0))],
         ),
         Carried::Pure => Term::intrinsic(Intrinsic::io_pure(

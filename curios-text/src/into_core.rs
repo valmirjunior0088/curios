@@ -1311,7 +1311,6 @@ fn process_items(
                 let path = context.prefixed(&f.label);
                 let function = ForeignFunction {
                     name: path.join(),
-                    label: f.label.to_string(),
                     signature: f.signature.clone(),
                 };
                 lowered.foreigns.register(function.clone());
@@ -1319,11 +1318,11 @@ fn process_items(
                 let name = curios_core::Global::Authored(path);
                 context.record_import_scope(Some(&name));
                 let lower = Lowerer::new(context, Some(name));
-                let (type_, body) = lower.foreign(&Arc::new(function));
+                let (type_, body) = lower.foreign(&Arc::new(function), name);
                 lowered.items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Authored,
                     span: f.label.span().cloned(),
-                    name: curios_core::Global::Authored(path),
+                    name,
                     island: context.island(),
                     type_,
                     body,

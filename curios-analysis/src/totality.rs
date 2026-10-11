@@ -503,7 +503,7 @@ impl<E: Env> Walk<'_, E> {
                 self.walks(&terms)
             }
 
-            Subterm::Foreign(_, args) => self.walks(args),
+            Subterm::Foreign(_, _, args) => self.walks(args),
 
             // A binding's type and value, and then the tail, are each walked with every binder before them standing for its value, for the reason an applied lambda is: a `let` is a redex, and a binder aliasing an arm's payload is below the scrutinee exactly as the payload is. Binding `i` is stored under the `i` binders before it, so it is released against the values already in hand before it is walked, as the kernel checks it against the binders before it: a call in a binding's value reads what an earlier binding stands for as a call in the tail does.
             Subterm::Let(Let { bindings, tail }) => {

@@ -27,7 +27,9 @@ pub enum Subterm {
     /// A store-described host call: the row's [`WireSignature`](curios_abi::WireSignature) fixes the operand types checked at elaboration and the result shape (unit, bare value, or named record). Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
     ///
     /// A term former rather than a [`Intrinsic`] variant, because it is the one construct here whose meaning is *not* fixed by the enum that holds it: every intrinsic has a signature this crate spells, while a foreign call reads its own off the ABI row it carries. Nothing about it is closed, so it does not belong in a closed set.
-    Foreign(Arc<ForeignFunction>, Vec<Term>),
+    ///
+    /// The [`Global`] is the `foreign` declaration that states the row: what a report spells the call by, as it spells any name, where the row itself holds only the name it imports under.
+    Foreign(Arc<ForeignFunction>, Global, Vec<Term>),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
@@ -196,7 +198,7 @@ impl Subterm {
                     .for_each(|t| t.collect_construction_names(names));
             }
             Subterm::Intrinsic(intrinsic) => intrinsic.collect_construction_names(names),
-            Subterm::Foreign(_, args) => args
+            Subterm::Foreign(_, _, args) => args
                 .iter()
                 .for_each(|arg| arg.collect_construction_names(names)),
             Subterm::Func(Func { telescope, .. }) => telescope.collect_construction_names(names),
@@ -366,7 +368,7 @@ impl Subterm {
                 children.any(&mut *pred)
             }
             Subterm::Intrinsic(intrinsic) => intrinsic.any_term(pred),
-            Subterm::Foreign(_, args) => args.iter().any(&mut *pred),
+            Subterm::Foreign(_, _, args) => args.iter().any(&mut *pred),
             Subterm::Func(Func { telescope, .. }) => telescope.any_term(pred),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_term(pred),
             Subterm::Apply(apply) => pred(&apply.head) || apply.params().any(&mut *pred),
@@ -641,8 +643,9 @@ impl Bound for Subterm {
                 Subterm::Sort(visit.visit_quality(quality), visit.visit_level(level))
             }
             Subterm::Intrinsic(intrinsic) => Subterm::Intrinsic(intrinsic.traverse(visit)),
-            Subterm::Foreign(function, args) => Subterm::Foreign(
+            Subterm::Foreign(function, declared, args) => Subterm::Foreign(
                 Arc::clone(function),
+                *declared,
                 args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
             ),
             Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {
@@ -899,7 +902,7 @@ impl Bound for Subterm {
                 None => 0,
             },
             Subterm::Intrinsic(intrinsic) => intrinsic.reach(),
-            Subterm::Foreign(_, args) => max_reach(args),
+            Subterm::Foreign(_, _, args) => max_reach(args),
             Subterm::Func(Func { telescope, .. }) => telescope.reach(),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.reach(),
             Subterm::Apply(apply) => apply.head.reach().max(max_reach(apply.params())),

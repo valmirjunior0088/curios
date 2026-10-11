@@ -123,3 +123,47 @@ fn a_row_of_no_operand_is_called() {
     .expect_err("a function of no operand is no description");
     assert!(refusal.contains("type mismatch"), "{refusal}");
 }
+
+/// A report spells a call of a row as a call of its declaration, by the spelling resolution takes back to it where the reader stands: a child module's row under its path, where the bare label is another declaration's name beside the reader.
+#[test]
+fn a_report_spells_a_row_as_its_declaration_is_reached() {
+    let (_directory, modules) = written_files(
+        "row-spelling",
+        &[
+            (
+                "lib.crs",
+                "mod inner;\n\nuse /std/{Eq, Io, Nat};\n\nlet deep(n: Nat) -> Io(Nat) = Io/pure(n);\n\nlet p: Eq()(inner/deep(1), deep(1)) = Eq/refl();\n",
+            ),
+            ("inner.crs", "pub foreign deep(Nat) -> Nat;\n"),
+        ],
+    );
+
+    let refusal = compile_modules(&modules)
+        .err()
+        .expect("the two calls are not one");
+
+    assert!(
+        refusal.contains("expected: Eq(@Io(Nat))(inner/deep(1), Io/pure(@Nat, 1))"),
+        "{refusal}"
+    );
+}
+
+/// A row no name its reader can write reaches keeps its declaration's whole path: a private row of the standard library, met through the function that calls it.
+#[test]
+fn a_report_spells_a_row_its_reader_cannot_reach_by_its_path() {
+    let refusal = typecheck(
+        r#"
+            use /std/{Eq, Handle, Io};
+            pub let p: Eq()(Handle/close(Handle/stdin), Io/pure(())) = Eq/refl();
+            /std/print("")
+        "#,
+    )
+    .expect_err("the two descriptions are not one");
+
+    assert!(
+        refusal.contains(
+            "expected: Eq(@Io({}))(/std/Handle/handle_close(Handle/stdin), Io/pure(@{}, ()))"
+        ),
+        "{refusal}"
+    );
+}

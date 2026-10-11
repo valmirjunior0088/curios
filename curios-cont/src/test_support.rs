@@ -22,7 +22,6 @@ pub(super) fn halt(args: Vec<Atom>) -> Node {
     Node::Halt {
         function: Arc::new(ForeignFunction {
             name: "/exit".to_string(),
-            label: "exit".to_string(),
             signature: WireSignature {
                 params: vec![WireType::Byte],
                 returns: WireReturn::Never,

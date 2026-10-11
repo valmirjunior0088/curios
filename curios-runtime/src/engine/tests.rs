@@ -17,7 +17,6 @@ fn doubling() -> ForeignBindings {
 
     store.register(ForeignFunction {
         name: "/double".to_string(),
-        label: "double".to_string(),
         signature: WireSignature {
             params: vec![WireType::Nat],
             returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
@@ -55,7 +54,6 @@ fn every_host_answer_crosses_as_its_row() {
     for op in HostOp::ALL {
         let declared = Arc::new(ForeignFunction {
             name: op.declared(),
-            label: op.name().to_string(),
             signature: op.signature().clone(),
         });
 
@@ -72,7 +70,6 @@ fn a_bits_row_is_read_by_the_bytes_codec() {
 
     store.register(ForeignFunction {
         name: "/echo".to_string(),
-        label: "echo".to_string(),
         signature: WireSignature {
             params: vec![WireType::List(WireLeaf::Bits)],
             returns: WireReturn::Answers(WireResults::single(WireType::List(WireLeaf::Bits))),

@@ -248,12 +248,12 @@ fn an_exit_seals_the_thunk_that_describes_it() {
         Term::foreign(
             Arc::new(ForeignFunction {
                 name: "/exit".to_string(),
-                label: "exit".to_string(),
                 signature: WireSignature {
                     params: vec![WireType::Byte],
                     returns: WireReturn::Never,
                 },
             }),
+            Global::Authored(Qualifier::from(["exit"])),
             vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(3))],
         ),
         nat_lit(7),

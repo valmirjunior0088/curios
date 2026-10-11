@@ -15,7 +15,6 @@ use {
 fn declared(name: &str, params: Vec<WireType>, returns: WireReturn) -> Arc<ForeignFunction> {
     Arc::new(ForeignFunction {
         name: format!("/{name}"),
-        label: name.to_string(),
         signature: WireSignature { params, returns },
     })
 }

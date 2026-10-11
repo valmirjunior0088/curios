@@ -35,9 +35,9 @@
 use {
     super::{
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
-        Func, Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult,
-        Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope, Term,
-        instantiate_universes_scoped, reduce_intrinsic,
+        Func, Global, Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match,
+        MatchResult, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope,
+        Term, instantiate_universes_scoped, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -148,7 +148,10 @@ enum Finish {
     /// The memo is what keeps a *closed neutral* accumulator linear. A fold whose combining operation is genuinely stuck — byte arithmetic no rule folds, a runtime-only operation — accumulates a neutral chain one link deeper per element, exactly as it does under the hosts; without the memo the machine would re-walk that chain at every element, and a pathological program would price *worse* here than under the strategy this replaces. With it, a chain link evaluates once and every later encounter is one probe.
     Intrinsic { key: Term, intrinsic: Intrinsic },
     /// Rebuild the inert host call over its evaluated operands.
-    Foreign { function: Arc<ForeignFunction> },
+    Foreign {
+        function: Arc<ForeignFunction>,
+        declared: Global,
+    },
 }
 
 /// A left-to-right evaluation of a fixed list of terms, then a [`Finish`] over the values.
@@ -492,7 +495,7 @@ impl Machine {
                 )
             }
 
-            Subterm::Foreign(function, operands) => {
+            Subterm::Foreign(function, declared, operands) => {
                 host.spend(Cost::collection(operands.len() as u64))?;
 
                 let count = operands.len();
@@ -505,7 +508,7 @@ impl Machine {
                         next: 0,
                         item_demand: Demand::Whnf,
                         catch: false,
-                        finish: Finish::Foreign { function },
+                        finish: Finish::Foreign { function, declared },
                     },
                 )
             }
@@ -871,9 +874,9 @@ impl Machine {
 
                 Ok(Step::Value(value))
             }
-            Finish::Foreign { function } => Ok(Step::Value(Term::from(Subterm::Foreign(
-                function, args.done,
-            )))),
+            Finish::Foreign { function, declared } => Ok(Step::Value(Term::from(
+                Subterm::Foreign(function, declared, args.done),
+            ))),
         }
     }
 

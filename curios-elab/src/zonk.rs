@@ -1213,8 +1213,8 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
             context.universes().quality(*quality),
             context.universes().zonk(level).map_err(Error::from)?,
         ),
-        Subterm::Foreign(function, args) => {
-            Subterm::Foreign(Arc::clone(function), zonk_terms(context, args)?)
+        Subterm::Foreign(function, declared, args) => {
+            Subterm::Foreign(Arc::clone(function), *declared, zonk_terms(context, args)?)
         }
         Subterm::Var(var) => Subterm::Var(var.clone()),
         Subterm::Instance(instance) => Subterm::Instance(Instance {

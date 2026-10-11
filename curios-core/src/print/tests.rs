@@ -1,4 +1,44 @@
-use {super::*, crate::Level};
+use {
+    super::*,
+    crate::Level,
+    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
+    std::sync::Arc,
+};
+
+/// A call of a row prints as a call of the declaration that states it: with its list where it takes no operand, a `foreign` being a function of none and never a constant, and with the type a row that does not return is handed under its mark.
+#[test]
+fn a_foreign_call_prints_as_a_call_of_its_declaration() {
+    let call = |label: &str, params: Vec<WireType>, returns: WireReturn, operands: Vec<Term>| {
+        Term::foreign(
+            Arc::new(ForeignFunction {
+                name: format!("/host/{label}"),
+                signature: WireSignature { params, returns },
+            }),
+            Global::Authored(Qualifier::from(["host", label])),
+            operands,
+        )
+        .to_string()
+    };
+
+    assert_eq!(
+        call(
+            "clock",
+            Vec::new(),
+            WireReturn::Answers(WireResults::single(WireType::Nat)),
+            Vec::new(),
+        ),
+        "/host/clock()"
+    );
+    assert_eq!(
+        call(
+            "exit",
+            vec![WireType::Byte],
+            WireReturn::Never,
+            vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(3))],
+        ),
+        "/host/exit(@{}, 0x03)"
+    );
+}
 
 #[test]
 fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
