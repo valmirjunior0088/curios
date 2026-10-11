@@ -1,6 +1,6 @@
 //! Folding an unfolded top-level `rec` back into its definitions' names: for display ([`refold_recs`]), and exactly, for a term the elaborator commits ([`named_members`]). And contracting, for display, a lambda that is applied where it stands ([`contract_redexes`]).
 //!
-//! A mismatch report normalizes both sides so the disagreement is visible, and normalizing `double(p + 1)` unfolds the global through its structural group, which carries no name: the report would then spell `rec #0: (n: Nat) -> Nat = n => …; #0(p) + 2` where the author wrote `double`. [`refold_recs`] recognizes a `Rec` node whose group is one the context defined — compared projected, so an instance of a universe-polymorphic group is the group it instantiates — and spells its tail with each member as the definition it is: `double(p) + 2`. This lives here rather than in the printer because the group to recognize is the *elaborated* one, which only the context holds; the lowered module the formatter has is a different structure, and on an error path there is no elaborated module at all.
+//! A mismatch report normalizes both sides so the disagreement is visible, and normalizing `double(p + 1)` unfolds the global through its structural group, which carries no name: the report would then spell `rec #0: (n: Nat) -> Nat = n => …; #0(p) + 2` where the author wrote `double`. [`refold_recs`] recognizes a `Rec` node whose group is one the context defined and spells its tail with each member as the definition it is: `double(p) + 2`. An instance reduction opened is named at the levels it was opened at, as a committed term names it, so two calls apart in a level alone are two spellings where a report shows universes; any other group is compared projected, so an instance of a universe-polymorphic group is the group it instantiates, and its members are named at no instance. This lives here rather than in the printer because the group to recognize is the *elaborated* one, which only the context holds; the lowered module the formatter has is a different structure, and on an error path there is no elaborated module at all.
 //!
 //! A witness is not folded here. How one reads — left out where resolution would restore it, a method projected off it spelled as its call or operator — depends on the witness binders in scope at each node, which only the printer's walk sees; that is axis (h) of `curios-core`'s printer.
 
@@ -18,6 +18,11 @@ use {
 
 /// Spell every unfolded top-level `rec` in `term` by its definitions' names. Display-only — see the module documentation. The table of groups is gathered only when the term holds a `Rec` node at all, which a mismatch rarely does.
 pub(crate) fn refold_recs(context: &Context, term: &Term) -> Term {
+    if !term.mentions_rec() {
+        return term.clone();
+    }
+    // An instance reduction opened is named first, at its levels: known by its projection alone, two instances of one group would be one spelling.
+    let term = &named_members(context, term);
     if !term.mentions_rec() {
         return term.clone();
     }

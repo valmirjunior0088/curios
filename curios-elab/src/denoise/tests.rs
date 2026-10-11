@@ -1,5 +1,11 @@
 use {
-    curios_core::{Free, Intrinsic, Nat, Subterm, Term},
+    crate::Context,
+    curios_analysis::test_support::SYNTAX,
+    curios_core::{
+        Free, Global, Intrinsic, Level, Nat, Rec, Subterm, Term, UniverseContext, UniverseParam,
+        Universes,
+    },
+    curios_utilities::Qualifier,
     std::rc::Rc,
 };
 
@@ -49,4 +55,49 @@ fn an_applied_lambda_is_contracted_where_it_stands() {
     );
 
     assert_eq!(super::contract_redexes(&applied), shown);
+}
+
+/// A group reduction opened at an instance is spelled by its member's name at that instance: two calls of one definition apart in a level alone are two spellings, which a report that shows universes tells apart.
+#[test]
+fn a_member_of_an_opened_instance_is_spelled_at_its_levels() {
+    let mut context = Context::new(100_000, SYNTAX);
+    let sized = context.fresh(Some("sized"));
+    let a = context.fresh(Some("A"));
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let domain = || Term::type_at(Level::param(UniverseParam(0)));
+    // `rec sized(A: Type u): Nat = sized(A)`: the level only sizes the parameter.
+    let written = Term::rec(
+        [(
+            sized,
+            Term::func_type([(a, domain())], nat()),
+            Term::func(
+                [(a, domain())],
+                Term::apply(Term::free_var(&sized), [Term::free_var(&a)]),
+            ),
+        )],
+        Term::free_var(&sized),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*written else {
+        unreachable!()
+    };
+    let group = group.clone().with_universe_context(UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: Vec::new(),
+    });
+    let name = Free::Global(Global::Authored(Qualifier::from(["sized"])));
+    context.define(&name, &Term::rec_proj(group.clone(), 0), None);
+
+    for level in [Level::constant(1), Level::constant(2)] {
+        let universes = Universes::levels(vec![level.clone()]);
+        let instance = group
+            .instantiate_universes(&universes)
+            .expect("one level for the group's one parameter");
+        context.opened_instance(&instance, &group, &universes);
+
+        assert_eq!(
+            super::refold_recs(&context, &Term::rec_proj(instance, 0)),
+            Term::instance_of(&name, vec![level])
+        );
+    }
 }
