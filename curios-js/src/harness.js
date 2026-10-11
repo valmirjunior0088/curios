@@ -137,10 +137,6 @@ export async function run(config) {
   const reuseaddr = (handle) =>
     standard.has(keyOf(handle)) ? status.OK : status.NOT_FOUND;
 
-  const unsupported = (name) => () => {
-    throw new Error(`${name} is not supported in the browser playground`);
-  };
-
   // What this host answers of the rows the standard library declares, keyed by the host's method name, which is each declaration's own label.
   const host = {
     // Standard input is at its end, so a read of it answers `EOF` — or, asked for nothing, succeeds with nothing, since a request for nothing only asks whether the handle could be read. The output streams are not open for reading.
@@ -235,8 +231,10 @@ export async function run(config) {
 
       return encodeBytes(bytes);
     },
-    // `proc_args` has no failure lane, and the playground has no arguments it could truthfully call a program's, so it refuses the call rather than answer an empty list a program would read as a fact.
-    proc_args: unsupported("proc_args"),
+    // The playground has no arguments it could truthfully call a program's, so it refuses the call, as the row's reply lets a host, rather than answer an empty list a program would read as a fact.
+    proc_args: () => {
+      throw new Error("proc_args: the playground runs a program with no arguments");
+    },
     proc_env: () => [status.NOT_FOUND, emptyBytes()],
     // The playground has no terminal to switch or measure, so both tty rows are denied as `file_open` is.
     tty_raw: denied,

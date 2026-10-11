@@ -93,8 +93,8 @@ macro_rules! for_each_host_op {
             /// Exactly `n` random bytes. A host that cannot find the memory or the entropy for them refuses the call, naming why, rather than answer fewer.
             RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> { module: rand }
 
-            /// The process arguments, each an opaque byte string.
-            ProcArgs: fn proc_args() -> Vec<Vec<u8>> { module: proc }
+            /// The process arguments, each an opaque byte string. A host that runs a program with no arguments it could call the program's refuses the call, naming why, rather than answer an empty list a program would read as a fact.
+            ProcArgs: fn proc_args() -> Result<Vec<Vec<u8>>, Refusal> { module: proc }
 
             /// Look up the environment variable `name`: its value, possibly empty, or its absence. A name that is empty or holds `=` or NUL names no variable, and is absent.
             ProcEnv: fn proc_env(name: Vec<u8>) -> Option<Vec<u8>> { module: proc, yields: value }

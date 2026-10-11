@@ -803,8 +803,8 @@ impl HostOps for OsHost {
         Ok(buffer)
     }
 
-    fn proc_args(&self) -> Vec<Vec<u8>> {
-        self.args.clone()
+    fn proc_args(&self) -> Result<Vec<Vec<u8>>, Refusal> {
+        Ok(self.args.clone())
     }
 
     fn proc_env(&self, name: Vec<u8>) -> Option<Vec<u8>> {

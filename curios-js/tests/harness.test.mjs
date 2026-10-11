@@ -398,6 +398,18 @@ match r | success(_) => print("listed") | failure(e) => print(Show/show(e)) end
   assert.equal(stdout, "permission_denied");
 });
 
+test("a program that reads its arguments is refused by the row, which has none to hand it", async () => {
+  await stopped(
+    `
+use /std/{List, Nat, print};
+let args = /std/proc/args!;
+print(Nat/to_str(List/len(args)))
+`,
+    {},
+    /proc_args: the playground runs a program with no arguments/,
+  );
+});
+
 test("random bytes are exactly as many as were asked for, past one Web Crypto call", async () => {
   const { stdout } = await execute(`
 use /std/{Bytes, Nat, print};
