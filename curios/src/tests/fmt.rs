@@ -39,7 +39,7 @@ fn print_partial_evaluation_reduces_residual() {
 
     let mut cont_optm = None;
 
-    let (wasm_module, _foreigns) = compile_with_prelude(
+    let (wasm_module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
@@ -60,7 +60,8 @@ fn print_partial_evaluation_reduces_residual() {
     );
 
     let (system, io) = MockHost::builder().stdin_lines(["Alice"]).build();
-    crate::run_wasm(&wasm_module, system, ForeignBindings::empty()).expect("execution succeeded");
+    crate::run_wasm(&wasm_module, foreigns, system, ForeignBindings::empty())
+        .expect("execution succeeded");
     assert_eq!(io.output(), b"Alice is 30");
 }
 
@@ -87,7 +88,7 @@ fn print_runtime_args_specializes_spine() {
 
     let mut ersd_optm = None;
 
-    let (wasm_module, _foreigns) = compile_with_prelude(
+    let (wasm_module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
@@ -110,7 +111,8 @@ fn print_runtime_args_specializes_spine() {
     );
 
     let (system, io) = MockHost::builder().stdin_lines(["Bob"]).build();
-    crate::run_wasm(&wasm_module, system, ForeignBindings::empty()).expect("execution succeeded");
+    crate::run_wasm(&wasm_module, foreigns, system, ForeignBindings::empty())
+        .expect("execution succeeded");
     assert_eq!(io.output(), b"Bob is 30");
 }
 
@@ -144,7 +146,7 @@ fn print_constant_args_collapses_at_ersd() {
     let mut ersd_optm = None;
     let mut cont_optm = None;
 
-    let (wasm_module, _foreigns) = compile_with_prelude(
+    let (wasm_module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
@@ -176,7 +178,8 @@ fn print_constant_args_collapses_at_ersd() {
     );
 
     let (system, io) = MockHost::builder().build();
-    crate::run_wasm(&wasm_module, system, ForeignBindings::empty()).expect("execution succeeded");
+    crate::run_wasm(&wasm_module, foreigns, system, ForeignBindings::empty())
+        .expect("execution succeeded");
     assert_eq!(io.output(), b"x = 42, s = hello\n");
 }
 

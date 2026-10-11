@@ -81,10 +81,9 @@ fn run_entrypoint<H: HostOps + Send + Sync + 'static>(
     loader: &RootSource,
     host: H,
 ) -> Result<(), String> {
-    let (module, _foreigns) =
-        compile_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, loader, |_| {})?;
+    let (module, foreigns) = compile_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, loader, |_| {})?;
 
-    run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
+    run_wasm(&module, foreigns, host, ForeignBindings::empty()).map(|_| ())
 }
 
 /// Parse `source` (no external modules) and run it.
@@ -107,14 +106,14 @@ fn compile(source: &str) -> Result<Compiled, String> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
-    let (module, _foreigns) = compile_with_prelude(
+    let (module, foreigns) = compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},
     )?;
 
-    to_compiled(&module)
+    to_compiled(&module, foreigns)
 }
 
 /// Compile-only, for the programs whose point is that they are refused.
@@ -147,7 +146,7 @@ fn error(source: &str) -> String {
 /// Compile `source` as its own test program — the synthesized `Test/main` tail over its declared tests in place of the authored one — and run it under a fresh mock host with no arguments, returning what it wrote. That it ran to an answer is asserted, and what it answered is not: a fixture about a verdict reaches for the pieces itself.
 fn run_tests_program(source: &str) -> Vec<u8> {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-    let (module, _foreigns, _records) = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+    let (module, foreigns, _records) = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
         .tests(
             &entrypoint,
             &RootSource::none(),
@@ -157,7 +156,7 @@ fn run_tests_program(source: &str) -> Vec<u8> {
         )
         .expect("fixture compiles as a test program");
 
-    let compiled = to_compiled(&module).expect("the test program compiles");
+    let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
 
     let (system, io) = MockHost::builder().build();
     let outcome = compiled.run_test(system, ForeignBindings::empty());

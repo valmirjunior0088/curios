@@ -33,7 +33,7 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
         "#;
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     let mut captured = None;
-    let (wasm, _foreigns) = compile_with_prelude(
+    let (wasm, foreigns) = compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
@@ -96,7 +96,7 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
         "neither entering nor iterating the loop materializes the wider tuple: {module}"
     );
 
-    let compiled = to_compiled(&wasm).expect("the scalarized program compiles");
+    let compiled = to_compiled(&wasm, foreigns).expect("the scalarized program compiles");
     for (args, expected) in [
         (&[][..], b"0".as_slice()),
         (&["program"][..], b"2".as_slice()),

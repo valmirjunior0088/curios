@@ -67,7 +67,7 @@ fn exit_halts_with_code() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, _foreigns) = compile_with_prelude(
+    let (module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
@@ -76,8 +76,8 @@ fn exit_halts_with_code() {
     .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
-    let code =
-        crate::run_wasm(&module, system, ForeignBindings::empty()).expect("execution succeeded");
+    let code = crate::run_wasm(&module, foreigns, system, ForeignBindings::empty())
+        .expect("execution succeeded");
 
     assert_eq!(code, 7);
     assert!(io.output().is_empty());
@@ -108,7 +108,7 @@ fn exit_in_local_binding_halts() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, _foreigns) = compile_with_prelude(
+    let (module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
@@ -117,8 +117,8 @@ fn exit_in_local_binding_halts() {
     .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
-    let code =
-        crate::run_wasm(&module, system, ForeignBindings::empty()).expect("execution succeeded");
+    let code = crate::run_wasm(&module, foreigns, system, ForeignBindings::empty())
+        .expect("execution succeeded");
 
     assert_eq!(code, 3);
     assert!(io.output().is_empty());
@@ -141,7 +141,7 @@ fn an_exit_ends_a_region_of_any_type() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, _foreigns) = compile_with_prelude(
+    let (module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
@@ -150,8 +150,8 @@ fn an_exit_ends_a_region_of_any_type() {
     .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
-    let code =
-        crate::run_wasm(&module, system, ForeignBindings::empty()).expect("execution succeeded");
+    let code = crate::run_wasm(&module, foreigns, system, ForeignBindings::empty())
+        .expect("execution succeeded");
 
     assert_eq!(code, 7);
     assert!(io.output().is_empty());
@@ -166,7 +166,7 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, _foreigns) = compile_with_prelude(
+    let (module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
@@ -175,8 +175,8 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
     .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
-    let code =
-        crate::run_wasm(&module, system, ForeignBindings::empty()).expect("execution succeeded");
+    let code = crate::run_wasm(&module, foreigns, system, ForeignBindings::empty())
+        .expect("execution succeeded");
 
     assert_eq!(code, 3);
     assert!(io.output().is_empty());

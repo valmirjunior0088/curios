@@ -3,6 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
+    curios_abi::ForeignStore,
     curios_pipeline::compile_with_prelude,
     curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
@@ -294,19 +295,22 @@ pub(super) const STRING_WALK: &str = r#"
 
 // -- helpers ----------------------------------------------------------------
 
-/// Compile `source` (no external modules) to the raw, pre-Binaryen wasm module. The returned `.0` of `compile_entrypoint` is the module `into_wasm` produces; Binaryen only runs later, in `crate::to_cwasm`.
-pub(in crate::tests::codegen) fn compile_raw(source: &str) -> Module {
+/// Compile `source` (no external modules) to the raw, pre-Binaryen wasm module, beside the rows it imports, which a run of it carries. The module is the one `into_wasm` produces; Binaryen only runs later, in `crate::to_cwasm`.
+pub(in crate::tests::codegen) fn compile_raw_program(source: &str) -> (Module, ForeignStore) {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
-    let (module, _foreigns) = compile_with_prelude(
+    compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},
     )
-    .expect("fixture compiles");
+    .expect("fixture compiles")
+}
 
-    module
+/// [`compile_raw_program`]'s module alone, for a test that reads it and runs nothing.
+pub(in crate::tests::codegen) fn compile_raw(source: &str) -> Module {
+    compile_raw_program(source).0
 }
 
 /// The raw module's WAT text. Not digit-normalized: literal constants and exact token counts are load-bearing here.
@@ -523,8 +527,8 @@ pub(super) fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
 
 /// Run the raw (Binaryen-free) module: Cranelift-compile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args!`, which drives the taint.
 pub(super) fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
-    let module = compile_raw(source);
-    let compiled = Compiled::compile(&to_bytes(&module))
+    let (module, foreigns) = compile_raw_program(source);
+    let compiled = Compiled::compile(&to_bytes(&module), foreigns)
         .expect("raw module validates and Cranelift-compiles without Binaryen");
 
     let (system, io) = MockHost::builder().args(args).build();
@@ -536,8 +540,8 @@ pub(super) fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
 
 /// Run the module through the ordinary Binaryen + Cranelift path, for the same input — the reference the raw path must agree with.
 pub(super) fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
-    let module = compile_raw(source);
-    let compiled = crate::to_compiled(&module).expect("binaryen path compiles");
+    let (module, foreigns) = compile_raw_program(source);
+    let compiled = crate::to_compiled(&module, foreigns).expect("binaryen path compiles");
 
     let (system, io) = MockHost::builder().args(args).build();
     compiled

@@ -246,12 +246,12 @@ fn dispatch() -> Result<(), Failure> {
             // Kept before the program is consumed: binding needs the governing root, and `payload_of` takes the program by value.
             let root = program.home().map(|home| home.root.clone());
             let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
-            let bindings = bindings_of(root.as_deref(), foreigns)?;
+            let bindings = bindings_of(root.as_deref(), foreigns.clone())?;
 
             step(Heading::Running, &subject);
 
             // SAFETY: `payload_of` precompiled the payload in this process or read it back from the project's own store, where a compilation of this compiler filed it.
-            let compiled = unsafe { Compiled::deserialize(&cwasm) }?;
+            let compiled = unsafe { Compiled::deserialize(&cwasm, foreigns) }?;
             let code = compiled.run(
                 OsHost::with_args(
                     iter::once(entry)

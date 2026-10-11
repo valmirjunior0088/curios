@@ -510,7 +510,8 @@ fn run_selected(
     met.any = true;
 
     // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
-    let compiled = unsafe { Compiled::deserialize(cwasm) }.map_err(CompileError::failure)?;
+    let compiled =
+        unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }.map_err(CompileError::failure)?;
 
     step(Heading::Testing, subject);
     // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/proc/args` promises opaque byte strings.

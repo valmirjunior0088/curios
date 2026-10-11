@@ -4,7 +4,10 @@
 //!
 //! No wasmtime operation below is spelled here. `curios_runtime::validate`, `curios_runtime::precompile` and `Compiled::compile` are, because they belong beside the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all, and its `curios-runtime` dependency row is a feature switch rather than an API dependency.
 
-use {curios_runtime::Compiled, curios_utilities::Fingerprint, std::sync::LazyLock};
+use {
+    curios_abi::ForeignStore, curios_runtime::Compiled, curios_utilities::Fingerprint,
+    std::sync::LazyLock,
+};
 
 /// What decides whether a payload compiled on this machine runs on another, as a key part — computed once, since it is a property of the process, and handed to `curios-verdicts`'s payload family beside every program it files.
 ///
@@ -59,18 +62,22 @@ pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
     curios_profile::profile!("precompile" => curios_runtime::precompile(&bytes))
 }
 
-/// Optimize (Binaryen) and compile (Cranelift) a module to the program this process runs, on `curios-runtime`'s shared engine: [`to_cwasm`]'s machine code, held rather than written out, so running it reads nothing back.
-pub fn to_compiled(module: &curios_wasm::Module) -> Result<Compiled, String> {
+/// Optimize (Binaryen) and compile (Cranelift) a module to the program this process runs, on `curios-runtime`'s shared engine: [`to_cwasm`]'s machine code, held rather than written out, so running it reads nothing back. `foreigns` is the rows the compilation handed back beside `module`, which the program carries to its link.
+pub fn to_compiled(
+    module: &curios_wasm::Module,
+    foreigns: ForeignStore,
+) -> Result<Compiled, String> {
     let bytes = optimized(module);
 
-    curios_profile::profile!("precompile" => Compiled::compile(&bytes))
+    curios_profile::profile!("precompile" => Compiled::compile(&bytes, foreigns))
 }
 
-/// Compile a module and run it in-process on the shared runtime engine. `bindings` supplies the `ffi`-tier implementations for the module's own `foreign` declarations (pass [`curios_runtime::ForeignBindings::empty`] for a program that declares none). Returns the process exit code.
+/// Compile a module and run it in-process on the shared runtime engine. `foreigns` is the rows the compilation handed back beside it, and `bindings` answers rows ahead of the host, the program's own `foreign` declarations among them (pass [`curios_runtime::ForeignBindings::empty`] where the host answers every row). Returns the process exit code.
 pub fn run_wasm<H: curios_runtime::HostOps + Send + Sync + 'static>(
     module: &curios_wasm::Module,
+    foreigns: ForeignStore,
     host: H,
     bindings: curios_runtime::ForeignBindings,
 ) -> Result<u8, String> {
-    to_compiled(module)?.run(host, bindings)
+    to_compiled(module, foreigns)?.run(host, bindings)
 }

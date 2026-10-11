@@ -182,7 +182,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
             .expect("the unit parses"),
     );
 
-    let (module, _foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[unit], None)
+    let (module, foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[unit], None)
         .tests(
             &Entrypoint::trivial(),
             &RootSource::none(),
@@ -191,7 +191,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
             |_| {},
         )
         .expect("the unit's test program compiles");
-    let compiled = to_compiled(&module).expect("the test program compiles");
+    let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
     assert_eq!(records.len(), 1);
 
     let (system, io) = MockHost::builder().args(["test", "0"]).build();

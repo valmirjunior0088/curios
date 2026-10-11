@@ -207,11 +207,6 @@ impl ForeignBindings {
         self.trampolines.contains_key(name)
     }
 
-    /// The row named `name`, as the program's units declared it.
-    fn row(&self, name: &str) -> Option<&Arc<ForeignFunction>> {
-        self.foreigns.get(name)
-    }
-
     /// Define the import named `name` into `linker` under `namespace`, typing it from its store row — the pull side of the registry, driven by the module's own import section.
     fn link(
         &self,
@@ -435,22 +430,27 @@ impl Ended for TestEnd {
 /// A program's machine code as this engine holds it, ready to run.
 ///
 /// **Holding one is what makes a run safe.** Machine code read back from bytes is run on trust, since nothing can check that the bytes are a compiler's output. So the trust is taken once, where a `Compiled` is made, and a run takes none: a program is either compiled on this engine ([`Compiled::compile`](Self::compile), where a compiler is linked) or read back by [`Compiled::deserialize`], whose caller vouches for the bytes.
-pub struct Compiled(pub(crate) Module);
+///
+/// **It carries the rows it imports.** The machine code names each `ffi` import and types it by its carriers alone, which cannot tell a `Nat` from an `Int`: what an import is declared as lives in the compilation, and travels here beside the code, so a run holds whatever answers a row to that row's own declaration and no caller hands the rows over a second time.
+pub struct Compiled {
+    pub(crate) module: Module,
+    pub(crate) foreigns: ForeignStore,
+}
 
 impl Compiled {
-    /// Read back a precompiled module — `.cwasm` bytes [`precompile`](super::precompile) produced for this exact wasmtime version and engine configuration.
+    /// Read back a precompiled module — `.cwasm` bytes [`precompile`](super::precompile) produced for this exact wasmtime version and engine configuration — beside `foreigns`, the rows the compilation that made it handed back.
     ///
     /// # Safety
     ///
     /// `payload` must be unmodified output of [`precompile`](super::precompile) for this engine: `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code. The keyword is what carries that obligation to each caller, which names its provenance where it takes it on — the launcher its own footer, the compiler what it precompiled or filed in the project's store.
-    pub unsafe fn deserialize(payload: &[u8]) -> Result<Self, String> {
+    pub unsafe fn deserialize(payload: &[u8], foreigns: ForeignStore) -> Result<Self, String> {
         // SAFETY: the caller's, restated in this function's contract — `payload` is our own precompiled output.
         unsafe { Module::deserialize(shared_engine(), payload) }
-            .map(Self)
+            .map(|module| Self { module, foreigns })
             .map_err(|error| format!("failed to load wasm module: {error}"))
     }
 
-    /// Run the program under `host`, returning the process exit code: `0` when `main` returns normally, otherwise the code passed to `proc_exit`. `bindings` implements the program's own `foreign` declarations (pass [`ForeignBindings::empty`] for a program that declares none).
+    /// Run the program under `host`, returning the process exit code: `0` when `main` returns normally, otherwise the code passed to `proc_exit`. `bindings` answers rows ahead of the host, a program's own `foreign` declarations among them (pass [`ForeignBindings::empty`] where the host answers every row the program reaches).
     pub fn run<H: HostOps + Send + Sync + 'static>(
         &self,
         host: H,
@@ -458,7 +458,13 @@ impl Compiled {
     ) -> Result<u8, String> {
         let host = Arc::new(host);
 
-        instantiate(shared_engine(), &self.0, bindings, host_rows(host))
+        instantiate(
+            shared_engine(),
+            &self.module,
+            &self.foreigns,
+            bindings,
+            host_rows(host),
+        )
     }
 
     /// [`Compiled::run`] for a program compiled as a test program, returning how its run ended: the verdict its entry answered, or the exit that left it unanswered.
@@ -469,24 +475,32 @@ impl Compiled {
     ) -> Result<TestEnd, String> {
         let host = Arc::new(host);
 
-        instantiate(shared_engine(), &self.0, bindings, host_rows(host))
+        instantiate(
+            shared_engine(),
+            &self.module,
+            &self.foreigns,
+            bindings,
+            host_rows(host),
+        )
     }
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `bindings` supplies the rows a module or an embedder answers, and `provided` the ones the host answers itself.
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` supplies the ones a module or an embedder answers, and `provided` the ones the host answers itself.
 pub(crate) fn instantiate<E: Ended>(
     engine: &Engine,
     module: &Module,
+    foreigns: &ForeignStore,
     bindings: ForeignBindings,
     provided: Provided,
 ) -> Result<E, String> {
-    on_guest_stack(move || entered(engine, module, bindings, provided))?
+    on_guest_stack(move || entered(engine, module, foreigns, bindings, provided))?
 }
 
 /// [`instantiate`], on the thread it is called on.
 fn entered<E: Ended>(
     engine: &Engine,
     module: &Module,
+    foreigns: &ForeignStore,
     bindings: ForeignBindings,
     provided: Provided,
 ) -> Result<E, String> {
@@ -529,7 +543,7 @@ fn entered<E: Ended>(
                     &mut linker,
                     engine,
                     import.name(),
-                    bindings.row(import.name()),
+                    foreigns.get(import.name()),
                 )?,
             },
             namespace => {

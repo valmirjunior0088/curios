@@ -15,7 +15,7 @@
 //! A change that moves this ladder owes a reading of the two harness workloads beside it, because "moved the column it aimed at" is only a claim if the other columns were looked at.
 
 use {
-    super::{compile_raw, functions, user_allocations, wat},
+    super::{compile_raw_program, functions, user_allocations, wat},
     curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_wasm::to_bytes,
     std::time::Instant,
@@ -350,10 +350,11 @@ fn walk_mirror_attribution_measurements() {
         ("indexed", WALK_MIRROR_INDEXED),
     ]
     .map(|(label, source)| {
-        let module = compile_raw(source);
+        let (module, foreigns) = compile_raw_program(source);
         let counts = mirror_counts(&module.to_string());
-        let raw = Compiled::compile(&to_bytes(&module)).expect("raw module compiles");
-        let optimized = crate::to_compiled(&module).expect("binaryen path compiles");
+        let raw =
+            Compiled::compile(&to_bytes(&module), foreigns.clone()).expect("raw module compiles");
+        let optimized = crate::to_compiled(&module, foreigns).expect("binaryen path compiles");
 
         (label, counts, raw, optimized)
     });
@@ -460,8 +461,8 @@ fn decoder_doubling_slope() {
     const SIZES: [usize; 3] = [20_000, 40_000, 80_000];
     const DECODERS: [&str; 3] = ["json", "html", "tokens"];
 
-    let module = compile_raw(DECODER_DOUBLING);
-    let compiled = crate::to_compiled(&module).expect("binaryen path compiles");
+    let (module, foreigns) = compile_raw_program(DECODER_DOUBLING);
+    let compiled = crate::to_compiled(&module, foreigns).expect("binaryen path compiles");
 
     let mut taken = vec![vec![Vec::new(); SIZES.len()]; DECODERS.len()];
     for round in 0..WARMUP + ROUNDS {

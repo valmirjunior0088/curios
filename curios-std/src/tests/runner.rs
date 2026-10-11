@@ -39,7 +39,7 @@ pub(super) fn outcomes(unit: &str, mounted: RootSource) -> (usize, String) {
     let loader = RootSource::none();
 
     // No cache: a test must not file payloads into a project store.
-    let (module, _foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[mounted], None)
+    let (module, foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[mounted], None)
         .tests(
             &entrypoint,
             &loader,
@@ -48,7 +48,7 @@ pub(super) fn outcomes(unit: &str, mounted: RootSource) -> (usize, String) {
             |_| {},
         )
         .unwrap_or_else(|error| panic!("`{unit}` failed to compile:\n{error}"));
-    let compiled = to_compiled(&module).expect("the test program compiles");
+    let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
 
     assert!(!records.is_empty(), "`{unit}` declares no tests");
 

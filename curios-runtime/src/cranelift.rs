@@ -6,6 +6,7 @@
 
 use {
     super::{Compiled, shared_engine},
+    curios_abi::ForeignStore,
     std::hash::{Hash, Hasher},
 };
 
@@ -17,10 +18,10 @@ pub fn precompile(bytes: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 impl Compiled {
-    /// Compile `bytes`, a WebAssembly module, to the program this process runs. Nothing is read back, so nothing is vouched for: the machine code is what this engine made of `bytes` just now.
-    pub fn compile(bytes: &[u8]) -> Result<Self, String> {
+    /// Compile `bytes`, a WebAssembly module, to the program this process runs, beside `foreigns`, the rows the compilation that emitted it handed back. Nothing is read back, so nothing is vouched for: the machine code is what this engine made of `bytes` just now.
+    pub fn compile(bytes: &[u8], foreigns: ForeignStore) -> Result<Self, String> {
         wasmtime::Module::new(shared_engine(), bytes)
-            .map(Self)
+            .map(|module| Self { module, foreigns })
             .map_err(|error| format!("failed to compile module: {error}"))
     }
 }

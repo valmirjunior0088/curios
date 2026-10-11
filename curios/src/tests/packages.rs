@@ -59,12 +59,12 @@ fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> 
     let (entry, units) = resolved(directory, target);
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
-    let (module, _foreigns) = Fold::new(DEFAULT_STEP_BUDGET, &units, cache)
+    let (module, foreigns) = Fold::new(DEFAULT_STEP_BUDGET, &units, cache)
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .expect("the package compiles");
 
     let (system, io) = MockHost::builder().build();
-    run_wasm(&module, system, ForeignBindings::empty()).expect("the program runs");
+    run_wasm(&module, foreigns, system, ForeignBindings::empty()).expect("the program runs");
 
     io.output().to_vec()
 }

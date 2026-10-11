@@ -86,7 +86,7 @@ fn compiled_of(source: &str) -> Compiled {
         .parse::<Entrypoint>()
         .map_err(|error| error.format())
         .expect("the workload parses");
-    let (module, _foreigns) = compile_with_prelude(
+    let (module, foreigns) = compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
@@ -94,7 +94,7 @@ fn compiled_of(source: &str) -> Compiled {
     )
     .expect("the workload compiles");
 
-    to_compiled(&module).expect("the workload compiles")
+    to_compiled(&module, foreigns).expect("the workload compiles")
 }
 
 /// One run: milliseconds around it — instantiate, and the whole call — and what the program printed.

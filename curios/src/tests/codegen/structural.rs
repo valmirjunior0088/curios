@@ -11,4 +11,4 @@ mod measurement_tests;
 mod test_support;
 
 // The shapes the sibling codegen suites also assert through.
-pub(super) use test_support::{compile_raw, functions, user_allocations, wat};
+pub(super) use test_support::{compile_raw_program, functions, user_allocations, wat};

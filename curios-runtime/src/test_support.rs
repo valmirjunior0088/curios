@@ -217,5 +217,11 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
         });
     }
 
-    instantiate(shared_engine(), &compiled.0, bindings, provided)
+    instantiate(
+        shared_engine(),
+        &compiled.module,
+        &compiled.foreigns,
+        bindings,
+        provided,
+    )
 }

@@ -172,10 +172,10 @@ fn run_linked(source: &str, modules: Vec<DeclaredModule>) -> Result<u8, String> 
     )
     .expect("compile succeeded");
 
-    let bindings = plugin_bindings(foreigns, modules)?;
+    let bindings = plugin_bindings(foreigns.clone(), modules)?;
     let (system, _io) = MockHost::builder().build();
 
-    run_wasm(&module, system, bindings)
+    run_wasm(&module, foreigns, system, bindings)
 }
 
 /// A scalar reaching a plugin and coming back, which is the whole path with no memory in it: the guest unboxes its i31, the plugin doubles a raw `i64`, and the guest boxes the answer.
