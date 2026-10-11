@@ -345,7 +345,7 @@ fn a_declaration_below_the_tail_is_refused_as_one() {
         "pub let y : /std/Nat = 2;",
         "induct Shape : Type | none() end",
         "struct P : Type { /std/Nat }",
-        "foreign f : /std/Nat;",
+        "foreign f() -> /std/Nat;",
     ] {
         let source = format!("let x = 1;\n{head}\nx");
         let report = source.parse::<Entrypoint>().unwrap_err().format();

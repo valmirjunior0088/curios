@@ -79,7 +79,7 @@ fn top_let_without_pub() {
 #[test]
 fn top_foreign_without_pub() {
     assert_eq!(
-        "foreign frobnicate : (Nat, Bytes) -> Nat;"
+        "foreign frobnicate(Nat, Bytes) -> Nat;"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -87,10 +87,10 @@ fn top_foreign_without_pub() {
             doc: None,
             vis_pub: false,
             label: "frobnicate".into(),
-            signature: ForeignSignature::Func(WireSignature {
+            signature: WireSignature {
                 params: vec![WireType::Nat, WireType::Bytes],
                 results: WireResults::single(WireType::Nat),
-            }),
+            },
         })]
     );
 }
@@ -98,7 +98,7 @@ fn top_foreign_without_pub() {
 #[test]
 fn top_foreign_with_pub() {
     assert_eq!(
-        "pub foreign frobnicate : (Nat, Bytes) -> Nat;"
+        "pub foreign frobnicate(Nat, Bytes) -> Nat;"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -106,10 +106,10 @@ fn top_foreign_with_pub() {
             doc: None,
             vis_pub: true,
             label: "frobnicate".into(),
-            signature: ForeignSignature::Func(WireSignature {
+            signature: WireSignature {
                 params: vec![WireType::Nat, WireType::Bytes],
                 results: WireResults::single(WireType::Nat),
-            }),
+            },
         })]
     );
 }
@@ -117,12 +117,15 @@ fn top_foreign_with_pub() {
 #[test]
 fn top_foreign_zero_arg() {
     assert_eq!(
-        "foreign clock : Nat;".parse::<Module>().unwrap().items,
+        "foreign clock() -> Nat;".parse::<Module>().unwrap().items,
         vec![TopItem::Foreign(TopForeign {
             doc: None,
             vis_pub: false,
             label: "clock".into(),
-            signature: ForeignSignature::Name(WireAnswer::single(WireType::Nat)),
+            signature: WireSignature {
+                params: vec![],
+                results: WireResults::single(WireType::Nat),
+            },
         })]
     );
 }
@@ -131,7 +134,7 @@ fn top_foreign_zero_arg() {
 #[test]
 fn top_foreign_takes_no_result() {
     assert_eq!(
-        "foreign close : (Handle) -> {};"
+        "foreign close(Handle) -> {};"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -139,10 +142,10 @@ fn top_foreign_takes_no_result() {
             doc: None,
             vis_pub: false,
             label: "close".into(),
-            signature: ForeignSignature::Func(WireSignature {
+            signature: WireSignature {
                 params: vec![WireType::Handle],
                 results: WireResults::none(),
-            }),
+            },
         })]
     );
 }
@@ -151,7 +154,7 @@ fn top_foreign_takes_no_result() {
 #[test]
 fn top_foreign_takes_a_tuple_of_results() {
     assert_eq!(
-        "foreign read : (Handle, Nat) -> {status: Nat, bytes: Bytes};"
+        "foreign read(Handle, Nat) -> {status: Nat, bytes: Bytes};"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -159,13 +162,13 @@ fn top_foreign_takes_a_tuple_of_results() {
             doc: None,
             vis_pub: false,
             label: "read".into(),
-            signature: ForeignSignature::Func(WireSignature {
+            signature: WireSignature {
                 params: vec![WireType::Handle, WireType::Nat],
                 results: WireResults::of(vec![
                     ("status".to_string(), WireType::Nat),
                     ("bytes".to_string(), WireType::Bytes),
                 ]),
-            }),
+            },
         })]
     );
 }
@@ -173,7 +176,7 @@ fn top_foreign_takes_a_tuple_of_results() {
 /// One result is forwarded through as itself, so a one-field brace would name a tuple no row can carry — and would drop the label, which by `documentation/syntax.md` makes it a different type again. Refused rather than quietly unwrapped.
 #[test]
 fn top_foreign_refuses_a_single_result_in_braces() {
-    let refusal = "foreign f : (Nat) -> {value: Nat};"
+    let refusal = "foreign f(Nat) -> {value: Nat};"
         .parse::<Module>()
         .unwrap_err()
         .format();
@@ -188,7 +191,7 @@ fn top_foreign_refuses_a_single_result_in_braces() {
 #[test]
 fn top_foreign_keeps_references_in_the_slots_written() {
     assert_eq!(
-        "foreign f : (Nat) -> {bytes: Bytes, status: Nat, rest: List(Bytes)};"
+        "foreign f(Nat) -> {bytes: Bytes, status: Nat, rest: List(Bytes)};"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -196,14 +199,14 @@ fn top_foreign_keeps_references_in_the_slots_written() {
             doc: None,
             vis_pub: false,
             label: "f".into(),
-            signature: ForeignSignature::Func(WireSignature {
+            signature: WireSignature {
                 params: vec![WireType::Nat],
                 results: WireResults::of(vec![
                     ("bytes".to_string(), WireType::Bytes),
                     ("status".to_string(), WireType::Nat),
                     ("rest".to_string(), WireType::List(WireLeaf::Bytes)),
                 ]),
-            }),
+            },
         })]
     );
 }
@@ -212,7 +215,7 @@ fn top_foreign_keeps_references_in_the_slots_written() {
 #[test]
 fn top_foreign_rejects_nested_list() {
     assert!(
-        "foreign frobnicate : (List(List(Nat))) -> Bool;"
+        "foreign frobnicate(List(List(Nat))) -> Bool;"
             .parse::<Module>()
             .is_err()
     );
@@ -223,21 +226,21 @@ fn top_foreign_rejects_nested_list() {
 fn top_foreign_names_the_wire_vocabulary_it_refused() {
     for (source, expected) in [
         (
-            "foreign f : (Str) -> Nat;",
+            "foreign f(Str) -> Nat;",
             "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...)), found 'Str'",
         ),
-        // A bare result goes through the same parser, so it names the same vocabulary.
+        // A result goes through the same parser, so it names the same vocabulary.
         (
-            "foreign f : Str;",
+            "foreign f() -> Str;",
             "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...)), found 'Str'",
         ),
         (
-            "foreign f : (List(List(Nat))) -> Bool;",
+            "foreign f(List(List(Nat))) -> Bool;",
             "expected a List element type (Nat, Int, Bool, Bytes, Bits, or Handle — List does not nest), found 'List'",
         ),
         // A `/` stops `parse_identifier` before either arm is reached, so the qualified spelling is refused by name of its own.
         (
-            "foreign f : (/std/Nat) -> Nat;",
+            "foreign f(/std/Nat) -> Nat;",
             "a wire type is written bare: `Nat` rather than `/std/Nat`",
         ),
     ] {
@@ -245,14 +248,14 @@ fn top_foreign_names_the_wire_vocabulary_it_refused() {
         assert!(report.contains(expected), "{source:?} reported {report}");
     }
     // `parse_identifier` fails on a non-identifier, so no refusal fires at the `)` and the empty parameter list still parses.
-    assert!("foreign f : () -> Nat;".parse::<Module>().is_ok());
+    assert!("foreign f() -> Nat;".parse::<Module>().is_ok());
 }
 
 /// One level of `List` still parses, over each leaf the wire admits.
 #[test]
 fn top_foreign_list_of_leaf() {
     assert_eq!(
-        "foreign frobnicate : (List(Bytes), List(Handle)) -> List(Nat);"
+        "foreign frobnicate(List(Bytes), List(Handle)) -> List(Nat);"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -260,26 +263,26 @@ fn top_foreign_list_of_leaf() {
             doc: None,
             vis_pub: false,
             label: "frobnicate".into(),
-            signature: ForeignSignature::Func(WireSignature {
+            signature: WireSignature {
                 params: vec![
                     WireType::List(WireLeaf::Bytes),
                     WireType::List(WireLeaf::Handle)
                 ],
                 results: WireResults::single(WireType::List(WireLeaf::Nat)),
-            }),
+            },
         })]
     );
 }
 
 #[test]
 fn top_foreign_rejects_non_wire_type() {
-    assert!("foreign frobnicate : Str;".parse::<Module>().is_err());
+    assert!("foreign frobnicate() -> Str;".parse::<Module>().is_err());
 }
 
 // A list of bytes is the `Bytes` a row already spells, so `Byte` is a wire type but not a list element.
 #[test]
 fn a_list_of_bytes_is_not_a_wire_type() {
-    let refusal = "foreign f : (List(Byte)) -> Nat;"
+    let refusal = "foreign f(List(Byte)) -> Nat;"
         .parse::<Module>()
         .unwrap_err()
         .format();
@@ -293,21 +296,19 @@ fn a_list_of_bytes_is_not_a_wire_type() {
 #[test]
 fn foreign_declaration_round_trips() {
     for source in [
-        "foreign frobnicate : (Nat, Bytes) -> Nat;",
-        "pub foreign frobnicate : (Nat, Bytes) -> Nat;",
-        "foreign clock : Nat;",
-        "foreign frobnicate : (List(Bytes), List(Handle)) -> List(Nat);",
-        "foreign frobnicate : (Bits, Bytes) -> Bits;",
-        "foreign frobnicate : (List(Bits)) -> List(Bits);",
-        "foreign close : (Handle) -> {};",
-        "foreign flip : (Byte) -> Byte;",
-        "foreign exited : {ok: Bool, code: Byte};",
-        "foreign wall : {secs: Nat, nanos: Nat};",
-        "foreign read : (Handle, Nat) -> {status: Nat, bytes: Bytes};",
-        "foreign abort : (Byte) -> Never;",
-        "pub foreign gone : () -> Never;",
-        "foreign clock : () -> Nat;",
-        "foreign wall : () -> {secs: Nat, nanos: Nat};",
+        "foreign frobnicate(Nat, Bytes) -> Nat;",
+        "pub foreign frobnicate(Nat, Bytes) -> Nat;",
+        "foreign clock() -> Nat;",
+        "foreign frobnicate(List(Bytes), List(Handle)) -> List(Nat);",
+        "foreign frobnicate(Bits, Bytes) -> Bits;",
+        "foreign frobnicate(List(Bits)) -> List(Bits);",
+        "foreign close(Handle) -> {};",
+        "foreign flip(Byte) -> Byte;",
+        "foreign exited() -> {ok: Bool, code: Byte};",
+        "foreign wall() -> {secs: Nat, nanos: Nat};",
+        "foreign read(Handle, Nat) -> {status: Nat, bytes: Bytes};",
+        "foreign abort(Byte) -> Never;",
+        "pub foreign gone() -> Never;",
     ] {
         let module = source.parse::<Module>().unwrap();
 
@@ -319,53 +320,39 @@ fn foreign_declaration_round_trips() {
     }
 }
 
-/// A written operand list declares a function of its operands, an empty one included, and no list the call's description itself: the two are two declarations, and each prints back as it was written.
+/// A `foreign` is written as a function with no body: its operand list follows its name, empty where it takes none, and no colon stands between them. A result alone and the colon are no spelling of one, and `Never` follows a list as any result does.
 #[test]
-fn top_foreign_with_an_empty_operand_list_is_no_bare_result() {
-    let listed = "foreign clock : () -> Nat;".parse::<Module>().unwrap();
-    let bare = "foreign clock : Nat;".parse::<Module>().unwrap();
+fn top_foreign_is_written_as_a_function_with_no_body() {
+    for source in [
+        "foreign clock : Nat;",
+        "foreign clock -> Nat;",
+        "foreign clock : () -> Nat;",
+        "foreign clock : (Nat) -> Nat;",
+    ] {
+        assert!(
+            source.parse::<Module>().is_err(),
+            "{source:?} is no declaration"
+        );
+    }
 
     assert_eq!(
-        listed.items,
-        vec![TopItem::Foreign(TopForeign {
-            doc: None,
-            vis_pub: false,
-            label: "clock".into(),
-            signature: ForeignSignature::Func(WireSignature {
-                params: vec![],
-                results: WireResults::single(WireType::Nat),
-            }),
-        })]
-    );
-    assert_ne!(listed, bare);
-    assert!(listed.to_string().contains("() -> Nat"), "{listed}");
-    assert!(!bare.to_string().contains("()"), "{bare}");
-}
-
-/// `Never` follows an operand list and stands nowhere else, so a signature with no list has none to write: a bare `Never` is no wire result, refused as any word that is no wire type is, and a row that does not return and takes no operand writes its empty list.
-#[test]
-fn top_foreign_has_no_never_without_an_operand_list() {
-    let refusal = "foreign gone : Never;"
-        .parse::<Module>()
-        .unwrap_err()
-        .format();
-
-    assert!(refusal.contains("expected a wire type"), "{refusal}");
-    assert!(refusal.contains("found 'Never'"), "{refusal}");
-    assert_eq!(
-        "foreign gone : () -> Never;"
-            .parse::<Module>()
-            .unwrap()
-            .items,
+        "foreign gone() -> Never;".parse::<Module>().unwrap().items,
         vec![TopItem::Foreign(TopForeign {
             doc: None,
             vis_pub: false,
             label: "gone".into(),
-            signature: ForeignSignature::Func(WireSignature {
+            signature: WireSignature {
                 params: vec![],
                 results: WireResults::never(),
-            }),
+            },
         })]
+    );
+    assert!(
+        "foreign clock() -> Nat;"
+            .parse::<Module>()
+            .unwrap()
+            .to_string()
+            .contains("foreign clock() -> Nat;")
     );
 }
 
@@ -835,7 +822,7 @@ fn a_test_takes_no_pub_and_stays_a_contextual_word() {
 /// A declaration's label is spanned over the word alone, whatever whitespace follows it: the span is what a report about the declaration underlines.
 #[test]
 fn every_declaration_label_spans_its_word_alone() {
-    let module = "pub let  x  : Type = Type;\nmod  Inner ;\ninduct  Foo  : Type | bar() end\nstruct  Pt  : Type { }\nconcept  Sh (A : Type) : Type { }\ntest  it  = Type;\nforeign  clock  : Nat;"
+    let module = "pub let  x  : Type = Type;\nmod  Inner ;\ninduct  Foo  : Type | bar() end\nstruct  Pt  : Type { }\nconcept  Sh (A : Type) : Type { }\ntest  it  = Type;\nforeign  clock() -> Nat;"
         .parse::<Module>()
         .unwrap();
     let spelled = module
@@ -908,7 +895,7 @@ fn a_documentation_comment_attaches_to_a_module_a_witness_a_foreign_and_a_later_
     let source = concat!(
         "--- Numbers.\nmod nat;\n",
         "--- Structural.\nsatisfy Equal(Nat) {\n    ..\n}\n",
-        "--- Ticks.\nforeign clock: Nat;\n",
+        "--- Ticks.\nforeign clock() -> Nat;\n",
         "let a: Nat = 1\n--- The other.\nand b: Nat = 2;\n",
     );
     let module = source.parse::<Module>().unwrap();

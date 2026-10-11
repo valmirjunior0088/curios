@@ -4,7 +4,7 @@ Definitions with and without sugar
 
 pub let zero: Nat = 0;
 let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) = m;
-pub foreign log: (Bytes) -> Nat;
+pub foreign log(Bytes) -> Nat;
 
 --------------------------------------------------------------------------------
 
@@ -54,13 +54,12 @@ pub foreign log: (Bytes) -> Nat;
         (identifier))))
   (foreign_item
     (identifier)
-    (function_type
-      (function_type_parameters
-        (function_type_parameter
-          (path
-            (identifier))))
-      (path
-        (identifier)))))
+    (function_type_parameters
+      (function_type_parameter
+        (path
+          (identifier))))
+    (path
+      (identifier))))
 
 ================================================================================
 A recursive group, each member with its own visibility

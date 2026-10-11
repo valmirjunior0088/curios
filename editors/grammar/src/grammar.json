@@ -1847,12 +1847,20 @@
           }
         },
         {
+          "type": "FIELD",
+          "name": "operands",
+          "content": {
+            "type": "SYMBOL",
+            "name": "function_type_parameters"
+          }
+        },
+        {
           "type": "STRING",
-          "value": ":"
+          "value": "->"
         },
         {
           "type": "FIELD",
-          "name": "type",
+          "name": "result",
           "content": {
             "type": "SYMBOL",
             "name": "_term"

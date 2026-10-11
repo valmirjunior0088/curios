@@ -93,7 +93,7 @@ pub(super) const AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS: &str = r#"
 pub(super) const A_FOREIGN_DECLARATION_IS_CONFINED_TO_WIRE_TYPES: &str = r#"
         use /std/{Str};
 
-        foreign bad : Str;
+        foreign bad() -> Str;
 
         /std/Io/pure(())
         "#;

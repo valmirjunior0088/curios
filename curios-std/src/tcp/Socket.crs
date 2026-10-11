@@ -33,13 +33,13 @@ let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
     Try/raise(e);
 
 --- Start connecting this socket to this address: `ok`, or the status of the failure.
-foreign socket_connect: (Handle, Bytes) -> Nat;
+foreign socket_connect(Handle, Bytes) -> Nat;
 
 --- How a connect under way ended: `ok`, or the status of the failure.
-foreign socket_finish_connect: (Handle) -> Nat;
+foreign socket_finish_connect(Handle) -> Nat;
 
 --- Upgrade this socket to a TLS client stream for this server name: `ok`, or the status of the failure.
-foreign tls_start: (Handle, Bytes) -> Nat;
+foreign tls_start(Handle, Bytes) -> Nat;
 
 let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
     let h = opened(addr)!;

@@ -1552,7 +1552,17 @@
           }
         ]
       },
-      "type": {
+      "operands": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "function_type_parameters",
+            "named": true
+          }
+        ]
+      },
+      "result": {
         "multiple": false,
         "required": true,
         "types": [

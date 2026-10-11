@@ -37,59 +37,59 @@ const stopped = async (source, hooks, pattern) => {
 
 const BYTE = `
 use /std/{Byte, Nat, print};
-foreign byte: (Byte) -> Byte;
+foreign byte(Byte) -> Byte;
 let b = byte(7)!;
 print(Nat/to_str(Byte/to_nat(b)))
 `;
 
 const FLAG = `
 use /std/{print};
-foreign flag: Bool;
-let b = flag!;
+foreign flag() -> Bool;
+let b = flag()!;
 print(match b | true => "yes" | false => "no" end)
 `;
 
 const PAIR = `
 use /std/{Nat, Str, print};
-foreign pair: (Nat, Bytes) -> {code: Nat, ok: Bool};
+foreign pair(Nat, Bytes) -> {code: Nat, ok: Bool};
 let r = pair(1, x[])!;
 print(Str/flatten([Nat/to_str(r.code), " ", match r.ok | true => "ok" | false => "not ok" end]))
 `;
 
 const SPLIT = `
 use /std/{Bytes, List, Nat, Str, print};
-foreign split: (Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
+foreign split(Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
 let r = split(x[1, 2, 3])!;
 print(Str/flatten([Nat/to_str(Bytes/to_nat(r.head)), " ", Nat/to_str(r.count), " ", Str/join(",", List/map(r.rest, (b) => Nat/to_str(Bytes/to_nat(b))))]))
 `;
 
 const TAKE = `
-foreign take: (Nat, Int, Bool, Byte, Flt, Bytes, Bits, List(Nat), List(Int), List(Bool), List(Bytes), List(Handle)) -> {};
+foreign take(Nat, Int, Bool, Byte, Flt, Bytes, Bits, List(Nat), List(Int), List(Bool), List(Bytes), List(Handle)) -> {};
 take(18446744073709551615, -5, true, 200, 1.5, x[1, 2], b[1, 0, 1], [1, 2], [-1, 3], [true, false], [x[7], x[]], [/std/Handle/stdout])
 `;
 
 const LISTS = `
 use /std/{Nat, Str, List, print};
-foreign lists: List(Nat);
-let l = lists!;
+foreign lists() -> List(Nat);
+let l = lists()!;
 print(Str/join(",", List/map(l, Nat/to_str)))
 `;
 
 const KEEP = `
 use /std/{Io};
-foreign keep: (Bytes) -> Bytes;
-foreign poke: {};
+foreign keep(Bytes) -> Bytes;
+foreign poke() -> {};
 let b = x[0x61, 0x62, 0x63];
 let r = keep(b)!;
-let _ = poke!;
+let _ = poke()!;
 let _ = Io/write(Io/stdout, b)!;
 Io/write(Io/stdout, r)
 `;
 
 const WRITE = `
 use /std/{Async, Handle, Show, print};
-foreign token: Handle;
-let h = token!;
+foreign token() -> Handle;
+let h = token()!;
 let r = Async/Write/write(h, x[0x68, 0x69])!;
 match r
 | success(_) => print(" wrote")
@@ -99,13 +99,13 @@ end
 
 const DIRECTION = `
 use /std/{Async, Handle, Io, Show, Str, print};
-foreign token: Handle;
+foreign token() -> Handle;
 let said(c: Io/Chunk) -> Str =
     match c | chunk(_, @_) => "chunk" | eof() => "eof" | error(e) => Show/show(e) end;
 let w = Async/Write/write(Handle/stdin, x[1])!;
 let out = Async/Read/read(Handle/stdout, 4)!;
 let rest = Async/Read/read(Handle/stdin, 4)!;
-let h = token!;
+let h = token()!;
 let unknown = Async/Read/read(h, 4)!;
 print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f) end, said(out), said(rest), said(unknown)]))
 `;
@@ -113,7 +113,7 @@ print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f
 const POLL = `
 use /std/{Handle, List, Str, print};
 use /std/Handle/{Interest, Readiness};
-foreign token: Handle;
+foreign token() -> Handle;
 let said(r: Readiness) -> Str =
     choose
     | r.failed => "err"
@@ -121,7 +121,7 @@ let said(r: Readiness) -> Str =
     | r.fired.readable => "read"
     | _ => "none"
     end;
-let h = token!;
+let h = token()!;
 let rs = Handle/poll([h, Handle/stdout, Handle/stdin], [Interest/readable, Interest/writable, Interest/readable], 0)!;
 print(Str/join(" ", List/map(rs, said)))
 `;
@@ -134,9 +134,9 @@ let _ = Handle/poll([Handle/stdin], [Interest/readable, Interest/writable], 0)!;
 `;
 
 const HOOKS = `
-foreign used: Nat;
-foreign _unused: Nat;
-let _ = used!;
+foreign used() -> Nat;
+foreign _unused() -> Nat;
+let _ = used()!;
 /std/print("ran")
 `;
 

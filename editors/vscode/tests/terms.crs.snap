@@ -167,15 +167,18 @@
 #    ^^^ source.curios keyword.other.curios
 #       ^ source.curios
 #        ^^^^^^^^ source.curios entity.name.type.curios
->    foreign random: Nat;
+>    foreign random() -> Nat;
 #^^^^ source.curios
 #    ^^^^^^^ source.curios keyword.control.curios
 #           ^ source.curios
 #            ^^^^^^ source.curios entity.name.function.curios
-#                  ^ source.curios keyword.operator.assignment.curios
-#                   ^ source.curios
-#                    ^^^ source.curios entity.name.type.curios
-#                       ^ source.curios punctuation.separator.curios
+#                  ^ source.curios punctuation.bracket.curios
+#                   ^ source.curios punctuation.bracket.curios
+#                    ^ source.curios
+#                     ^^ source.curios keyword.operator.arrow.curios
+#                       ^ source.curios
+#                        ^^^ source.curios entity.name.type.curios
+#                           ^ source.curios punctuation.separator.curios
 >end
 #^^^ source.curios keyword.control.curios
 >

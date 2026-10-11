@@ -4,7 +4,7 @@ use /std/{Bool, Byte, Bytes, Nat, Int, List, Option, Result, Io, Async};
 use /std/Bool/{Holds};
 
 --- Close this handle.
-foreign handle_close: (Handle) -> {};
+foreign handle_close(Handle) -> {};
 
 --- Close `h`. Closing a handle that names nothing does nothing.
 pub let close(h: Handle) -> Io({}) =
@@ -43,7 +43,7 @@ let of_masks(masks: Bytes) -> List(Readiness) =
     match masks | x[] => [] | x[m, ..rest] => [of_mask(m), ..of_masks(rest)] end;
 
 --- Wait on these handles for so many milliseconds, an event mask beside each: the events each is ready for, a mask a handle.
-foreign handle_poll: (List(Handle), Bytes, Int) -> Bytes;
+foreign handle_poll(List(Handle), Bytes, Int) -> Bytes;
 
 --- Wait until a handle is ready for the interest beside it, or until `timeout` milliseconds pass; a negative timeout waits forever and zero answers at once.
 pub let poll(
@@ -59,7 +59,7 @@ let answered(b: Bytes) -> Io/Chunk =
     match b | x[] => Io/Chunk/eof() | x[_, .._] => Io/Chunk/chunk(b) end;
 
 --- Read up to so many bytes: `ok` beside them, `eof` at the end of the stream, or the status of the failure.
-foreign handle_read: (Handle, Nat) -> {status: Nat, bytes: Bytes};
+foreign handle_read(Handle, Nat) -> {status: Nat, bytes: Bytes};
 
 --- A read's reply as its outcome: `ok` beside its bytes, `eof` the end of the stream, and any other status the failure it names.
 let reading(h: Handle, n: Nat) -> Io(Result(Nat, Option(Bytes))) =
@@ -72,7 +72,7 @@ let reading(h: Handle, n: Nat) -> Io(Result(Nat, Option(Bytes))) =
         end);
 
 --- Write these bytes: `ok` beside how many were accepted, or the status of the failure.
-foreign handle_write: (Handle, Bytes) -> {status: Nat, written: Nat};
+foreign handle_write(Handle, Bytes) -> {status: Nat, written: Nat};
 
 --- A write's reply as its outcome. One that accepted nothing of the `offered` bytes, where there were some, is the failure no errno names: a loop that resends what is left would resend it for ever.
 let accepted(offered: Nat, status: Nat, written: Nat) -> Result(Nat, Nat) =
@@ -87,7 +87,7 @@ let writing(h: Handle, b: Bytes) -> Io(Result(Nat, Nat)) =
     Io/pure(accepted(Bytes/len(b), reply.status, reply.written));
 
 --- Hand on what is still held of this handle's writes: `ok`, or the status of the failure.
-foreign handle_flush: (Handle) -> Nat;
+foreign handle_flush(Handle) -> Nat;
 
 let flushing(h: Handle) -> Io(Result(Nat, {})) =
     let status = handle_flush(h)!;
@@ -98,7 +98,7 @@ let flushing(h: Handle) -> Io(Result(Nat, {})) =
         end);
 
 --- End this handle's sending half: `ok`, or the status of the failure.
-foreign handle_finish: (Handle) -> Nat;
+foreign handle_finish(Handle) -> Nat;
 
 let finishing(h: Handle) -> Io(Result(Nat, {})) =
     let status = handle_finish(h)!;

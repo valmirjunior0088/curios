@@ -8,22 +8,22 @@ pub struct Listener: Type {
 }
 
 --- Set whether this socket's address may be bound again: `ok`, or the status of the failure.
-foreign socket_set_reuseaddr: (Handle, Bool) -> Nat;
+foreign socket_set_reuseaddr(Handle, Bool) -> Nat;
 
 --- Bind this socket to this address: `ok`, or the status of the failure.
-foreign socket_bind: (Handle, Bytes) -> Nat;
+foreign socket_bind(Handle, Bytes) -> Nat;
 
 --- Mark this socket as listening, with so deep a queue: `ok`, or the status of the failure.
-foreign socket_listen: (Handle, Nat) -> Nat;
+foreign socket_listen(Handle, Nat) -> Nat;
 
 --- The next connection on this listener: `ok` beside its handle, or the status of the failure.
-foreign socket_accept: (Handle) -> {status: Nat, handle: Handle};
+foreign socket_accept(Handle) -> {status: Nat, handle: Handle};
 
 --- A server's TLS configuration from this certificate chain and this key: `ok` beside its handle, or the status of the failure.
-foreign tls_server_config: (Bytes, Bytes) -> {status: Nat, handle: Handle};
+foreign tls_server_config(Bytes, Bytes) -> {status: Nat, handle: Handle};
 
 --- Upgrade this socket to a TLS server stream under this configuration: `ok`, or the status of the failure.
-foreign tls_start_server: (Handle, Handle) -> Nat;
+foreign tls_start_server(Handle, Handle) -> Nat;
 
 --- The outcome a row's bare status names.
 let ok(status: Nat) -> Try(Io, Io/Error, {}) =

@@ -80,7 +80,7 @@ let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =
     end;
 
 --- Start a program from its arguments, a working directory, environment entries and a `/sys/stdio_mode` code for each standard stream: `ok` beside the child's handle and a handle for each stream, or the status of the failure.
-foreign proc_spawn: (List(Bytes), Bytes, List(Bytes), Nat, Nat, Nat) -> {
+foreign proc_spawn(List(Bytes), Bytes, List(Bytes), Nat, Nat, Nat) -> {
     status: Nat,
     child: Handle,
     stdin: Handle,

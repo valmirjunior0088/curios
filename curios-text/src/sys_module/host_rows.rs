@@ -8,9 +8,7 @@ use {
     super::{
         Decl, bin, bool_, byte, flt, handle, int, io_of, list_of, name, nat, record, type_, unit,
     },
-    crate::{
-        ForeignSignature, Func, FuncType, FuncTypeParam, LetSignature, Subterm, Term, TopForeign,
-    },
+    crate::{Func, FuncType, FuncTypeParam, LetSignature, Subterm, Term, TopForeign},
     curios_abi::{ForeignFunction, ForeignStore, ResultShape, WireType},
     curios_num::Grain,
     curios_utilities::Plicity,
@@ -61,7 +59,7 @@ fn thunk(body: Term) -> Term {
 ///
 /// The result is an `Io`, and this one site is what makes that true of every row — a call across the wire is a host effect whoever declared it. The raw result shape (unit, bare type, named record) comes off the `WireSignature`, and a row that does not return yields the type its call is handed, taken as an implicit operand ahead of its wire operands, which the lowering opens a binder for.
 ///
-/// **A written operand list is a function of its operands, and no list is the description itself.** `foreign clock: () -> Nat;` binds a `() -> Io(Nat)`, called `clock()`, and `foreign clock: Nat;` an `Io(Nat)`: the two cross the wire alike and are two declarations, as the list was written or was not. A row that does not return always writes its list, which the type it yields joins, so `() -> Never` is `(@A: Type) -> Io(A)`.
+/// **A row is a function of its operands, none included.** `foreign clock() -> Nat;` binds a `() -> Io(Nat)`, called `clock()`. A row that does not return takes the type it yields into the same list, so `foreign gone() -> Never;` is `(@A: Type) -> Io(A)`.
 pub(super) fn host_fn(function: &Arc<ForeignFunction>, declaration: &TopForeign) -> Decl {
     let vis_pub = declaration.vis_pub;
     let signature = function.signature();
@@ -103,17 +101,13 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, declaration: &TopForeign)
         ),
     };
     let output = io_of(result);
-    // The row lowers as the function of its operands, and as the call itself where it takes none, so an empty list written is the one shape the declaration wraps for itself.
-    let (output, body) = match &declaration.signature {
-        ForeignSignature::Name(_) => (output, row),
-        ForeignSignature::Func(written) if written.params.is_empty() => {
-            (function_over(Vec::new(), output), thunk(row))
-        }
-        ForeignSignature::Func(written) => (
-            function_over(written.params.iter().map(wire_type).collect(), output),
-            row,
-        ),
+    // The row lowers as the function of its operands, and as the call itself where it takes none, so a row of no operand is the one shape the declaration wraps for itself.
+    let domains = signature.params.iter().map(wire_type).collect::<Vec<_>>();
+    let body = match domains.is_empty() {
+        true => thunk(row),
+        false => row,
     };
+    let output = function_over(domains, output);
 
     Decl {
         doc: None,
@@ -135,7 +129,7 @@ pub(crate) fn foreign_signature(
     let function = ForeignFunction {
         name,
         label: declaration.label.to_string(),
-        signature: declaration.signature.wire(),
+        signature: declaration.signature.clone(),
     };
 
     foreigns.register(function.clone());

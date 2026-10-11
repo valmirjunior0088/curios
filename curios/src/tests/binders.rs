@@ -464,7 +464,7 @@ fn a_foreign_declarations_operands_have_no_names() {
     let message = error(
         r#"
         use /std/{Nat, Bytes, Str, print};
-        foreign frobnicate: (Nat, Bytes) -> Nat;
+        foreign frobnicate(Nat, Bytes) -> Nat;
         let f: Str = frobnicate;
         print("no")
         "#,

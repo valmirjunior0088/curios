@@ -7,11 +7,11 @@ pub struct Instant: Type {
 }
 
 --- The monotonic clock: seconds since a fixed origin, and the nanoseconds within the second.
-foreign clock_mono: {secs: Nat, nanos: Nat};
+foreign clock_mono() -> {secs: Nat, nanos: Nat};
 
 --- The clock now.
 pub let now() -> Io(Instant) =
-    let r = clock_mono!;
+    let r = clock_mono()!;
     Io/pure(Instant { elapsed = Duration/of(r.secs, r.nanos) });
 
 --- The moment `d` after `t`.

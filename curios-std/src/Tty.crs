@@ -25,10 +25,10 @@ satisfy Show(Size) {
 }
 
 --- Put this terminal in raw mode, or restore it: `ok`, or the status of the failure.
-foreign tty_raw: (Handle, Bool) -> Nat;
+foreign tty_raw(Handle, Bool) -> Nat;
 
 --- This terminal's dimensions: `ok` beside its columns and its rows, or the status of the failure.
-foreign tty_size: (Handle) -> {status: Nat, cols: Nat, rows: Nat};
+foreign tty_size(Handle) -> {status: Nat, cols: Nat, rows: Nat};
 
 --- Raw mode on `t`, or off.
 pub let raw(t: Tty, on: Bool) -> Try(Io, Io/Error, {}) =

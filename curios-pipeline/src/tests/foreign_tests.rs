@@ -7,7 +7,7 @@ fn declaration_produces_a_wasm_import() {
     // Must actually *run* `frobnicate` — a foreign call yields a description (`Io(Nat)`), and one the program never forces is pruned by `curios_ersd::optimize` along with its import, before codegen ever sees it.
     let module = compile(
         r#"
-            foreign frobnicate : (Nat, Bytes) -> Nat;
+            foreign frobnicate(Nat, Bytes) -> Nat;
             let n = frobnicate(5, x[0x00, 0x01])!;
             /std/print(/std/Nat/to_str(n))
         "#,
@@ -27,7 +27,7 @@ fn declaration_produces_a_wasm_import() {
 /// What a package's manifest says a module answers is held to the rows its own unit declares, where the unit is compiled: a claim on a `foreign` the unit declares passes, and one on no declaration is refused against the ones it does declare.
 #[test]
 fn a_claim_is_held_to_a_declaration_of_its_own_unit() {
-    let library = "pub foreign sha256: (Bytes) -> Bytes;\n";
+    let library = "pub foreign sha256(Bytes) -> Bytes;\n";
     let claiming = |declaration: &str| {
         mounted("crypto", library).answering([(declaration.to_string(), "sha2".to_string())])
     };
@@ -51,8 +51,8 @@ fn a_claim_is_held_to_a_declaration_of_its_own_unit() {
 fn a_program_is_handed_the_rows_it_reaches() {
     let entry = entrypoint_of(
         r#"
-            foreign reached : (Nat) -> Nat;
-            foreign unreached : (Nat) -> Nat;
+            foreign reached(Nat) -> Nat;
+            foreign unreached(Nat) -> Nat;
             let n = reached(5)!;
             /std/print(/std/Nat/to_str(n))
         "#,
@@ -74,7 +74,7 @@ fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under()
     // Must actually run both — an unforced description is pruned before codegen ever sees it (see the note above).
     let module = compile(
         r#"
-            foreign frobnicate : (Nat) -> Nat;
+            foreign frobnicate(Nat) -> Nat;
             let _ = /std/Io/write(/std/Io/stdout, x[0x00])!;
             let n = frobnicate(5)!;
             /std/print(/std/Nat/to_str(n))
@@ -98,40 +98,28 @@ fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under()
     );
 }
 
-/// A declaration that writes an operand list is a function of its operands, an empty list included, and one that writes none is the call's description: each is typed as it was written, and neither stands where the other is wanted. A row that does not return writes its list, which the type it yields joins, so it is called once.
+/// A row is a function of its operands, none included: one with no operand is called where its description is wanted and is no description itself, and one that does not return takes the type it yields into the same list, so it is called once.
 #[test]
-fn an_operand_list_declares_a_function_and_no_list_a_description() {
+fn a_row_of_no_operand_is_called() {
     typecheck(
         r#"
-            foreign listed : () -> Nat;
-            foreign bare : Nat;
-            foreign gone : () -> Never;
-            let called : /std/Io(/std/Nat) = listed();
-            let held : () -> /std/Io(/std/Nat) = listed;
-            let description : /std/Io(/std/Nat) = bare;
+            foreign clock() -> Nat;
+            foreign gone() -> Never;
+            let called : /std/Io(/std/Nat) = clock();
+            let held : () -> /std/Io(/std/Nat) = clock;
             let ended : /std/Io(/std/Nat) = gone();
             /std/Io/pure(())
         "#,
     )
-    .expect("each is used as it was declared");
+    .expect("each is used as the function it is");
 
     let refusal = typecheck(
         r#"
-            foreign listed : () -> Nat;
-            let description : /std/Io(/std/Nat) = listed;
+            foreign clock() -> Nat;
+            let description : /std/Io(/std/Nat) = clock;
             /std/Io/pure(())
         "#,
     )
     .expect_err("a function of no operand is no description");
     assert!(refusal.contains("type mismatch"), "{refusal}");
-
-    let refusal = typecheck(
-        r#"
-            foreign bare : Nat;
-            let called : /std/Io(/std/Nat) = bare();
-            /std/Io/pure(())
-        "#,
-    )
-    .expect_err("a description is no function");
-    assert!(refusal.contains("applied a non-function"), "{refusal}");
 }

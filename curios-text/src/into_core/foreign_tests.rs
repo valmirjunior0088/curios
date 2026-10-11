@@ -10,7 +10,7 @@ use {
 fn declaration_populates_the_store() {
     // No loader/prelude needed at all: a `foreign` signature is parsed directly into `WireType`s, not resolved as ordinary names.
     let (_, _, foreigns) = super::into_core(
-        &"foreign frobnicate : (Nat, Bytes) -> Nat; 0"
+        &"foreign frobnicate(Nat, Bytes) -> Nat; 0"
             .parse::<Entrypoint>()
             .unwrap(),
         &RootSource::none(),
@@ -32,7 +32,7 @@ fn declaration_populates_the_store() {
 #[test]
 fn declaration_zero_arg_populates_the_store() {
     let (_, _, foreigns) = super::into_core(
-        &"foreign clock : Nat; 0".parse::<Entrypoint>().unwrap(),
+        &"foreign clock() -> Nat; 0".parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         syntax(),
     )
@@ -42,29 +42,11 @@ fn declaration_zero_arg_populates_the_store() {
     assert!(function.signature().params.is_empty());
 }
 
-// A list written empty and no list are two declarations and one row on the wire: neither hands the host an operand, so the import is the same.
-#[test]
-fn an_empty_operand_list_crosses_as_no_operand() {
-    let (_, _, foreigns) = super::into_core(
-        &"foreign clock : () -> Nat; foreign wall : Nat; 0"
-            .parse::<Entrypoint>()
-            .unwrap(),
-        &RootSource::none(),
-        syntax(),
-    )
-    .unwrap();
-
-    let clock = foreigns.get("/clock").expect("clock registered");
-    let wall = foreigns.get("/wall").expect("wall registered");
-    assert!(clock.signature().params.is_empty());
-    assert_eq!(clock.signature(), wall.signature());
-}
-
 #[test]
 fn declaration_call_lowers() {
     // Declaring and calling a foreign function lowers end to end (`run` panics on failure) — the `Intrinsic::Foreign` body `foreign_signature` builds is well typed against the same wire-typed signature the call site checks against.
     let _ = run(r#"
-        foreign frobnicate : (Nat, Bytes) -> Nat;
+        foreign frobnicate(Nat, Bytes) -> Nat;
         frobnicate(5, x[0x00, 0x01])
     "#);
 }
@@ -73,7 +55,7 @@ fn declaration_call_lowers() {
 #[test]
 fn duplicate_foreign_declaration_in_one_scope_is_rejected() {
     assert!(
-        run_err("foreign frobnicate : Nat; foreign frobnicate : Nat; 0")
+        run_err("foreign frobnicate() -> Nat; foreign frobnicate() -> Nat; 0")
             .contains("`frobnicate` is already declared in this module")
     );
 }
@@ -84,10 +66,10 @@ fn declarations_across_modules_get_distinct_import_names() {
     let (_, _, foreigns) = super::into_core(
         &r#"
         mod A
-            foreign frobnicate : Nat;
+            foreign frobnicate() -> Nat;
         end
         mod B
-            foreign frobnicate : Nat;
+            foreign frobnicate() -> Nat;
         end
         0
     "#

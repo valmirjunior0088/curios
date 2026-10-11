@@ -292,7 +292,7 @@ fn http_perform_parses_a_scripted_response() {
 fn foreign_declaration_runs_through_supplied_bindings() {
     // `double` has no host meaning at all — it's purely an embedder-supplied function, wired up via the store `compile_entrypoint` hands back and exercised end to end through `run_wasm`, not the compiler's own `sys` implementations.
     let source = r#"
-        foreign double : (Nat) -> Nat;
+        foreign double(Nat) -> Nat;
         let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
         let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
@@ -322,7 +322,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
 #[test]
 fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
     let source = r#"
-        foreign flip : (Byte) -> Byte;
+        foreign flip(Byte) -> Byte;
         let top = flip(0)!;
         let bottom = flip(255)!;
         let _ = /std/proc/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
@@ -356,7 +356,7 @@ fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
 #[test]
 fn a_foreign_flt_crosses_raw_in_both_directions() {
     let source = r#"
-        foreign halve : (Flt) -> Flt;
+        foreign halve(Flt) -> Flt;
         let halved = halve(/std/Nat/to_flt(84))!;
         let matched = halved == /std/Nat/to_flt(42);
         let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
@@ -388,7 +388,7 @@ fn a_foreign_flt_crosses_raw_in_both_directions() {
 #[test]
 fn a_foreign_flt_may_stand_before_another_result() {
     let source = r#"
-        foreign probe : (Nat) -> {value: Flt, status: Nat};
+        foreign probe(Nat) -> {value: Flt, status: Nat};
         let answered = probe(3)!;
         let matched = answered.value == /std/Nat/to_flt(6);
         let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte(answered.status % 256) | false => 1 end)!;
@@ -422,7 +422,7 @@ fn a_foreign_flt_may_stand_before_another_result() {
 fn a_foreign_record_may_answer_references_in_any_slot() {
     let source = r#"
         use /std/{Bytes, List, Nat, Str};
-        foreign split : (Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
+        foreign split(Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
         let r = split(x[1, 2, 3])!;
         /std/print(Str/flatten([
             Nat/to_str(Bytes/to_nat(r.head)), " ",
@@ -463,7 +463,7 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
 #[test]
 fn a_list_of_bit_runs_crosses_in_both_directions() {
     let source = r#"
-        foreign echo : (List(Bits)) -> List(Bits);
+        foreign echo(List(Bits)) -> List(Bits);
         let run = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
         let answered = echo([run, b[]])!;
         let first = match answered | [] => b[] | [head, .._] => head end;
@@ -495,9 +495,9 @@ fn a_list_of_bit_runs_crosses_in_both_directions() {
 #[test]
 fn a_list_of_scalars_crosses_flat_in_both_directions() {
     let source = r#"
-        foreign nats : (List(Nat)) -> List(Nat);
-        foreign ints : (List(Int)) -> List(Int);
-        foreign flags : (List(Bool)) -> List(Bool);
+        foreign nats(List(Nat)) -> List(Nat);
+        foreign ints(List(Int)) -> List(Int);
+        foreign flags(List(Bool)) -> List(Bool);
         let n = nats([1, 6000000000000000000])!;
         let i = ints([-5, +7, -3000000000])!;
         let f = flags([true, false])!;
@@ -538,7 +538,7 @@ fn a_list_of_scalars_crosses_flat_in_both_directions() {
 fn a_list_element_past_the_wire_is_refused() {
     let source = r#"
         use /std/{Nat, Bytes, Option, Io};
-        foreign nats : (List(Nat)) -> List(Nat);
+        foreign nats(List(Nat)) -> List(Nat);
         let v = /std/proc/env("CURIOS_UNSET_LIST")!;
         let _ = nats([1, Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[]))])!;
         /std/Io/pure(())

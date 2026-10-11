@@ -4,13 +4,12 @@ mod tests;
 use {
     super::{
         Apply, Argument, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Doc,
-        Field, ForeignSignature, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam,
-        GroupItem, Infix, Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Literal,
-        Match, MatchPattern, MatchPatternField, NatLiteral, NatPattern, NumLit, Pattern,
-        PatternField, Proj, ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm,
-        Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
-        TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup,
-        WitnessField,
+        Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
+        Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern,
+        MatchPatternField, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj,
+        ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase,
+        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse,
+        TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
     },
     crate::op_precedence,
     curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
@@ -1555,20 +1554,22 @@ fn print_wire_results(results: &WireResults) -> Printer {
     }
 }
 
-/// A `foreign` declaration's signature as it writes it: the result alone where it writes no operand list, and the list ahead of it where it writes one, empty or not.
-fn print_wire_signature(signature: &ForeignSignature) -> Printer {
-    match signature {
-        ForeignSignature::Name(answer) => print_wire_results(answer.results()),
-        ForeignSignature::Func(WireSignature { params, results }) => flat([
-            listed(
-                "(",
-                params.iter().copied().map(print_wire_type).collect(),
-                ")",
-            ),
-            pure(" -> "),
-            print_wire_results(results),
-        ]),
-    }
+/// A row's signature as its declaration writes it after the name: the operand list, empty or not, and what the call answers.
+fn print_wire_signature(signature: &WireSignature) -> Printer {
+    flat([
+        listed(
+            "(",
+            signature
+                .params
+                .iter()
+                .copied()
+                .map(print_wire_type)
+                .collect(),
+            ")",
+        ),
+        pure(" -> "),
+        print_wire_results(&signature.results),
+    ])
 }
 
 fn print_top_foreign(item: TopForeign) -> Printer {
@@ -1577,7 +1578,6 @@ fn print_top_foreign(item: TopForeign) -> Printer {
         print_pub(item.vis_pub),
         pure("foreign "),
         pure(item.label),
-        pure(": "),
         print_wire_signature(&item.signature),
         pure(";"),
     ])
@@ -2146,7 +2146,6 @@ pub(crate) fn print_foreign_head(item: &TopForeign) -> Printer {
         print_pub(item.vis_pub),
         pure("foreign "),
         pure(item.label.clone()),
-        pure(": "),
         print_wire_signature(&item.signature),
     ])
 }

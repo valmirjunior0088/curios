@@ -14,7 +14,7 @@ pub concept Ordered(A: Type): Type {
 }
 
 pub mod Internal
-    foreign random: Nat;
+    foreign random() -> Nat;
 end
 
 let literals = ("a \"q\" \n \% b \u{301} \u", '\'', 'c', '\u{1F600}', 1.5e3, -inf.0, +nan.0, -42, 0xFF, 0b10, true, false, ?);

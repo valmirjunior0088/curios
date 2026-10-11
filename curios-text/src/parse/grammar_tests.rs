@@ -116,8 +116,8 @@ fn trailing_comma_accepted_in_top_level_comma_lists() {
     for (trailed, plain) in [
         // Foreign wire parameters.
         (
-            "foreign f : (Nat, Bytes,) -> Nat;",
-            "foreign f : (Nat, Bytes) -> Nat;",
+            "foreign f(Nat, Bytes,) -> Nat;",
+            "foreign f(Nat, Bytes) -> Nat;",
         ),
         // Use groups.
         ("use /std/{Nat, Bool,};", "use /std/{Nat, Bool};"),

@@ -265,13 +265,15 @@ module.exports = grammar({
         optional(seq(":", field("type", $._term))),
       ),
 
+    // A function with no body: the operand list follows the name as a definition's parameters do, with no colon, since a row's signature is not its type.
     foreign_item: ($) =>
       seq(
         optional("pub"),
         "foreign",
         field("name", $.identifier),
-        ":",
-        field("type", $._term),
+        field("operands", $.function_type_parameters),
+        "->",
+        field("result", $._term),
         ";",
       ),
 

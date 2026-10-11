@@ -25,7 +25,7 @@ pub let of_mode(mode: Mode) -> Nat =
     end;
 
 --- Open the file at this path in this mode, one of `/sys/open_mode`'s codes: `ok` beside its handle, or the status of the failure.
-foreign file_open: (Bytes, Nat) -> {status: Nat, handle: Handle};
+foreign file_open(Bytes, Nat) -> {status: Nat, handle: Handle};
 
 --- The file at `path`, opened in `mode`.
 pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =

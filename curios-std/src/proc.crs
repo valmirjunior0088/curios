@@ -1,17 +1,17 @@
 use /std/{Byte, Bytes, List, Str, Option, Io};
 
 --- The process's arguments.
-foreign proc_args: List(Bytes);
+foreign proc_args() -> List(Bytes);
 
 --- The arguments this process was started with, each as the bytes it arrived as.
 pub let args: Io(List(Bytes)) =
-    proc_args;
+    proc_args();
 
 --- The environment variable of this name: `ok` beside its value, or another status where it has none.
-foreign proc_env: (Bytes) -> {status: Nat, value: Bytes};
+foreign proc_env(Bytes) -> {status: Nat, value: Bytes};
 
 --- End the instance with this code. The call does not return.
-foreign proc_exit: (Byte) -> Never;
+foreign proc_exit(Byte) -> Never;
 
 --- The environment variable `name`, or `none` when it is unset.
 pub let env(name: Str) -> Io(Option(Bytes)) =

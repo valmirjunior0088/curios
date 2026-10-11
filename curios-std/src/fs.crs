@@ -29,30 +29,25 @@ satisfy Show(Kind) {
 }
 
 --- What is at this path: `ok` beside its kind, one of `/sys/file_kind`'s codes, its size in bytes and when its contents last changed, or the status of the failure.
-foreign file_stat: (Bytes) -> {
-    status: Nat,
-    kind: Nat,
-    size: Nat,
-    mtime_secs: Nat,
-    mtime_nanos: Nat};
+foreign file_stat(Bytes) -> {status: Nat, kind: Nat, size: Nat, mtime_secs: Nat, mtime_nanos: Nat};
 
 --- Remove the file at this path: `ok`, or the status of the failure.
-foreign file_remove: (Bytes) -> Nat;
+foreign file_remove(Bytes) -> Nat;
 
 --- Rename what is at the first path to the second: `ok`, or the status of the failure.
-foreign file_rename: (Bytes, Bytes) -> Nat;
+foreign file_rename(Bytes, Bytes) -> Nat;
 
 --- The names in the directory at this path: `ok` beside them, or the status of the failure.
-foreign dir_list: (Bytes) -> {status: Nat, names: List(Bytes)};
+foreign dir_list(Bytes) -> {status: Nat, names: List(Bytes)};
 
 --- Create the directory at this path: `ok`, or the status of the failure.
-foreign dir_create: (Bytes) -> Nat;
+foreign dir_create(Bytes) -> Nat;
 
 --- Remove the directory at this path: `ok`, or the status of the failure.
-foreign dir_remove: (Bytes) -> Nat;
+foreign dir_remove(Bytes) -> Nat;
 
 --- The process's working directory: `ok` beside its path, or the status of the failure.
-foreign proc_cwd: {status: Nat, path: Bytes};
+foreign proc_cwd() -> {status: Nat, path: Bytes};
 
 --- The kind a code of `file_stat`'s names, where it names one.
 let kind_of(code: Nat) -> Option(Kind) =
@@ -146,7 +141,7 @@ pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
 
 --- The working directory.
 pub let cwd: Try(Io, Io/Error, Path) =
-    let reply = proc_cwd!;
+    let reply = proc_cwd()!;
     match reply.status == /sys/status/ok
     | true => Try/pure(Path/of_bytes(reply.path))
     | false => Try/raise(Io/Error/of(reply.status))

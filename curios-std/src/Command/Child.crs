@@ -23,10 +23,10 @@ let close_pipes(c: Child) -> Io({}) =
     close_pipe(c.stderr);
 
 --- How this child ended: `ok` beside its exit code and the signal that ended it, or the status of the failure.
-foreign proc_wait: (Handle) -> {status: Nat, code: Nat, signal: Nat};
+foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
 
 --- End this child: `ok`, or the status of the failure.
-foreign proc_kill: (Handle) -> Nat;
+foreign proc_kill(Handle) -> Nat;
 
 --- The child ended if it still runs. A child the host could not signal is left as it is.
 let killed(c: Child) -> Io({}) =

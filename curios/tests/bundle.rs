@@ -166,11 +166,8 @@ fn a_compiled_executable_carries_the_modules_answering_its_foreign_declarations(
     )
     .expect("write the manifest");
 
-    fs::write(
-        package.join("lib.crs"),
-        "pub foreign double: (Nat) -> Nat;\n",
-    )
-    .expect("write the library");
+    fs::write(package.join("lib.crs"), "pub foreign double(Nat) -> Nat;\n")
+        .expect("write the library");
     fs::write(
         package.join("exe.crs"),
         "let doubled = /ffi/double(3)!;\nlet _ = /std/proc/exit(@{}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(())\n",
