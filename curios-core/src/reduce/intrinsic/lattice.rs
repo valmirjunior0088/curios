@@ -7,7 +7,7 @@
 //! **A node the fold changes nothing of keeps its spelling.** Where no leaf is dropped and no offset hoisted the node stands as written over its reduced operands; the operation's commutation, association and idempotence are decided where two trees are compared, by their leaf sets, and no fold sorts a tree.
 
 use {
-    super::{compare_int, compare_nat, operand_bound},
+    super::{Asked, compare_int, compare_nat, operand_bound},
     crate::{Cost, Extremum, ReduceError, Reducer, Subterm, Term},
     curios_algebra::{Carrier, Comparison, Kept, Lattice},
     curios_num::Integer,
@@ -129,18 +129,19 @@ fn folded(
 
 /// What the lattice forces of `left` against `right`, each a reduced term of `carrier`: a `min` is at most each of its leaves and at least what is at most all of them, and a `max` the mirror, each read over the verdicts the plain comparison reaches of the leaves (`curios-algebra`'s `Lattice::below` and `Lattice::above`). `Stuck` where neither side is a `min` or a `max` under a literal offset, or the leaves' verdicts force nothing.
 ///
-/// Each verdict asked is of a leaf, a strict subterm of the side it stands in, so the reading ends.
+/// Each verdict asked is of a leaf, a strict subterm of the side it stands in, so the reading ends, and each is asked of `asked`, the comparison this one is part of.
 pub(super) fn lattice_verdict(
     reducer: &mut impl Reducer,
+    asked: &mut Asked,
     carrier: Carrier,
     left: &Term,
     right: &Term,
 ) -> Result<Comparison, ReduceError> {
-    let forward = at_most(reducer, carrier, left, right)?;
+    let forward = at_most(reducer, asked, carrier, left, right)?;
     if forward == Some(Comparison::Lt) {
         return Ok(Comparison::Lt);
     }
-    let backward = at_most(reducer, carrier, right, left)?;
+    let backward = at_most(reducer, asked, carrier, right, left)?;
     Ok(match (forward, backward) {
         (_, Some(Comparison::Lt)) => Comparison::Gt,
         (Some(_), Some(_)) => Comparison::Eq,
@@ -153,6 +154,7 @@ pub(super) fn lattice_verdict(
 /// `Lt` or `Le` where the lattice forces `lower` at most `upper`, and `None` where it forces nothing.
 fn at_most(
     reducer: &mut impl Reducer,
+    asked: &mut Asked,
     carrier: Carrier,
     lower: &Term,
     upper: &Term,
@@ -164,7 +166,7 @@ fn at_most(
             reducer.spend(Cost::collection(leaves.len() as u64))?;
             let mut verdicts = Vec::new();
             for leaf in leaves {
-                verdicts.push(compare(reducer, carrier, leaf, upper.clone())?);
+                verdicts.push(asked.verdict(reducer, carrier, leaf, upper.clone())?);
             }
             if let Some(forced) = lattice.below(&verdicts) {
                 return Ok(Some(forced));
@@ -175,7 +177,7 @@ fn at_most(
             reducer.spend(Cost::collection(leaves.len() as u64))?;
             let mut verdicts = Vec::new();
             for leaf in leaves {
-                verdicts.push(compare(reducer, carrier, lower.clone(), leaf)?);
+                verdicts.push(asked.verdict(reducer, carrier, lower.clone(), leaf)?);
             }
             if let Some(forced) = lattice.above(&verdicts) {
                 return Ok(Some(forced));

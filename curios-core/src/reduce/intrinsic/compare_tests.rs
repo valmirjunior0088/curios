@@ -185,6 +185,43 @@ fn nat_decides_a_value_against_an_operand_it_never_exceeds() {
     );
 }
 
+// A side is compared through each operand it never exceeds, and so is the other, so two sides nested this deep lead to one pair of their subterms along every interleaving of the two descents: more paths than a run walks. The comparison keeps each pair's verdict, and what it costs is the product of the two sides' sizes.
+#[test]
+fn two_chains_of_operands_a_value_never_exceeds_compare_each_pair_once() {
+    let links: [fn(Term, Term) -> Term; 4] = [
+        |so_far, operand| Term::intrinsic(Intrinsic::NatAnd(so_far, operand)),
+        |so_far, operand| Term::intrinsic(Intrinsic::NatShr(so_far, operand)),
+        |so_far, operand| {
+            Term::intrinsic(Intrinsic::NatDiv {
+                dividend: so_far,
+                divisor: Nat::rebuild(1u32.into(), operand),
+                non_zero: qed(),
+            })
+        },
+        |so_far, operand| {
+            Term::intrinsic(Intrinsic::NatRem {
+                dividend: so_far,
+                divisor: Nat::rebuild(1u32.into(), operand),
+                non_zero: qed(),
+            })
+        },
+    ];
+
+    for link in links {
+        let chain = |first: u32| {
+            (1..=24).fold(sym(first, "x"), |so_far, at| {
+                link(so_far, sym(first + at, "y"))
+            })
+        };
+        let (verdict, _, _) = compare_nat(&mut Inert, chain(0), chain(100)).expect("reduces");
+        assert_eq!(
+            verdict,
+            Comparison::Stuck,
+            "two chains that share no symbol decide nothing"
+        );
+    }
+}
+
 // A side with a literal bound decides against the floor under a symbolic side, as it does against a bare literal: the other side is at least its floor whatever stands above it. A byte's value has a bound and no operand it never exceeds, so nothing else decides these. The control is a floor one short of the bound.
 #[test]
 fn nat_decides_a_bounded_side_against_the_floor_under_a_symbolic_one() {

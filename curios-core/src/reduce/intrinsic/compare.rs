@@ -3,11 +3,45 @@
 //! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. `curios-algebra`'s `Comparison` is the verdict — which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed — and every fact that narrows it is the algebra's: the floors, a bound against a literal, a dominator, divisibility. What is decided here is what to observe and in what order: which terms to normalize, which side is bare, which operand bounds which.
 
 use {
-    super::{lattice_verdict, nat_bound, nat_dominators, nat_least},
+    super::{compare_int_among, lattice_verdict, nat_bound, nat_dominators, nat_least},
     crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, project_erased_universes},
     curios_algebra::{Carrier, Comparison, Side, apart_modulo},
     curios_num::Natural,
+    std::collections::HashMap,
 };
+
+/// The verdicts one comparison has reached of the pairs of terms it was led to.
+///
+/// **A pair is compared once.** A side is compared through each operand it never exceeds and each leaf of a `min` or a `max`, and so is the other side, so two sides nested `n` deep lead to one pair of their subterms along every interleaving of the two descents: as many paths as a binomial coefficient counts, where the pairs are the product of the two sides' sizes. A verdict is a function of the two terms, so the first one reached stands for every path.
+///
+/// It lives as long as the comparison that made it: an arm's equations and a reducer's state are one thing for the whole of a comparison, and may be another for the next.
+#[derive(Default)]
+pub(super) struct Asked {
+    verdicts: HashMap<(Term, Term), Comparison>,
+}
+
+impl Asked {
+    /// What `carrier`'s comparison decides of `left` against `right`, compared where this is the first time the pair is asked about.
+    pub(super) fn verdict(
+        &mut self,
+        reducer: &mut impl Reducer,
+        carrier: Carrier,
+        left: Term,
+        right: Term,
+    ) -> Result<Comparison, ReduceError> {
+        let pair = (left, right);
+        if let Some(verdict) = self.verdicts.get(&pair) {
+            return Ok(*verdict);
+        }
+        let (left, right) = pair.clone();
+        let verdict = match carrier {
+            Carrier::Natural => compare_nat_among(reducer, self, left, right)?.0,
+            _ => compare_int_among(reducer, self, left, right)?.0,
+        };
+        self.verdicts.insert(pair, verdict);
+        Ok(verdict)
+    }
+}
 
 /// One side of a comparison once cancellation has run: its floor, the symbolic part above it, what the side is at least, and the whole side.
 struct Operand {
@@ -47,6 +81,16 @@ pub(super) fn compare_nat(
     left: Term,
     right: Term,
 ) -> Result<(Comparison, Term, Term), ReduceError> {
+    compare_nat_among(reducer, &mut Asked::default(), left, right)
+}
+
+/// [`compare_nat`] inside a comparison that has asked about other pairs: what it is led to in turn is asked of `asked`.
+pub(super) fn compare_nat_among(
+    reducer: &mut impl Reducer,
+    asked: &mut Asked,
+    left: Term,
+    right: Term,
+) -> Result<(Comparison, Term, Term), ReduceError> {
     // The comparison cancels like terms across both sides, so a stuck product on either is distributed first, by name.
     let left = Nat::normalize(reducer, left)?;
     let right = Nat::normalize(reducer, right)?;
@@ -71,13 +115,15 @@ pub(super) fn compare_nat(
 
     // A symbolic bound decides by the same criterion, through the operand the value never exceeds: `x - y` is at most `x`, so `x - y <= x + z` is decided by comparing `x` in its place, and `x % (y + 1)` is below `y + 1` outright. The dominator is compared one strict subterm down, so the recursion ends. See `nat_dominators` for why each pair holds unconditionally.
     let outcome = match outcome {
-        Comparison::Stuck => dominated(reducer, &left, &right)?,
+        Comparison::Stuck => dominated(reducer, asked, &left, &right)?,
         decided => decided,
     };
 
     // A `min` or a `max` on either side is read through the lattice: at most each of a `min`'s leaves and at least what is at most all of them, and a `max` the mirror. Each verdict it asks is of a leaf, one strict subterm down.
     let outcome = match outcome {
-        Comparison::Stuck => lattice_verdict(reducer, Carrier::Natural, &left.whole, &right.whole)?,
+        Comparison::Stuck => {
+            lattice_verdict(reducer, asked, Carrier::Natural, &left.whole, &right.whole)?
+        }
         decided => decided,
     };
 
@@ -110,6 +156,7 @@ fn bounded(bounded: &Operand, other: &Operand) -> Comparison {
 /// The verdict a dominator forces, tried on the left inner and then the right, or `Stuck` when no listed operand compares: the dominator's verdict against the other side, read through `Comparison::through_dominator`, and a strict dominator's against the other side's successor, read through `Comparison::through_strict_dominator`.
 fn dominated(
     reducer: &mut impl Reducer,
+    asked: &mut Asked,
     left: &Operand,
     right: &Operand,
 ) -> Result<Comparison, ReduceError> {
@@ -121,12 +168,17 @@ fn dominated(
     };
     for (bound, strict) in nat_dominators(&left.inner) {
         let dominator = Nat::rebuild(left.floor.clone(), bound);
-        let (verdict, _, _) = compare_nat(reducer, dominator.clone(), right.whole.clone())?;
+        let verdict = asked.verdict(
+            reducer,
+            Carrier::Natural,
+            dominator.clone(),
+            right.whole.clone(),
+        )?;
         if let Some(verdict) = verdict.through_dominator(strict) {
             return Ok(verdict);
         }
         if strict {
-            let (verdict, _, _) = compare_nat(reducer, dominator, successor(right))?;
+            let verdict = asked.verdict(reducer, Carrier::Natural, dominator, successor(right))?;
             if let Some(verdict) = verdict.through_strict_dominator() {
                 return Ok(verdict);
             }
@@ -134,12 +186,17 @@ fn dominated(
     }
     for (bound, strict) in nat_dominators(&right.inner) {
         let dominator = Nat::rebuild(right.floor.clone(), bound);
-        let (verdict, _, _) = compare_nat(reducer, left.whole.clone(), dominator.clone())?;
+        let verdict = asked.verdict(
+            reducer,
+            Carrier::Natural,
+            left.whole.clone(),
+            dominator.clone(),
+        )?;
         if let Some(verdict) = verdict.mirrored().through_dominator(strict) {
             return Ok(verdict.mirrored());
         }
         if strict {
-            let (verdict, _, _) = compare_nat(reducer, successor(left), dominator)?;
+            let verdict = asked.verdict(reducer, Carrier::Natural, successor(left), dominator)?;
             if let Some(verdict) = verdict.mirrored().through_strict_dominator() {
                 return Ok(verdict.mirrored());
             }

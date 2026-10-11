@@ -3,7 +3,7 @@
 //! ℤ under `+` is a group, so every relation reads through the difference: `a ⋈ b` iff `a - b ⋈ 0`. [`int_cancel_common`] moves that difference to the two sides by sign, and a pair whose residuals are both constants is decided by comparing them; anything else is undecided and rebuilt from the residuals, so `i + a < i + b` and `a < b` reduce to one term, which conversion needs.
 
 use {
-    super::{compare_nat, lattice_verdict},
+    super::{Asked, lattice_verdict},
     crate::{
         Intrinsic, ReduceError, Reducer, Subterm, Term, int_cancel_common, int_has_stuck_product,
         int_monomial, int_normalize, int_preimage, int_split_by_sign, int_terms,
@@ -15,6 +15,16 @@ use {
 /// The structural outcome of comparing two `Int`s, with the operands their shared part cancelled off. A stuck product on either side is distributed first, by name, as `compare_nat` distributes.
 pub(super) fn compare_int(
     reducer: &mut impl Reducer,
+    left: Term,
+    right: Term,
+) -> Result<(Comparison, Term, Term), ReduceError> {
+    compare_int_among(reducer, &mut Asked::default(), left, right)
+}
+
+/// [`compare_int`] inside a comparison that has asked about other pairs: what it is led to in turn is asked of `asked`.
+pub(super) fn compare_int_among(
+    reducer: &mut impl Reducer,
+    asked: &mut Asked,
     left: Term,
     right: Term,
 ) -> Result<(Comparison, Term, Term), ReduceError> {
@@ -39,14 +49,16 @@ pub(super) fn compare_int(
                 .chain(&summands_right)
                 .map(|summand| int_monomial(summand).0.magnitude());
             let difference = (constant_left - constant_right).magnitude();
-            let pulled_back = compare_preimages(reducer, &left, &right)?;
+            let pulled_back = compare_preimages(reducer, asked, &left, &right)?;
             let ordered = match apart_modulo((&difference, &Natural::zero()), coefficients) {
                 true => pulled_back.unequal(),
                 false => pulled_back,
             };
             // A `min` or a `max` on either side is read through the lattice, as `compare_nat` reads one.
             match ordered {
-                Comparison::Stuck => lattice_verdict(reducer, Carrier::Integer, &left, &right)?,
+                Comparison::Stuck => {
+                    lattice_verdict(reducer, asked, Carrier::Integer, &left, &right)?
+                }
                 decided => decided,
             }
         }
@@ -60,12 +72,13 @@ pub(super) fn compare_int(
 /// It only ever decides: the neutral term the caller rebuilds on `Stuck` is its own residual pair, so a stuck comparison keeps the spelling its guard recorded.
 fn compare_preimages(
     reducer: &mut impl Reducer,
+    asked: &mut Asked,
     left: &Term,
     right: &Term,
 ) -> Result<Comparison, ReduceError> {
     let (left, right) = int_split_by_sign(left, right);
     match (int_preimage(&left), int_preimage(&right)) {
-        (Some(left), Some(right)) => Ok(compare_nat(reducer, left, right)?.0),
+        (Some(left), Some(right)) => asked.verdict(reducer, Carrier::Natural, left, right),
         _ => Ok(Comparison::Stuck),
     }
 }
