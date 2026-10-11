@@ -15,8 +15,9 @@ use {
     },
     curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_parse::{
-        Mark, Parser, ParserError, commit, fail, fail_from, lazy, many0, mark, not_ahead, pure,
-        raise, refusal, sep_by0_trailing, sep_by1_trailing, spanned, tagging, take_exact,
+        Mark, Parser, ParserError, commit, fail, fail_from, lazy, look_ahead, many0, mark,
+        not_ahead, pure, raise, refusal, sep_by0_trailing, sep_by1_trailing, spanned, tagging,
+        take_exact,
     },
     curios_utilities::{Plicity, Qualifier, is_keyword},
     std::iter,
@@ -107,10 +108,28 @@ pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, T
         .map(TopItem::Let)
 }
 
+/// The words a wire type is one of, which the refusal of anything else names.
+const WIRE_TYPE_EXPECTED: &str =
+    "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...))";
+
+/// The words a `List`'s element is one of.
+const WIRE_LEAF_EXPECTED: &str =
+    "expected a List element type (Nat, Int, Bool, Bytes, Bits, or Handle — List does not nest)";
+
+/// What refuses `List` written with no element.
+const LIST_STATES_ITS_ELEMENT: &str = "`List` is written with its element type, as in `List(Nat)`";
+
+/// What refuses a result that no form of one begins.
+const WIRE_RESULT_EXPECTED: &str = "expected a wire result: a wire type, a braced list of labelled wire types, `{}` for none, or `Never`";
+
+/// What refuses `()` where a result stands.
+const WIRE_RESULT_IS_A_TYPE: &str =
+    "`()` is the unit value, and a result is a type: a row that answers nothing is written `-> {}`";
+
 // An `List` element type — the wire grammar minus `List` itself. Splitting it out of `parse_wire_type` is what makes `List(List(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
 fn parse_wire_leaf<'a>() -> Parser<'a, WireLeaf> {
     refuse_qualified_wire_name()
-        .and_keep(mark().and(parse_identifier))
+        .and_keep(mark().and(parse_identifier().map_err(WIRE_LEAF_EXPECTED)))
         .flat_map(|(start, name)| match name {
             "Nat" => pure(WireLeaf::Nat),
             "Int" => pure(WireLeaf::Int),
@@ -119,9 +138,10 @@ fn parse_wire_leaf<'a>() -> Parser<'a, WireLeaf> {
             "Bits" => pure(WireLeaf::Bits),
             "Handle" => pure(WireLeaf::Handle),
             // A word read here is an element type or nothing, so the refusal commits and is the diagnosis. Left to backtrack it reached no reader at all: the enclosing list took the failure for an empty one and the `)` after it complained instead, naming a paren for a mistake about a type.
-            other => commit(fail_from(&start, format!(
-                "expected a List element type (Nat, Int, Bool, Bytes, Bits, or Handle — List does not nest), found '{other}'"
-            ))),
+            other => commit(fail_from(
+                &start,
+                format!("{WIRE_LEAF_EXPECTED}, found '{other}'"),
+            )),
         })
 }
 
@@ -133,7 +153,7 @@ fn refuse_qualified_wire_name<'a>() -> Parser<'a, ()> {
 // One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Byte`/`Flt`/`Bytes`/`Bits`/`Handle` are literal keywords here, and `List(T)` takes a leaf.
 pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
     refuse_qualified_wire_name()
-        .and_keep(mark().and(parse_identifier))
+        .and_keep(mark().and(parse_identifier().map_err(WIRE_TYPE_EXPECTED)))
         .flat_map(|(start, name)| match name {
             "Nat" => pure(WireType::Nat),
             "Int" => pure(WireType::Int),
@@ -143,14 +163,19 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
             "Bytes" => pure(WireType::Bytes),
             "Bits" => pure(WireType::Bits),
             "Handle" => pure(WireType::Handle),
-            "List" => parse_literal("(")
-                .and_keep(parse_wire_leaf)
-                .and_drop(parse_literal(")"))
-                .map(WireType::List),
+            // `List` is read, so its element follows or nothing does. Left to backtrack, an operand list came back empty and its `)` complained where the word stands.
+            "List" => commit(
+                parse_literal("(")
+                    .map_err(LIST_STATES_ITS_ELEMENT)
+                    .and_keep(parse_wire_leaf)
+                    .and_drop(parse_literal(")")),
+            )
+            .map(WireType::List),
             // As in [`parse_wire_leaf`]: a word here is a wire type or nothing. `parse_identifier` failing on a non-identifier is what keeps the empty parameter list `() -> T` working — the arm is never reached at the `)`.
-            other => commit(fail_from(&start, format!(
-                "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...)), found '{other}'"
-            ))),
+            other => commit(fail_from(
+                &start,
+                format!("{WIRE_TYPE_EXPECTED}, found '{other}'"),
+            )),
         })
 }
 
@@ -161,17 +186,24 @@ const WIRE_FIELD_IS_LABELLED: &str = "a result's field is read by its label, so 
 type WireField = ((String, WireType), ParserError);
 
 // The label of a result's field, read as a tuple type's is — `documentation/syntax.md` makes a tuple's labels part of its identity — so a name, no keyword and no `_`, each refused at the word: left to the declaration's type, the refusal is the elaborator's and holds no position.
+//
+// Inside a result's braces a word is a field's label or nothing, so one with no `:` after it is refused as a field, at the word, where a backtrack would leave the closing brace to name itself for a mistake about a field.
 fn parse_wire_label<'a>() -> Parser<'a, (String, ParserError)> {
     mark()
         .and(parse_identifier_raw)
         .flat_map(|(start, word)| match word {
             "_" => commit(fail_from(&start, WIRE_FIELD_IS_LABELLED)),
             word if is_keyword(word) => commit(fail_from(&start, reserved_keyword(word))),
-            word => refusal(
-                &start,
-                format!("a result names each of its fields once: '{word}' labels an earlier one"),
-            )
-            .map(move |repeated| (word.to_string(), repeated)),
+            word => look_ahead(parse_whitespace().and_keep(take_exact(":")))
+                .or(commit(fail_from(
+                    &start,
+                    format!("a result's field is written `label: type`, as in `status: Nat`; '{word}' is read as a label and no `:` follows it"),
+                )))
+                .and_keep(refusal(
+                    &start,
+                    format!("a result names each of its fields once: '{word}' labels an earlier one"),
+                ))
+                .map(move |repeated| (word.to_string(), repeated)),
         })
         .and_drop(parse_whitespace)
 }
@@ -180,17 +212,20 @@ fn parse_wire_label<'a>() -> Parser<'a, (String, ParserError)> {
 fn parse_wire_field<'a>() -> Parser<'a, WireField> {
     parse_wire_label()
         .and_drop(parse_literal(":"))
-        .and(lazy(parse_wire_type))
+        .and(commit(parse_wire_type))
         .map(|((label, repeated), type_)| ((label, type_), repeated))
 }
 
-// The results a braced field list denotes, in the order written, or the report of why it denotes none: a tuple type's labels are part of its identity, so this may not drop the label a single field carries, nor take a label twice.
-fn wire_fields<'a>(fields: Vec<WireField>) -> Parser<'a, WireResults> {
+// The results a braced field list denotes, in the order written, or the report of why it denotes none: a tuple type's labels are part of its identity, so this may not drop the label a single field carries, nor take a label twice. `start` is where the fields begin, so a field standing alone is refused where it is written.
+fn wire_fields<'a>(start: &Mark, fields: Vec<WireField>) -> Parser<'a, WireResults> {
     // A row forwards one result through as itself, so `{x: T}` would name a one-field tuple no row can carry — and the label would be dropped rather than kept, which is a different type from the one written.
     if let [((label, _), _)] = fields.as_slice() {
-        return fail(format!(
-            "a result is spelled bare rather than in braces when there is one of it: write the type itself, not `{{{label}: …}}`"
-        ));
+        return fail_from(
+            start,
+            format!(
+                "a result is spelled bare rather than in braces when there is one of it: write the type itself, not `{{{label}: …}}`"
+            ),
+        );
     }
 
     let mut read: Vec<(String, WireType)> = Vec::new();
@@ -205,23 +240,42 @@ fn wire_fields<'a>(fields: Vec<WireField>) -> Parser<'a, WireResults> {
     pure(WireResults::of(read))
 }
 
-// A result: a bare wire type, a braced field list naming the tuple type the row yields, or `Never`. `{}` is no result at all — the unit *type*, which is what a result position holds; `()` is the unit value and never appears here.
+// A result: a bare wire type, a braced field list naming the tuple type the row yields, or `Never`. Each form is told by how it begins, and past the arrow a result stands or nothing does, so where none begins the refusal says what one is, rather than leaving the first alternative to name its brace.
 fn parse_wire_results<'a>() -> Parser<'a, WireResults> {
-    parse_literal("{")
-        .and_keep(sep_by0_trailing(parse_wire_field, || parse_literal(",")))
-        .and_drop(parse_literal("}"))
-        // A brace has been read, so nothing else could have been meant: the refusal is the diagnosis rather than a backtrack into a vaguer one.
-        .flat_map(|fields| commit(wire_fields(fields)))
-        .or(parse_wire_never())
-        .or(parse_wire_type().map(WireResults::single))
+    parse_wire_record()
+        .or(refuse_wire_unit_value())
+        .or(parse_wire_word())
+        .or(commit(fail(WIRE_RESULT_EXPECTED)))
 }
 
-// `Never`: the row answers no value because its call does not return. A result alone and no wire type, so it stands in no operand, field or element; any other word is left to `parse_wire_type`, which diagnoses it.
-fn parse_wire_never<'a>() -> Parser<'a, WireResults> {
-    parse_identifier().flat_map(|name| match name {
-        "Never" => pure(WireResults::never()),
-        other => fail(format!("'{other}' is not `Never`")),
-    })
+// A braced result: `{}`, no result at all — the unit *type*, which is what a result position holds — or the fields of the tuple type the row yields. The brace discriminates it, so what follows commits.
+fn parse_wire_record<'a>() -> Parser<'a, WireResults> {
+    parse_literal("{").and_keep(commit(
+        mark()
+            .and(sep_by0_trailing(parse_wire_field, || parse_literal(",")))
+            // The list is judged once it is seen to close: before that, a field standing alone may be one whose separator is missing, which is the brace's to report.
+            .and_drop(look_ahead(parse_literal("}")))
+            .flat_map(|(start, fields)| wire_fields(&start, fields))
+            .and_drop(parse_literal("}")),
+    ))
+}
+
+// `()` where a result stands: the unit value, which never stands here. Refused by name, since `{}` is what its writer meant.
+fn refuse_wire_unit_value<'a>() -> Parser<'a, WireResults> {
+    mark()
+        .and_drop(parse_literal("("))
+        .and_drop(take_exact(")"))
+        .flat_map(|start| commit(fail_from(&start, WIRE_RESULT_IS_A_TYPE)))
+}
+
+// A result that is one word: `Never`, or a wire type. `Never` says the row answers no value because its call does not return; it is a result alone and no wire type, so it stands in no operand, field or element. The word is looked at before either form reads it, so any other is the wire type's to read, and to refuse in its own sentence.
+fn parse_wire_word<'a>() -> Parser<'a, WireResults> {
+    look_ahead(parse_identifier_raw)
+        .or(pure(""))
+        .flat_map(|word| match word {
+            "Never" => parse_identifier().map(|_| WireResults::never()),
+            _ => parse_wire_type().map(WireResults::single),
+        })
 }
 
 // `(T, T, ...) -> R`: the operands a row takes, none included, and what its call answers. An operand is its wire type alone and so is a bare result, while a braced result names its fields, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.

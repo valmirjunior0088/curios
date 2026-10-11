@@ -185,6 +185,83 @@ fn top_foreign_refuses_a_single_result_in_braces() {
         refusal.contains("spelled bare"),
         "the refusal says how to spell it: {refusal}"
     );
+    assert!(
+        refusal.ends_with(
+            "    1 | foreign f(Nat) -> {value: Nat};\n      |                    ^^^^^^^^^^"
+        ),
+        "the refusal stands at the field: {refusal}"
+    );
+}
+
+/// A result is refused as the form its writer began: a brace commits to its fields, a word is `Never` or a wire type's to refuse, and where no form begins the refusal says what a result is. Uncommitted, each fell to whichever alternative was tried first and named its brace.
+#[test]
+fn top_foreign_refuses_a_result_as_the_form_it_began() {
+    for (source, expected, caret) in [
+        (
+            "foreign m(Nat) -> ();",
+            "`()` is the unit value, and a result is a type: a row that answers nothing is written `-> {}`",
+            "                  ^^",
+        ),
+        (
+            "foreign m(Nat) -> (Nat) -> Nat;",
+            "expected a wire result: a wire type, a braced list of labelled wire types, `{}` for none, or `Never`",
+            "                  ^",
+        ),
+        (
+            "foreign m(Nat) -> ;",
+            "expected a wire result",
+            "                  ^",
+        ),
+        (
+            "foreign m(Nat) -> {Nat, Nat};",
+            "a result's field is written `label: type`, as in `status: Nat`; 'Nat' is read as a label and no `:` follows it",
+            "                   ^^^",
+        ),
+        (
+            "foreign m(Nat) -> {a: Nat, b};",
+            "'b' is read as a label and no `:` follows it",
+            "                           ^",
+        ),
+        (
+            "foreign m(Nat) -> {a: };",
+            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...))",
+            "                      ^",
+        ),
+        // A field whose separator is missing is no field standing alone: the brace reports it.
+        (
+            "foreign m(Nat) -> {a: Nat b: Nat};",
+            "Expected '}', obtained 'b'",
+            "                          ^",
+        ),
+        // `List` reaches the wire type's own refusal, as a result and as an operand.
+        (
+            "foreign m(Nat) -> List;",
+            "`List` is written with its element type, as in `List(Nat)`",
+            "                      ^",
+        ),
+        (
+            "foreign m(List) -> Nat;",
+            "`List` is written with its element type, as in `List(Nat)`",
+            "              ^",
+        ),
+        (
+            "foreign m(Nat) -> List();",
+            "expected a List element type (Nat, Int, Bool, Bytes, Bits, or Handle — List does not nest)",
+            "                       ^",
+        ),
+        (
+            "foreign m(Nat) -> /std/Nat;",
+            "a wire type is written bare: `Nat` rather than `/std/Nat`",
+            "                  ^",
+        ),
+    ] {
+        let report = source.parse::<Module>().unwrap_err().format();
+        assert!(report.contains(expected), "{source:?} reported {report}");
+        assert!(
+            report.ends_with(&format!("    1 | {source}\n      | {caret}")),
+            "{source:?} reported {report}"
+        );
+    }
 }
 
 /// A result's labels are a tuple type's, so a keyword, `_` and a label written twice are each refused, and at the label: the declaration's type is built with no extent, so a refusal left to it holds no position.
