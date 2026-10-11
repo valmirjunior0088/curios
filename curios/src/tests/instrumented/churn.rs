@@ -1,4 +1,4 @@
-//! Runtime measurements behind `curios-runtime/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` and `spines` under differently sized heaps, and the pinned absence of allocation in `churn`'s threaded-record loop. Both hear the engine's own per-collection announcements through `curios-profile`'s log bridge, which is why this module lives behind the `profile` feature.
+//! Runtime measurements behind `curios-runtime/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` and `spines` under differently sized heaps, and the pinned absence of allocation in `churn`'s threaded-record loop. Both hear the engine's own per-collection announcements through `curios-profile`'s log bridge, which is why this module is one of the instrumented.
 //!
 //! What the sixteen-mebibyte initial heap buys: under death-birth churn an unsized heap parks within a doubling of the live set and the collector recopies it continually; sized, those collections are gone, the allocation-free `churn` does not move — the empirical pin on its exit from the churn class — and `trees` gains little, because an all-live tree must outgrow any constant.
 
@@ -135,10 +135,10 @@ fn collections(compiled: &Compiled, k: u64) -> (usize, Option<String>) {
 /// # What this measures, and how to retake it
 ///
 /// ```sh
-/// cargo test --package curios --release --all-features -- codegen::churn::chain_collection_decomposition --ignored --nocapture
+/// cargo test --package curios --release --all-features -- instrumented::churn::chain_collection_decomposition --ignored --nocapture
 /// ```
 ///
-/// `--release` is load-bearing: the collector under measurement is host-side wasmtime code, and a debug build inflates exactly the share this probe exists to isolate. `--all-features` supplies the `profile` feature the module is gated on.
+/// `--release` is load-bearing: the collector under measurement is host-side wasmtime code, and a debug build inflates exactly the share this probe exists to isolate. `--all-features` supplies the `profile` feature the instrumented tests are gated on.
 ///
 /// Three arrangements run the identical churn phase — `ROUNDS` rounds over the harness's 10 000-cell chain — inside heaps the dead ballast pre-grows to different sizes, and the churn cost is the K = `ROUNDS` time minus the K = 0 time, which cancels startup and the ballast phase itself. Collections are counted from the engine's own `Begin GC` records through `curios-profile`'s log bridge, in separate runs so the raised log level never touches a timed figure.
 ///

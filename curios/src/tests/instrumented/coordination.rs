@@ -1,9 +1,10 @@
 //! Repeatable measurements of guest coordination, with compilation and execution captured separately. The measurement below owns its workload settings and individual results.
 
 use {
-    super::{LISTING_PROGRAM, compile},
+    super::test_support::*,
+    crate::tests::{LISTING_PROGRAM, compile},
     curios_profile::{Destination, fold, trace},
-    curios_runtime::{ForeignBindings, MockHost, MockIo},
+    curios_runtime::{ForeignBindings, MockHost},
     std::{
         fs::{File, create_dir_all, write},
         io::{BufReader, BufWriter},
@@ -11,35 +12,6 @@ use {
         time::{SystemTime, UNIX_EPOCH},
     },
 };
-
-// Shared with the host boundary measurement, which drives the same session.
-pub(super) fn listing_host() -> (MockHost, MockIo) {
-    let mut keys = vec![b"\x1b[".to_vec(), b"B".to_vec(), b"\x1b[A".to_vec()];
-    for _ in 1..100 {
-        keys.extend([b"\x1b[B".to_vec(), b"\x1b[A".to_vec()]);
-    }
-    keys.push(b"q".to_vec());
-
-    MockHost::builder()
-        .tty_sizes([(12, 5), (16, 6), (12, 5)])
-        .stdin_chunks(keys)
-        .mono((0..100_000).map(|millis| (millis / 1_000, millis % 1_000 * 1_000_000)))
-        .build()
-}
-
-pub(super) fn assert_listing(io: &MockIo) {
-    let output = String::from_utf8(io.output()).expect("terminal output is UTF-8");
-    assert!(output.starts_with("\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[>1u"));
-    assert!(output.ends_with("\x1b[<u\x1b[?2004l\x1b[?25h\x1b[?1049lone"));
-    assert_eq!(
-        output.matches("\x1b[2J").count(),
-        3,
-        "initial frame and two resizes"
-    );
-    assert!(output.contains("┌pick"));
-    assert_eq!(io.raw_modes(), [true, false]);
-    assert!(io.errors().is_empty());
-}
 
 /// Measure the compilation and execution of guest coordination.
 ///
@@ -99,7 +71,7 @@ fn coordination_measurements() {
     for (workload, source) in [
         (
             "monad_async",
-            include_str!("../../../programs/monad_async.crs"),
+            include_str!("../../../../programs/monad_async.crs"),
         ),
         ("tui", LISTING_PROGRAM),
     ] {

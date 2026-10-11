@@ -1,9 +1,9 @@
 //! What the Cont fixpoint costs, pass by pass.
 //!
-//! Behind the `profile` feature for the reason `churn` is: the per-pass spans and fired-samples `curios_cont::optimize` carries exist only there. It reports and does not assert, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
+//! Instrumented for the reason `churn` is: the per-pass spans and fired-samples `curios_cont::optimize` carries exist only under the `profile` feature. It reports and does not assert, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
 
 use {
-    super::TOML_DRIVER,
+    crate::tests::TOML_DRIVER,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_profile::{Destination, fold, trace},
     curios_text::{Entrypoint, RootSource},
@@ -39,7 +39,7 @@ impl std::io::Write for Rows {
 /// cargo test --release --package curios --lib --all-features -- --ignored --nocapture fixpoint_pass_measurements
 /// ```
 ///
-/// Release only, for the reason `combinator_sharing_measurements` gives: the wall clocks are the fixpoint's, and a debug build prices its walks differently. `--all-features` supplies the `profile` feature this module is gated on.
+/// Release only, for the reason `combinator_sharing_measurements` gives: the wall clocks are the fixpoint's, and a debug build prices its walks differently. `--all-features` supplies the `profile` feature the instrumented tests are gated on.
 ///
 /// The memory columns are deliberately absent: the test binary installs no counting allocator, so they would read zero. For the allocation half write `TOML_DRIVER` to a file and take `cargo xtask profile --profile release <file>`, whose stage-level figures carry them.
 ///

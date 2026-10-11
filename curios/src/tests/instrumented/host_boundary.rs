@@ -1,7 +1,8 @@
 //! Repeatable measurements of the host and guest boundary, with compilation and execution captured separately. The measurement below owns its workload settings and individual results.
 
 use {
-    super::{LISTING_PROGRAM, assert_listing, compile, listing_host},
+    super::test_support::*,
+    crate::tests::{LISTING_PROGRAM, compile},
     curios_profile::{Destination, fold, trace},
     curios_runtime::{ForeignBindings, MockHost, MockIo},
     std::{
@@ -47,7 +48,7 @@ fn assert_stream(io: &MockIo) {
 
 /// Measure compilation and execution around the host and guest boundary: the adapter, the rows' requirements and the library's readings of their replies.
 ///
-/// This capture times compilation and execution around the host and guest boundary — [a host operation is a foreign declaration whose types are its whole contract](../../../documentation/design/runtime/a-host-operation-is-a-foreign-declaration-whose-types-are-its-whole-contract.md): the host's adapter, the rows' requirements and the readings `/std` makes of wire-shaped replies. It is a local native measurement, separate from the containerized cross-language series.
+/// This capture times compilation and execution around the host and guest boundary — [a host operation is a foreign declaration whose types are its whole contract](../../../../documentation/design/runtime/a-host-operation-is-a-foreign-declaration-whose-types-are-its-whole-contract.md): the host's adapter, the rows' requirements and the readings `/std` makes of wire-shaped replies. It is a local native measurement, separate from the containerized cross-language series.
 ///
 /// ## Workloads and reproduction
 ///
@@ -59,7 +60,7 @@ fn assert_stream(io: &MockIo) {
 ///
 /// - **`monad_io`:** the existing `programs/monad_io.crs` corpus program, with stdin `10000\n`, requiring stdout `30000\n` and no stderr. It measures the `Io` carrier's per-`bind` cost, which every reading of a reply adds to, and reads its line a byte at a time.
 /// - **`stream_copy`:** 2,000 chunks of 256 bytes on standard input, copied to standard output through `Io/read` and `Io/write`, requiring the output to equal the input and no stderr. The scripted host answers `would_block` between chunks, so every chunk costs a read that blocks, a poll, a read that succeeds and a write.
-/// - **`tui`:** the bordered listing fixture `curios/src/tests/coordination.rs` measures, with its host and assertions: reads, writes, polls and terminal-size queries through a whole session.
+/// - **`tui`:** the bordered listing fixture `coordination.rs` measures beside this file, with the host and assertions the two share: reads, writes, polls and terminal-size queries through a whole session.
 ///
 /// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/host_boundary/`. Each stream has a folded `.tsv` beside it. The `host_boundary_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `host_boundary_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The test binary has no counting allocator; memory columns in the folded reports are zero and are not allocation evidence.
 ///
@@ -108,7 +109,10 @@ fn host_boundary_measurements() {
     println!("workload\tsample\tcompile_ms\trun_ms\toutput_bytes");
 
     for (workload, source) in [
-        ("monad_io", include_str!("../../../programs/monad_io.crs")),
+        (
+            "monad_io",
+            include_str!("../../../../programs/monad_io.crs"),
+        ),
         ("stream_copy", STREAM_COPY),
         ("tui", LISTING_PROGRAM),
     ] {

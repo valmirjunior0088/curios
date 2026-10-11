@@ -5,6 +5,7 @@ mod algebra;
 mod alignment;
 mod big_num;
 mod binders;
+mod board;
 mod bounds;
 mod characters;
 mod cli;
@@ -15,26 +16,16 @@ mod codegen;
 use codegen::*;
 
 mod concepts;
-
-#[cfg(feature = "profile")]
-mod coordination;
-#[cfg(feature = "profile")]
-use coordination::*;
-
 mod derive;
 mod document;
 mod effects;
 mod erasure;
-// The fixpoint probe reads the per-pass spans `curios_cont::optimize` carries only under `curios-profile`'s `enabled` feature, reached through this crate's `profile` feature as `churn` is.
-mod board;
-#[cfg(feature = "profile")]
-mod fixpoint;
 mod fmt;
 mod harness;
 mod host;
-#[cfg(feature = "profile")]
-mod host_boundary;
 mod inference;
+#[cfg(feature = "profile")]
+mod instrumented;
 mod laws;
 mod map;
 mod matching;

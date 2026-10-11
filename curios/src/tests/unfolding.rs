@@ -1,6 +1,6 @@
 //! What a combinator web costs to compile, and where.
 //!
-//! Two measurements of what a combinator web can drive a compilation to spend: how a case refinement is keyed and what an index inversion reduces, and how a reified closure is shared — the Cont fixpoint's cost is `tests::fixpoint`'s. They are kept in code rather than prose because a figure taken by a throwaway script does not survive being re-measured.
+//! Two measurements of what a combinator web can drive a compilation to spend: how a case refinement is keyed and what an index inversion reduces, and how a reified closure is shared — the Cont fixpoint's cost is `tests::instrumented::fixpoint`'s. They are kept in code rather than prose because a figure taken by a throwaway script does not survive being re-measured.
 //!
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude-archive`'s `stored_prelude_measurements`, whose shape this follows.
 
@@ -246,7 +246,7 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 /// | `cont_optimize` allocations | 7 889 915 | 7 889 915 |
 /// | `evaluate_closed_terms` | 12 ms | 12 ms |
 ///
-/// **The allocation counts are identical**, which says more than the wall clocks: the two spellings hand the fixpoint the same module, so what it does with them cannot differ. `evaluate_closed_terms`, the pass this measurement is about, is never the cost; what it *produces* can be, because the fixpoint below it prices the module it is handed — `tests::fixpoint` carries that measurement.
+/// **The allocation counts are identical**, which says more than the wall clocks: the two spellings hand the fixpoint the same module, so what it does with them cannot differ. `evaluate_closed_terms`, the pass this measurement is about, is never the cost; what it *produces* can be, because the fixpoint below it prices the module it is handed — `tests::instrumented::fixpoint` carries that measurement.
 #[test]
 #[ignore = "measurement, mixed: reports what a spelling costs rather than asserting"]
 fn combinator_sharing_measurements() {
