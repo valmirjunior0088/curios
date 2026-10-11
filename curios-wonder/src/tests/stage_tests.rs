@@ -1,18 +1,25 @@
 //! What `wonder stage` answers: a rung the driver reached is an answer whatever stopped the program after it, and a rung it never reached is a refusal carrying what stopped it.
 
-use {crate::Origin, curios_pipeline::DEFAULT_STEP_BUDGET, curios_text::Overlay};
+use {
+    crate::{Origin, Subject},
+    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_text::Overlay,
+};
 
 /// One rung of `program`, asked for the way the one-shot transport asks: what the asker was handed, beside what the query answered.
 fn rung(name: &str, text: &str) -> Result<(String, crate::Rendering), crate::Refusal> {
     let mut handed = String::new();
     let reached = crate::stage(
         DEFAULT_STEP_BUDGET,
-        Vec::new(),
-        Origin::Text {
-            label: "<stdin>".to_string(),
-            text: text.to_string(),
+        Subject::Entry {
+            units: Vec::new(),
+            origin: Origin::Text {
+                label: "<stdin>".to_string(),
+                text: text.to_string(),
+            },
+            declares: None,
+            unlinked: None,
         },
-        None,
         &Overlay::default(),
         None,
         name,

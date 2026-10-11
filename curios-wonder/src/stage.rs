@@ -3,10 +3,9 @@
 //! The rungs are [`Stage::NAMES`], observed exactly where the driver emits them; the last, `wasm-optm`, is emitted by the native product where Binaryen runs rather than by the driver, so the engine cannot render it and hands the module back for the transport to finish — the one rung `curios` can reach and `curios-js` cannot.
 
 use {
-    crate::{Diagnosis, Origin, Overlaid, of_error, open, overlaid},
+    crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid},
     curios_pipeline::{Cache, Fold, Stage},
-    curios_text::{Overlay, RootSource},
-    curios_utilities::Qualifier,
+    curios_text::Overlay,
     curios_verdicts::Verdicts,
 };
 
@@ -29,27 +28,32 @@ pub enum Reached {
 /// Why a rung could not be shown.
 #[derive(Debug)]
 pub enum Refusal {
+    /// The subject is a unit rather than a program: it is written as a module, with no final term to compile a program from, and only a program has rungs.
+    Unit,
     /// No rung of that name — the question could not be asked.
     NoSuchStage { asked: String },
     /// The program did not compile *as far as* the rung: what stopped it. A failure past the rung is not a refusal — see [`Rendering::diagnostics`].
     Diagnostics(Vec<Diagnosis>),
 }
 
-/// `program`'s representation at the rung `name`, compiled against `units` and the prelude, handed to `shown` where the driver emits it: nothing a later rung does unmakes a rung already handed on, a panic on an invariant of its own among it.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one over the line: what is staged becomes one value where a library can be staged too"
-)]
+/// `subject`'s representation at the rung `name`, compiled against its units and the prelude, handed to `shown` where the driver emits it: nothing a later rung does unmakes a rung already handed on, a panic on an invariant of its own among it.
 pub fn stage(
     budget: u64,
-    units: Vec<RootSource>,
-    origin: Origin,
-    declares: Option<Vec<Qualifier>>,
+    subject: Subject,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     name: &str,
     mut shown: impl FnMut(&str),
 ) -> Result<Reached, Refusal> {
+    let Subject::Entry {
+        units,
+        origin,
+        declares,
+        ..
+    } = subject.formed(overlay)
+    else {
+        return Err(Refusal::Unit);
+    };
     let Some(name) = Stage::NAMES.into_iter().find(|known| *known == name) else {
         return Err(Refusal::NoSuchStage {
             asked: name.to_string(),

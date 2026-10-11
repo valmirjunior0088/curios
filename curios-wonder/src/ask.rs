@@ -6,10 +6,10 @@
 
 use {
     crate::{
-        Diagnosed, Diagnosis, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject, cost,
-        declared_tests, diagnosed, stage,
+        Diagnosed, Diagnosis, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject, Uncosted,
+        cost, declared_tests, diagnosed, stage,
     },
-    curios_cont::Outcome,
+    curios_cont::{Fate, Outcome},
     curios_package::{Entry, Library, Program, Selection},
     curios_pipeline::CompileError,
     curios_text::{LoadError, Overlay},
@@ -91,6 +91,32 @@ impl Asked {
     /// Every diagnostic, goal and lint the subject reports, with what it reached and why its store took nothing, where it could not.
     pub fn diagnosed(self, budget: u64, overlay: &Overlay) -> Diagnosed {
         diagnosed(budget, self.subject, overlay, self.store.as_ref())
+    }
+
+    /// The subject's rung `name`, handed to `shown` where the driver emits it, beside why its store took nothing, where it could not.
+    pub fn staged(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        name: &str,
+        shown: impl FnMut(&str),
+    ) -> (Result<Reached, Refusal>, Option<String>) {
+        let cache = self.store.as_ref();
+        let reached = stage(budget, self.subject, overlay, cache, name, shown);
+
+        (reached, refused(cache))
+    }
+
+    /// What the optimizer did to each of the subject's declarations, beside why its store took nothing, where it could not.
+    pub fn costed(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+    ) -> (Result<Vec<Fate>, Uncosted>, Option<String>) {
+        let cache = self.store.as_ref();
+        let fates = cost(budget, self.subject, overlay, cache);
+
+        (fates, refused(cache))
     }
 }
 
@@ -197,24 +223,11 @@ pub fn wonder_stage(
     let overlay = Overlay::default();
 
     let refusal = written_as_a_module(program.entry());
-    let Asked { subject, store } = Asked::about_program(program).map_err(CompileError::failure)?;
-    let Subject::Entry {
-        units,
-        origin,
-        declares,
-        ..
-    } = subject.formed(&overlay)
-    else {
-        return Err(CompileError::failure(refusal));
-    };
-    let cache = store.as_ref();
+    let asked = Asked::about_program(program).map_err(CompileError::failure)?;
 
     // The rung is the answer and goes to stdout, where the driver emits it.
     let shown = |text: &str| println!("{text}");
-    let reached = stage(
-        budget, units, origin, declares, &overlay, cache, name, shown,
-    );
-    let unstored = refused(cache);
+    let (reached, unstored) = asked.staged(budget, &overlay, name, shown);
     let answered = match reached {
         Ok(Reached::Rendered(rendering)) => {
             // What stopped the compilation after the rung is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
@@ -231,6 +244,7 @@ pub fn wonder_stage(
             "no stage named {asked:?}; the stages are {}",
             curios_pipeline::Stage::NAMES.join(", ")
         ))),
+        Err(Refusal::Unit) => Err(CompileError::failure(refusal)),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     };
     if let Some(unstored) = unstored {
@@ -253,20 +267,9 @@ pub fn wonder_cost(
     let overlay = Overlay::default();
 
     let refusal = written_as_a_module(program.entry());
-    let Asked { subject, store } = Asked::about_program(program).map_err(CompileError::failure)?;
-    let Subject::Entry {
-        units,
-        origin,
-        declares,
-        ..
-    } = subject.formed(&overlay)
-    else {
-        return Err(CompileError::failure(refusal));
-    };
-    let cache = store.as_ref();
+    let asked = Asked::about_program(program).map_err(CompileError::failure)?;
 
-    let fates = cost(budget, units, origin, declares, &overlay, cache);
-    let unstored = refused(cache);
+    let (fates, unstored) = asked.costed(budget, &overlay);
     let answered = match fates {
         Ok(fates) => {
             for fate in fates {
@@ -281,7 +284,8 @@ pub fn wonder_cost(
             }
             Ok(())
         }
-        Err(diagnostics) => Err(stopped(diagnostics)),
+        Err(Uncosted::Unit) => Err(CompileError::failure(refusal)),
+        Err(Uncosted::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     };
     if let Some(unstored) = unstored {
         unfiled(unstored);
