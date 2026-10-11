@@ -1,551 +1,551 @@
 /* The one stylesheet every page links. The brand is three colors and three faces: navy for every surface, ice sage for every word at one of four strengths, amber for what a reader reaches for; Faustina italic for display headings alone, Geist for prose, Geist Mono for everything the compiler said. */
 
 @font-face {
-    font-family: "Geist";
-    font-style: normal;
-    font-weight: 100 900;
-    font-display: swap;
-    src: url("fonts/geist.woff2") format("woff2");
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/geist.woff2") format("woff2");
 }
 @font-face {
-    font-family: "Geist Mono";
-    font-style: normal;
-    font-weight: 100 900;
-    font-display: swap;
-    src: url("fonts/geist-mono.woff2") format("woff2");
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/geist-mono.woff2") format("woff2");
 }
 @font-face {
-    font-family: "Faustina";
-    font-style: italic;
-    font-weight: 300 800;
-    font-display: swap;
-    src: url("fonts/faustina-italic.woff2") format("woff2");
+  font-family: "Faustina";
+  font-style: italic;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("fonts/faustina-italic.woff2") format("woff2");
 }
 
 :root {
-    --navy: #143340;
-    --ink: #dee9e9;
-    --amber: #f7c577;
-    --amber-bright: #ffdca1;
-    --ink-85: rgba(222, 233, 233, 0.85);
-    --ink-70: rgba(222, 233, 233, 0.7);
-    --ink-57: rgba(222, 233, 233, 0.57);
-    --ink-28: rgba(222, 233, 233, 0.28);
-    --edge: rgba(222, 233, 233, 0.14);
-    --edge-soft: rgba(222, 233, 233, 0.1);
-    --well: rgba(0, 0, 0, 0.2);
-    --well-deep: rgba(0, 0, 0, 0.34);
-    --amber-wash: rgba(247, 197, 119, 0.14);
-    --amber-edge: rgba(247, 197, 119, 0.5);
-    --amber-ring: rgba(247, 197, 119, 0.28);
-    --rail: #122d38;
-    --well-flat: #102933;
-    --sans: Geist, system-ui, sans-serif;
-    --mono: "Geist Mono", ui-monospace, monospace;
-    --serif: Faustina, Georgia, serif;
+  --navy: #143340;
+  --ink: #dee9e9;
+  --amber: #f7c577;
+  --amber-bright: #ffdca1;
+  --ink-85: rgba(222, 233, 233, 0.85);
+  --ink-70: rgba(222, 233, 233, 0.7);
+  --ink-57: rgba(222, 233, 233, 0.57);
+  --ink-28: rgba(222, 233, 233, 0.28);
+  --edge: rgba(222, 233, 233, 0.14);
+  --edge-soft: rgba(222, 233, 233, 0.1);
+  --well: rgba(0, 0, 0, 0.2);
+  --well-deep: rgba(0, 0, 0, 0.34);
+  --amber-wash: rgba(247, 197, 119, 0.14);
+  --amber-edge: rgba(247, 197, 119, 0.5);
+  --amber-ring: rgba(247, 197, 119, 0.28);
+  --rail: #122d38;
+  --well-flat: #102933;
+  --sans: Geist, system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --serif: Faustina, Georgia, serif;
 }
 
 html,
 body {
-    margin: 0;
-    padding: 0;
+  margin: 0;
+  padding: 0;
 }
 body {
-    background: var(--navy);
-    color: var(--ink);
-    font-family: var(--sans);
-    font-weight: 400;
-    -webkit-font-smoothing: antialiased;
+  background: var(--navy);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
 }
 a {
-    color: var(--amber);
-    text-decoration: none;
+  color: var(--amber);
+  text-decoration: none;
 }
 a:hover {
-    color: var(--amber-bright);
+  color: var(--amber-bright);
 }
 ::selection {
-    background: var(--amber-ring);
+  background: var(--amber-ring);
 }
 code {
-    font-family: var(--mono);
-    font-size: 0.92em;
-    color: var(--ink-85);
+  font-family: var(--mono);
+  font-size: 0.92em;
+  color: var(--ink-85);
 }
 
 /* The frame: a rail and a main column side by side, stacked when the width runs out. The footer closes the main column rather than the body, so the frame reaches the page's end and the sticky rail is never pushed up by anything below it.
 
    The main column's cap is the page's one measure: nothing inside it sets a width of its own, so every paragraph, signature and note shares one right edge and each type size gets the character count that edge gives it. The cap is on the content box, so the number is the card's own width: a card must clear the widest line the record can print — a signature pre-broken at a hundred columns, plus the `| ` a constructor adds — in the mono face and inside the card's padding. A narrower column would not break a signature, since the breaks are the record's; it would put the longest of them behind the horizontal scroll `.signature` carries. */
 .frame {
-    display: flex;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  min-height: 100vh;
 }
 .rail {
-    flex: 0 0 300px;
-    position: sticky;
-    top: 0;
-    min-height: 100vh;
-    max-height: 100vh;
-    overflow-y: auto;
-    box-sizing: border-box;
-    background: var(--rail);
-    border-right: 1px solid var(--edge);
-    padding: 0 0 16px;
+  flex: 0 0 300px;
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: var(--rail);
+  border-right: 1px solid var(--edge);
+  padding: 0 0 16px;
 }
 main {
-    flex: 1 1 480px;
-    min-width: 0;
-    max-width: 930px;
-    padding: 22px clamp(20px, 4vw, 40px) 40px;
+  flex: 1 1 480px;
+  min-width: 0;
+  max-width: 930px;
+  padding: 22px clamp(20px, 4vw, 40px) 40px;
 }
 
 /* The rail: the search field pinned at its top, then the tree, every row a link; the current module carries the page's declarations beneath it. While a query is live the results stand in for the tree, as rows of the same shape. The label and the checkbox it toggles exist for the narrow layout alone. */
 .search {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    padding: 16px;
-    background: var(--well-flat);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 16px;
+  background: var(--well-flat);
 }
 .search input {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 9px 40px 9px 12px;
-    border: 1px solid var(--edge);
-    border-radius: 4px;
-    background: var(--well);
-    color: var(--ink);
-    font-family: var(--mono);
-    font-size: 16px;
-    line-height: 1.3;
-    appearance: none;
-    -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 40px 9px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  background: var(--well);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1.3;
+  appearance: none;
+  -webkit-appearance: none;
 }
 .search input::-webkit-search-decoration,
 .search input::-webkit-search-cancel-button {
-    display: none;
+  display: none;
 }
 .search input::placeholder {
-    color: var(--ink-57);
+  color: var(--ink-57);
 }
 .search input:focus {
-    outline: none;
-    border-color: var(--amber-edge);
-    box-shadow: 0 0 0 3px var(--amber-ring);
+  outline: none;
+  border-color: var(--amber-edge);
+  box-shadow: 0 0 0 3px var(--amber-ring);
 }
 /* The cross that empties the field, inside its right edge, present only while there is something to clear. */
 .search .clear {
-    position: absolute;
-    top: 50%;
-    right: 22px;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: none;
-    border-radius: 3px;
-    background: none;
-    color: var(--ink-57);
-    cursor: pointer;
+  position: absolute;
+  top: 50%;
+  right: 22px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: var(--ink-57);
+  cursor: pointer;
 }
 .search .clear:hover {
-    color: var(--amber);
+  color: var(--amber);
 }
 .search .clear[hidden] {
-    display: none;
+  display: none;
 }
 .tree label {
-    display: none;
+  display: none;
 }
 .tree nav {
-    display: flex;
-    flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
 /* Without script the field never shows, and the tree keeps the top edge the field would have carried. */
 .search[hidden] ~ nav {
-    padding-top: 16px;
+  padding-top: 16px;
 }
 .results {
-    display: none;
-    flex-direction: column;
-    --depth: 0;
+  display: none;
+  flex-direction: column;
+  --depth: 0;
 }
 .tree a {
-    flex: none;
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    padding: 6px 16px;
-    padding-left: calc(16px + var(--depth) * 22px);
-    font-family: var(--mono);
-    font-size: 12.5px;
-    color: var(--ink-70);
-    overflow: hidden;
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 16px;
+  padding-left: calc(16px + var(--depth) * 22px);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-70);
+  overflow: hidden;
 }
 .tree a:hover {
-    background: rgba(247, 197, 119, 0.06);
-    color: var(--amber);
+  background: rgba(247, 197, 119, 0.06);
+  color: var(--amber);
 }
 .tree a.current {
-    color: var(--amber);
+  color: var(--amber);
 }
 .tree .entry .kind {
-    flex: none;
-    width: 52px;
-    font-size: 10.5px;
-    letter-spacing: 0.06em;
-    color: rgba(247, 197, 119, 0.85);
+  flex: none;
+  width: 52px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: rgba(247, 197, 119, 0.85);
 }
 .tree .entry .label {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* The module a hit lives in gives way before the hit's own name does. */
 .tree .entry .where {
-    flex: 0 4 auto;
-    min-width: 0;
-    max-width: 50%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 11px;
-    color: var(--ink-57);
+  flex: 0 4 auto;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--ink-57);
 }
 .tree mark {
-    background: none;
-    color: var(--amber-bright);
+  background: none;
+  color: var(--amber-bright);
 }
 .results a[aria-current] {
-    background: var(--amber-wash);
-    color: var(--amber);
+  background: var(--amber-wash);
+  color: var(--amber);
 }
 .results .none {
-    padding: 6px 16px;
-    font-family: var(--mono);
-    font-size: 12.5px;
-    color: var(--ink-57);
+  padding: 6px 16px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-57);
 }
 
 /* The head of a page: where it sits, what it is, what it is for. */
 /* The heading is the page's path, each module above the page a link and the separators dimmed. */
 h1 {
-    margin: 0 0 32px;
-    font-family: var(--mono);
-    font-weight: 400;
-    font-size: clamp(24px, 4.4vw, 34px);
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-    overflow-wrap: break-word;
+  margin: 0 0 32px;
+  font-family: var(--mono);
+  font-weight: 400;
+  font-size: clamp(24px, 4.4vw, 34px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  overflow-wrap: break-word;
 }
 h1 .sep {
-    color: var(--ink-28);
+  color: var(--ink-28);
 }
 h2 {
-    margin: 40px 0 18px;
-    font-family: var(--serif);
-    font-style: italic;
-    font-weight: 500;
-    font-size: clamp(22px, 3.4vw, 26px);
+  margin: 40px 0 18px;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(22px, 3.4vw, 26px);
 }
 .lead {
-    margin: -12px 0 32px;
-    font-size: clamp(16px, 2.1vw, 17.5px);
-    font-weight: 300;
-    line-height: 1.6;
-    color: var(--ink-70);
-    text-wrap: pretty;
+  margin: -12px 0 32px;
+  font-size: clamp(16px, 2.1vw, 17.5px);
+  font-weight: 300;
+  line-height: 1.6;
+  color: var(--ink-70);
+  text-wrap: pretty;
 }
 
 /* Child modules, as cards in a grid. */
 .modules {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
-    gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  gap: 12px;
 }
 .module-card {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 18px 20px;
-    border: 1px solid var(--edge);
-    border-radius: 4px;
-    background: var(--well);
-    color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  background: var(--well);
+  color: inherit;
 }
 .module-card:hover {
-    border-color: var(--amber-edge);
-    color: inherit;
+  border-color: var(--amber-edge);
+  color: inherit;
 }
 .module-card .path {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--amber);
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--amber);
 }
 .module-card .counts {
-    font-family: var(--mono);
-    font-size: 10.5px;
-    letter-spacing: 0.06em;
-    color: var(--ink-57);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-57);
 }
 .module-card .gloss {
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--ink-70);
-    text-wrap: pretty;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-70);
+  text-wrap: pretty;
 }
 
 /* A declaration: a header naming it, the signature the compiler printed, the prose the author wrote. */
 .card {
-    margin-bottom: 12px;
-    border: 1px solid var(--edge);
-    border-radius: 4px;
-    background: var(--well);
-    overflow: hidden;
+  margin-bottom: 12px;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  background: var(--well);
+  overflow: hidden;
 }
 .card header {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--edge-soft);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--edge-soft);
 }
 .card header .tag {
-    padding: 4px 8px;
-    border-radius: 2px;
-    background: var(--amber-wash);
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    color: var(--amber);
+  padding: 4px 8px;
+  border-radius: 2px;
+  background: var(--amber-wash);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--amber);
 }
 .card header .title {
-    font-family: var(--mono);
-    font-size: 15px;
-    color: var(--ink);
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--ink);
 }
 .badge {
-    padding: 4px 8px;
-    border-radius: 2px;
-    font-family: var(--mono);
-    font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
 }
 .badge.plain {
-    border: 1px solid var(--edge);
-    color: var(--ink-70);
+  border: 1px solid var(--edge);
+  color: var(--ink-70);
 }
 .badge.dashed {
-    border: 1px dashed rgba(222, 233, 233, 0.22);
-    color: var(--ink-57);
+  border: 1px dashed rgba(222, 233, 233, 0.22);
+  color: var(--ink-57);
 }
 .signature {
-    padding: 18px 22px;
-    font-family: var(--mono);
-    font-size: 13px;
-    line-height: 1.85;
-    color: var(--ink-85);
-    overflow-x: auto;
+  padding: 18px 22px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--ink-85);
+  overflow-x: auto;
 }
 .signature .line {
-    white-space: pre;
+  white-space: pre;
 }
 /* A member and its notes are one block, so the indent is the block's and a note always sits under its own line. */
 .signature .member {
-    padding-left: 2em;
+  padding-left: 2em;
 }
 .signature.cases .member {
-    padding-left: 0;
+  padding-left: 0;
 }
 .signature .keyword {
-    color: var(--amber);
+  color: var(--amber);
 }
 .signature .name {
-    color: var(--ink-70);
+  color: var(--ink-70);
 }
 .signature .note {
-    margin: 0 0 6px;
-    font-family: var(--sans);
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--ink-57);
-    white-space: normal;
+  margin: 0 0 6px;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-57);
+  white-space: normal;
 }
 .card .prose {
-    margin: 0;
-    padding: 0 22px 20px;
-    font-size: 15px;
-    line-height: 1.65;
-    color: var(--ink-70);
-    text-wrap: pretty;
+  margin: 0;
+  padding: 0 22px 20px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink-70);
+  text-wrap: pretty;
 }
 
 /* The witnesses: one row each, in one box. */
 .witnesses {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    border: 1px solid var(--edge);
-    border-radius: 4px;
-    overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  overflow: hidden;
 }
 .witnesses li {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 12px;
-    padding: 11px 18px;
-    border-bottom: 1px solid var(--edge-soft);
-    background: var(--well);
-    font-family: var(--mono);
-    font-size: 13px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--edge-soft);
+  background: var(--well);
+  font-family: var(--mono);
+  font-size: 13px;
 }
 .witnesses li:last-child {
-    border-bottom: none;
+  border-bottom: none;
 }
 .witnesses .line {
-    flex: 1 1 320px;
-    min-width: 0;
-    line-height: 1.7;
-    color: var(--ink-85);
-    overflow-x: auto;
-    white-space: pre;
+  flex: 1 1 320px;
+  min-width: 0;
+  line-height: 1.7;
+  color: var(--ink-85);
+  overflow-x: auto;
+  white-space: pre;
 }
 .witnesses .keyword {
-    color: var(--amber);
+  color: var(--amber);
 }
 .witnesses .name {
-    color: var(--ink-70);
+  color: var(--ink-70);
 }
 .witnesses .note {
-    flex-basis: 100%;
-    font-family: var(--sans);
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--ink-57);
+  flex-basis: 100%;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-57);
 }
 
 footer {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    margin-top: 72px;
-    padding: 28px 0 0;
-    border-top: 1px solid var(--edge);
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-57);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 72px;
+  padding: 28px 0 0;
+  border-top: 1px solid var(--edge);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-57);
 }
 footer img {
-    display: block;
+  display: block;
 }
 
 /* Below 900px the rail is a bar pinned above the main column, the field and a chevron on one row; the tree starts folded behind the chevron, which toggles the checkbox that shows it, and the tree or the results open as a flap over the content rather than pushing it down. A followed anchor keeps clear of the bar. */
 @media (max-width: 900px) {
-    .rail {
-        flex: 1 1 100%;
-        z-index: 2;
-        min-height: 0;
-        max-height: none;
-        overflow: visible;
-        border-right: none;
-        border-bottom: 1px solid var(--edge);
-        padding: 0;
-    }
-    .tree {
-        position: relative;
-        display: flex;
-        align-items: center;
-        background: var(--well-flat);
-    }
-    .search {
-        flex: 1 1 auto;
-        min-width: 0;
-        position: relative;
-        padding: 16px 8px 16px 16px;
-    }
-    .search .clear {
-        right: 14px;
-    }
-    .tree label {
-        display: flex;
-        flex: none;
-        align-items: center;
-        justify-content: center;
-        width: 40px;
-        height: 40px;
-        margin-right: 8px;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        color: var(--ink-70);
-        cursor: pointer;
-    }
-    .tree label svg {
-        transition: transform 0.15s ease;
-    }
-    .tree .toggle:checked ~ label {
-        color: var(--amber);
-    }
-    .tree .toggle:checked ~ label svg {
-        transform: rotate(180deg);
-    }
-    .tree nav {
-        display: none;
-    }
-    /* Under the top bar the footer has no column to sit under, so it is centred. */
-    footer {
-        justify-content: center;
-    }
-    .results,
-    .tree nav {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        padding: 8px 0 12px;
-        max-height: 62vh;
-        overflow-y: auto;
-        background: var(--rail);
-        border-bottom: 1px solid var(--edge);
-    }
-    .tree .toggle:checked ~ nav {
-        display: flex;
-    }
-    .card,
-    .signature .member,
-    .witnesses li {
-        scroll-margin-top: 82px;
-    }
+  .rail {
+    flex: 1 1 100%;
+    z-index: 2;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    border-right: none;
+    border-bottom: 1px solid var(--edge);
+    padding: 0;
+  }
+  .tree {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: var(--well-flat);
+  }
+  .search {
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+    padding: 16px 8px 16px 16px;
+  }
+  .search .clear {
+    right: 14px;
+  }
+  .tree label {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-right: 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--ink-70);
+    cursor: pointer;
+  }
+  .tree label svg {
+    transition: transform 0.15s ease;
+  }
+  .tree .toggle:checked ~ label {
+    color: var(--amber);
+  }
+  .tree .toggle:checked ~ label svg {
+    transform: rotate(180deg);
+  }
+  .tree nav {
+    display: none;
+  }
+  /* Under the top bar the footer has no column to sit under, so it is centred. */
+  footer {
+    justify-content: center;
+  }
+  .results,
+  .tree nav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    padding: 8px 0 12px;
+    max-height: 62vh;
+    overflow-y: auto;
+    background: var(--rail);
+    border-bottom: 1px solid var(--edge);
+  }
+  .tree .toggle:checked ~ nav {
+    display: flex;
+  }
+  .card,
+  .signature .member,
+  .witnesses li {
+    scroll-margin-top: 82px;
+  }
 }
 
 /* While a query is live the results stand in for the tree, whatever the width and whatever the toggle says: these come last so they outrank the toggle's rule above. */
 .tree.live .results {
-    display: flex;
+  display: flex;
 }
 .tree.live nav {
-    display: none;
+  display: none;
 }
 
 /* What a card says about where it came from, pushed to the far end of its header. Both are asides — they say where a declaration comes from, never what it does — so the chip borrows the badge's shape and the origin reads quieter still, and neither competes with the name. A card carries at most one of them: a declaration is either written on a page this bundle holds or adopted out of a root it does not name. */
 .card header .chip,
 .card header .origin {
-    margin-left: auto;
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--ink-57);
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-57);
 }
 .card header .origin a {
-    color: inherit;
-    text-decoration: underline;
-    text-underline-offset: 2px;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

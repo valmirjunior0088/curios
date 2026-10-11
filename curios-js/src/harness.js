@@ -186,7 +186,10 @@ export async function run(config) {
     clock_wall: () => {
       const millis = Date.now();
 
-      return [BigInt(Math.floor(millis / 1000)), BigInt((millis % 1000) * 1_000_000)];
+      return [
+        BigInt(Math.floor(millis / 1000)),
+        BigInt((millis % 1000) * 1_000_000),
+      ];
     },
     clock_mono: () => {
       const millis = performance.now();
@@ -217,7 +220,9 @@ export async function run(config) {
     },
     // The playground has no arguments it could truthfully call a program's, so it refuses the call, as the row's reply lets a host, rather than answer an empty list a program would read as a fact.
     proc_args: () => {
-      throw new Error("proc_args: the playground runs a program with no arguments");
+      throw new Error(
+        "proc_args: the playground runs a program with no arguments",
+      );
     },
     proc_env: () => [status.NOT_FOUND, emptyBytes()],
     // The playground has no terminal to switch or measure, so both tty rows are denied as `file_open` is.
@@ -331,7 +336,11 @@ export async function run(config) {
       "an integer from 0 to 255",
     ],
     Flt: [(value) => typeof value === "number", (value) => value, "a number"],
-    Bytes: [(value) => value instanceof Uint8Array, encodeBytes, "a Uint8Array"],
+    Bytes: [
+      (value) => value instanceof Uint8Array,
+      encodeBytes,
+      "a Uint8Array",
+    ],
     Bits: [(value) => value instanceof Uint8Array, encodeBytes, "a Uint8Array"],
     Handle: [
       (value) => value instanceof Uint8Array,
@@ -375,57 +384,61 @@ export async function run(config) {
   };
 
   // A program's own `foreign` row, implemented by `hook`: the operands decoded into copies the hook owns, and what it answers held to the row's results and copied in — nothing for a row with none, the one value for a row with one, and an object keyed by exactly the results' labels for a row with several. A row that does not return is answered by a hook that does not either, which ends the program by throwing. A violation stops the program, naming the row.
-  const checked = (row, hook) => (...operands) => {
-    const fail = (what) => {
-      throw new Error(`ffi ${row.name}: ${what}`);
-    };
+  const checked =
+    (row, hook) =>
+    (...operands) => {
+      const fail = (what) => {
+        throw new Error(`ffi ${row.name}: ${what}`);
+      };
 
-    const answer = hook(
-      ...row.params.map((type, i) => lifts[type](operands[i], fail)),
-    );
+      const answer = hook(
+        ...row.params.map((type, i) => lifts[type](operands[i], fail)),
+      );
 
-    // The guest holds no code for a return from such a row, so a hook that comes back is refused here, by the row's name, and not left to the engine's trap.
-    if (row.never) {
-      return fail("the hook returned, and the row does not return");
-    }
+      // The guest holds no code for a return from such a row, so a hook that comes back is refused here, by the row's name, and not left to the engine's trap.
+      if (row.never) {
+        return fail("the hook returned, and the row does not return");
+      }
 
-    switch (row.results.length) {
-      case 0:
-        return answer === undefined
-          ? undefined
-          : fail(
-              `the hook answered ${describe(answer)}, and the row answers nothing`,
+      switch (row.results.length) {
+        case 0:
+          return answer === undefined
+            ? undefined
+            : fail(
+                `the hook answered ${describe(answer)}, and the row answers nothing`,
+              );
+        case 1:
+          return lower(row.results[0].type, answer, "the result", fail);
+        default: {
+          const labels = row.results.map(({ label }) => label);
+
+          if (
+            typeof answer !== "object" ||
+            answer === null ||
+            Array.isArray(answer) ||
+            answer instanceof Uint8Array
+          ) {
+            return fail(
+              `the hook answered ${describe(answer)}, not an object of ${labels.join(", ")}`,
             );
-      case 1:
-        return lower(row.results[0].type, answer, "the result", fail);
-      default: {
-        const labels = row.results.map(({ label }) => label);
+          }
 
-        if (
-          typeof answer !== "object" ||
-          answer === null ||
-          Array.isArray(answer) ||
-          answer instanceof Uint8Array
-        ) {
-          return fail(
-            `the hook answered ${describe(answer)}, not an object of ${labels.join(", ")}`,
+          for (const label of Object.keys(answer)) {
+            if (!labels.includes(label)) {
+              fail(
+                `the hook answered ${label}, which the row has no result of`,
+              );
+            }
+          }
+
+          return row.results.map(({ label, type }) =>
+            label in answer
+              ? lower(type, answer[label], label, fail)
+              : fail(`the hook answered no ${label}`),
           );
         }
-
-        for (const label of Object.keys(answer)) {
-          if (!labels.includes(label)) {
-            fail(`the hook answered ${label}, which the row has no result of`);
-          }
-        }
-
-        return row.results.map(({ label, type }) =>
-          label in answer
-            ? lower(type, answer[label], label, fail)
-            : fail(`the hook answered no ${label}`),
-        );
       }
-    }
-  };
+    };
 
   // The `ffi` import object, built from the module's own imports. A hook answers a row before this host does, as a module answers one before the native host, and is held to the row `compile` described; a row no hook implements is this host's where it answers that name, and needs no description, since nothing here is held to one. A declaration the program never calls is never imported, so it needs no hook; a hook naming no row is a hook for a program other than this one.
   const ffiEnv = (module) => {

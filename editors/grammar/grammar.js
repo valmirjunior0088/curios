@@ -51,7 +51,8 @@ module.exports = grammar({
     source_file: ($) => seq(repeat($._item), optional($._term)),
 
     // A comment opens with `-- `, with the space, or is a bare `--` ending its line, as the compiler reads it; `--glued` is not one, so a line the compiler refuses is not painted as a comment. A documentation comment opens with `--- ` or is a bare `---`.
-    comment: (_) => token(choice(seq("--- ", /.*/), "---", seq("-- ", /.*/), "--")),
+    comment: (_) =>
+      token(choice(seq("--- ", /.*/), "---", seq("-- ", /.*/), "--")),
 
     // ---- Items ----
 
@@ -119,7 +120,8 @@ module.exports = grammar({
 
     use_glob: (_) => "/*",
 
-    use_entry: ($) => seq(optional(choice("mod", "let")), field("name", $.identifier)),
+    use_entry: ($) =>
+      seq(optional(choice("mod", "let")), field("name", $.identifier)),
 
     induct_item: ($) =>
       seq(
@@ -144,7 +146,12 @@ module.exports = grammar({
     // A named parameter, plain or `@`, or a `use` premise, which has no name.
     type_parameter: ($) =>
       choice(
-        seq(optional("@"), field("name", $.identifier), ":", field("type", $._term)),
+        seq(
+          optional("@"),
+          field("name", $.identifier),
+          ":",
+          field("type", $._term),
+        ),
         seq("use", field("type", $._term)),
       ),
 
@@ -156,7 +163,10 @@ module.exports = grammar({
       ),
 
     index: ($) =>
-      choice(seq(field("name", $.identifier), ":", field("type", $._term)), field("type", $._term)),
+      choice(
+        seq(field("name", $.identifier), ":", field("type", $._term)),
+        field("type", $._term),
+      ),
 
     constructor: ($) =>
       seq(
@@ -171,7 +181,12 @@ module.exports = grammar({
     // Plain or `@`, named or the type alone.
     payload: ($) =>
       choice(
-        seq(optional("@"), field("name", $.identifier), ":", field("type", $._term)),
+        seq(
+          optional("@"),
+          field("name", $.identifier),
+          ":",
+          field("type", $._term),
+        ),
         seq(optional("@"), field("type", $._term)),
       ),
 
@@ -231,7 +246,8 @@ module.exports = grammar({
         "}",
       ),
 
-    concept_field: ($) => choice(seq("use", field("type", $._term)), $.field_declaration),
+    concept_field: ($) =>
+      choice(seq("use", field("type", $._term)), $.field_declaration),
 
     // One witness, or a `satisfy C(A) { … } and D(B) { … }` group of witnesses that resolve through one another. A member's block holds its entries, or `..` alone — the derived form, whose body the compiler writes — and a group may mix the two. A written body holds implementation fields alone: a concept literal admits a `use <term>` fill for a superclass slot and a witness does not, since resolution fills it.
     satisfy_item: ($) =>
@@ -279,7 +295,13 @@ module.exports = grammar({
 
     // A test declaration: `test name = body;`. Never `pub`, and never parameterized — a claim about every instantiation is a `let` whose type states it, so there is no telescope here to hold.
     test_item: ($) =>
-      seq("test", field("name", $.identifier), "=", field("body", $._term), ";"),
+      seq(
+        "test",
+        field("name", $.identifier),
+        "=",
+        field("body", $._term),
+        ";",
+      ),
 
     // ---- Telescopes ----
 
@@ -289,16 +311,27 @@ module.exports = grammar({
     parameter: ($) =>
       choice(
         seq("use", field("type", $._term)),
-        seq(optional("@"), field("pattern", $._pattern), ":", field("type", $._term)),
+        seq(
+          optional("@"),
+          field("pattern", $._pattern),
+          ":",
+          field("type", $._term),
+        ),
         seq("@", field("type", $._term)),
       ),
 
-    function_type_parameters: ($) => seq("(", commaList($.function_type_parameter), ")"),
+    function_type_parameters: ($) =>
+      seq("(", commaList($.function_type_parameter), ")"),
 
     function_type_parameter: ($) =>
       choice(
         seq("use", field("type", $._term)),
-        seq(optional("@"), field("name", $.identifier), ":", field("type", $._term)),
+        seq(
+          optional("@"),
+          field("name", $.identifier),
+          ":",
+          field("type", $._term),
+        ),
         seq(optional("@"), field("type", $._term)),
       ),
 
@@ -313,13 +346,7 @@ module.exports = grammar({
 
     // ---- Terms ----
 
-    _term: ($) =>
-      choice(
-        $.let_term,
-        $.function_type,
-        $.lambda,
-        $._infix,
-      ),
+    _term: ($) => choice($.let_term, $.function_type, $.lambda, $._infix),
 
     let_term: ($) => seq($.let_binding, field("body", $._term)),
 
@@ -335,7 +362,11 @@ module.exports = grammar({
             "=",
             field("value", $._term),
           ),
-          seq(optional(seq(":", field("type", $._term))), "=", field("value", $._term)),
+          seq(
+            optional(seq(":", field("type", $._term))),
+            "=",
+            field("value", $._term),
+          ),
         ),
         repeat(seq("and", $.let_member)),
         ";",
@@ -351,7 +382,12 @@ module.exports = grammar({
       ),
 
     match_arm: ($) =>
-      seq("|", field("pattern", $._match_pattern), "=>", field("body", $._term)),
+      seq(
+        "|",
+        field("pattern", $._match_pattern),
+        "=>",
+        field("body", $._term),
+      ),
 
     choose_term: ($) => seq("choose", repeat($.choose_arm), "end"),
 
@@ -366,9 +402,18 @@ module.exports = grammar({
       ),
 
     function_type: ($) =>
-      seq(field("parameters", $.function_type_parameters), "->", field("result", $._term)),
+      seq(
+        field("parameters", $.function_type_parameters),
+        "->",
+        field("result", $._term),
+      ),
 
-    lambda: ($) => seq(field("parameters", $.lambda_parameters), "=>", field("body", $._term)),
+    lambda: ($) =>
+      seq(
+        field("parameters", $.lambda_parameters),
+        "=>",
+        field("body", $._term),
+      ),
 
     _infix: ($) => choice($.binary, $._applied),
 
@@ -385,7 +430,11 @@ module.exports = grammar({
         ...table.map(([precedence, operator]) =>
           prec.left(
             precedence,
-            seq(field("left", $._infix), field("operator", operator), field("right", $._infix)),
+            seq(
+              field("left", $._infix),
+              field("operator", operator),
+              field("right", $._infix),
+            ),
           ),
         ),
       );
@@ -394,7 +443,10 @@ module.exports = grammar({
     _applied: ($) => choice($._atom, $.call, $.projection, $.bang),
 
     call: ($) =>
-      prec.left(PRECEDENCE.suffix, seq(field("function", $._applied), field("arguments", $.arguments))),
+      prec.left(
+        PRECEDENCE.suffix,
+        seq(field("function", $._applied), field("arguments", $.arguments)),
+      ),
 
     arguments: ($) => seq("(", commaList($.argument), ")"),
 
@@ -406,11 +458,18 @@ module.exports = grammar({
         seq(
           field("value", $._applied),
           token.immediate("."),
-          field("field", alias(token.immediate(choice(/[0-9]+/, IDENTIFIER)), $.field_identifier)),
+          field(
+            "field",
+            alias(
+              token.immediate(choice(/[0-9]+/, IDENTIFIER)),
+              $.field_identifier,
+            ),
+          ),
         ),
       ),
 
-    bang: ($) => prec.left(PRECEDENCE.suffix, seq(field("action", $._applied), "!")),
+    bang: ($) =>
+      prec.left(PRECEDENCE.suffix, seq(field("action", $._applied), "!")),
 
     // `match` and `choose` are atoms because `end` closes them, so an operator or a suffix may follow one bare.
     _atom: ($) =>
@@ -444,15 +503,28 @@ module.exports = grammar({
     // A path is whitespace-free: the segments after the first are immediate tokens.
     path: ($) =>
       seq(
-        choice(seq("/", alias(token.immediate(IDENTIFIER), $.identifier)), $.identifier),
-        repeat(seq(token.immediate("/"), alias(token.immediate(IDENTIFIER), $.identifier))),
+        choice(
+          seq("/", alias(token.immediate(IDENTIFIER), $.identifier)),
+          $.identifier,
+        ),
+        repeat(
+          seq(
+            token.immediate("/"),
+            alias(token.immediate(IDENTIFIER), $.identifier),
+          ),
+        ),
       ),
 
     // A term-position path whose head is the lexed `test` keyword, shown as the path it spells. Keyword extraction lexes `test` over `identifier` wherever an item may start, so a term spelled `test` there — `let x: Nat = 1; test(1)` — would strand the keyword in an ERROR node without this alternative. Term position only: binder and pattern paths never compete with an item start, and the compiler's parser backtracks out of the same overlap by itself.
     keyword_head_path: ($) =>
       seq(
         alias("test", $.identifier),
-        repeat(seq(token.immediate("/"), alias(token.immediate(IDENTIFIER), $.identifier))),
+        repeat(
+          seq(
+            token.immediate("/"),
+            alias(token.immediate(IDENTIFIER), $.identifier),
+          ),
+        ),
       ),
 
     struct_literal: ($) =>
@@ -478,7 +550,11 @@ module.exports = grammar({
 
     // The grain letter is glued to the bracket: `b[` and `x[` are single tokens, so `b [1]` stays the binder `b` before a list.
     packed_literal: ($) =>
-      seq(field("grain", choice("b[", "x[")), commaList(choice($.spread, $._term)), "]"),
+      seq(
+        field("grain", choice("b[", "x[")),
+        commaList(choice($.spread, $._term)),
+        "]",
+      ),
 
     tuple_type: ($) => seq("{", commaList($.field_declaration), "}"),
 
@@ -514,7 +590,9 @@ module.exports = grammar({
       ),
 
     character: (_) =>
-      token(seq("'", choice(/[^'\\]/, /\\[ntr\\']/, /\\u\{[0-9a-fA-F]+\}/), "'")),
+      token(
+        seq("'", choice(/[^'\\]/, /\\[ntr\\']/, /\\u\{[0-9a-fA-F]+\}/), "'"),
+      ),
 
     // An unrecognized escape stands for itself, so only the six recognized ones are named — the five one-letter ones and the braced Unicode scalar. Lexical precedence outranks match length, and both ranks below are load-bearing: the named escape outranks the catch-all, since a `\n` matches both at the same length and the catch-all won the tie, so no escape was ever named; and the plain content outranks the comment token, since a `--` inside a string is otherwise a comment running to the end of the line, which is what made every string spelling a long option a parse error.
     string: ($) =>
@@ -553,7 +631,12 @@ module.exports = grammar({
     // ---- Irrefutable patterns ----
 
     _pattern: ($) =>
-      choice($.identifier, $.tuple_pattern, $.struct_pattern, $.parenthesized_pattern),
+      choice(
+        $.identifier,
+        $.tuple_pattern,
+        $.struct_pattern,
+        $.parenthesized_pattern,
+      ),
 
     tuple_pattern: ($) =>
       seq(
@@ -591,13 +674,23 @@ module.exports = grammar({
       ),
 
     constructor_pattern: ($) =>
-      seq(field("name", $.identifier), "(", commaList($.constructor_argument), ")"),
+      seq(
+        field("name", $.identifier),
+        "(",
+        commaList($.constructor_argument),
+        ")",
+      ),
 
     constructor_argument: ($) => seq(optional("@"), $._match_pattern),
 
     // `pred + 1`, with an optional `; hypothesis` receiving the fold result.
     successor_pattern: ($) =>
-      seq(field("predecessor", $.identifier), "+", $.number, optional($.hypothesis)),
+      seq(
+        field("predecessor", $.identifier),
+        "+",
+        $.number,
+        optional($.hypothesis),
+      ),
 
     hypothesis: ($) => seq(";", $._pattern),
 
@@ -640,7 +733,10 @@ module.exports = grammar({
       ),
 
     match_pattern_field: ($) =>
-      choice(seq(field("name", $.identifier), "=", $._match_pattern), $._match_pattern),
+      choice(
+        seq(field("name", $.identifier), "=", $._match_pattern),
+        $._match_pattern,
+      ),
 
     struct_match_pattern: ($) =>
       seq(field("type", $.path), "{", commaList($.match_pattern_field), "}"),
