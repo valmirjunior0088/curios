@@ -1,13 +1,6 @@
 //! End-to-end tests of the `compile` subcommand's bundler: compile a package's program to a native executable, run it, and check what it produced.
 //!
-//! The tests that produce an executable are gated with `#[ignore]` because they exec a produced binary; the ones that hold `compile` to refusing what its launcher would refuse run with the ordinary suite, since nothing is produced for them to exec.
-//!
-//! The compiler embeds its launcher, so the produced executable is self-contained — but the compiler itself only builds once `cargo xtask runtime` has generated its target-scoped runtime launcher. Run the gated ones with:
-//!
-//! ```sh
-//! cargo xtask runtime
-//! cargo test -p curios --test bundle -- --ignored
-//! ```
+//! Two of them exec what they produced, and run with the ordinary suite all the same: the compiler embeds its launcher, so the produced executable is self-contained, and a build of this crate already has the launcher it embeds.
 
 use {
     curios_utilities::{digest, test_support::Temporary},
@@ -314,7 +307,6 @@ fn compile(package: &Path, output: &Path) {
 }
 
 #[test]
-#[ignore = "execs a produced executable; build the compiler with `cargo xtask runtime` first"]
 fn compile_produces_a_runnable_executable() {
     // `compile` builds a declared executable, so the program is a package: a one-line manifest beside its `exe.crs`, and the executable beside the package — both in a directory of their own that goes away with the test.
     let root = Temporary::new("cli-bundle", "e2e");
@@ -339,7 +331,6 @@ fn compile_produces_a_runnable_executable() {
 ///
 /// **This is what the bundle format is for.** `curios run` links a plugin by reading the manifest, hashing the `.wasm` beside it and compiling it; none of those three things exist where a compiled executable runs. So the module is precompiled into the tail and the launcher deserializes it — and the executable is run from a directory holding nothing else, which is the only way to show that no part of the package was still being reached.
 #[test]
-#[ignore = "execs a produced executable; build the compiler with `cargo xtask runtime` first"]
 fn a_compiled_executable_carries_the_modules_answering_its_foreign_declarations() {
     let root = Temporary::new("cli-bundle", "ffi");
     let package = calling_double(&root, "ffi", &[("probe", "double")]);

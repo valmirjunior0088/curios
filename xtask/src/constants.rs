@@ -1,9 +1,0 @@
-//! What a recipe needs of a tool cargo does not bring: the oldest version it runs under, and the command that installs it.
-//!
-//! Each is spelled once, here, so the recipe that refuses and the message that says why read the same value.
-
-/// The oldest Node the browser suite runs under: the first whose engine runs WebAssembly GC unflagged and whose test runner expands a pattern itself.
-pub(crate) const NODE_FLOOR: u32 = 22;
-
-/// What installs nextest where it is absent. Cargo's own install rather than a prebuilt download, because it is one spelling on every platform and needs nothing a clone does not already have.
-pub(crate) const NEXTEST_INSTALL: &str = "cargo install cargo-nextest --locked";

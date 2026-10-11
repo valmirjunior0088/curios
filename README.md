@@ -135,10 +135,10 @@ Building requires Rust (`rustup` installs the pinned toolchain from `rust-toolch
 ```sh
 git clone https://github.com/valmirjunior0088/curios
 cd curios
-cargo xtask build
+cargo xtask compiler build
 ```
 
-The resulting CLI is `target/release/curios`. The build has two stages — a slim runtime launcher, then the compiler that embeds it — and `cargo xtask build` runs both in order. The documentation a release ships is built the same way: `cargo xtask docs` renders the crates' own under `target/doc`. The standard library's pages come from the compiler itself: `curios document --std site` writes them under `site`, read off the prelude it embeds.
+The resulting CLI is `target/release/curios`. The build has two stages — a slim runtime launcher, then the compiler that embeds it — and `cargo xtask compiler build` runs both in order. The documentation a release ships is built the same way: `cargo xtask docs build` renders the crates' own under `target/doc`. The standard library's pages come from the compiler itself: `curios document --std site` writes them under `site`, read off the prelude it embeds.
 
 ## Go deeper
 

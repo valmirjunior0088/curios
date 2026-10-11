@@ -11,6 +11,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
+# The toolchain is the one `rust-toolchain.toml` pins, with its targets, as the check workflow's is.
 jobs:
   native:
     name: Native binary (${{ matrix.target }})
@@ -33,7 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -43,7 +45,7 @@ jobs:
             curios-binaryen/.artifacts
 
       - name: Build
-        run: cargo xtask build
+        run: cargo xtask compiler build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -60,16 +62,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
 
       - name: Build curios-js
-        run: cargo xtask js
+        run: cargo xtask bundle build
 
       - name: Archive package
         run: mkdir -p .artifacts && tar -czf .artifacts/curios-js.tar.gz -C curios-js/.artifacts/wasm32-unknown-unknown .
@@ -89,7 +90,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -99,7 +101,7 @@ jobs:
             curios-binaryen/.artifacts
 
       - name: Build docs
-        run: cargo xtask docs
+        run: cargo xtask docs build
 
       - name: Archive docs
         run: mkdir -p .artifacts && tar -czf .artifacts/curios-docs.tar.gz -C target/doc .

@@ -1,32 +1,28 @@
-//! The workspace's build recipes, as `cargo xtask <recipe>`.
+//! The repository's steps, as `cargo xtask <subject> [action]`.
 //!
-//! **A recipe is cargo with flags, and whatever step cargo does not do.** Every recipe here spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file, generates the browser bindings or runs a container, where there is such a step to take. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
+//! **A step is an action on a subject, and the table of them is the one thing authored.** [`steps`] states every step once: what it is about, what it does, what it is run after, what it needs and the one thing only it catches. A subject's actions, a bare subject's sequence, the gate's order and what the check workflow must run are read off that table, so `/run-full-gate`, the workflow and a contributor run one spelling of each step and no two of them can drift.
 //!
-//! **A recipe takes no arguments it passes on.** A recipe may take a parameter it places itself — a release's version, a program to profile, a package to narrow a check to, a name to narrow a test run by — but never a tail it hands to the tool unread. Every recipe's command line is written here, so `/run-full-gate`, the check workflow and a contributor run one spelling of each step and no two of them can drift. A recipe names a tool and a tree: `cargo` at the workspace root, `grammar` and `vscode` for their npm packages, `zed` for the extension's own workspace. Anything else in a tree is run from inside it, where that tree's README sends the reader.
+//! **A subject comes first, because a person works on one thing.** `cargo xtask vscode` runs everything about the VS Code extension, each step writing a log of its own; `cargo xtask vscode test` runs one action and streams it. An action a subject does not have is the parser's own error. `cargo xtask gate` is every subject.
 //!
-//! **The launcher's isolation is the spawn.** `runtime` builds `curios-runtime` in its own `cargo` invocation, so workspace feature unification cannot reach it — `curios` enables `curios-runtime/cranelift`, and a launcher built beside it would carry a compiler. `curios/build.rs` embeds what this recipe copies to `curios/.artifacts/<triple>` and refuses to build without it.
+//! **A step is cargo with flags, and whatever cargo does not do.** Every step spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file or generates the browser bindings, where there is such a thing to do. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
 //!
-//! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build`, `profile` and `docs` all do, because the compiler they build or document embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file_with_inputs()`](filing::file_with_inputs) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches. It files the launcher's inputs beside it — cargo's dep-info and the lock file — which is what that build script compares the launcher against, and it refreshes the launcher's timestamp when a listed input is newer while the bytes stayed the same, so the staleness warning never outlives the command it names.
+//! **A step takes no arguments it passes on.** An action may take a parameter it places itself — a package to narrow a check to, a name to narrow a test run by, a release's version — but never a tail it hands to the tool unread.
 //!
-//! **The bindings generator is a dependency.** `js` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
+//! **The launcher's isolation is the spawn.** `launcher build` builds `curios-runtime` in its own `cargo` invocation, so workspace feature unification cannot reach it. `curios/build.rs` embeds what the step copies to `curios/.artifacts/<triple>` and refuses to build without it, and every step that builds the compiler has the launcher's build run first: it costs nothing when nothing changed, since cargo decides whether the launcher needs rebuilding and [`file_with_inputs()`](filing::file_with_inputs) skips the copy when the filed bytes are already the built ones.
 //!
-//! **The test runner is a tool a contributor installs.** `test` runs the suite under `cargo-nextest` and refuses before building when it is absent, naming the command that installs it; why nextest is the README's decision.
+//! **The bindings generator is a dependency.** `bundle build` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
 //!
-//! **The installer is a template.** `installer` renders `templates/install.sh` with a release's version through Askama and files the script under `xtask/.artifacts/`, the one recipe that spawns no tool at all: the release workflow calls it with the tag's version and attaches what it filed. What it is and why it is rendered here rather than by the workflow is [`installer`](mod@installer)'s own documentation.
+//! **The test runner is a tool a contributor installs.** A test step runs under `cargo-nextest` and refuses before building when it is absent, naming the command that installs it; why nextest is the README's decision.
 //!
-//! **The release recipe publishes.** `release` is the one recipe that changes the repository rather than building from it: it sets the workspace version, commits it, tags it and pushes both, which is what fires `release.yml`. It builds nothing, because the check workflow has already had its say on the commits being released, and it undoes nothing, because removing a local commit or tag is destructive and so the user's to ask for. What it refuses, and when a failure leaves something behind, is [`release`](mod@release)'s own documentation.
+//! **Four commands are not steps.** `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track. None is part of the gate, so none has a row; each keeps the parameters it had.
 //!
 //! **A dependency of nothing.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it.
-//!
-//! The command line is clap's, in `curios`'s own convention — a `Parser` root over a `Subcommand` of recipes — so the help is derived from the definitions and cannot fall out of step with them.
-//!
-//! **This file is the rule table and nothing else.** It declares the recipes and dispatches each to one call, so what a recipe *is* can be read top to bottom without reading what it *does* — and a recipe's steps live in [`recipes`], beside the vocabulary they are written in: [`places`], [`commands`], [`filing`] and [`constants`]. Every step `/run-full-gate` and the check workflow name is a recipe here, with nothing between a name and its meaning.
 
 mod places;
 use places::*;
 
-mod constants;
-use constants::*;
+mod tools;
+use tools::*;
 
 mod commands;
 use commands::*;
@@ -34,8 +30,20 @@ use commands::*;
 mod filing;
 use filing::*;
 
+mod trees;
+use trees::*;
+
+mod steps;
+use steps::*;
+
+mod subjects;
+use subjects::*;
+
 mod recipes;
 use recipes::*;
+
+mod gate;
+use gate::*;
 
 mod installer;
 use installer::*;
@@ -44,16 +52,19 @@ mod release;
 use release::*;
 
 use {
-    clap::{Parser, Subcommand},
+    clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum},
     std::{path::PathBuf, process::ExitCode},
 };
+
+/// The base a step's path condition is read against where the gate is not told one: local `main`, which is where a branch started and, on `main` itself, what nothing has changed since.
+const BASE: &str = "main";
 
 #[derive(Debug, Parser)]
 #[command(
     name = "cargo xtask",
     bin_name = "cargo xtask",
     version,
-    about = "The workspace's build recipes",
+    about = "The repository's steps: a subject, then an action of it",
     help_template = "\
 {name} {version}
 {about-with-newline}
@@ -63,78 +74,33 @@ use {
 )]
 struct Cli {
     #[command(subcommand)]
-    recipe: Recipe,
+    asked: Asked,
 }
 
 #[derive(Debug, Subcommand)]
-enum Recipe {
-    #[command(
-        about = "Build the slim runtime launcher in its own cargo invocation and file it under curios/.artifacts/<triple>"
-    )]
-    Runtime,
-
-    #[command(about = "Build the launcher, then the compiler that embeds it")]
-    Build,
-
-    #[command(about = "Format the workspace")]
-    Format,
-
-    #[command(about = "Check the workspace's formatting without writing")]
-    FormatCheck,
+enum Asked {
+    #[command(flatten)]
+    About(About),
 
     #[command(
-        about = "Lint the workspace over every target and feature, and the launcher as it ships, warnings denied"
+        about = "Run every step, in the order the table derives, each writing target/gate/<step>.log"
     )]
-    Lint {
-        #[arg(
-            value_name = "PACKAGE",
-            help = "The package to lint; the whole workspace when omitted"
-        )]
-        package: Option<String>,
-    },
-
-    #[command(about = "Run the workspace's tests over every target and feature")]
-    Test {
-        #[arg(
-            value_name = "PACKAGE",
-            help = "The package whose tests to run; the whole workspace when omitted"
-        )]
-        package: Option<String>,
-
+    Gate {
         #[arg(
             long,
-            short,
-            value_name = "FILTER",
-            help = "Run only the tests whose path contains this; every test when omitted"
+            value_name = "REVISION",
+            default_value = BASE,
+            help = "The revision a step's path condition is read against"
         )]
-        filter: Option<String>,
+        base: String,
     },
 
-    #[command(
-        about = "Run the workspace's documentation examples, which testing every target leaves out"
-    )]
-    Doctest {
-        #[arg(
-            value_name = "PACKAGE",
-            help = "The package whose documentation examples to run; the whole workspace when omitted"
-        )]
-        package: Option<String>,
+    /// One step by its row's name: how the gate starts each step as a process of its own. Hidden, since a person types the subject and the action.
+    #[command(hide = true)]
+    Step {
+        #[arg(value_enum)]
+        step: Step,
     },
-
-    #[command(
-        about = "Build curios-js for wasm32-unknown-unknown and generate the browser bindings under curios-js/.artifacts/<triple>"
-    )]
-    Js,
-
-    #[command(
-        about = "Build the browser bundle, then run its Node suite under curios-js/tests against it"
-    )]
-    JsTest,
-
-    #[command(
-        about = "Build the launcher, then the workspace's Rust documentation under target/doc, with a root redirect to the compiler's"
-    )]
-    Docs,
 
     #[command(
         about = "Render the installer script for one release version under xtask/.artifacts/install.sh"
@@ -187,76 +153,142 @@ enum Recipe {
         stream: PathBuf,
     },
 
-    #[command(about = "Install editors/grammar's dependencies from its lock file")]
-    GrammarInstall,
-
-    #[command(about = "Run the grammar's tests: regeneration drift, corpus and highlight queries")]
-    GrammarTest,
-
-    #[command(about = "Install editors/vscode's dependencies from its lock file")]
-    VscodeInstall,
-
-    #[command(about = "Run the VS Code extension's TextMate grammar snapshots")]
-    VscodeTest,
-
-    #[command(
-        about = "Bundle the VS Code extension and write its .vsix under editors/vscode/.artifacts"
-    )]
-    VscodeBuild,
-
-    #[command(about = "Format the Zed extension")]
-    ZedFmt,
-
-    #[command(about = "Check the Zed extension's formatting without writing")]
-    ZedFmtCheck,
-
-    #[command(about = "Lint the Zed extension for wasm32-wasip2, warnings denied")]
-    ZedClippy,
-
-    #[command(about = "Build the Zed extension for wasm32-wasip2 in release")]
-    ZedBuild,
-
-    #[command(
-        about = "Check that the grammar rev in editors/zed/extension.toml publishes this tree's grammar"
-    )]
-    ZedTest,
-
     #[command(about = "Remove everything git does not track, including the build products")]
     Clean,
 }
 
-fn main() -> ExitCode {
-    let outcome = match Cli::parse().recipe {
-        Recipe::Runtime => runtime(),
-        Recipe::Build => build(),
-        Recipe::Format => cargo(&["fmt", "--all"]),
-        Recipe::FormatCheck => cargo(&["fmt", "--all", "--", "--check"]),
-        Recipe::Lint { package } => lint(package.as_deref()),
-        Recipe::Test { package, filter } => test(package.as_deref(), filter.as_deref()),
-        Recipe::Doctest { package } => {
-            scoped(package.as_deref(), &["test"], &["--doc", "--all-features"])
+/// A subject, bare or with one action of it. Each is described by the table ([`described`]), so none carries a description here.
+#[derive(Debug, Subcommand)]
+enum About {
+    Workspace {
+        #[command(subcommand)]
+        action: Option<WorkspaceAction>,
+    },
+
+    Instrumented {
+        #[command(subcommand)]
+        action: Option<InstrumentedAction>,
+    },
+
+    Compiler {
+        #[command(subcommand)]
+        action: Option<CompilerAction>,
+    },
+
+    Launcher {
+        #[command(subcommand)]
+        action: Option<LauncherAction>,
+    },
+
+    Bundle {
+        #[command(subcommand)]
+        action: Option<BundleAction>,
+    },
+
+    Docs {
+        #[command(subcommand)]
+        action: Option<DocsAction>,
+    },
+
+    Grammar {
+        #[command(subcommand)]
+        action: Option<GrammarAction>,
+    },
+
+    Vscode {
+        #[command(subcommand)]
+        action: Option<VscodeAction>,
+    },
+
+    Zed {
+        #[command(subcommand)]
+        action: Option<ZedAction>,
+    },
+}
+
+/// The steps a subject's command line asks for: every step about it where it stands bare, and otherwise one action's, with what the person narrowed it by.
+fn selected<A: Asks>(subject: Subject, action: Option<A>) -> (Vec<Step>, Option<Request>) {
+    match action {
+        None => (Step::about(subject), None),
+        Some(action) => {
+            let (action, request) = action.asked();
+
+            (Step::of(subject, action), Some(request))
         }
-        Recipe::Js => js(),
-        Recipe::JsTest => js_test(),
-        Recipe::Docs => docs(),
-        Recipe::Installer { version } => installer(&version),
-        Recipe::Release { bump } => release(bump.as_deref()),
-        Recipe::Profile {
+    }
+}
+
+impl About {
+    /// The steps the command line asks for, and what narrows them where it names an action.
+    fn steps(self) -> (Vec<Step>, Option<Request>) {
+        match self {
+            About::Workspace { action } => selected(Subject::Workspace, action),
+            About::Instrumented { action } => selected(Subject::Instrumented, action),
+            About::Compiler { action } => selected(Subject::Compiler, action),
+            About::Launcher { action } => selected(Subject::Launcher, action),
+            About::Bundle { action } => selected(Subject::Bundle, action),
+            About::Docs { action } => selected(Subject::Docs, action),
+            About::Grammar { action } => selected(Subject::Grammar, action),
+            About::Vscode { action } => selected(Subject::Vscode, action),
+            About::Zed { action } => selected(Subject::Zed, action),
+        }
+    }
+}
+
+/// The command line with each subject and each action described by the table: a subject by the steps it has, an action by what its steps do.
+fn described() -> clap::Command {
+    let mut command = Cli::command();
+
+    for subject in Subject::value_variants() {
+        let about = format!(
+            "{}: every step about it, each writing a log, or one action of it",
+            subject.is()
+        );
+        command = command.mut_subcommand(spelled(*subject), |described| {
+            let mut described = described.about(about);
+            for action in Action::value_variants() {
+                let steps = Step::of(*subject, *action);
+                if steps.is_empty() {
+                    continue;
+                }
+
+                let does = steps
+                    .iter()
+                    .map(|step| step.row().does)
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                described = described.mut_subcommand(spelled(*action), |action| action.about(does));
+            }
+
+            described
+        });
+    }
+
+    command
+}
+
+fn main() -> ExitCode {
+    let asked = described().get_matches();
+    let asked = Cli::from_arg_matches(&asked)
+        .unwrap_or_else(|error| error.exit())
+        .asked;
+
+    // A bare subject is many steps, each a process with a log of its own; one action is streamed.
+    let outcome = match asked {
+        Asked::About(about) => match about.steps() {
+            (steps, None) => gate(&steps, BASE),
+            (steps, Some(request)) => perform(&steps, &request, BASE),
+        },
+        Asked::Gate { base } => gate(Step::value_variants(), &base),
+        Asked::Step { step } => step.run(&Request::whole()),
+        Asked::Installer { version } => installer(&version),
+        Asked::Release { bump } => release(bump.as_deref()),
+        Asked::Profile {
             source,
             profile: build,
         } => profile(&source, build),
-        Recipe::ProfilePrelude { half, stream } => profile_prelude(half, &stream),
-        Recipe::GrammarInstall => grammar(&["clean-install"]),
-        Recipe::GrammarTest => grammar(&["test"]),
-        Recipe::VscodeInstall => vscode(&["clean-install"]),
-        Recipe::VscodeTest => vscode(&["test"]),
-        Recipe::VscodeBuild => vscode(&["run", "package"]),
-        Recipe::ZedFmt => zed(&["fmt", "--all"]),
-        Recipe::ZedFmtCheck => zed(&["fmt", "--all", "--", "--check"]),
-        Recipe::ZedClippy => zed(&["clippy", "--target", "wasm32-wasip2", "--", "-Dwarnings"]),
-        Recipe::ZedBuild => zed(&["build", "--release", "--target", "wasm32-wasip2"]),
-        Recipe::ZedTest => zed(&["test"]),
-        Recipe::Clean => clean(),
+        Asked::ProfilePrelude { half, stream } => profile_prelude(half, &stream),
+        Asked::Clean => clean(),
     };
 
     match outcome {

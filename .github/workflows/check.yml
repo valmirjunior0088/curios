@@ -15,80 +15,95 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  NEXTEST: nextest@0.9.146
 
+# A job sets up a machine and runs steps of one subject, each a `cargo xtask` line. Which steps there are, and what each runs, is the table's in `xtask/src/steps.rs`; `every_step_has_a_job` there holds that these lines parse and together run every step. The toolchain is the one `rust-toolchain.toml` pins and Node the one `.node-version` names, so no job names a version of either.
 jobs:
-  fmt:
-    name: Formatting
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: xtask
-      - name: Run rustfmt
-        run: cargo xtask format-check
-
-  lints:
-    name: Lints
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-directories: |
-            curios/.artifacts
-            curios-binaryen/.artifacts
-      - name: Build runtime launcher
-        run: cargo xtask runtime
-      - name: Run Clippy
-        run: cargo xtask lint
-
-  tests:
-    name: Tests
+  workspace:
+    name: Workspace
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@0.9.146
+          tool: ${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
-      - name: Build runtime launcher
-        run: cargo xtask runtime
-      - name: Run tests
-        run: cargo xtask test
-      - name: Run doctests
-        run: cargo xtask doctest
+      - name: Check formatting
+        run: cargo xtask workspace format --check
+      - name: Lint
+        run: cargo xtask workspace lint
+      - name: Test
+        run: cargo xtask workspace test
 
-  # The native host's macOS branches — the serial speed ioctl, the modem-line opcodes, the device listing — are compiled by no Linux job, and the release workflow would be the first to meet them. The runtime's tests need neither the launcher nor Binaryen.
-  tests-curios-runtime-macos:
-    name: Tests (`curios-runtime`) (macOS)
+  # The native host's macOS branches — the serial speed ioctl, the modem-line opcodes, the device listing — are compiled by no Linux job, and the release workflow would be the first to meet them. The runtime's lint and tests need neither the launcher nor Binaryen.
+  workspace-macos:
+    name: Workspace (`curios-runtime`) (macOS)
     runs-on: macos-14
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@0.9.146
+          tool: ${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: runtime-macos
-      - name: Run the runtime's tests
-        run: cargo xtask test curios-runtime
+      - name: Lint the runtime
+        run: cargo xtask workspace lint curios-runtime
+      - name: Test the runtime
+        run: cargo xtask workspace test curios-runtime
+
+  instrumented:
+    name: Instrumented
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: ${{ env.NEXTEST }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: instrumented
+          cache-directories: |
+            curios/.artifacts
+            curios-binaryen/.artifacts
+      - name: Lint
+        run: cargo xtask instrumented lint
+
+  compiler:
+    name: Compiler
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: ${{ env.NEXTEST }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: compiler
+          cache-directories: |
+            curios/.artifacts
+            curios-binaryen/.artifacts
+      - name: Build
+        run: cargo xtask compiler build
 
   docs:
     name: Documentation
@@ -96,16 +111,18 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
+          key: docs
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
-      - name: Build docs
-        run: cargo xtask docs
+      - name: Build
+        run: cargo xtask docs build
 
-  wasm:
+  bundle:
     name: Browser bundle
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -113,15 +130,16 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: lts/*
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
+          node-version-file: .node-version
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
-      - name: Build curios-js and run its Node suite
-        run: cargo xtask js-test
+      - name: Build
+        run: cargo xtask bundle build
+      - name: Test
+        run: cargo xtask bundle test
 
   grammar:
     name: Grammar parser
@@ -131,17 +149,22 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: lts/*
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: editors/grammar/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           key: xtask
-      - name: Install dependencies
-        run: cargo xtask grammar-install
-      - name: Run grammar tests
-        run: cargo xtask grammar-test
+      - name: Install
+        run: cargo xtask grammar install
+      - name: Check formatting
+        run: cargo xtask grammar format --check
+      - name: Lint
+        run: cargo xtask grammar lint
+      - name: Test
+        run: cargo xtask grammar test
 
   vscode:
     name: VS Code extension
@@ -151,19 +174,24 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: lts/*
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: editors/vscode/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           key: xtask
-      - name: Install dependencies
-        run: cargo xtask vscode-install
-      - name: Run grammar snapshot tests
-        run: cargo xtask vscode-test
-      - name: Build the extension
-        run: cargo xtask vscode-build
+      - name: Install
+        run: cargo xtask vscode install
+      - name: Check formatting
+        run: cargo xtask vscode format --check
+      - name: Lint
+        run: cargo xtask vscode lint
+      - name: Test
+        run: cargo xtask vscode test
+      - name: Build
+        run: cargo xtask vscode build
 
   zed:
     name: Zed extension
@@ -171,18 +199,19 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-wasip2
           workspaces: |
             .
             editors/zed
-      - name: Run rustfmt
-        run: cargo xtask zed-fmt-check
-      - name: Run Clippy
-        run: cargo xtask zed-clippy
-      - name: Build extension
-        run: cargo xtask zed-build
-      - name: Check the grammar rev publishes this grammar
-        run: cargo xtask zed-test
+      - name: Check formatting
+        run: cargo xtask zed format --check
+      - name: Lint
+        run: cargo xtask zed lint
+      - name: Build
+        run: cargo xtask zed build
+      - name: Check the extension against the tree
+        run: cargo xtask zed test

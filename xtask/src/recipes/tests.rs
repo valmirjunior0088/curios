@@ -1,17 +1,16 @@
-//! What the test recipe hands nextest for a selection, how it refuses where nextest is missing, and which selections lint the launcher as it ships.
+//! What a workspace step hands cargo for a selection.
 
 use super::*;
 
 #[test]
 fn no_selection_is_the_whole_workspace() {
     assert_eq!(
-        test_arguments(None, None),
+        testing(None, None),
         [
             "nextest",
             "run",
             "--workspace",
             "--all-targets",
-            "--all-features",
             "--no-fail-fast",
             "--no-tests=warn",
         ]
@@ -20,7 +19,7 @@ fn no_selection_is_the_whole_workspace() {
 
 #[test]
 fn a_package_takes_the_place_of_the_workspace() {
-    let arguments = test_arguments(Some("curios-abi"), None);
+    let arguments = testing(Some("curios-abi"), None);
 
     assert_eq!(
         arguments[..4],
@@ -31,35 +30,30 @@ fn a_package_takes_the_place_of_the_workspace() {
 
 #[test]
 fn a_filter_comes_last() {
-    let arguments = test_arguments(Some("curios"), Some("universes"));
+    let arguments = testing(Some("curios"), Some("universes"));
 
     assert_eq!(arguments.last(), Some(&"universes"));
 }
 
+/// The workspace is checked as it ships: no step of it turns every feature on, which is `instrumented`'s.
 #[test]
-fn the_launcher_is_linted_with_the_workspace_and_by_its_own_name() {
-    assert!(holds_launcher(None));
-    assert!(holds_launcher(Some("curios-runtime")));
-    assert!(!holds_launcher(Some("curios-abi")));
+fn a_workspace_step_names_no_feature() {
+    for arguments in [
+        linting(None),
+        testing(None, None),
+        doctesting(Some("curios-core")),
+    ] {
+        assert!(
+            arguments
+                .iter()
+                .all(|argument| !argument.contains("feature")),
+            "{arguments:?}"
+        );
+    }
 }
 
 #[test]
-fn nextest_is_listed_by_its_own_name_and_no_other() {
-    let listing = "Installed Commands:\n    new                  Create a new cargo package at <path>\n    nextest\n    x                    alias: run --package xtask --\n";
-
-    assert!(lists_nextest(listing));
-    assert!(!lists_nextest(&listing.replace("nextest", "nextest-next")));
-    assert!(!lists_nextest(
-        "    search               Search packages, cargo-nextest among them\n"
-    ));
-}
-
-#[test]
-fn a_refusal_puts_the_fix_on_a_line_of_its_own() {
-    assert_eq!(
-        nextest_refusal(),
-        format!(
-            "test needs cargo-nextest, and it is not installed. Install it with:\n\n    {NEXTEST_INSTALL}"
-        )
-    );
+fn formatting_writes_unless_it_checks() {
+    assert_eq!(formatting(false), ["fmt", "--all"]);
+    assert_eq!(formatting(true), ["fmt", "--all", "--", "--check"]);
 }
