@@ -121,9 +121,7 @@ fn an_ih_fold_costs_transitions_rather_than_frames() {
         bytes(vec![7; n]),
         motive(),
         nat(0),
-        &h,
-        &t,
-        &ih,
+        &[&h, &t, &ih],
         Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat(1))),
     );
 
@@ -147,9 +145,7 @@ fn a_hypothesis_demanded_twice_is_forced_once() {
         bytes(vec![7; n]),
         motive(),
         nat(5),
-        &h,
-        &t,
-        &ih,
+        &[&h, &t, &ih],
         Term::let_(&c, nat_type(), Term::free_var(&ih), Term::free_var(&ih)),
     );
 
@@ -205,9 +201,7 @@ fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
             Term::free_var(&b),
             motive(),
             Term::free_var(&acc),
-            &h,
-            &t,
-            &ih,
+            &[&h, &t, &ih],
             Term::apply(
                 Term::free_var(&go),
                 [
@@ -242,9 +236,7 @@ fn whnf_keeps_a_recursive_application_folded() {
             Term::free_var(&b),
             motive(),
             nat(0),
-            &h,
-            &t,
-            &ih,
+            &[&h, &t, &ih],
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
         ),
     );
@@ -294,9 +286,7 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
             Term::free_var(&b),
             motive(),
             nat(0),
-            &h,
-            &t,
-            &ih,
+            &[&h, &t, &ih],
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
         ),
     );
@@ -697,9 +687,7 @@ fn spend_probe() {
             bytes(vec![7; n]),
             motive(),
             nat(0),
-            &h,
-            &t,
-            &ih,
+            &[&h, &t, &ih],
             Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat(1))),
         );
         reduce_closed(&mut host, count, Demand::Forced).unwrap();

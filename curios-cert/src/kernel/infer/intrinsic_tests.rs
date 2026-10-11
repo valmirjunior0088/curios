@@ -249,9 +249,7 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
         Some(&motive),
         nat_type(),
         nat(0),
-        &head,
-        &tail,
-        &ih,
+        &[&head, &tail, &ih],
         Term::free_var(&ih),
     );
     assert!(matches!(

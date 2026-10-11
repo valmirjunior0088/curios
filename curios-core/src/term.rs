@@ -424,16 +424,13 @@ impl Term {
         }
     }
 
-    /// Build the structural `Bin` eliminator ([`Carrier::Bin`]) over an already-built motive scope: an empty arm plus a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
-    #[allow(clippy::too_many_arguments)]
+    /// Build the structural `Bin` eliminator ([`Carrier::Bin`]) over an already-built motive scope: an empty arm plus a cons arm closed over `cons_binders`, `(head, tail, ih)` — the induction hypothesis at the tail.
     pub fn bin_match_scoped<H, EC, CC>(
         grain: Grain,
         head: H,
         motive: Scope<Many>,
         empty_case: EC,
-        head_binder: &Free,
-        tail_binder: &Free,
-        ih_binder: &Free,
+        cons_binders: &[&Free; 3],
         cons_case: CC,
     ) -> Self
     where
@@ -448,11 +445,7 @@ impl Term {
                 carrier: Carrier::Bin {
                     grain,
                     empty_case: empty_case.into(),
-                    cons_case: Scope::close(
-                        Three,
-                        &[head_binder, tail_binder, ih_binder],
-                        cons_case.into(),
-                    ),
+                    cons_case: Scope::close(Three, cons_binders, cons_case.into()),
                 },
             },
         )
@@ -513,15 +506,12 @@ impl Term {
     }
 
     /// [`Term::list_match`] over an already-built motive scope.
-    #[allow(clippy::too_many_arguments)]
     pub fn list_match_scoped<H, EL, EC, CC>(
         head: H,
         elem: EL,
         motive: Scope<Many>,
         empty_case: EC,
-        head_binder: &Free,
-        tail_binder: &Free,
-        ih_binder: &Free,
+        cons_binders: &[&Free; 3],
         cons_case: CC,
     ) -> Self
     where
@@ -537,11 +527,7 @@ impl Term {
                 carrier: Carrier::List {
                     elem: elem.into(),
                     empty_case: empty_case.into(),
-                    cons_case: Scope::close(
-                        Three,
-                        &[head_binder, tail_binder, ih_binder],
-                        cons_case.into(),
-                    ),
+                    cons_case: Scope::close(Three, cons_binders, cons_case.into()),
                 },
             },
         )
@@ -1196,17 +1182,14 @@ impl Term {
         )
     }
 
-    /// Build the structural `List` eliminator ([`Carrier::List`]): the element type `elem`, an empty arm, and a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
-    #[allow(clippy::too_many_arguments)]
+    /// Build the structural `List` eliminator ([`Carrier::List`]): the element type `elem`, an empty arm, and a cons arm closed over `cons_binders`, `(head, tail, ih)` — the induction hypothesis at the tail.
     pub fn list_match<H, M, EL, EC, CC>(
         head: H,
         elem: EL,
         motive_binder: Option<&Free>,
         motive: M,
         empty_case: EC,
-        head_binder: &Free,
-        tail_binder: &Free,
-        ih_binder: &Free,
+        cons_binders: &[&Free; 3],
         cons_case: CC,
     ) -> Self
     where
@@ -1221,9 +1204,7 @@ impl Term {
             elem,
             Self::motive_scope(motive_binder, motive.into()),
             empty_case,
-            head_binder,
-            tail_binder,
-            ih_binder,
+            cons_binders,
             cons_case,
         )
     }

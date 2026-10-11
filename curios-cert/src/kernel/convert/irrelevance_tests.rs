@@ -670,9 +670,7 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
                     (binder(74, "y"), nat_type()),
                 ]),
                 Term::tuple([Term::free_var(&in_scope), nat(0)]),
-                &h,
-                &t,
-                &ih,
+                &[&h, &t, &ih],
                 Term::tuple([Term::free_var(&chosen), nat(1)]),
             )
         };

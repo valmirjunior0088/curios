@@ -158,9 +158,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
             bytes(vec![7; 40]),
             motive(),
             nat(0),
-            &h,
-            &t,
-            &ih,
+            &[&h, &t, &ih],
             Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat(1))),
         )
     };
@@ -175,9 +173,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
                 Term::free_var(&b),
                 motive(),
                 Term::free_var(&acc),
-                &h,
-                &t,
-                &ih,
+                &[&h, &t, &ih],
                 Term::apply(
                     Term::free_var(&go),
                     [
@@ -279,9 +275,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
                 Term::free_var(&b),
                 motive(),
                 nat(0),
-                &h,
-                &t,
-                &ih,
+                &[&h, &t, &ih],
                 Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
             ),
         );
@@ -316,9 +310,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
                 Term::free_var(&b),
                 motive(),
                 nat(0),
-                &h,
-                &t,
-                &ih,
+                &[&h, &t, &ih],
                 Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
             ),
         );

@@ -750,9 +750,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             curios_core::Term::hole(self.context.fresh_metavar()),
             motive,
             empty_case,
-            &head_label,
-            &tail_label,
-            &ih_label,
+            &[&head_label, &tail_label, &ih_label],
             cons_case,
         ))
     }
@@ -869,9 +867,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             scrutinee,
             motive,
             empty_case,
-            &head_label,
-            &tail_label,
-            &ih_label,
+            &[&head_label, &tail_label, &ih_label],
             cons_case,
         ))
     }

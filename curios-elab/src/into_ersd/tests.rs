@@ -1299,9 +1299,7 @@ fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
         None,
         Term::intrinsic(Intrinsic::NatType),
         nat_lit(0),
-        &h,
-        &t,
-        &ih,
+        &[&h, &t, &ih],
         Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat_lit(1))),
     );
     let erased = erase(&module(items, body), Term::intrinsic(Intrinsic::NatType));
