@@ -332,3 +332,50 @@ fn an_omitted_motive_over_a_proposition_is_refused_where_its_arms_are_data() {
         "{report}"
     );
 }
+
+// A motive whose body is a match with no motive of its own lands in the sort that match's arms decide: a proposition where they are propositions, with the inner motive written or left out, and data where they are data, which a proposition of two constructors is not matched into.
+#[test]
+fn a_motive_whose_body_is_a_match_takes_the_sort_its_arms_decide() {
+    let declared = r#"
+        use /std/{Nat, List, Eq};
+        use /std/Bool/{True};
+        induct In(@T: Type): (T, List(T)) -> Prop
+        | here(@x: T, @l: List(T)): (x, [x, ..l])
+        | there(@x: T, @y: T, @l: List(T), rest: In()(x, l)): (x, [y, ..l])
+        end
+        "#;
+    let inversion = |inner: &str| {
+        format!(
+            r#"{declared}
+        let uncons(@T: Type, @P: Prop, @x: T, @h: T, @l: List(T), i: In()(x, [h, ..l]), head: (Eq()(x, h)) -> P, tail: (In()(x, l)) -> P) -> P =
+            match i: (y, m, _) =>
+                match m{inner}
+                | [] => True
+                | [k, ..r] => (head: (Eq()(y, k)) -> P, tail: (In()(y, r)) -> P) -> P
+                end
+            | here() => (head, _) => head(Eq/refl())
+            | there(rest) => (_, tail) => tail(rest)
+            end(head, tail);
+        /std/print("held")
+        "#
+        )
+    };
+    let data = format!(
+        r#"{declared}
+        let position(@T: Type, @x: T, @h: T, @l: List(T), i: In()(x, [h, ..l])) -> Nat =
+            match i: (y, m, _) => match m | [] => Nat | [k, ..r] => Nat end
+            | here() => 0
+            | there(rest) => 1
+            end;
+        /std/print("held")
+        "#
+    );
+
+    assert_eq!(run(&inversion("")), b"held");
+    assert_eq!(run(&inversion(": (_) => Prop")), b"held");
+    let report = error(&data);
+    assert!(
+        report.contains("cannot eliminate the proposition '/In'"),
+        "{report}"
+    );
+}

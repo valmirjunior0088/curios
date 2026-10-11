@@ -433,8 +433,7 @@ let layered_over(
     @rest: List(Option(List(T))),
     layered: Layered(second)([top, ..rest]),
 ) -> Across(second, flat(rest), held(top)) =
-    match layered: (s, _) =>
-        match s: (_) => Prop | [] => True | [t, ..r] => Across(second, flat(r), held(t)) end
+    match layered: (s, _) => match s | [] => True | [t, ..r] => Across(second, flat(r), held(t)) end
     | bottom() => True/qed()
     | level(over, _) => over
     end;
@@ -446,7 +445,7 @@ let layered_below(
     @rest: List(Option(List(T))),
     layered: Layered(second)([top, ..rest]),
 ) -> Layered(second)(rest) =
-    match layered: (s, _) => match s: (_) => Prop | [] => True | [_, ..r] => Layered(second)(r) end
+    match layered: (s, _) => match s | [] => True | [_, ..r] => Layered(second)(r) end
     | bottom() => True/qed()
     | level(_, below) => below
     end;

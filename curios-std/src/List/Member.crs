@@ -31,7 +31,7 @@ pub let uncons(
     tail: (Member()(x, l)) -> P,
 ) -> P =
     match i: (y, m, _) =>
-        match m: (_) => Prop
+        match m
         | [] => True
         | [k, ..r] => (head: (Eq()(y, k)) -> P, tail: (Member()(y, r)) -> P) -> P
         end
