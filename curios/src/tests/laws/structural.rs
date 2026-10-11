@@ -322,6 +322,17 @@ pub(super) const SEEDS: &[Seeds] = &[
             ),
         ],
     },
+    // Two calls of one recursive definition at a type that leaves the definition's level open, one argument the other's eta: a claim whose statement named a side would put the two calls at two instances.
+    Seeds {
+        type_: "Box(Box(Nat))",
+        binders: "u: Box(Box(Nat)), count: Nat",
+        compound: None,
+        seeds: &[held(
+            "two calls of a recursive definition, one argument the other's eta",
+            "carry(count, Box { held = Box { held = u.held.held } })",
+            "carry(count, u)",
+        )],
+    },
     // A struct declared in a group is referred to through the group, which weak-head reduction leaves folded: each checker reads a goal's type forced, and reads no more off it there than anywhere.
     Seeds {
         type_: "Holder",
