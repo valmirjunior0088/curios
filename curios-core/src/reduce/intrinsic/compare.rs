@@ -3,7 +3,7 @@
 //! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. `curios-algebra`'s `Comparison` is the verdict — which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed — and every fact that narrows it is the algebra's: the floors, a bound against a literal, a dominator, divisibility. What is decided here is what to observe and in what order: which terms to normalize, which side is bare, which operand bounds which.
 
 use {
-    super::{compare_int_among, lattice_verdict, nat_bound, nat_dominators, nat_least},
+    super::{compare_int_among, lattice_verdict, nat_bound, nat_dominators, nat_least, sum_bound},
     crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{Carrier, Comparison, Side, apart_modulo},
     curios_num::Natural,
@@ -95,7 +95,9 @@ pub(super) fn compare_nat_among(
     let left = Nat::normalize(reducer, left)?;
     let right = Nat::normalize(reducer, right)?;
     // Cancel first, so everything below reads the residuals: the shared part decides nothing on its own, and removing it is what lets `cmp(x + a, x + b)` reach `cmp(a, b)` — and `cmp(a + b, b + a)` reach equality — instead of stalling on two inners that differ only by what they share.
-    let (left, right) = Nat::cancel_common(&left, &right);
+    let cancelled = Nat::cancellation(&left, &right);
+    reducer.spend(sum_bound(Nat::residuals(&cancelled)))?;
+    let (left, right) = Nat::rebuild_cancelled(cancelled, &left, &right);
     let (left, right) = (Operand::of(left), Operand::of(right));
 
     // The floors decide where one symbolic part stands on both sides, or where a side is bare. Two inners are one part up to universe instances, for the reason [`Nat::cancel_common`] matches summands that way: two occurrences of a polymorphic name carry independently fresh instances, and a level is not part of the answer to "are these the same number".

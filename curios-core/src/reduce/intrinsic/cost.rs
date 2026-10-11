@@ -1,10 +1,10 @@
-//! What a packed or shifted result costs, charged before the value is built.
+//! What a packed, shifted, summed or distributed result costs, charged before the value is built.
 //!
 //! **An asymmetry in what two spellings cost can be earned rather than drifted into.** Two formulas that differ may each be right for its own implementation — a bit-grain append that rebuilt its value a `bool` per bit would earn a whole extra buffer that a byte-grain copy of the packed payload does not. Before unifying two prices, check whether the operations differ for a reason — where they do, the reason is the thing to remove, and unifying over it writes the accident into the budget permanently.
 //!
 //! Each bound is computed from operand *sizes* rather than from the result, so a fold that would allocate more than the budget allows is refused before `num-bigint` is asked for anything — the difference between a diagnostic and a process the allocator does not return from.
 
-use {crate::Cost, curios_num::Grain};
+use {crate::Cost, curios_algebra::distribution_size, curios_num::Grain};
 
 /// What a packed value of `bits` logical bits costs, in its grain's own row of the price list.
 ///
@@ -36,5 +36,42 @@ pub(super) fn shift_bound(value: u64, amount: Option<u64>) -> Cost {
     match amount {
         Some(amount) => Cost::big_number(value.saturating_add(amount)),
         None => Cost::NOTHING,
+    }
+}
+
+/// What a sum of `summands` symbolic summands costs to write back in normal form: the collection they are read into and a node a summand, the idiom a distributed product is charged by.
+///
+/// A fold writes the whole sum again wherever one is added to or cancelled against, so what it builds is as wide as its operands, whatever the step added. Nothing for a sum with no symbolic summand, which is a literal and [`operand_bound`]'s.
+pub(crate) fn sum_bound(summands: usize) -> Cost {
+    match summands as u64 {
+        0 => Cost::NOTHING,
+        summands => {
+            Cost::collection(summands).saturating_add(Cost::term(2).saturating_mul(summands))
+        }
+    }
+}
+
+/// One operand of a product as distribution reads it: its summands, a literal part counted as one over no factor, the factors they hold between them, and the bits of their coefficients.
+pub(crate) struct Multiplicand {
+    pub(crate) summands: usize,
+    pub(crate) factors: usize,
+    pub(crate) bits: u64,
+}
+
+/// What a product of two operands costs to write back distributed: the collection its monomials are read into, a node for each monomial and for each factor it holds, and the limbs of its coefficients.
+///
+/// Every summand of one operand meets every summand of the other, so an operand's factors and its coefficients are written once for each summand across from it: a monomial is as long as the two it is the product of and its coefficient as wide as theirs together, which a count of monomials alone prices as one node whatever its degree. Nothing for a product with no factor, which is a literal and [`operand_bound`]'s.
+pub(crate) fn product_bound(left: &Multiplicand, right: &Multiplicand) -> Cost {
+    let across = |own: u64, other: &Multiplicand| own.saturating_mul(other.summands as u64);
+    let products = distribution_size(left.summands, right.summands);
+    let factors =
+        across(left.factors as u64, right).saturating_add(across(right.factors as u64, left));
+    let bits = across(left.bits, right).saturating_add(across(right.bits, left));
+
+    match factors {
+        0 => Cost::NOTHING,
+        factors => Cost::collection(products)
+            .saturating_add(Cost::term(2).saturating_mul(products.saturating_add(factors)))
+            .saturating_add(Cost::big_number(bits)),
     }
 }

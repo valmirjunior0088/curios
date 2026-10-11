@@ -3,7 +3,7 @@
 //! `Nat` division is the one arithmetic family whose fold reaches past literals: [`nat_bound`] states how large a shape can be, and [`nat_euclid_split`] uses that to peel a quotient off a sum whose remainder cannot reach the divisor. The bound must never under-report — the split turns it into a definitional equation.
 
 use {
-    super::{operand_bound, shift_bound},
+    super::{operand_bound, shift_bound, sum_bound},
     crate::{Cost, Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{
         Carrier, Divided, FloorSplit, Half, Observed, Operation, cofactor, euclid_split, floor_law,
@@ -243,6 +243,7 @@ pub(super) fn reduce_nat_division(
     }
 
     if let Some(divisor) = &divisor {
+        reducer.spend(sum_bound(Nat::summands(&Nat::decompose(&left).1).len()))?;
         if let Some((quotient, remainder)) = nat_euclid_split(&left, divisor) {
             return Ok(Term::unwrap_or_clone(match euclid {
                 Euclid::Quotient => quotient,

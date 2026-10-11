@@ -1,8 +1,11 @@
 use {
-    super::{Atoms, Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, same_atom},
+    super::{
+        Atoms, Intrinsic, Multiplicand, ReduceError, Reducer, Subterm, Term, product_bound,
+        same_atom, sum_bound,
+    },
     curios_algebra::{
         Cancelled, Carrier, Combination, Deduction, Monomial, Progress, Recombination, Summand,
-        Wanted, distribute, distribution_size,
+        Wanted, distribute,
     },
     curios_num::Natural,
     curios_utilities::recurse,
@@ -256,10 +259,21 @@ impl Nat {
         terms
     }
 
-    /// How many summands a product distributes, its floor counted as one — what a distribution of it against another costs, through `distribution_size`.
-    pub(crate) fn distributed_count(term: &Term) -> usize {
+    /// A reduced `Nat` as one operand of a product, counted for [`product_bound`] before [`Nat::multiply`] writes anything: its summands with the floor one of them, their factors, and the bits of their coefficients.
+    pub(crate) fn multiplicand(term: &Term) -> Multiplicand {
         let (floor, inner) = Self::decompose(term);
-        Self::summands(&inner).len() + usize::from(!floor.is_zero())
+        let monomials = Self::summands(&inner)
+            .iter()
+            .map(Self::monomial)
+            .collect::<Vec<_>>();
+        Multiplicand {
+            summands: monomials.len() + usize::from(!floor.is_zero()),
+            factors: monomials.iter().map(|(_, factors)| factors.len()).sum(),
+            bits: monomials
+                .iter()
+                .map(|(coefficient, _)| coefficient.bits())
+                .fold(floor.bits(), u64::saturating_add),
+        }
     }
 
     /// `coefficient · factor` in normal form: a zero coefficient is `0`, a unit coefficient is the factor itself, and anything else is the product with the literal on the left — so `x · 2` and `2 · x` are one term.
@@ -457,7 +471,7 @@ impl Nat {
 
     /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold does not perform on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s. See `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
     ///
-    /// The fold keeps every sum merged and every difference cancelled, so this walks only into products and the sums that hold them; a term with no stuck product comes back untouched. A memo keyed on node identity keeps a shared operand distributed once and holds each input alive beside its answer, since an identity is an address; the descent re-enters [`recurse`] per level. A product is priced here by what it builds — the concat fold's idiom, one collection and one node per product — because `operand_bound` at the fold prices by literal width, and a symbolic cross product read as zero bits.
+    /// The fold keeps every sum merged and every difference cancelled, so this walks only into products and the sums that hold them; a term with no stuck product comes back untouched. A memo keyed on node identity keeps a shared operand distributed once and holds each input alive beside its answer, since an identity is an address; the descent re-enters [`recurse`] per level. A product is charged here as the fold charges one it distributes, by what distribution writes ([`product_bound`]).
     pub fn normalize(reducer: &mut impl Reducer, term: Term) -> Result<Term, ReduceError> {
         let mut memo: HashMap<usize, (Term, Term)> = HashMap::new();
         Self::normalize_within(reducer, term, &mut memo)
@@ -478,24 +492,28 @@ impl Nat {
                 Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
                     let left = Self::normalize_within(reducer, left.clone(), memo)?;
                     let right = Self::normalize_within(reducer, right.clone(), memo)?;
-                    let products = distribution_size(
-                        Self::distributed_count(&left),
-                        Self::distributed_count(&right),
-                    );
-                    reducer.spend(
-                        Cost::collection(products)
-                            .saturating_add(Cost::term(2).saturating_mul(products)),
-                    )?;
+                    reducer.spend(product_bound(
+                        &Self::multiplicand(&left),
+                        &Self::multiplicand(&right),
+                    ))?;
                     Self::multiply(&left, &right)
                 }
                 Subterm::Intrinsic(Intrinsic::NatAdd(..))
                 | Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))) => {
                     let (floor, inner) = Self::decompose(&reduced);
-                    let summands = Self::summands(&inner)
-                        .into_iter()
-                        .map(|summand| Self::normalize_within(reducer, summand, memo))
+                    let read = Self::summands(&inner);
+                    let summands = read
+                        .iter()
+                        .map(|summand| Self::normalize_within(reducer, summand.clone(), memo))
                         .collect::<Result<Vec<_>, _>>()?;
-                    Self::sum_over_floor(summands, floor)
+                    // A sum no product changed stands as the fold left it; one that changed is written back, and charged as a sum is.
+                    match summands == read {
+                        true => reduced,
+                        false => {
+                            reducer.spend(sum_bound(summands.len()))?;
+                            Self::sum_over_floor(summands, floor)
+                        }
+                    }
                 }
                 _ => reduced,
             };
@@ -549,13 +567,11 @@ impl Nat {
     ///
     /// The mathematics is `curios-algebra`'s `Combination::cancel_common`; what is decided here is which terms are one atom, and which terms the residuals are rebuilt from.
     pub(crate) fn cancel_common(left: &Term, right: &Term) -> (Term, Term) {
-        curios_profile::profile!("nat::cancel_common");
         Self::rebuild_cancelled(Self::cancellation(left, right), left, right)
     }
 
     /// What `left = right` concludes over `Nat`, with its residuals rebuilt as terms: the cancellation as the peel reads it, timed under the one span every cancellation passes through.
     pub(crate) fn cancellation_deduced(left: &Term, right: &Term) -> Deduction<(Term, Term)> {
-        curios_profile::profile!("nat::cancel_common");
         Self::cancellation(left, right)
             .deduction()
             .map(|cancelled| Self::rebuild_cancelled(cancelled, left, right))
@@ -566,7 +582,6 @@ impl Nat {
         if left == right {
             return true;
         }
-        curios_profile::profile!("nat::cancel_common");
         matches!(
             Self::cancellation(left, right).deduction(),
             Deduction::Equal
@@ -574,7 +589,8 @@ impl Nat {
     }
 
     /// `left` against `right` read over one table of atoms, with what they share taken off both.
-    fn cancellation(left: &Term, right: &Term) -> Cancelled<Natural, Term> {
+    pub(crate) fn cancellation(left: &Term, right: &Term) -> Cancelled<Natural, Term> {
+        curios_profile::profile!("nat::cancel_common");
         let mut atoms = Atoms::default();
         let left = Self::combination(&mut atoms, left);
         let right = Self::combination(&mut atoms, right);
@@ -584,7 +600,7 @@ impl Nat {
     /// The terms a cancellation of `left` against `right` leaves.
     ///
     /// **A pass that cancels no summand hands its inners back untouched.** Rebuilding through [`Nat::from_linear`] re-associates and reorders a sum — `a + (b + c)` comes back as `(c + b) + a`, and again as `(a + b) + c` — so a stuck comparison rebuilt from reordered operands is a *different* term, which the caller reduces again, reorders again, and never settles. Taking the floors off the original inners is what the comparison family did before summands were read at all, and it is stable because it rewrites nothing below the floor.
-    fn rebuild_cancelled(
+    pub(crate) fn rebuild_cancelled(
         cancelled: Cancelled<Natural, Term>,
         left: &Term,
         right: &Term,
@@ -599,6 +615,14 @@ impl Nat {
                 Self::rebuild(cancelled.left.constant, Self::decompose(left).1),
                 Self::rebuild(cancelled.right.constant, Self::decompose(right).1),
             ),
+        }
+    }
+
+    /// How many summands [`Nat::rebuild_cancelled`] writes back for `cancelled`: both residuals where a summand cancelled, and none where only the floors moved.
+    pub(crate) fn residuals(cancelled: &Cancelled<Natural, Term>) -> usize {
+        match cancelled.progress {
+            Progress::Summands => cancelled.left.summands.len() + cancelled.right.summands.len(),
+            Progress::Nothing | Progress::Constant => 0,
         }
     }
 }

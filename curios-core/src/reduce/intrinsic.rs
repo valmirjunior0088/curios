@@ -2,7 +2,7 @@ mod compare;
 use compare::*;
 
 mod cost;
-use cost::*;
+pub(crate) use cost::*;
 
 mod free_monoid;
 use free_monoid::*;
@@ -36,10 +36,11 @@ use {
     crate::{
         Aligned, Cost, Declaration, Element, Extremum, FUSION_CAP, FreeMonoid, Func, Intrinsic,
         LinearViews, Nat, Operands, Probe, Subterm, Telescope, Term, Words, int_cancel_common,
-        int_negate, int_of_nat, int_preimage, int_product, int_sum, int_terms, normalize_concat,
-        peel_bin, peel_first_atom, peel_first_elem, same_atom,
+        int_distributes, int_multiplicand, int_multiply, int_negate, int_of_nat, int_preimage,
+        int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
+        same_atom,
     },
-    curios_algebra::{Carrier, Comparison, Deduction, Half, distribution_size},
+    curios_algebra::{Carrier, Comparison, Deduction, Half},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
 };
 
@@ -331,6 +332,38 @@ fn reduce_bin_pointwise(
     )))
 }
 
+/// How many symbolic summands a reduced `Nat` holds over its floor.
+fn nat_summands(term: &Term) -> usize {
+    Nat::summands(&Nat::decompose(term).1).len()
+}
+
+/// What the literal a sum or a difference of two reduced `Nat`s computes costs, by the widths of their floors: charged where both are closed literals or each holds a floor, and nothing where one side holds none and the other's stands.
+fn nat_floors_bound(left: &Term, right: &Term) -> Cost {
+    let (floor_left, inner_left) = Nat::decompose(left);
+    let (floor_right, inner_right) = Nat::decompose(right);
+    let closed = Nat::is_zero(&inner_left) && Nat::is_zero(&inner_right);
+    match closed || !(floor_left.is_zero() || floor_right.is_zero()) {
+        true => operand_bound(floor_left.bits(), floor_right.bits()),
+        false => Cost::NOTHING,
+    }
+}
+
+/// [`nat_floors_bound`] for two reduced `Int`s and their constants, spent, answering how many symbolic summands each holds.
+fn int_literals_charged(
+    reducer: &mut impl Reducer,
+    left: &Term,
+    right: &Term,
+) -> Result<(usize, usize), ReduceError> {
+    let (constant_left, summands_left) = int_terms(left);
+    let (constant_right, summands_right) = int_terms(right);
+    let closed = summands_left.is_empty() && summands_right.is_empty();
+    if closed || !(constant_left.is_zero() || constant_right.is_zero()) {
+        reducer.spend(operand_bound(constant_left.bits(), constant_right.bits()))?;
+    }
+
+    Ok((summands_left.len(), summands_right.len()))
+}
+
 pub fn reduce_intrinsic(
     reducer: &mut impl Reducer,
     intrinsic: &Intrinsic,
@@ -472,6 +505,8 @@ pub fn reduce_intrinsic(
         Intrinsic::NatAdd(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
+            reducer.spend(nat_floors_bound(&left, &right))?;
+            reducer.spend(sum_bound(nat_summands(&left) + nat_summands(&right)))?;
             // Through the sum normal form, which is what merges like terms: `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x`. Idempotent by construction — `Nat::summands` reads in the order `Nat::from_linear` writes — which is what lets the reducer rebuild a sum it was handed already reduced without changing it.
             Ok(Term::unwrap_or_clone(Nat::sum(&left, &right)))
         }
@@ -480,7 +515,10 @@ pub fn reduce_intrinsic(
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
             // The same cancellation the comparisons take, and for the same law: a borrow never reaches what both sides carry, so `(x + a) - (x + b)` is `a - b` and the floor law below gets to see a literal subtrahend where it would otherwise have seen a sum.
-            let (left, right) = Nat::cancel_common(&left, &right);
+            reducer.spend(nat_floors_bound(&left, &right))?;
+            let cancelled = Nat::cancellation(&left, &right);
+            reducer.spend(sum_bound(Nat::residuals(&cancelled)))?;
+            let (left, right) = Nat::rebuild_cancelled(cancelled, &left, &right);
             let (sl, il) = Nat::decompose(&left);
             let (k, ir) = Nat::decompose(&right);
 
@@ -511,13 +549,17 @@ pub fn reduce_intrinsic(
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
             // **A product of two symbolic sums is its own weak-head form.** Distribution is the one quadratic step in the `Nat` normal form — every summand of one operand against every summand of the other — and a web of definitions each naming the one before it twice made it build 1 222 222 monomials to keep 25 412, to answer a comparison a head clash settles. A product with a literal or a single symbolic summand on either side distributes here as it always did, in O(summands); only sum × sum stays stuck, and `Nat::normalize` distributes it where a value is asked for by name — see `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
-            let symbolic_summands = |term: &Term| Nat::summands(&Nat::decompose(term).1).len();
-            if symbolic_summands(&left) > 1 && symbolic_summands(&right) > 1 {
+            if nat_summands(&left) > 1 && nat_summands(&right) > 1 {
                 return Ok(Subterm::Intrinsic(Intrinsic::nat_mul(left, right)));
             }
             reducer.spend(operand_bound(
                 left.as_nat().map_or(0, |value| value.bits()),
                 right.as_nat().map_or(0, |value| value.bits()),
+            ))?;
+            // A product over a symbol is written back distributed, as wide as its operands' monomials are long.
+            reducer.spend(product_bound(
+                &Nat::multiplicand(&left),
+                &Nat::multiplicand(&right),
             ))?;
             Ok(Term::unwrap_or_clone(Nat::multiply(&left, &right)))
         }
@@ -657,17 +699,17 @@ pub fn reduce_intrinsic(
         Intrinsic::IntAdd(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
-            if let (Some(l), Some(r)) = (left.as_int(), right.as_int()) {
-                reducer.spend(operand_bound(l.bits(), r.bits()))?;
-            }
+            let (minuend, subtrahend) = int_literals_charged(reducer, &left, &right)?;
+            reducer.spend(sum_bound(minuend + subtrahend))?;
             Ok(Term::unwrap_or_clone(int_sum(&left, &right)))
         }
         Intrinsic::IntSub(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
-            if let (Some(l), Some(r)) = (left.as_int(), right.as_int()) {
-                reducer.spend(operand_bound(l.bits(), r.bits()))?;
-            }
+            // The negated subtrahend is a sum written back too, ahead of the difference.
+            let (minuend, subtrahend) = int_literals_charged(reducer, &left, &right)?;
+            reducer.spend(sum_bound(subtrahend))?;
+            reducer.spend(sum_bound(minuend + subtrahend))?;
             Ok(Term::unwrap_or_clone(int_sum(&left, &int_negate(&right))))
         }
         // Distributes past a constant or a single monomial and stays stuck between two symbolic sums, the line `NatMul` draws; `int_normalize` crosses it where a comparison asks.
@@ -677,13 +719,14 @@ pub fn reduce_intrinsic(
             if let (Some(l), Some(r)) = (left.as_int(), right.as_int()) {
                 reducer.spend(operand_bound(l.bits(), r.bits()))?;
             }
-            let (_, summands_left) = int_terms(&left);
-            let (_, summands_right) = int_terms(&right);
-            reducer.spend(Cost::collection(distribution_size(
-                summands_left.len() + 1,
-                summands_right.len() + 1,
-            )))?;
-            Ok(Term::unwrap_or_clone(int_product(&left, &right)))
+            if !int_distributes(&left, &right) {
+                return Ok(Subterm::Intrinsic(Intrinsic::IntMul(left, right)));
+            }
+            reducer.spend(product_bound(
+                &int_multiplicand(&left),
+                &int_multiplicand(&right),
+            ))?;
+            Ok(Term::unwrap_or_clone(int_multiply(&left, &right)))
         }
         Intrinsic::IntDiv {
             dividend,
@@ -1022,6 +1065,7 @@ pub fn reduce_intrinsic(
             }
 
             // Pushed through `Nat`'s normal form — a literal folds, a floor becomes the constant, a sum and a product widen summand by summand — since the widening is a semiring homomorphism; `int_of_nat` states it.
+            reducer.spend(sum_bound(nat_summands(&inner)))?;
             Ok(Term::unwrap_or_clone(int_of_nat(&inner)))
         }
         // Into `Flt` the conversions are total and take no proof: rounding is the canonical extension of the embedding, forced by the structure the way monus is for `Nat/sub`, in whichever direction the operation names, and a magnitude past the largest finite value answers what that direction sends an overflow to.
@@ -1045,10 +1089,11 @@ pub fn reduce_intrinsic(
             if let Some(operand) = intrinsic.undone(&int) {
                 return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
-            if int.as_int().is_none()
-                && let Some(preimage) = int_preimage(&int)
-            {
-                return Ok(Term::unwrap_or_clone(preimage));
+            if int.as_int().is_none() {
+                reducer.spend(sum_bound(int_terms(&int).1.len()))?;
+                if let Some(preimage) = int_preimage(&int) {
+                    return Ok(Term::unwrap_or_clone(preimage));
+                }
             }
 
             match int.as_int() {

@@ -7,10 +7,13 @@
 //! Every function here is total over reduced terms it does not recognize, reading anything that is not an `IntAdd`, `IntMul` or `Int` literal as an opaque monomial factor, which is what makes `i - i` fold to `0` for a symbolic `i` while `f(i)` stays the symbol it is.
 
 use {
-    super::{Atoms, Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
+    super::{
+        Atoms, Intrinsic, Multiplicand, Nat, ReduceError, Reducer, Subterm, Term, product_bound,
+        same_atom, sum_bound,
+    },
     curios_algebra::{
         Cancelled, Carrier, Combination, Deduction, Progress, Recombination, Summand, Wanted,
-        distribute, distribution_size, signed_cofactor,
+        distribute, signed_cofactor,
     },
     curios_num::Integer,
     curios_utilities::recurse,
@@ -369,15 +372,28 @@ pub(crate) fn int_multiply(left: &Term, right: &Term) -> Term {
     int_merged(constant, summands)
 }
 
-/// How many monomials a product distributes, its constant counted as one — what a distribution of it against another costs, through `distribution_size`.
-pub(crate) fn int_distributed_count(term: &Term) -> usize {
-    int_monomials(term).len()
+/// A reduced term as one operand of a product, counted for [`product_bound`] before [`int_multiply`] writes anything, as `Nat::multiplicand` counts: its monomials with the constant one of them, their factors, and the bits of their coefficients.
+pub(crate) fn int_multiplicand(term: &Term) -> Multiplicand {
+    let monomials = int_monomials(term);
+    Multiplicand {
+        summands: monomials.len(),
+        factors: monomials.iter().map(|(_, factors)| factors.len()).sum(),
+        bits: monomials
+            .iter()
+            .map(|(coefficient, _)| coefficient.bits())
+            .fold(0, u64::saturating_add),
+    }
 }
 
-/// The product as the fold takes it: distributed when either operand is a constant or a single monomial, and left as a stuck `IntMul` of the two reduced operands otherwise — the same line `NatMul` draws, and [`int_normalize`] is what crosses it on demand.
-pub fn int_product(left: &Term, right: &Term) -> Term {
+/// Whether the fold distributes a product of two reduced terms: where either is a constant or a single monomial — the same line `NatMul` draws, and [`int_normalize`] is what crosses it on demand.
+pub(crate) fn int_distributes(left: &Term, right: &Term) -> bool {
     let single = |term: &Term| int_monomials(term).len() <= 1;
-    match single(left) || single(right) {
+    single(left) || single(right)
+}
+
+/// The product as the fold takes it: distributed where [`int_distributes`] says, and left as a stuck `IntMul` of the two reduced operands otherwise.
+pub fn int_product(left: &Term, right: &Term) -> Term {
+    match int_distributes(left, right) {
         true => int_multiply(left, right),
         false => Term::intrinsic(Intrinsic::IntMul(left.clone(), right.clone())),
     }
@@ -389,7 +405,7 @@ pub fn int_has_stuck_product(term: &Term) -> bool {
     while let Some(term) = pending.pop() {
         match &*term {
             Subterm::Intrinsic(Intrinsic::IntMul(left, right)) => {
-                if int_monomials(left).len() > 1 && int_monomials(right).len() > 1 {
+                if !int_distributes(left, right) {
                     return true;
                 }
                 pending.push(left.clone());
@@ -426,21 +442,26 @@ fn int_normalize_within(
             Subterm::Intrinsic(Intrinsic::IntMul(left, right)) => {
                 let left = int_normalize_within(reducer, left.clone(), memo)?;
                 let right = int_normalize_within(reducer, right.clone(), memo)?;
-                let products =
-                    distribution_size(int_distributed_count(&left), int_distributed_count(&right));
-                reducer.spend(
-                    Cost::collection(products)
-                        .saturating_add(Cost::term(2).saturating_mul(products)),
-                )?;
+                reducer.spend(product_bound(
+                    &int_multiplicand(&left),
+                    &int_multiplicand(&right),
+                ))?;
                 int_multiply(&left, &right)
             }
             Subterm::Intrinsic(Intrinsic::IntAdd(..)) => {
-                let (constant, summands) = int_terms(&reduced);
-                let summands = summands
-                    .into_iter()
-                    .map(|summand| int_normalize_within(reducer, summand, memo))
+                let (constant, read) = int_terms(&reduced);
+                let summands = read
+                    .iter()
+                    .map(|summand| int_normalize_within(reducer, summand.clone(), memo))
                     .collect::<Result<Vec<_>, _>>()?;
-                int_merged(constant, summands)
+                // As `Nat::normalize` leaves a sum no product changed, and charges one it writes back.
+                match summands == read {
+                    true => reduced,
+                    false => {
+                        reducer.spend(sum_bound(summands.len()))?;
+                        int_merged(constant, summands)
+                    }
+                }
             }
             _ => reduced,
         };
@@ -483,6 +504,16 @@ pub(crate) fn int_rebuild_cancelled(
             int_from_combination(cancelled.left),
             int_from_combination(cancelled.right),
         ),
+    }
+}
+
+/// How many summands [`int_rebuild_cancelled`] writes back for `cancelled`: both residuals where anything was taken off, and none where the operands stand.
+pub(crate) fn int_residuals(cancelled: &Cancelled<Integer, Vec<Term>>) -> usize {
+    match cancelled.progress {
+        Progress::Nothing => 0,
+        Progress::Constant | Progress::Summands => {
+            cancelled.left.summands.len() + cancelled.right.summands.len()
+        }
     }
 }
 

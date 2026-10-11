@@ -3,10 +3,11 @@
 //! ℤ under `+` is a group, so every relation reads through the difference: `a ⋈ b` iff `a - b ⋈ 0`. [`int_cancel_common`] moves that difference to the two sides by sign, and a pair whose residuals are both constants is decided by comparing them; anything else is undecided and rebuilt from the residuals, so `i + a < i + b` and `a < b` reduce to one term, which conversion needs.
 
 use {
-    super::{Asked, lattice_verdict},
+    super::{Asked, lattice_verdict, sum_bound},
     crate::{
-        Intrinsic, ReduceError, Reducer, Subterm, Term, int_cancel_common, int_has_stuck_product,
-        int_monomial, int_normalize, int_preimage, int_split_by_sign, int_terms,
+        Intrinsic, ReduceError, Reducer, Subterm, Term, int_cancellation, int_has_stuck_product,
+        int_monomial, int_normalize, int_preimage, int_rebuild_cancelled, int_residuals,
+        int_split_by_sign, int_terms,
     },
     curios_algebra::{Carrier, Comparison, apart_modulo},
     curios_num::Natural,
@@ -36,7 +37,9 @@ pub(super) fn compare_int_among(
         true => int_normalize(reducer, right)?,
         false => right,
     };
-    let (left, right) = int_cancel_common(&left, &right);
+    let cancelled = int_cancellation(&left, &right);
+    reducer.spend(sum_bound(int_residuals(&cancelled)))?;
+    let (left, right) = int_rebuild_cancelled(cancelled, &left, &right);
 
     let outcome = match (left.as_int(), right.as_int()) {
         (Some(l), Some(r)) => Comparison::of(l.cmp(&r)),
@@ -76,6 +79,9 @@ fn compare_preimages(
     left: &Term,
     right: &Term,
 ) -> Result<Comparison, ReduceError> {
+    // The two sides split by sign, and then their preimages: two sums written back, each as wide as both.
+    let summands = int_terms(left).1.len() + int_terms(right).1.len();
+    reducer.spend(sum_bound(summands).saturating_mul(2))?;
     let (left, right) = int_split_by_sign(left, right);
     match (int_preimage(&left), int_preimage(&right)) {
         (Some(left), Some(right)) => asked.verdict(reducer, Carrier::Natural, left, right),

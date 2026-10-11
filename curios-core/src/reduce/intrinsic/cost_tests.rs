@@ -1,8 +1,8 @@
 //! What a fold is charged for what it builds, and the shifts refused before they are built at all.
 
 use {
-    super::{Reducer, test_support::*},
-    crate::{Category, Cost, Intrinsic, Nat, ReduceError, Term},
+    super::{Multiplicand, Reducer, operand_bound, product_bound, sum_bound, test_support::*},
+    crate::{Category, Cost, Intrinsic, Nat, ReduceError, Term, int_normalize},
     curios_num::{Binary, Grain, Integer, Natural},
 };
 
@@ -110,8 +110,11 @@ fn every_payload_carrier_is_charged_for_at_least_what_it_builds() {
         element: Term::intrinsic(Intrinsic::Bool(true)),
     });
 
-    let wide =
-        Integer::from(Natural::parse_bytes(&vec![b'9'; DIGITS], 10).expect("a decimal numeral"));
+    let digits = Natural::parse_bytes(&vec![b'9'; DIGITS], 10).expect("a decimal numeral");
+    let natural = || Term::intrinsic(Intrinsic::Nat(Nat::new(digits.clone())));
+    let sum = add(natural(), natural());
+
+    let wide = Integer::from(digits.clone());
     let product = Term::intrinsic(Intrinsic::IntMul(
         Term::intrinsic(Intrinsic::Int(wide.clone())),
         Term::intrinsic(Intrinsic::Int(wide)),
@@ -127,6 +130,7 @@ fn every_payload_carrier_is_charged_for_at_least_what_it_builds() {
 
     for (carrier, charge, built) in [
         ("bits", charged(appended_bits), BITS as u64 / 64),
+        ("natural", charged(sum), digit_bits / 64),
         ("integer", charged(product), digit_bits * 2 / 64),
         ("list", charged(joined), ELEMENTS as u64 * 2),
     ] {
@@ -151,4 +155,360 @@ fn a_window_charges_for_no_payload_it_did_not_build() {
     };
 
     assert_eq!(charged(slice(8)), charged(slice(8_000)));
+}
+
+/// A sum is written back whole where it is added to, so an addition is charged for the sum it builds and not for the summand it adds: over what its two operands cost to reduce, the fold pays [`sum_bound`] of every summand they hold, on each carrier, and a budget one unit short of that refuses it before anything is built.
+///
+/// Mutation-checked: with the charge taken out of either fold, its row costs nothing over its operands.
+#[test]
+fn a_sum_is_charged_for_every_summand_it_writes_back() {
+    const SUMMANDS: u32 = 64;
+
+    type Join = fn(Term, Term) -> Term;
+    let chain = |join: Join, from: u32| {
+        (from..from + SUMMANDS)
+            .map(|index| sym(index, "x"))
+            .reduce(join)
+            .expect("a sum of at least one summand")
+    };
+    let int_add: Join = |left, right| Term::intrinsic(Intrinsic::IntAdd(left, right));
+
+    for (carrier, join) in [("nat", add as Join), ("int", int_add)] {
+        let (left, right) = (chain(join, 0), chain(join, SUMMANDS));
+        let operands = charged(left.clone()) + charged(right.clone());
+        let bound = sum_bound(2 * SUMMANDS as usize).get();
+
+        assert_eq!(
+            charged(join(left.clone(), right.clone())) - operands,
+            bound,
+            "{carrier}: a sum of two sums is charged for the summands of both"
+        );
+
+        let mut reducer = Budgeted {
+            remaining: operands + bound - 1,
+        };
+        assert!(
+            matches!(
+                reducer.reduce(join(left, right)),
+                Err(ReduceError::Exhausted {
+                    category: Category::Reconstruction,
+                    ..
+                })
+            ),
+            "{carrier}: a budget short of the sum refuses it"
+        );
+    }
+}
+
+/// A subtraction and a comparison write back two residuals where a summand cancels, and are charged for those: two sums that share one summand cost each fold [`sum_bound`] of what is left of both over what the same two sums cost it sharing nothing, which are handed back as they stand.
+///
+/// Mutation-checked: with the charge taken out of a cancellation, its row costs what the pair sharing nothing does.
+#[test]
+fn a_cancellation_is_charged_for_the_residuals_it_writes_back() {
+    const SUMMANDS: u32 = 32;
+
+    type Join = fn(Term, Term) -> Term;
+    let sum_over = |join: Join, from: u32, first: Term| {
+        (from..from + SUMMANDS)
+            .map(|index| sym(index, "x"))
+            .fold(first, join)
+    };
+    let int_add: Join = |left, right| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let nat_sub: Join = |left, right| Term::intrinsic(Intrinsic::NatSub(left, right));
+    let nat_lt: Join = |left, right| Term::intrinsic(Intrinsic::NatLt(left, right));
+    let int_lt: Join = |left, right| Term::intrinsic(Intrinsic::IntLt(left, right));
+    let int_sub: Join = |left, right| Term::intrinsic(Intrinsic::IntSub(left, right));
+    let (shared, other) = (sym(1_000, "s"), sym(1_001, "t"));
+    // The `Int` comparison goes on to read the preimages of what is left, two sums as wide as both sides: two summands fewer where the shared one cancelled.
+    let preimages = |summands: u32| 2 * sum_bound(summands as usize).get();
+    let narrower = preimages(2 * SUMMANDS + 2) - preimages(2 * SUMMANDS);
+
+    for (fold, join, over, saved) in [
+        ("Nat/sub", add as Join, nat_sub, 0),
+        ("Nat/lt", add as Join, nat_lt, 0),
+        ("Int/lt", int_add, int_lt, narrower),
+    ] {
+        let left = sum_over(join, 0, shared.clone());
+        let cancelling = over(left.clone(), sum_over(join, SUMMANDS, shared.clone()));
+        let standing = over(left, sum_over(join, SUMMANDS, other.clone()));
+
+        assert_eq!(
+            charged(cancelling) + saved - charged(standing),
+            sum_bound(2 * SUMMANDS as usize).get(),
+            "{fold}: two residuals are charged for the summands of both"
+        );
+    }
+
+    // A difference of two `Int` sums is one sum over the negated subtrahend: charged for both, whatever cancels.
+    let left = sum_over(int_add, 0, shared);
+    let right = sum_over(int_add, SUMMANDS, other);
+    let operands = charged(left.clone()) + charged(right.clone());
+    let each = SUMMANDS as usize + 1;
+
+    assert_eq!(
+        charged(int_sub(left, right)) - operands,
+        sum_bound(each).get() + sum_bound(2 * each).get(),
+        "Int/sub: the negated subtrahend, then the sum of both"
+    );
+}
+
+/// Every other fold that writes a sum back is charged for it as addition is: a widening for the image of each summand, a narrowing for each preimage, and the division's split for the summands it parts into a quotient and a residual — each at least [`sum_bound`] of its operand's summands over what the operand costs to reduce.
+///
+/// Mutation-checked: with the charge taken out of a fold, its row costs less than the sum it writes.
+#[test]
+fn a_fold_that_writes_a_sum_back_is_charged_for_it() {
+    const SUMMANDS: u32 = 32;
+
+    let doubled = || {
+        (0..SUMMANDS)
+            .map(|index| scaled(2, sym(index, "x")))
+            .reduce(add)
+            .expect("a sum of at least one summand")
+    };
+    let widened = || Term::intrinsic(Intrinsic::NatToInt(doubled()));
+    let narrowed = Term::intrinsic(Intrinsic::IntToNat {
+        int: widened(),
+        non_neg: qed(),
+    });
+    let halved = Term::intrinsic(Intrinsic::NatDiv {
+        dividend: doubled(),
+        divisor: lit(2),
+        non_zero: qed(),
+    });
+
+    for (fold, over, operand) in [
+        ("Nat/to_int", widened(), doubled()),
+        ("Int/to_nat", narrowed, widened()),
+        ("Nat/div", halved, doubled()),
+    ] {
+        assert!(
+            charged(over) - charged(operand) >= sum_bound(SUMMANDS as usize).get(),
+            "{fold}: a sum written back is charged for its summands"
+        );
+    }
+}
+
+/// The literal a sum computes is charged by its operands' widths wherever the fold adds two, over a symbolic part as between two closed literals, on each carrier: two wide floors, each over a symbol, cost their sum at least the number it builds, and a wide floor added to a bare symbol, which stands as it was, costs nothing for its width.
+///
+/// Mutation-checked: with the literals charged only between closed operands, a carrier's first sum costs less than its floor.
+#[test]
+fn a_floor_added_over_a_symbol_is_charged_by_its_width() {
+    const DIGITS: usize = 1_000;
+
+    type Join = fn(Term, Term) -> Term;
+    let int_add: Join = |left, right| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let digits = Natural::parse_bytes(&vec![b'9'; DIGITS], 10).expect("a decimal numeral");
+    let nat_wide = Term::intrinsic(Intrinsic::Nat(Nat::new(digits.clone())));
+    let int_wide = Term::intrinsic(Intrinsic::Int(Integer::from(digits)));
+    // A decimal digit is a little over three and a third bits; rounding down keeps this a lower bound.
+    let limbs = (DIGITS as u64 * 33) / 10 / 64;
+
+    for (carrier, join, wide) in [("nat", add as Join, nat_wide), ("int", int_add, int_wide)] {
+        let over = |index: u32| join(sym(index, "x"), wide.clone());
+
+        let both = charged(join(over(0), over(1))) - charged(over(0)) - charged(over(1));
+        assert!(
+            both >= limbs,
+            "{carrier}, two floors: charged {both} for a number of {limbs} units"
+        );
+
+        let one = charged(join(over(0), sym(1, "x"))) - charged(over(0));
+        assert!(
+            one < limbs,
+            "{carrier}, one floor: charged {one} for a number that stands as it was"
+        );
+    }
+}
+
+/// A sum no product changed is handed back as the fold left it, the node it was, on each carrier: normalizing writes back, and is charged for, only a sum one of whose summands it distributed.
+///
+/// Mutation-checked: with the sum written back whatever its summands, a carrier's answer is another node.
+#[test]
+fn a_sum_no_product_changed_is_handed_back_unbuilt() {
+    type Join = fn(Term, Term) -> Term;
+    let int_add: Join = |left, right| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let sum = |join: Join| {
+        fold(
+            (0..8)
+                .map(|index| sym(index, "x"))
+                .reduce(join)
+                .expect("a sum of at least one summand"),
+        )
+    };
+
+    let nat = sum(add);
+    let normalized = Nat::normalize(&mut Inert, nat.clone()).expect("normalizes");
+    assert_eq!(normalized.identity(), nat.identity(), "nat");
+
+    let int = sum(int_add);
+    let normalized = int_normalize(&mut Inert, int.clone()).expect("normalizes");
+    assert_eq!(normalized.identity(), int.identity(), "int");
+}
+
+/// A product over a symbol is written back distributed, so the fold is charged for what distribution writes and not for one node: over what its two operands cost to reduce, a sum of symbols times a symbol pays [`product_bound`] of the two, on each carrier, and a budget one unit short of that refuses it before anything is built.
+///
+/// Mutation-checked: with the charge taken out of either fold, its row costs nothing over its operands and its literal row.
+#[test]
+fn a_product_is_charged_for_every_monomial_it_writes_back() {
+    const SUMMANDS: u32 = 64;
+
+    type Join = fn(Term, Term) -> Term;
+    let int_add: Join = |left, right| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let nat_mul: Join = |left, right| Term::intrinsic(Intrinsic::nat_mul(left, right));
+    let int_mul: Join = |left, right| Term::intrinsic(Intrinsic::IntMul(left, right));
+    // Every summand is one symbol under the coefficient one, a bit wide.
+    let sum = Multiplicand {
+        summands: SUMMANDS as usize,
+        factors: SUMMANDS as usize,
+        bits: u64::from(SUMMANDS),
+    };
+    let symbol = Multiplicand {
+        summands: 1,
+        factors: 1,
+        bits: 1,
+    };
+    let bound = product_bound(&sum, &symbol).get();
+
+    // `Nat`'s fold pays its literal row whatever its operands are; `Int`'s only between two literals.
+    for (carrier, join, over, literals) in [
+        ("nat", add as Join, nat_mul, operand_bound(0, 0).get()),
+        ("int", int_add, int_mul, 0),
+    ] {
+        let left = (0..SUMMANDS)
+            .map(|index| sym(index, "x"))
+            .reduce(join)
+            .expect("a sum of at least one summand");
+        let right = sym(SUMMANDS, "y");
+        let operands = charged(left.clone());
+
+        assert_eq!(
+            charged(over(left.clone(), right.clone())) - operands,
+            literals + bound,
+            "{carrier}: a sum times a symbol is charged for every monomial and its factors"
+        );
+
+        let mut reducer = Budgeted {
+            remaining: operands + literals + bound - 1,
+        };
+        assert!(
+            matches!(
+                reducer.reduce(over(left, right)),
+                Err(ReduceError::Exhausted { .. })
+            ),
+            "{carrier}: a budget short of the product refuses it"
+        );
+    }
+}
+
+/// A monomial is as long as the two it is the product of, so a product is charged by its operands' factors and a power built a factor at a time costs each step what it has grown to: a symbol times a monomial of so many factors pays a node for each of them, on each carrier.
+///
+/// Mutation-checked: with a product charged by its monomials alone, each row costs one node whatever its degree.
+#[test]
+fn a_product_is_charged_for_every_factor_it_writes_back() {
+    const FACTORS: u32 = 64;
+
+    type Join = fn(Term, Term) -> Term;
+    let nat_mul: Join = |left, right| Term::intrinsic(Intrinsic::nat_mul(left, right));
+    let int_mul: Join = |left, right| Term::intrinsic(Intrinsic::IntMul(left, right));
+
+    for (carrier, over) in [("nat", nat_mul), ("int", int_mul)] {
+        let monomial = (0..FACTORS)
+            .map(|index| sym(index, "x"))
+            .reduce(over)
+            .expect("a product of at least one factor");
+        let operands = charged(monomial.clone());
+
+        assert!(
+            charged(over(monomial, sym(FACTORS, "y"))) - operands
+                >= Cost::term(2).get() * u64::from(FACTORS),
+            "{carrier}: a monomial written back is charged for its factors"
+        );
+    }
+}
+
+/// A coefficient is as wide as the two it is the product of and is written once for every summand it is multiplied over, so a wide literal times a sum of symbols costs at least that many numbers of its width, on each carrier.
+///
+/// Mutation-checked: with a product charged for no coefficient, each row costs its literal row's one number at most.
+#[test]
+fn a_coefficient_multiplied_over_a_sum_is_charged_by_its_width() {
+    const DIGITS: usize = 1_000;
+    const SUMMANDS: u32 = 16;
+
+    type Join = fn(Term, Term) -> Term;
+    let int_add: Join = |left, right| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let nat_mul: Join = |left, right| Term::intrinsic(Intrinsic::nat_mul(left, right));
+    let int_mul: Join = |left, right| Term::intrinsic(Intrinsic::IntMul(left, right));
+    let digits = Natural::parse_bytes(&vec![b'9'; DIGITS], 10).expect("a decimal numeral");
+    let nat_wide = Term::intrinsic(Intrinsic::Nat(Nat::new(digits.clone())));
+    let int_wide = Term::intrinsic(Intrinsic::Int(Integer::from(digits)));
+    // A decimal digit is a little over three and a third bits; rounding down keeps this a lower bound.
+    let limbs = (DIGITS as u64 * 33) / 10 / 64;
+
+    for (carrier, join, over, wide) in [
+        ("nat", add as Join, nat_mul, nat_wide),
+        ("int", int_add, int_mul, int_wide),
+    ] {
+        let sum = (0..SUMMANDS)
+            .map(|index| sym(index, "x"))
+            .reduce(join)
+            .expect("a sum of at least one summand");
+        let product = charged(over(wide, sum.clone())) - charged(sum);
+
+        assert!(
+            product >= limbs * u64::from(SUMMANDS),
+            "{carrier}: charged {product} for {SUMMANDS} numbers of {limbs} units"
+        );
+    }
+}
+
+/// A product of two symbolic sums stands as written and costs nothing over its operands, on each carrier; it is charged where its value is asked for by name and distribution writes it, every summand of one against every summand of the other: normalizing it pays [`product_bound`] of the two over what reducing it and normalizing each operand cost.
+///
+/// Mutation-checked: with the charge taken out of either normalization, its row pays nothing for the product.
+#[test]
+fn a_product_of_two_sums_is_charged_where_it_is_distributed() {
+    const SUMMANDS: u32 = 16;
+    const AMPLE: u64 = 1_000_000_000;
+
+    type Join = fn(Term, Term) -> Term;
+    type Normalize = fn(&mut Budgeted, Term) -> Result<Term, ReduceError>;
+    let int_add: Join = |left, right| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let nat_mul: Join = |left, right| Term::intrinsic(Intrinsic::nat_mul(left, right));
+    let int_mul: Join = |left, right| Term::intrinsic(Intrinsic::IntMul(left, right));
+    let each = Multiplicand {
+        summands: SUMMANDS as usize,
+        factors: SUMMANDS as usize,
+        bits: u64::from(SUMMANDS),
+    };
+    let bound = product_bound(&each, &each).get();
+
+    for (carrier, join, over, normalize) in [
+        ("nat", add as Join, nat_mul, Nat::normalize as Normalize),
+        ("int", int_add, int_mul, int_normalize as Normalize),
+    ] {
+        let sum = |from: u32| {
+            (from..from + SUMMANDS)
+                .map(|index| sym(index, "x"))
+                .reduce(join)
+                .expect("a sum of at least one summand")
+        };
+        let normalized = |term: Term| {
+            let mut reducer = Budgeted { remaining: AMPLE };
+            normalize(&mut reducer, term).expect("the subject normalizes");
+
+            AMPLE - reducer.remaining
+        };
+        let stuck = over(sum(0), sum(SUMMANDS));
+        let standing = charged(stuck.clone());
+
+        assert_eq!(
+            standing,
+            charged(sum(0)) + charged(sum(SUMMANDS)),
+            "{carrier}: a product of two sums costs nothing where it stands"
+        );
+        assert_eq!(
+            normalized(stuck) - standing - normalized(sum(0)) - normalized(sum(SUMMANDS)),
+            bound,
+            "{carrier}: normalizing is charged for the product it distributes"
+        );
+    }
 }
