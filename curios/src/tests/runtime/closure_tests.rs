@@ -289,3 +289,31 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
     .expect("expected result");
     assert_eq!(io.output(), b"8:1");
 }
+
+/// A closure whose arity a run-time value decides is called at each. A function type computed from a `Bool` leaves one application for each shape, and a copy the optimizer specializes to one arm keeps the other arm's application, which no run arrives at (`curios-cont`'s `Module::applies`). Both arities are asked in one run, over a value only the host knows.
+#[test]
+fn a_closure_whose_arity_a_value_decides_is_called_at_each() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Bool, Str, List};
+        let Shape(b : Bool) -> Type =
+            match b | true => (Nat) -> Nat | false => (Nat, Nat) -> Nat end;
+        let pick(b : Bool) -> Shape(b) =
+            match b : (c) => Shape(c) | true => (x) => x + 1 | false => (x, y) => x + y end;
+        let apply(b : Bool, f : Shape(b)) -> Nat =
+            match b : (c) => (g : Shape(c)) -> Nat
+            | true => (g) => g(10)
+            | false => (g) => g(10, 20)
+            end(f);
+        let args = /std/proc/args!;
+        let b = List/len(args) == 0;
+        /std/print(
+            Str/flatten(
+                [
+                    Nat/to_str(apply(b, pick(b))),
+                    " ",
+                    Nat/to_str(apply(Bool/not(b), pick(Bool/not(b))))]))
+        "#),
+        b"11 30".to_vec()
+    );
+}
