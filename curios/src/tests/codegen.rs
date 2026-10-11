@@ -9,6 +9,7 @@ mod census;
 #[cfg(feature = "profile")]
 pub(super) use census::*;
 
+mod churn;
 mod fields;
 mod ladder;
 mod specialize;

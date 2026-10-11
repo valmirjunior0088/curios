@@ -1,12 +1,11 @@
-//! Runtime measurements behind `curios-runtime/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` and `spines` under differently sized heaps, and the pinned absence of allocation in `churn`'s threaded-record loop. Both hear the engine's own per-collection announcements through `curios-profile`'s log bridge, which is why this module is one of the instrumented.
+//! Runtime measurements behind `curios-runtime/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` and `spines` under differently sized heaps, and the pinned absence of allocation in `churn`'s threaded-record loop. Both count the engine's collections through `curios_runtime::test_support::collected`, which hears the engine's own announcements.
 //!
 //! What the sixteen-mebibyte initial heap buys: under death-birth churn an unsized heap parks within a doubling of the live set and the collector recopies it continually; sized, those collections are gone, the allocation-free `churn` does not move — the empirical pin on its exit from the churn class — and `trees` gains little, because an all-live tree must outgrow any constant.
 
 use {
     crate::to_compiled,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
-    curios_profile::capture_host_records,
-    curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_runtime::{Compiled, ForeignBindings, MockHost, test_support::collected},
     curios_text::{Entrypoint, RootSource},
     std::time::Instant,
 };
@@ -75,9 +74,6 @@ match input: (_) => Io({})
 end
 "#;
 
-/// Where the engine announces each collection: one `Begin GC` record per collection, and each heap growth reports its new size, both at trace level on this target.
-const GC_TARGET: &str = "wasmtime::runtime::store::gc";
-
 /// The churn phase is measured as T(K) − T(0) at this K, which subtracts startup, the initial build, and — in the ballast arms — the whole ballast phase.
 const ROUNDS: u64 = 400;
 
@@ -119,26 +115,18 @@ fn timed(compiled: &Compiled, k: u64) -> f64 {
 
 /// Collections and the heap's final size during one run at `k`, from the engine's own records. The counted run's duration is discarded: the raised log level prices every suppressed record, so timing and counting are separate runs.
 fn collections(compiled: &Compiled, k: u64) -> (usize, Option<String>) {
-    let (_, records) = capture_host_records(GC_TARGET, || run(compiled, k));
-    let begins = records
-        .iter()
-        .filter(|message| message.contains("Begin GC"))
-        .count();
-    let heap = records
-        .iter()
-        .rfind(|message| message.contains("new size is"))
-        .map(|message| message.trim().to_string());
+    let (_, collected) = collected(|| run(compiled, k));
 
-    (begins, heap)
+    (collected.collections, collected.growth)
 }
 
 /// # What this measures, and how to retake it
 ///
 /// ```sh
-/// cargo test --package curios --release --all-features -- instrumented::churn::chain_collection_decomposition --ignored --nocapture
+/// cargo test --package curios --release -- codegen::churn::chain_collection_decomposition --ignored --nocapture
 /// ```
 ///
-/// `--release` is load-bearing: the collector under measurement is host-side wasmtime code, and a debug build inflates exactly the share this probe exists to isolate. `--all-features` supplies the `profile` feature the instrumented tests are gated on.
+/// `--release` is load-bearing: the collector under measurement is host-side wasmtime code, and a debug build inflates exactly the share this probe exists to isolate.
 ///
 /// Three arrangements run the identical churn phase — `ROUNDS` rounds over the harness's 10 000-cell chain — inside heaps the dead ballast pre-grows to different sizes, and the churn cost is the K = `ROUNDS` time minus the K = 0 time, which cancels startup and the ballast phase itself. Collections are counted from the engine's own `Begin GC` records through `curios-profile`'s log bridge, in separate runs so the raised log level never touches a timed figure.
 ///
@@ -196,17 +184,25 @@ fn chain_collection_decomposition() {
 fn threaded_record_allocates_nothing() {
     let compiled = compiled_of(CHURN);
 
-    let ((_, output), records) = capture_host_records(GC_TARGET, || run(&compiled, 1_000_000));
+    let ((_, output), collected) = collected(|| run(&compiled, 1_000_000));
 
     assert_eq!(output, b"863718\n", "churn(1000000) anchor");
-
-    let collections = records
-        .iter()
-        .filter(|message| message.contains("Begin GC"))
-        .count();
     assert_eq!(
-        collections, 0,
+        collected.collections, 0,
         "the spread-update loop reached the collector"
+    );
+}
+
+/// The count's positive control. `threaded_record_allocates_nothing` asserts an absence, and an absence read off a count that hears nothing holds whatever the program does, as one taken on the calling thread does of a module the engine runs on another. So a workload that reaches the collector is heard to: the chain's churn, whose collections `chain_collection_decomposition` decomposes.
+#[test]
+fn a_churning_chain_is_heard_to_collect() {
+    let compiled = compiled_of(CHAIN);
+
+    let (_, collected) = collected(|| run(&compiled, ROUNDS));
+
+    assert!(
+        collected.collections > 0,
+        "the chain churned through {ROUNDS} rounds and no collection was heard"
     );
 }
 
@@ -263,7 +259,7 @@ match input: (_) => Io({})
 end
 "#;
 
-/// The `spines` half of the heap-sizing evidence, by the method `chain_collection_decomposition` documents — `--release`, `--all-features`, timed and counted runs separate. The one difference is the subject: `spines`' live set grows toward the map's plateau instead of holding still, so an unsized heap's collections copy a growing structure and the per-insert cost is superlinear until the plateau.
+/// The `spines` half of the heap-sizing evidence, by the method `chain_collection_decomposition` documents — `--release`, timed and counted runs separate. The one difference is the subject: `spines`' live set grows toward the map's plateau instead of holding still, so an unsized heap's collections copy a growing structure and the per-insert cost is superlinear until the plateau.
 ///
 /// # What it last printed
 ///

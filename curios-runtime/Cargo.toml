@@ -14,8 +14,8 @@ workspace = true
 [features]
 # Emit a perf map for the guest, so a sampling profiler can name emitted wasm functions. Carries no dependency: the whole feature is one `Config` call, and it is spelled as a feature rather than an environment variable so profiling is a property of the build like every other `profile` in this workspace.
 profile = []
-# `GuestInstance`, for a *test* that drives an emitted module by hand — `curios-js`'s bridge suite — and `run_raw`, for one that answers a row as no adapter would. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests; a dev-dependency carries the crate, not its private test code.
-test-support = []
+# `GuestInstance`, for a *test* that drives an emitted module by hand — `curios-js`'s bridge suite — `run_raw`, for one that answers a row as no adapter would, and `collected`, for one that counts the engine's collections. The last listens on the `log` facade, the channel wasmtime reports through, which this crate names for it alone. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests; a dev-dependency carries the crate, not its private test code.
+test-support = ["dep:log"]
 
 [dependencies]
 # `ForeignStore`, which a bundle carries archived: the rows a payload's `ffi` imports are typed by cannot be recovered from the payload.
@@ -24,6 +24,7 @@ curios-abi = { workspace = true }
 curios-archive = { workspace = true }
 # The engine without a backend, on the workspace's one row for Wasmtime: `curios-cranelift` takes the same row for the compiler, so the version that precompiles a `.cwasm` and the version this crate deserializes it with cannot drift.
 wasmtime = { workspace = true, features = ["runtime", "gc", "gc-copying", "std"] }
+log = { version = "0.4.33", optional = true }
 getrandom = { version = "0.4.3" }
 socket2 = { version = "0.6.4" }
 rustix = { version = "1.1.4", features = ["event", "fs", "process", "termios"] }

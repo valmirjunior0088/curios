@@ -8,6 +8,8 @@
 //!
 //! Calls are untyped, and deliberately: they type-check dynamically against the module's declared signatures, so a call succeeding *is* the assertion that the emitted shapes are right.
 //!
+//! It counts what the engine's collector does while a program runs: [`collected`](crate::test_support::collected) listens to the engine's own announcements, which are wasmtime's strings on wasmtime's channel, the `log` facade, and so are read here beside the pin that decides them. The facade is the process's and a record reaches it from whichever thread wrote it, which matters because the engine runs a module on a thread of its own: a listener bound to the calling thread hears nothing of a run.
+//!
 //! It also runs a compiled program against replies no adapter would write: [`run_raw`](crate::test_support::run_raw) answers chosen rows of the host's, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the standard library's reading of a reply is put under test past what a host's types let it answer.
 
 use {
@@ -16,7 +18,8 @@ use {
         lower_scalars, on_guest_stack, shared_engine, words_array_type,
     },
     curios_abi::HostOp,
-    std::sync::Arc,
+    log::{LevelFilter, Log, Metadata, Record, set_logger, set_max_level},
+    std::sync::{Arc, Mutex, Once},
     wasmtime::{Caller, Instance, Linker, Memory, Store, Val},
 };
 
@@ -145,6 +148,88 @@ impl GuestInstance {
             .get_memory(&mut self.store, export)
             .ok_or_else(|| format!("missing memory export `{export}`"))
     }
+}
+
+/// Where the engine says what its collector does, at trace level: one record as each collection begins, and one for each growth of the heap.
+const GC_TARGET: &str = "wasmtime::runtime::store::gc";
+
+/// How a record on [`GC_TARGET`] says a collection began.
+const GC_BEGAN: &str = "Begin GC";
+
+/// How one says the heap grew, and to what size.
+const GC_GREW: &str = "new size is";
+
+/// What the engine's collector did during one operation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Collected {
+    /// How many collections began.
+    pub collections: usize,
+    /// The engine's own sentence for the heap's last growth, where it grew.
+    pub growth: Option<String>,
+}
+
+/// What the engine has said of its collector since a count opened, where one is open.
+static HEARD: Mutex<Option<Vec<String>>> = Mutex::new(None);
+
+/// The process's logger: it keeps what the engine says of its collector while a count is open and drops everything else unformatted.
+struct Hearing;
+
+impl Log for Hearing {
+    /// Whatever the facade's level lets through: the level is raised only while a count is open.
+    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+        true
+    }
+
+    fn log(&self, record: &Record<'_>) {
+        // The target is compared before a message is formatted, because a collection-heavy run writes per-object trace records by the million on other targets, and materializing them would swamp both memory and the run.
+        if record.target() != GC_TARGET {
+            return;
+        }
+
+        if let Some(heard) = HEARD.lock().expect("the count's lock holds").as_mut() {
+            heard.push(record.args().to_string());
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+/// Run `operation` and report what the engine's collector did meanwhile, from the engine's own records, on whatever thread they were written.
+///
+/// The facade admits one logger for the process, so this one is installed where a count is first taken and stays, with the facade's level at `Off` between counts: a build that never counts pays nothing, and a process that counts pays one relaxed atomic load for each suppressed record. A count raises the level for its duration, which prices every record the engine writes, so a duration taken inside one is no timing. Counts are taken one at a time: the level and what is heard are the process's.
+pub fn collected<T>(operation: impl FnOnce() -> T) -> (T, Collected) {
+    static INSTALL: Once = Once::new();
+    static COUNTING: Mutex<()> = Mutex::new(());
+
+    INSTALL.call_once(|| {
+        set_max_level(LevelFilter::Off);
+        set_logger(&Hearing).expect("a process that counts collections has no other logger");
+    });
+
+    let _counting = COUNTING.lock().expect("the count's turn is held");
+    *HEARD.lock().expect("the count's lock holds") = Some(Vec::new());
+
+    set_max_level(LevelFilter::Trace);
+    let result = operation();
+    set_max_level(LevelFilter::Off);
+
+    let heard = HEARD
+        .lock()
+        .expect("the count's lock holds")
+        .take()
+        .unwrap_or_default();
+    let collected = Collected {
+        collections: heard
+            .iter()
+            .filter(|message| message.contains(GC_BEGAN))
+            .count(),
+        growth: heard
+            .iter()
+            .rfind(|message| message.contains(GC_GREW))
+            .map(|message| message.trim().to_string()),
+    };
+
+    (result, collected)
 }
 
 /// One value of a raw host reply, written into the guest's result slot as it stands. No reply's type is consulted, so one can hold what no adapter would write: a status its row never answers, a code outside its table, an empty handle beside `ok`.

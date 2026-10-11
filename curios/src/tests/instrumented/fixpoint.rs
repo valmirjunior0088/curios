@@ -1,6 +1,6 @@
 //! What the Cont fixpoint costs, pass by pass.
 //!
-//! Instrumented for the reason `churn` is: the per-pass spans and fired-samples `curios_cont::optimize` carries exist only under the `profile` feature. It reports and does not assert, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
+//! Instrumented because the per-pass spans and fired-samples `curios_cont::optimize` carries exist only under the `profile` feature. It reports and does not assert, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
 
 use {
     crate::tests::TOML_DRIVER,
