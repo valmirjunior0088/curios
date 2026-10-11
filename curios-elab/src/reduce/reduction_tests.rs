@@ -5,9 +5,9 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Apply, Bound, Exhaustion, Free, InductDecl, Intrinsic, Level, MetavarId, MetavarOrigin,
-        Nat, Quality, QualityMetaId, QualityParam, ReduceError, Subterm, Telescope, Term,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
+        Apply, Atom, Bound, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId,
+        MetavarOrigin, Nat, Quality, QualityMetaId, QualityParam, ReduceError, Subterm, Telescope,
+        Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
         UniverseParam, UniverseRole, Universes, Variance,
     },
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
@@ -230,6 +230,69 @@ fn inductive_match_present_tag_ignores_default() {
     );
 
     assert_eq!(reduce(&mut context, term), Ok(nat(42)));
+}
+
+/// A match taking a proof into data stands while the instance it states holds a metavariable no solution has landed for, and fires on that instance once one has. Over `induct Zero : (n : Nat) -> Prop | zero() : (0)`, `match p | zero() => 7 end` stating `Zero(?m)` is left as it is, whether `p` is a variable or the constructor's own value, whose arm the ordinary rule would take; with `?m` solved to `0` each is `7`, the variable unread.
+///
+/// Mutation-checked: with an open instance answered as one that says nothing, the match on the constructor's value fires before the solution lands.
+#[test]
+fn a_proofs_match_stands_while_the_instance_it_states_is_open() {
+    let mut context = context();
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let index = context.fresh(Some("n"));
+    let zero = nominal("Zero");
+    context
+        .register_induct(
+            &zero,
+            InductDecl {
+                universe_context: UniverseContext::empty(),
+                arity: Telescope::done(Telescope::build([(index, nat_type.clone())], ())),
+                constructors: vec![(
+                    Atom::from("zero"),
+                    InductParam::new(Telescope::done(vec![nat(0)]), Vec::new()),
+                )],
+                result_sort: Term::prop(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .unwrap();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat_type.clone());
+
+    let stated = Term::induct_type(zero, Vec::<Term>::new(), [Term::hole(0)]);
+    let eliminated = |proof: Term| {
+        Term::induct_match(
+            proof,
+            None,
+            nat_type.clone(),
+            [("zero", Vec::<Free>::new(), nat(7))],
+        )
+        .stating(stated.clone())
+    };
+    let variable = context.fresh(Some("p"));
+    let of_a_variable = eliminated(Term::free_var(&variable));
+    let of_a_value = eliminated(Term::variant(
+        zero,
+        Vec::<Term>::new(),
+        "zero",
+        Vec::<Term>::new(),
+    ));
+
+    assert_eq!(
+        reduce(&mut context, of_a_variable.clone()),
+        Ok(of_a_variable.clone())
+    );
+    assert_eq!(
+        reduce(&mut context, of_a_value.clone()),
+        Ok(of_a_value.clone())
+    );
+
+    context.solve_metavar(MetavarId(0), nat(0));
+
+    assert_eq!(reduce(&mut context, of_a_variable), Ok(nat(7)));
+    assert_eq!(reduce(&mut context, of_a_value), Ok(nat(7)));
 }
 
 #[test]
