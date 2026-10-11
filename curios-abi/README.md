@@ -44,6 +44,14 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 **Rejected.** At most one reference result, and it last — a rule for a stack discipline no emitted call needs, since a scalar result crosses raw and is boxed in the guest, results that are not on top of the stack wait in locals, and the runtime lowers positionally. Keeping it for rows that need no locals, which splits one statement of a row's shape in two.
 
+### How a wire type crosses is stated once
+
+**Decision.** `WireType::carrier` names what each wire type crosses the boundary as at the Wasm level: a raw `i64`, `i32` or `f64` for a scalar, and for a reference the flat array its value is forced to and embedded from — bytes, longs, words, or an array of references. `curios-emit` types a module's imports by it and `curios-runtime` types what it links by it, each mapping a carrier to its own engine's type.
+
+**Rationale.** The two ends must type an import alike or the module does not instantiate, and a mapping written at each end agrees only while its two authors remember to keep it so. Stated here, a new wire type is one arm, and a new carrier does not compile at either end until that end maps it.
+
+**Rejected.** The mapping at each end with a comment to keep them alike; the Wasm types themselves in this crate, which would make the contract depend on one engine's vocabulary.
+
 ### A function is its import name, a host's row a variant, and the namespace is an enum
 
 **Decision.** A `ForeignFunction` is what a `foreign` declaration states — the fully qualified name it is declared under and its `WireSignature` — and it compares by that name, which is its import under `ffi` and the one name it has. A term that calls across the wire carries one beside the declaration that states it, whoever answers the call, and a report spells the call as a call of that declaration. `Namespace` is a two-variant enum: `ffi` for every row, and `sys` for `panic` alone. A `HostOp` is the host's side of the rows the standard library declares, and no program carries one: a variant is the row it names, its method, module, signature and requirements read back from the table, and it is its method name in CamelCase (`a_variant_is_its_method_name_in_camel_case`).
