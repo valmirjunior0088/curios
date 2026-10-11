@@ -145,6 +145,54 @@ fn a_clashing_absent_arm_is_legitimately_absent() {
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 }
 
+/// A written arm whose targets clash with the scrutinee's indices is not typed, by the answer that excuses its absence: no value of that constructor carries them, so no reduction takes the arm. `s(p)` aims at `p + 1`, the scrutinee sits at `0`, and the `s` arm holds a `Bool` where the result is `Nat`. At a variable index nothing clashes, and the same arm is refused.
+///
+/// Mutation-checked: with a clashing arm typed as written, the first elimination is refused.
+#[test]
+fn a_clashing_written_arm_is_not_typed() {
+    let over = |index: fn(&mut Kernel) -> Term| {
+        let mut kernel = kernel();
+        let payload = binder(1, "p");
+        let arm_binder = binder(10, "p");
+        let family = declare(
+            &mut kernel,
+            "Ix",
+            Term::type_ground(),
+            vec![
+                nullary("z", nat(0)),
+                carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
+            ],
+        );
+        let index = index(&mut kernel);
+        let term = eliminate(
+            &mut kernel,
+            &family,
+            index,
+            nat_type(),
+            vec![
+                ("z", Vec::new(), nat(1)),
+                (
+                    "s",
+                    vec![arm_binder],
+                    Term::intrinsic(Intrinsic::Bool(true)),
+                ),
+            ],
+        );
+
+        infer(&mut kernel, &term)
+    };
+
+    assert_eq!(over(|_| nat(0)), Ok(nat_type()));
+    assert!(
+        over(|kernel| {
+            let open = binder(0, "b");
+            kernel.assume(&open, &nat_type());
+            Term::free_var(&open)
+        })
+        .is_err()
+    );
+}
+
 /// An absent arm the unifier cannot rule out is a refusal: at a *variable* index nothing clashes, so every constructor must have an arm or a catch-all. Undecided is not absent.
 #[test]
 fn an_undecided_absent_arm_is_refused() {

@@ -28,7 +28,6 @@ pub let head(
 ) -> (y: T, Member()(y, t)) -> Holds(le(h, y)) =
     match whole: (s, _) =>
         match s | [] => True | [k, ..r] => (y: T, Member()(y, r)) -> Holds(le(k, y)) end
-    | empty() => True/qed()
     | cons(head, _) => head
     end;
 
@@ -41,7 +40,6 @@ pub let tail(
     whole: Pairwise(le)([h, ..t]),
 ) -> Pairwise(le)(t) =
     match whole: (s, _) => match s | [] => True | [_, ..r] => Pairwise(le)(r) end
-    | empty() => True/qed()
     | cons(_, rest) => rest
     end;
 

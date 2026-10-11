@@ -1407,6 +1407,49 @@ fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
     );
 }
 
+/// The outer direction's clash is held as the first direction's is: a local forced to two values a program tells apart leaves the case with no value, and one forced to two inhabitants of a proposition is forced to one value twice.
+///
+/// Actuals `(x, x)` against targets `(a(), b())`, for a case with no binder. The first direction reads a variable as what may yet be the target, and decides nothing. The second solves `x` to each target in turn. At a relevant family the two clash and the case is impossible, which is what leaves a written arm untyped by the kernel and may leave it out. At a proposition the same two convert, so the case stays reachable: read as a clash there, an arm would go unchecked on the strength of two proofs being told apart.
+#[test]
+fn an_outer_variable_forced_twice_clashes_only_where_its_forcings_are_told_apart() {
+    for (label, sort, impossible) in [
+        (
+            "a relevant family, whose two constructors a program tells apart",
+            Term::type_ground(),
+            true,
+        ),
+        (
+            "a proposition, whose two inhabitants irrelevance identifies",
+            Term::prop(),
+            false,
+        ),
+    ] {
+        let mut kernel = kernel();
+        let family = declare(&mut kernel, "Forced", sort);
+        let x = Free::local(900, Some("x"));
+        kernel.assume(
+            &x,
+            &Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new()),
+        );
+
+        let inhabitant = |tag| Term::variant(family, Vec::<Term>::new(), tag, Vec::<Term>::new());
+        let actuals = [Term::free_var(&x), Term::free_var(&x)];
+        let targets = [inhabitant("a"), inhabitant("b")];
+
+        assert!(
+            matches!(
+                invert_indices(&mut kernel, &actuals, &targets, &[]),
+                Ok(Invert::Solved(_))
+            ),
+            "{label}: the first direction decided what a variable may yet be",
+        );
+
+        let outcome =
+            solve_indices(&mut kernel, &actuals, &targets, &[]).expect("the kernel answers");
+        assert_eq!(matches!(outcome, Invert::Impossible), impossible, "{label}");
+    }
+}
+
 /// Reading an argument's size through what stands before it is a probe: where the budget cannot afford the reading, the engine answers with the refusal. Reading the argument as nothing would classify the group `Partial`, a verdict with no cause in the term that the drivers would report as non-termination. The control is the same group with the budget to read it.
 #[test]
 fn a_size_the_budget_cannot_read_refuses_the_classification() {

@@ -434,7 +434,6 @@ let layered_over(
     layered: Layered(second)([top, ..rest]),
 ) -> Across(second, flat(rest), held(top)) =
     match layered: (s, _) => match s | [] => True | [t, ..r] => Across(second, flat(r), held(t)) end
-    | bottom() => True/qed()
     | level(over, _) => over
     end;
 
@@ -446,7 +445,6 @@ let layered_below(
     layered: Layered(second)([top, ..rest]),
 ) -> Layered(second)(rest) =
     match layered: (s, _) => match s | [] => True | [_, ..r] => Layered(second)(r) end
-    | bottom() => True/qed()
     | level(_, below) => below
     end;
 

@@ -139,8 +139,10 @@ fn check_arm(
                 }
             }
 
-            // The forced equations of this case, as one substitution. An unreachable arm (a definite clash) is checked as written, exactly as the elaborator checks one.
-            let mut solutions = specialize(kernel, family, targets, binders)?;
+            // The forced equations of this case, as one substitution. Where they clash no value of the scrutinee's type is this case, so no reduction takes the arm and it is not typed: an arm a reader wrote there is the elaborator's to refuse, and one a substitution left there was typed where its indices were open.
+            let Some(mut solutions) = specialize(kernel, family, targets, binders)? else {
+                return Ok(());
+            };
 
             // The value this arm's scrutinee is: the constructor at its payload.
             let value: Term = Subterm::Variant(Variant {
@@ -247,17 +249,17 @@ pub(super) fn assume_case_value(
     Ok(())
 }
 
-/// The most-general solution of `actual indices ~ case targets`, both directions, as one idempotent substitution — the shared [`solve_indices`], which carries the rule. Empty when the equations force nothing, including when they *clash*, which makes the arm unreachable and therefore checked as written.
+/// The most-general solution of `actual indices ~ case targets`, both directions, as one idempotent substitution — the shared [`solve_indices`], which carries the rule. Empty when the equations force nothing, and `None` where they *clash*: the case is one no value of the scrutinee's type is.
 fn specialize(
     kernel: &mut Kernel,
     family: &InductType,
     targets: &[Term],
     binders: &[Free],
-) -> Result<Vec<(Free, Term)>, Error> {
+) -> Result<Option<Vec<(Free, Term)>>, Error> {
     Ok(
         match solve_indices(kernel, &family.indices, targets, binders)? {
-            Invert::Impossible => Vec::new(),
-            Invert::Solved(solutions) => solutions,
+            Invert::Impossible => None,
+            Invert::Solved(solutions) => Some(solutions),
         },
     )
 }
