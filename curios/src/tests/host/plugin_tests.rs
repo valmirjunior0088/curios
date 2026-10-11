@@ -155,6 +155,11 @@ fn declared(exports: &[(&str, &str)]) -> Vec<DeclaredModule> {
 
 /// Compile `source`, bind it against the fixture plugin, and run it, answering the exit code.
 fn run_against(source: &str, exports: &[(&str, &str)]) -> Result<u8, String> {
+    run_linked(source, declared(exports))
+}
+
+/// Compile `source`, bind it against `modules`, and run it, answering the exit code.
+fn run_linked(source: &str, modules: Vec<DeclaredModule>) -> Result<u8, String> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
@@ -167,7 +172,7 @@ fn run_against(source: &str, exports: &[(&str, &str)]) -> Result<u8, String> {
     )
     .expect("compile succeeded");
 
-    let bindings = plugin_bindings(foreigns, declared(exports))?;
+    let bindings = plugin_bindings(foreigns, modules)?;
     let (system, _io) = MockHost::builder().build();
 
     run_wasm(&module, system, bindings)
@@ -395,4 +400,21 @@ fn a_row_written_with_an_empty_operand_list_is_called() {
     .expect("execution succeeded");
 
     assert_eq!(code, 9, "the call answered");
+}
+
+/// A declaration two modules are named for is refused where the program is linked, naming it: nothing chooses between two answers.
+#[test]
+fn a_declaration_two_modules_claim_is_refused() {
+    let claim: &[(&str, &str)] = &[("double", "/double")];
+    let refusal = run_linked(
+        r#"
+        foreign double : (Nat) -> Nat;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+        /std/Io/pure(())
+        "#,
+        declared(claim).into_iter().chain(declared(claim)).collect(),
+    )
+    .expect_err("one declaration, two answers");
+
+    assert!(refusal.contains("`/double` is claimed twice"), "{refusal}");
 }
