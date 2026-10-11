@@ -93,7 +93,7 @@ fn with_async_reads_through_the_stream_witness_inside_a_fiber() {
         use /std/Monad/{Lift};
         let program: Try(Async, Io/Error, Bytes) =
             File/with_async(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
-                let _ = Async/yield_now!;
+                let _ = Async/yield_now()!;
                 let c = Lift/lift(Async/Read/read(@Async, f, 1024))!;
                 Try/pure(match c | chunk(b, @_) => b | _ => x[] end));
         let fiber: Async({}) =

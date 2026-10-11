@@ -213,7 +213,7 @@ fn a_format_past_the_evaluators_budget_still_prints() {
 fn runtime_args_leave_no_formatter_in_cont() {
     let source = r#"
         use /std/{Fmt, Nat, List, proc};
-        Fmt/print("count: %")(Nat/to_str(List/len(proc/args!)))
+        Fmt/print("count: %")(Nat/to_str(List/len(proc/args()!)))
         "#;
     assert_eq!(run(source), b"count: 0".to_vec());
 

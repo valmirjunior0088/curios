@@ -10,7 +10,7 @@ use {
 fn tainted_packed_literals_fuse_to_flat_chunks() {
     let source = r#"
         use /std/{Nat, List, Byte, Bytes, Bits, Bool, Str, proc};
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let a: Byte = match taint | 0 => 7 | _ => 9 end;
         let y: Byte = match taint | 0 => 8 | _ => 10 end;
         let bytes = x[a, y, 0x21];
@@ -47,7 +47,7 @@ fn indexed_field_store_fuses_to_flat_build() {
         | pack(items: List(Nat))
         end
 
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let pre = [taint + 1, taint + 2];
         let post = [taint + 3, taint + 4];
         let boxed = Box/pack([..pre, taint + 9, ..post]);
@@ -80,7 +80,7 @@ fn a_shared_tuple_field_settles_nothing() {
     let source = r#"
         use /std/{Nat, List, proc};
 
-        let n = List/len(proc/args!);
+        let n = List/len(proc/args()!);
         let a: {List(Nat), Nat, Nat} = ([n, 2, 3], 0, 0);
         let b: {Nat, Nat, Nat} = (7, n, 0);
         /std/print(Nat/to_str(List/len(a.0) + b.1))
@@ -105,7 +105,7 @@ fn regrown_field_store_stays_lazy() {
         | keep(items: List(Nat))
         end
 
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let grow(n: Nat, acc: Acc) -> Acc =
             match n: (_) => Acc
             | 0 => acc
@@ -141,7 +141,7 @@ fn regrown_field_store_stays_lazy() {
 fn indexed_local_concat_fuses_to_flat_build() {
     let source = r#"
         use /std/{Nat, List, Str, Option, proc};
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let a = [taint + 1, taint + 2];
         let b = [taint + 3, taint + 4];
         let joined = [..a, ..b];

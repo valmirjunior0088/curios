@@ -99,7 +99,7 @@ pub let sleep(d: Duration) -> Async({}) =
     park([Wait/elapsed(d)]);
 
 --- Park once, letting every other runnable fiber take a turn.
-pub let yield_now: Async({}) =
+pub let yield_now() -> Async({}) =
     suspend(Pause/yield_now());
 
 let acquire(g: Guard) -> Async({}) =

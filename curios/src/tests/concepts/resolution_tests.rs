@@ -243,7 +243,7 @@ fn a_premise_naming_a_constant_beside_a_binder_resolves_through_the_constant_edg
         }
         let body: Try(Async, Nat, Nat) =
             let _ = print("a")!;
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             let _ = print("b")!;
             pure(3);
         let fiber: Async({}) =

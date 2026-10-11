@@ -19,7 +19,7 @@ fn distinct_families_with_matching_tags_and_widths_compile_and_run() {
             | true => match x | wrap(n) => n | other(n) => n + 1 end
             | false => match x | wrap(n) => n | other(n) => n + 1 end
             end;
-        let n = List/len(proc/args!);
+        let n = List/len(proc/args()!);
         let a = read(true, Left/wrap(n));
         let b = read(false, Right/wrap(n + 1));
         /std/print(Nat/to_str(a + b))

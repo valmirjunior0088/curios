@@ -27,7 +27,7 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
                 let next = Bool/not(b);
                 loop(next, make(next, n + 1), n + 1, rest)
             end;
-        let n = List/len(proc/args!);
+        let n = List/len(proc/args()!);
         let b = Nat/eql(n, 1);
         /std/print(Nat/to_str(loop(b, make(b, n), n, n)))
         "#;

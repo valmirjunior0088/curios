@@ -674,7 +674,7 @@ let drive(within: List(Str), cli: Cli, argv: List(Str)) -> Io({}) =
 
 --- The entry a program hands its `Cli` to: arguments read, help and the version answered on standard output with exit 0, a refusal reported on standard error with exit 2, and otherwise the handler run. A group descends into the subcommand its first token names, to any depth, and each command answers help and its own version for itself.
 pub let main(cli: Cli) -> Io({}) =
-    let raw = proc/args!;
+    let raw = proc/args()!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;
     match decode(dropped)
     | failure(at) =>

@@ -25,7 +25,7 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
         use /std/Nat/{le};
         use /std/Bool/{Holds};
         let use_it(a: Nat, b: Nat, _p: Holds(a <= b)) -> Nat = a + b;
-        Io/bind(proc/args, (args) =>
+        Io/bind(proc/args(), (args) =>
             let n = List/len(args);
             let p = le/trans(@n, @n, @n + 1, le/refl(n), True/qed());
             proc/exit(Nat/to_byte(use_it(n, n + 1, p) % 256)))
@@ -63,7 +63,7 @@ fn an_unused_total_value_leaves_no_computation_behind() {
         use /std/{Nat, List, Io, proc};
         let count(a: Nat, b: Nat) -> Nat =
             match a | 0 => b | ap + 1 => count(ap, b + 1) end;
-        Io/bind(proc/args, (args) =>
+        Io/bind(proc/args(), (args) =>
             let n = List/len(args);
             let _unused = count(n, n);
             proc/exit(Nat/to_byte(n % 256)))
@@ -82,7 +82,7 @@ fn an_unused_partial_value_is_still_computed() {
         use /std/{Nat, List, Io, proc};
         let count(a: Nat, b: Nat) -> Nat =
             match a | 0 => b | _ + 1 => count(a, b + 1) end;
-        Io/bind(proc/args, (args) =>
+        Io/bind(proc/args(), (args) =>
             let n = List/len(args);
             let _unused = count(n, n);
             proc/exit(Nat/to_byte(n % 256)))
@@ -144,7 +144,7 @@ fn a_recursion_on_a_bound_is_fused_with_its_step() {
                 (_) => Nat,
                 (k, ih) => match k | 0 => 0 | kp + 1 => k + ih(kp, True/qed()) end,
                 n);
-        Io/bind(proc/args, (args) => proc/exit(Nat/to_byte(sum_to(List/len(args)) % 256)))
+        Io/bind(proc/args(), (args) => proc/exit(Nat/to_byte(sum_to(List/len(args)) % 256)))
         "#;
     let optimized = cont_optm(source);
     assert!(

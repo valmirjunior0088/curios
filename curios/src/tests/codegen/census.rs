@@ -1094,7 +1094,7 @@ fn step_specialization_extent() {
 fn surveys_the_fold_accumulator_region() {
     let source = r#"
         use /std/{Nat, Str, Char, List, proc};
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let n : Nat = taint;
         let text : Str = Nat/to_str(n);
         /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))))

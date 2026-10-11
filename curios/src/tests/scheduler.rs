@@ -65,7 +65,7 @@ fn block_on_returns_a_typed_value_and_awaits_a_spawned_child() {
         run(r#"
         use /std/{Async, Str, Nat, Io};
         let child : Async(Nat) =
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             let _ = Io/write(Io/stdout, Str/to_bytes("child;"))!;
             Async/pure(5);
         let root : Async(Nat) =

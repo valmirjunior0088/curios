@@ -13,7 +13,7 @@ use {
 
 // -- fixtures ---------------------------------------------------------------
 //
-// Every fixture takes a runtime taint (`List/len(proc/args!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
+// Every fixture takes a runtime taint (`List/len(proc/args()!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
 //
 // It arrives through two bindings rather than one annotated `let`, because an annotated top-level `let` is a module *item* and an item's value body is its own sequencing region — a `!` written there could not reach the program's. The unannotated binding opens the final term instead, and the annotation rides on a local `let` inside it.
 
@@ -24,7 +24,7 @@ pub(super) const LCG: &str = r#"
         | 0 => x
         | kp + 1; ih => loop(kp, 75 * x % 65537)
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     /std/print(Nat/to_str(loop(n, 1)))
     "#;
@@ -45,7 +45,7 @@ pub(super) const TREES: &str = r#"
         | leaf(n) => n % 1000003
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let d : Nat = taint;
     /std/print(Nat/to_str(sum(build(d, 1))))
     "#;
@@ -57,7 +57,7 @@ pub(super) const HIGHER_ORDER: &str = r#"
         | true => (y) => y + 1
         | false => (y) => y * 2
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     let f = pick(n <= 0);
     /std/print(Nat/to_str(f(n)))
@@ -72,7 +72,7 @@ pub(super) const DIRECT_ESCAPING: &str = r#"
         | true => g
         | false => (y) => y
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     let escaped = select(n <= 0, inc);
     /std/print(Nat/to_str(inc(n) + apply(escaped, n)))
@@ -85,7 +85,7 @@ pub(super) const FUNCTION_ONLY: &str = r#"
         | 0 => acc
         | p + 1; ih => down(p, acc + 1)
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     /std/print(Nat/to_str(down(n, 0)))
     "#;
@@ -97,7 +97,7 @@ pub(super) const MUTUAL_RECURSION: &str = r#"
         match n : (_) => Nat | 0 => 0 | p + 1; ih => pong(p) end
     and pong(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 1 | p + 1; ih => ping(p) end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     let start = n <= 0;
     /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end))
@@ -131,7 +131,7 @@ pub(super) const SPLIT_RETURN: &str = r#"
         | more(p, q, t) => (p * 2 + q + t) % 40009
         | done(r, s) => (r * 3 + s) % 40009
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     /std/print(Nat/to_str(first(n) + second(n)))
     "#;
@@ -154,7 +154,7 @@ pub(super) const UNCURRY: &str = r#"
             let c = (b * 3 + 19) % 30011;
             walk(m)(c)
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     /std/print(Nat/to_str(walk(n)(1)))
     "#;
@@ -170,7 +170,7 @@ pub(super) const UNCURRY_CAPTURED: &str = r#"
             let w = f(0);
             (m) => f(m) + w
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     let c = mk(n);
     let v = c(2);
@@ -191,7 +191,7 @@ pub(super) const LOOPED_PICK: &str = r#"
                 end;
             spin(p, f(acc) % 40009)
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     /std/print(Nat/to_str(spin(n, 1)))
     "#;
@@ -214,7 +214,7 @@ pub(super) const VARIANT_FILLER: &str = r#"
                 end;
             spin(p, next)
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint * 4 + 4;
     /std/print(Flt/to_str(spin(n, Option/none())))
     "#;
@@ -243,7 +243,7 @@ pub(super) const SHARED_PAYLOAD: &str = r#"
         | success(f) => Flt/to_str(f + +0.5)
         | failure(why) => why
         end;
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     /std/print(Str/join(" | ", [told(taint + 1), told(taint), told(taint + 3)]))
     "#;
 
@@ -257,7 +257,7 @@ pub(super) const PARSED_FLOAT: &str = r#"
         let value = digits!;
         let _ = Parse/eof()!;
         Parse/pure(value);
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let text = Str/concat(Nat/to_str(taint + 10), match taint > 99 | true => "x" | false => "" end);
     /std/print(match Parse/run(whole, text) | success(f) => Flt/to_str(f) | failure(_) => "none" end)
     "#;
@@ -278,7 +278,7 @@ pub(super) const COMPUTED_TYPE: &str = r#"
             | true => (x) => Flt/to_str(x + +0.5)
             | false => (x) => x
             end)(v);
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     /std/print(Str/join(" | ", [told(taint % 2 == 0, taint + 2), told(taint % 2 == 1, taint + 3)]))
     "#;
 
@@ -287,7 +287,7 @@ pub(super) const COMPUTED_TYPE: &str = r#"
 /// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in the scan `/std/Str/Valid/try` runs over every byte, whose allocations would swamp the claim. What is left is the walk itself.
 pub(super) const STRING_WALK: &str = r#"
     use /std/{Nat, Str, Char, List, proc};
-    let taint = List/len(proc/args!);
+    let taint = List/len(proc/args()!);
     let n : Nat = taint;
     let text : Str = Nat/to_str(n);
     /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))))
@@ -525,7 +525,7 @@ pub(super) fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
     set
 }
 
-/// Run the raw (Binaryen-free) module: Cranelift-compile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args!`, which drives the taint.
+/// Run the raw (Binaryen-free) module: Cranelift-compile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args()!`, which drives the taint.
 pub(super) fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let (module, foreigns) = compile_raw_program(source);
     let compiled = Compiled::compile(&to_bytes(&module), foreigns)

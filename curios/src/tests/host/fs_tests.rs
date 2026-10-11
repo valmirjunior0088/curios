@@ -70,7 +70,7 @@ fn directories_are_made_moved_and_removed_whole() {
             let moved = fs/is_file(Path/of_str("x/w/z/f.txt"))!;
             let _ = fs/remove_all(Path/of_str("x"))!;
             let gone = fs/exists(Path/of_str("x"))!;
-            let here = fs/cwd!;
+            let here = fs/cwd()!;
             Try/pure(Str/join(" ", [Bool/to_str(made), text(back), Bool/to_str(moved), Bool/to_str(gone), Show/show(here)]))
         "#,
     );

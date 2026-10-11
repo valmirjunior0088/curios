@@ -240,7 +240,7 @@ fn a_try_region_over_async_takes_every_declared_edge() {
             Try/pure(n * 2);
         pub let body: Try(Async, Str, Nat) =
             let a = sync(2)!;
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             let _ = print("a")!;
             let b = Result/success(a + 1)!;
             let _ = Result/raise(@Str, @{}, "stop")!;
@@ -291,7 +291,7 @@ fn a_try_action_lifts_by_the_base_its_context_argument_was_declared_over() {
             Try/raise("e");
         pub let rescued: Try(Async, Str, {}) =
             let n = Try/rescue(step, (e) => Try/pure(4))!;
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             let _ = print(Nat/to_str(n))!;
             Try/pure(());
         pub let fiber: Async({}) =
@@ -312,7 +312,7 @@ fn an_unreadable_action_of_another_monad_is_reported_at_its_own_bang() {
     let source = r#"
         use /std/{Nat, Async, Io, print};
         let fiber: Async({}) =
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             let _ = print("a")!;
             let acts = (print("b"), 1);
             let _ = acts.0!;
@@ -360,7 +360,7 @@ fn an_io_action_lifts_into_an_async_region() {
         use /std/{Async, print};
         pub let fiber: Async({}) =
             let _ = print("a")!;
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             let _ = print("b")!;
             Async/pure(());
         Async/run(fiber)
@@ -375,7 +375,7 @@ fn an_io_tail_lifts_into_an_async_region() {
     let source = r#"
         use /std/{Async, Bool, print};
         pub let fiber(flag: Bool) -> Async({}) =
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             match flag
             | true => print("t")
             | false => print("f")
@@ -405,7 +405,7 @@ fn a_tail_with_no_edge_reports_the_lift_witness() {
             bind = jbind,
         }
         pub let job: Job({}) =
-            Async/yield_now;
+            Async/yield_now();
         job.0
         "#;
 
@@ -448,7 +448,7 @@ fn a_missing_edge_reports_the_lift_witness() {
             bind = jbind,
         }
         pub let job: Job({}) =
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             jpure(());
         job.0
         "#;
@@ -588,7 +588,7 @@ fn embeddings_do_not_chain_through_a_middle_monad() {
             lift(action) = Job { action },
         }
         pub let job: Job({}) =
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             jpure(());
         job.0
         "#;

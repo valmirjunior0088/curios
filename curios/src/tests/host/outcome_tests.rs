@@ -148,7 +148,7 @@ fn a_filesystem_row_s_failure_is_the_error_it_names() {
                 vec![(HostOp::DirRemove, denied(vec![]))],
             ),
             (
-                "let _ = fs/cwd!; Try/pure(())",
+                "let _ = fs/cwd()!; Try/pure(())",
                 vec![(HostOp::ProcCwd, denied(vec![bytes(b"")]))],
             ),
         ],
@@ -175,7 +175,7 @@ fn a_device_row_s_failure_is_the_error_it_names() {
                 vec![(HostOp::SerialOpen, denied(vec![bytes(b"")]))],
             ),
             (
-                "let _ = Serial/list!; Try/pure(())",
+                "let _ = Serial/list()!; Try/pure(())",
                 vec![(
                     HostOp::SerialList,
                     denied(vec![RawValue::BytesList(vec![])]),
@@ -443,7 +443,7 @@ fn a_bytes_payload_arrives_whole() {
     let compiled = compile(
         r#"
         use /std/{Io, Path, Try, fs};
-        let r = Try/run(fs/cwd)!;
+        let r = Try/run(fs/cwd())!;
         match r | success(p) => Io/write(Io/stdout, Path/to_bytes(p)) | failure(_) => Io/pure(()) end
         "#,
     )

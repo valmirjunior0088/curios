@@ -122,7 +122,7 @@ fn closure_index_dispatch_measurements() {
 /// | mutual-recursion | 0 | 90 |
 /// | split-return | 1 | 91 |
 ///
-/// **The zeroes are not a null result, they are the wrong corpus for the question.** These fixtures take their runtime taint from `proc/args!` and never read stdin, so none of them reaches the UTF-8 decode path where the protocol actually fires. What they do establish is that the pass is inert everywhere it has no candidate — which is most places.
+/// **The zeroes are not a null result, they are the wrong corpus for the question.** These fixtures take their runtime taint from `proc/args()!` and never read stdin, so none of them reaches the UTF-8 decode path where the protocol actually fires. What they do establish is that the pass is inert everywhere it has no candidate — which is most places.
 ///
 /// The allocation counts are taken pre-Binaryen, so some of what the pass removes earlier, Binaryen may remove later; only a runtime figure accounts for that. Toggling the pass on `programs/parse_digits.crs` and nothing else moved `user` time by one to two percent (debug compiler): the per-character loop is not allocation-bound on the tuple the protocol removes.
 #[test]

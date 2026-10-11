@@ -8,7 +8,7 @@ A statement that does not finish where its unit is erased runs when a program st
 
 ## What is known
 
-- **Four values of `/std` are linked into every program so.** Each still applies something at its top level in the erased rung of the one-line program `/std/print("ok")` (`curios wonder stage ersd`): the two recursive parsers `/std/Json/decode/decode` and `/std/Html/parse/content`, and the two `Io` values `/std/fs/cwd` and `/std/Serial/list`. That program's optimizer drops all four; one that reaches a recursion the optimizer cannot see return, or that allocates, stays.
+- **Two values of `/std` are linked into every program so.** Each still applies something at its top level in the erased rung of the one-line program `/std/print("ok")` (`curios wonder stage ersd`): the two recursive parsers `/std/Json/decode/decode` and `/std/Html/parse/content`. An effect of `/std` that takes no argument is a function of none, so none is among them. That program's optimizer drops both; one that reaches a recursion the optimizer cannot see return, or that allocates, stays.
 - **One suite notices such a value and none names it.** `curios`'s `tests::codegen::structural::loop_tests` hold that a small program allocates no environment of its own.
 - **The finding is exact, and decided later than a lint is today.** The four lints are zeros read off name resolution, decided in `into_core`, always on, with nothing to configure ([A lint is an exact finding read off the compilation](../../design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md)). Whether a value's statements finish where its unit is erased is a fact of the unit's erased forms, with no false positive either, and known two stages after names resolve.
 
@@ -17,6 +17,6 @@ A statement that does not finish where its unit is erased runs when a program st
 - The rule as erasure states it: which statements of an erased value still compute, an application, an allocation and a recursion among them, and whether a value every program's optimizer drops is reported.
 - Where the finding is decided and how it travels with its unit, since a lint is filed with the lowered unit and this one is read off the erased one; and what `wonder diagnostics` and the server show of a unit erasure has not reached.
 - What the report says the remedy is. A lint is fixed by changing the program, and the change here is a function in the value's place or a value that finishes where its unit is compiled.
-- What becomes of the four values of `/std`: the two `Io` values, which a function in their place respells at every use, and the two parsers, whose recursion runs through the value, so that a function in its place builds the parser again at each call.
+- What becomes of the two values of `/std`, the parsers, whose recursion runs through the value, so that a function in its place builds the parser again at each call.
 
 It retires when the two programs above are reported, a value finished where its unit is erased is not, and no value of `/std` is.

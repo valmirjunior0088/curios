@@ -184,7 +184,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         | pair(Nat, Nat)
         end
 
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let g = match taint | 0 => Gauge/tiny(7) | _ => Gauge/pair(taint, taint) end;
         match g
         | tiny(n) => /std/print(Str/concat(Nat/to_str(n), "\n"))
@@ -199,7 +199,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         | pair(Nat, Nat)
         end
 
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let g = match taint | 0 => Gauge/tiny(x[7]) | _ => Gauge/pair(taint, taint) end;
         match g
         | tiny(inner) => /std/print(Str/concat(Nat/to_str(Bytes/len(inner)), "\n"))
@@ -227,7 +227,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         | pair(Nat, Nat)
         end
 
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let g = match taint | 0 => Gauge/tiny(b[1]) | _ => Gauge/pair(taint, taint) end;
         match g
         | tiny(inner) => /std/print(Str/concat(Nat/to_str(Bits/len(inner)), "\n"))
@@ -250,7 +250,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
 fn small_bits_ride_the_immediate_and_overflow_boxes() {
     let source = r#"
         use /std/{Nat, List, Bits, Bool, Str, proc};
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let t: Bool = taint == 0;
         let small = b[t, 1, 0, t];
         let grown = b[..small, 1];
@@ -282,7 +282,7 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
         | right(Nat)
         end
 
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let flag : Bool = taint == 0;
         let decide(n : Nat, acc : Nat) -> Nat =
             match n : (_) => Nat
@@ -321,7 +321,7 @@ fn a_tuple_is_read_at_its_own_final_type() {
         | link(Nat, Chain)
         end
 
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let build(n : Nat, acc : Chain) -> Chain =
             match n : (_) => Chain
             | 0 => acc
@@ -384,7 +384,7 @@ fn a_monomorphic_slot_carries_its_own_type() {
         | link(Nat, Chain)
         end
 
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let build(n : Nat, acc : Chain) -> Chain =
             match n : (_) => Chain
             | 0 => acc

@@ -311,7 +311,7 @@ fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
     write(
         &root,
         "args.crs",
-        "use /std/{Str, Bytes, List, Show, Io, proc};\nlet args = proc/args!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))))\n",
+        "use /std/{Str, Bytes, List, Show, Io, proc};\nlet args = proc/args()!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))))\n",
     );
     let output = Command::new(env!("CARGO_BIN_EXE_curios"))
         .current_dir(&root)

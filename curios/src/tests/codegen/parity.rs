@@ -21,14 +21,14 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
         use /std/{Nat, List, Str, proc};
         use /std/ops/{Add};
         pub let bump(x : Nat) -> Nat = Add/add(x, 1);
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(bump(n)))
         "#;
     let direct = r#"
         use /std/{Nat, List, Str, proc};
         pub let bump(x : Nat) -> Nat = Nat/add(x, 1);
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(bump(n)))
         "#;
@@ -36,12 +36,12 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
     assert_eq!(operations(through_concept), operations(direct),);
 }
 
-/// `choose` desugars to exactly the nested boolean matches a user would hand-write: `choose | c0 => b0 | c1 => b1 | _ => d end` is `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`. Both lower through the same core `bool_match` nesting, so they emit the same intrinsic operations — the two forms mint metavars in a slightly different order, which only permutes the emission order of the top-level specialized closures (their bodies are identical), so `operations()` is the exact comparison. A runtime operand (`List/len(proc/args!)`) keeps the ladder from folding to a constant.
+/// `choose` desugars to exactly the nested boolean matches a user would hand-write: `choose | c0 => b0 | c1 => b1 | _ => d end` is `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`. Both lower through the same core `bool_match` nesting, so they emit the same intrinsic operations — the two forms mint metavars in a slightly different order, which only permutes the emission order of the top-level specialized closures (their bodies are identical), so `operations()` is the exact comparison. A runtime operand (`List/len(proc/args()!)`) keeps the ladder from folding to a constant.
 #[test]
 fn choose_matches_hand_nested_bool_codegen() {
     let ladder = r#"
         use /std/{Nat, List, Str, proc};
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let n : Nat = taint;
         let result =
             choose
@@ -53,7 +53,7 @@ fn choose_matches_hand_nested_bool_codegen() {
         "#;
     let nested = r#"
         use /std/{Nat, List, Str, proc};
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let n : Nat = taint;
         let result =
             match n <= 0
@@ -80,7 +80,7 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
             | some(x) = o => x + 10
             | _ => 99
             end;
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(f(Option/some(n))))
         "#;
@@ -91,7 +91,7 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
             | some(x) => x + 10
             | _ => 99
             end;
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(f(Option/some(n))))
         "#;
@@ -106,14 +106,14 @@ fn concept_comparison_matches_direct_intrinsic_codegen() {
         use /std/{Nat, Bool, List, Str, proc};
         use /std/ops/{Cmp};
         pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let n : Nat = taint;
         /std/print(Bool/to_str(small(n)))
         "#;
     let direct = r#"
         use /std/{Nat, Bool, List, Str, proc};
         pub let small(x : Nat) -> Bool = Nat/lt(x, 10);
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         let n : Nat = taint;
         /std/print(Bool/to_str(small(n)))
         "#;

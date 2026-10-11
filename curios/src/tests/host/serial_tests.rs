@@ -158,7 +158,7 @@ fn opens_are_refused_by_name() {
 fn list_names_the_devices_the_host_has_and_is_empty_without_any() {
     let source = r#"
         use /std/{Str, List, Show, Try, Io, Serial};
-        match Try/run(Serial/list)!
+        match Try/run(Serial/list())!
         | success(ports) => /std/print(Str/join(",", List/map(ports, (p) => Show/show(p))))
         | failure(e) => /std/print(Show/show(e))
         end

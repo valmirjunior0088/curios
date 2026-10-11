@@ -14,7 +14,7 @@ fn args_indexes_the_argv_snapshot() {
     // argv crosses as a host-built `List(Bytes)`; indexing it round-trips one entry.
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     run_text(r#"
-let _ = std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args!, 1), x[]))!;
+let _ = std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args()!, 1), x[]))!;
 /std/Io/pure(())
 "#,
         system,
@@ -256,9 +256,9 @@ fn a_cancelled_task_kills_the_child_it_spawned() {
                 let child = Command/spawn(Command/new("sleepy", []))!;
                 Child/with(child, Async/sleep(/std/time/Duration/of(60, 0)));
             let task = Async/spawn(Try/run(body))!;
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             let _ = Async/cancel(task)!;
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             Try/pure("cancelled")
         "#,
     );

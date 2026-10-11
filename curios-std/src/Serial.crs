@@ -154,7 +154,7 @@ let drained(@A: Type, s: Serial, body: Try(Async, Io/Error, A)) -> Try(Async, Io
     Try/pure(a);
 
 --- The serial devices the host has, each by a path `open` takes, in byte order, and none where it has none. On Linux a device is named by its entry of `/dev/serial/by-id` where the system keeps one — a name that carries its vendor, product and serial number, and outlives the order devices were plugged in — and by its node otherwise, as an onboard port is `/dev/ttyS0`; on macOS by its callout device, `/dev/cu.` and its name.
-pub let list: Try(Io, Io/Error, List(Path)) =
+pub let list() -> Try(Io, Io/Error, List(Path)) =
     let reply = serial_list()!;
     match reply.status == /sys/status/ok
     | true => Try/pure(List/map(reply.paths, Path/of_bytes))

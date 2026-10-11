@@ -87,7 +87,7 @@ fn with_raw_async_brackets_a_parking_body_inside_a_fiber() {
     let source = r#"
         use /std/{Nat, Show, Try, Async, Io, Tty};
         let body: Try(Async, Io/Error, Nat) =
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             Try/pure(7);
         let fiber: Async({}) =
             let r = Try/run(Tty/with_raw_async(Tty/stdin, body))!;

@@ -118,7 +118,7 @@ let run_all(tests: List({Str, () -> Test})) -> Io(Bool) =
 
 --- The tail `curios test` runs: it performs each named test, reports what each came to, and answers whether every one held.
 pub let main(tests: List({Str, () -> Test})) -> Io(Bool) =
-    let arguments = proc/args!;
+    let arguments = proc/args()!;
     match List/try_get(arguments, 1)
     | some(raw) =>
         match parse_index(raw)

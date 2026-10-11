@@ -167,7 +167,7 @@ fn a_convoy_in_a_hot_loop_allocates_no_closure() {
             end(Eq/refl());
         let loop(k: Nat, x: Nat) -> Nat =
             match k | 0 => x | kp + 1 => loop(kp, step(x) % 65537) end;
-        let taint = List/len(proc/args!);
+        let taint = List/len(proc/args()!);
         /std/print(Nat/to_str(loop(taint, 7)))
         "#;
 

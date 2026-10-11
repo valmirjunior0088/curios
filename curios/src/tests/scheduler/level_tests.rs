@@ -16,7 +16,7 @@ fn a_lifted_fill_wakes_a_job_once_across_duplicate_waits() {
             let task = Async/spawn(waiter())!;
             let _ = Async/lift(Cell/fill(c, 7))!;
             let n = Async/join(task)!;
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             print(Nat/to_str(n));
         Async/run(fiber)
     "#),
@@ -72,7 +72,7 @@ fn a_losing_registration_neither_takes_a_later_message_nor_acknowledges_it() {
             let _ = Async/join(selecting)!;
             let ack = Cell/new(@{})!;
             let _ = Channel/send(messages.0, (7, ack))!;
-            let _ = Async/yield_now!;
+            let _ = Async/yield_now()!;
             let _ = print(match Cell/poll(ack)! | none() => "unacknowledged " | some(_) => "acknowledged " end)!;
             let got = Channel/recv(messages.1)!;
             match got

@@ -227,7 +227,7 @@ fn a_reassociated_product_agrees_with_the_written_one() {
              let k(n: Nat) -> Nat = match n == 1 | true => 0 | false => 65536 end;\n\
              let prod(n: Nat) -> Nat =\n\
              match n | 0 => 1 | p + 1; _ => {combine} end;\n\
-             Fmt/print(\"%\")(Nat/to_str(prod(List/len(proc/args!))))\n"
+             Fmt/print(\"%\")(Nat/to_str(prod(List/len(proc/args()!))))\n"
         )
     };
     let answer = |combine: &str| {

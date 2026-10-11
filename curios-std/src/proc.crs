@@ -4,7 +4,7 @@ use /std/{Byte, Bytes, List, Str, Option, Io};
 foreign proc_args() -> List(Bytes);
 
 --- The arguments this process was started with, each as the bytes it arrived as.
-pub let args: Io(List(Bytes)) =
+pub let args() -> Io(List(Bytes)) =
     proc_args();
 
 --- The environment variable of this name: `ok` beside its value, or another status where it has none.

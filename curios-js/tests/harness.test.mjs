@@ -394,7 +394,7 @@ test("a program that reads its arguments is refused by the row, which has none t
   await stopped(
     `
 use /std/{List, Nat, print};
-let args = /std/proc/args!;
+let args = /std/proc/args()!;
 print(Nat/to_str(List/len(args)))
 `,
     {},

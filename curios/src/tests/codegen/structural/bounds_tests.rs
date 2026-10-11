@@ -6,7 +6,7 @@ use super::{functions, wat};
 const READS_EVERY_CARRIER: &str = r#"
     use /std/{Nat, Byte, Bytes, Bits, List, Option, Io, proc};
 
-    Io/bind(proc/args, (args) =>
+    Io/bind(proc/args(), (args) =>
         let values = List/map(args, (a) => 1);
         let bytes = Bytes/join(x[], args);
         let bits = Bits/flatten(List/map(args, (a) => b[]));

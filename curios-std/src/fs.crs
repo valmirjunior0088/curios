@@ -68,13 +68,6 @@ pub struct Metadata: pub Type {
     mtime: Timestamp,
 }
 
---- The outcome a row's bare status names.
-let outcome(status: Nat) -> Try(Io, Io/Error, {}) =
-    match status == /sys/status/ok
-    | true => Try/pure(())
-    | false => Try/raise(Io/Error/of(status))
-    end;
-
 --- What is at `path`. A kind the host names by no code this library knows is a failure no errno names.
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
     let reply = file_stat(Path/to_bytes(path))!;
@@ -122,25 +115,37 @@ pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
 --- A directory at `path`, whose parent must exist.
 pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
     let status = dir_create(Path/to_bytes(path))!;
-    outcome(status);
+    match status == /sys/status/ok
+    | true => Try/pure(())
+    | false => Try/raise(Io/Error/of(status))
+    end;
 
 --- Remove the empty directory at `path`.
 pub let remove_dir(path: Path) -> Try(Io, Io/Error, {}) =
     let status = dir_remove(Path/to_bytes(path))!;
-    outcome(status);
+    match status == /sys/status/ok
+    | true => Try/pure(())
+    | false => Try/raise(Io/Error/of(status))
+    end;
 
 --- Remove the file at `path`.
 pub let remove_file(path: Path) -> Try(Io, Io/Error, {}) =
     let status = file_remove(Path/to_bytes(path))!;
-    outcome(status);
+    match status == /sys/status/ok
+    | true => Try/pure(())
+    | false => Try/raise(Io/Error/of(status))
+    end;
 
 --- Move what is at `from` to `to`.
 pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
     let status = file_rename(Path/to_bytes(from), Path/to_bytes(to))!;
-    outcome(status);
+    match status == /sys/status/ok
+    | true => Try/pure(())
+    | false => Try/raise(Io/Error/of(status))
+    end;
 
 --- The working directory.
-pub let cwd: Try(Io, Io/Error, Path) =
+pub let cwd() -> Try(Io, Io/Error, Path) =
     let reply = proc_cwd()!;
     match reply.status == /sys/status/ok
     | true => Try/pure(Path/of_bytes(reply.path))

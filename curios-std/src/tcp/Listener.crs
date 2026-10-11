@@ -25,25 +25,24 @@ foreign tls_server_config(Bytes, Bytes) -> {status: Nat, handle: Handle};
 --- Upgrade this socket to a TLS server stream under this configuration: `ok`, or the status of the failure.
 foreign tls_start_server(Handle, Handle) -> Nat;
 
---- The outcome a row's bare status names.
-let ok(status: Nat) -> Try(Io, Io/Error, {}) =
-    match status == /sys/status/ok
-    | true => Try/pure(())
-    | false => Try/raise(Io/Error/of(status))
-    end;
-
-let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
+--- The socket `h` closed and the failure `status` names raised: what a listener that could not be made answers, with nothing of it left open.
+let closed_raising(@A: Type, h: Handle, status: Nat) -> Try(Io, Io/Error, A) =
     let _ = Handle/close(h)!;
-    Try/raise(e);
+    Try/raise(Io/Error/of(status));
 
 let bind_listen(addr: Bytes) -> Try(Io, Io/Error, Listener) =
     let h = opened(addr)!;
     let _ = socket_set_reuseaddr(h, true)!;
     let bound = socket_bind(h, addr)!;
-    let _ = Try/rescue(ok(bound), (e) => close_raising(h, e))!;
-    let listening = socket_listen(h, 128)!;
-    let _ = Try/rescue(ok(listening), (e) => close_raising(h, e))!;
-    Try/pure(Listener { h });
+    match bound == /sys/status/ok
+    | false => closed_raising(h, bound)
+    | true =>
+        let listening = socket_listen(h, 128)!;
+        match listening == /sys/status/ok
+        | false => closed_raising(h, listening)
+        | true => Try/pure(Listener { h })
+        end
+    end;
 
 --- A listener bound to `host` at `port`, the address reusable so a restart does not wait out the previous socket.
 pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
