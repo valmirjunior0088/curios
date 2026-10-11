@@ -13,7 +13,9 @@
 //! The ABI is the raw one every wasm toolchain already emits: a scalar crosses as itself, a byte string as a `(ptr, len)` pair into the plugin's memory, and a byte-string result comes back as the same pair through wasm's multi-value return. The plugin exports its `memory` and an allocator; what it is called and what it takes are [`ALLOC`] and the conformance check below.
 
 use {
-    super::{Answers, ForeignBindings, Lift, Lower, Returned, shared_engine},
+    super::{
+        Answers, BundledPlugin, ForeignBindings, Lift, Lower, Stated, Trampoline, shared_engine,
+    },
     curios_abi::{ForeignFunction, ForeignStore, WireReturn, WireType},
     std::{collections::BTreeMap, sync::Arc},
     wasmtime::{Caller, ExternType, Func, Linker, Memory, Module, Store, TypedFunc, Val},
@@ -97,6 +99,10 @@ struct Row {
 pub(crate) struct Plugin {
     /// What a refusal names: the module, and the package whose manifest declared it.
     subject: String,
+    /// The module as its package declared it, for a bundle to carry.
+    package: String,
+    name: String,
+    exports: BTreeMap<String, String>,
     compiled: Module,
     /// Whether the module follows the canonical ABI's conventions, which its allocator's name says.
     canonical: bool,
@@ -156,10 +162,18 @@ impl Plugin {
 
         Ok(Self {
             subject,
+            package: module.package.clone(),
+            name: module.name.clone(),
+            exports: module.exports.clone(),
             compiled,
             canonical,
             rows: Vec::new(),
         })
+    }
+
+    /// The rows the module was resolved for, each as the program declares it.
+    pub(crate) fn answers(&self) -> impl Iterator<Item = &Arc<ForeignFunction>> {
+        self.rows.iter().map(|row| &row.function)
     }
 
     /// The names the module exports, for a refusal to list.
@@ -217,23 +231,22 @@ impl Plugin {
             let released = instance.get_func(&mut *store, &format!("cabi_post_{}", row.export));
             let plugin = Arc::clone(self);
             let instantiated = instantiated.clone();
-            let signature = row.function.signature();
+            let entered: Trampoline = Arc::new(move |mut caller, given, answered| {
+                plugin.rows[index].call(
+                    &plugin.subject,
+                    &instantiated,
+                    function,
+                    released,
+                    &mut caller,
+                    given,
+                    answered,
+                )
+            });
 
-            answers.answer_raw(
+            answers.record(
                 row.function.name().to_string(),
-                signature.params.clone(),
-                Returned::declared(&signature.returns),
-                move |mut caller, given, answered| {
-                    plugin.rows[index].call(
-                        &plugin.subject,
-                        &instantiated,
-                        function,
-                        released,
-                        &mut caller,
-                        given,
-                        answered,
-                    )
-                },
+                Stated::declared(&row.function),
+                entered,
             );
         }
 
@@ -614,6 +627,26 @@ impl Row {
                 Ok(())
             }
         }
+    }
+}
+
+impl ForeignBindings {
+    /// The modules resolved here as a bundle carries them, each as the machine code a launcher reads back. What was resolved and held to the program's rows is what travels: nothing is compiled a second time, and no other module can stand in the executable for the one that was checked.
+    #[cfg(feature = "cranelift")]
+    pub fn bundled(&self) -> Result<Vec<BundledPlugin>, String> {
+        self.modules
+            .iter()
+            .map(|module| {
+                Ok(BundledPlugin {
+                    package: module.package.clone(),
+                    name: module.name.clone(),
+                    exports: module.exports.clone(),
+                    payload: module.compiled.serialize().map_err(|error| {
+                        format!("{} could not be written out: {error}", module.subject)
+                    })?,
+                })
+            })
+            .collect()
     }
 }
 

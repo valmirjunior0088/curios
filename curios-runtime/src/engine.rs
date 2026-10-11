@@ -130,7 +130,7 @@ fn wire_func_type(engine: &Engine, params: &[WireType], results: &[WireType]) ->
 }
 
 /// A type-erased implementation of one import: the closure wasmtime calls, already wrapped in its [`Lift`] and [`Reply`] plumbing.
-type Trampoline =
+pub(crate) type Trampoline =
     Arc<dyn Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
 /// What a call comes back with, as the type of what answers it states: the wire types that cross, in order, or nothing ever.
@@ -168,62 +168,51 @@ impl fmt::Display for Returned {
     }
 }
 
-/// One answer to a row: the wire types it takes and what it comes back with, as its implementation states them, and how it is entered.
+/// What an answer takes and comes back with, as its implementation states them: what the link holds to the row.
 #[derive(Clone)]
-struct Answer {
+pub(crate) struct Stated {
     params: Vec<WireType>,
     returned: Returned,
-    trampoline: Trampoline,
 }
 
-/// Answers by the name each row is declared under: the one registry a run links from, whoever filled it. An embedder's closures and a package's modules fill one ([`ForeignBindings`]) and a host's own methods another ([`host_rows`]), and nothing tells the two kinds of answer apart but which was asked first.
-#[derive(Clone, Default)]
-pub(crate) struct Answers {
-    rows: HashMap<String, Answer>,
+impl Stated {
+    /// What a row's own declaration states: what an answer resolved against the row itself crosses as.
+    pub(crate) fn declared(function: &ForeignFunction) -> Self {
+        let signature = function.signature();
+
+        Self {
+            params: signature.params.clone(),
+            returned: Returned::declared(&signature.returns),
+        }
+    }
+}
+
+/// Answers by the name each row is declared under: the one registry a link reads, whoever filled it. An embedder's closures and a package's modules fill one ([`ForeignBindings`]) and a host's own methods another ([`host_rows`]), and nothing tells the two kinds of answer apart but which was asked first.
+///
+/// Each answer stands beside `T`, how it is entered: a [`Trampoline`] where a program is run, and nothing where its link is only checked ([`ForeignBindings::check`]). The comparison is the same code either way.
+#[derive(Clone)]
+pub(crate) struct Answers<T = Trampoline> {
+    rows: HashMap<String, (Stated, T)>,
     /// The names answered more than once, in the order the second answer arrived: what the link refuses, since [`ForeignBindings::define`] refuses nothing.
     twice: Vec<String>,
 }
 
-impl Answers {
-    /// Answer the row declared as `name` with a typed closure: its operands and its reply are the closure's own types, which the link holds to the row.
-    fn answer<Li, Lo, F>(&mut self, name: String, f: F)
-    where
-        Li: Lift,
-        Lo: Reply,
-        F: Fn(Li) -> Lo + Send + Sync + 'static,
-    {
-        self.answer_raw(
-            name,
-            Li::shape(),
-            Lo::returned(),
-            move |mut caller, params, results| {
-                f(Li::lift(&mut caller, params)?).reply(&mut caller, results)
-            },
-        );
+impl<T> Default for Answers<T> {
+    fn default() -> Self {
+        Self {
+            rows: HashMap::new(),
+            twice: Vec::new(),
+        }
     }
+}
 
-    /// Answer the row declared as `name` with a trampoline that marshals for itself, stating what it takes and comes back with.
-    ///
-    /// [`answer`](Self::answer) is the door for an implementation written against Rust types, where the signature is known where the closure is written and `Lift`/`Lower` pick themselves from it. A module's is not: its marshalling is decided by a [`WireSignature`](curios_abi::WireSignature) read at run time, so the closure has to see the raw slots and choose.
-    pub(crate) fn answer_raw<F>(
-        &mut self,
-        name: String,
-        params: Vec<WireType>,
-        returned: Returned,
-        f: F,
-    ) where
-        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
-    {
-        let answer = Answer {
-            params,
-            returned,
-            trampoline: Arc::new(f),
-        };
-
+impl<T> Answers<T> {
+    /// Record the answer to the row declared as `name`: what it states, and how it is entered.
+    pub(crate) fn record(&mut self, name: String, stated: Stated, entered: T) {
         match self.rows.entry(name) {
             Entry::Occupied(taken) => self.twice.push(taken.key().clone()),
             Entry::Vacant(free) => {
-                free.insert(answer);
+                free.insert((stated, entered));
             }
         }
     }
@@ -248,6 +237,27 @@ impl Answers {
             None => Ok(()),
         }
     }
+}
+
+impl Answers {
+    /// Answer the row declared as `name` with a typed closure: its operands and its reply are the closure's own types, which the link holds to the row.
+    fn answer<Li, Lo, F>(&mut self, name: String, f: F)
+    where
+        Li: Lift,
+        Lo: Reply,
+        F: Fn(Li) -> Lo + Send + Sync + 'static,
+    {
+        self.record(
+            name,
+            Stated {
+                params: Li::shape(),
+                returned: Lo::returned(),
+            },
+            Arc::new(move |mut caller, params, results| {
+                f(Li::lift(&mut caller, params)?).reply(&mut caller, results)
+            }),
+        );
+    }
 
     /// Replace how the row declared as `name` is entered with a trampoline that marshals for itself — how a test puts a reply in front of the guest that no checked answer would give.
     #[cfg(feature = "test-support")]
@@ -258,7 +268,7 @@ impl Answers {
         self.rows
             .get_mut(name)
             .unwrap_or_else(|| panic!("nothing here answers `{name}`"))
-            .trampoline = Arc::new(f);
+            .1 = Arc::new(f);
     }
 }
 
@@ -287,21 +297,79 @@ impl ForeignBindings {
     {
         self.answers.answer(name.to_string(), f);
     }
+
+    /// Whether an answer here stands for the row declared as `name`: an embedder's closure, or a module resolved for it.
+    pub fn answers(&self, name: &str) -> bool {
+        self.answers.rows.contains_key(name)
+            || self
+                .modules
+                .iter()
+                .any(|module| module.answers().any(|row| row.name() == name))
+    }
+
+    /// Link the program whose rows are `foreigns` as a run under this runtime's host would, entering nothing: every row is held to what stands to answer it, by the comparison a run makes, and what a run would refuse where it begins is refused here. What writes an executable asks this first, since a launcher has these bindings and this host and no other.
+    pub fn check(&self, foreigns: &ForeignStore) -> Result<(), String> {
+        let mut bindings = Answers::<()> {
+            rows: self
+                .answers
+                .rows
+                .iter()
+                .map(|(name, (stated, _))| (name.clone(), (stated.clone(), ())))
+                .collect(),
+            twice: self.answers.twice.clone(),
+        };
+        for module in &self.modules {
+            for row in module.answers() {
+                bindings.record(row.name().to_string(), Stated::declared(row), ());
+            }
+        }
+        bindings.admit(foreigns)?;
+
+        let host = host_stated();
+        for row in foreigns.iter() {
+            answering(foreigns, &bindings, &host, row.name())?;
+        }
+
+        Ok(())
+    }
 }
 
-/// Define the `ffi` import declared as `name` into `linker`: the row as the program declares it, the first answer among `bindings`' and the host's, and the two held to each other. Who answers a row is decided here, by what was linked, and nothing in the program says which.
-fn link(
-    linker: &mut Linker<()>,
-    engine: &Engine,
-    foreigns: &ForeignStore,
-    bindings: &Answers,
-    host: &Answers,
+/// Whether this runtime's host answers the row declared as `name`: one of the rows of `curios-abi`'s table, which are the standard library's.
+pub fn host_answers(name: &str) -> bool {
+    HostOp::ALL.iter().any(|op| op.declared() == name)
+}
+
+/// What this runtime's host states of every row it answers, with nothing to enter: the table's own signatures, which [`host_rows`] answers by.
+fn host_stated() -> Answers<()> {
+    let mut answers = Answers::default();
+
+    for op in HostOp::ALL {
+        let signature = op.signature();
+
+        answers.record(
+            op.declared(),
+            Stated {
+                params: signature.params.clone(),
+                returned: Returned::declared(&signature.returns),
+            },
+            (),
+        );
+    }
+
+    answers
+}
+
+/// The row the program declares as `name` and how its answer is entered: the first answer among `bindings`' and the host's, held to the row — the wire types it takes and what it comes back with. Who answers a row is decided here, by what stands to answer, and nothing in the program says which.
+fn answering<'a, T>(
+    foreigns: &'a ForeignStore,
+    bindings: &'a Answers<T>,
+    host: &'a Answers<T>,
     name: &str,
-) -> Result<(), String> {
+) -> Result<(&'a Arc<ForeignFunction>, &'a T), String> {
     let declared = foreigns.get(name).ok_or_else(|| {
         format!("the program imports `{name}`, which the rows it carries do not describe")
     })?;
-    let (answer, answerer) = bindings
+    let ((stated, entered), answerer) = bindings
         .rows
         .get(name)
         .map(|answer| (answer, "a binding"))
@@ -313,16 +381,29 @@ fn link(
     let signature = declared.signature();
     let returned = Returned::declared(&signature.returns);
 
-    if signature.params != answer.params || returned != answer.returned {
+    if signature.params != stated.params || returned != stated.returned {
         return Err(format!(
             "{answerer} answers `{name}` as ({}) -> {}, and the program declares it ({}) -> {returned}",
-            spelled(&answer.params),
-            answer.returned,
+            spelled(&stated.params),
+            stated.returned,
             spelled(&signature.params),
         ));
     }
 
-    let trampoline = Arc::clone(&answer.trampoline);
+    Ok((declared, entered))
+}
+
+/// Define the `ffi` import declared as `name` into `linker`, entered as [`answering`] finds it answered.
+fn link(
+    linker: &mut Linker<()>,
+    engine: &Engine,
+    foreigns: &ForeignStore,
+    bindings: &Answers,
+    host: &Answers,
+    name: &str,
+) -> Result<(), String> {
+    let (declared, trampoline) = answering(foreigns, bindings, host, name)?;
+    let trampoline = Arc::clone(trampoline);
 
     linker
         .func_new(

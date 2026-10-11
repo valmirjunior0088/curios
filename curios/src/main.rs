@@ -32,8 +32,8 @@ use {
     },
     curios_pipeline::CompileError,
     curios_runtime::{
-        Bundle, BundledPlugin, Compiled, DeclaredModule, ForeignBindings, ModuleBytes, OsHost,
-        module_exports, plugin_bindings, precompile,
+        Bundle, Compiled, DeclaredModule, ForeignBindings, ModuleBytes, OsHost, host_answers,
+        module_exports, plugin_bindings,
     },
     curios_text::Formatted,
     curios_utilities::Source,
@@ -42,7 +42,7 @@ use {
         wonder_stage, wonder_tests,
     },
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::BTreeSet,
         ffi::OsString,
         fs, io, iter,
         path::{Path, PathBuf},
@@ -93,29 +93,19 @@ impl From<CompileError> for Failure {
     }
 }
 
-/// One `[[foreign]]` row resolved: what declared it, which declarations its exports answer, and the module's own bytes.
+/// The modules a program's package graph declares for the `foreign` declarations it reaches, each already accepted against the hash its row pins and handed over as the source `run`, `test` and `compile` alike resolve it from.
 ///
-/// Deliberately not a [`DeclaredModule`], which carries a [`ModuleBytes`] whose provenance its consumer decides — `run` and `test` link these as source, `compile` precompiles them first. A type that had already chosen would make one of the two unwrap what the other had just wrapped.
-struct ResolvedModule {
-    package: String,
-    name: String,
-    exports: BTreeMap<String, String>,
-    bytes: Vec<u8>,
-}
-
-/// The modules a program's package graph declares for the `foreign` declarations it holds, each already accepted against the hash its row pins.
+/// **Nothing is read where the host answers every row the program reaches**, which is very nearly every program, since each reaches the standard library's rows and few any other: no manifest is walked and no module opened, so the common case pays one pass over its rows. A module answers a declaration of its own package alone, so none could answer for such a program.
 ///
-/// **Nothing is read for a program that declares no `foreign`**, which is very nearly all of them: an empty store short-circuits before any manifest is walked or any module opened, so the common case pays one check.
-///
-/// A loose program is refused rather than left to fail at link: it has no manifest, so there is nowhere for it to say what implements what. The refusal says that, where a failure to link would say only that nobody had.
-///
-/// Shared by the two consumers that want these for different ends, so what a bundled executable ships and what `curios run` links cannot differ by having read the manifest twice.
-fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<ResolvedModule>, String> {
-    if foreigns.iter().next().is_none() {
+/// A loose program has no manifest and so no module. What it reaches of the standard library's rows the host answers, and a row of its own is refused by [`bindings_of`], which says that it has nowhere to name what would answer it.
+fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<DeclaredModule>, String> {
+    if foreigns
+        .iter()
+        .all(|function| host_answers(function.name()))
+    {
         return Ok(Vec::new());
     }
 
-    // A loose program has no manifest and so no module: what it reaches of the standard library's rows the host answers, and a row of its own is refused by name where the program is linked.
     let Some(root) = root else {
         return Ok(Vec::new());
     };
@@ -133,9 +123,9 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Resolv
                 .any(|declaration| foreigns.get(declaration).is_some())
         })
         .map(|(package, directory, foreign)| {
-            Ok(ResolvedModule {
+            Ok(DeclaredModule {
                 package,
-                bytes: foreign.bytes(&directory, &store)?,
+                bytes: ModuleBytes::Source(foreign.bytes(&directory, &store)?),
                 name: foreign.name,
                 exports: foreign.exports,
             })
@@ -188,23 +178,27 @@ fn asked(row: Pinned) -> (curios_package::Subject, String, Repoint, bool) {
     }
 }
 
-/// The `ffi`-tier bindings a program needs, linking each declared module in this process.
-fn bindings_of(root: Option<&Path>, foreigns: ForeignStore) -> Result<ForeignBindings, String> {
-    if foreigns.iter().next().is_none() {
-        return Ok(ForeignBindings::empty());
+/// What answers a program's rows ahead of the host: each module its packages declare, resolved against the rows the program reaches. Shared by `run`, `test` and `compile`, so what a bundled executable carries and what a run links are one resolution.
+///
+/// A reached row nothing stands to answer is refused here, before anything runs or is written, by what would answer it: a `[[foreign]]` row of a manifest, which a loose program has none to write in.
+fn bindings_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<ForeignBindings, String> {
+    let bindings = plugin_bindings(foreigns, modules_of(root, foreigns)?)?;
+
+    match foreigns
+        .iter()
+        .map(|function| function.name())
+        .find(|name| !bindings.answers(name) && !host_answers(name))
+    {
+        None => Ok(bindings),
+        Some(name) => Err(match root {
+            Some(_) => format!(
+                "`{name}` has no implementation: no `[[foreign]]` row of the package's manifests names an export that answers it"
+            ),
+            None => format!(
+                "`{name}` has no implementation: a `foreign` is answered by a module that a `[[foreign]]` row of a manifest names, and a loose program has no manifest to write one in"
+            ),
+        }),
     }
-
-    let declared = modules_of(root, &foreigns)?
-        .into_iter()
-        .map(|module| DeclaredModule {
-            package: module.package,
-            name: module.name,
-            exports: module.exports,
-            bytes: ModuleBytes::Source(module.bytes),
-        })
-        .collect();
-
-    plugin_bindings(&foreigns, declared)
 }
 
 fn dispatch() -> Result<(), Failure> {
@@ -246,7 +240,7 @@ fn dispatch() -> Result<(), Failure> {
             // Kept before the program is consumed: binding needs the governing root, and `payload_of` takes the program by value.
             let root = program.home().map(|home| home.root.clone());
             let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
-            let bindings = bindings_of(root.as_deref(), foreigns.clone())?;
+            let bindings = bindings_of(root.as_deref(), &foreigns)?;
 
             step(Heading::Running, &subject);
 
@@ -336,18 +330,12 @@ fn dispatch() -> Result<(), Failure> {
             let started = Instant::now();
             let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
 
+            // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
+            let bindings = bindings_of(root.as_deref(), &foreigns)?;
+            bindings.check(&foreigns)?;
+
             // Compiled here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
-            let plugins = modules_of(root.as_deref(), &foreigns)?
-                .into_iter()
-                .map(|module| {
-                    Ok(BundledPlugin {
-                        package: module.package,
-                        name: module.name,
-                        exports: module.exports,
-                        payload: precompile(&module.bytes)?,
-                    })
-                })
-                .collect::<Result<Vec<_>, String>>()?;
+            let plugins = bindings.bundled()?;
 
             emit_exe(
                 &Bundle {

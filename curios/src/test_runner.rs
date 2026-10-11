@@ -329,7 +329,7 @@ impl Run<'_> {
             None,
         )?;
 
-        // A loose target has no package, so nothing declares what would implement a `foreign` it holds; `bindings_of` refuses it saying so.
+        // A loose target has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
         self.selected(&records, &cwasm, invoked, subject, None, &foreigns)
     }
 
@@ -355,7 +355,7 @@ impl Run<'_> {
             None,
         )?;
 
-        // A loose target has no package, so nothing declares what would implement a `foreign` it holds; `bindings_of` refuses it saying so.
+        // A loose target has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
         self.selected(&records, &cwasm, invoked, subject, None, &foreigns)
     }
 
@@ -518,12 +518,13 @@ fn run_selected(
     let argv0 = entry.as_os_str().as_encoded_bytes().to_vec();
     let mut unit = Totals::default();
 
+    // Resolved once for the unit: its manifests are walked and its modules compiled here, and each test below is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's.
+    let bindings = bindings_of(root, foreigns).map_err(CompileError::failure)?;
+
     for (index, record) in selected {
         let arguments = vec![argv0.clone(), index.to_string().into_bytes()];
-        // Built per test rather than once: a run takes the registry by value, and a fresh set is a fresh plugin instance — which is what keeps one test's marks in a plugin's memory out of the next one's, the isolation a test run is entitled to.
-        let bindings = bindings_of(root, foreigns.clone()).map_err(CompileError::failure)?;
 
-        match compiled.run_test(OsHost::with_args(arguments), bindings) {
+        match compiled.run_test(OsHost::with_args(arguments), bindings.clone()) {
             // The guest printed `path: passed` and answered that the test held.
             Ok(TestEnd::Answered(true)) => unit.passed += 1,
             // The guest printed `path: failed` and its report, and answered that the test did not hold; the body as written is what only the records know.
