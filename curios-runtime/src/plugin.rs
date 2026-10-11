@@ -13,13 +13,14 @@
 //! The ABI is the raw one every wasm toolchain already emits: a scalar crosses as itself, a byte string as a `(ptr, len)` pair into the plugin's memory, and a byte-string result comes back as the same pair through wasm's multi-value return. The plugin exports its `memory` and an allocator; what it is called and what it takes are [`ALLOC`] and the conformance check below.
 
 use {
-    super::{
-        Answers, BundledPlugin, ForeignBindings, Lift, Lower, Stated, Trampoline, shared_engine,
-    },
+    super::{Answers, ForeignBindings, Lift, Lower, Stated, Trampoline, shared_engine},
     curios_abi::{ForeignFunction, ForeignStore, WireReturn, WireType},
-    std::{collections::BTreeMap, sync::Arc},
+    std::{collections::BTreeMap, fmt, sync::Arc},
     wasmtime::{Caller, ExternType, Func, Linker, Memory, Module, Store, TypedFunc, Val},
 };
+
+#[cfg(feature = "cranelift")]
+use super::BundledPlugin;
 
 /// The allocator a plugin exports, by the name every raw-ABI toolchain gives it: bytes in, an offset into the plugin's own memory out.
 ///
@@ -95,14 +96,21 @@ struct Row {
     returns: Returns,
 }
 
-/// A module resolved against the rows a program reaches: compiled or read back, refused if no plugin can be made of it, and each export that answers a reached row held to that row's declaration. Nothing is instantiated here: an instance is made where a program is run ([`Plugin::instantiate`]), so one resolution serves every run of the program.
-pub(crate) struct Plugin {
-    /// What a refusal names: the module, and the package whose manifest declared it.
-    subject: String,
-    /// The module as its package declared it, for a bundle to carry.
+/// What a refusal names, and what a bundle says a module is: the module, and the package whose manifest declared it.
+struct Subject {
     package: String,
     name: String,
-    answers: BTreeMap<String, String>,
+}
+
+impl fmt::Display for Subject {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "the module {:?} of {}", self.name, self.package)
+    }
+}
+
+/// A module resolved against the rows a program reaches: compiled or read back, refused if no plugin can be made of it, and each export that answers a reached row held to that row's declaration. Nothing is instantiated here: an instance is made where a program is run ([`Plugin::instantiate`]), so one resolution serves every run of the program.
+pub(crate) struct Plugin {
+    subject: Subject,
     compiled: Module,
     /// Whether the module follows the canonical ABI's conventions, which its allocator's name says.
     canonical: bool,
@@ -115,7 +123,10 @@ impl Plugin {
     /// The checks are the whole of what "a plugin" means, each made of the module's own types and refused by name rather than left to a `LinkError` that would report one missing import and stop.
     fn of(module: &DeclaredModule) -> Result<Self, String> {
         let engine = shared_engine();
-        let subject = format!("the module {:?} of {}", module.name, module.package);
+        let subject = Subject {
+            package: module.package.clone(),
+            name: module.name.clone(),
+        };
 
         let compiled = match &module.bytes {
             #[cfg(feature = "cranelift")]
@@ -162,9 +173,6 @@ impl Plugin {
 
         Ok(Self {
             subject,
-            package: module.package.clone(),
-            name: module.name.clone(),
-            answers: module.answers.clone(),
             compiled,
             canonical,
             rows: Vec::new(),
@@ -262,7 +270,7 @@ struct Instantiated {
 }
 
 /// A call into the module that failed, as the refusal a run reports: who failed, in what, and the cause at the root of the engine's chain. A trap's own display is its frames, so the root is the sentence that says what happened.
-fn failed(subject: &str, what: &str, error: wasmtime::Error) -> wasmtime::Error {
+fn failed(subject: &Subject, what: &str, error: wasmtime::Error) -> wasmtime::Error {
     wasmtime::Error::msg(format!(
         "{subject} failed in `{what}`: {}",
         error.root_cause()
@@ -273,7 +281,7 @@ impl Instantiated {
     /// Copy `bytes` into the module's memory through its allocator, answering the offset they landed at.
     fn write(
         &self,
-        subject: &str,
+        subject: &Subject,
         caller: &mut Caller<'_, ()>,
         bytes: &[u8],
     ) -> wasmtime::Result<u32> {
@@ -308,7 +316,7 @@ impl Instantiated {
     /// Read `length` bytes back out of the module's memory at `offset`, which its export `export` answered.
     fn read(
         &self,
-        subject: &str,
+        subject: &Subject,
         export: &str,
         caller: &mut Caller<'_, ()>,
         offset: u32,
@@ -333,7 +341,7 @@ impl Instantiated {
 /// A scalar is itself: a `Nat` or `Int` an `i64`, a `Bool` or a `Byte` an `i32`, an `Flt` an `f64`, as they cross to the host. A byte string is a `(ptr, len)` pair, which is why it costs two slots where a scalar costs one — the shape every raw-ABI toolchain already emits, rather than a convention invented here. `Bits` crosses as that same pair over its packed bytes, `len` counting bytes as it does for `Bytes`: the wire has no slot for a bit count, and a plugin needing one reads it in band.
 ///
 /// `Handle` and `List` are refused. A handle is a token into the *host's* resource table and means nothing inside a plugin, which holds none; a list is a rope whose element marshalling nothing has asked for. Both are refused where a signature is read rather than mistranslated where it is called.
-fn crossing(wire: WireType, subject: &str, declaration: &str) -> Result<Crossing, String> {
+fn crossing(wire: WireType, subject: &Subject, declaration: &str) -> Result<Crossing, String> {
     match wire {
         WireType::Nat => Ok(Crossing::Nat),
         WireType::Int => Ok(Crossing::Int),
@@ -409,7 +417,7 @@ fn lower_scalar(
     value: Val,
     caller: &mut Caller<'_, ()>,
     slot: &mut [Val],
-    subject: &str,
+    subject: &Subject,
     export: &str,
 ) -> wasmtime::Result<()> {
     match crossing {
@@ -512,7 +520,7 @@ impl Row {
     #[allow(clippy::too_many_arguments)]
     fn call(
         &self,
-        subject: &str,
+        subject: &Subject,
         instantiated: &Instantiated,
         function: Func,
         released: Option<Func>,
@@ -631,16 +639,20 @@ impl Row {
 }
 
 impl ForeignBindings {
-    /// The modules resolved here as a bundle carries them, each as the machine code a launcher reads back. What was resolved and held to the program's rows is what travels: nothing is compiled a second time, and no other module can stand in the executable for the one that was checked.
+    /// The modules resolved here as a bundle carries them, each as the machine code a launcher reads back. What was resolved and held to the program's rows is what travels, each module beside the answers it was held to: nothing is compiled a second time, no other module can stand in the executable for the one that was checked, and a claim on a row the program does not reach is left behind.
     #[cfg(feature = "cranelift")]
     pub fn bundled(&self) -> Result<Vec<BundledPlugin>, String> {
         self.modules
             .iter()
             .map(|module| {
                 Ok(BundledPlugin {
-                    package: module.package.clone(),
-                    name: module.name.clone(),
-                    answers: module.answers.clone(),
+                    package: module.subject.package.clone(),
+                    name: module.subject.name.clone(),
+                    answers: module
+                        .rows
+                        .iter()
+                        .map(|row| (row.function.name().to_string(), row.export.clone()))
+                        .collect(),
                     payload: module.compiled.serialize().map_err(|error| {
                         format!("{} could not be written out: {error}", module.subject)
                     })?,
