@@ -30,7 +30,7 @@ jobs:
         with:
           key: xtask
       - name: Run rustfmt
-        run: cargo xtask fmt-check
+        run: cargo xtask format-check
 
   lints:
     name: Lints
@@ -49,7 +49,7 @@ jobs:
       - name: Build runtime launcher
         run: cargo xtask runtime
       - name: Run Clippy
-        run: cargo xtask clippy
+        run: cargo xtask lint
 
   tests:
     name: Tests

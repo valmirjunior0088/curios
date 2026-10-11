@@ -53,7 +53,7 @@ fn scope(package: Option<&str>) -> Vec<&str> {
 /// Lint the workspace, or one package, over every target and feature with warnings denied, and the launcher once more as it ships, where the selection holds it.
 ///
 /// **The launcher is linted as [`runtime`] builds it.** Every feature turns on the backend the launcher is built without, so what its own build alone leaves unread, an import or a field only a backend reads, is seen by no lint over every feature, and `runtime` denies nothing. The second pass is the launcher's package under its default features, in a cargo invocation of its own for the reason `runtime` has one, over its library and its binary: its tests need a backend.
-pub(crate) fn clippy(package: Option<&str>) -> Result<(), String> {
+pub(crate) fn lint(package: Option<&str>) -> Result<(), String> {
     scoped(
         package,
         &["clippy"],

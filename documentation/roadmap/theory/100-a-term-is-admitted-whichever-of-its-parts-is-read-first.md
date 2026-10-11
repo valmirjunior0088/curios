@@ -67,7 +67,7 @@ Each lands alone, on its own check.
 
 - Every program under *The gap* is a fixture in both orders, run and not only elaborated, so that the kernel has judged what the elaborator accepted.
 - **The image compared.** `curios-prelude-archive`'s build writes `/std`'s image as `std.rkyv` under its `OUT_DIR`, and `curios-prelude`'s writes `certification.rkyv` and `reads.rkyv` under its own. The image is read with `curios-unit`'s `segments`, `halves` and `apart_parts`, which give the unit and the eight parts it stores apart from itself: its lowered items, its erased forms, its elaborated module, where its declarations lie, its import scopes, and what the lowering, the elaborator and erasure each asked. A release build of the commit before a stage and one of the stage are compared part by part, and the certifier's two files whole. A stage that changes only the order work is retried in moves what the elaborator asked and nothing else; any other part that moves is named with the declaration it first differs at, and is the stage's to explain. Counted.
-- `cargo xtask clippy` and `cargo xtask test` at every stage.
+- `cargo xtask lint` and `cargo xtask test` at every stage.
 - Each stage names the figures it may have moved: the budget every declaration of `/std` consumes, which a problem that parks and wakes spends otherwise.
 
 ## Rejected

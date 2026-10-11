@@ -77,15 +77,15 @@ enum Recipe {
     Build,
 
     #[command(about = "Format the workspace")]
-    Fmt,
+    Format,
 
     #[command(about = "Check the workspace's formatting without writing")]
-    FmtCheck,
+    FormatCheck,
 
     #[command(
         about = "Lint the workspace over every target and feature, and the launcher as it ships, warnings denied"
     )]
-    Clippy {
+    Lint {
         #[arg(
             value_name = "PACKAGE",
             help = "The package to lint; the whole workspace when omitted"
@@ -229,9 +229,9 @@ fn main() -> ExitCode {
     let outcome = match Cli::parse().recipe {
         Recipe::Runtime => runtime(),
         Recipe::Build => build(),
-        Recipe::Fmt => cargo(&["fmt", "--all"]),
-        Recipe::FmtCheck => cargo(&["fmt", "--all", "--", "--check"]),
-        Recipe::Clippy { package } => clippy(package.as_deref()),
+        Recipe::Format => cargo(&["fmt", "--all"]),
+        Recipe::FormatCheck => cargo(&["fmt", "--all", "--", "--check"]),
+        Recipe::Lint { package } => lint(package.as_deref()),
         Recipe::Test { package, filter } => test(package.as_deref(), filter.as_deref()),
         Recipe::Doctest { package } => {
             scoped(package.as_deref(), &["test"], &["--doc", "--all-features"])

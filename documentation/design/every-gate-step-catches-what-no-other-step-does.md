@@ -3,8 +3,8 @@
 **Decision.** The hand-off gate, `/run-full-gate` (`.claude/commands/run-full-gate.md`), is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated here, and a step added later states its own first. That each step is one `cargo xtask` recipe is [`xtask`'s own decision](../../xtask/README.md).
 
 - **`runtime`** is a prerequisite rather than a check: it builds the slim launcher in its own Cargo invocation, which `curios` embeds.
-- **`fmt-check`** alone fails on formatting drift.
-- **`clippy`** compiles the workspace over every target and feature with warnings denied, the same compilation as `cargo check` with more lints. It stops at erasure and certification, over the whole standard library. It lints the launcher once more under the features it ships with, and alone refuses what only that build leaves unread, since every feature turns on the backend the launcher is built without. Under `iter_over_hash_type` it alone refuses a loop over a hash's order, which differs from one compilation to the next: a loop states the order it walks in or the reason none reaches a stored unit or a report, since a test holds the loops it was written for and never the next one.
+- **`format-check`** alone fails on formatting drift.
+- **`lint`** compiles the workspace over every target and feature with warnings denied, the same compilation as `cargo check` with more lints. It stops at erasure and certification, over the whole standard library. It lints the launcher once more under the features it ships with, and alone refuses what only that build leaves unread, since every feature turns on the backend the launcher is built without. Under `iter_over_hash_type` it alone refuses a loop over a hash's order, which differs from one compilation to the next: a loop states the order it walks in or the reason none reaches a stored unit or a report, since a test holds the loops it was written for and never the next one.
 - **`test`** alone reaches `curios-cont`, `curios-emit` and `curios-wasm`, through the cross-stage corpus, and renders `/std`'s pages end to end through `curios document --std`.
 - **`doctest`** alone compiles and runs what a `///` block asserts, since cargo's every target excludes doctests. It passes over an empty set, so the first example written is run the day it is written.
 - **`docs`** alone runs rustdoc, under `[workspace.lints.rustdoc] all = "deny"` inherited through `[lints] workspace = true`, over private items because the crates state their invariants on `pub(crate)` ones; a broken intra-doc link is checked nowhere else.
@@ -16,7 +16,7 @@
 
 **Rejected.**
 
-- **`cargo check` beside `clippy`**, the same compilation reporting a subset; **`cargo xtask js` beside `js-test`**, the same bundle.
+- **`cargo check` beside `lint`**, the same compilation reporting a subset; **`cargo xtask js` beside `js-test`**, the same bundle.
 - **A step rendering `/std`'s pages**, which the test suite already renders through the same command.
 - **Denying rustdoc's lints through an environment variable**, a second place to set it and so one to forget.
 - **Leaving the grammar rev to CI alone**: the check is cheap and local, and only its failure mode is remote.
