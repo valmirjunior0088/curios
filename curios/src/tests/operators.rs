@@ -147,6 +147,34 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     );
 }
 
+// A default is a literal's. An operator with no literal operand takes none: its operand type waits for whatever pins it, here the line after, and where nothing does the program is refused at the parameter nothing typed, not read at `Nat`.
+#[test]
+fn an_operator_with_no_literal_operand_takes_no_default() {
+    assert_eq!(
+        run(r#"
+        use /std/{Byte, Bool, print};
+        let id(@A: Type, a: A) -> A = a;
+        let same = id((x) => x == x);
+        let at_byte: (Byte) -> Bool = same;
+        print(Bool/to_str(at_byte(7)))
+        "#),
+        b"true"
+    );
+
+    let report = error(
+        r#"
+        use /std/{Bool};
+        let id(@A: Type, a: A) -> A = a;
+        let same = id((x) => x == x);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("never solved: the type of parameter 'x'"),
+        "unexpected report:\n{report}"
+    );
+}
+
 #[test]
 fn infix_resolves_to_int_for_signed_literals() {
     // Both operands carry a written sign, so the operand type defaults to `Int`.

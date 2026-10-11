@@ -360,16 +360,32 @@ fn character_value(context: &Context, character: char) -> Term {
     )
 }
 
-/// The shape default for an infix operator whose operand type nothing pinned: any signed/negative literal operand forces `Int`, otherwise `Nat`.
+/// The shape default for an infix operator whose operand type nothing pinned, read off its literal operands: `Int` where one is a signed numeral, `Nat` where one is an unsigned numeral, and the certified `/std/Char` where every literal operand is a character. `None` where no operand is a literal: a default is a literal's, and an operator with none has nothing to take one from.
 ///
 /// A free function rather than an inherent method on [`Infix`]: the node is representation and lives in `curios-core`, while literal defaulting is an elaboration decision.
-pub(super) fn infix_default_type(infix: &Infix) -> Intrinsic {
-    let signed = |operand: &Term| matches!(&**operand, Subterm::Transient(Transient::NumLit(NumLit::Number { sign, .. })) if sign.is_marked());
+pub(super) fn infix_default_type(context: &Context, infix: &Infix) -> Option<Term> {
+    let literals = [&infix.left, &infix.right]
+        .into_iter()
+        .filter_map(|operand| match &**operand {
+            Subterm::Transient(Transient::NumLit(literal)) => Some(literal),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let signed =
+        |literal: &&NumLit| matches!(literal, NumLit::Number { sign, .. } if sign.is_marked());
+    let number = |literal: &&NumLit| matches!(literal, NumLit::Number { .. });
 
-    if signed(&infix.left) || signed(&infix.right) {
-        Intrinsic::IntType
+    if literals.iter().any(signed) {
+        Some(Term::intrinsic(Intrinsic::IntType))
+    } else if literals.iter().any(number) {
+        Some(Term::intrinsic(Intrinsic::NatType))
+    } else if literals.is_empty() {
+        None
     } else {
-        Intrinsic::NatType
+        Some(Term::struct_type(
+            Global::Authored(context.syntax().character.character.qualifier()),
+            Vec::<Term>::new(),
+        ))
     }
 }
 
@@ -946,10 +962,11 @@ pub(super) fn elaborate_infix(
         true => None,
     };
 
-    // Nothing pinned `?T` — every non-literal operand left it open. Default from the operand shapes so the literal operands have a concrete type to take.
-    if context.metavar_solution(operand_id).is_none() {
-        let default = infix_default_type(infix);
-        context.solve_metavar(operand_id, Subterm::Intrinsic(default).into());
+    // Nothing pinned `?T` — every non-literal operand left it open. Default from the literal operands' shapes so they have a concrete type to take; with no literal operand nothing is defaulted, and `?T` waits for whatever pins it.
+    if context.metavar_solution(operand_id).is_none()
+        && let Some(default) = infix_default_type(context, infix)
+    {
+        context.solve_metavar(operand_id, default);
     }
 
     // Phase 2: the literal operands resolve against the now-concrete `?T`.
