@@ -35,8 +35,15 @@ pub enum VerifyError {
     InitializerPerformsEffect {
         member: String,
         value: ValueId,
-        through: Option<String>,
+        through: Option<CycleCall>,
     },
+}
+
+/// A function a read went through: the identity it was minted as, and the name its source gave it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CycleCall {
+    pub function: FunctionId,
+    pub name: String,
 }
 
 /// One link of an evaluation cycle: a member, the identity it was minted as, and the function it reads the next member through, when that read goes through a call.
@@ -44,7 +51,7 @@ pub enum VerifyError {
 pub struct CycleStep {
     pub member: String,
     pub value: ValueId,
-    pub through: Option<String>,
+    pub through: Option<CycleCall>,
 }
 
 impl std::fmt::Display for VerifyError {
@@ -58,7 +65,9 @@ impl std::fmt::Display for VerifyError {
                 write!(f, "{shape}, which no forcing order can satisfy:")?;
                 for step in steps {
                     match &step.through {
-                        Some(callee) => write!(f, " {} evaluates, through {callee},", step.member)?,
+                        Some(callee) => {
+                            write!(f, " {} evaluates, through {},", step.member, callee.name)?
+                        }
                         None => write!(f, " {} evaluates", step.member)?,
                     }
                 }
@@ -75,7 +84,7 @@ impl std::fmt::Display for VerifyError {
                     "the initializer of computed group member {member} performs an effect"
                 )?;
                 if let Some(callee) = through {
-                    write!(f, " through a call to {callee}")?;
+                    write!(f, " through a call to {}", callee.name)?;
                 }
                 write!(f, ", which forcing it by need could not keep in its place")
             }

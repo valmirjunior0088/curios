@@ -13,8 +13,8 @@ mod tests;
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Traces, Zonked,
-        body_levels, check_concept_registry, check_is_sort, check_proof_totality,
+        Declared, ErasedSite, Established, GoalReport, GoalSite, Published, ScheduledTest, Traces,
+        Zonked, body_levels, check_concept_registry, check_is_sort, check_proof_totality,
         check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
         decide_polarities, definition_variances, family_levels, goal_sites, hold_prop,
         hold_variances, record_definition_totality, record_superclasses, record_variances,
@@ -179,7 +179,7 @@ fn telescope_sizing<B: Bound>(
                     UniverseConstraintOrigin {
                         extent: domain.extent(),
                         kind: kind.clone(),
-                        declaration: Some(declaration.to_string()),
+                        declaration: Some(declaration.faithful().to_string()),
                         binder: hint.map(str::to_string),
                     },
                 )
@@ -354,7 +354,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     let fields = loop {
         match written {
             Telescope::Cons(_, entry, rest) => {
-                check_written_type_totality(context, entry, &format!("a field of '{name}'"))?;
+                check_written_type_totality(context, entry, ErasedSite::FieldOf(*name))?;
                 written = rest.body();
             }
             Telescope::Done(fields) => break &**fields,
@@ -362,7 +362,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     };
     let mut written = fields;
     while let Telescope::Cons(_, entry, rest) = written {
-        check_written_type_totality(context, entry, &format!("a field of '{name}'"))?;
+        check_written_type_totality(context, entry, ErasedSite::FieldOf(*name))?;
         written = rest.body();
     }
 
@@ -394,7 +394,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
                 for ((_, _, ty), label) in fields.iter().zip(&field_labels) {
                     if !hold_prop(context, ty, ty.extent())? {
                         return Err(Error::informative_prop_struct(
-                            name.symbol(),
+                            *name,
                             label.clone(),
                             ty.clone(),
                         ));
@@ -575,16 +575,18 @@ fn finalize_definition(
             .concept(&owner)
             .ok_or_else(|| {
                 Error::UniverseInvariant(format!(
-                    "{name}: method wrapper names an unregistered concept '{}'",
-                    owner.symbol()
+                    "{}: method wrapper names an unregistered concept '{}'",
+                    name.faithful(),
+                    owner.faithful()
                 ))
             })?
             .universe_context
             .clone();
         let instance = declaration_instance(&type_, &owner).ok_or_else(|| {
             Error::UniverseInvariant(format!(
-                "{name}: method wrapper does not apply its concept '{}'",
-                owner.symbol()
+                "{}: method wrapper does not apply its concept '{}'",
+                name.faithful(),
+                owner.faithful()
             ))
         })?;
         let mut metas = context.universe_metas_in(&type_);
@@ -607,8 +609,9 @@ fn finalize_definition(
             .induct_decl(&owner)
             .ok_or_else(|| {
                 Error::UniverseInvariant(format!(
-                    "{name}: constructor names an unregistered inductive '{}'",
-                    owner.symbol()
+                    "{}: constructor names an unregistered inductive '{}'",
+                    name.faithful(),
+                    owner.faithful()
                 ))
             })?
             .universe_context
@@ -793,8 +796,8 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item, Error> {
     // Γ and the definition store key on the free-variable identity; the nominal registries key on the definition's own name.
     let name = Free::from(&def.name);
-    let outer_site = context.set_checked_site(&format!("'{}'", def.name));
-    check_written_type_totality(context, &def.type_, &format!("the type of '{}'", def.name))?;
+    let outer_site = context.set_checked_site(def.name);
+    check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
     let type_ = check_is_sort(context, &def.type_)?.0;
 
     // A witness declaration registers into the program-wide table as soon as its signature is known — *before* its body elaborates, so a recursive witness (a `Show(Tree)` whose fields show subtrees) can resolve through its own entry.
@@ -904,7 +907,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 
     let mut types = Vec::with_capacity(defs.len());
     for def in &defs {
-        check_written_type_totality(context, &def.type_, &format!("the type of '{}'", def.name))?;
+        check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
         context.enter_declaration(Some(def.name));
         types.push(check_is_sort(context, &def.type_)?.0);
@@ -952,7 +955,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 
     let mut bodies = Vec::with_capacity(defs.len());
     for ((def, type_), slot) in defs.iter().zip(&types).zip(slots) {
-        let outer_site = context.set_checked_site(&format!("'{}'", def.name));
+        let outer_site = context.set_checked_site(def.name);
         context.enter_declaration(Some(def.name));
         let body = check(context, &def.body, type_.clone())?;
         context.restore_checked_site(outer_site);
@@ -1272,10 +1275,14 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     };
     context.set_island(item_module);
 
-    let item_names = item.describe();
-    let owner = item.declared_names().first().copied();
+    let declared = item
+        .declared_names()
+        .into_iter()
+        .copied()
+        .collect::<Vec<_>>();
+    let owner = declared.first();
     // One span per top-level item, aggregated per item rather than across all of them: the fixed prelude is over a thousand declarations whose costs differ by three orders of magnitude, and a single averaged row cannot say which one a pass is actually spending on.
-    curios_profile::profile!("declaration", group = %item_names);
+    curios_profile::profile!("declaration", group = %item.describe());
 
     // The step budget is per declaration, so it is restored here rather than drained across the module: whether this item typechecks must not depend on how much the items before it happened to spend.
     context.restore_budget();
@@ -1287,11 +1294,11 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
         Item::Rec(rec) => elaborate_module_rec(context, rec).map(Item::Rec),
     }
     // Attribute *every* failure to the item that caused it, not only universe invariants. A whole-module diagnostic with no declaration name — an exhausted budget or an effect reduced at the type level — costs a full prelude rebuild to localize, which is the expensive way to learn one string.
-    .map_err(|error| error.in_declaration(&item_names, owner))?;
+    .map_err(|error| error.in_declaration(declared.iter().copied()))?;
 
     context
         .drain_parked()
-        .map_err(|error| error.in_declaration(&item_names, owner))?;
+        .map_err(|error| error.in_declaration(declared.iter().copied()))?;
     context.close_qualities();
     context.finish_universe_transaction();
 
@@ -1318,18 +1325,18 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     }
 
     let mut published = zonk_published(context, &elaborated)
-        .map_err(|error| error.in_declaration(&item_names, owner))?;
+        .map_err(|error| error.in_declaration(declared.iter().copied()))?;
     // Each binder says whether it binds a proof before any declaration can read it: the closed machine reads that where it substitutes.
     state_proof_binders(context, &mut published)
-        .map_err(|error| error.in_declaration(&item_names, owner))?;
+        .map_err(|error| error.in_declaration(declared.iter().copied()))?;
     context.publish(&published);
     context
         .settle_checked(recorded)
-        .map_err(|error| error.in_declaration(&item_names, owner))?;
+        .map_err(|error| error.in_declaration(declared.iter().copied()))?;
     // An attempt that read something unfinished is void whatever it concludes, so nothing is decided of what it published.
     let obligations = match context.needs_nothing() {
         true => settle_published(context, &mut published, recorded)
-            .map_err(|error| error.in_declaration(&item_names, owner))?,
+            .map_err(|error| error.in_declaration(declared.iter().copied()))?,
         false => Vec::new(),
     };
 

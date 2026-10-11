@@ -44,7 +44,7 @@ pub(crate) fn certify(out: &Path) {
             if let Some(verdict) = refusals.first() {
                 // The name, not only the error: a `curios_cert::Error` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this crate exists to produce points nowhere in a prelude of a thousand items.
                 let name = match &verdict.name {
-                    Some(name) => format!("{name}"),
+                    Some(name) => name.faithful().to_string(),
                     None => "<entrypoint>".to_owned(),
                 };
 

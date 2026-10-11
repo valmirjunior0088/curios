@@ -229,7 +229,9 @@ fn module_member_is_not_classified_as_a_generated_nominal_member() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == "/Foo/bar" => {
+            curios_core::Item::Let(definition)
+                if definition.name.faithful().to_string() == "/Foo/bar" =>
+            {
                 Some(definition)
             }
             _ => None,
@@ -553,7 +555,7 @@ fn imports_record_each_binding_under_the_spelling_it_resolves_by() {
     let in_scope = |owner: Option<&str>| {
         imports
             .in_scope_at(owner.map(global_name).as_ref())
-            .map(|imported| format!("{}={}", imported.global, imported.spelling()))
+            .map(|imported| format!("{}={}", imported.global.faithful(), imported.spelling()))
             .collect::<Vec<_>>()
     };
 

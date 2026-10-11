@@ -1,13 +1,14 @@
 use {
     super::{Misaligned, align, flexible, trivially_inhabited},
     crate::{
-        ArgumentSite, Context, Entailed, Error, FrozenFrame, Mode, ParkedWork, SettleTier, Sort,
-        attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, elaborate, entail,
-        exhausted_bound, expect, is_prop, reduce_with, settle_against, transitively_ground,
+        ArgumentSite, Context, Entailed, ErasedSite, Error, FrozenFrame, Mode, ParkedWork,
+        SettleTier, Sort, attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort,
+        elaborate, entail, exhausted_bound, expect, is_prop, reduce_with, settle_against,
+        transitively_ground,
     },
     curios_core::{
         Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Intrinsic,
-        Level, MetavarId, One, Probe, Scope, Spelling, Subterm, Telescope, Term, WitnessOrigin,
+        Level, MetavarId, One, Probe, Scope, Subterm, Telescope, Term, WitnessOrigin,
     },
     curios_utilities::Plicity,
     std::collections::BTreeSet,
@@ -307,8 +308,10 @@ fn bound_exhausted(
     bound: &Term,
     provenance: &ImplicitOrigin,
 ) -> Error {
-    let site =
-        callee(context, &provenance.func).slot("bound", &provenance.binder, &Spelling::default());
+    let site = ErasedSite::Bound {
+        callee: callee(context, &provenance.func),
+        binder: provenance.binder.clone(),
+    };
     exhausted_bound(context, error, bound, site)
 }
 

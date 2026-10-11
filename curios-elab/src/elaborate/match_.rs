@@ -867,7 +867,7 @@ fn elaborate_induct_match(
         .collect::<Result<Vec<_>, _>>()?;
 
     let Some(induct_decl) = context.induct_decl(&name).cloned() else {
-        return Err(Error::unknown_declaration(name.symbol()));
+        return Err(Error::unknown_declaration(name));
     };
     let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &universes)?;
 
@@ -877,7 +877,7 @@ fn elaborate_induct_match(
             .island()
             .is_some_and(|island| !island.is_within(&induct_decl.module))
     {
-        return Err(Error::private_representation(name.symbol()));
+        return Err(Error::private_representation(name));
     }
 
     // The motive abstracts the index telescope instantiated at the scrutinee's actual parameters, then the scrutinee.
@@ -948,7 +948,7 @@ fn elaborate_induct_match(
             })
             .collect();
         return Err(Error::unknown_match_constructor(
-            name.symbol(),
+            name,
             tag.to_string(),
             constructors,
         ));
@@ -965,7 +965,7 @@ fn elaborate_induct_match(
 
             // An unindexed inductive has nothing to invert: every arm is reachable and a missing one is plainly missing.
             if actual_indices.is_empty() {
-                return Err(Error::match_case_missing(name.symbol(), tag.to_string()));
+                return Err(Error::match_case_missing(name, tag.to_string()));
             }
 
             // Inversion — checker-verified omission: a missing arm is accepted iff first-order unification of the scrutinee's actual indices against this case's targets finds a *definite* clash, in either direction — the answer a written arm is checked under, so an arm may be left out exactly where the kernel would type none of it. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
@@ -1158,7 +1158,7 @@ fn elaborate_induct_match(
 fn eliminated_into_data(context: &mut Context, name: &Global, result_type: &Term) -> Error {
     match decided_sort_of(context, result_type) {
         Some(other) => Error::sort_decided_twice(true, other),
-        None => Error::large_elim_of_prop(name.symbol()),
+        None => Error::large_elim_of_prop(*name),
     }
 }
 

@@ -43,8 +43,8 @@ fn one_place_under_two_modules_is_two_witnesses() {
     });
 
     assert_ne!(here, there);
-    assert_eq!(here.to_string(), "/std/Nat/witness@0");
-    assert_eq!(there.to_string(), "/json/Value/witness@0");
+    assert_eq!(here.faithful().to_string(), "/std/Nat/witness@0");
+    assert_eq!(there.faithful().to_string(), "/json/Value/witness@0");
 }
 
 // A global and a local are different kinds of thing, not two spellings — a distinction a test for a marker character would draw, and a marker collision break.
@@ -65,7 +65,10 @@ fn segment_structure_decides_identity_not_rendered_text() {
     let one_segment = Global::Authored(Qualifier::from(["Foo/bar"]));
 
     assert_ne!(two_segments, one_segment);
-    assert_eq!(two_segments.to_string(), one_segment.to_string());
+    assert_eq!(
+        two_segments.faithful().to_string(),
+        one_segment.faithful().to_string()
+    );
 }
 
 // Distinct mints are distinct identities regardless of what a binder chose to call itself: the hint is display metadata, so it cannot make two identities collide or one identity split.

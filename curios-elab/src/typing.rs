@@ -17,7 +17,7 @@ use {
     curios_core::{
         Advance, Apply, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
         Intrinsic, Many, Metavar, MetavarId, MetavarOrigin, Proj, Quality, ReduceError, Scope,
-        Spelling, Subterm, Telescope, Term, Transient, Universes, Visit,
+        Subterm, Telescope, Term, Transient, Universes, Visit,
     },
     std::{
         cell::RefCell,
@@ -831,18 +831,20 @@ fn watched_blockers(
     that: &Term,
 ) -> Vec<Watched> {
     let origins = metavar_origins(&[this, that]);
-    // Rendered before the report's own spelling exists, so a witness callee reads at its full names.
-    let spelling = Spelling::default();
     watching
         .iter()
         .filter(|id| context.metavar_solution(**id).is_none())
         .map(|id| match origins.get(id) {
-            Some((MetavarOrigin::Implicit(origin), _)) => Watched::Described(
-                callee(context, &origin.func).slot("implicit argument", &origin.binder, &spelling),
-            ),
-            Some((MetavarOrigin::Witness(origin), _)) => Watched::Described(
-                callee(context, &origin.func).slot("witness argument", &origin.binder, &spelling),
-            ),
+            Some((MetavarOrigin::Implicit(origin), _)) => Watched::Slot {
+                callee: callee(context, &origin.func),
+                noun: "implicit argument",
+                binder: origin.binder.clone(),
+            },
+            Some((MetavarOrigin::Witness(origin), _)) => Watched::Slot {
+                callee: callee(context, &origin.func),
+                noun: "witness argument",
+                binder: origin.binder.clone(),
+            },
             // Named by the extent the goal was born with, never by an occurrence's: substituted into a declaration's type, the goal rides the extent of the binder it replaced, which would name the declaration rather than the `?`. Where that is in a file is the report's to say.
             Some((MetavarOrigin::Goal, _)) => Watched::Goal(context.goal_extent(*id).copied()),
             Some((MetavarOrigin::Domain(binder), _)) => {
@@ -1296,7 +1298,7 @@ pub(crate) fn check_motive(
         },
         written if written == arity => check_closed_motive(context, shape, motive),
         written => Err(Error::motive_binder_count(
-            shape.name().map(Global::symbol),
+            shape.name().copied(),
             arity,
             written,
         )),
@@ -1345,7 +1347,7 @@ fn check_written_motive(
         && telescope.len() != arity
     {
         return Err(Error::motive_binder_count(
-            shape.name().map(Global::symbol),
+            shape.name().copied(),
             arity,
             telescope.len(),
         ));

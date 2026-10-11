@@ -20,8 +20,9 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Advance, Bound, Free, FuncType, Global, InductDecl, InductType, Instance, InstanceHead,
-        Intrinsic, Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
+        Advance, Atom, Bound, Free, FuncType, Global, InductDecl, InductType, Instance,
+        InstanceHead, Intrinsic, Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope,
+        Term, TupleType,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -37,11 +38,32 @@ pub enum PositivityRefusal<E> {
     Exhausted { name: Global, error: E },
 }
 
+/// A member of a telescope as its declaration names it: by the label it was written under, or by its place among the members where it was written with none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemberLabel {
+    Written(String),
+    Place(usize),
+}
+
+/// The piece of a declaration a refused path starts from. An identity, which each driver words for its own reader.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeclaredPart {
+    /// A payload of the constructor `constructor`.
+    Payload {
+        constructor: Atom,
+        member: MemberLabel,
+    },
+    /// A structure's field.
+    Field(MemberLabel),
+    /// The declaration as a whole, where no one piece reproduces the path.
+    Whole,
+}
+
 /// A declaration refused by the rule itself: `name`'s `part` reaches back to `name` at a non-accepting `polarity`. The driver owns the rendering; `type_` is the offending part's type, for a diagnostic that points at real source.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NotPositive {
     pub name: Global,
-    pub part: String,
+    pub part: DeclaredPart,
     pub type_: Term,
     pub polarity: Polarity,
 }
@@ -139,13 +161,13 @@ pub fn positivity_vectors<E: Env>(
 #[derive(Debug)]
 struct Split {
     params: Vec<Free>,
-    parts: Vec<Part>,
+    parts: Vec<Piece>,
 }
 
 /// A declaration opened for analysis: its parameter binders, and every piece of it the walk consumes.
 #[derive(Debug)]
-struct Part {
-    label: String,
+struct Piece {
+    part: DeclaredPart,
     type_: Term,
 }
 
@@ -164,9 +186,12 @@ impl Split {
             for (tag, constructor) in &declaration.constructors {
                 // The terminal is the constructed type, not a payload: it is *always* a recursive occurrence and is skipped, which `labelled` does by ignoring the telescope's `Done`.
                 let payload = constructor.telescope.clone().open_params(&arguments);
-                for (label, type_) in labelled(env, &payload) {
-                    parts.push(Part {
-                        label: format!("{tag}({label})"),
+                for (member, type_) in labelled(env, &payload) {
+                    parts.push(Piece {
+                        part: DeclaredPart::Payload {
+                            constructor: tag.clone(),
+                            member,
+                        },
                         type_,
                     });
                 }
@@ -182,7 +207,10 @@ impl Split {
         let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
         let parts = labelled(env, &declaration.fields_at(&arguments))
             .into_iter()
-            .map(|(label, type_)| Part { label, type_ })
+            .map(|(member, type_)| Piece {
+                part: DeclaredPart::Field(member),
+                type_,
+            })
             .collect();
 
         Self { params, parts }
@@ -205,13 +233,14 @@ pub(crate) fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> V
 pub(crate) fn labelled<E: Env, B: Bound>(
     env: &mut E,
     telescope: &Telescope<B>,
-) -> Vec<(String, Term)> {
+) -> Vec<(MemberLabel, Term)> {
     let mut entries = Vec::new();
     let mut cursor = telescope.cursor();
     while let Some((hint, type_)) = cursor.entry() {
-        let label = hint
-            .filter(|hint| !hint.is_empty())
-            .map_or_else(|| cursor.args().len().to_string(), str::to_string);
+        let label = match hint.filter(|hint| !hint.is_empty()) {
+            Some(hint) => MemberLabel::Written(hint.to_string()),
+            None => MemberLabel::Place(cursor.args().len()),
+        };
         entries.push((label, type_));
         cursor.advance_fresh(|hint| env.fresh(hint.filter(|hint| !hint.is_empty())));
     }
@@ -381,7 +410,7 @@ fn refusal<E: Env>(
             if !through.accepting() {
                 return NotPositive {
                     name: *name,
-                    part: part.label.clone(),
+                    part: part.part.clone(),
                     type_: part.type_.clone(),
                     polarity: through,
                 };
@@ -392,7 +421,7 @@ fn refusal<E: Env>(
     // The parts were re-walked under the final vectors, so one of them always reproduces the offending path. Fall back to the declaration alone rather than panicking on a diagnostic.
     NotPositive {
         name: *name,
-        part: "this declaration".to_string(),
+        part: DeclaredPart::Whole,
         type_: Term::type_ground(),
         polarity: diagonal,
     }

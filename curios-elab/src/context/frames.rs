@@ -421,7 +421,12 @@ impl<'s> Frames<'s> {
             .iter_mut()
             .rev()
             .find(|(bound, _)| bound == name)
-            .unwrap_or_else(|| panic!("reassume: '{name}' has no local binding to replace"));
+            .unwrap_or_else(|| {
+                panic!(
+                    "reassume: '{}' has no local binding to replace",
+                    name.faithful()
+                )
+            });
         entry.1 = type_.clone();
 
         let assumptions = self
@@ -430,7 +435,10 @@ impl<'s> Frames<'s> {
             .rev()
             .find(|assumptions| assumptions.contains_key(name))
             .unwrap_or_else(|| {
-                panic!("reassume: '{name}' has no assumption-frame entry to replace")
+                panic!(
+                    "reassume: '{}' has no assumption-frame entry to replace",
+                    name.faithful()
+                )
             });
         assumptions.insert(*name, type_.clone());
     }
@@ -502,7 +510,8 @@ impl<'s> Frames<'s> {
         assert_eq!(
             self.assumptions.len(),
             1,
-            "forget: '{name}' outside the base frame"
+            "forget: '{}' outside the base frame",
+            name.faithful()
         );
         self.locals_stamp.fresh();
         self.assumptions[0].remove(name);
@@ -538,7 +547,12 @@ impl<'s> Frames<'s> {
             .chain(&mut local[floor - 1..])
             .rev()
             .find(|contexts| contexts.contains_key(name))
-            .unwrap_or_else(|| panic!("'{name}' has no assumption universe context to replace"));
+            .unwrap_or_else(|| {
+                panic!(
+                    "'{}' has no assumption universe context to replace",
+                    name.faithful()
+                )
+            });
         contexts.insert(*name, universe_context);
     }
 

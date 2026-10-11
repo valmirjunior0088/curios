@@ -125,7 +125,7 @@ fn a_bound_over_a_diverging_subject_is_refused_by_name() {
     .expect_err("a diverging subject cannot discharge a bound");
 
     assert!(
-        error.contains("is a proof position but reaches '/spin'"),
+        error.contains("is a proof position but reaches 'spin'"),
         "expected the totality refusal by name, got: {error}"
     );
     assert!(

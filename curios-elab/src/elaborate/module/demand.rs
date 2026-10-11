@@ -371,7 +371,7 @@ impl<'a> Demand<'a> {
                     });
                     let error = Error::declaration_cycle(&members)
                         .at_opt(site)
-                        .in_declaration(&item.describe(), item.declared_names().first().copied());
+                        .in_declaration(item.declared_names().into_iter().copied());
                     self.survivors.refuse(ItemStamp(first(&declaration)), error);
                 }
                 // The cycle is closed by the member asked for first: what asked for that one reads a refusal, as it would any other.

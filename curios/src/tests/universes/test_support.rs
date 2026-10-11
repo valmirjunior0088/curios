@@ -73,7 +73,7 @@ pub(super) fn family_variances(source: &str) -> BTreeMap<String, String> {
                     Variance::Invariant => '=',
                 })
                 .collect();
-            (name.to_string(), spelled)
+            (name.faithful().to_string(), spelled)
         })
         .collect()
 }

@@ -363,7 +363,7 @@ fn a_comparison_that_fails_at_the_drain_names_its_declaration_and_what_was_compa
         /std/print("unreachable")
         "#,
     );
-    assert!(boxed.starts_with("while elaborating /boxed:"), "{boxed}");
+    assert!(boxed.starts_with("while elaborating boxed:"), "{boxed}");
     assert!(
         boxed.contains("terms differ") && boxed.contains("written: (n) => n + 1"),
         "{boxed}"
@@ -397,7 +397,7 @@ fn a_refusal_at_the_entrys_drain_is_reported_once() {
     );
     assert!(
         report.contains("never solved: ")
-            && report.contains("the implicit argument 'A' of '/std/proc/exit'"),
+            && report.contains("the implicit argument 'A' of 'proc/exit'"),
         "{report}"
     );
     assert!(!report.contains("was not inferred"), "{report}");

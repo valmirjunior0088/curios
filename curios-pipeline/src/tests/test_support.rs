@@ -435,9 +435,12 @@ pub(super) fn reuses_body(baseline: &Unit, unit: &Unit, name: &str) -> bool {
             .items
             .iter()
             .find(|item| {
-                item.declared_names()
-                    .first()
-                    .is_some_and(|declared| declared.symbol().ends_with(&format!("/{name}")))
+                item.declared_names().first().is_some_and(|declared| {
+                    declared
+                        .faithful()
+                        .to_string()
+                        .ends_with(&format!("/{name}"))
+                })
             })
             .and_then(|item| match item {
                 Item::Let(definition) => Some(definition.body.clone()),
@@ -458,7 +461,12 @@ pub(super) fn keeps_lowered(baseline: &Unit, unit: &Unit, name: &str) -> bool {
             .items
             .iter()
             .flat_map(Item::declared_names)
-            .find(|declared| declared.symbol().ends_with(&format!("/{name}")))
+            .find(|declared| {
+                declared
+                    .faithful()
+                    .to_string()
+                    .ends_with(&format!("/{name}"))
+            })
             .unwrap_or_else(|| panic!("{name} is a name of the unit"));
 
         match unit.text().lowered(declared) {
@@ -476,7 +484,7 @@ pub(super) fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
     unit.core()
         .induct_decls()
         .iter()
-        .find(|(name, _)| name.symbol().ends_with(&format!("/{family}")))
+        .find(|(name, _)| name.faithful().to_string().ends_with(&format!("/{family}")))
         .map(|(_, declaration)| declaration.variances.clone())
         .unwrap_or_else(|| panic!("{family} is an inductive family of the unit"))
 }

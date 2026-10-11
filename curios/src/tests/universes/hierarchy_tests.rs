@@ -77,7 +77,10 @@ fn the_self_application_girards_paradox_needs_is_refused_at_one_instance() {
 
     let message = error(&source);
     assert!(message.contains("strictly below itself"), "got: {message}");
-    assert!(message.contains("/omega"), "got: {message}");
+    assert!(
+        message.contains("while elaborating omega:"),
+        "got: {message}"
+    );
 }
 
 // The control, differing in the last declaration alone: the same `s` instantiated at a type its caller supplies. `A`'s level is held to the one `X` ranges over, which is satisfiable — what the refusal above rests on is the self-instantiation at one instance, not the quantifier.

@@ -254,7 +254,7 @@ impl HeadKey {
 impl fmt::Display for HeadKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HeadKey::Nominal(name) => write!(f, "{name}"),
+            HeadKey::Nominal(name) => write!(f, "{}", name.faithful()),
             HeadKey::Nat => write!(f, "Nat"),
             HeadKey::Byte => write!(f, "Byte"),
             HeadKey::Int => write!(f, "Int"),

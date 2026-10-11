@@ -339,7 +339,7 @@ fn a_private_representation_refuses_the_derivation_outside_its_module() {
 
     let report = error(source);
     assert!(
-        report.contains("the representation of type '/Guard/Secret' is private"),
+        report.contains("the representation of type 'Secret' is private"),
         "{report}"
     );
 }

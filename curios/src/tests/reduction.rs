@@ -963,7 +963,9 @@ fn a_published_binder_states_whether_it_binds_a_proof() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.to_string() == "/through" => {
+            curios_core::Item::Let(definition)
+                if definition.name.faithful().to_string() == "/through" =>
+            {
                 Some(definition)
             }
             _ => None,

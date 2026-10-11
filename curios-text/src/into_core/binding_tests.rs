@@ -104,7 +104,7 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
         module
             .items
             .iter()
-            .any(|item| matches!(item, curios_core::Item::Let(d) if d.name.symbol() == "/outer")),
+            .any(|item| matches!(item, curios_core::Item::Let(d) if d.name.faithful().to_string() == "/outer")),
         "outer elaborated"
     );
 }

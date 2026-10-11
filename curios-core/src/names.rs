@@ -97,9 +97,9 @@ pub enum Global {
 }
 
 impl Global {
-    /// This name's canonical flattened spelling, which a diagnostic names a declaration by; the registries are keyed by the [`Global`] itself.
-    pub fn symbol(&self) -> String {
-        self.to_string()
+    /// This name as the compiler holds it, in full: what a dump, a kernel refusal and an erased program's debug name print, being read about the compiler. A report names a declaration through its reader's [`Spelling`](crate::Spelling), which is why a `Global` has no `Display` and this is asked for by name.
+    pub fn faithful(&self) -> Faithful<'_, Self> {
+        Faithful(self)
     }
 
     /// The module path a programmer wrote this name at, if they wrote one.
@@ -120,7 +120,7 @@ impl Global {
 
 /// Who an inserted metavariable's call site was applying — the identity a report names, rather than the text it renders to.
 ///
-/// **Three facts, three variants.** Written into one `String` slot — a function's flattened [`Global::symbol`], a witness's, an operator's bare symbol — they would be told apart on the error path by trying `InfixOp::from_symbol` and scanning every registered witness for a matching *rendered* name: behavior recovered from spelling, which this module exists to prevent. And a callee captured as text would never meet the shorten map or the import spellings, so a report could name `/sys/Nat/to_byte` — a path no program is permitted to write.
+/// **Three facts, three variants.** Written into one `String` slot — a function's flattened path, a witness's, an operator's bare symbol — they would be told apart on the error path by trying `InfixOp::from_symbol` and scanning every registered witness for a matching *rendered* name: behavior recovered from spelling, which this module exists to prevent. And a callee captured as text would never meet the shorten map or the import spellings, so a report could name `/sys/Nat/to_byte` — a path no program is permitted to write.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum CalleeId {
@@ -268,7 +268,16 @@ impl Free {
     pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
         self.as_local().and_then(Mint::hint_symbol)
     }
+
+    /// This name as the compiler holds it — see [`Global::faithful`]: a global in full, a local as its hint and index.
+    pub fn faithful(&self) -> Faithful<'_, Self> {
+        Faithful(self)
+    }
 }
+
+/// A name spelled as the compiler holds it — see [`Global::faithful`].
+#[derive(Debug, Clone, Copy)]
+pub struct Faithful<'a, T>(&'a T);
 
 /// The archived form keeps the live identity law: the hint is not read.
 ///
@@ -323,20 +332,19 @@ impl fmt::Display for Mint {
     }
 }
 
-impl fmt::Display for Global {
-    /// Debug rendering only. A diagnostic names a global through the printer, which shortens it against the module's other symbols; a witness is named by its declaring module, which the printer takes from the definition.
+impl fmt::Display for Faithful<'_, Global> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
+        match self.0 {
             Global::Authored(qualifier) => formatter.write_str(&qualifier.join()),
             Global::Witness(id) => write!(formatter, "{id}"),
         }
     }
 }
 
-impl fmt::Display for Free {
+impl fmt::Display for Faithful<'_, Free> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Free::Global(global) => write!(formatter, "{global}"),
+        match self.0 {
+            Free::Global(global) => write!(formatter, "{}", global.faithful()),
             Free::Local(mint) => write!(formatter, "{mint}"),
         }
     }

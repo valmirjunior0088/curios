@@ -527,7 +527,7 @@ fn every_context_places_its_hole_under_the_former_it_names() {
                 Item::Let(definition) if definition.name == name => Some(&definition.body),
                 _ => None,
             })
-            .unwrap_or_else(|| panic!("the program defines {name}"));
+            .unwrap_or_else(|| panic!("the program defines {}", name.faithful()));
         let marker = Term::free_var(&Free::from(&named(marked(context).1.to_owned())));
 
         let mut parents = Vec::new();

@@ -51,7 +51,7 @@ impl<'s> Program<'s> {
         induct_decl: InductDecl,
     ) -> Result<(), Error> {
         if self.induct_decl(name).is_some() {
-            return Err(Error::duplicate_induct(name.symbol()));
+            return Err(Error::duplicate_induct(*name));
         }
         self.induct_decls.insert(*name, induct_decl);
         Ok(())
@@ -61,7 +61,8 @@ impl<'s> Program<'s> {
     pub(crate) fn update_induct(&mut self, name: &Global, induct_decl: InductDecl) {
         assert!(
             self.induct_decls.contains_key(name),
-            "update_induct: '{name}' is not already registered"
+            "update_induct: '{}' is not already registered",
+            name.faithful()
         );
         self.induct_decls.insert(*name, induct_decl);
     }
@@ -85,7 +86,7 @@ impl<'s> Program<'s> {
         struct_decl: StructDecl,
     ) -> Result<(), Error> {
         if self.struct_decl(name).is_some() {
-            return Err(Error::duplicate_struct(name.symbol()));
+            return Err(Error::duplicate_struct(*name));
         }
         self.struct_decls.insert(*name, struct_decl);
         Ok(())
@@ -95,7 +96,8 @@ impl<'s> Program<'s> {
     pub(crate) fn update_struct(&mut self, name: &Global, struct_decl: StructDecl) {
         assert!(
             self.struct_decls.contains_key(name),
-            "update_struct: '{name}' is not already registered"
+            "update_struct: '{}' is not already registered",
+            name.faithful()
         );
         self.struct_decls.insert(*name, struct_decl);
     }
@@ -119,7 +121,7 @@ impl<'s> Program<'s> {
         concept: ConceptDecl,
     ) -> Result<(), Error> {
         if self.concept(name).is_some() {
-            return Err(Error::duplicate_concept(name.symbol()));
+            return Err(Error::duplicate_concept(*name));
         }
         self.concepts.insert(*name, concept);
         Ok(())
@@ -135,7 +137,8 @@ impl<'s> Program<'s> {
     pub(crate) fn update_concept(&mut self, name: &Global, concept: ConceptDecl) {
         assert!(
             self.concepts.contains_key(name),
-            "update_concept: '{name}' is not already registered"
+            "update_concept: '{}' is not already registered",
+            name.faithful()
         );
         self.concepts.insert(*name, concept);
     }
@@ -280,7 +283,7 @@ impl<'s> Program<'s> {
             .witness_table
             .values_mut()
             .find(|witness| witness.name == *name)
-            .unwrap_or_else(|| panic!("witness '{name}' was not registered"));
+            .unwrap_or_else(|| panic!("witness '{}' was not registered", name.faithful()));
         witness.universe_context = universe_context;
         witness.signature = signature;
     }

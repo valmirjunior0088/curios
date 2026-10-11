@@ -5,7 +5,8 @@ use display::*;
 mod tests;
 
 use {
-    super::{Erased, Refusal},
+    super::{Erased, ErasedNames, Refusal},
+    curios_analysis::DeclaredPart,
     curios_core::{
         Anchors, Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Extent, Free, Global,
         Item, Level, Lexicon, Module, Polarity, ReaderNames, ReaderPosition, ReduceError, Rename,
@@ -110,9 +111,15 @@ pub struct ShapeDiagnosis {
 }
 
 /// One still-unsolved metavariable a postponed conversion watched, by what it is: what a reader can act on.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Watched {
-    /// An implicit or witness argument of a named callee, the type of a parameter, an inferred hole: described where it was found, since nothing about it needs a position.
+    /// An implicit or witness argument of a callee, by the slot it was inserted for: `noun` says which kind, and the callee is its identity, spelled for the reader where the report is made.
+    Slot {
+        callee: Callee,
+        noun: &'static str,
+        binder: String,
+    },
+    /// The type of a parameter, an inferred hole: described where it was found, since nothing about it needs a position or names a declaration.
     Described(String),
     /// A written goal `?`, which a reader knows by where it was written: its extent, rendered as a line and a column where the report is made.
     Goal(Option<Extent>),
@@ -284,15 +291,15 @@ pub enum Error {
     },
     /// A second `induct` registered under a name a prior declaration already claims. The registry is global across every root elaborated into one `Context`, so this is rejected rather than silently overwritten — the same shape of collision `DuplicateWitness` guards for witnesses.
     DuplicateInduct {
-        name: String,
+        name: Global,
     },
     /// A second `struct` registered under a name a prior declaration already claims — see `DuplicateInduct`.
     DuplicateStruct {
-        name: String,
+        name: Global,
     },
     /// A second `concept` registered under a name a prior declaration already claims — see `DuplicateInduct`.
     DuplicateConcept {
-        name: String,
+        name: Global,
     },
     TupleFieldNameMismatch {
         written: String,
@@ -335,13 +342,13 @@ pub enum Error {
     },
     /// A `match` arm naming no constructor of `type_name`, with the constructors it has, each spelled as a pattern writes it.
     UnknownMatchConstructor {
-        type_name: String,
+        type_name: Global,
         tag: String,
         constructors: Vec<String>,
     },
     /// A `match` on `type_name` with no arm for `tag` and nothing that proves the constructor impossible. Named by type and constructor alone: the match itself sits under the report's span, and the elaborator's spelling of it would repeat that snippet in a vocabulary the surface language does not have.
     MatchCaseMissing {
-        type_name: String,
+        type_name: Global,
         tag: String,
     },
     CtorArityMismatch {
@@ -356,7 +363,7 @@ pub enum Error {
     },
     /// A strict proposition was eliminated into a relevant (data) result — a large elimination that would observe which inhabitant it was, breaking proof irrelevance. Permitted only for an empty or singleton proposition.
     LargeElimOfProp {
-        name: String,
+        name: Global,
     },
     /// A `Sort` its declaration wrote and then decided: `Prop` where `prop`, `Type` otherwise. A sort is left to a caller where each use states it, and one the declaration's own terms decide is no caller's to state. The report stands at the term whose check decided it where `at_decider`, and at the written `Sort` otherwise.
     SortDecided {
@@ -376,16 +383,16 @@ pub enum Error {
     RecordOverTwoSorts,
     /// A struct was declared at sort `Prop` but a field is informative (its type is not itself a proposition). Proof irrelevance would then let projection observe which inhabitant was built — the singleton-elimination condition, applied at declaration time. `field` is the offending field; `field_type` its type.
     InformativePropStruct {
-        name: String,
+        name: Global,
         field: String,
         field_type: Box<Term>,
     },
     /// An `induct` or `struct` declaration is not strictly positive: it reaches itself through a position that is not a plain payload. Such a declaration is not the initial algebra of a polynomial functor, so the eliminator it would hand back is not sound — the classic witness being `induct Bad | c(f : (Bad) -> False) end`, which inhabits `False`.
     ///
-    /// `site` is the constructor payload or struct field the offending path starts from and `site_type` its type. The path itself may be longer than one step: `polarity` is where it ends up, not where the named site stands on its own.
+    /// `part` is the constructor payload or struct field the offending path starts from and `site_type` its type. The path itself may be longer than one step: `polarity` is where it ends up, not where the named part stands on its own.
     NotStrictlyPositive {
-        name: String,
-        site: String,
+        name: Global,
+        part: DeclaredPart,
         site_type: Box<Term>,
         polarity: Polarity,
     },
@@ -396,8 +403,8 @@ pub enum Error {
     /// `offender` is the partial definition the position reaches, or `None` when the position is partial on its own account — an inline `rec` that does not descend, or an exit, neither of which has a name to blame.
     PartialInErasedPosition {
         erased: Erased,
-        site: String,
-        offender: Option<String>,
+        site: ErasedSite,
+        offender: Option<Global>,
     },
     /// A struct literal's (or struct type's) head names a binding that is not a struct; `found` is that binding's type.
     NotAStructType {
@@ -405,13 +412,13 @@ pub enum Error {
     },
     /// Wrong number of type arguments applied to a struct's type-former.
     StructArityMismatch {
-        name: String,
+        name: Global,
         expected: usize,
         got: usize,
     },
     /// A struct literal supplies the wrong number of fields: the declared labels it leaves out and the written ones the declaration lacks, where the literal's labels say which.
     WrongNumberOfFields {
-        name: String,
+        name: Global,
         expected: usize,
         got: usize,
         missing: Vec<String>,
@@ -419,49 +426,49 @@ pub enum Error {
     },
     /// A nominal type whose declaration is absent from the registry.
     UnknownDeclaration {
-        name: String,
+        name: Global,
     },
     /// A written field label does not match the declared label at its position (fields are given in declaration order — no reordering).
     UnknownStructField {
-        name: String,
+        name: Global,
         label: String,
         available: Vec<String>,
     },
     /// A `use <term>` entry in a literal whose head is not a concept.
     UseEntryOutsideConcept {
-        name: String,
+        name: Global,
     },
     /// A `..` spread entry written anywhere but first in the literal.
     SpreadNotFirst {
-        name: String,
+        name: Global,
     },
     /// More than one `..` spread entry in one literal.
     MultipleSpreads {
-        name: String,
+        name: Global,
     },
     /// The base of a `..` spread is not a value of the literal's own struct.
     SpreadBaseTypeMismatch {
-        name: String,
+        name: Global,
         found: Box<Term>,
     },
     /// An unlabeled override after a `..` spread — gaps make positions ambiguous, so every override must name its field.
     UnlabeledSpreadOverride {
-        name: String,
+        name: Global,
     },
     /// Overrides after a `..` spread must be an order-preserving subsequence of the declared fields; `label` is repeated or out of place.
     SpreadOverrideOutOfOrder {
-        name: String,
+        name: Global,
         label: String,
         order: Vec<String>,
     },
     /// Projecting a field of a struct whose representation is private, from outside the declaring module's subtree.
     PrivateField {
-        name: String,
+        name: Global,
         field: String,
     },
     /// Constructing or eliminating a nominal type whose representation is private, from outside the declaring module's subtree.
     PrivateRepresentation {
-        name: String,
+        name: Global,
     },
     /// A derived `satisfy` for a concept the compiler has no derivation for. Derivability is registered per concept, never inferred from its shape.
     NoDerivation {
@@ -587,11 +594,11 @@ pub enum Error {
     },
     /// The superclass graph (concepts' `use`-marked fields) has a cycle.
     CyclicSuperclass {
-        concept: String,
+        concept: Global,
     },
     /// A concept's `use`-marked field whose type reduces to no application of a registered concept (e.g. to a struct or an inductive): resolution answers nothing else, so it reaches no superclass.
     UnknownSuperclass {
-        concept: String,
+        concept: Global,
         target: Box<Term>,
     },
     /// A witness's concept parameter at `position` (0-based) does not reduce to a rigid nominal or intrinsic head — nothing to key the table entry on.
@@ -607,7 +614,7 @@ pub enum Error {
     },
     /// A witness for a parameterless concept: with no parameter heads there is nothing to key the global table entry on, so such a concept is supplied through a local `use` binder instead.
     ParameterlessWitnessConcept {
-        concept: String,
+        concept: Global,
     },
     /// A witness's annotation does not elaborate to an application of a registered concept.
     WitnessNotAConcept {
@@ -634,16 +641,16 @@ pub enum Error {
     },
     /// Computed recursive members whose initializers evaluate one another, so no order of forcing them by need can initialize them — the recursion class the erased verifier owns and this surfaces. Each step is a member by its source name and the call it reads the next member through, when the read goes through one; a single step is a member evaluating itself.
     EvaluationCycle {
-        steps: Vec<(String, Option<String>)>,
+        steps: Vec<(ErasedName, Option<ErasedName>)>,
     },
     /// A computed recursive member whose initializer performs an effect, directly or through the named call, which forcing it by need could not keep in its place.
     InitializerPerformsEffect {
-        member: String,
-        through: Option<String>,
+        member: ErasedName,
+        through: Option<ErasedName>,
     },
     /// A written motive binds the wrong number of names. An eliminator's motive abstracts the scrutinee's indices, in declaration order, and then the scrutinee — `expected` of them. `name` is the eliminated family when there is one to name (an intrinsic carrier has none).
     MotiveBinderCount {
-        name: Option<String>,
+        name: Option<Global>,
         expected: usize,
         written: usize,
     },
@@ -659,13 +666,11 @@ pub enum Error {
         extent: Extent,
         error: Box<Error>,
     },
-    /// The declaration whose elaboration raised `error`.
+    /// The declaration whose elaboration raised `error`, by the names it declares.
     ///
-    /// A sibling of [`Error::Located`] rather than a message prefix: the context is structured, so a consumer can still match on the underlying error, and every failure gains a name without each raising site formatting one.
+    /// A sibling of [`Error::Located`] rather than a message prefix: the context is structured, so a consumer can still match on the underlying error, and every failure gains a name without each raising site formatting one. The first name is the reader position a report about the declaration is spelled for, since its module and the imports in scope there decide what reaches a name.
     InDeclaration {
-        name: String,
-        /// The definition `name` describes, where there is one: the reader position a report about it is spelled for, since its module and the imports in scope there decide what reaches a name.
-        owner: Option<Global>,
+        names: Vec<Global>,
         error: Box<Error>,
     },
     /// An arm that is never taken raised `error`: the arm is dead, which the report says beside what failed, with `dead` as the reason. What the arm rests on fails there: a proof resting on its guard, no checker recording an equation under a spelling that mentions no local, and a fact read off an index its scrutinee does not have, a case whose indices clash being checked with none solved.
@@ -887,15 +892,15 @@ impl Error {
         Self::DuplicateTupleLabel { label }
     }
 
-    pub(crate) fn duplicate_induct(name: String) -> Self {
+    pub(crate) fn duplicate_induct(name: Global) -> Self {
         Self::DuplicateInduct { name }
     }
 
-    pub(crate) fn duplicate_struct(name: String) -> Self {
+    pub(crate) fn duplicate_struct(name: Global) -> Self {
         Self::DuplicateStruct { name }
     }
 
-    pub(crate) fn duplicate_concept(name: String) -> Self {
+    pub(crate) fn duplicate_concept(name: Global) -> Self {
         Self::DuplicateConcept { name }
     }
 
@@ -945,7 +950,7 @@ impl Error {
     }
 
     pub(crate) fn unknown_match_constructor(
-        type_name: String,
+        type_name: Global,
         tag: String,
         constructors: Vec<String>,
     ) -> Self {
@@ -956,7 +961,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn match_case_missing(type_name: String, tag: String) -> Self {
+    pub(crate) fn match_case_missing(type_name: Global, tag: String) -> Self {
         Self::MatchCaseMissing { type_name, tag }
     }
 
@@ -967,8 +972,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
-        Self::LargeElimOfProp { name: name.into() }
+    pub(crate) fn large_elim_of_prop(name: Global) -> Self {
+        Self::LargeElimOfProp { name }
     }
 
     pub(crate) fn sort_decided(prop: bool, at_decider: bool) -> Self {
@@ -987,27 +992,27 @@ impl Error {
         Self::RecordOverTwoSorts
     }
 
-    pub(crate) fn informative_prop_struct<N: Into<String>, F: Into<String>, T: Into<Term>>(
-        name: N,
+    pub(crate) fn informative_prop_struct<F: Into<String>, T: Into<Term>>(
+        name: Global,
         field: F,
         field_type: T,
     ) -> Self {
         Self::InformativePropStruct {
-            name: name.into(),
+            name,
             field: field.into(),
             field_type: Box::new(field_type.into()),
         }
     }
 
-    pub(crate) fn not_strictly_positive<N: Into<String>, S: Into<String>, T: Into<Term>>(
-        name: N,
-        site: S,
+    pub(crate) fn not_strictly_positive<T: Into<Term>>(
+        name: Global,
+        part: DeclaredPart,
         site_type: T,
         polarity: Polarity,
     ) -> Self {
         Self::NotStrictlyPositive {
-            name: name.into(),
-            site: site.into(),
+            name,
+            part,
             site_type: Box::new(site_type.into()),
             polarity,
         }
@@ -1019,27 +1024,23 @@ impl Error {
         }
     }
 
-    pub(crate) fn struct_arity_mismatch<N: Into<String>>(
-        name: N,
-        expected: usize,
-        got: usize,
-    ) -> Self {
+    pub(crate) fn struct_arity_mismatch(name: Global, expected: usize, got: usize) -> Self {
         Self::StructArityMismatch {
-            name: name.into(),
+            name,
             expected,
             got,
         }
     }
 
-    pub(crate) fn wrong_number_of_fields<N: Into<String>>(
-        name: N,
+    pub(crate) fn wrong_number_of_fields(
+        name: Global,
         expected: usize,
         got: usize,
         missing: Vec<String>,
         surplus: Vec<String>,
     ) -> Self {
         Self::WrongNumberOfFields {
-            name: name.into(),
+            name,
             expected,
             got,
             missing,
@@ -1048,69 +1049,62 @@ impl Error {
     }
 
     /// A nominal type whose declaration is missing from the registry — a well-typed term can only carry a declared nominal head, so this is an invariant violation surfaced as a diagnostic rather than a panic.
-    pub(crate) fn unknown_declaration(name: String) -> Self {
+    pub(crate) fn unknown_declaration(name: Global) -> Self {
         Self::UnknownDeclaration { name }
     }
 
-    pub(crate) fn unknown_struct_field<N: Into<String>>(
-        name: N,
+    pub(crate) fn unknown_struct_field(
+        name: Global,
         label: String,
         available: Vec<String>,
     ) -> Self {
         Self::UnknownStructField {
-            name: name.into(),
+            name,
             label,
             available,
         }
     }
 
-    pub(crate) fn use_entry_outside_concept<N: Into<String>>(name: N) -> Self {
-        Self::UseEntryOutsideConcept { name: name.into() }
+    pub(crate) fn use_entry_outside_concept(name: Global) -> Self {
+        Self::UseEntryOutsideConcept { name }
     }
 
-    pub(crate) fn spread_not_first<N: Into<String>>(name: N) -> Self {
-        Self::SpreadNotFirst { name: name.into() }
+    pub(crate) fn spread_not_first(name: Global) -> Self {
+        Self::SpreadNotFirst { name }
     }
 
-    pub(crate) fn multiple_spreads<N: Into<String>>(name: N) -> Self {
-        Self::MultipleSpreads { name: name.into() }
+    pub(crate) fn multiple_spreads(name: Global) -> Self {
+        Self::MultipleSpreads { name }
     }
 
-    pub(crate) fn spread_base_type_mismatch<N: Into<String>, T: Into<Term>>(
-        name: N,
-        found: T,
-    ) -> Self {
+    pub(crate) fn spread_base_type_mismatch<T: Into<Term>>(name: Global, found: T) -> Self {
         Self::SpreadBaseTypeMismatch {
-            name: name.into(),
+            name,
             found: Box::new(found.into()),
         }
     }
 
-    pub(crate) fn unlabeled_spread_override<N: Into<String>>(name: N) -> Self {
-        Self::UnlabeledSpreadOverride { name: name.into() }
+    pub(crate) fn unlabeled_spread_override(name: Global) -> Self {
+        Self::UnlabeledSpreadOverride { name }
     }
 
-    pub(crate) fn spread_override_out_of_order<N: Into<String>>(
-        name: N,
+    pub(crate) fn spread_override_out_of_order(
+        name: Global,
         label: String,
         order: Vec<String>,
     ) -> Self {
-        Self::SpreadOverrideOutOfOrder {
-            name: name.into(),
-            label,
-            order,
-        }
+        Self::SpreadOverrideOutOfOrder { name, label, order }
     }
 
-    pub(crate) fn private_field<N: Into<String>, F: Into<String>>(name: N, field: F) -> Self {
+    pub(crate) fn private_field<F: Into<String>>(name: Global, field: F) -> Self {
         Self::PrivateField {
-            name: name.into(),
+            name,
             field: field.into(),
         }
     }
 
-    pub(crate) fn private_representation<N: Into<String>>(name: N) -> Self {
-        Self::PrivateRepresentation { name: name.into() }
+    pub(crate) fn private_representation(name: Global) -> Self {
+        Self::PrivateRepresentation { name }
     }
 
     pub(crate) fn no_derivation(concept: Global) -> Self {
@@ -1320,18 +1314,13 @@ impl Error {
         }
     }
 
-    pub(crate) fn cyclic_superclass<N: Into<String>>(concept: N) -> Self {
-        Self::CyclicSuperclass {
-            concept: concept.into(),
-        }
+    pub(crate) fn cyclic_superclass(concept: Global) -> Self {
+        Self::CyclicSuperclass { concept }
     }
 
-    pub(crate) fn unknown_superclass<N: Into<String>, T: Into<Term>>(
-        concept: N,
-        target: T,
-    ) -> Self {
+    pub(crate) fn unknown_superclass<T: Into<Term>>(concept: Global, target: T) -> Self {
         Self::UnknownSuperclass {
-            concept: concept.into(),
+            concept,
             target: Box::new(target.into()),
         }
     }
@@ -1355,10 +1344,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn parameterless_witness_concept<C: Into<String>>(concept: C) -> Self {
-        Self::ParameterlessWitnessConcept {
-            concept: concept.into(),
-        }
+    pub(crate) fn parameterless_witness_concept(concept: Global) -> Self {
+        Self::ParameterlessWitnessConcept { concept }
     }
 
     pub(crate) fn witness_not_a_concept<T: Into<Term>>(found: T) -> Self {
@@ -1391,9 +1378,9 @@ impl Error {
     }
 
     /// The refusal of a read of `member` from another item, where `member`'s own initializer reads it: the one-step cycle the verifier would name had the two been erased together.
-    pub(crate) fn evaluates_itself(member: String) -> Self {
+    pub(crate) fn evaluates_itself(member: Free) -> Self {
         Self::EvaluationCycle {
-            steps: vec![(member, None)],
+            steps: vec![(ErasedName::Named(member), None)],
         }
     }
 
@@ -1401,7 +1388,18 @@ impl Error {
     pub(crate) fn refused_by_verifier(
         error: curios_ersd::VerifyError,
         extents: &BTreeMap<curios_ersd::ValueId, Extent>,
+        names: &ErasedNames,
     ) -> Self {
+        // A member and a callee by the name erasure minted each for, and by the erased program's own where it minted it for none: a lambda written in place, a fragment linked past the names of its items.
+        let member = |value: curios_ersd::ValueId, erased: String| match names.values.get(&value) {
+            Some(name) => ErasedName::Named(*name),
+            None => ErasedName::Erased(erased),
+        };
+        let callee = |call: curios_ersd::CycleCall| match names.functions.get(&call.function) {
+            Some(name) => ErasedName::Named(*name),
+            None => ErasedName::Erased(call.name),
+        };
+
         match error {
             curios_ersd::VerifyError::EvaluationCycle { steps } => {
                 let extent = steps
@@ -1411,22 +1409,25 @@ impl Error {
                 Self::EvaluationCycle {
                     steps: steps
                         .into_iter()
-                        .map(|step| (step.member, step.through))
+                        .map(|step| (member(step.value, step.member), step.through.map(callee)))
                         .collect(),
                 }
                 .at_opt(extent)
             }
             curios_ersd::VerifyError::InitializerPerformsEffect {
-                member,
+                member: erased,
                 value,
                 through,
-            } => Self::InitializerPerformsEffect { member, through }
-                .at_opt(extents.get(&value).cloned()),
+            } => Self::InitializerPerformsEffect {
+                member: member(value, erased),
+                through: through.map(callee),
+            }
+            .at_opt(extents.get(&value).cloned()),
         }
     }
 
     pub(crate) fn motive_binder_count(
-        name: Option<String>,
+        name: Option<Global>,
         expected: usize,
         written: usize,
     ) -> Self {
@@ -1441,13 +1442,12 @@ impl Error {
         Self::MissingArmNotImpossible { tag }
     }
 
-    /// Name the declaration this error arose in. Innermost wins, matching [`Error::at`]: a nested item keeps its own attribution, and a batch's members already carry theirs.
-    pub(crate) fn in_declaration(self, name: &str, owner: Option<&Global>) -> Self {
+    /// Name the declaration this error arose in, by the names it declares. Innermost wins, matching [`Error::at`]: a nested item keeps its own attribution, and a batch's members already carry theirs.
+    pub(crate) fn in_declaration(self, names: impl IntoIterator<Item = Global>) -> Self {
         match self {
             Self::InDeclaration { .. } | Self::Batch(_) => self,
             error => Self::InDeclaration {
-                name: name.to_string(),
-                owner: owner.cloned(),
+                names: names.into_iter().collect(),
                 error: Box::new(error),
             },
         }
@@ -1480,7 +1480,7 @@ impl Error {
     /// The definition the innermost declaration wrapper names — where the reader of this error stands.
     fn owner(&self) -> Option<Global> {
         match self {
-            Self::InDeclaration { owner, error, .. } => error.owner().or(*owner),
+            Self::InDeclaration { names, error } => error.owner().or(names.first().copied()),
             Self::Located { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InScope { error, .. } => error.owner(),
@@ -1676,7 +1676,8 @@ impl Error {
         };
 
         if let Self::Goals(goals) = self.unwrapped() {
-            let prefix = self.declaration_prefix();
+            // The line naming the declaration is spelled for a reader standing in it, as every other report's is.
+            let prefix = self.declaration_prefix(&for_reader(self.owner(), Rc::default()));
             return goals
                 .iter()
                 .map(|goal| {
@@ -1721,13 +1722,17 @@ impl Error {
     }
 
     /// What the wrappers prefix a body with — `render_body`'s own lines for them, without the body.
-    fn declaration_prefix(&self) -> String {
+    fn declaration_prefix(&self, spelling: &Spelling) -> String {
         match self {
             Self::Located { error, .. }
             | Self::InUnreachableArm { error, .. }
-            | Self::InScope { error, .. } => error.declaration_prefix(),
-            Self::InDeclaration { name, error, .. } => {
-                format!("while elaborating {name}:\n{}", error.declaration_prefix())
+            | Self::InScope { error, .. } => error.declaration_prefix(spelling),
+            Self::InDeclaration { names, error } => {
+                format!(
+                    "while elaborating {}:\n{}",
+                    declared(names, spelling),
+                    error.declaration_prefix(spelling)
+                )
             }
             _ => String::new(),
         }
@@ -1739,9 +1744,10 @@ impl Error {
             Self::Located { error, .. } | Self::InScope { error, .. } => {
                 error.render_body(spelling, anchors)
             }
-            Self::InDeclaration { name, error, .. } => {
+            Self::InDeclaration { names, error } => {
                 format!(
-                    "while elaborating {name}:\n{}",
+                    "while elaborating {}:\n{}",
+                    declared(names, spelling),
                     error.render_body(spelling, anchors)
                 )
             }
@@ -1900,6 +1906,45 @@ impl Error {
             _ => {}
         }
     }
+}
+
+/// A member or a callee of a refusal the erased verifier raised: the name erasure minted it for, or the erased program's own name for it where erasure minted it for none.
+#[derive(Debug, Clone)]
+pub enum ErasedName {
+    Named(Free),
+    Erased(String),
+}
+
+/// What an erased position is a position of, as a totality refusal names it.
+///
+/// An identity where a sentence stood: a declaration is its [`Global`], spelled for the reader where the refusal is rendered, and what a reader wrote under no global name — a local binder's label — is the text they wrote.
+#[derive(Debug, Clone)]
+pub enum ErasedSite {
+    /// The declared type of a definition.
+    TypeOf(Global),
+    /// The body of a definition whose type ends in a sort.
+    BodyOf(Global),
+    /// A term in a definition, or in the entry where `definition` is `None`: one written in a type position there, or one elaboration settled there, `settled` saying as what.
+    Within {
+        definition: Option<Global>,
+        settled: Option<&'static str>,
+    },
+    /// The type the entry is stated at.
+    EntryType,
+    /// A parameter of a type former.
+    ParameterOf(Global),
+    /// A payload of a constructor of `family`.
+    PayloadOf { family: Global, constructor: Atom },
+    /// A field of a structure.
+    FieldOf(Global),
+    /// Declared definitions of one recursive group that yield a sort.
+    Recursive(Vec<Global>),
+    /// Local definitions of one recursive group that yield a sort, by the labels they were written under.
+    LocallyRecursive(Vec<String>),
+    /// The bound a slot of `callee` states, which a call left to be discharged.
+    Bound { callee: Callee, binder: String },
+    /// The bound a built-in operation states of an operand.
+    OperandBound(Box<Term>),
 }
 
 /// What a binder written under the wrong mark was a binder of.

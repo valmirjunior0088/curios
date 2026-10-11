@@ -1816,7 +1816,7 @@ impl Convert {
             curios_profile::note!(
                 target: "curios_elab::solve",
                 meta = id.0,
-                %name,
+                name = %name.faithful(),
                 mentioned,
                 "scope check rejected a free name",
             );

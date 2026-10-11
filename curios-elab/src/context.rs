@@ -280,22 +280,22 @@ impl<'s> Context<'s> {
     }
 
     /// Name the definition whose body is elaborating, for (V)'s diagnostics. Returns the previous site so the caller can restore it.
-    pub(crate) fn set_checked_site(&mut self, site: &str) -> Rc<str> {
-        self.underway.checked.set_site(Rc::from(site))
+    pub(crate) fn set_checked_site(&mut self, site: Global) -> Option<Global> {
+        self.underway.checked.set_site(Some(site))
     }
 
     /// Restore a site saved by [`Context::set_checked_site`].
-    pub(crate) fn restore_checked_site(&mut self, site: Rc<str>) {
+    pub(crate) fn restore_checked_site(&mut self, site: Option<Global>) {
         self.underway.checked.set_site(site);
     }
 
-    /// The site being elaborated, as [`Context::set_checked_site`] last set it.
-    pub(crate) fn checked_site(&self) -> Rc<str> {
+    /// The site being elaborated, as [`Context::set_checked_site`] last set it: `None` is the entry.
+    pub(crate) fn checked_site(&self) -> Option<Global> {
         self.underway.checked.site()
     }
 
     /// Read the recorded terms without consuming them — obligation (T) reads them first, and (V) takes them afterwards.
-    pub(crate) fn checked(&self) -> &[(Term, Term, Rc<str>)] {
+    pub(crate) fn checked(&self) -> &[(Term, Term, Option<Global>)] {
         self.underway.checked.terms()
     }
 
@@ -500,7 +500,7 @@ impl<'s> Context<'s> {
                     Ok::<_, Error>(done)
                 }
             };
-            settled.push((settle(term)?, settle(type_)?, Rc::clone(site)));
+            settled.push((settle(term)?, settle(type_)?, *site));
         }
         self.underway.checked.replace_since(mark, settled);
 
@@ -594,7 +594,7 @@ impl<'s> Context<'s> {
     }
 
     /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last.
-    pub(crate) fn split_checked(&mut self, mark: usize) -> Vec<(Term, Term, Rc<str>)> {
+    pub(crate) fn split_checked(&mut self, mark: usize) -> Vec<(Term, Term, Option<Global>)> {
         self.underway.checked.split_off(mark)
     }
 
@@ -1129,7 +1129,7 @@ impl<'s> Context<'s> {
             let (frames, holders) = self.typing.frames.assumption_universe_holders(name);
             curios_profile::note!(
                 target: "curios_elab::universe",
-                %name,
+                name = %name.faithful(),
                 registered = found.is_some(),
                 expected = found.as_ref().map_or(0, |context| context.parameter_count),
                 got = universes.levels.len(),

@@ -48,7 +48,7 @@ fn a_proposition_holding_a_proof_still_eliminates_into_a_proposition() {
 fn a_constructor_an_index_rules_out_still_counts() {
     rejected_by(
         A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS,
-        "cannot eliminate the proposition '/Side'",
+        "cannot eliminate the proposition 'Side'",
     );
 }
 

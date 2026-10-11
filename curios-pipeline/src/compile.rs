@@ -243,7 +243,7 @@ pub(crate) fn kernel_refusal(
     let refusal = verdict.format_with(module, scope, syntax);
 
     CompileError::failure(match &verdict.name {
-        Some(name) => format!("the kernel refused {name}: {refusal}"),
+        Some(name) => format!("the kernel refused {}: {refusal}", name.faithful()),
         None => format!("the kernel refused a unit: {refusal}"),
     })
 }
@@ -975,7 +975,7 @@ fn judged(
             syntax,
         );
         return Err(CompileError::failure(match &verdict.name {
-            Some(name) => format!("the kernel refused {name}: {refusal}"),
+            Some(name) => format!("the kernel refused {}: {refusal}", name.faithful()),
             None => format!("the kernel refused the entrypoint: {refusal}"),
         }));
     }

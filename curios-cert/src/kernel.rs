@@ -51,7 +51,7 @@ pub(crate) use whnf::*;
 
 use {
     crate::{Baseline, entails, erased_half, instantiate_qualities},
-    curios_analysis::{Env, Erased, Judge},
+    curios_analysis::{DeclaredPart, Env, Erased, Judge, MemberLabel},
     curios_core::{
         Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
         LevelHead, Lexicon, Module, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
@@ -180,7 +180,7 @@ pub enum Error {
     /// A declaration that is not strictly positive: `part` of `name` reaches back to `name` at a non-accepting polarity. Without this gate, `induct Bad | c(f : (Bad) -> False) end` inhabits `False` in four lines with no recursion at all.
     NotPositive {
         name: Global,
-        part: String,
+        part: DeclaredPart,
         polarity: Polarity,
     },
     /// A declaration carried as indifferent to a universe level its own telescopes mention. The item walk compared two instances of `name` on the carried vector's word, so a vector claiming an irrelevance the recomputation denies is a conversion nothing licensed.
@@ -287,11 +287,17 @@ impl fmt::Display for Displayed<'_> {
                 "the kernel's reduction budget ran out: {category} needed {attempted} units with {remaining} left"
             ),
             Error::Reduce(_) => formatter.write_str("reduction failed in the kernel"),
-            Error::Unbound(name) => write!(formatter, "unbound name `{name}`"),
+            Error::Unbound(name) => write!(formatter, "unbound name `{}`", name.faithful()),
             Error::Undeclared(name) => {
-                write!(formatter, "no declaration registered for `{name}`")
+                write!(
+                    formatter,
+                    "no declaration registered for `{}`",
+                    name.faithful()
+                )
             }
-            Error::Redeclared(name) => write!(formatter, "`{name}` is already declared"),
+            Error::Redeclared(name) => {
+                write!(formatter, "`{}` is already declared", name.faithful())
+            }
             Error::Unclassified(type_) => {
                 let type_ = type_.spelled(spelling);
                 write!(formatter, "cannot determine the sort of `{type_}`")
@@ -395,7 +401,8 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::LargeElimination(name) => write!(
                 formatter,
-                "cannot eliminate the proposition `{name}` into a relevant result",
+                "cannot eliminate the proposition `{}` into a relevant result",
+                name.faithful()
             ),
             Error::NotCore(term) => {
                 let term = term.spelled(spelling);
@@ -409,7 +416,8 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::MissingArm { family, tag } => write!(
                 formatter,
-                "no arm for `{tag}` of `{family}`, and its case is not impossible",
+                "no arm for `{tag}` of `{}`, and its case is not impossible",
+                family.faithful()
             ),
             Error::NotDescending { type_ } => {
                 let type_ = type_.spelled(spelling);
@@ -438,7 +446,8 @@ impl fmt::Display for Displayed<'_> {
                 reached: Some(reached),
             } => write!(
                 formatter,
-                "a {erased} position reaches `{reached}`, which is not known to terminate",
+                "a {erased} position reaches `{}`, which is not known to terminate",
+                reached.faithful()
             ),
             Error::NotTotal {
                 erased,
@@ -451,13 +460,29 @@ impl fmt::Display for Displayed<'_> {
                 name,
                 part,
                 polarity,
-            } => write!(
-                formatter,
-                "`{part}` of `{name}` reaches back to it at {polarity:?}, which is not strictly positive",
-            ),
+            } => {
+                let member = |member: &MemberLabel| match member {
+                    MemberLabel::Written(label) => label.clone(),
+                    MemberLabel::Place(place) => place.to_string(),
+                };
+                let part = match part {
+                    DeclaredPart::Payload {
+                        constructor,
+                        member: payload,
+                    } => format!("{constructor}({})", member(payload)),
+                    DeclaredPart::Field(field) => member(field),
+                    DeclaredPart::Whole => "this declaration".to_string(),
+                };
+                write!(
+                    formatter,
+                    "`{part}` of `{}` reaches back to it at {polarity:?}, which is not strictly positive",
+                    name.faithful()
+                )
+            }
             Error::VarianceDenied { name, level } => write!(
                 formatter,
-                "`{name}` is carried as indifferent to its universe level {level}, which its declaration mentions",
+                "`{}` is carried as indifferent to its universe level {level}, which its declaration mentions",
+                name.faithful()
             ),
             Error::Oversized { domain, bound } => write!(
                 formatter,
@@ -469,7 +494,8 @@ impl fmt::Display for Displayed<'_> {
             ),
             Error::MissingUniverseInstance { name, expected } => write!(
                 formatter,
-                "this occurrence of `{name}` states no universe instance, and its scheme declares {expected}",
+                "this occurrence of `{}` states no universe instance, and its scheme declares {expected}",
+                name.faithful()
             ),
         }
     }

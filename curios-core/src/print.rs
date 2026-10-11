@@ -368,12 +368,12 @@ impl Spelling {
         if let Some(names) = &self.names {
             return names
                 .spell(&self.reader, name)
-                .unwrap_or_else(|| name.to_string());
+                .unwrap_or_else(|| name.faithful().to_string());
         }
         self.shorten
             .as_ref()
             .and_then(|shorten| shorten.get(name))
-            .unwrap_or_else(|| name.to_string())
+            .unwrap_or_else(|| name.faithful().to_string())
     }
 
     /// The display spelling of a name. A global with a shorter in-scope spelling takes it (axis (b)); a local binder gets its pretty rename (axis (a)), falling back to its minting hint. A name in neither map renders verbatim.
@@ -386,7 +386,7 @@ impl Spelling {
             .and_then(|rename| rename.get(name).cloned())
             .unwrap_or_else(|| match name.hint() {
                 Some(hint) => hint.to_string(),
-                None => name.to_string(),
+                None => name.faithful().to_string(),
             })
     }
 
@@ -568,7 +568,7 @@ fn assign(
         .into_iter()
         .map(|key| match key.name.as_global() {
             Some(global) => spelling.symbol(global),
-            None => key.name.to_string(),
+            None => key.name.faithful().to_string(),
         })
         .collect::<BTreeSet<_>>();
 
@@ -681,7 +681,7 @@ impl Shorten {
                     .names
                     .contains(&Global::Authored(Qualifier::from([suffix])))
         };
-        let rendered = name.to_string();
+        let rendered = name.faithful().to_string();
 
         suffixes_of(name)
             .into_iter()

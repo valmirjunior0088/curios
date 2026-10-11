@@ -153,7 +153,9 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == "/id" => {
+            curios_core::Item::Let(definition)
+                if definition.name.faithful().to_string() == "/id" =>
+            {
                 Some(definition)
             }
             _ => None,
@@ -262,7 +264,9 @@ fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == "/outer" => {
+            curios_core::Item::Let(definition)
+                if definition.name.faithful().to_string() == "/outer" =>
+            {
                 Some(definition)
             }
             _ => None,
@@ -284,7 +288,9 @@ fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == "/outer" => {
+            curios_core::Item::Let(definition)
+                if definition.name.faithful().to_string() == "/outer" =>
+            {
                 Some(definition)
             }
             _ => None,

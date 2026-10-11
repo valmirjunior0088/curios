@@ -41,7 +41,7 @@ fn named(unit: &Unit, symbol: &str) -> Global {
         .iter()
         .flat_map(|item| item.definitions())
         .map(|definition| definition.name)
-        .find(|name| name.symbol().ends_with(&format!("/{symbol}")))
+        .find(|name| name.faithful().to_string().ends_with(&format!("/{symbol}")))
         .unwrap_or_else(|| panic!("the unit defines no `{symbol}`"))
 }
 
@@ -190,7 +190,12 @@ fn the_prelude_reads_along_the_graph_its_definitions_reach() {
                             .filter(|name| {
                                 !reads.signatures.contains(*name) && !reads.bodies.contains(*name)
                             })
-                            .map(|name| (definition.name.symbol(), name.symbol())),
+                            .map(|name| {
+                                (
+                                    definition.name.faithful().to_string(),
+                                    name.faithful().to_string(),
+                                )
+                            }),
                     );
                     let reached = reached(&definition.name);
                     unreached.extend(
@@ -199,7 +204,12 @@ fn the_prelude_reads_along_the_graph_its_definitions_reach() {
                             .iter()
                             .chain(&reads.bodies)
                             .filter(|name| !reached.contains(*name))
-                            .map(|name| (definition.name.symbol(), name.symbol())),
+                            .map(|name| {
+                                (
+                                    definition.name.faithful().to_string(),
+                                    name.faithful().to_string(),
+                                )
+                            }),
                     );
                 }
             }
@@ -265,7 +275,7 @@ let subject : /std/Nat = double(2) + spin(0);
         prelude
             .iter()
             .flat_map(|unit| unit.certification().iter())
-            .map(|(name, totality)| (name.symbol(), totality))
+            .map(|(name, totality)| (name.faithful().to_string(), totality))
             .collect::<BTreeMap<_, _>>()
     });
 

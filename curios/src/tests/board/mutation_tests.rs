@@ -110,7 +110,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             assert!(
                 !recheck(&mutant, curios_pipeline::DEFAULT_STEP_BUDGET).is_empty(),
                 "{description}: the kernel accepted `{}` at `{}` with a body of another type entirely",
-                definition.name,
+                definition.name.faithful(),
                 definition.type_,
             );
             mutated += 1;
@@ -170,7 +170,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
                 assert!(
                     !recheck(&mutant, curios_pipeline::DEFAULT_STEP_BUDGET).is_empty(),
                     "{description}: the kernel accepted `{}` redeclared at `{replacement}`",
-                    definition.name,
+                    definition.name.faithful(),
                 );
                 mutated += 1;
             }
@@ -241,7 +241,9 @@ fn a_body_grafted_across_an_index_is_refused() {
             .items
             .iter()
             .find_map(|item| match item {
-                Item::Let(definition) if definition.name.to_string().ends_with("subject") => {
+                Item::Let(definition)
+                    if definition.name.faithful().to_string().ends_with("subject") =>
+                {
                     Some(definition.body.clone())
                 }
                 _ => None,
@@ -259,7 +261,9 @@ fn a_body_grafted_across_an_index_is_refused() {
             .items
             .iter_mut()
             .find_map(|item| match item {
-                Item::Let(definition) if definition.name.to_string().ends_with("subject") => {
+                Item::Let(definition)
+                    if definition.name.faithful().to_string().ends_with("subject") =>
+                {
                     Some(definition)
                 }
                 _ => None,

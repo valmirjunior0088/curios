@@ -7,13 +7,14 @@ mod tests;
 
 use {
     super::{
-        BinderSite, Callee, CycleMember, DeadArm, Declined, Erased, Error, GoalReport,
-        ShapeDiagnosis, Underivable, Watched,
+        BinderSite, Callee, CycleMember, DeadArm, Declined, Erased, ErasedName, ErasedSite, Error,
+        GoalReport, ShapeDiagnosis, Underivable, Watched,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_algebra::BOOL_ATOM_CAP,
+    curios_analysis::{DeclaredPart, MemberLabel},
     curios_core::{
-        Anchors, CalleeId, Free, Level, Quality, ReaderPosition, Spelling, Subterm, Term,
+        Anchors, CalleeId, Free, Global, Level, Quality, ReaderPosition, Spelling, Subterm, Term,
         UniverseMetaId, WitnessKey,
     },
     curios_num::Grain,
@@ -208,8 +209,80 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
 fn spelled_free(name: &Free, spelling: &Spelling) -> String {
     match name {
         Free::Global(global) => spelling.symbol(global),
-        Free::Local(_) => name.to_string(),
+        Free::Local(_) => name.hint().unwrap_or("_").to_string(),
     }
+}
+
+impl ErasedName {
+    /// This name as its reader writes it: a declaration as resolution reaches it, a local binder by its label.
+    fn spelled(&self, spelling: &Spelling) -> String {
+        match self {
+            ErasedName::Named(name) => spelled_free(name, spelling),
+            ErasedName::Erased(name) => name.clone(),
+        }
+    }
+}
+
+impl ErasedSite {
+    /// This site as a refusal's sentence names it, each declaration spelled for the reader.
+    pub(crate) fn phrase(&self, spelling: &Rc<Spelling>) -> String {
+        let quoted = |name: &Global| format!("'{}'", spelling.symbol(name));
+        match self {
+            ErasedSite::TypeOf(name) => format!("the type of {}", quoted(name)),
+            ErasedSite::BodyOf(name) => format!("the body of {}", quoted(name)),
+            ErasedSite::Within {
+                definition,
+                settled,
+            } => {
+                let place = match definition {
+                    Some(name) => quoted(name),
+                    None => "the entrypoint".to_string(),
+                };
+                match settled {
+                    Some(what) => format!("{what} in {place}"),
+                    None => place,
+                }
+            }
+            ErasedSite::EntryType => "the entrypoint's type".to_string(),
+            ErasedSite::ParameterOf(name) => format!("a parameter of {}", quoted(name)),
+            ErasedSite::PayloadOf {
+                family,
+                constructor,
+            } => format!("the payload of '{}/{constructor}'", spelling.symbol(family)),
+            ErasedSite::FieldOf(name) => format!("a field of {}", quoted(name)),
+            ErasedSite::Recursive(names) => format!(
+                "the recursive definition {}",
+                names.iter().map(quoted).collect::<Vec<_>>().join(", ")
+            ),
+            ErasedSite::LocallyRecursive(labels) => format!(
+                "the recursive definition {}",
+                labels
+                    .iter()
+                    .map(|label| format!("'{label}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            ErasedSite::Bound { callee, binder } => callee.slot("bound", binder, spelling),
+            ErasedSite::OperandBound(operation) => {
+                format!("the bound of '{}'", operation.spelled(spelling))
+            }
+        }
+    }
+}
+
+/// The declaration a report arose in, by the names it declares, each as resolution reaches it from where the reader stands. A witness has no name and is described: by its concept and key, or by its module where its signature spells neither.
+pub(super) fn declared(names: &[Global], spelling: &Spelling) -> String {
+    names
+        .iter()
+        .map(|name| match name {
+            Global::Authored(_) => spelling.symbol(name),
+            Global::Witness(id) => match id.spelled() {
+                Some((concept, key)) => Callee::Witness { concept, key }.phrase(spelling),
+                None => format!("the witness in {}", declaring_module(id.module())),
+            },
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// A callee identity spelled the same way, for the reports that carry one whole rather than destructured.
@@ -480,12 +553,15 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "duplicate field label '{label}' in tuple type")
             }
             Error::DuplicateInduct { name } => {
+                let name = spelling.symbol(name);
                 write!(f, "duplicate inductive declaration '{name}'")
             }
             Error::DuplicateStruct { name } => {
+                let name = spelling.symbol(name);
                 write!(f, "duplicate struct declaration '{name}'")
             }
             Error::DuplicateConcept { name } => {
+                let name = spelling.symbol(name);
                 write!(f, "duplicate concept declaration '{name}'")
             }
             Error::TupleFieldNameMismatch {
@@ -591,6 +667,7 @@ impl fmt::Display for Displayed<'_> {
                 tag,
                 constructors,
             } => {
+                let type_name = spelling.symbol(type_name);
                 write!(f, "match arm '{tag}' is not a constructor of '{type_name}'")?;
                 match constructors.is_empty() {
                     true => write!(f, "\n  it has no constructors"),
@@ -598,6 +675,7 @@ impl fmt::Display for Displayed<'_> {
                 }
             }
             Error::MatchCaseMissing { type_name, tag } => {
+                let type_name = spelling.symbol(type_name);
                 write!(
                     f,
                     "missing match case for constructor '{tag}' of '{type_name}'"
@@ -667,6 +745,7 @@ impl fmt::Display for Displayed<'_> {
                 )
             }
             Error::LargeElimOfProp { name } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "cannot eliminate the proposition '{name}' into a relevant result\n  a proposition is matched into data only where no constructor applies, or where it declares one whose every payload its indices determine"
@@ -677,6 +756,7 @@ impl fmt::Display for Displayed<'_> {
                 field,
                 field_type,
             } => {
+                let name = spelling.symbol(name);
                 let field_type = field_type.spelled(spelling);
                 write!(
                     f,
@@ -685,14 +765,35 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::NotStrictlyPositive {
                 name,
-                site,
+                part,
                 site_type,
                 polarity,
             } => {
+                let name = spelling.symbol(name);
                 let site_type = site_type.spelled(spelling);
+                let through = match part {
+                    DeclaredPart::Payload {
+                        constructor,
+                        member: MemberLabel::Written(label),
+                    } => format!("the payload '{label}' of '{constructor}', a '{site_type}',"),
+                    DeclaredPart::Payload {
+                        constructor,
+                        member: MemberLabel::Place(place),
+                    } => format!(
+                        "the {} payload of '{constructor}', a '{site_type}',",
+                        ordinal(*place)
+                    ),
+                    DeclaredPart::Field(MemberLabel::Written(label)) => {
+                        format!("its field '{label}', a '{site_type}',")
+                    }
+                    DeclaredPart::Field(MemberLabel::Place(place)) => {
+                        format!("its {} field, a '{site_type}',", ordinal(*place))
+                    }
+                    DeclaredPart::Whole => "its own declaration".to_string(),
+                };
                 write!(
                     f,
-                    "'{name}' is not strictly positive: through '{site} : {site_type}' it occurs in itself {polarity}\n  a recursive occurrence must be a plain payload, never left of an arrow"
+                    "'{name}' is not strictly positive: through {through} it occurs in itself {polarity}\n  a recursive occurrence must be a plain payload, never left of an arrow"
                 )
             }
             Error::PartialInErasedPosition {
@@ -708,10 +809,12 @@ impl fmt::Display for Displayed<'_> {
                         "erasure deletes proofs, so a proof that may not terminate proves anything"
                     }
                 };
+                let site = site.phrase(spelling);
                 match offender {
                     Some(offender) => write!(
                         f,
-                        "{site} is a {erased} position but reaches '{offender}', which is not known to terminate\n  {advice}"
+                        "{site} is a {erased} position but reaches '{}', which is not known to terminate\n  {advice}",
+                        spelling.symbol(offender)
                     ),
                     None => write!(
                         f,
@@ -728,6 +831,7 @@ impl fmt::Display for Displayed<'_> {
                 expected,
                 got,
             } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "struct '{name}' takes {expected} type argument(s) but got {got}"
@@ -740,6 +844,7 @@ impl fmt::Display for Displayed<'_> {
                 missing,
                 surplus,
             } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "struct '{name}' has {expected} field(s) but the literal supplies {got}"
@@ -753,6 +858,7 @@ impl fmt::Display for Displayed<'_> {
                 Ok(())
             }
             Error::UnknownDeclaration { name } => {
+                let name = spelling.symbol(name);
                 write!(f, "no declaration for '{name}'")
             }
             Error::UnknownStructField {
@@ -760,6 +866,7 @@ impl fmt::Display for Displayed<'_> {
                 label,
                 available,
             } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "struct '{name}' has no field '{label}' at that position (fields in order: {})",
@@ -767,24 +874,28 @@ impl fmt::Display for Displayed<'_> {
                 )
             }
             Error::UseEntryOutsideConcept { name } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "'use' entries are only legal in concept literals — struct '{name}' is not a concept"
                 )
             }
             Error::SpreadNotFirst { name } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "a '..' spread must be the first entry of the '{name}' literal"
                 )
             }
             Error::MultipleSpreads { name } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "a struct literal takes at most one '..' spread, but the '{name}' literal has more"
                 )
             }
             Error::SpreadBaseTypeMismatch { name, found } => {
+                let name = spelling.symbol(name);
                 let found = found.spelled(spelling);
                 write!(
                     f,
@@ -792,12 +903,14 @@ impl fmt::Display for Displayed<'_> {
                 )
             }
             Error::UnlabeledSpreadOverride { name } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "overrides after a '..' spread must be labeled ('field = value') in the '{name}' literal"
                 )
             }
             Error::SpreadOverrideOutOfOrder { name, label, order } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "overrides after a '..' spread must follow '{name}''s declared field order ({}); '{label}' is repeated or out of place",
@@ -805,12 +918,14 @@ impl fmt::Display for Displayed<'_> {
                 )
             }
             Error::PrivateField { name, field } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "field '{field}' of struct '{name}' is private to its declaring module and its descendants"
                 )
             }
             Error::PrivateRepresentation { name } => {
+                let name = spelling.symbol(name);
                 write!(
                     f,
                     "the representation of type '{name}' is private to its declaring module and its descendants"
@@ -899,6 +1014,11 @@ impl fmt::Display for Displayed<'_> {
                     let watching = watching
                         .iter()
                         .map(|watched| match watched {
+                            Watched::Slot {
+                                callee,
+                                noun,
+                                binder,
+                            } => callee.slot(noun, binder, spelling),
                             Watched::Described(description) => description.clone(),
                             Watched::Goal(extent) => {
                                 match extent.and_then(|extent| extent.resolved(anchors)) {
@@ -1274,12 +1394,14 @@ impl fmt::Display for Displayed<'_> {
                 )
             }
             Error::CyclicSuperclass { concept } => {
+                let concept = spelling.symbol(concept);
                 write!(
                     f,
                     "concept '{concept}' participates in a superclass cycle ('use'-marked fields must form an acyclic graph)"
                 )
             }
             Error::UnknownSuperclass { concept, target } => {
+                let concept = spelling.symbol(concept);
                 let target = target.spelled(spelling);
                 write!(
                     f,
@@ -1315,6 +1437,7 @@ impl fmt::Display for Displayed<'_> {
                 )
             }
             Error::ParameterlessWitnessConcept { concept } => {
+                let concept = spelling.symbol(concept);
                 write!(
                     f,
                     "this witness cannot be registered: concept '{concept}' has no parameters to key on\n  a global witness keys on its concept's parameter heads; supply a parameterless concept through a local 'use' binder instead"
@@ -1370,7 +1493,7 @@ impl fmt::Display for Displayed<'_> {
             Error::EvaluationCycle { steps } => {
                 let quoted = steps
                     .iter()
-                    .map(|(member, _)| format!("`{member}`"))
+                    .map(|(member, _)| format!("`{}`", member.spelled(spelling)))
                     .collect::<Vec<_>>();
                 let listed = match quoted.split_last() {
                     Some((last, rest)) if !rest.is_empty() => {
@@ -1381,7 +1504,7 @@ impl fmt::Display for Displayed<'_> {
                 let calls = steps
                     .iter()
                     .filter_map(|(_, through)| through.as_ref())
-                    .map(|callee| format!("`{callee}`"))
+                    .map(|callee| format!("`{}`", callee.spelled(spelling)))
                     .collect::<Vec<_>>();
                 let through = match calls.as_slice() {
                     [] => String::new(),
@@ -1401,12 +1524,15 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::InitializerPerformsEffect { member, through } => {
                 let through = match through {
-                    Some(callee) => format!(" through a call to `{callee}`"),
+                    Some(callee) => {
+                        format!(" through a call to `{}`", callee.spelled(spelling))
+                    }
                     None => String::new(),
                 };
                 write!(
                     f,
-                    "the initializer of `{member}` performs an effect{through}; a recursive value is computed when it is first read, or never, so its initializer may perform none"
+                    "the initializer of `{}` performs an effect{through}; a recursive value is computed when it is first read, or never, so its initializer may perform none",
+                    member.spelled(spelling)
                 )
             }
             Error::MotiveBinderCount {
@@ -1415,7 +1541,7 @@ impl fmt::Display for Displayed<'_> {
                 written,
             } => {
                 let subject = match name {
-                    Some(name) => format!("eliminating '{name}'"),
+                    Some(name) => format!("eliminating '{}'", spelling.symbol(name)),
                     None => "this eliminator".to_string(),
                 };
                 let shape = match expected {
@@ -1480,8 +1606,8 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "a declaration that has not elaborated was read")
             }
             // `render_body` intercepts both wrappers before a real spelling ever reaches this match, but these arms must not rely on that: interpolating `{error}` would route through `Display for Error`, silently resetting a nested term's spelling to core's default. Recurse with the spelling in hand instead.
-            Error::InDeclaration { name, error, .. } => {
-                writeln!(f, "while elaborating {name}:")?;
+            Error::InDeclaration { names, error } => {
+                writeln!(f, "while elaborating {}:", declared(names, spelling))?;
                 Displayed(error, Rc::clone(spelling), anchors).fmt(f)
             }
             Error::Located { error, .. } | Error::InScope { error, .. } => {

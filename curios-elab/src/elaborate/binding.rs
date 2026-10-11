@@ -1,9 +1,9 @@
 use {
     super::{Misaligned, align, check_witness_domain, insert_auto_argument, stands_at},
     crate::{
-        BinderSite, Context, DomainScope, EmbeddingSite, Error, Mode, ParkedWork, SlotPositions,
-        attempt_witness_goal, check, check_is_sort, check_rec_totality, convert, display_mismatch,
-        elaborate, expect, reduce_with, written_monad, zonk_solved_term_metas,
+        BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, ParkedWork,
+        SlotPositions, attempt_witness_goal, check, check_is_sort, check_rec_totality, convert,
+        display_mismatch, elaborate, expect, reduce_with, written_monad, zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Free, Func, Global, HeadKey, Infix, Intrinsic, Let,
@@ -157,7 +157,14 @@ pub(super) fn elaborate_rec(
             .hint_iter()
             .map(|hint| hint.unwrap_or("_").to_string())
             .collect::<Vec<_>>();
-        check_rec_totality(context, &group, &names)?;
+        check_rec_totality(context, &group, |members| {
+            ErasedSite::LocallyRecursive(
+                members
+                    .iter()
+                    .filter_map(|member| names.get(*member).cloned())
+                    .collect(),
+            )
+        })?;
         for (index, (label, type_)) in labels.iter().zip(&types_elaborated).enumerate() {
             context.reassume(label, type_);
             context.define(label, &Term::rec_proj(group.clone(), index), None);

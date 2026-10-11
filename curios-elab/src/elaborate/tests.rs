@@ -103,7 +103,7 @@ fn opaque_inductive_construction_is_rejected_outside_declaring_module() {
     );
     assert!(matches!(
         elaborate(&mut context, &term, Mode::Infer),
-        Err(Error::PrivateRepresentation { name }) if name == "/Opt"
+        Err(Error::PrivateRepresentation { name }) if name == nominal("Opt")
     ));
 
     context.set_island(Qualifier::from(["Owner"]));
@@ -145,7 +145,7 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
     for term in [empty, named, defaulted] {
         assert!(matches!(
             elaborate(&mut context, &term, Mode::Infer),
-            Err(Error::PrivateRepresentation { name }) if name == "/Opt"
+            Err(Error::PrivateRepresentation { name }) if name == nominal("Opt")
         ));
     }
 }
@@ -165,7 +165,7 @@ fn privacy_suppression_admits_machinery_rederivation() {
     );
     assert!(matches!(
         elaborate(&mut context, &term, Mode::Infer),
-        Err(Error::PrivateRepresentation { name }) if name == "/Opt"
+        Err(Error::PrivateRepresentation { name }) if name == nominal("Opt")
     ));
 
     let admitted =
@@ -174,7 +174,7 @@ fn privacy_suppression_admits_machinery_rederivation() {
 
     assert!(matches!(
         elaborate(&mut context, &term, Mode::Infer),
-        Err(Error::PrivateRepresentation { name }) if name == "/Opt"
+        Err(Error::PrivateRepresentation { name }) if name == nominal("Opt")
     ));
 }
 

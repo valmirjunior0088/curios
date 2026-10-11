@@ -47,8 +47,8 @@ fn two_independent_refusals_report_both() {
         "#,
     );
 
-    assert!(report.contains("while elaborating /_a:"), "{report}");
-    assert!(report.contains("while elaborating /_c:"), "{report}");
+    assert!(report.contains("while elaborating _a:"), "{report}");
+    assert!(report.contains("while elaborating _c:"), "{report}");
     assert!(!report.contains("_b"), "{report}");
 }
 
@@ -65,7 +65,7 @@ fn a_dependent_of_a_refused_declaration_reports_nothing_of_its_own() {
         "#,
     );
 
-    assert!(report.contains("while elaborating /_a:"), "{report}");
+    assert!(report.contains("while elaborating _a:"), "{report}");
     assert!(!report.contains("_b"), "{report}");
 }
 
@@ -115,7 +115,7 @@ fn a_user_of_a_refused_witness_reports_nothing_of_its_own() {
     );
 
     assert!(
-        report.contains("the witness in the entry module"),
+        report.contains("the witness of 'Show' for head 'Color'"),
         "{report}"
     );
     assert!(!report.contains("_shown"), "{report}");
@@ -166,7 +166,7 @@ fn a_test_of_a_refused_declaration_is_left_out_of_the_synthesized_tail() {
         "#,
     );
 
-    assert!(report.contains("while elaborating /_a:"), "{report}");
+    assert!(report.contains("while elaborating _a:"), "{report}");
     assert!(!report.contains("uses_a"), "{report}");
 }
 
@@ -247,7 +247,7 @@ fn a_broken_declaration_is_reported_beside_a_refusal_after_it() {
     );
 
     assert!(report.contains("expected a term"), "{report}");
-    assert!(report.contains("while elaborating /_c:"), "{report}");
+    assert!(report.contains("while elaborating _c:"), "{report}");
     assert!(
         report.find("expected a term") < report.find("while elaborating"),
         "the parse failure first: {report}"

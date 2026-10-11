@@ -66,7 +66,7 @@ pub(super) fn elaborate_struct_type(
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Err(match context.assumption(&Free::from(name)) {
             Some(found) => Error::not_a_struct_type(found.clone()),
-            None => Error::unknown_declaration(name.symbol()),
+            None => Error::unknown_declaration(*name),
         });
     };
     let explicit_universes = (!universes.is_empty()).then_some(universes);
@@ -98,7 +98,7 @@ pub(super) fn elaborate_struct_type(
 
     if params.len() != struct_decl.param_count() {
         return Err(Error::struct_arity_mismatch(
-            name.symbol(),
+            *name,
             struct_decl.param_count(),
             params.len(),
         ));
@@ -182,7 +182,7 @@ pub(super) fn elaborate_struct(
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Err(match context.assumption(&Free::from(name)) {
             Some(found) => Error::not_a_struct_type(found.clone()),
-            None => Error::unknown_declaration(name.symbol()),
+            None => Error::unknown_declaration(*name),
         });
     };
     let explicit_universes = (!written_universes.is_empty()).then_some(written_universes);
@@ -195,13 +195,13 @@ pub(super) fn elaborate_struct(
             .island()
             .is_some_and(|island| !island.is_within(&struct_decl.module))
     {
-        return Err(Error::private_representation(name.symbol()));
+        return Err(Error::private_representation(*name));
     }
 
     // A written-but-wrong parameter count is an error; an *empty* list is the bare-name head, which mints one fresh metavariable per parameter.
     if !params.is_empty() && params.len() != struct_decl.param_count() {
         return Err(Error::struct_arity_mismatch(
-            name.symbol(),
+            *name,
             struct_decl.param_count(),
             params.len(),
         ));
@@ -217,8 +217,8 @@ pub(super) fn elaborate_struct(
         1 if matches!(entries[0], StructEntry::Spread) => {
             return elaborate_struct_spread(context, &struct_decl, &universes, s, term, mode);
         }
-        1 => return Err(Error::spread_not_first(name.symbol())),
-        _ => return Err(Error::multiple_spreads(name.symbol())),
+        1 => return Err(Error::spread_not_first(*name)),
+        _ => return Err(Error::multiple_spreads(*name)),
     }
 
     let resolved = resolve_struct_params(context, name, &struct_decl, params, term)?;
@@ -245,7 +245,7 @@ pub(super) fn elaborate_struct(
             .collect(),
         true => {
             return Err(Error::wrong_number_of_fields(
-                name.symbol(),
+                *name,
                 slots.len(),
                 fields.len(),
                 Vec::new(),
@@ -271,7 +271,7 @@ pub(super) fn elaborate_struct(
 
     if written.iter().any(|(mark, ..)| *mark == Plicity::Witness) && context.concept(name).is_none()
     {
-        return Err(Error::use_entry_outside_concept(name.symbol()));
+        return Err(Error::use_entry_outside_concept(*name));
     }
 
     // Superclass fields are anonymous, so no written label can target one: a labeled entry naming a superclass is just an unknown field, caught by the positional validation below.
@@ -320,7 +320,7 @@ pub(super) fn elaborate_struct(
         };
 
         return Err(Error::wrong_number_of_fields(
-            name.symbol(),
+            *name,
             plain_labels.len(),
             plain.len(),
             missing,
@@ -334,7 +334,7 @@ pub(super) fn elaborate_struct(
         let declared = plain_labels.get(position).copied().unwrap_or_default();
         if declared != *written {
             return Err(Error::unknown_struct_field(
-                name.symbol(),
+                *name,
                 (*written).to_string(),
                 plain_labels
                     .iter()
@@ -367,7 +367,7 @@ pub(super) fn elaborate_struct(
         };
         if mark != Plicity::Explicit && labels[position] != label {
             return Err(Error::unknown_struct_field(
-                name.symbol(),
+                *name,
                 format!("@{label}"),
                 written_fields(&labels, &slots),
             )
@@ -524,10 +524,7 @@ pub(super) fn elaborate_struct_spread(
         &*base_type,
         Subterm::StructType(StructType { name: base_name, .. }) if base_name == name
     ) {
-        return Err(Error::spread_base_type_mismatch(
-            name.symbol(),
-            base_type.clone(),
-        ));
+        return Err(Error::spread_base_type_mismatch(*name, base_type.clone()));
     }
 
     let label = context.fresh(None);
@@ -548,7 +545,7 @@ pub(super) fn elaborate_struct_spread(
             .any(|entry| matches!(entry, StructEntry::Use))
             && context.concept(name).is_none()
         {
-            return Err(Error::use_entry_outside_concept(name.symbol()));
+            return Err(Error::use_entry_outside_concept(*name));
         }
 
         let labels = field_telescope.labels();
@@ -576,14 +573,14 @@ pub(super) fn elaborate_struct_spread(
                         // Found only among the fields already passed: repeated, or out of order.
                         None if (0..from).any(|position| named(&position)) => {
                             return Err(Error::spread_override_out_of_order(
-                                name.symbol(),
+                                *name,
                                 written.to_string(),
                                 listed(),
                             ));
                         }
                         None => {
                             return Err(Error::unknown_struct_field(
-                                name.symbol(),
+                                *name,
                                 written.to_string(),
                                 listed(),
                             ));
@@ -591,7 +588,7 @@ pub(super) fn elaborate_struct_spread(
                     }
                 }
                 StructEntry::Field(None) => {
-                    return Err(Error::unlabeled_spread_override(name.symbol()));
+                    return Err(Error::unlabeled_spread_override(*name));
                 }
                 StructEntry::Use | StructEntry::Implicit(_) => {}
                 StructEntry::Spread => unreachable!("spread multiplicity was validated"),
@@ -638,7 +635,7 @@ pub(super) fn elaborate_struct_spread(
                 && labels[*position] != written.as_str()
             {
                 return Err(Error::unknown_struct_field(
-                    name.symbol(),
+                    *name,
                     format!("@{written}"),
                     written_fields(&labels, &slots),
                 )

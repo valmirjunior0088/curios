@@ -15,7 +15,7 @@ mod tests;
 /// The two obligations run one analysis over one partiality relation, seeded twice, and this says which seeding rejected: a type must be total or type formation may not terminate, a proof must be total or it proves anything. Both checkers state that same distinction and each carries it in its own diagnostic, so a second declaration of it would be two vocabularies that could drift while describing one thing.
 pub use curios_analysis::Erased;
 use {
-    super::{Context, Error, proof_position, zonk},
+    super::{Context, ErasedSite, Error, proof_position, zonk},
     curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
         Definition, Enter, Entrypoint, Global, Item, Module, Rec, RecGroup, RecItem, Subterm, Term,
@@ -68,14 +68,14 @@ pub(crate) fn exhausted_bound(
     context: &Context,
     error: Error,
     proposition: &Term,
-    site: String,
+    site: ErasedSite,
 ) -> Error {
     match (&error, partial_offender(context, proposition)) {
         (Error::ReduceExhausted { .. } | Error::ConvertExhausted { .. }, Some(offender)) => {
             Error::PartialInErasedPosition {
                 erased: Erased::Proof,
                 site,
-                offender: Some(offender.to_string()),
+                offender: Some(offender),
             }
         }
         _ => error,
@@ -90,14 +90,14 @@ pub(crate) fn exhausted_bound(
 pub fn check_written_type_totality(
     context: &mut Context,
     type_: &Term,
-    site: &str,
+    site: ErasedSite,
 ) -> Result<(), Error> {
     match partial_offender(context, type_) {
         None => Ok(()),
         Some(offender) => Err(Error::PartialInErasedPosition {
             erased: Erased::Type,
-            site: site.to_string(),
-            offender: Some(offender.to_string()),
+            site,
+            offender: Some(offender),
         }),
     }
 }
@@ -193,7 +193,10 @@ pub fn recorded_totality(module: &Module) -> BTreeMap<Global, Totality> {
 /// Every way the given positions fail to be total, with the site of each.
 ///
 /// Two ways, and a position can fail either: it names a definition classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`stamp_totality`]), so what a position reaches through a total definition is total, and the definitions it names are all there is to ask.
-fn faults(context: &mut Context, positions: &[Position]) -> Result<Vec<(String, Fault)>, Error> {
+fn faults(
+    context: &mut Context,
+    positions: &[Position],
+) -> Result<Vec<(ErasedSite, Fault)>, Error> {
     curios_profile::sample!("totality::faults_positions", positions.len());
     let named = seeds(positions)
         .into_iter()
@@ -209,7 +212,7 @@ fn faults(context: &mut Context, positions: &[Position]) -> Result<Vec<(String, 
     let mut memo = LocalMemo::new();
     for position in positions {
         if locally_partial(context, &position.term, &mut memo)? {
-            faults.push((position.site.to_string(), Fault::Inline));
+            faults.push((ErasedSite::clone(&position.site), Fault::Inline));
         }
     }
     // One named fault per offending definition, attributed to the first position that names it.
@@ -224,7 +227,7 @@ fn faults(context: &mut Context, positions: &[Position]) -> Result<Vec<(String, 
                     .filter_map(|free| free.as_global())
                     .any(|global| *global == name)
             })
-            .map(|position| position.site.to_string())
+            .map(|position| ErasedSite::clone(&position.site))
             .expect("a seed is a name some position writes");
         faults.push((site, Fault::Named(name)));
     }
@@ -278,8 +281,8 @@ fn checked_type_positions(
     cache: &mut Zonked,
 ) -> Result<Vec<Position>, Error> {
     let settled = context.checked()[mark..].to_vec();
-    // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
-    let mut sites: HashMap<Rc<str>, Rc<str>> = HashMap::new();
+    // One site per definition, not per position: many recorded terms were settled in one.
+    let mut sites: HashMap<Option<Global>, Rc<ErasedSite>> = HashMap::new();
     let mut positions = Vec::new();
     curios_profile::sample!("totality::checked_entries", settled.len());
 
@@ -291,11 +294,12 @@ fn checked_type_positions(
         if sort {
             positions.push(Position {
                 term: zonked(context, cache, &term)?,
-                site: Rc::clone(
-                    sites
-                        .entry(site.clone())
-                        .or_insert_with(|| Rc::from(format!("a type in {site}"))),
-                ),
+                site: Rc::clone(sites.entry(site).or_insert_with(|| {
+                    Rc::new(ErasedSite::Within {
+                        definition: site,
+                        settled: Some("a type"),
+                    })
+                })),
             });
         }
     }
@@ -332,8 +336,8 @@ fn checked_proof_positions(
     cache: &mut Zonked,
 ) -> Result<Vec<Position>, Error> {
     let checked = context.split_checked(mark);
-    // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
-    let mut sites: HashMap<(Rc<str>, &'static str), Rc<str>> = HashMap::new();
+    // One site per definition and kind of proof, not per position: many recorded terms were settled in one.
+    let mut sites: HashMap<(Option<Global>, &'static str), Rc<ErasedSite>> = HashMap::new();
     let mut memo: HashMap<Term, Option<&'static str>> = HashMap::new();
     let mut positions = Vec::new();
 
@@ -353,11 +357,12 @@ fn checked_proof_positions(
         if let Some(what) = held {
             positions.push(Position {
                 term: zonked(context, cache, &term)?,
-                site: Rc::clone(
-                    sites
-                        .entry((site.clone(), what))
-                        .or_insert_with(|| Rc::from(format!("{what} in {site}"))),
-                ),
+                site: Rc::clone(sites.entry((site, what)).or_insert_with(|| {
+                    Rc::new(ErasedSite::Within {
+                        definition: site,
+                        settled: Some(what),
+                    })
+                })),
             });
         }
     }
@@ -375,7 +380,7 @@ fn report(context: &mut Context, positions: &[Position], erased: Erased) -> Resu
         Some((site, Fault::Named(name))) => Err(Error::PartialInErasedPosition {
             erased,
             site,
-            offender: Some(name.to_string()),
+            offender: Some(name),
         }),
         Some((site, Fault::Inline)) => Err(Error::PartialInErasedPosition {
             erased,
@@ -393,7 +398,7 @@ fn report(context: &mut Context, positions: &[Position], erased: Erased) -> Resu
 pub fn check_rec_totality(
     context: &mut Context,
     group: &RecGroup,
-    names: &[String],
+    site: impl FnOnce(&[usize]) -> ErasedSite,
 ) -> Result<(), Error> {
     // `RecGroup::member_type` rather than the member's scope body: the body carries loose indices where it names the group, and the question is now asked of a term that reduces. It is also the spelling `curios-cert`'s own gate asks about, so the two checkers put the same question to the same term.
     let mut extractable = Vec::new();
@@ -407,28 +412,25 @@ pub fn check_rec_totality(
         return Ok(());
     }
 
-    let site = extractable
-        .into_iter()
-        .filter_map(|index| names.get(index))
-        .map(|name| format!("'{name}'"))
-        .collect::<Vec<_>>()
-        .join(", ");
-
     Err(Error::PartialInErasedPosition {
         erased: Erased::Type,
-        site: format!("the recursive definition {site}"),
+        site: site(&extractable),
         offender: None,
     })
 }
 
 /// [`check_rec_totality`] for a top-level `rec`, which knows its own names.
 pub fn check_rec_item_totality(context: &mut Context, rec: &RecItem) -> Result<(), Error> {
-    let names = rec
-        .definitions()
-        .into_iter()
-        .map(|definition| definition.name.to_string())
-        .collect::<Vec<_>>();
-    check_rec_totality(context, &rec.group, &names)
+    let definitions = rec.definitions();
+    check_rec_totality(context, &rec.group, |members| {
+        ErasedSite::Recursive(
+            members
+                .iter()
+                .filter_map(|member| definitions.get(*member))
+                .map(|definition| definition.name)
+                .collect(),
+        )
+    })
 }
 
 /// Per-node verdicts for [`locally_partial`], carried across the terms one pass classifies.

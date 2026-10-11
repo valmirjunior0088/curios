@@ -9,7 +9,7 @@
 //! **A schema is its declaration's.** The item that declares a structure or an inductive registers its row, and a fragment that imports the row is linked after that item's rows are, its schema resolved to the one the item registered. Only the rows: a declaration a program constructs or matches values of, and names nowhere else, contributes its schemas and none of what its own item erased to ([`curios_ersd::Module::link_rows`]). An anonymous row is declared by no item: the first fragment linked that holds one of a width registers it, and every later one is resolved to it.
 
 use {
-    super::{Binding, ErasedItem, ErasedProgram, ErasedUnit, Erasures},
+    super::{Binding, ErasedItem, ErasedNames, ErasedProgram, ErasedUnit, Erasures},
     crate::Error,
     curios_core::Global,
     std::collections::{BTreeMap, BTreeSet},
@@ -50,7 +50,10 @@ impl Linking {
     pub(super) fn add(&mut self, erased: &ErasedItem) -> curios_ersd::Linked {
         let bound = |name: &Global| {
             *self.bound.get(name).unwrap_or_else(|| {
-                panic!("{name} is imported before the item that binds it is linked")
+                panic!(
+                    "{} is imported before the item that binds it is linked",
+                    name.faithful()
+                )
             })
         };
         let resolution = curios_ersd::Resolution {
@@ -60,7 +63,10 @@ impl Linking {
                 .iter()
                 .map(|name| match bound(name) {
                     curios_ersd::Atom::Function(function) => function,
-                    atom => panic!("{name} is imported as a function and bound to {atom:?}"),
+                    atom => panic!(
+                        "{} is imported as a function and bound to {atom:?}",
+                        name.faithful()
+                    ),
                 })
                 .collect(),
             ..self.held(erased)
@@ -110,7 +116,8 @@ impl Linking {
             };
             assert!(
                 held,
-                "the row of {name} is imported before the rows of the item that declares it are linked",
+                "the row of {} is imported before the rows of the item that declares it are linked",
+                name.faithful()
             );
         }
 
@@ -256,9 +263,9 @@ pub(super) fn link(
         .map(|(function, name)| (name, function))
         .collect();
     // Every fragment was held to the recursion rules where it was erased: its own groups by its verification, what it applies of another through that function's interface, and a read of a value whose initializer reads itself where the read was erased. So nothing here is expected to be refused, and a refusal would name nothing an extent was kept for.
-    module
-        .verify()
-        .map_err(|error| Error::refused_by_verifier(error, &BTreeMap::new()))?;
+    module.verify().map_err(|error| {
+        Error::refused_by_verifier(error, &BTreeMap::new(), &ErasedNames::default())
+    })?;
 
     Ok(ErasedProgram::new(module, defined))
 }

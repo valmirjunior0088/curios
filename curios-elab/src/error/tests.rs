@@ -14,6 +14,11 @@ fn goals() -> Error {
     Error::goals(Vec::new())
 }
 
+/// The name a declaration of the entry module is declared under.
+fn declared(label: &str) -> Global {
+    Global::Authored(Qualifier::from([label]))
+}
+
 /// Where the entry's text `a b` lies, and the extent of each of its two letters and of the whole.
 fn written() -> (Anchors, [Extent; 3]) {
     let source = Source::inline("a b");
@@ -60,7 +65,7 @@ fn a_batch_is_neither_located_nor_attributed() {
     let (_, [first, second, whole]) = written();
     let batch = Error::batch(vec![refusal().at(first), refusal().at(second)]);
 
-    let wrapped = batch.at(whole).in_declaration("outer", None);
+    let wrapped = batch.at(whole).in_declaration([declared("outer")]);
 
     assert!(matches!(wrapped, Error::Batch(_)));
 }
@@ -69,14 +74,14 @@ fn a_batch_is_neither_located_nor_attributed() {
 fn a_batch_renders_one_report_per_member() {
     let (anchors, [first, second, _]) = written();
     let batch = Error::batch(vec![
-        refusal().at(first).in_declaration("first", None),
+        refusal().at(first).in_declaration([declared("first")]),
         refusal().at(second),
     ]);
 
     let reports = batch.reports(&Rc::new(Spelling::default()), &BTreeMap::new(), &[&anchors]);
 
     assert_eq!(reports.len(), 2);
-    assert!(reports[0].message.starts_with("while elaborating first:"));
+    assert!(reports[0].message.starts_with("while elaborating /first:"));
     assert_eq!(
         reports
             .iter()

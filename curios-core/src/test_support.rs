@@ -87,7 +87,11 @@ pub fn declaring(
     );
     for (name, declaration) in inducts {
         let earlier = entries.insert(name, Nominal::Inductive(declaration));
-        assert!(earlier.is_none(), "{name} is declared by one entry");
+        assert!(
+            earlier.is_none(),
+            "{} is declared by one entry",
+            name.faithful()
+        );
     }
 
     let carried = |name: &Global, kind: &mut DefinitionKind, entries: &mut BTreeMap<_, _>| {

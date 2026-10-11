@@ -35,8 +35,8 @@ pub struct ErasedItem {
     functions: Vec<Global>,
     /// What applying each function a declared name is bound to does ([`curios_ersd::Module::interface`]), read once here, where the fragment is final, since every item that imports the name asks.
     interfaces: BTreeMap<curios_ersd::FunctionId, curios_ersd::Interface>,
-    /// The values whose initializers read themselves while nothing else of the fragment reads them ([`curios_ersd::Module::unforced`]), each with the name a refusal calls it by and where its initializer is written. Nothing here forces one; an item that reads one would, and is refused.
-    unforced: BTreeMap<curios_ersd::ValueId, (String, Option<Extent>)>,
+    /// The values whose initializers read themselves while nothing else of the fragment reads them ([`curios_ersd::Module::unforced`]), each with where its initializer is written. Nothing here forces one; an item that reads one would, and is refused.
+    unforced: BTreeMap<curios_ersd::ValueId, Option<Extent>>,
     /// The names bound to what an evaluation of the item computed, where that is another atom than the one the item bound them to. A function one of them is bound to is a closure the item computed and no definition's own, so what a record says of the definition is not said of it.
     computed: BTreeSet<Global>,
 }
@@ -50,11 +50,8 @@ pub(super) enum Export<'a> {
     Constant(&'a curios_ersd::Constant),
     /// To a value its item computes.
     Value,
-    /// To a value whose own initializer reads it and nothing else of its item does: reading it is the cycle forcing meets first, under the name `member`, written at `extent`.
-    Unforced {
-        member: &'a str,
-        extent: Option<&'a Extent>,
-    },
+    /// To a value whose own initializer reads it and nothing else of its item does: reading it is the cycle forcing meets first, its initializer written at `extent`.
+    Unforced { extent: Option<&'a Extent> },
     /// To a function of `arity` parameters.
     Function {
         arity: usize,
@@ -83,7 +80,7 @@ impl ErasedItem {
         let unforced = module
             .unforced()
             .into_iter()
-            .map(|step| (step.value, (step.member, extents.get(&step.value).cloned())))
+            .map(|step| (step.value, extents.get(&step.value).cloned()))
             .collect();
 
         Self {
@@ -132,7 +129,7 @@ impl ErasedItem {
     pub(super) fn extents(&self) -> impl Iterator<Item = (curios_ersd::ValueId, &Extent)> {
         self.unforced
             .iter()
-            .filter_map(|(value, (_, extent))| Some((*value, extent.as_ref()?)))
+            .filter_map(|(value, extent)| Some((*value, extent.as_ref()?)))
     }
 
     /// Whether an item that names `name` reads this erased form and `other` alike: the name bound the same way, and the row it declares, where it declares one, of the same shape under the same mask. What an importing item holds of a row is no more ([`ErasedItem::struct_row_read`], [`ErasedItem::induct_row_read`]).
@@ -148,9 +145,7 @@ impl ErasedItem {
             Export::Dropped => (0u8, None, None, None),
             Export::Constant(constant) => (1, Some(constant.clone()), None, None),
             Export::Value => (2, None, None, None),
-            Export::Unforced { member, extent } => {
-                (3, None, Some((member.to_string(), extent.cloned())), None)
-            }
+            Export::Unforced { extent } => (3, None, Some(extent.cloned()), None),
             Export::Function { arity, interface } => {
                 (4, None, None, Some((arity as u64, interface)))
             }
@@ -225,8 +220,7 @@ impl ErasedItem {
                     .expect("an exported constant is the fragment's"),
             ),
             Binding::Atom(curios_ersd::Atom::Value(value)) => match self.unforced.get(&value) {
-                Some((member, extent)) => Export::Unforced {
-                    member,
+                Some(extent) => Export::Unforced {
                     extent: extent.as_ref(),
                 },
                 None => Export::Value,

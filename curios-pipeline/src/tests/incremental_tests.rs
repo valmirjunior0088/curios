@@ -499,7 +499,13 @@ fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
         .items
         .iter()
         .find_map(|item| match item {
-            Item::Let(definition) if definition.name.symbol().ends_with(&format!("/{name}")) => {
+            Item::Let(definition)
+                if definition
+                    .name
+                    .faithful()
+                    .to_string()
+                    .ends_with(&format!("/{name}")) =>
+            {
                 Some(definition)
             }
             _ => None,

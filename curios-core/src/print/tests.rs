@@ -110,7 +110,8 @@ fn a_suffix_is_counted_across_the_units_of_a_scope() {
 
         assert!(
             !matches!(spelled.as_deref(), Some("T" | "Vec/T")),
-            "{shared} took a suffix the other unit's global carries: {spelled:?}"
+            "{} took a suffix the other unit's global carries: {spelled:?}",
+            shared.faithful()
         );
     }
     assert_eq!(shorten.get(&lone).as_deref(), Some("empty"));

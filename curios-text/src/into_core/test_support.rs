@@ -386,14 +386,16 @@ pub(super) fn universe_parameters(module: &curios_core::Module, name: &str) -> u
         .items
         .iter()
         .find_map(|item| match item {
-            curios_core::Item::Let(definition) if definition.name.symbol() == name => {
+            curios_core::Item::Let(definition)
+                if definition.name.faithful().to_string() == name =>
+            {
                 Some(definition.universe_context.parameter_count)
             }
             // An inductive and its constructors are one recursive group, so a lookup restricted to `Let` would miss every one of them.
             curios_core::Item::Rec(rec) => rec
                 .definitions()
                 .iter()
-                .find(|definition| definition.name.symbol() == name)
+                .find(|definition| definition.name.faithful().to_string() == name)
                 .map(|definition| definition.universe_context.parameter_count),
             _ => None,
         })

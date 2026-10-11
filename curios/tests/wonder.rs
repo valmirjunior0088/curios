@@ -186,7 +186,7 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     let answered = curios(&root, &["wonder", "diagnostics", "-"], module);
     assert!(answered.status.success());
     let text = stdout(&answered);
-    assert!(text.contains("while elaborating /stdin/w"), "{text}");
+    assert!(text.contains("while elaborating w"), "{text}");
     assert!(text.contains("--> <stdin>:1:24"), "{text}");
 
     let staged = curios(&root, &["wonder", "stage", "core", "-"], module);

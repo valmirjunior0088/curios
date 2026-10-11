@@ -1,6 +1,9 @@
 use {
     super::{Context, Error, Mode, elaborate, expect},
-    crate::{SettleTier, check_is_sort, exhausted_bound, reduce_with, settle_against, sort_term},
+    crate::{
+        ErasedSite, SettleTier, check_is_sort, exhausted_bound, reduce_with, settle_against,
+        sort_term,
+    },
     curios_core::{Intrinsic, Operand, Produced, Subterm, Term, Var, Visit},
 };
 
@@ -101,7 +104,7 @@ pub(super) fn elaborate_demand(
                             context,
                             error,
                             type_,
-                            format!("the bound of '{}'", operation()),
+                            ErasedSite::OperandBound(Box::new(operation())),
                         )
                     })?
                     .0

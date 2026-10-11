@@ -587,7 +587,7 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
             let struct_decl = context
                 .struct_decl(name)
                 .cloned()
-                .ok_or_else(|| Error::unknown_declaration(name.symbol()))?;
+                .ok_or_else(|| Error::unknown_declaration(*name))?;
             let arity = context.instantiate_universe_bound_at(
                 &struct_decl.universe_context,
                 &struct_decl.arity,
@@ -867,7 +867,7 @@ pub(crate) fn read_witness_signature(
 
     // Key on every parameter: each must reduce to a rigid, keyable head. A parameterless concept has no head to key on at all — it is supplied through a local `use` binder, never the global table.
     if params.is_empty() {
-        return Err(Error::parameterless_witness_concept(concept_name.symbol()));
+        return Err(Error::parameterless_witness_concept(*concept_name));
     }
     let mut heads = Vec::with_capacity(params.len());
     for (position, param) in params.iter().enumerate() {
@@ -1051,10 +1051,7 @@ pub(crate) fn superclass_targets(
                 Subterm::StructType(reached) if context.concept(&reached.name).is_some() => {
                     Ok(reached.name)
                 }
-                _ => {
-                    Err(Error::unknown_superclass(name.symbol(), edge.clone())
-                        .at_opt(edge.extent()))
-                }
+                _ => Err(Error::unknown_superclass(*name, edge.clone()).at_opt(edge.extent())),
             }
         })
         .collect()
@@ -1083,7 +1080,7 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
         for target in &concept.supers {
             if context.registered_concept(target).is_none() {
                 return Err(Error::unknown_superclass(
-                    name.symbol(),
+                    *name,
                     Term::free_var(&Free::Global(*target)),
                 ));
             }
@@ -1101,7 +1098,7 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
             return Ok(());
         }
         if !visiting.insert(*name) {
-            return Err(Error::cyclic_superclass(name.symbol()));
+            return Err(Error::cyclic_superclass(*name));
         }
         let concept = context
             .registered_concept(name)

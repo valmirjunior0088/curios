@@ -122,8 +122,7 @@ fn an_elaborators_error_is_named_beneath_what_located_it() {
         ..FORGED
     };
     let located = curios_elab::Error::InDeclaration {
-        name: "forged".to_string(),
-        owner: None,
+        names: Vec::new(),
         error: Box::new(curios_elab::Error::Poisoned),
     };
 

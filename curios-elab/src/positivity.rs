@@ -35,14 +35,12 @@ pub(crate) fn decide_polarities(context: &mut Context, published: &Published) ->
         positivity_vectors(context, Declarations::of(&inducts, &structs)).map_err(|refusal| {
             match refusal {
                 PositivityRefusal::NotPositive(refusal) => Error::not_strictly_positive(
-                    refusal.name.symbol(),
+                    refusal.name,
                     refusal.part,
                     refusal.type_,
                     refusal.polarity,
                 ),
-                PositivityRefusal::Exhausted { name, error } => {
-                    error.in_declaration(&name.symbol(), Some(&name))
-                }
+                PositivityRefusal::Exhausted { name, error } => error.in_declaration([name]),
             }
         })?;
 

@@ -595,7 +595,7 @@ impl Definition {
         write!(
             formatter,
             "{} : {} = {}",
-            self.name,
+            self.name.faithful(),
             self.type_.spelled(spelling),
             self.body.spelled(spelling)
         )
@@ -1471,19 +1471,21 @@ impl fmt::Display for Positional {
             Positional::UnscopedWitness { witness } => {
                 return write!(
                     formatter,
-                    "{witness} is declared here and scoped to a mount this module does not own"
+                    "{} is declared here and scoped to a mount this module does not own",
+                    witness.faithful()
                 );
             }
             Positional::PlacedWitness { witness } => {
                 return write!(
                     formatter,
-                    "{witness} is declared here under its place in its module, its signature spelling no key"
+                    "{} is declared here under its place in its module, its signature spelling no key",
+                    witness.faithful()
                 );
             }
         };
 
         match owner {
-            Some(name) => write!(formatter, "{name} carries {carried}"),
+            Some(name) => write!(formatter, "{} carries {carried}", name.faithful()),
             None => write!(formatter, "the entrypoint carries {carried}"),
         }
     }
@@ -1705,14 +1707,16 @@ fn zonked_refusal(module: &Module) -> Option<String> {
                 .any(|(_, param)| unfinished_bound(&param.telescope))
         {
             return Some(format!(
-                "elaboration-only syntax survives in the registry entry for {name}"
+                "elaboration-only syntax survives in the registry entry for {}",
+                name.faithful()
             ));
         }
     }
     for (name, decl) in module.struct_decls() {
         if unfinished_bound(&decl.arity) || unfinished(&decl.result_sort) {
             return Some(format!(
-                "elaboration-only syntax survives in the registry entry for {name}"
+                "elaboration-only syntax survives in the registry entry for {}",
+                name.faithful()
             ));
         }
     }

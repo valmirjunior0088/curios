@@ -612,7 +612,7 @@ fn differences(whole: &Module, replayed: &Module, names: &BTreeSet<Global>) -> V
                 parts.push("its totality".to_string());
             }
             if !parts.is_empty() {
-                differences.push(format!("{}: {}", this.name.symbol(), parts.join(", ")));
+                differences.push(format!("{}: {}", this.name.faithful(), parts.join(", ")));
             }
         }
     }
@@ -621,7 +621,7 @@ fn differences(whole: &Module, replayed: &Module, names: &BTreeSet<Global>) -> V
             || whole.struct_decls().get(name) != replayed.struct_decls().get(name)
             || whole.concepts().get(name) != replayed.concepts().get(name)
         {
-            differences.push(format!("{}: its registry entry", name.symbol()));
+            differences.push(format!("{}: its registry entry", name.faithful()));
         }
     }
 
@@ -811,7 +811,7 @@ fn std_former_derivation() {
                     let cut = |term: &dyn ToString| {
                         term.to_string().chars().take(SHOWN).collect::<String>()
                     };
-                    println!("{kind} {}: {}", stored.name.symbol(), parts.join(", "));
+                    println!("{kind} {}: {}", stored.name.faithful(), parts.join(", "));
                     if stored.type_ != derived.type_ {
                         println!("  stored type   {}", cut(&stored.type_));
                         println!("  derived type  {}", cut(&derived.type_));

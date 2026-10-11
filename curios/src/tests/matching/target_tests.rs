@@ -43,7 +43,7 @@ fn opaque_inductive_empty_elimination_is_private() {
 
     let error = error(source);
     assert!(
-        error.contains("representation of type '/Secret/T' is private"),
+        error.contains("representation of type 'Secret/T' is private"),
         "unexpected error: {error}"
     );
 }

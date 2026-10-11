@@ -67,7 +67,7 @@ impl Lowering<'_> {
             .collect::<Vec<_>>();
         let hints = definitions
             .iter()
-            .map(|definition| Some(definition.name.symbol()))
+            .map(|definition| Some(definition.name.faithful().to_string()))
             .collect::<Vec<_>>();
         let members = definitions
             .iter()
@@ -90,9 +90,14 @@ impl Lowering<'_> {
             .zip(members)
             .map(|((name, hint), (_, body))| {
                 let member = match &**body {
-                    Subterm::Func(_) => Member::Function(self.builder.reserve_function()),
+                    Subterm::Func(_) => {
+                        let function = self.builder.reserve_function();
+                        self.names.functions.insert(function, *name);
+                        Member::Function(function)
+                    }
                     _ => {
                         let value = self.builder.value(hint.clone());
+                        self.names.values.insert(value, *name);
                         // Where the verifier's refusal of this member is framed, should it refuse it: the initializer, since no extent of the binder reaches this far.
                         if let Some(extent) = body.extent() {
                             self.extents.insert(value, extent);

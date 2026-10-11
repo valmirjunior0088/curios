@@ -60,7 +60,7 @@ pub(crate) fn record_variances(context: &mut Context, names: &[Global]) -> Resul
     let VarianceVectors { vectors, exhausted } =
         variance_vectors(context, Declarations::of(&inducts, &structs));
     if let Some((walked, error)) = exhausted {
-        return Err(error.in_declaration(&walked.symbol(), Some(&walked)));
+        return Err(error.in_declaration([walked]));
     }
     for (name, vector) in vectors {
         if let Some(declaration) = context.induct_decl(&name).cloned() {
@@ -347,9 +347,10 @@ pub(crate) fn hold_variances(context: &mut Context, published: &Published) -> Re
         });
         if let Some(level) = denied {
             return Err(match exhausted {
-                Some((walked, error)) => error.in_declaration(&walked.symbol(), Some(&walked)),
+                Some((walked, error)) => error.in_declaration([walked]),
                 None => Error::UniverseInvariant(format!(
-                    "{name}: universe level {level} is carried as irrelevant, and its declaration mentions it"
+                    "{}: universe level {level} is carried as irrelevant, and its declaration mentions it",
+                    name.faithful()
                 )),
             });
         }

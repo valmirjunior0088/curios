@@ -157,7 +157,7 @@ fn audit_dependencies(
         if !Audiences::covers(exposure, &reach) {
             return Err(Error::PrivateItemInPublicInterface {
                 item: item.to_string(),
-                referent: referent.symbol(),
+                referent: referent.path(),
             });
         }
     }
@@ -199,7 +199,7 @@ pub(super) fn audit_public_exposures(
             audiences,
             &sources,
             &exposure,
-            &name.symbol(),
+            &name.path(),
             declared.signature.iter().copied(),
         )?;
     }

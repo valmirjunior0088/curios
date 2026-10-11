@@ -9,7 +9,7 @@
 use {
     crate::{Attempted, Context, Error, GoalSite},
     curios_core::{Entrypoint, Free, Global, Item, Module},
-    std::{collections::BTreeSet, rc::Rc},
+    std::collections::BTreeSet,
 };
 
 /// A top-level item's position in its module's order, with the entry after the last item: what an item is kept and a refusal filed under, so both come back in item order whatever order the items elaborated in.
@@ -85,7 +85,7 @@ pub(super) fn withdraw(context: &mut Context, declared: &[&Global]) {
 /// Where an attempt at an item began, so what it wrote can be taken back when it is refused or void.
 pub(super) struct ItemMark {
     checked: usize,
-    site: Rc<str>,
+    site: Option<Global>,
 }
 
 impl ItemMark {

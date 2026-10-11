@@ -236,7 +236,7 @@ fn project(
             params,
         }) => {
             let Some(struct_decl) = context.struct_decl(name).cloned() else {
-                return Err(Error::unknown_declaration(name.symbol()));
+                return Err(Error::unknown_declaration(*name));
             };
             let arity = context.instantiate_universe_bound_at(
                 &struct_decl.universe_context,
@@ -254,7 +254,7 @@ fn project(
                     Field::Index(index) | Field::Position(index) => index.to_string(),
                     Field::Label(label) => label.clone(),
                 };
-                return Err(Error::private_field(name.symbol(), field));
+                return Err(Error::private_field(*name, field));
             }
 
             arity.open(&params.iter().collect::<Vec<_>>())
@@ -341,7 +341,7 @@ pub(super) fn elaborate_induct_type(
     } = ut;
 
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
-        return Err(Error::unknown_declaration(name.symbol()));
+        return Err(Error::unknown_declaration(*name));
     };
     let (arity, result_sort, universes) = if written_universes.is_empty() {
         let (arity, universes) = context
@@ -394,7 +394,7 @@ pub(super) fn elaborate_variant(
     } = uc;
 
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
-        return Err(Error::unknown_declaration(name.symbol()));
+        return Err(Error::unknown_declaration(*name));
     };
 
     if !induct_decl.rep_public
@@ -402,12 +402,12 @@ pub(super) fn elaborate_variant(
             .island()
             .is_some_and(|island| !island.is_within(&induct_decl.module))
     {
-        return Err(Error::private_representation(name.symbol()));
+        return Err(Error::private_representation(*name));
     }
 
     let (signature, universes) = if written_universes.is_empty() {
         let Some(signature) = induct_decl.constructor(tag).map(|c| c.telescope.clone()) else {
-            return Err(Error::match_case_missing(name.symbol(), tag.to_string()));
+            return Err(Error::match_case_missing(*name, tag.to_string()));
         };
         let (signature, universes) =
             context.instantiate_universe_bound(&induct_decl.universe_context, &signature)?;
@@ -418,7 +418,7 @@ pub(super) fn elaborate_variant(
             .constructor(tag)
             .map(|constructor| constructor.telescope.clone())
         else {
-            return Err(Error::match_case_missing(name.symbol(), tag.to_string()));
+            return Err(Error::match_case_missing(*name, tag.to_string()));
         };
         (signature, written_universes.clone())
     };

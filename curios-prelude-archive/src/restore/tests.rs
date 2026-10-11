@@ -76,14 +76,14 @@ fn string_literal_machinery_is_monomorphic() {
             match item {
                 Item::Let(definition) => {
                     parameters.insert(
-                        definition.name.symbol(),
+                        definition.name.faithful().to_string(),
                         definition.universe_context.parameter_count,
                     );
                 }
                 Item::Rec(rec) => {
                     for definition in rec.definitions() {
                         parameters.insert(
-                            definition.name.symbol(),
+                            definition.name.faithful().to_string(),
                             definition.universe_context.parameter_count,
                         );
                     }
@@ -199,7 +199,11 @@ fn every_registry_entry_is_keyed_by_a_name_an_item_of_its_root_declares() {
                 .chain(core.struct_decls().keys())
                 .chain(core.concepts().keys())
             {
-                assert!(declared.contains(name), "no item declares {name}");
+                assert!(
+                    declared.contains(name),
+                    "no item declares {}",
+                    name.faithful()
+                );
             }
         }
     });
@@ -316,7 +320,7 @@ fn kernel_disagreements() {
         }
         for verdict in &verdicts {
             let name = match &verdict.name {
-                Some(name) => format!("{name}"),
+                Some(name) => name.faithful().to_string(),
                 None => "<entrypoint>".to_string(),
             };
             println!("        {name}  —  {}", class(&verdict.error));
@@ -470,7 +474,7 @@ fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
                                     Err(error) if error.is_exhausted() => {}
                                     Err(error) => refused.push(format!(
                                         "{} at {value} in place of parameter {}: {error:?}",
-                                        definition.name,
+                                        definition.name.faithful(),
                                         position + 1,
                                     )),
                                 }
@@ -729,7 +733,8 @@ fn universe_parameter_census() {
 
                 println!(
                     "{}\t{}\t{constraints}\t{type_}",
-                    definition.name, context.parameter_count
+                    definition.name.faithful(),
+                    context.parameter_count
                 );
             }
         }
@@ -742,7 +747,7 @@ fn every_sys_former_takes_one_universe_parameter() {
     with_prelude(|prelude| {
         let counts = items(prelude)
             .flat_map(|item| item.definitions())
-            .map(|definition| (definition.name.to_string(), definition))
+            .map(|definition| (definition.name.faithful().to_string(), definition))
             .filter(|(name, _)| SYS_FORMERS.contains(&name.as_str()))
             .map(|(name, definition)| (name, definition.universe_context.parameter_count))
             .collect::<BTreeMap<_, _>>();
@@ -876,7 +881,7 @@ fn family_variance_inventory() {
                     Variance::Invariant => '=',
                 })
                 .collect::<String>();
-            println!("{name}\t{spelled}");
+            println!("{}\t{spelled}", name.faithful());
         }
 
         let parameters = families.values().map(Vec::len).sum::<usize>();
@@ -938,7 +943,7 @@ fn definition_variance_inventory() {
                     Variance::Invariant => '=',
                 })
                 .collect::<String>();
-            println!("{}\t{spelled}", definition.name);
+            println!("{}\t{spelled}", definition.name.faithful());
         }
 
         println!(

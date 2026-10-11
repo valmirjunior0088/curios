@@ -58,7 +58,7 @@ impl Lowering<'_> {
         // A single relevant field is a newtype: the bare field, no schema.
         let schema = (!ProductRow::collapses(relevant.len())).then(|| {
             self.builder.product(curios_ersd::ProductSchema {
-                debug_name: Some(name.to_string()),
+                debug_name: Some(name.faithful().to_string()),
                 fields: relevant,
                 shared: false,
             })
@@ -84,7 +84,7 @@ impl Lowering<'_> {
             .induct_decl(name)
             .cloned()
             .expect("erase: a registered inductive");
-        let family = self.builder.family(Some(name.to_string()));
+        let family = self.builder.family(Some(name.faithful().to_string()));
         // Registered before the constructor walk, not after: classifying a field of this very inductive is the ordinary case, not an edge one.
         self.pending_families.insert(*name, family);
         // A `Prop`-sorted family is proof-irrelevant, so erasure drops its inhabitants wholesale — payloads included. Classifying each payload on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)` has an abstract `A`, which is neither prop nor universe), leaving a live field inside an erased proof: rebuilding the constructor would then compute that field from binders the same erasure had dropped. `Prop` structures already guarantee this by declaration — their fields must be non-informative — so this aligns inductives with them.

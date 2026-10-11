@@ -6,8 +6,8 @@
 
 use {
     super::{
-        Atom, BlockId, CycleStep, FunctionId, Intrinsic, Module, Rhs, Statement, ValueId,
-        VerifyError,
+        Atom, BlockId, CycleCall, CycleStep, FunctionId, Intrinsic, Module, Rhs, Statement,
+        ValueId, VerifyError,
     },
     crate::{Interface, LocalBehavior, RecValue, Semantics},
     std::collections::{BTreeMap, BTreeSet},
@@ -46,7 +46,10 @@ pub(super) fn check_group(
             return Err(VerifyError::InitializerPerformsEffect {
                 member: value_name(module, member.value),
                 value: member.value,
-                through: through.map(|callee| function_name(module, callee)),
+                through: through.map(|callee| CycleCall {
+                    function: callee,
+                    name: function_name(module, callee),
+                }),
             });
         }
         let mut edges = BTreeMap::new();
@@ -87,7 +90,10 @@ pub(super) fn check_group(
                     CycleStep {
                         member: value_name(module, computed[from]),
                         value: computed[from],
-                        through: evaluates[from][&to].map(|callee| function_name(module, callee)),
+                        through: evaluates[from][&to].map(|callee| CycleCall {
+                            function: callee,
+                            name: function_name(module, callee),
+                        }),
                     }
                 })
                 .collect();

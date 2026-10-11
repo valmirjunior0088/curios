@@ -382,7 +382,7 @@ fn validate_instance_arities<B: Bound>(
                             definitions.get(name).and_then(|expected| {
                                 mismatch(
                                     "definition instance",
-                                    &name.symbol(),
+                                    &name.faithful().to_string(),
                                     *expected,
                                     instance.universes.levels.len(),
                                 )
@@ -393,7 +393,7 @@ fn validate_instance_arities<B: Bound>(
                 Subterm::InductType(induct) => inducts.get(&induct.name).and_then(|expected| {
                     mismatch(
                         "inductive occurrence",
-                        &induct.name.symbol(),
+                        &induct.name.faithful().to_string(),
                         *expected,
                         induct.universes.levels.len(),
                     )
@@ -401,7 +401,7 @@ fn validate_instance_arities<B: Bound>(
                 Subterm::Variant(variant) => inducts.get(&variant.name).and_then(|expected| {
                     mismatch(
                         "constructor occurrence",
-                        &variant.name.symbol(),
+                        &variant.name.faithful().to_string(),
                         *expected,
                         variant.universes.levels.len(),
                     )
@@ -409,7 +409,7 @@ fn validate_instance_arities<B: Bound>(
                 Subterm::StructType(struct_) => structs.get(&struct_.name).and_then(|expected| {
                     mismatch(
                         "structure occurrence",
-                        &struct_.name.symbol(),
+                        &struct_.name.faithful().to_string(),
                         *expected,
                         struct_.universes.levels.len(),
                     )
@@ -417,7 +417,7 @@ fn validate_instance_arities<B: Bound>(
                 Subterm::Struct(struct_) => structs.get(&struct_.name).and_then(|expected| {
                     mismatch(
                         "structure value",
-                        &struct_.name.symbol(),
+                        &struct_.name.faithful().to_string(),
                         *expected,
                         struct_.universes.levels.len(),
                     )
@@ -525,24 +525,25 @@ fn validate_module_instance_arities(
         for definition in item.definitions() {
             validate!(
                 &definition.type_,
-                &format!("definition {} type", definition.name),
+                &format!("definition {} type", definition.name.faithful()),
             )?;
             validate!(
                 &definition.body,
-                &format!("definition {} body", definition.name),
+                &format!("definition {} body", definition.name.faithful()),
             )?;
         }
     }
     for (name, declaration) in module.induct_decls().iter().filter(|(name, _)| held(name)) {
-        validate!(&declaration.arity, &format!("inductive {name} arity"))?;
+        let shown = name.faithful();
+        validate!(&declaration.arity, &format!("inductive {shown} arity"))?;
         validate!(
             &declaration.result_sort,
-            &format!("inductive {name} result sort"),
+            &format!("inductive {shown} result sort"),
         )?;
         for (constructor, signature) in &declaration.constructors {
             validate!(
                 &signature.telescope,
-                &format!("inductive {name} constructor {constructor}"),
+                &format!("inductive {shown} constructor {constructor}"),
             )?;
         }
 
@@ -550,26 +551,28 @@ fn validate_module_instance_arities(
             && **actual != declaration.universe_context
         {
             return Err(Error::UniverseInvariant(format!(
-                "inductive {name} and its type-former definition have different universe contexts"
+                "inductive {shown} and its type-former definition have different universe contexts"
             )));
         }
     }
     for (name, declaration) in module.struct_decls().iter().filter(|(name, _)| held(name)) {
-        validate!(&declaration.arity, &format!("structure {name} arity"))?;
+        let shown = name.faithful();
+        validate!(&declaration.arity, &format!("structure {shown} arity"))?;
         validate!(
             &declaration.result_sort,
-            &format!("structure {name} result sort"),
+            &format!("structure {shown} result sort"),
         )?;
         if let Some((_, actual)) = definition_schemes.get(name)
             && **actual != declaration.universe_context
         {
             return Err(Error::UniverseInvariant(format!(
-                "structure {name} and its type-former definition have different universe contexts"
+                "structure {shown} and its type-former definition have different universe contexts"
             )));
         }
     }
     // A concept carries its record, so there is no concept without one to refuse.
     for (name, nominal) in module.nominals().filter(|(name, _)| held(name)) {
+        let shown = name.faithful();
         let Nominal::Concept {
             concept,
             record: struct_decl,
@@ -577,27 +580,30 @@ fn validate_module_instance_arities(
         else {
             continue;
         };
-        validate!(&concept.params, &format!("concept {name} parameters"))?;
+        validate!(&concept.params, &format!("concept {shown} parameters"))?;
         if concept.universe_context != struct_decl.universe_context {
             return Err(Error::UniverseInvariant(format!(
-                "concept {name} and its structure registry have different universe contexts"
+                "concept {shown} and its structure registry have different universe contexts"
             )));
         }
     }
     // Both directions of the generated-member correspondence, read off the definition's own recorded origin. A constructor names the inductive it belongs to *and* which case it is, so this checks the registry entry exists and actually declares that case — without joining an owner and a tag back into a name to look up.
     let (inducts, concepts) = (module.induct_decls(), module.concepts());
     for (name, (kind, _)) in definition_schemes.iter().filter(|(name, _)| held(name)) {
+        let shown = name.faithful();
         match kind {
             DefinitionKind::InductiveConstructor { owner, tag } => {
                 let owner = Global::Authored(*owner);
                 let Some(declaration) = inducts.get(&owner) else {
                     return Err(Error::UniverseInvariant(format!(
-                        "constructor definition {name} names missing owner {owner}"
+                        "constructor definition {shown} names missing owner {}",
+                        owner.faithful()
                     )));
                 };
                 if !declaration.declares(tag) {
                     return Err(Error::UniverseInvariant(format!(
-                        "constructor definition {name} names owner {owner}, which declares no case '{tag}'"
+                        "constructor definition {shown} names owner {}, which declares no case '{tag}'",
+                        owner.faithful()
                     )));
                 }
             }
@@ -605,7 +611,8 @@ fn validate_module_instance_arities(
                 let owner = Global::Authored(*owner);
                 if !concepts.contains_key(&owner) {
                     return Err(Error::UniverseInvariant(format!(
-                        "concept method {name} names missing owner {owner}"
+                        "concept method {shown} names missing owner {}",
+                        owner.faithful()
                     )));
                 }
             }
@@ -638,82 +645,85 @@ pub(crate) fn validate_universes_of(
             universe_context_validate(&definition.universe_context).map_err(|error| {
                 Error::UniverseInvariant(format!(
                     "definition {} has an invalid universe context: {error}",
-                    definition.name
+                    definition.name.faithful()
                 ))
             })?;
             let parameter_count = definition.universe_context.parameter_count;
             validate_bound_universes(
                 &definition.type_,
                 parameter_count,
-                &format!("definition {} type", definition.name),
+                &format!("definition {} type", definition.name.faithful()),
             )?;
             validate_bound_universes(
                 &definition.body,
                 parameter_count,
-                &format!("definition {} body", definition.name),
+                &format!("definition {} body", definition.name.faithful()),
             )?;
         }
     }
     for (name, induct_decl) in module.induct_decls().iter().filter(|(name, _)| held(name)) {
+        let shown = name.faithful();
         universe_context_validate(&induct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
-                "inductive {name} has an invalid universe context: {error}"
+                "inductive {shown} has an invalid universe context: {error}"
             ))
         })?;
         let parameter_count = induct_decl.universe_context.parameter_count;
         validate_bound_universes(
             &induct_decl.arity,
             parameter_count,
-            &format!("inductive {name} arity"),
+            &format!("inductive {shown} arity"),
         )?;
         validate_bound_universes(
             &induct_decl.result_sort,
             parameter_count,
-            &format!("inductive {name} result sort"),
+            &format!("inductive {shown} result sort"),
         )?;
         for (constructor_name, constructor) in &induct_decl.constructors {
             validate_bound_universes(
                 &constructor.telescope,
                 parameter_count,
-                &format!("inductive {name} constructor {constructor_name}"),
+                &format!("inductive {shown} constructor {constructor_name}"),
             )?;
         }
     }
     for (name, struct_decl) in module.struct_decls().iter().filter(|(name, _)| held(name)) {
+        let shown = name.faithful();
         universe_context_validate(&struct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
-                "structure {name} has an invalid universe context: {error}"
+                "structure {shown} has an invalid universe context: {error}"
             ))
         })?;
         let parameter_count = struct_decl.universe_context.parameter_count;
         validate_bound_universes(
             &struct_decl.arity,
             parameter_count,
-            &format!("structure {name} arity"),
+            &format!("structure {shown} arity"),
         )?;
         validate_bound_universes(
             &struct_decl.result_sort,
             parameter_count,
-            &format!("structure {name} result sort"),
+            &format!("structure {shown} result sort"),
         )?;
         if let Some(concept) = module.concepts().get(name)
             && concept.universe_context != struct_decl.universe_context
         {
             return Err(Error::UniverseInvariant(format!(
-                "concept and structure universe contexts differ for {name}"
+                "concept and structure universe contexts differ for {shown}"
             )));
         }
     }
     for (name, concept) in module.concepts().iter().filter(|(name, _)| held(name)) {
+        let shown = name.faithful();
         universe_context_validate(&concept.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
-                "concept {name} has an invalid universe context: {error}"
+                "concept {shown} has an invalid universe context: {error}"
             ))
         })?;
         validate_bound_universes(
             &concept.params,
             concept.universe_context.parameter_count,
-            &format!("concept {name} parameters"),
+            &format!("concept {shown} parameters"),
         )?;
     }
     validate_module_instance_arities(module, held)?;
@@ -771,10 +781,11 @@ pub fn validate_lowered_universe_seeds(module: &Module, minted: &Minted) -> Resu
     }
 
     for (name, metas) in metas {
+        let shown = name.faithful();
         let seeded = minted.of(&name).universes.len();
         if let Some(meta) = metas.into_iter().find(|meta| meta.0 >= seeded) {
             return Err(Error::UniverseInvariant(format!(
-                "{name}: lowered universe meta {meta} has no seed among its declaration's {seeded}"
+                "{shown}: lowered universe meta {meta} has no seed among its declaration's {seeded}"
             )));
         }
     }

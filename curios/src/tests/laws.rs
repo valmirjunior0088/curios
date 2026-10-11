@@ -135,12 +135,8 @@ fn elaborator_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<
         let (mut owner, mut raised) = (None, member);
         loop {
             raised = match raised {
-                curios_elab::Error::InDeclaration {
-                    owner: declared,
-                    error,
-                    ..
-                } => {
-                    owner = *declared;
+                curios_elab::Error::InDeclaration { names, error } => {
+                    owner = names.first().copied();
                     error
                 }
                 curios_elab::Error::Located { error, .. }
@@ -220,7 +216,7 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
                     Item::Let(definition) if definition.name == name => Some(definition),
                     _ => None,
                 })
-                .unwrap_or_else(|| panic!("the program defines {name}"));
+                .unwrap_or_else(|| panic!("the program defines {}", name.faithful()));
             let Subterm::Func(function) = &*stated.body else {
                 panic!("a row's statement is a function of its binders");
             };

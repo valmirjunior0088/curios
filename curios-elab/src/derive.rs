@@ -66,7 +66,7 @@ pub(crate) fn elaborate_derive(
             .island()
             .is_some_and(|island| !island.is_within(&record.module))
     {
-        return Err(Error::private_representation(name.symbol()).at_opt(term.extent()));
+        return Err(Error::private_representation(*name).at_opt(term.extent()));
     }
 
     let syntax = context.syntax();
@@ -188,7 +188,7 @@ fn transparent(
             .island()
             .is_some_and(|island| !island.is_within(module))
     {
-        return Err(Error::private_representation(name.symbol()).at_opt(site.extent));
+        return Err(Error::private_representation(*name).at_opt(site.extent));
     }
     Ok(())
 }

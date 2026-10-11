@@ -47,7 +47,7 @@ impl Probe {
 impl fmt::Display for Probe {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.admitted() {
-            true => writeln!(formatter, "ADMITTED   at `{}`", false_name())?,
+            true => writeln!(formatter, "ADMITTED   at `{}`", false_name().faithful())?,
             false => writeln!(formatter, "REFUSED    by {}", refusers(&self.answer))?,
         }
 

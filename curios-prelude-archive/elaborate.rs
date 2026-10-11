@@ -264,7 +264,7 @@ fn validate_syntax_targets(modules: &[&curios_core::Module]) {
             "registered syntax target '{symbol}' is absent from the lowered prelude; nearby names: {:?}",
             names
                 .iter()
-                .map(Global::symbol)
+                .map(|name| name.faithful().to_string())
                 .filter(|name| name.contains(target.last()))
                 .collect::<Vec<_>>()
         );
