@@ -50,26 +50,22 @@ use {
     crate::{
         Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
         LintedBinder, Module, Name, RootSource, StructLit, StructLitEntry, Subterm, Term, TopItem,
-        TupleField, UseGroup, func_sugar_lambda, func_sugar_type_params, ordered, tree_of,
+        TupleField, UseGroup, WithoutItems, func_sugar_lambda, func_sugar_type_params, ordered,
+        tree_of,
     },
     curios_abi::{ForeignFunction, ForeignStore},
+    curios_archive::{Bytes, joined, parted},
     curios_document::Documentation,
     curios_utilities::{
         Entropy, Mount, Plicity, Qualifier, Report, RootKind, Source, Span, SyntaxRegistry, grown,
     },
     std::{
+        borrow::Cow,
         cell::{Cell, OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
         sync::Arc,
     },
-};
-
-#[cfg(feature = "archive")]
-use {
-    crate::WithoutItems,
-    curios_archive::{Bytes, joined, parted},
-    std::borrow::Cow,
 };
 
 #[cfg(test)]
@@ -490,18 +486,9 @@ impl PreparedText {
 
     /// Where each source declaration of this unit lies. See the field.
     pub fn anchors(&self) -> &curios_core::Anchors {
-        #[cfg(feature = "archive")]
-        let anchors = self
-            .anchors
+        self.anchors
             .get()
-            .unwrap_or_else(|error| panic!("a unit's anchors failed to restore: {error}"));
-        #[cfg(not(feature = "archive"))]
-        let anchors = self
-            .anchors
-            .peek()
-            .expect("a unit that was never stored holds its anchors");
-
-        anchors
+            .unwrap_or_else(|error| panic!("a unit's anchors failed to restore: {error}"))
     }
 
     /// Drop the `unused-binder` lint of every binder in `credited`: read by a proof the elaborator wrote, which no written name reaches, so used. Called once the unit has elaborated, since only elaboration writes such a proof.
@@ -563,16 +550,9 @@ impl PreparedText {
         let Some(items) = &self.items else {
             return &self.core.items[place];
         };
-        #[cfg(feature = "archive")]
-        let item = items[place]
+        items[place]
             .get()
-            .unwrap_or_else(|error| panic!("a unit's lowered item failed to restore: {error}"));
-        #[cfg(not(feature = "archive"))]
-        let item = items[place]
-            .peek()
-            .expect("a unit that was never stored holds its lowered items");
-
-        item
+            .unwrap_or_else(|error| panic!("a unit's lowered item failed to restore: {error}"))
     }
 
     /// The entry this unit's lowering wrote for the nominal declaration `name`, read at the former that carries it: the one lowered item, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit declares no nominal under.
@@ -643,47 +623,33 @@ impl PreparedText {
 
     /// The unit's baseline half, read out of its bytes now where the unit was restored and nothing has asked before.
     fn half(&self) -> &BaselineHalf {
-        #[cfg(feature = "archive")]
-        let half = self
-            .baseline
+        self.baseline
             .get()
-            .unwrap_or_else(|error| panic!("a unit's baseline half failed to restore: {error}"));
-        #[cfg(not(feature = "archive"))]
-        let half = self
-            .baseline
-            .peek()
-            .expect("a unit that was never stored holds its baseline half");
-
-        half
+            .unwrap_or_else(|error| panic!("a unit's baseline half failed to restore: {error}"))
     }
 
     /// The bytes of this unit's baseline half: what a later lowering of the same sources keeps this unit's lowerings by, stored apart from what the unit is for its successors.
-    #[cfg(feature = "archive")]
     pub fn baseline_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
         self.baseline.bytes()
     }
 
     /// This unit with `bytes` as its baseline half, read when a lowering over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
-    #[cfg(feature = "archive")]
     pub fn with_baseline(mut self, bytes: impl Into<Bytes>) -> Self {
         self.baseline = curios_archive::Deferred::stored(bytes);
         self
     }
 
     /// The bytes of this unit's import scopes, stored apart from what the unit is for its successors: the ones they were restored from, or their archive, made now.
-    #[cfg(feature = "archive")]
     pub fn imports_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
         self.imports.bytes()
     }
 
     /// The bytes of where this unit's declarations lie, stored apart as its import scopes are.
-    #[cfg(feature = "archive")]
     pub fn anchors_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
         self.anchors.bytes()
     }
 
     /// This unit with `imports` as its import scopes and `anchors` as where its declarations lie ([`PreparedText::imports_bytes`], [`PreparedText::anchors_bytes`]), each read when something first asks: what a restored unit is given, since restoring it leaves it with neither.
-    #[cfg(feature = "archive")]
     pub fn with_reported(mut self, imports: impl Into<Bytes>, anchors: impl Into<Bytes>) -> Self {
         self.imports = curios_archive::Deferred::stored(imports);
         self.anchors = curios_archive::Deferred::stored(anchors);
@@ -691,7 +657,6 @@ impl PreparedText {
     }
 
     /// The bytes of this unit's lowered items, each stored on its own behind how many they are and how long each is ([`joined`]): the ones an item was restored from where the unit was, and its archive, made now, where it was lowered here.
-    #[cfg(feature = "archive")]
     pub fn items_bytes(&self) -> Result<Vec<u8>, String> {
         match &self.items {
             Some(items) => items
@@ -722,7 +687,6 @@ impl PreparedText {
     }
 
     /// This unit with `bytes` as its lowered items ([`PreparedText::items_bytes`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves its module without one. `Err` is bytes that hold no such items, or not one for each the unit declares.
-    #[cfg(feature = "archive")]
     pub fn with_items(mut self, bytes: impl Into<Bytes>) -> Result<Self, String> {
         let items = parted(&bytes.into()).ok_or("not a unit's lowered items")?;
         if self
@@ -802,18 +766,9 @@ impl PreparedText {
 
     /// What each `use` brought into scope, where, and under which spelling — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
     pub fn imports(&self) -> &curios_core::Imports {
-        #[cfg(feature = "archive")]
-        let imports = self
-            .imports
+        self.imports
             .get()
-            .unwrap_or_else(|error| panic!("a unit's import scopes failed to restore: {error}"));
-        #[cfg(not(feature = "archive"))]
-        let imports = self
-            .imports
-            .peek()
-            .expect("a unit that was never stored holds its import scopes");
-
-        imports
+            .unwrap_or_else(|error| panic!("a unit's import scopes failed to restore: {error}"))
     }
 
     /// Who can see each declaration of this unit. See the field.

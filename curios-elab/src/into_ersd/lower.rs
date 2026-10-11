@@ -8,7 +8,10 @@ use {
         Error, Export, Intrinsic, Let, Projected, Retyping, Subterm, Telescope, Term, emitted,
         evaluate, intrinsic, link,
     },
-    crate::{Traces, validate_entry_universes, validate_universes, validate_universes_of},
+    crate::{
+        Answered, Foreign, Question, Traces, validate_entry_universes, validate_universes,
+        validate_universes_of,
+    },
     curios_core::{
         Certification, Entrypoint, Extent, Free, Global, Item, Module, Operand, Program, Zonked,
         foreign_operands, project_erased_universes,
@@ -21,9 +24,6 @@ use {
         sync::Arc,
     },
 };
-
-#[cfg(feature = "archive")]
-use crate::{Answered, Foreign, Question};
 
 /// What one expression erased to. See the module documentation.
 #[derive(Debug)]
@@ -599,7 +599,6 @@ pub(super) fn erase_items<'s>(
             asked.share(**name, trace);
         }
     }
-    #[cfg(feature = "archive")]
     note_foreign(&mut asked, &unit, scope, over.as_ref());
 
     Ok(unit.asking(asked))
@@ -608,7 +607,6 @@ pub(super) fn erase_items<'s>(
 /// Record what erasing `unit`'s items read of declarations the unit does not hold, each part and each binding by the digest it has in `scope`: what a later erasure over this unit asks a read of another unit again by (`Foreign`).
 ///
 /// Taken where the walk ends, off the traces that stood, as elaboration takes its own. What a kept form's erasure read of a unit that did not move is the baseline's, digest and all, and an erasure that kept every form of its baseline in a scope that did not move holds the baseline's table.
-#[cfg(feature = "archive")]
 fn note_foreign(
     asked: &mut Traces,
     unit: &ErasedUnit,

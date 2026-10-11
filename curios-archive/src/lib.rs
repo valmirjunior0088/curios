@@ -6,14 +6,7 @@
 //!
 //! # Using it
 //!
-//! Depend on this crate, gate on your own `archive` feature, and forward it to [`enabled`](#features):
-//!
-//! ```text
-//! [features]
-//! archive = ["curios-archive/enabled", "curios-core/archive"]
-//! ```
-//!
-//! Then annotate the types that are archived, and their fields where a field needs saying something:
+//! Depend on this crate, and annotate the types that are archived, and their fields where a field needs saying something:
 //!
 //! ```text
 //! #[curios_archive::archived]
@@ -23,7 +16,7 @@
 //! }
 //! ```
 //!
-//! [`archived`] takes two keywords, in either order. `recursive` emits the serialize/deserialize/bytecheck bounds a type that reaches itself needs. `always` drops the `cfg_attr` gate, for a crate that archives unconditionally and so has no `archive` feature to name. Anything else is forwarded verbatim into rkyv's own clause, which is how `derive(PartialEq, Eq, Hash)` reaches the archived type.
+//! [`archived`] takes one keyword, `recursive`, which emits the serialize/deserialize/bytecheck bounds a type that reaches itself needs. Anything else is forwarded verbatim into rkyv's own clause, which is how `derive(PartialEq, Eq, Hash)` reaches the archived type.
 //!
 //! Fields say `#[archived_with(Adapter)]` and `#[archived_omit_bounds]`. Both are inert markers the macro consumes; nothing declares them, so one written outside an `#[archived]` item is an unresolved-attribute error rather than a line that silently does nothing.
 //!
@@ -40,29 +33,20 @@ pub use curios_archive_derive::archived;
 mod deferred;
 pub use deferred::*;
 
-#[cfg(feature = "enabled")]
 mod pooled;
-#[cfg(feature = "enabled")]
 pub use pooled::*;
 
-#[cfg(feature = "enabled")]
 mod proxy;
-#[cfg(feature = "enabled")]
 pub use proxy::*;
 
-#[cfg(feature = "enabled")]
 mod serialize;
-#[cfg(feature = "enabled")]
 pub use serialize::*;
 
-#[cfg(feature = "enabled")]
 pub use rkyv;
 
-#[cfg(feature = "enabled")]
 pub use rkyv::{Archive, Deserialize, Serialize};
 
 /// rkyv's stock field adapters, flat, so a `with =` clause reads `curios_archive::Skip` rather than reaching three modules deep through the [`rkyv`] re-export.
 ///
 /// Only the ones the workspace uses are here, and that is deliberate: a name absent from this list is a name nothing needed, so adding one is a decision someone makes rather than something a glob does silently.
-#[cfg(feature = "enabled")]
 pub use rkyv::with::{AsString, Map, Skip};

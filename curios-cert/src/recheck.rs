@@ -53,7 +53,7 @@ use {
     super::{
         Adopting, Baseline, Error, Globals, Kernel, Totals, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl, define_as_stated,
-        free_locals_outside, open_quality, positivity_vectors,
+        free_locals_outside, open_quality, positivity_vectors, read_digest,
         rewrite_universe_levels_scoped_shared, satisfiable, universe_metas, variance_vectors,
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
@@ -68,9 +68,6 @@ use {
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     },
 };
-
-#[cfg(feature = "archive")]
-use super::read_digest;
 
 /// One refusal the kernel reached.
 ///
@@ -801,7 +798,6 @@ fn verdicts_within<'s>(
     }
 
     // What the walk read of each declaration of another unit, by the digest of the part read: the baseline's own where the unit is the one its walk read, and digested here otherwise.
-    #[cfg(feature = "archive")]
     let read_abroad = {
         let mut read_abroad = BTreeMap::<Global, Abroad>::new();
         for read in reads.values() {
@@ -832,8 +828,6 @@ fn verdicts_within<'s>(
 
         read_abroad
     };
-    #[cfg(not(feature = "archive"))]
-    let read_abroad = BTreeMap::<Global, Abroad>::new();
 
     // The record of what this walk concluded: every judged definition's totality, from the set each was classified into, with what its judgment read, and every accepted entry's polarity vector — so a later walk reading it needs nothing of this one's.
     let certification = Certification::of(
@@ -878,7 +872,6 @@ fn read_stands(
         return *stands;
     }
 
-    #[cfg(feature = "archive")]
     let stands = {
         let then = baseline
             .certification
@@ -892,12 +885,6 @@ fn read_stands(
             (then, read_digest(globals, name, body)),
             (Some(then), Ok(Some(now))) if *then == now
         )
-    };
-    #[cfg(not(feature = "archive"))]
-    let stands = {
-        let _ = baseline;
-
-        false
     };
     asked.borrow_mut().insert((*name, body), stands);
 

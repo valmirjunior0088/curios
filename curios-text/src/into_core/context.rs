@@ -1,15 +1,12 @@
 use {
     super::{Lookup, PublicInterface, Reach, Scoped, visible_binding, visible_child},
-    crate::{Error, Label, Lint, Name},
+    crate::{Error, Label, Lint, Name, OrderedMap},
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     },
 };
-
-#[cfg(feature = "archive")]
-use crate::OrderedMap;
 
 /// One `use` selector or glob as resolution met it: what it imports, whether it re-exports, and whether any reference resolved through it — the fact the `unused-import` lint reads. Shared across the unit's contexts as the import table is, since a lint is about the unit.
 pub(super) struct UseSite {

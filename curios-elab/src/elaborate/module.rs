@@ -1553,7 +1553,6 @@ fn elaborate_module_suffix<'s>(
         curios_profile::profile!("demand::all");
         demand.all(context, vocabulary);
     }
-    #[cfg(feature = "archive")]
     if let Some(established) = established {
         demand.note_foreign(established);
     }

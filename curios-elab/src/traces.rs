@@ -8,18 +8,15 @@
 
 use {
     crate::{Answered, Question},
-    curios_core::{Global, Trace},
+    curios_core::{Global, Trace, WitnessKey},
     std::{
+        borrow::Borrow,
         cell::OnceCell,
         collections::{BTreeMap, HashMap},
+        convert::Infallible,
+        hash::Hash,
         rc::Rc,
     },
-};
-
-#[cfg(feature = "archive")]
-use {
-    curios_core::WitnessKey,
-    std::{borrow::Borrow, convert::Infallible, hash::Hash},
 };
 
 /// Each declaration's trace, by the name it is written as. See the module documentation.
@@ -69,7 +66,6 @@ impl Foreign {
     }
 
     /// Record `digest` as what the part `question` asks had. The table's places are made after its last record.
-    #[cfg(feature = "archive")]
     pub(crate) fn record(&mut self, question: Question, digest: Option<String>) {
         self.read.push((question, digest));
     }
@@ -107,19 +103,16 @@ impl Traces {
     }
 
     /// Hold `foreign` as what the declarations read of declarations the unit does not hold.
-    #[cfg(feature = "archive")]
     pub(crate) fn read(&mut self, foreign: Rc<Foreign>) {
         self.foreign = foreign;
     }
 
     /// Every declaration's trace, in the order of the names the declarations are written as.
-    #[cfg(feature = "archive")]
     pub(crate) fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
         self.declarations.values().map(Rc::as_ref)
     }
 
     /// How many declarations hold a trace.
-    #[cfg(feature = "archive")]
     pub(crate) fn len(&self) -> usize {
         self.declarations.len()
     }
@@ -133,7 +126,6 @@ impl Traces {
 }
 
 /// A unit's traces as they are stored: every name and every witness key a question holds, once, and each declaration's questions holding their places.
-#[cfg(feature = "archive")]
 #[curios_archive::archived]
 pub struct TraceTable {
     names: Vec<Global>,
@@ -143,7 +135,6 @@ pub struct TraceTable {
 }
 
 /// One declaration's trace as a [`TraceTable`] holds it: the place of the name it is written as, and its questions holding places.
-#[cfg(feature = "archive")]
 #[curios_archive::archived]
 pub struct TabledTrace {
     name: u32,
@@ -151,13 +142,11 @@ pub struct TabledTrace {
 }
 
 /// The places a table gives its entries, each entry at the place it was first asked for.
-#[cfg(feature = "archive")]
 struct Placing<T> {
     entries: Vec<T>,
     places: HashMap<T, u32>,
 }
 
-#[cfg(feature = "archive")]
 impl<T: Copy + Eq + Hash> Placing<T> {
     fn new() -> Self {
         Self {
@@ -177,7 +166,6 @@ impl<T: Copy + Eq + Hash> Placing<T> {
 }
 
 /// The entry `table` holds at `place`, or a refusal naming what the table is `of`.
-#[cfg(feature = "archive")]
 fn placed<T: Copy>(table: &[T], place: u32, of: &str) -> Result<T, String> {
     usize::try_from(place)
         .ok()
@@ -187,14 +175,11 @@ fn placed<T: Copy>(table: &[T], place: u32, of: &str) -> Result<T, String> {
 }
 
 /// How a unit's traces are archived: as a [`TraceTable`].
-#[cfg(feature = "archive")]
 pub struct TraceTabling;
 
 /// The field adapter: `#[archived_with(TraceTabled)]`.
-#[cfg(feature = "archive")]
 pub type TraceTabled = curios_archive::Via<TraceTabling>;
 
-#[cfg(feature = "archive")]
 impl curios_archive::Proxy<BTreeMap<Global, Rc<Trace<Question, Answered>>>> for TraceTabling {
     type Archivable = TraceTable;
 

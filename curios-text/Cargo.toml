@@ -9,8 +9,6 @@ description = "The Curios surface syntax: parser, formatter, printer, lints, mod
 workspace = true
 
 [features]
-# `curios-core/archive` because `BrokenItem` archives an `Option<curios_core::Global>`: without it this crate's `archive` feature compiles only when something else in the graph turns the core one on, so the package could not be built or tested on its own with the feature enabled.
-archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-core/archive", "curios-num/archive"]
 profile = ["curios-profile/enabled", "curios-parse/profile"]
 
 [dependencies]

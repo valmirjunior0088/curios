@@ -2,7 +2,7 @@
 mod tests;
 
 use {
-    crate::{ScalarTrap, within},
+    crate::{BigUintBytes, ScalarTrap, within},
     num_bigint::BigUint,
     num_traits::{One, ToPrimitive, Zero},
     std::{
@@ -10,9 +10,6 @@ use {
         ops::{Add, AddAssign, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shr, Sub},
     },
 };
-
-#[cfg(feature = "archive")]
-use crate::BigUintBytes;
 
 /// A type-level natural. Unbounded — the type level pretends ℕ, the way [`Integer`](crate::Integer) pretends ℤ; the running program is unbounded too, an i31 while a value is small and a boxed magnitude past it.
 ///

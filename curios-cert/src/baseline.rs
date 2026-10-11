@@ -9,19 +9,13 @@
 //! **What a declaration's own terms decide is decided of its terms.** Its universe contexts, the levels and binders it mentions and what it spells of elaboration's own syntax are held to their rules by the walk that first met those terms, so a declaration whose terms are the baseline's is passed over by every such check whether or not its verdict is adopted.
 
 use {
-    super::{held, induct_alike, struct_alike},
+    super::{Globals, held, induct_alike, struct_alike},
     curios_core::{
-        Certification, Global, InductDecl, Item, Module, Nominal, Places, Polarity, Reads, Term,
-        Totality, Variance,
+        Certification, Global, InductDecl, Item, Module, Nominal, Places, Polarity, Reads, Sharing,
+        StructDecl, Term, Totality, Variance,
     },
-    std::collections::{BTreeMap, HashMap},
-};
-
-#[cfg(feature = "archive")]
-use {
-    super::Globals,
-    curios_core::{Sharing, StructDecl},
     curios_utilities::{Qualifier, digest},
+    std::collections::{BTreeMap, HashMap},
 };
 
 /// An earlier walk over another text of the unit a walk judges: the module it judged, where that module holds each name, and the record it filed.
@@ -94,7 +88,6 @@ impl<'a> Baseline<'a> {
 /// The digest of what a read reads of `name`, a declaration a unit in `globals` holds: of its body, what it unfolds to, where `body`, and otherwise of its signature, which is its type, its universe context, the registry entry it carries as [`induct_alike`] and [`struct_alike`] read one, and the certifier's verdict on it, its totality and its entry's polarity vector. `Ok(None)` where no unit holds the name.
 ///
 /// **The certifier's own, of what [`Stood`] says of a declaration of the walk's unit.** A walk records it of each part it read of another unit, and a walk over that walk's unit as a baseline digests the part again where the unit it reads is not the one that was read: the terms are the ones in its scope and the function is this one, so a verdict adopted across units rests on nothing another component computed. Each term is consed alone (`Sharing`), so it is digested under no position and under its binders' names: two parts that digest alike are one to every judgment, and two that differ in a name alone are judged again, which costs a judgment and admits nothing.
-#[cfg(feature = "archive")]
 pub(crate) fn read_digest(
     globals: &Globals<'_>,
     name: &Global,

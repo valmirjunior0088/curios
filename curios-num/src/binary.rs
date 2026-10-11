@@ -2,10 +2,10 @@
 //!
 //! Values are immutable windows over a shared byte buffer. Bit zero is the least-significant bit of the first byte, so advancing a B tail is O(1).
 
-use std::{hash::Hash, sync::Arc};
-
-#[cfg(feature = "archive")]
-use crate::BufferBytes;
+use {
+    crate::BufferBytes,
+    std::{hash::Hash, sync::Arc},
+};
 
 /// The closed logical grain of a packed binary sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

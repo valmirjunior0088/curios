@@ -9,15 +9,6 @@ description = "The Curios compilation unit: what one unit provides to its succes
 workspace = true
 
 [features]
-archive = [
-    "curios-archive/enabled",
-    "curios-abi/archive",
-    "curios-utilities/archive",
-    "curios-core/archive",
-    "curios-elab/archive",
-    "curios-ersd/archive",
-    "curios-text/archive",
-]
 profile = [
     "curios-elab/profile",
     "curios-ersd/profile",

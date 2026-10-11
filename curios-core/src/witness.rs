@@ -139,14 +139,11 @@ impl fmt::Display for WitnessKey {
 }
 
 /// Reads an archived key back into the process table every other occurrence of the same heads already uses.
-#[cfg(feature = "archive")]
 pub struct InterningHeads;
 
 /// The field adapter: `#[archived_with(InternedHeads)]`.
-#[cfg(feature = "archive")]
 pub type InternedHeads = curios_archive::Via<InterningHeads>;
 
-#[cfg(feature = "archive")]
 impl curios_archive::Proxy<&'static Vec<HeadKey>> for InterningHeads {
     type Archivable = Vec<HeadKey>;
 

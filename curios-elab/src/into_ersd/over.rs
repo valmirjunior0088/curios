@@ -77,13 +77,11 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// Whether every item walked so far holds the baseline's own erased form.
-    #[cfg(feature = "archive")]
     pub(super) fn kept_all(&self) -> bool {
         self.kept.iter().all(|kept| *kept)
     }
 
     /// What the baseline's erasure read of declarations its unit did not hold.
-    #[cfg(feature = "archive")]
     pub(super) fn earlier(&self) -> &'a ErasedUnit {
         self.baseline.erased
     }
@@ -102,7 +100,6 @@ impl<'a> ErasedOver<'a> {
             return stands;
         }
 
-        #[cfg(feature = "archive")]
         let stands = match (
             self.baseline.erased.foreign().digest(question),
             self.scope.part_digest(question),
@@ -110,9 +107,6 @@ impl<'a> ErasedOver<'a> {
             (Some(then), Ok(now)) => *then == now,
             _ => false,
         };
-        // Nothing digests where nothing is archived, so no read of a unit that moved stands.
-        #[cfg(not(feature = "archive"))]
-        let stands = false;
         self.read
             .entry(*name)
             .or_default()

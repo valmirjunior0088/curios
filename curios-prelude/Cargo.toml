@@ -31,23 +31,23 @@ curios-prelude-archive = { workspace = true }
 # The record the build script files is read back beside the images: its type is
 # `curios-core`'s, read through the one crate that names rkyv, and attached to
 # `curios-unit`'s unit.
-curios-archive = { workspace = true, features = ["enabled"] }
-curios-core = { workspace = true, features = ["archive"] }
+curios-archive = { workspace = true }
+curios-core = { workspace = true }
 curios-document = { workspace = true }
 curios-unit = { workspace = true }
 # For `profile-certification` alone, which certifies as the build script does.
-curios-cert = { workspace = true, features = ["archive"], optional = true }
-curios-elab = { workspace = true, features = ["archive"], optional = true }
+curios-cert = { workspace = true, optional = true }
+curios-elab = { workspace = true, optional = true }
 curios-profile = { workspace = true, optional = true }
-curios-text = { workspace = true, features = ["archive"], optional = true }
+curios-text = { workspace = true, optional = true }
 
 # The certifying half of the prelude's build: `curios-prelude-archive`
 # elaborates and serializes the image, and this script restores it and runs the
 # kernel over it. Why the two are separate crates is this crate's `README.md`.
 [build-dependencies]
-curios-archive = { workspace = true, features = ["enabled"] }
-curios-cert = { workspace = true, features = ["archive"] }
-curios-core = { workspace = true, features = ["archive"] }
-curios-elab = { workspace = true, features = ["archive"] }
+curios-archive = { workspace = true }
+curios-cert = { workspace = true }
+curios-core = { workspace = true }
+curios-elab = { workspace = true }
 curios-prelude-archive = { workspace = true }
-curios-text = { workspace = true, features = ["archive"] }
+curios-text = { workspace = true }

@@ -90,14 +90,11 @@ impl fmt::Display for Symbol {
 }
 
 /// Reads an archived spelling back into the process table.
-#[cfg(feature = "archive")]
 pub struct InterningText;
 
 /// The field adapter: `#[archived_with(InternedText)]`.
-#[cfg(feature = "archive")]
 pub type InternedText = curios_archive::Via<InterningText>;
 
-#[cfg(feature = "archive")]
 impl curios_archive::Proxy<&'static String> for InterningText {
     type Archivable = String;
 

@@ -6,16 +6,16 @@
 //!
 //! **Many values stored apart share the buffer they were read from.** A holder of one deferred value for each of its declarations stores their bytes one after another ([`joined`]) and hands each back as a run of the one buffer ([`parted`]), so opening it copies nothing and decodes nothing, and a holder made from another's values stores the bytes of each one it kept as they are.
 
-use std::{borrow::Cow, cell::OnceCell, ops::Range, rc::Rc};
-
-#[cfg(feature = "enabled")]
-use rkyv::{
-    Archive, Deserialize, Serialize,
-    api::high::{HighDeserializer, HighSerializer, HighValidator},
-    bytecheck::CheckBytes,
-    rancor::Error,
-    ser::allocator::ArenaHandle,
-    util::AlignedVec,
+use {
+    rkyv::{
+        Archive, Deserialize, Serialize,
+        api::high::{HighDeserializer, HighSerializer, HighValidator},
+        bytecheck::CheckBytes,
+        rancor::Error,
+        ser::allocator::ArenaHandle,
+        util::AlignedVec,
+    },
+    std::{borrow::Cow, cell::OnceCell, ops::Range, rc::Rc},
 };
 
 /// The bytes a value was stored as, held as what they were read from allows: a constant of the executable, or a run of a buffer read for it, which every value read from that buffer shares.
@@ -147,11 +147,6 @@ impl<T> Deferred<T> {
         }
     }
 
-    /// The value where it is in hand: made here, or already read out of its bytes.
-    pub fn peek(&self) -> Option<&T> {
-        self.value.get()
-    }
-
     /// The value where it is in hand, taken: one made here, or already read out of its bytes.
     pub fn into_held(self) -> Option<T> {
         self.value.into_inner()
@@ -161,10 +156,7 @@ impl<T> Deferred<T> {
     pub fn as_stored(&self) -> Option<&Bytes> {
         self.stored.as_ref()
     }
-}
 
-#[cfg(feature = "enabled")]
-impl<T> Deferred<T> {
     /// A value stored as `bytes`, which are read when it is first asked for.
     pub fn stored(bytes: impl Into<Bytes>) -> Self {
         Self {

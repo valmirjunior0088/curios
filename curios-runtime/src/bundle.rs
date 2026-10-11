@@ -15,8 +15,7 @@ const MAGIC: &[u8; 8] = b"CRSEXEC2";
 const FOOTER_LEN: usize = 16;
 
 /// One module travelling in a bundle: what it is, which declarations its exports answer, and the precompiled payload implementing them.
-// `always`: the launcher reads this archive unconditionally, so there is no `archive` feature for a `cfg_attr` to gate on.
-#[curios_archive::archived(always)]
+#[curios_archive::archived]
 pub struct BundledPlugin {
     /// The package whose manifest declared the row, for a refusal to name.
     pub package: String,
@@ -29,8 +28,7 @@ pub struct BundledPlugin {
 }
 
 /// Everything a bundled executable carries past its launcher image.
-// `always`: as [`BundledPlugin`].
-#[curios_archive::archived(always)]
+#[curios_archive::archived]
 pub struct Bundle {
     /// The program itself, precompiled.
     pub program: Vec<u8>,

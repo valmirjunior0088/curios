@@ -12,14 +12,9 @@ mod tests;
 use {
     crate::Question,
     curios_core::{
-        Bound, ConceptDecl, Definition, DefinitionKind, InductDecl, Item, MetaRenaming, RecItem,
-        StructDecl, Telescope, Term,
+        Bound, ConceptDecl, Definition, DefinitionKind, InductDecl, Item, MetaRenaming, Module,
+        Nominal, Place, Places, RecItem, Sharing, StructDecl, Telescope, Term, Variance,
     },
-};
-
-#[cfg(feature = "archive")]
-use {
-    curios_core::{Module, Nominal, Place, Places, Sharing, Variance},
     curios_utilities::digest,
 };
 
@@ -125,7 +120,6 @@ impl Same {
 /// The digest of the part of a declaration `question` asks, where `module` holds the declaration at the place `places` keeps for it: what a unit records of a part it read of another unit, and what the part is asked again by, once the unit it was read from is no longer the one in scope. `Ok(None)` where the name declares no such part, which is an answer as any other is; `Err` where the part will not archive.
 ///
 /// **Two parts digest alike exactly where [`Same`] calls them one.** A part is consed alone ([`Sharing`]), which leaves one node for each structure under its binders' names and no position on any, then archived and digested, so what [`spelled_alike`] compares is what the bytes spell. Each part holds what [`Same`] reads of it and nothing else: a signature its kind, a body its signature, and a group's member the group whole.
-#[cfg(feature = "archive")]
 pub(crate) fn part_digest(
     module: &Module,
     places: &Places,
@@ -244,7 +238,6 @@ pub(crate) fn part_digest(
 }
 
 /// The digest of a part, of the bytes it archived as.
-#[cfg(feature = "archive")]
 fn sealed(archived: Result<curios_archive::Serialized, String>) -> Result<String, String> {
     archived.map(|bytes| digest(&bytes))
 }

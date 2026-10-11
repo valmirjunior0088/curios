@@ -1,20 +1,14 @@
 //! What one unit provides to its successors, and what it is before a certifier has walked it.
 
 use {
+    crate::{apart_parts, halved, halves},
     curios_abi::ForeignStore,
-    curios_archive::Deferred,
-    curios_core::{Certification, Lexicon, Module, Places},
+    curios_archive::{Bytes, Deferred, joined, parted},
+    curios_core::{Certification, Lexicon, Module, Places, Sharing},
     curios_elab::{ErasedUnit, Projection, Traces},
     curios_text::PreparedText,
     curios_utilities::{Mount, SyntaxRegistry},
     std::{cell::OnceCell, rc::Rc},
-};
-
-#[cfg(feature = "archive")]
-use {
-    crate::{apart_parts, halved, halves},
-    curios_archive::{Bytes, joined, parted},
-    curios_core::Sharing,
 };
 
 /// A unit as its compilation produced it, before the kernel has judged it: everything a [`Unit`] holds except the certifier's record.
@@ -126,22 +120,12 @@ impl Uncertified {
 
     /// What each of this unit's declarations asked as it elaborated. See the field. Read out of the unit's baseline half now, where the unit was restored and no compile over it has asked before.
     pub fn traces(&self) -> &Traces {
-        #[cfg(feature = "archive")]
-        let traces = self
-            .traces
+        self.traces
             .get()
-            .unwrap_or_else(|error| panic!("a unit's traces failed to restore: {error}"));
-        #[cfg(not(feature = "archive"))]
-        let traces = self
-            .traces
-            .peek()
-            .expect("a unit that was never stored holds its traces");
-
-        traces
+            .unwrap_or_else(|error| panic!("a unit's traces failed to restore: {error}"))
     }
 
     /// The bytes this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it: its lowered items and its erased forms, one on its own for each ([`PreparedText::items_bytes`], [`ErasedUnit::items_bytes`]), its elaborated module's archive, read by item ([`Module::stored`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
-    #[cfg(feature = "archive")]
     pub fn apart_bytes(&self) -> Result<Vec<u8>, String> {
         let items = self.text.items_bytes()?;
         let forms = self.erased.items_bytes()?;
@@ -165,7 +149,6 @@ impl Uncertified {
     }
 
     /// The bytes this unit is imaged as: itself, then what it stores apart from itself ([`halved`]).
-    #[cfg(feature = "archive")]
     pub fn stored(&self) -> Result<Vec<u8>, String> {
         let unit = curios_archive::to_bytes(self)?;
 
@@ -173,7 +156,6 @@ impl Uncertified {
     }
 
     /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::apart_bytes`]), each part a run of the buffer they are in and read when something first asks for it — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing.
-    #[cfg(feature = "archive")]
     pub fn with_apart(self, bytes: impl Into<Bytes>) -> Result<Self, String> {
         let bytes = bytes.into();
         let fixed = matches!(bytes, Bytes::Constant(_));
@@ -202,7 +184,6 @@ impl Uncertified {
     }
 
     /// This unit with its elaborated module hash-consed in a table of its own — what [`Unit::stored`] serializes. The lowered module is left as it was built, since a lint and a report are located in it.
-    #[cfg(feature = "archive")]
     fn consed(&self) -> Self {
         Self {
             text: Rc::clone(&self.text),
@@ -296,7 +277,6 @@ impl Unit {
     /// **A stored unit says what its items mean, not where they were written or how they were come by.** A consed module is one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are the same nodes, and one moved by an edit above it is stored as it was. The fixed prelude's images are consed by the same pass, where they are built.
     ///
     /// Run here and not where a unit is assembled: the pass builds a node for every node of the module, and a unit that is neither filed nor followed — a keystroke's — is never serialized.
-    #[cfg(feature = "archive")]
     pub fn stored(&self) -> Result<Vec<u8>, String> {
         let consed = self.unit.consed();
         let apart = consed.apart_bytes()?;
@@ -311,7 +291,6 @@ impl Unit {
     }
 
     /// The unit stored as `artifact` ([`Unit::stored`]): decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit.
-    #[cfg(feature = "archive")]
     pub fn restored(artifact: &[u8]) -> Result<Self, String> {
         let (unit, apart) = halves(artifact).ok_or("not a unit's artifact")?;
         let restored = curios_archive::from_bytes::<Unit>(unit)?;

@@ -6,7 +6,6 @@ use {
     std::{collections::hash_map::RandomState, hash::BuildHasher, rc::Rc},
 };
 
-#[cfg(feature = "archive")]
 #[test]
 fn archive_resets_caches_and_preserves_rc_sharing() {
     let shared_binder = Free::local(0, Some("shared"));

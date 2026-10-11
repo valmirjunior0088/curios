@@ -83,7 +83,7 @@ impl Imports {
 
 /// The erased program as flat, first-order data. See the crate documentation for the representation contract.
 ///
-/// Archived (behind the `archive` feature) as what an item of a stored unit erased to. The constant interning index is skipped — it is exactly the inverse of the `constants` arena — so the serialized bytes stay deterministic (a hash map's iteration order is not). A restored module is linked from and never built on, so nothing rebuilds the index: linking interns a fragment's constants into the program that takes them.
+/// Archived as what an item of a stored unit erased to. The constant interning index is skipped — it is exactly the inverse of the `constants` arena — so the serialized bytes stay deterministic (a hash map's iteration order is not). A restored module is linked from and never built on, so nothing rebuilds the index: linking interns a fragment's constants into the program that takes them.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived(recursive)]
 pub struct Module {

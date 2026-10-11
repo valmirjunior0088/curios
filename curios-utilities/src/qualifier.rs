@@ -229,14 +229,11 @@ where
 /// Reads an archived qualifier back into the process table every other occurrence of the same path already uses, instead of giving each occurrence its own allocation.
 ///
 /// The archived bytes are the bare segment sequence, so the live representation is no part of the archive format. The fixed prelude's Core carries on the order of a hundred thousand qualifier occurrences drawn from a couple of thousand distinct paths, and reading each back through the table is what keeps that a couple of thousand allocations.
-#[cfg(feature = "archive")]
 pub struct Interning;
 
 /// The field adapter: `#[archived_with(Interned)]`.
-#[cfg(feature = "archive")]
 pub type Interned = curios_archive::Via<Interning>;
 
-#[cfg(feature = "archive")]
 impl curios_archive::Proxy<&'static Vec<String>> for Interning {
     type Archivable = Vec<String>;
 

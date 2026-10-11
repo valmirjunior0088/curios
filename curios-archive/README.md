@@ -4,6 +4,14 @@ Zero-copy archiving for the workspace: the one crate that names rkyv ([One crate
 
 ## Design
 
+### Every build archives
+
+**Decision.** Archiving is no Cargo feature. rkyv is an ordinary dependency of this crate, `#[archived]` derives in every build, and a crate whose types are stored says so by depending on this one.
+
+**Rationale.** The compiler, the launcher and the browser bundle each read an archive, so a build without one is a configuration no product is and no check compiles: what only it compiles goes stale unseen, and a package built alone reaches it through a dev-dependency that names no feature. With one configuration, what a focused check compiles is what ships. Products are told apart by crate boundaries, never by features.
+
+**Rejected.** An `archive` feature on each crate that stores a type, gating the derive's expansion and every function that reads or writes stored bytes: it keeps a second body beside each read that restores, for a build nothing runs. A check that builds the workspace with archiving off, which holds that build to compile and nothing to need it.
+
 ### A type rkyv cannot archive is described by a stand-in, once
 
 **Decision.** `Proxy<Value>` states one conversion — this value converts to an archivable one, and back — and `Via<P>` supplies the three rkyv adapter impls (`ArchiveWith`, `SerializeWith`, `DeserializeWith`) from it. A bignum is its little-endian bytes, a hash map its sorted entries, and an interned path or spelling the segments or text the process table already holds.

@@ -1,10 +1,10 @@
 //! The attribute macro behind `curios-archive`. Depend on that crate, never on this one.
 //!
-//! Why this is a crate of its own, why the expansion rather than the attribute is feature-gated, why it depends on nothing, and why the field markers are inert are `README.md`'s decisions.
+//! Why this is a crate of its own, why it depends on nothing, and why the field markers are inert are `README.md`'s decisions.
 
 use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
 
-/// Mark a type as archived: gate rkyv's three derives on the crate's own `archive` feature, and redirect the paths they expand to.
+/// Mark a type as archived: derive rkyv's three traits on it, and redirect the paths they expand to.
 ///
 /// ```text
 /// #[curios_archive::archived]
@@ -18,30 +18,18 @@ use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
 /// pub struct Atom(String);
 /// ```
 ///
-/// The annotation is unconditional at the call site and the *expansion* is what the feature gates, through `cfg_attr`, so `feature = "archive"` names the consuming crate's own feature.
-///
 /// # Field markers
 ///
-/// A field says `#[archived_with(SomeAdapter)]` or `#[archived_omit_bounds]`, and this rewrites it into the gated `rkyv(…)` helper. Both are inert: nothing declares them, so a field carrying one outside an `#[archived]` item is an unresolved-attribute error rather than a silently ignored line.
+/// A field says `#[archived_with(SomeAdapter)]` or `#[archived_omit_bounds]`, and this rewrites it into the `rkyv(…)` helper. Both are inert: nothing declares them, so a field carrying one outside an `#[archived]` item is an unresolved-attribute error rather than a silently ignored line.
 ///
 /// Recognizing a marker needs no grammar — it is `#`, a bracket group, and one of two idents — so the walk is over token trees and this crate depends on nothing.
 #[proc_macro_attribute]
 pub fn archived(args: TokenStream, item: TokenStream) -> TokenStream {
     let arguments = args.to_string();
-    let mut arguments = arguments.trim();
-
-    let mut always = false;
-    let mut recursive = false;
-    // Either order, so a reader writes what reads best rather than what the macro insists on.
-    loop {
-        if let Some(rest) = take_keyword(arguments, "always") {
-            (always, arguments) = (true, rest);
-        } else if let Some(rest) = take_keyword(arguments, "recursive") {
-            (recursive, arguments) = (true, rest);
-        } else {
-            break;
-        }
-    }
+    let (recursive, arguments) = match take_keyword(arguments.trim(), "recursive") {
+        Some(rest) => (true, rest),
+        None => (false, arguments.trim()),
+    };
 
     let clauses = [recursive.then_some(RECURSIVE_BOUNDS), Some(arguments)]
         .into_iter()
@@ -61,16 +49,10 @@ pub fn archived(args: TokenStream, item: TokenStream) -> TokenStream {
     )";
     let redirect = format!("rkyv(crate = ::curios_archive::rkyv{forwarded})");
 
-    // `always` drops the gate rather than changing what is emitted, and must split the pair into two attributes: a comma-separated list of them is `cfg_attr`'s own grammar, not an attribute's. A crate that archives unconditionally has no `archive` feature for `cfg_attr` to name anyway.
-    let attribute = match always {
-        true => format!("#[{derives}] #[{redirect}]"),
-        false => format!("#[cfg_attr(feature = \"archive\", {derives}, {redirect})]"),
-    };
-
-    let mut expanded: TokenStream = attribute
+    let mut expanded: TokenStream = format!("#[{derives}] #[{redirect}]")
         .parse()
-        .expect("the generated attribute is well-formed");
-    expanded.extend(rewrite_markers(item, always));
+        .expect("the generated attributes are well-formed");
+    expanded.extend(rewrite_markers(item));
     expanded
 }
 
@@ -102,7 +84,7 @@ fn field_clause(group: &Group) -> Option<String> {
 /// Rewrite this crate's inert field markers into the rkyv helper attributes they stand for, everywhere in `stream`.
 ///
 /// The walk is over token trees rather than a parsed item, which is what keeps this crate free of `syn`. It can afford to be: a marker is `#` followed by a bracket group whose first token is one of two idents, and recognizing that needs no grammar. Anything else is copied through untouched, so a form this does not know is a form it cannot damage.
-fn rewrite_markers(stream: TokenStream, always: bool) -> TokenStream {
+fn rewrite_markers(stream: TokenStream) -> TokenStream {
     let mut rewritten = Vec::new();
     let mut trees = stream.into_iter().peekable();
 
@@ -115,12 +97,8 @@ fn rewrite_markers(stream: TokenStream, always: bool) -> TokenStream {
         {
             trees.next();
 
-            let attribute = match always {
-                true => format!("#[rkyv({clause})]"),
-                false => format!("#[cfg_attr(feature = \"archive\", rkyv({clause}))]"),
-            };
             rewritten.extend(
-                attribute
+                format!("#[rkyv({clause})]")
                     .parse::<TokenStream>()
                     .expect("the generated field attribute is well-formed"),
             );
@@ -131,8 +109,7 @@ fn rewrite_markers(stream: TokenStream, always: bool) -> TokenStream {
         // Fields live inside the item's brace group, so the walk has to descend.
         match tree {
             TokenTree::Group(group) => {
-                let mut rebuilt =
-                    Group::new(group.delimiter(), rewrite_markers(group.stream(), always));
+                let mut rebuilt = Group::new(group.delimiter(), rewrite_markers(group.stream()));
                 rebuilt.set_span(group.span());
                 rewritten.push(TokenTree::Group(rebuilt));
             }

@@ -10,21 +10,15 @@
 
 use {
     super::{Binding, Environment, Projection},
-    crate::{Answered, Foreign, Question, Traces},
-    curios_archive::{Bytes, Deferred},
+    crate::{Answered, Foreign, Question, Traces, part_digest},
+    curios_archive::{Bytes, Deferred, joined, parted},
     curios_core::{Extent, Free, Global, Item, Module, Places, Trace},
+    curios_utilities::digest,
     std::{
+        borrow::Cow,
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
     },
-};
-
-#[cfg(feature = "archive")]
-use {
-    crate::part_digest,
-    curios_archive::{joined, parted},
-    curios_utilities::digest,
-    std::borrow::Cow,
 };
 
 /// One item's erased form — see the module documentation.
@@ -149,7 +143,6 @@ impl ErasedItem {
     }
 
     /// The digest of what an item that names `name` reads of this erased form: what [`ErasedItem::read_alike`] compares, archived. What a unit records of a binding it read in another unit's erased form, and what the binding is asked again by.
-    #[cfg(feature = "archive")]
     pub(super) fn read_digest(&self, name: &Global) -> Result<String, String> {
         let export = self.export(name).map(|export| match export {
             Export::Dropped => (0u8, None, None, None),
@@ -313,16 +306,9 @@ impl ErasedUnit {
 
     /// The erased form of the item at `place`, read out of its bytes now where the unit was restored and nothing has read it before.
     pub(super) fn item(&self, place: usize) -> &ErasedItem {
-        #[cfg(feature = "archive")]
-        let erased = self.items[place]
+        self.items[place]
             .get()
-            .unwrap_or_else(|error| panic!("a unit's erased form failed to restore: {error}"));
-        #[cfg(not(feature = "archive"))]
-        let erased = self.items[place]
-            .peek()
-            .expect("a unit that was never stored holds its erased forms");
-
-        erased
+            .unwrap_or_else(|error| panic!("a unit's erased form failed to restore: {error}"))
     }
 
     /// The erased forms, in item order, each read as [`ErasedUnit::item`] reads it.
@@ -351,7 +337,7 @@ impl ErasedUnit {
         })
     }
 
-    /// Whether the item declaring `name` holds one erased form in this unit and in `other`: the one handle, or two forms stored as the same bytes. Nothing is stored where nothing is archived, and two forms made apart are then not known to be one.
+    /// Whether the item declaring `name` holds one erased form in this unit and in `other`: the one handle, or two forms stored as the same bytes.
     pub(super) fn form_alike(&self, other: &ErasedUnit, name: &Global) -> bool {
         let (Some(this), Some(that)) = (self.place(name), other.place(name)) else {
             return false;
@@ -361,16 +347,10 @@ impl ErasedUnit {
             return true;
         }
 
-        #[cfg(feature = "archive")]
-        let alike = matches!((this.bytes(), that.bytes()), (Ok(this), Ok(that)) if this == that);
-        #[cfg(not(feature = "archive"))]
-        let alike = false;
-
-        alike
+        matches!((this.bytes(), that.bytes()), (Ok(this), Ok(that)) if this == that)
     }
 
     /// The digest of the erased form of the item at `place`, whole, as it is stored.
-    #[cfg(feature = "archive")]
     fn form_digest(&self, place: usize) -> Result<String, String> {
         self.items[place].bytes().map(|bytes| digest(&bytes))
     }
@@ -388,18 +368,9 @@ impl ErasedUnit {
 
     /// What erasing each item asked, read out of the unit's baseline half now, where the unit was restored and no erasure over it has asked before.
     fn traces(&self) -> &Traces {
-        #[cfg(feature = "archive")]
-        let asked = self
-            .asked
+        self.asked
             .get()
-            .unwrap_or_else(|error| panic!("an erased unit's traces failed to restore: {error}"));
-        #[cfg(not(feature = "archive"))]
-        let asked = self
-            .asked
-            .peek()
-            .expect("an erased unit that was never stored holds its traces");
-
-        asked
+            .unwrap_or_else(|error| panic!("an erased unit's traces failed to restore: {error}"))
     }
 
     /// What erasing the item declaring `name` first asked, as the unit holds it.
@@ -413,26 +384,22 @@ impl ErasedUnit {
     }
 
     /// How many items' erasures hold a trace.
-    #[cfg(feature = "archive")]
     pub(super) fn asked_len(&self) -> usize {
         self.traces().len()
     }
 
     /// The bytes of this unit's baseline half: what erasing each of its items asked, stored apart from what the unit is for its successors.
-    #[cfg(feature = "archive")]
     pub fn baseline_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
         self.asked.bytes()
     }
 
     /// This unit with `bytes` as its baseline half, read when an erasure over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
-    #[cfg(feature = "archive")]
     pub fn with_baseline(mut self, bytes: impl Into<Bytes>) -> Self {
         self.asked = Deferred::stored(bytes);
         self
     }
 
     /// The bytes of this unit's erased forms, each stored on its own behind how many they are and how long each is ([`joined`]): the ones a form was restored from, and otherwise its archive, made now.
-    #[cfg(feature = "archive")]
     pub fn items_bytes(&self) -> Result<Vec<u8>, String> {
         self.items
             .iter()
@@ -442,7 +409,6 @@ impl ErasedUnit {
     }
 
     /// This unit with `bytes` as its erased forms ([`ErasedUnit::items_bytes`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves it with none. `Err` is bytes that hold no such forms, or not one for each item the unit's index names.
-    #[cfg(feature = "archive")]
     pub fn with_items(mut self, bytes: impl Into<Bytes>) -> Result<Self, String> {
         let items = parted(&bytes.into()).ok_or("not a unit's erased forms")?;
         let named = |place: &u32| (*place as usize) < items.len();
@@ -553,14 +519,12 @@ impl<'a> Erasures<'a> {
     }
 
     /// Whether a read of `name`, which the unit being erased does not declare, is one to record: every one but a read of a fixed unit's declaration.
-    #[cfg(feature = "archive")]
     pub(super) fn recorded(&self, name: &Global) -> bool {
         self.place(name)
             .is_none_or(|(unit, _)| !self.is_fixed(unit))
     }
 
     /// The digest of what `question` asks of the declaration a unit in scope holds under its name: a part of its elaborated declaration ([`part_digest`]), how an item naming it reads its erased form ([`ErasedItem::read_digest`]), or that form whole. `Ok(None)` where no unit declares the name or the one that does holds no such part; `Err` where a part is asked of a scope read without its units' places.
-    #[cfg(feature = "archive")]
     pub(super) fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
         let Some(name) = question.subject() else {
             return Ok(None);

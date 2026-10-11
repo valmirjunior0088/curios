@@ -1,15 +1,12 @@
 use {
     super::{Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped},
-    crate::{Error, GroupItem, Name, UseGroup},
+    crate::{Error, GroupItem, Name, OrderedMap, UseGroup},
     curios_utilities::{Mount, Qualifier},
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,
     },
 };
-
-#[cfg(feature = "archive")]
-use crate::OrderedMap;
 
 // The export view of a module: public names only, each pointing at the canonical declaration site. Built to a fixed point before any body is elaborated.
 #[derive(Clone)]

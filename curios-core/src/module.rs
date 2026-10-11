@@ -9,7 +9,7 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Items,
-        Lexicon, Many, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
+        Lexicon, Many, Outline, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
         Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
         UniverseError, Variance, WitnessId, WitnessSpelling, build_shorten,
     },
@@ -20,9 +20,6 @@ use {
         rc::Rc,
     },
 };
-
-#[cfg(feature = "archive")]
-use super::Outline;
 
 /// Whether a definition is known to terminate on every input.
 ///
@@ -151,28 +148,17 @@ impl Certification {
 
     /// What the walk's judgments read, read out of its bytes now where the record was restored and no walk has asked before.
     fn read(&self) -> &Read {
-        #[cfg(feature = "archive")]
-        let reads = self
-            .reads
+        self.reads
             .get()
-            .unwrap_or_else(|error| panic!("a certifier's reads failed to restore: {error}"));
-        #[cfg(not(feature = "archive"))]
-        let reads = self
-            .reads
-            .peek()
-            .expect("a record that was never stored holds its reads");
-
-        reads
+            .unwrap_or_else(|error| panic!("a certifier's reads failed to restore: {error}"))
     }
 
     /// The bytes of what judging each definition read: stored apart from the record, since only a walk over its unit as a baseline reads them.
-    #[cfg(feature = "archive")]
     pub fn reads_bytes(&self) -> Result<std::borrow::Cow<'_, [u8]>, String> {
         self.reads.bytes()
     }
 
     /// This record with `bytes` as what judging each definition read ([`Certification::reads_bytes`]), read when a walk over its unit first asks: what a restored record is given, since restoring it leaves it with none.
-    #[cfg(feature = "archive")]
     pub fn with_reads(mut self, bytes: impl Into<curios_archive::Bytes>) -> Self {
         self.reads = curios_archive::Deferred::stored(bytes);
         self
@@ -755,7 +741,6 @@ pub struct Module {
     pub tests: Vec<Global>,
 }
 
-#[cfg(feature = "archive")]
 impl Module {
     /// The module archived as `bytes`, read by item where the bytes outlive every reader: its outline restored now — each item's names, what each is declared as and whether it is a group, which every compilation reads and which is small — and each item the first time it is read ([`Items`]), the entry a former carries with it, all through one pool, so a node an item shares with another is one allocation as it is in a module restored whole. `Err` is bytes that hold no module.
     ///

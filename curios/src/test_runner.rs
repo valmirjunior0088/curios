@@ -565,8 +565,7 @@ fn body(record: &TestRecord) {
 }
 
 /// What the store files for one test program: its records as `(path, body)` pairs beside the machine code, one archive as every other artifact in the store is. A corrupt or foreign payload fails to decode and is a miss, never an error.
-// `always`: a product that reads and writes archives unconditionally has no `archive` feature for a `cfg_attr` to gate on.
-#[curios_archive::archived(always)]
+#[curios_archive::archived]
 struct TestPayload {
     records: Vec<(String, String)>,
     cwasm: Vec<u8>,

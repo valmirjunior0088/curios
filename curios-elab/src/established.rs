@@ -8,11 +8,8 @@
 //!
 //! **A witness in scope is found by its name**, which states its concept and its key (`curios_core::WitnessId`): a unit's witnesses are an ordered set of names, so the witnesses at a concept and a key are the names from there on.
 
-#[cfg(feature = "archive")]
-use super::{Question, part_digest};
-
 use {
-    super::{Defined, Error, InScope},
+    super::{Defined, Error, InScope, Question, part_digest},
     curios_core::{
         ConceptDecl, Global, InductDecl, Item, Module, Place, Places, RecGroup, RecItem,
         StructDecl, WitnessId, WitnessKey,
@@ -332,13 +329,11 @@ impl<'a> Established<'a> {
     }
 
     /// Whether a read of `name`, which the unit being compiled does not declare, is one to record: every one but a read of a fixed unit's declaration.
-    #[cfg(feature = "archive")]
     pub(crate) fn recorded(&self, name: &Global) -> bool {
         self.declaring(name).is_none_or(|unit| !unit.fixed)
     }
 
     /// The digest of the part `question` asks, of the declaration a unit in scope holds under its name ([`part_digest`]): `Ok(None)` where no unit declares the name, or the one that does holds no such part.
-    #[cfg(feature = "archive")]
     pub(crate) fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
         let Some(unit) = question.subject().and_then(|name| self.declaring(name)) else {
             return Ok(None);

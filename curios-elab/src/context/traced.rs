@@ -73,7 +73,6 @@ impl<N, K> Question<N, K> {
     }
 
     /// The question with its name spelled by `name` and its key by `key`, or the first refusal of either: how a trace is written into a unit's table and read back out of it.
-    #[cfg(feature = "archive")]
     pub(crate) fn spelled<M, L, E>(
         self,
         mut name: impl FnMut(N) -> Result<M, E>,
@@ -113,7 +112,6 @@ pub enum Answered<N = Global> {
 
 impl<N> Answered<N> {
     /// The answer with its name spelled by `name`, or its refusal.
-    #[cfg(feature = "archive")]
     pub(crate) fn spelled<M, E>(
         self,
         name: impl FnOnce(N) -> Result<M, E>,

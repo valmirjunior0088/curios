@@ -16,8 +16,8 @@ use {
         withhold,
     },
     crate::{
-        Answered, Context, Error, Established, GoalSite, Question, Same, Traces, concepts_alike,
-        entries_alike, inducts_alike, structs_alike,
+        Answered, Context, Error, Established, Foreign, GoalSite, Question, Same, Traces,
+        concepts_alike, entries_alike, inducts_alike, structs_alike,
     },
     curios_core::{
         DefinitionKind, Enter, Extent, Global, Item, Module, Nominal, Places, Term, Trace,
@@ -30,9 +30,6 @@ use {
         rc::Rc,
     },
 };
-
-#[cfg(feature = "archive")]
-use crate::Foreign;
 
 /// Where one declaration stands in the walk.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -94,7 +91,6 @@ pub(super) struct Demand<'a> {
 }
 
 /// Whether the part `question` asks, of a declaration the unit does not hold, digests now to what the baseline recorded of it. A part the baseline recorded nothing of does not stand, and neither does one that will not digest.
-#[cfg(feature = "archive")]
 fn read_again(over: Over<'_>, question: &Question) -> bool {
     match (
         over.traces.foreign().digest(question),
@@ -103,12 +99,6 @@ fn read_again(over: Over<'_>, question: &Question) -> bool {
         (Some(then), Ok(now)) => *then == now,
         _ => false,
     }
-}
-
-/// Nothing digests where nothing is archived, so no read of a unit that moved stands.
-#[cfg(not(feature = "archive"))]
-fn read_again(_: Over<'_>, _: &Question) -> bool {
-    false
 }
 
 /// The first position written anywhere in `term`, outermost first, each node of its graph visited once.
@@ -212,7 +202,6 @@ impl<'a> Demand<'a> {
     /// Record what the unit's declarations read of the declarations it does not hold, each part by the digest it has in `scope`: what a later compile over this unit asks a read of another unit again by ([`Foreign`]).
     ///
     /// Taken where the walk ends, off the traces that stood. A part a kept declaration read of a unit that did not move is the baseline's, digest and all, so nothing of that unit is read to record it; and a walk that kept every declaration of its baseline in a scope that did not move holds the baseline's table.
-    #[cfg(feature = "archive")]
     pub(super) fn note_foreign(&mut self, scope: &Established<'_>) {
         let earlier = self.over.map(|over| over.traces);
         if let Some(earlier) = earlier

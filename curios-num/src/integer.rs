@@ -1,5 +1,5 @@
 use {
-    crate::{Natural, OutOfRange, ScalarTrap, within},
+    crate::{BigIntBytes, Natural, OutOfRange, ScalarTrap, within},
     num_bigint::{BigInt, Sign},
     num_traits::{ToPrimitive, Zero},
     std::{
@@ -7,9 +7,6 @@ use {
         ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Shr, Sub},
     },
 };
-
-#[cfg(feature = "archive")]
-use crate::BigIntBytes;
 
 /// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the running program is unbounded too, an i31 while a value is small and a boxed magnitude past it.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

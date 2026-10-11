@@ -9,9 +9,6 @@ publish = false
 [lints]
 workspace = true
 
-[features]
-archive = ["curios-archive/enabled", "curios-utilities/archive"]
-
 [dependencies]
 curios-archive = { workspace = true }
 curios-utilities = { workspace = true }

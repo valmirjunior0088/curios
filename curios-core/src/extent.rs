@@ -16,6 +16,7 @@ mod tests;
 use {
     curios_utilities::{Qualifier, Source, Span, Table, intern},
     std::{
+        cell::RefCell,
         cmp::Ordering,
         collections::{BTreeMap, HashMap},
         fmt,
@@ -24,9 +25,6 @@ use {
         sync::{Arc, LazyLock, Mutex},
     },
 };
-
-#[cfg(feature = "archive")]
-use std::cell::RefCell;
 
 /// What an anchor is the text of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -117,14 +115,11 @@ impl fmt::Debug for Anchor {
 }
 
 /// Reads an archived anchor back into the process table every other occurrence of it already uses.
-#[cfg(feature = "archive")]
 pub struct InterningAnchor;
 
 /// The field adapter: `#[archived_with(InternedAnchor)]`.
-#[cfg(feature = "archive")]
 pub type InternedAnchor = curios_archive::Via<InterningAnchor>;
 
-#[cfg(feature = "archive")]
 impl curios_archive::Proxy<&'static Arc<Anchored>> for InterningAnchor {
     type Archivable = Arc<Anchored>;
 
@@ -151,7 +146,6 @@ impl curios_archive::Proxy<&'static Arc<Anchored>> for InterningAnchor {
     }
 }
 
-#[cfg(feature = "archive")]
 thread_local! {
     /// The archived pointer this thread read last, with the anchor it came back as. One entry, which holds its pointer: no other allocation takes that address while it is remembered, so the address answers for what it points at.
     static READ_LAST: RefCell<Option<(Arc<Anchored>, &'static Arc<Anchored>)>> =

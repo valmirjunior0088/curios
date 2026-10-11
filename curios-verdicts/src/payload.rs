@@ -40,8 +40,7 @@ pub struct Program<'a> {
 /// **Two kinds of field, and [`agrees`] reads only the first.** Every field but `foreigns` is a fact the compilation depended on and the address deliberately does not carry; verification is all of them or nothing, and a record that cannot be read or disagrees anywhere is a miss.
 ///
 /// `foreigns` is the other kind: an *output* of the compilation rather than an input it rested on, so nothing verifies it — the payload's digest already answers for the bytes it was derived alongside. It is here because a reused payload still has to be linked, and the rows a program's `ffi` imports are typed by cannot be recovered from the module: `Nat` and `Int` both cross as an `i64`, and `Bytes`, `Bits` and `Handle` share one reference type, so a re-derivation from the wasm import types would lose what a result is boxed as. Filing what the compilation already computed is the only reading that cannot disagree with itself.
-// `always`: a product that reads and writes archives unconditionally has no `archive` feature for a `cfg_attr` to gate on.
-#[curios_archive::archived(always)]
+#[curios_archive::archived]
 struct Record {
     /// The entry file, by canonical path and the digest of the text that was parsed from it.
     ///

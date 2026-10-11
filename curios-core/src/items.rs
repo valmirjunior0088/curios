@@ -268,13 +268,10 @@ impl fmt::Debug for Items {
 }
 
 /// A module's items archived as the vector they are: the ones in hand by reference, and a stored module's each restored first.
-#[cfg(feature = "archive")]
 pub struct ItemVector;
 
-#[cfg(feature = "archive")]
 pub type AsVector = curios_archive::Via<ItemVector>;
 
-#[cfg(feature = "archive")]
 impl curios_archive::Proxy<Items> for ItemVector {
     type Archivable = Vec<Item>;
 

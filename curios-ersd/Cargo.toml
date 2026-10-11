@@ -9,7 +9,6 @@ description = "The Curios erased IR: post-erasure optimization and lowering to c
 workspace = true
 
 [features]
-archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-num/archive"]
 profile = ["curios-profile/enabled"]
 
 [dependencies]

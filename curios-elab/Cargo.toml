@@ -9,7 +9,6 @@ description = "The Curios elaborator: elaboration, typing, conversion, universe 
 workspace = true
 
 [features]
-archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-core/archive", "curios-ersd/archive", "curios-num/archive"]
 profile = ["curios-profile/enabled", "curios-analysis/profile"]
 
 [dependencies]

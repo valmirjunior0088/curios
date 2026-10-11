@@ -223,7 +223,6 @@ impl<'s> Globals<'s> {
     }
 
     /// Whether a read of `name`, which a unit here declares, is one a walk records: every one but a read of a fixed unit.
-    #[cfg(feature = "archive")]
     pub(crate) fn recorded(&self, name: &Global) -> bool {
         self.mounted
             .iter()
