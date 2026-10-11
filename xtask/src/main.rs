@@ -82,7 +82,9 @@ enum Recipe {
     #[command(about = "Check the workspace's formatting without writing")]
     FmtCheck,
 
-    #[command(about = "Lint the workspace over every target and feature, warnings denied")]
+    #[command(
+        about = "Lint the workspace over every target and feature, and the launcher as it ships, warnings denied"
+    )]
     Clippy {
         #[arg(
             value_name = "PACKAGE",
@@ -229,11 +231,7 @@ fn main() -> ExitCode {
         Recipe::Build => build(),
         Recipe::Fmt => cargo(&["fmt", "--all"]),
         Recipe::FmtCheck => cargo(&["fmt", "--all", "--", "--check"]),
-        Recipe::Clippy { package } => scoped(
-            package.as_deref(),
-            &["clippy"],
-            &["--all-targets", "--all-features", "--", "-Dwarnings"],
-        ),
+        Recipe::Clippy { package } => clippy(package.as_deref()),
         Recipe::Test { package, filter } => test(package.as_deref(), filter.as_deref()),
         Recipe::Doctest { package } => {
             scoped(package.as_deref(), &["test"], &["--doc", "--all-features"])

@@ -13,18 +13,21 @@ use {
 #[cfg(test)]
 mod tests;
 
+/// The package the launcher is built from, under its default features alone.
+const LAUNCHER: &str = "curios-runtime";
+
 pub(crate) fn runtime() -> Result<(), String> {
     cargo(&[
         "build",
         "--release",
         "--package",
-        "curios-runtime",
+        LAUNCHER,
         "--target",
         HOST_TRIPLE,
     ])?;
 
     file_with_inputs(
-        &built(HOST_TRIPLE, "curios-runtime"),
+        &built(HOST_TRIPLE, LAUNCHER),
         &artifact("curios", HOST_TRIPLE),
         &inputs("curios", HOST_TRIPLE),
     )?;
@@ -45,6 +48,27 @@ fn scope(package: Option<&str>) -> Vec<&str> {
         Some(package) => vec!["--package", package],
         None => vec!["--workspace"],
     }
+}
+
+/// Lint the workspace, or one package, over every target and feature with warnings denied, and the launcher once more as it ships, where the selection holds it.
+///
+/// **The launcher is linted as [`runtime`] builds it.** Every feature turns on the backend the launcher is built without, so what its own build alone leaves unread, an import or a field only a backend reads, is seen by no lint over every feature, and `runtime` denies nothing. The second pass is the launcher's package under its default features, in a cargo invocation of its own for the reason `runtime` has one, over its library and its binary: its tests need a backend.
+pub(crate) fn clippy(package: Option<&str>) -> Result<(), String> {
+    scoped(
+        package,
+        &["clippy"],
+        &["--all-targets", "--all-features", "--", "-Dwarnings"],
+    )?;
+
+    match holds_launcher(package) {
+        true => cargo(&["clippy", "--package", LAUNCHER, "--", "-Dwarnings"]),
+        false => Ok(()),
+    }
+}
+
+/// Whether a selection holds the launcher's package: the whole workspace does, and so does the package by its name.
+fn holds_launcher(package: Option<&str>) -> bool {
+    package.is_none_or(|package| package == LAUNCHER)
 }
 
 /// The workspace's tests, or one package's, under nextest: every target and feature, every failure reported rather than the first, narrowed to the tests whose path contains `filter`.

@@ -1,4 +1,4 @@
-//! What the test recipe hands nextest for a selection, and how it refuses where nextest is missing.
+//! What the test recipe hands nextest for a selection, how it refuses where nextest is missing, and which selections lint the launcher as it ships.
 
 use super::*;
 
@@ -34,6 +34,13 @@ fn a_filter_comes_last() {
     let arguments = test_arguments(Some("curios"), Some("universes"));
 
     assert_eq!(arguments.last(), Some(&"universes"));
+}
+
+#[test]
+fn the_launcher_is_linted_with_the_workspace_and_by_its_own_name() {
+    assert!(holds_launcher(None));
+    assert!(holds_launcher(Some("curios-runtime")));
+    assert!(!holds_launcher(Some("curios-abi")));
 }
 
 #[test]
