@@ -359,6 +359,6 @@ impl ClosedCode for SerialOp {
     ];
 }
 
-/// How a diverging row ends the instance: the code `proc/exit` hands the embedder, which the adapter carries out as its guest-exit trap. A host method that answers one cannot return into the guest, because nothing but the trap is made of it.
+/// How a diverging row ends the instance: the code `proc_exit` hands the embedder, which the adapter carries out as its guest-exit trap. A host method that answers one cannot return into the guest, because nothing but the trap is made of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Termination(pub u8);

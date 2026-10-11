@@ -25,7 +25,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 
 /// The six-outcome package: every rung the report can print, declared in the library, beside an executable with no tests of its own.
 ///
-/// **The trapping row needs a narrowing that still refuses, and a value the folder cannot see.** `Nat` is unbounded at run time, so the only narrowing that refuses is the host wire's: the row hands `2⁷⁰` to `rand/bytes`, whose count crosses as an `i64`, and the refusal fires before the host is called. The operand is tainted by an unset environment variable the way `numeric::test_support::table` taints its rows, since a closed computation never traps (`numeric::unbounded_tests::a_closed_computation_folds_at_the_theory_s_width`); an unset variable rather than stdin because the harness inherits the test runner's stdin, and a read on a terminal would hang.
+/// **The trapping row needs a narrowing that still refuses, and a value the folder cannot see.** `Nat` is unbounded at run time, so the only narrowing that refuses is the host wire's: the row hands `2⁷⁰` to `/std/rand/bytes`, whose count crosses as an `i64`, and the refusal fires before the host is called. The operand is tainted by an unset environment variable the way `numeric::test_support::table` taints its rows, since a closed computation never traps (`numeric::unbounded_tests::a_closed_computation_folds_at_the_theory_s_width`); an unset variable rather than stdin because the harness inherits the test runner's stdin, and a read on a terminal would hang.
 fn project(name: &str) -> Temporary {
     let root = temporary(name);
     write(

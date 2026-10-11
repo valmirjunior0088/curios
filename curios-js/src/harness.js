@@ -228,14 +228,14 @@ export async function run(config) {
         throw new Error(`rand_bytes: this host cannot hold ${length} bytes`);
       }
 
-      // Web Crypto caps one `getRandomValues` at 65536 bytes (a `QuotaExceededError` past it), so a larger request is filled a slice at a time; the native host has no such ceiling, and `rand/bytes` promises none.
+      // Web Crypto caps one `getRandomValues` at 65536 bytes (a `QuotaExceededError` past it), so a larger request is filled a slice at a time; the native host has no such ceiling, and `rand_bytes` promises none.
       for (let offset = 0; offset < bytes.length; offset += 65536) {
         crypto.getRandomValues(bytes.subarray(offset, offset + 65536));
       }
 
       return encodeBytes(bytes);
     },
-    // `proc/args` has no failure lane, and the playground has no arguments it could truthfully call a program's, so it refuses the call rather than answer an empty list a program would read as a fact.
+    // `proc_args` has no failure lane, and the playground has no arguments it could truthfully call a program's, so it refuses the call rather than answer an empty list a program would read as a fact.
     proc_args: unsupported("proc_args"),
     proc_env: () => [status.NOT_FOUND, emptyBytes()],
     // The playground has no terminal to switch or measure, so both tty rows are denied as `file_open` is.

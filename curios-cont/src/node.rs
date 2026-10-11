@@ -200,7 +200,7 @@ pub enum Node {
         args: Vec<Atom>,
         return_to: ContinuationId,
     },
-    /// A call to a host row that diverges — `proc/exit` — with its wire operands. Terminal like [`Node::Panic`]: it has no continuation, so no pass can give one to it, and the emitter writes nothing a return could reach.
+    /// A call to a host row that diverges — `proc_exit` — with its wire operands. Terminal like [`Node::Panic`]: it has no continuation, so no pass can give one to it, and the emitter writes nothing a return could reach.
     Halt {
         function: Arc<ForeignFunction>,
         args: Vec<Atom>,

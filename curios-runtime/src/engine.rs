@@ -381,7 +381,7 @@ macro_rules! declare_host_rows {
 
 for_each_host_op!(declare_host_rows);
 
-/// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap. Made only when a [`Termination`](curios_abi::Termination) reply is encoded, so a host method answering the row cannot return into the guest.
+/// A process exit requested via `proc_exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap. Made only when a [`Termination`](curios_abi::Termination) reply is encoded, so a host method answering the row cannot return into the guest.
 #[derive(Debug)]
 pub(crate) struct ExitTrap(pub(crate) u8);
 
@@ -405,12 +405,12 @@ impl fmt::Display for PanicTrap {
 
 impl Error for PanicTrap {}
 
-/// What a run answers of how a program ended: one reading where its entry returned, of the result it handed back, and one where `proc/exit` unwound it, of the code. A trap is neither, and is every run's error alike.
+/// What a run answers of how a program ended: one reading where its entry returned, of the result it handed back, and one where `proc_exit` unwound it, of the code. A trap is neither, and is every run's error alike.
 pub(crate) trait Ended: Sized + Send {
     /// The entry returned `result`, read while the store it lives in is open.
     fn returned(store: &Store<()>, result: Option<Rooted<AnyRef>>) -> Result<Self, String>;
 
-    /// `proc/exit` ended the run with `code`.
+    /// `proc_exit` ended the run with `code`.
     fn exited(code: u8) -> Self;
 }
 
@@ -430,7 +430,7 @@ impl Ended for u8 {
 pub enum TestEnd {
     /// The entry returned, answering whether what it ran held.
     Answered(bool),
-    /// `proc/exit` ended the run with this code before the entry answered.
+    /// `proc_exit` ended the run with this code before the entry answered.
     Exited(u8),
 }
 
@@ -472,7 +472,7 @@ impl Compiled {
             .map_err(|error| format!("failed to load wasm module: {error}"))
     }
 
-    /// Run the program under `host`, returning the process exit code: `0` when `main` returns normally, otherwise the code passed to `proc/exit`. `bindings` implements the program's own `foreign` declarations (pass [`ForeignBindings::empty`] for a program that declares none).
+    /// Run the program under `host`, returning the process exit code: `0` when `main` returns normally, otherwise the code passed to `proc_exit`. `bindings` implements the program's own `foreign` declarations (pass [`ForeignBindings::empty`] for a program that declares none).
     pub fn run<H: HostOps + Send + Sync + 'static>(
         &self,
         host: H,
