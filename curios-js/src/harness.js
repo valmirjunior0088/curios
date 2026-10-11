@@ -133,10 +133,6 @@ export async function run(config) {
 
   const denied = () => status.PERMISSION_DENIED;
 
-  // The standard streams take `SO_REUSEADDR` like a file — recording nothing and answering OK, as OsHost and MockHost do; no other handle exists in the browser, so anything else names nothing and is not found.
-  const reuseaddr = (handle) =>
-    standard.has(keyOf(handle)) ? status.OK : status.NOT_FOUND;
-
   // What this host answers of the rows the standard library declares, keyed by the host's method name, which is each declaration's own label.
   const host = {
     // Standard input is at its end, so a read of it answers `EOF` — or, asked for nothing, succeeds with nothing, since a request for nothing only asks whether the handle could be read. The output streams are not open for reading.
@@ -156,15 +152,13 @@ export async function run(config) {
     dns_lookup: deniedHandle,
     dns_resolve: deniedList,
     socket_open: deniedHandle,
-    socket_bind: denied,
     socket_connect: denied,
     socket_finish_connect: denied,
-    socket_listen: denied,
+    socket_listen: deniedHandle,
     socket_accept: deniedHandle,
     tls_start: denied,
     tls_server_config: deniedHandle,
     tls_start_server: denied,
-    socket_set_reuseaddr: reuseaddr,
     // Readiness in the playground: the standard streams are always ready — stdin is at its end, which a read answers at once, and the output streams accept everything — and any other handle names nothing, so it reports its failure in whichever list it stands, which wakes whatever waits on it into the call that says why.
     // A list's reports cross as one byte per handle, in the list's order.
     handle_poll: (readers, writers, _timeout) => {

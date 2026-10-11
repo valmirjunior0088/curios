@@ -396,7 +396,7 @@ struct MockSerial {
     bytes: Chunked,
 }
 
-/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle between states: `socket_open` mints a `Socket`, `socket_connect` turns it into an `Outbound` stream, `socket_listen` turns it into a `Listener` that `socket_accept` pulls `Inbound` streams from; `file_open` files a `File`; `proc_spawn` files a `Child` with a `Piped` stream per piped output and a `Sink` for a piped stdin; `serial_open` files a `Serial` port and `serial_drain` a `Piped` stream already at its end. `handle_close` drops any kind.
+/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle between states: `socket_open` mints a `Socket` that `socket_connect` turns into an `Outbound` stream, and `socket_listen` mints a `Listener` that `socket_accept` pulls `Inbound` streams from; `file_open` files a `File`; `proc_spawn` files a `Child` with a `Piped` stream per piped output and a `Sink` for a piped stdin; `serial_open` files a `Serial` port and `serial_drain` a `Piped` stream already at its end. `handle_close` drops any kind.
 enum MockResource {
     File(MockFile),
     Child(MockChild),
@@ -431,7 +431,7 @@ pub struct MockHost {
     errors: Arc<Mutex<Vec<u8>>>,
     /// The in-memory filesystem backing `file_open`/`handle_read`/`handle_write`/`handle_close`. Shared with [`MockIo::file`].
     files: MockFileSystem,
-    /// One table for every non-stdio handle, keyed by token bytes: open files, outbound/inbound connections, and unconnected/listening sockets. The BSD lifecycle transitions a handle in place (`socket_open` → `socket_connect`/`socket_listen` → `socket_accept`) and `handle_close` releases any kind uniformly — the scripted mirror of `OsHost`'s real-resource table.
+    /// One table for every non-stdio handle, keyed by token bytes: open files, outbound/inbound connections, and unconnected/listening sockets. The BSD lifecycle transitions a handle in place (`socket_open` → `socket_connect`) and `handle_close` releases any kind uniformly — the scripted mirror of `OsHost`'s real-resource table.
     table: Mutex<Table<MockResource>>,
     /// Scripted network endpoints: `host:port` → the peer a connection reads from. Read-only during the run; connecting elsewhere is refused.
     endpoints: HashMap<Vec<u8>, Script>,
@@ -586,13 +586,6 @@ impl HostOps for MockHost {
         Ok(self.mint(MockResource::Socket))
     }
 
-    fn socket_bind(&self, io: Handle, _addr: Vec<u8>) -> Result<(), Failure> {
-        match self.table.lock().unwrap().get(&io) {
-            Some(MockResource::Socket) => Ok(()),
-            _ => Err(Failure::NotFound),
-        }
-    }
-
     fn socket_connect(&self, io: Handle, addr: Vec<u8>) -> Result<(), Failure> {
         // The handle must be an unconnected socket minted by `socket_open`; consume it up front so a refusal leaves no half-open handle behind.
         {
@@ -681,16 +674,8 @@ impl HostOps for MockHost {
         }
     }
 
-    fn socket_listen(&self, io: Handle, _backlog: u64) -> Result<(), Failure> {
-        let mut table = self.table.lock().unwrap();
-
-        match table.get(&io) {
-            Some(MockResource::Socket) => {
-                table.insert(&io, MockResource::Listener);
-                Ok(())
-            }
-            _ => Err(Failure::NotFound),
-        }
+    fn socket_listen(&self, _addr: Vec<u8>) -> Result<Handle, Failure> {
+        Ok(self.mint(MockResource::Listener))
     }
 
     fn socket_accept(&self, io: Handle) -> Result<Handle, Failure> {
@@ -718,10 +703,6 @@ impl HostOps for MockHost {
             bytes: Chunked::scripted(request),
             capture,
         })))
-    }
-
-    fn socket_set_reuseaddr(&self, _io: Handle, _on: bool) -> Result<(), Failure> {
-        Ok(())
     }
 
     fn handle_poll(

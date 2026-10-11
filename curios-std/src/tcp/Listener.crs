@@ -1,5 +1,5 @@
 use /std/{Bytes, Str, Nat, Result, Try, Async, Io, Handle};
-use /std/tcp/{resolve, opened, Socket};
+use /std/tcp/{resolve, Socket};
 use /std/Handle/{Interest};
 
 --- A bound, listening socket.
@@ -7,14 +7,8 @@ pub struct Listener: Type {
     Handle,
 }
 
---- Set whether this socket's address may be bound again: `ok`, or the status of the failure.
-foreign socket_set_reuseaddr(Handle, Bool) -> Nat;
-
---- Bind this socket to this address: `ok`, or the status of the failure.
-foreign socket_bind(Handle, Bytes) -> Nat;
-
---- Mark this socket as listening, with so deep a queue: `ok`, or the status of the failure.
-foreign socket_listen(Handle, Nat) -> Nat;
+--- A listener at this address, the address reusable: `ok` beside its handle, or the status of the failure.
+foreign socket_listen(Bytes) -> {status: Nat, handle: Handle};
 
 --- The next connection on this listener: `ok` beside its handle, or the status of the failure.
 foreign socket_accept(Handle) -> {status: Nat, handle: Handle};
@@ -25,29 +19,17 @@ foreign tls_server_config(Bytes, Bytes) -> {status: Nat, handle: Handle};
 --- Upgrade this socket to a TLS server stream under this configuration: `ok`, or the status of the failure.
 foreign tls_start_server(Handle, Handle) -> Nat;
 
---- The socket `h` closed and the failure `status` names raised: what a listener that could not be made answers, with nothing of it left open.
-let closed_raising(@A: Type, h: Handle, status: Nat) -> Try(Io, Io/Error, A) =
-    let _ = Handle/close(h)!;
-    Try/raise(Io/Error/of(status));
-
-let bind_listen(addr: Bytes) -> Try(Io, Io/Error, Listener) =
-    let h = opened(addr)!;
-    let _ = socket_set_reuseaddr(h, true)!;
-    let bound = socket_bind(h, addr)!;
-    match bound == /sys/status/ok
-    | false => closed_raising(h, bound)
-    | true =>
-        let listening = socket_listen(h, 128)!;
-        match listening == /sys/status/ok
-        | false => closed_raising(h, listening)
-        | true => Try/pure(Listener { h })
-        end
+let listening(addr: Bytes) -> Try(Io, Io/Error, Listener) =
+    let reply = socket_listen(addr)!;
+    match reply.status == /sys/status/ok
+    | true => Try/pure(Listener { reply.handle })
+    | false => Try/raise(Io/Error/of(reply.status))
     end;
 
 --- A listener bound to `host` at `port`, the address reusable so a restart does not wait out the previous socket.
 pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
     let addr = resolve(host, port)!;
-    bind_listen(addr);
+    listening(addr);
 
 --- The next connection on `l`, parking until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
 let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =

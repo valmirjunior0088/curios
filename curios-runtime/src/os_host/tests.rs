@@ -38,16 +38,6 @@ fn a_table_entry_does_not_carry_a_tls_connection_inline() {
     );
 }
 
-/// The standard streams are never in the handle table, so a setter that asked the table would call them closed; like a file, they record nothing and answer `Ok`, which is what the mock answers for any handle.
-#[test]
-fn a_standard_stream_takes_set_reuseaddr_like_a_file() {
-    let host = OsHost::with_args(vec![]);
-
-    for handle in [Handle::Stdin, Handle::Stdout, Handle::Stderr] {
-        assert_eq!(host.socket_set_reuseaddr(handle, true), Ok(()));
-    }
-}
-
 /// A descriptor that is not a terminal refuses both tty rows through the errno lane, which is how a program learns it has none. Which errno is the platform's own — Linux answers `ENOTTY`, macOS `ENODEV` for both rows — so what is under test is the lane rather than the code. `/dev/null` rather than a standard stream, because under an interactive `cargo test` stdin *is* a terminal and a passing `tty_raw` would leave it in raw mode.
 #[test]
 fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_refuse_through_the_errno_lane() {
@@ -161,11 +151,7 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
 ///
 /// Bound at port zero and read back, never probed and released: a released port is free only until the next probe takes it, and the two tests that need one run in parallel, so a probe-and-release helper would have the second test bind the port the first is about to.
 fn loopback_listener(host: &OsHost) -> (Handle, Vec<u8>) {
-    let any = b"127.0.0.1:0".to_vec();
-    let listener = host.socket_open(any.clone()).unwrap();
-    assert_eq!(host.socket_set_reuseaddr(listener.clone(), true), Ok(()));
-    assert_eq!(host.socket_bind(listener.clone(), any), Ok(()));
-    assert_eq!(host.socket_listen(listener.clone(), 1), Ok(()));
+    let listener = host.socket_listen(b"127.0.0.1:0".to_vec()).unwrap();
 
     let port = match host.table.lock().unwrap().get(&listener) {
         Some(OsResource::Listener(socket)) => socket
@@ -178,6 +164,36 @@ fn loopback_listener(host: &OsHost) -> (Handle, Vec<u8>) {
     };
 
     (listener, format!("127.0.0.1:{port}").into_bytes())
+}
+
+/// A listener's address is reusable, as the row promises, so a restart binds the port its predecessor's connections still linger on.
+#[test]
+fn a_listener_s_address_is_reusable() {
+    let host = OsHost::with_args(vec![]);
+    let (listener, _) = loopback_listener(&host);
+
+    match host.table.lock().unwrap().get(&listener) {
+        Some(OsResource::Listener(socket)) => {
+            assert!(socket.reuse_address().expect("the option read"));
+        }
+        _ => panic!("the listener is filed as one"),
+    }
+
+    host.handle_close(listener);
+}
+
+/// A listener that cannot be made is the row's failure, whichever step refused it: an address a listener already holds refuses the bind, and the failure is the system's own.
+#[test]
+fn a_listener_at_a_held_address_is_refused() {
+    let host = OsHost::with_args(vec![]);
+    let (listener, blob) = loopback_listener(&host);
+
+    assert_eq!(
+        host.socket_listen(blob),
+        Err(Failure::Other(Errno::ADDRINUSE.raw_os_error() as u32))
+    );
+
+    host.handle_close(listener);
 }
 
 /// A listener never blocks: `socket_accept` with nothing pending answers `WouldBlock`. A connect to it answers at once on loopback or goes pending and settles through `handle_poll` and `socket_finish_connect`, which is idempotent on a settled socket. Both ends are non-blocking, so a read before any write answers `WouldBlock` and one after `handle_poll` serves the bytes.

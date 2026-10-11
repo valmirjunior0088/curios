@@ -45,14 +45,11 @@ macro_rules! for_each_host_op {
             /// Start an asynchronous lookup of `host`:`port`, succeeding with a handle that becomes `READ`-ready once resolution completes, at which point `dns_resolve` forces the address list off it. The blocking resolution runs off the calling thread. A `host` that is not UTF-8 names nothing a resolver can find and is `NotFound`, and a `port` past 65535 is `EINVAL`, both before any lookup starts.
             DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Result<Handle, Failure> { module: tcp/resolve, yields: handle }
 
-            /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it: every address the resolver found, none included, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_bind`/`socket_connect`. A lookup that failed is `NotFound`. `WouldBlock` before readiness.
+            /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it: every address the resolver found, none included, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_connect`/`socket_listen`. A lookup that failed is `NotFound`. `WouldBlock` before readiness.
             DnsResolve: fn dns_resolve(handle: Handle) -> Result<Vec<Vec<u8>>, Failure> { module: tcp/resolve, yields: addresses }
 
-            /// Create an unconnected, non-blocking socket for the address family encoded in `addr`, succeeding with its handle; transitioned by `socket_bind`/`socket_connect`/`socket_listen`.
-            SocketOpen: fn socket_open(addr: Vec<u8>) -> Result<Handle, Failure> { module: tcp, yields: handle }
-
-            /// Bind socket `h` to the local address `addr`.
-            SocketBind: fn socket_bind(h: Handle, addr: Vec<u8>) -> Result<(), Failure> { module: tcp/Listener }
+            /// Create an unconnected, non-blocking socket for the address family encoded in `addr`, succeeding with its handle; `socket_connect` is what makes it a stream.
+            SocketOpen: fn socket_open(addr: Vec<u8>) -> Result<Handle, Failure> { module: tcp/Socket, yields: handle }
 
             /// Start connecting socket `h` to the resolved address `addr`. `Ok` when the kernel completed it at once, on which the handle is an ordinary byte stream `handle_read`/`handle_write`/`handle_close` serve; `WouldBlock` while it is under way, on which `handle_poll` reports `h` `WRITE`-ready once it has settled and `socket_finish_connect` reads the outcome; a refusal otherwise, on which the socket drops.
             SocketConnect: fn socket_connect(h: Handle, addr: Vec<u8>) -> Result<(), Failure> { module: tcp/Socket }
@@ -60,8 +57,8 @@ macro_rules! for_each_host_op {
             /// Complete a `socket_connect` that answered `WouldBlock`, once `handle_poll` reports `h` `WRITE`-ready. `Ok` re-files `h` as a connected byte stream; a refusal or other failure reports its status and drops the socket; `WouldBlock` while the connect is still pending. `Ok` on a connect that never went pending.
             SocketFinishConnect: fn socket_finish_connect(h: Handle) -> Result<(), Failure> { module: tcp/Socket }
 
-            /// Mark bound socket `h` as listening with accept-queue depth `backlog` (OS-clamped to `somaxconn`). A refused listen leaves the socket unconnected, as it was.
-            SocketListen: fn socket_listen(h: Handle, backlog: u64) -> Result<(), Failure> { module: tcp/Listener }
+            /// A listener at the local address `addr`, succeeding with its handle: a non-blocking socket of the address's family with `SO_REUSEADDR` set, so a restart does not wait out the previous socket, bound to `addr` and listening with an accept queue the host chooses. Whichever step fails is the row's failure, and it leaves no socket behind.
+            SocketListen: fn socket_listen(addr: Vec<u8>) -> Result<Handle, Failure> { module: tcp/Listener, yields: handle }
 
             /// Pull the next connection from listener `h`: `WouldBlock` when none is pending, else a success with its handle, a non-blocking byte stream like a connected socket.
             SocketAccept: fn socket_accept(h: Handle) -> Result<Handle, Failure> { module: tcp/Listener, yields: handle }
@@ -74,9 +71,6 @@ macro_rules! for_each_host_op {
 
             /// Upgrade accepted socket `h` to a TLS server stream in place using configuration handle `cfg`; the handshake is driven by the reads and writes that follow, as `tls_start`'s is. The configuration stays filed for the next connection, and an upgrade that cannot start leaves the socket connected.
             TlsStartServer: fn tls_start_server(h: Handle, cfg: Handle) -> Result<(), Failure> { module: tcp/Listener }
-
-            /// Set socket `h`'s `SO_REUSEADDR` flag; set before `socket_bind`.
-            SocketSetReuseaddr: fn socket_set_reuseaddr(h: Handle, on: bool) -> Result<(), Failure> { module: tcp/Listener }
 
             /// The readiness oracle. Wait until a handle of `readers` is ready to read or one of `writers` to write, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Answers a report for each handle of each list, in the list's order: whether it is ready for what its list waits on, and, asked or not, that it failed or that its peer hung up. A handle that is unknown — closed, say — has no descriptor, or names a descriptor the system calls invalid reports its failure, so its waiter wakes into the call that says why. A handle may stand in both lists and in either more than once: each distinct descriptor is polled once, and each standing is answered for its own list. An interruption is retried against a deadline taken at the call, and a poll the system refuses outright refuses the call, naming the error.
             HandlePoll: fn handle_poll(readers: Vec<Handle>, writers: Vec<Handle>, timeout: i64) -> Result<Polled, Refusal> { module: Handle }

@@ -1,5 +1,5 @@
 use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io, Handle};
-use /std/tcp/{resolve, opened, Socket};
+use /std/tcp/{resolve, Socket};
 use /std/Handle/{Interest};
 use /std/Bool/{Holds};
 
@@ -32,6 +32,9 @@ let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
     let _ = Handle/close(h)!;
     Try/raise(e);
 
+--- Create a socket for the family of this address: `ok` beside its handle, or the status of the failure.
+foreign socket_open(Bytes) -> {status: Nat, handle: Handle};
+
 --- Start connecting this socket to this address: `ok`, or the status of the failure.
 foreign socket_connect(Handle, Bytes) -> Nat;
 
@@ -40,6 +43,13 @@ foreign socket_finish_connect(Handle) -> Nat;
 
 --- Upgrade this socket to a TLS client stream for this server name: `ok`, or the status of the failure.
 foreign tls_start(Handle, Bytes) -> Nat;
+
+let opened(addr: Bytes) -> Try(Io, Io/Error, Handle) =
+    let reply = socket_open(addr)!;
+    match reply.status == /sys/status/ok
+    | true => Try/pure(reply.handle)
+    | false => Try/raise(Io/Error/of(reply.status))
+    end;
 
 let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
     let h = opened(addr)!;

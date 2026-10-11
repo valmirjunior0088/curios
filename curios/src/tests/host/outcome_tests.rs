@@ -217,7 +217,6 @@ fn a_network_row_s_failure_is_the_error_it_names() {
     };
     let opened = || (HostOp::SocketOpen, ok(vec![bytes(&[8])]));
     let connect = r#"let _ = tcp/Socket/connect("h", 80)!; Try/pure(())"#;
-    let listen = r#"let _ = tcp/Listener/listen("h", 80)!; Try/pure(())"#;
 
     each_fails(
         In::Async,
@@ -274,22 +273,11 @@ fn a_network_row_s_failure_is_the_error_it_names() {
                 ],
             ),
             (
-                listen,
+                r#"let _ = tcp/Listener/listen("h", 80)!; Try/pure(())"#,
                 vec![
                     looked_up(),
                     resolved(),
-                    opened(),
-                    (HostOp::SocketBind, denied(vec![])),
-                ],
-            ),
-            (
-                listen,
-                vec![
-                    looked_up(),
-                    resolved(),
-                    opened(),
-                    (HostOp::SocketBind, ok(vec![])),
-                    (HostOp::SocketListen, denied(vec![])),
+                    (HostOp::SocketListen, denied(vec![bytes(b"")])),
                 ],
             ),
             (
@@ -299,9 +287,7 @@ fn a_network_row_s_failure_is_the_error_it_names() {
                 vec![
                     looked_up(),
                     resolved(),
-                    opened(),
-                    (HostOp::SocketBind, ok(vec![])),
-                    (HostOp::SocketListen, ok(vec![])),
+                    (HostOp::SocketListen, ok(vec![bytes(&[8])])),
                     (HostOp::SocketAccept, denied(vec![bytes(b"")])),
                 ],
             ),
@@ -361,7 +347,7 @@ fn a_process_row_s_failure_is_the_error_it_names() {
     );
 }
 
-/// `/std` absorbs three failures by design: a listener's `SO_REUSEADDR` is a courtesy the bind does not depend on, a kill that fails leaves a child the bracket reaps regardless, and a socket's finish is a courtesy to a peer that may already be gone.
+/// `/std` absorbs two failures by design: a kill that fails leaves a child the bracket reaps regardless, and a socket's finish is a courtesy to a peer that may already be gone.
 #[test]
 fn the_failures_std_absorbs_by_design_are_absorbed() {
     assert_eq!(
@@ -378,24 +364,6 @@ fn the_failures_std_absorbs_by_design_are_absorbed() {
                 (HostOp::SocketConnect, ok(vec![])),
                 (HostOp::HandleFlush, ok(vec![])),
                 (HostOp::HandleFinish, denied(vec![])),
-            ],
-        ),
-        0
-    );
-    assert_eq!(
-        exit_code(
-            In::Async,
-            r#"let _ = tcp/Listener/listen("h", 80)!; Try/pure(())"#,
-            vec![
-                (HostOp::DnsLookup, ok(vec![bytes(&[7])])),
-                (
-                    HostOp::DnsResolve,
-                    ok(vec![RawValue::BytesList(vec![b"a".to_vec()])]),
-                ),
-                (HostOp::SocketOpen, ok(vec![bytes(&[8])])),
-                (HostOp::SocketSetReuseaddr, denied(vec![])),
-                (HostOp::SocketBind, ok(vec![])),
-                (HostOp::SocketListen, ok(vec![])),
             ],
         ),
         0

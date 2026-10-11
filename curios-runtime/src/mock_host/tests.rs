@@ -545,8 +545,7 @@ fn a_scripted_finish_waits_then_ends_the_sending_half() {
 #[test]
 fn a_waiting_peer_closes_once_this_side_has_finished() {
     let (host, io) = MockHost::builder().inbound_waiting([vec!["ping"]]).build();
-    let listener = host.socket_open(b"0.0.0.0:8080".to_vec()).unwrap();
-    assert_eq!(host.socket_listen(listener.clone(), 1), Ok(()));
+    let listener = host.socket_listen(b"0.0.0.0:8080".to_vec()).unwrap();
     let conn = host.socket_accept(listener).unwrap();
     let reading = || {
         host.handle_poll(vec![conn.clone()], vec![], 0)
@@ -585,8 +584,7 @@ fn a_waiting_peer_closes_once_this_side_has_finished() {
 #[test]
 fn an_open_peer_stays_open_once_this_side_has_finished() {
     let (host, io) = MockHost::builder().inbound_open([vec!["ping"]]).build();
-    let listener = host.socket_open(b"0.0.0.0:8080".to_vec()).unwrap();
-    assert_eq!(host.socket_listen(listener.clone(), 1), Ok(()));
+    let listener = host.socket_listen(b"0.0.0.0:8080".to_vec()).unwrap();
     let conn = host.socket_accept(listener).unwrap();
 
     assert_eq!(
@@ -617,8 +615,7 @@ fn a_timed_poll_nothing_can_end_is_refused() {
         .inbound_open([vec!["ping"]])
         .mono([(1, 0)])
         .build();
-    let listener = host.socket_open(b"0.0.0.0:8080".to_vec()).unwrap();
-    assert_eq!(host.socket_listen(listener.clone(), 1), Ok(()));
+    let listener = host.socket_listen(b"0.0.0.0:8080".to_vec()).unwrap();
     let conn = host.socket_accept(listener).unwrap();
     let waiting = || host.handle_poll(vec![conn.clone()], vec![], 1000);
 

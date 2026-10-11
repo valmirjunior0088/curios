@@ -33,6 +33,9 @@ use {
     webpki_roots::TLS_SERVER_ROOTS,
 };
 
+/// The accept queue `socket_listen` asks for, which the kernel clamps to `somaxconn`: how many connections may wait for a `socket_accept` before the system turns the next away.
+const ACCEPT_QUEUE: i32 = 128;
+
 /// The most one `handle_read` reads, whatever it is asked. A request is a count the guest names and the buffer a read fills is allocated before anything arrives, so an uncapped one would let a request for more memory than the host has abort the process; a larger request is answered with the prefix one read takes, which the row allows. 64 KiB is a pipe's buffer, and four of the largest TLS record.
 const READ_MAX: u64 = 64 * 1024;
 
@@ -51,7 +54,7 @@ static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
     )
 });
 
-/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `file_open` files a `File`; `socket_open` mints an `Unconnected` socket, `socket_connect` turns it into a `Connected` one at once or into a `Connecting` one that `socket_finish_connect` settles (`socket_accept` mints a `Connected` one directly), and `socket_listen` turns it into a `Listener`. `tls_start` / `tls_start_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token; `serial_open` files a `Serial` port. `handle_read`/`handle_write` serve `File`, `Connected`, both TLS streams, a `Descriptor` and a `Serial` port alike; `handle_close` drops any kind, releasing its descriptor.
+/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `file_open` files a `File`; `socket_open` mints an `Unconnected` socket, `socket_connect` turns it into a `Connected` one at once or into a `Connecting` one that `socket_finish_connect` settles (`socket_accept` mints a `Connected` one directly), and `socket_listen` mints a `Listener`. `tls_start` / `tls_start_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token; `serial_open` files a `Serial` port. `handle_read`/`handle_write` serve `File`, `Connected`, both TLS streams, a `Descriptor` and a `Serial` port alike; `handle_close` drops any kind, releasing its descriptor.
 ///
 /// Every kind on which a peer decides — a socket in any state, an accepted stream, a pipe to a child, a serial port — is filed non-blocking at the moment it is minted, so no row waits on a peer: a `handle_read`, `handle_write`, `socket_connect` or `socket_accept` that cannot progress answers `WouldBlock` and `handle_poll` is the one place the host sleeps. A regular file is synchronous, since the disk rather than a peer answers it.
 enum OsResource {
@@ -155,7 +158,7 @@ impl OsHost {
         self.table.lock().unwrap().mint(resource)
     }
 
-    /// Pull an unconnected socket out of the table by handle, leaving any other resource (or none) in place. Lets `socket_connect`/`socket_listen` transition a handle in place.
+    /// Pull an unconnected socket out of the table by handle, leaving any other resource (or none) in place. Lets `socket_connect` transition a handle in place.
     fn take_unconnected(&self, handle: &Handle) -> Option<Socket> {
         self.table
             .lock()
@@ -175,44 +178,6 @@ impl OsHost {
                 OsResource::Connected(socket) => Ok(socket),
                 other => Err(other),
             })
-    }
-
-    /// Apply a `socket2` setter to a configurable handle. Every socket kind — unconnected, connecting, connected, or listening — exposes its typed setters directly; a `File` has no socket options, so that path records nothing and succeeds.
-    ///
-    /// The match selects a socket rather than answering, so the failure contract — a setter error is a [`failure_from_error`], never a quiet success — is written once instead of once per kind. A resource added later picks its socket or returns; there is no copy of that contract for it to get wrong.
-    fn with_socket<F>(&self, handle: &Handle, apply: F) -> Result<(), Failure>
-    where
-        F: FnOnce(&Socket) -> io::Result<()>,
-    {
-        let table = self.table.lock().unwrap();
-
-        let socket = match handle {
-            // The standard streams are the process's, shared with everything else on the terminal or pipe: no socket option applies to them, so, like a file, they record nothing and succeed. They are never in the table, so asking it would answer `NotFound`, the verdict for a closed handle.
-            Handle::Stdin | Handle::Stdout | Handle::Stderr => return Ok(()),
-            Handle::Other(_) => match table.get(handle) {
-                Some(
-                    OsResource::Unconnected(socket)
-                    | OsResource::Connecting(socket)
-                    | OsResource::Connected(socket)
-                    | OsResource::Listener(socket),
-                ) => socket,
-                // A TLS stream forwards setters to its underlying socket.
-                Some(OsResource::ClientTls(stream)) => &stream.sock,
-                Some(OsResource::ServerTls(stream)) => &stream.sock,
-                // A file, a pipe, a serial port, a child, a config token, and an in-flight lookup have no socket options: record nothing.
-                Some(
-                    OsResource::File(_)
-                    | OsResource::Descriptor(_)
-                    | OsResource::Serial(_)
-                    | OsResource::Child { .. }
-                    | OsResource::TlsConfig(_)
-                    | OsResource::Resolving { .. },
-                ) => return Ok(()),
-                None => return Err(Failure::NotFound),
-            },
-        };
-
-        apply(socket).map_err(failure_from_error)
     }
 }
 
@@ -303,21 +268,6 @@ impl HostOps for OsHost {
         created
             .map(|socket| self.mint(OsResource::Unconnected(socket)))
             .map_err(failure_from_error)
-    }
-
-    fn socket_bind(&self, io: Handle, addr: Vec<u8>) -> Result<(), Failure> {
-        // The address blob is the canonical "ip:port" string `dns_resolve` minted.
-        let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
-            Ok(address) => address,
-            Err(_) => return Err(Failure::NotFound),
-        };
-
-        match self.table.lock().unwrap().get(&io) {
-            Some(OsResource::Unconnected(socket)) => socket
-                .bind(&SockAddr::from(address))
-                .map_err(failure_from_error),
-            _ => Err(Failure::NotFound),
-        }
     }
 
     fn socket_connect(&self, io: Handle, addr: Vec<u8>) -> Result<(), Failure> {
@@ -482,32 +432,27 @@ impl HostOps for OsHost {
         Ok(())
     }
 
-    fn socket_listen(&self, io: Handle, backlog: u64) -> Result<(), Failure> {
-        let socket = match self.take_unconnected(&io) {
-            Some(socket) => socket,
-            None => return Err(Failure::NotFound),
+    fn socket_listen(&self, addr: Vec<u8>) -> Result<Handle, Failure> {
+        // The address blob is the canonical "ip:port" string `dns_resolve` minted.
+        let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
+            Ok(address) => address,
+            Err(_) => return Err(Failure::NotFound),
         };
 
-        // The kernel clamps the depth to `somaxconn`, so one past what `listen(2)` takes asks for the same queue.
-        match socket.listen(i32::try_from(backlog).unwrap_or(i32::MAX)) {
-            Ok(()) => {
-                self.table
-                    .lock()
-                    .unwrap()
-                    .insert(&io, OsResource::Listener(socket));
+        // Non-blocking from birth, as `socket_open` makes one, so `socket_accept` answers `WouldBlock` rather than wait. The socket is filed only once it listens: a step that fails drops it, which is what leaves nothing behind.
+        let listening =
+            Socket::new(Domain::for_address(address), Type::STREAM, None).and_then(|socket| {
+                socket.set_nonblocking(true)?;
+                socket.set_reuse_address(true)?;
+                socket.bind(&SockAddr::from(address))?;
+                socket.listen(ACCEPT_QUEUE)?;
 
-                Ok(())
-            }
-            // A refused listen leaves the socket as it found it, unconnected, as the row promises.
-            Err(error) => {
-                self.table
-                    .lock()
-                    .unwrap()
-                    .insert(&io, OsResource::Unconnected(socket));
+                Ok(socket)
+            });
 
-                Err(failure_from_error(error))
-            }
-        }
+        listening
+            .map(|socket| self.mint(OsResource::Listener(socket)))
+            .map_err(failure_from_error)
     }
 
     fn socket_accept(&self, io: Handle) -> Result<Handle, Failure> {
@@ -522,10 +467,6 @@ impl HostOps for OsHost {
             .and_then(|(stream, _)| stream.set_nonblocking(true).map(|()| stream))
             .map(|stream| table.mint(OsResource::Connected(stream)))
             .map_err(failure_from_error)
-    }
-
-    fn socket_set_reuseaddr(&self, io: Handle, on: bool) -> Result<(), Failure> {
-        self.with_socket(&io, |socket| socket.set_reuse_address(on))
     }
 
     fn handle_poll(
