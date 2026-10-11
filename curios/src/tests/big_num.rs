@@ -3,7 +3,6 @@
 use super::run;
 
 #[test]
-#[allow(clippy::approx_constant)] // "+3.14" is a parse-and-render test vector, not π
 fn flt_to_str_matches_rust_shortest_format() {
     // `Flt/to_str` is a Dragon4 shortest-float renderer over unbounded `Nat`, matching `format!("{:+}", f64)` byte-for-byte. The result is assembled from `Str` literals + `Nat/to_str` digits via `Str/concat`, so it carries the UTF-8 proof through `Str/Valid/concat`. Expectations come straight from Rust's own `{:+}`, so the test cannot drift from that oracle.
     let cases: &[(&str, f64)] = &[
@@ -16,7 +15,7 @@ fn flt_to_str_matches_rust_shortest_format() {
         ("+0.25", 0.25),
         ("+0.125", 0.125),
         ("+0.1", 0.1),
-        ("+3.14", 3.14),
+        ("+7.29", 7.29),
         ("+2.5", 2.5),
         ("+100.0", 100.0),
         ("+1234.5", 1234.5),
@@ -58,7 +57,6 @@ fn flt_to_str_matches_rust_shortest_format() {
 }
 
 #[test]
-#[allow(clippy::approx_constant)] // "3.14" is a parse-and-render test vector, not π
 fn flt_of_str_matches_rust_parse() {
     // `Flt/of_str` is exact: the digits go into a `Nat` and `D · 10^E` is narrowed to binary64 once, ties to even. The oracle is Rust's `str::parse::<f64>`, which is correctly rounded, rendered through the same `{:+}` the printer test uses so both halves of the codec answer to the same spelling. The table walks the roundings a narrowing gets wrong: a seventeen-digit mantissa, a large exponent, the normal and subnormal boundaries, the overflow boundary — `1.7976931348623159e308` is above the rounding threshold `2^1024 − 2^970`, so it is `inf` and not the largest finite value, which is what makes it the row that catches a clamp placed one representable step out — and leading zeros, which the underflow clamp must count and the overflow clamp must not.
     let cases = [
@@ -66,7 +64,7 @@ fn flt_of_str_matches_rust_parse() {
         ".5",
         "1e3",
         "+0.1",
-        "-3.14",
+        "-7.29",
         "123456.789012345",
         "1.2345678901234567e-5",
         "9.999999999999998e9",
