@@ -1,6 +1,6 @@
-//! What a step needs of a tool cargo does not bring: how each is asked whether it is there, the oldest version it runs under, and what installs it.
+//! What a step needs of a tool cargo does not bring: how each is asked whether it is there, and what installs it.
 //!
-//! Each is spelled once, here, so the step that refuses and the message that says why read the same value.
+//! A step asks only that its tool is there. Which version of it a machine holds is the machine's: the check workflow pins nextest's and Node's for its runners, and a contributor installs what they have. Biome is the exception, since this crate is what fetches it.
 
 use {
     crate::{ask, ask_cargo},
@@ -9,9 +9,6 @@ use {
 
 #[cfg(test)]
 mod tests;
-
-/// The oldest Node the browser suite runs under: the first whose engine runs WebAssembly GC unflagged and whose test runner expands a pattern itself. `.node-version` states it, for the check workflow that installs it and for the step that refuses an older one, so the Node the suite is held to is the one a contributor is asked for.
-const NODE_VERSION: &str = include_str!("../../.node-version");
 
 /// What installs nextest where it is absent. Cargo's own install rather than a prebuilt download, because it is one spelling on every platform and needs nothing a clone does not already have.
 pub(crate) const NEXTEST_INSTALL: &str = "cargo install cargo-nextest --locked";
@@ -28,42 +25,21 @@ pub(crate) enum Tool {
 }
 
 impl Tool {
-    /// `Ok` where the tool is there and new enough; otherwise the sentence saying what is missing and what installs it.
+    /// `Ok` where the tool is there; otherwise the sentence saying what is missing and, where one command does it, what installs it.
     pub(crate) fn ready(self) -> Result<(), String> {
         match self {
             Tool::Nextest => match lists_nextest(&ask_cargo(&["--list"])?) {
                 true => Ok(()),
                 false => Err(nextest_refusal()),
             },
-            Tool::Node => {
-                let floor = node_major(NODE_VERSION)
-                    .ok_or_else(|| format!("`.node-version` names no version: {NODE_VERSION}"))?;
-                let version = ask(Command::new("node"), &["--version"])
-                    .map_err(|error| format!("Node {floor} or later is needed, and {error}"))?;
-                let version = version.trim();
-
-                match node_major(version).is_some_and(|major| major >= floor) {
-                    true => Ok(()),
-                    false => Err(format!(
-                        "Node {floor} or later is needed, and `node --version` answered {version}"
-                    )),
-                }
-            }
+            Tool::Node => ask(Command::new("node"), &["--version"])
+                .map(drop)
+                .map_err(|error| format!("Node is needed, and {error}")),
             Tool::Npm => ask(Command::new("npm"), &["--version"])
                 .map(drop)
                 .map_err(|error| format!("npm is needed, and {error}")),
         }
     }
-}
-
-/// The major version `node --version` or `.node-version` names, as in `v22.4.1` and `22`.
-fn node_major(version: &str) -> Option<u32> {
-    version
-        .trim()
-        .trim_start_matches('v')
-        .split('.')
-        .next()
-        .and_then(|major| major.parse().ok())
 }
 
 /// Whether `cargo --list` names nextest among the commands it can run. Each command is a line led by its name, so a command merely named after nextest is not it.

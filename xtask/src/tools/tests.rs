@@ -22,16 +22,3 @@ fn a_refusal_puts_the_fix_on_a_line_of_its_own() {
         )
     );
 }
-
-#[test]
-fn a_node_version_is_read_by_its_major() {
-    assert_eq!(node_major("v22.4.1"), Some(22));
-    assert_eq!(node_major("24.0.0"), Some(24));
-    assert_eq!(node_major("22\n"), Some(22));
-    assert_eq!(node_major("lts"), None);
-}
-
-#[test]
-fn the_floor_the_tree_states_is_a_version() {
-    assert!(node_major(NODE_VERSION).is_some(), "{NODE_VERSION}");
-}

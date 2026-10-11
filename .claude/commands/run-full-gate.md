@@ -16,7 +16,7 @@ Every subject, each by its bare command. A bare subject runs its steps one after
 | `cargo xtask instrumented` | |
 | `cargo xtask docs` | |
 | `cargo xtask compiler` | |
-| `cargo xtask bundle` | the `wasm32-unknown-unknown` target; Node at the version `.node-version` names |
+| `cargo xtask bundle` | the `wasm32-unknown-unknown` target; Node |
 | `cargo xtask grammar` | `npm` |
 | `cargo xtask vscode` | `npm` |
 | `cargo xtask zed` | the `wasm32-wasip2` target |
