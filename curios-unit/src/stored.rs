@@ -25,20 +25,24 @@ pub struct Record {
     pub reads: Vec<(String, String)>,
     /// What each unit the compilation could have read contained: the units it may name and the ones those may name in turn, each by the prefixes it claims and the digest of the bytes its own slot holds, in the order of those prefixes. A unit outside them is not named, so what it holds decides nothing here.
     pub after: Vec<(String, String)>,
+    /// The `foreign` declarations the unit's package said a module answers when it was compiled, each beside the manifest row that names it, as its source carried them. A claim is held to a declaration of the unit where the unit is compiled or restored, and a program's stored payload is taken with no unit compiled or restored at all: recorded here, a manifest whose claims have changed since is a disagreement, so the claims it holds now are held as any are.
+    pub answers: Vec<(String, String)>,
     /// The stored unit's own digest, so a damaged unit that still deserializes is a miss rather than a belief, as the payload family's own digest makes a damaged artifact. Bytecheck confirms a unit's structure and nothing about its contents: a flipped byte inside a string reads back as a different string. Concurrent filing is not its concern: a slot is one file renamed into place, so no write can leave a record beside a unit it was not made from.
     pub unit: String,
 }
 
 impl Record {
-    /// The record of a unit compiled from `reads` after units containing `after`, whose own bytes digest to `unit`.
+    /// The record of a unit compiled from `reads` after units containing `after`, under a package claiming `answers`, whose own bytes digest to `unit`.
     pub fn of(
         reads: Vec<(PathBuf, Arc<Source>)>,
         after: Vec<(String, String)>,
+        answers: Vec<(String, String)>,
         unit: String,
     ) -> Self {
         Self {
             reads: digested(reads),
             after,
+            answers,
             unit,
         }
     }

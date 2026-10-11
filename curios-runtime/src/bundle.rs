@@ -22,8 +22,8 @@ pub struct BundledPlugin {
     pub package: String,
     /// The row's own name, likewise.
     pub name: String,
-    /// Which declaration each export answers, as `export -> fully qualified name`.
-    pub exports: BTreeMap<String, String>,
+    /// The export that answers each declaration, as `fully qualified name -> export`.
+    pub answers: BTreeMap<String, String>,
     /// The module, already compiled. `curios` owns Cranelift and compiles it while bundling; the launcher only deserializes, which is what lets a plugin travel without a backend travelling with it.
     pub payload: Vec<u8>,
 }

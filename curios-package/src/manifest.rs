@@ -407,7 +407,7 @@ pub enum Module {
     Fetched(String),
 }
 
-/// One declared provider of `foreign` implementations: a module, and which of the package's declarations each of its exports answers.
+/// One declared provider of `foreign` implementations: a module, and the export of it that answers each of the package's declarations it is named for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Foreign {
     /// A single legal identifier, which exists for the same reason an [`Executable`]'s does — so a command can name this row. Nothing in Curios source refers to it: a `foreign` declaration is reached by its own qualified name, never through the module that implements it.
@@ -417,8 +417,8 @@ pub struct Foreign {
     ///
     /// **Stated for a carried module too, and that is the case it matters most for.** A fetched one is obviously unvouched-for until it is checked. A carried one *looks* covered by the tree hash its consumer pinned — and is, when the package was fetched from git. But the entry package is hashed against nothing, and `source = "path"` and `member` dependencies are deliberately unpinned, because live code has no pin. That is exactly where a locally built module lives, so without this the common case is the unchecked one.
     pub hash: FileHash,
-    /// Which declaration each export answers, as `export name -> fully qualified path`. The manifest names each from the package's own root, and the qualified path is made of it and the package's name where the row is read (`own_declaration`), so every path here lies under the package's prefix. A row no entry names is the host's to answer, or is refused by name where a program reaches it.
-    pub exports: BTreeMap<String, String>,
+    /// The export that answers each declaration, as `fully qualified path -> export name`: keyed by what is answered, so a row states one export a declaration, and a declaration two rows claim is refused where the manifest is read. The manifest names each from the package's own root, and the qualified path is made of it and the package's name where the row is read (`own_declaration`), so every path here lies under the package's prefix. A row no entry names is the host's to answer, or is refused by name where a program reaches it.
+    pub answers: BTreeMap<String, String>,
 }
 
 /// One `[[foreign]]` row as TOML spells it — the union of every field either delivery takes, for the reason [`DependencyRow`] is a union.
@@ -429,7 +429,7 @@ struct ForeignRow {
     path: Option<String>,
     url: Option<String>,
     hash: Option<String>,
-    exports: Option<BTreeMap<String, String>>,
+    answers: Option<BTreeMap<String, String>>,
 }
 
 impl Foreign {
@@ -476,7 +476,7 @@ impl ForeignRow {
             path,
             url,
             hash,
-            exports,
+            answers,
         } = self;
 
         let name = canonical(&name, "foreign row name")?;
@@ -510,20 +510,30 @@ impl ForeignRow {
             ));
         };
 
-        let exports = exports
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(export, declaration)| {
-                Ok((export, own_declaration(package, &declaration, &name)?))
-            })
-            .collect::<Result<_, String>>()?;
+        // Each declaration is claimed once across the package's rows: nothing chooses between two answers, and the rows of one manifest are where two claims on one declaration can be written.
+        let mut claimed = BTreeMap::new();
+        for (spelled, export) in answers.unwrap_or_default() {
+            let declaration = own_declaration(package, &spelled, &name)?;
+
+            if let Some(earlier) = declared
+                .iter()
+                .find(|foreign| foreign.answers.contains_key(&declaration))
+            {
+                return Err(format!(
+                    "the foreign rows {:?} and {name:?} both name an export that answers `{declaration}`; a declaration is answered by one export of one module",
+                    earlier.name
+                ));
+            }
+
+            claimed.insert(declaration, export);
+        }
 
         Ok(Foreign {
             name: name.clone(),
             module,
             hash: FileHash::parse(&hash)
                 .map_err(|refusal| format!("the foreign row {name:?}: {refusal}"))?,
-            exports,
+            answers: claimed,
         })
     }
 }

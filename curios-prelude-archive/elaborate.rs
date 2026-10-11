@@ -218,7 +218,8 @@ fn write_image(
         .unwrap_or_else(|error| panic!("/{root} archive repeat serialization failed: {error}"));
     assert_eq!(first, second, "/{root} archive is not deterministic");
 
-    let record = Record::of(reads, after, digest(&first));
+    // The compiler's own library is no package's, and no manifest claims a declaration of it: its rows are the host's to answer.
+    let record = Record::of(reads, after, Vec::new(), digest(&first));
     let recorded = curios_archive::to_bytes(&record)
         .unwrap_or_else(|error| panic!("/{root} record serialization failed: {error}"));
 

@@ -53,7 +53,7 @@ struct Record {
     predecessors: Vec<String>,
     /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the slot is exactly the byte string a bundled executable carries and `curios_runtime::run_bytes` deserializes.
     payload: String,
-    /// The `ffi` rows the compilation harvested, which is what a link types its marshalling by. Empty for the overwhelming majority of programs, which declare no `foreign`.
+    /// The `ffi` rows the program imports, which is what a link types its marshalling by and holds each answer to: the standard library's that it reaches, which the host answers, and any of a package's own.
     foreigns: ForeignStore,
 }
 

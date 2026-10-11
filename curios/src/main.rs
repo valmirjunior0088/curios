@@ -118,8 +118,8 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Declar
         .into_iter()
         .filter(|(_, _, foreign)| {
             foreign
-                .exports
-                .values()
+                .answers
+                .keys()
                 .any(|declaration| foreigns.get(declaration).is_some())
         })
         .map(|(package, directory, foreign)| {
@@ -127,7 +127,7 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Declar
                 package,
                 bytes: ModuleBytes::Source(foreign.bytes(&directory, &store)?),
                 name: foreign.name,
-                exports: foreign.exports,
+                answers: foreign.answers,
             })
         })
         .collect()
@@ -420,7 +420,7 @@ fn dispatch() -> Result<(), Failure> {
                     format!("{named}: {} bytes, {}", probe.bytes, probe.kind),
                 );
 
-                // What the row's `[foreign.exports]` may name, read by compiling the module — which `curios-package` cannot do and this can, since the runtime is here. A module that will not compile reports why instead, and that is the more useful half of the answer. Bytes with no magic are not put to it: the line above has already answered, and wasmtime would answer again by printing both magic numbers byte by byte.
+                // What the row's `[foreign.answers]` may name as an export, read by compiling the module — which `curios-package` cannot do and this can, since the runtime is here. A module that will not compile reports why instead, and that is the more useful half of the answer. Bytes with no magic are not put to it: the line above has already answered, and wasmtime would answer again by printing both magic numbers byte by byte.
                 let read = |at| module_exports(&fs::read(at).map_err(|error| error.to_string())?);
                 match probe.magic.then(|| read(&probe.at)) {
                     None => {}

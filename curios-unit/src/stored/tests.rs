@@ -9,6 +9,7 @@ fn of_reads(reads: &[&str]) -> Record {
             .map(|path| (path.to_string(), "digest".to_string()))
             .collect(),
         after: Vec::new(),
+        answers: Vec::new(),
         unit: "unit".to_string(),
     }
 }

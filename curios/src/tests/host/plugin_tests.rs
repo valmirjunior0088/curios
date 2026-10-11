@@ -172,15 +172,15 @@ fn plugin() -> Vec<u8> {
     to_bytes(&module)
 }
 
-/// One module answering the declarations `exports` names.
+/// One module answering the declarations `exports` names, each an export beside the declaration it answers.
 fn declared(exports: &[(&str, &str)]) -> Vec<DeclaredModule> {
     vec![DeclaredModule {
         package: "fixture".to_string(),
         name: "probe".to_string(),
         bytes: ModuleBytes::Source(plugin()),
-        exports: exports
+        answers: exports
             .iter()
-            .map(|(export, declaration)| (export.to_string(), declaration.to_string()))
+            .map(|(export, declaration)| (declaration.to_string(), export.to_string()))
             .collect::<BTreeMap<_, _>>(),
     }]
 }
@@ -417,7 +417,7 @@ fn a_nat_answered_with_every_bit_set_is_read_unsigned() {
     assert_eq!(code, 9, "the answer arrived whole");
 }
 
-/// A declaration two modules are named for is refused where the program is linked, naming it: nothing chooses between two answers.
+/// A declaration two modules are handed over for is refused where the run admits its bindings, naming it: nothing chooses between two answers. A manifest cannot state the two, its claims being keyed by declaration and held apart across its rows where it is read, so this is what an embedder of the runtime meets.
 #[test]
 fn a_declaration_two_modules_claim_is_refused() {
     let claim: &[(&str, &str)] = &[("double", "/double")];
@@ -432,30 +432,7 @@ fn a_declaration_two_modules_claim_is_refused() {
     .expect_err("one declaration, two answers");
 
     assert!(
-        refusal.contains(
-            "`/double` is claimed twice: by `double` of the module \"probe\" of fixture, and by `double` of the module \"probe\" of fixture"
-        ),
-        "{refusal}"
-    );
-}
-
-/// Two exports of one module named for one declaration are refused by both their names: the claim that is second says which export made it, beside the first.
-#[test]
-fn a_declaration_two_exports_claim_is_refused_naming_both() {
-    let refusal = run_against(
-        r#"
-        foreign double(Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
-        /std/Io/pure(())
-        "#,
-        &[("double", "/double"), ("ones", "/double")],
-    )
-    .expect_err("one declaration, two answers");
-
-    assert!(
-        refusal.contains(
-            "`/double` is claimed twice: by `double` of the module \"probe\" of fixture, and by `ones` of the module \"probe\" of fixture"
-        ),
+        refusal.contains("`/double` is answered twice by the bindings of this run"),
         "{refusal}"
     );
 }

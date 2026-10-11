@@ -39,8 +39,8 @@ pub struct DeclaredModule {
     pub name: String,
     /// The module itself, already accepted against its hash by whoever read it.
     pub bytes: ModuleBytes,
-    /// Which declaration each of its exports answers, as `export -> fully qualified name`.
-    pub exports: BTreeMap<String, String>,
+    /// The export of it that answers each declaration, as `fully qualified name -> export`: keyed by what is answered, so a module states one export a declaration.
+    pub answers: BTreeMap<String, String>,
 }
 
 /// A plugin's module, and how this build is able to turn it into one.
@@ -102,7 +102,7 @@ pub(crate) struct Plugin {
     /// The module as its package declared it, for a bundle to carry.
     package: String,
     name: String,
-    exports: BTreeMap<String, String>,
+    answers: BTreeMap<String, String>,
     compiled: Module,
     /// Whether the module follows the canonical ABI's conventions, which its allocator's name says.
     canonical: bool,
@@ -164,7 +164,7 @@ impl Plugin {
             subject,
             package: module.package.clone(),
             name: module.name.clone(),
-            exports: module.exports.clone(),
+            answers: module.answers.clone(),
             compiled,
             canonical,
             rows: Vec::new(),
@@ -640,7 +640,7 @@ impl ForeignBindings {
                 Ok(BundledPlugin {
                     package: module.package.clone(),
                     name: module.name.clone(),
-                    exports: module.exports.clone(),
+                    answers: module.answers.clone(),
                     payload: module.compiled.serialize().map_err(|error| {
                         format!("{} could not be written out: {error}", module.subject)
                     })?,
@@ -657,14 +657,12 @@ pub fn plugin_bindings(
     foreigns: &ForeignStore,
     declared: Vec<DeclaredModule>,
 ) -> Result<ForeignBindings, String> {
-    // Which claim took each row: the export, and the module it is of — what lets a second claim name both.
-    let mut claimed: BTreeMap<String, (String, String)> = BTreeMap::new();
     let mut bindings = ForeignBindings::empty();
 
     for module in &declared {
         let mut resolved = Plugin::of(module)?;
 
-        for (export, declaration) in &module.exports {
+        for (declaration, export) in &module.answers {
             // The rows handed over are the ones the program reaches, so a claim on another is a claim nothing asks about here.
             let Some(function) = foreigns.get(declaration) else {
                 continue;
@@ -679,17 +677,6 @@ pub fn plugin_bindings(
                 ));
             }
 
-            if let Some((first, subject)) = claimed.get(declaration) {
-                return Err(format!(
-                    "`{declaration}` is claimed twice: by `{first}` of {subject}, and by `{export}` of {}",
-                    resolved.subject
-                ));
-            }
-            claimed.insert(
-                declaration.clone(),
-                (export.clone(), resolved.subject.clone()),
-            );
-
             let row = Row::of(&resolved, export, function)?;
             resolved.rows.push(row);
         }
@@ -697,6 +684,7 @@ pub fn plugin_bindings(
         bindings.modules.push(Arc::new(resolved));
     }
 
+    // A declaration is claimed once within a module, which states its answers by declaration, and across a package's modules, whose manifest is refused otherwise; two modules handed over for one declaration all the same are refused where a run admits its bindings, as any row answered twice is.
     // A row no module claims is left for the link, which follows what the program imports: the host answers it there, or it is refused by name where the program reaches it. A declaration nothing reaches asks for no implementation.
     Ok(bindings)
 }

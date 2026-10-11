@@ -133,7 +133,7 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
         .iter()
         .map(|(row, export)| {
             format!(
-                "\n[[foreign]]\nname = \"{row}\"\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.exports]\n{export} = \"double\"\n",
+                "\n[[foreign]]\nname = \"{row}\"\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"{export}\"\n",
                 digest(&wasm)
             )
         })
@@ -236,7 +236,7 @@ fn a_loose_program_is_told_it_has_no_manifest_to_answer_its_foreign_in() {
     );
 }
 
-/// What the link refuses of a package's modules is refused by `compile` too: two rows that claim one declaration, and an export that answers another type than its declaration crosses as.
+/// What a run refuses of a package's modules is refused by `compile` too: two rows that claim one declaration, where the manifest is read, and an export that answers another type than its declaration crosses as, where the two are linked.
 #[test]
 fn compile_refuses_the_modules_a_run_would() {
     let root = Temporary::new("cli-bundle", "refused");
@@ -244,7 +244,9 @@ fn compile_refuses_the_modules_a_run_would() {
     let twice = calling_double(&root, "twice", &[("one", "double"), ("two", "double")]);
     let refusal = refused(&twice, &root.join("twice.out"), &[]);
     assert!(
-        refusal.contains("`/twice/double` is claimed twice: by `double` of the module \"one\" of twice, and by `double` of the module \"two\" of twice"),
+        refusal.contains(
+            "the foreign rows \"one\" and \"two\" both name an export that answers `/twice/double`"
+        ),
         "{refusal}"
     );
 
@@ -253,6 +255,44 @@ fn compile_refuses_the_modules_a_run_would() {
     assert!(
         refusal.contains("the module \"probe\" of mistyped exports `truthy` as () -> (i32), and `/mistyped/double` crosses to a module as (i64) -> (i64)"),
         "{refusal}"
+    );
+}
+
+/// A claim is held to a declaration however the program is reached: a run that reuses the payload an earlier run filed compiles no unit, so the claims a manifest has gained since are held by what the stored units record. Without that, a claim on no declaration is admitted for as long as the store answers and refused the moment it is emptied.
+#[test]
+fn a_claim_written_after_a_run_is_refused_by_the_next() {
+    let root = Temporary::new("cli-bundle", "claimed");
+    let package = calling_double(&root, "claimed", &[("probe", "double")]);
+    let run = || {
+        Command::new(env!("CARGO_BIN_EXE_curios"))
+            .arg("run")
+            .current_dir(&package)
+            .output()
+            .expect("run the compiler")
+    };
+
+    assert_eq!(run().status.code(), Some(6), "the module answers");
+    assert_eq!(
+        run().status.code(),
+        Some(6),
+        "and answers again from the store"
+    );
+
+    let manifest = package.join("curios.toml");
+    let claiming = format!(
+        "{}nowhere = \"double\"\n",
+        fs::read_to_string(&manifest).expect("read the manifest")
+    );
+    fs::write(&manifest, claiming).expect("write the manifest");
+
+    let refused = run();
+    assert_eq!(refused.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains(
+            "the foreign row \"probe\" says an export answers `/claimed/nowhere`, and /claimed declares no such `foreign`"
+        ),
+        "{}",
+        String::from_utf8_lossy(&refused.stderr)
     );
 }
 

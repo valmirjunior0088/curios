@@ -201,7 +201,7 @@ Exactly one delivery form is required. `--path` and `--url` say where the row po
 
 **What was fetched is filed, not discarded.** A delivery lands in the store under the digest it turns out to have, so the `curate` that follows finds it already there rather than downloading it a second time. That is sound because the digest is computed *from* the delivery: the entry holds bytes that hash to its own name by construction, and every reader re-hashes what it takes out.
 
-**A module is described before its pin is believed.** What arrived is reported first — its size, whether it is a WebAssembly module, and **what it exports**, which is what a `[foreign.exports]` entry may name:
+**A module is described before its pin is believed.** What arrived is reported first — its size, whether it is a WebAssembly module, and **what it exports**, which is what a `[foreign.answers]` entry may name as the export that answers a declaration:
 
 ```
 Delivered      sha2: 12484 bytes, a WebAssembly module
@@ -328,7 +328,7 @@ path = "tools/serve.crs"  # unless the row says otherwise
 
 An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the stem-space checks compare it as written.
 
-A `[[foreign]]` row names a module and says which of the package's `foreign` declarations each of its exports answers:
+A `[[foreign]]` row names a module and says which of its exports answers each of the package's `foreign` declarations it is named for:
 
 ```toml
 [[foreign]]
@@ -336,15 +336,15 @@ name = "sha2"                    # a handle for `curios pin`; no program refers 
 path = "foreign/libsha2.wasm"    # or `url`, never both
 hash = "f1:9c3a…"                # either way
 
-[foreign.exports]
-SHA256_Digest = "digest/sha256"  # in the package `crypto`: `/crypto/digest/sha256`
+[foreign.answers]
+"digest/sha256" = "SHA256_Digest"  # in the package `crypto`: `/crypto/digest/sha256`
 ```
 
 `path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both, and the carried case is the one it matters most for: a fetched module is obviously unvouched-for until it is checked, while a carried one *looks* covered by the tree hash its consumer pinned — and is, when the package came from git. But the entry package is hashed against nothing and `path` and `member` dependencies are deliberately unpinned, which is exactly where a locally built module lives.
 
 `f1:` is plain SHA-256 over the file's bytes, so `sha256sum` computes it and a release's checksum file already states it. A delivery that fails its hash is refused naming both digests, whichever way it arrived.
 
-`[foreign.exports]` maps each export of that module to the declaration it answers. A module answers its own package's declarations: each is a `foreign` of the package's library, named from the package's root and spelled plainly, as an executable's `path` is, so a row of another package or of the standard library has no spelling here. A path written in full, `/crypto/digest/sha256`, is refused with the spelling it has; an entry that names no `foreign` the library declares is refused where the library is compiled, listing the ones it does; and a package with no `lib.crs` has no declaration for a module to answer. Export names are local to their module, so two rows may export the same name; the declaration paths are what must not collide.
+`[foreign.answers]` maps each declaration to the export of that module that answers it. A module answers its own package's declarations: each is a `foreign` of the package's library, named from the package's root and spelled plainly, as an executable's `path` is, so a row of another package or of the standard library has no spelling here. A path written in full, `/crypto/digest/sha256`, is refused with the spelling it has; an entry that names no `foreign` the library declares is refused where the library is compiled, listing the ones it does; and a package with no `lib.crs` has no declaration for a module to answer. A declaration is answered once: the table is keyed by what is answered, so a row names one export for it, and a second row naming one for a declaration an earlier row answers is refused where the manifest is read, naming both rows. Export names are local to their module, so two rows may name the same export.
 
 A `foreign` no entry names is the host's to answer. A program asks only for what it reaches: a declaration nothing calls needs no implementation, and one a program reaches that neither a module nor the host answers is refused before the program starts, naming it. An export is held to its declaration when the two are linked, so a module that answers another type is refused there as well.
 

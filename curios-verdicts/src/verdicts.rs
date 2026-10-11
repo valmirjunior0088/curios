@@ -586,7 +586,12 @@ impl Cache for Verdicts {
             return;
         };
 
-        let record = Record::of(source.reads(), placement.after, placement.contained.clone());
+        let record = Record::of(
+            source.reads(),
+            placement.after,
+            source.answered().to_vec(),
+            placement.contained.clone(),
+        );
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
             .and_then(|record| replace(&placement.path, &record, &placement.bytes));
@@ -616,6 +621,7 @@ fn agrees(
     overlay: Option<&Overlay>,
 ) -> bool {
     record.unit == digest(bytes)
+        && record.answers == source.answered()
         && contents(reach, taken).is_some_and(|contents| contents == record.after)
         && read_within(&source.directories(), &record.reads)
         && unchanged(&record.reads, overlay)

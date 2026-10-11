@@ -263,6 +263,37 @@ fn an_edited_unit_is_not_reused() {
     assert!(!reused(&root), "and refused once its source differs");
 }
 
+/// A unit is reused only under the claims its package made when it was compiled. A manifest whose `[foreign.answers]` has changed since is a disagreement like an edited source, so what it claims now is held to the unit's declarations again, where a slot that still answered would vouch for claims nobody checked.
+#[test]
+fn a_unit_is_not_reused_under_other_claims() {
+    const ROW: &str = "name = \"shape\"\n\n[[foreign]]\nname = \"probe\"\npath = \"probe.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n";
+    let root = project("claims");
+    let library = format!(
+        "{}\npub foreign one(Nat) -> Nat;\n\npub foreign two(Nat) -> Nat;\n",
+        library("first")
+    );
+
+    write(&root, "shape/lib.crs", &library);
+    write(
+        &root,
+        "shape/curios.toml",
+        &format!("{ROW}\n[foreign.answers]\none = \"one\"\n"),
+    );
+    reused(&root);
+    assert!(reused(&root), "stored by the first compile");
+
+    write(
+        &root,
+        "shape/curios.toml",
+        &format!("{ROW}\n[foreign.answers]\none = \"one\"\ntwo = \"two\"\n"),
+    );
+    assert!(
+        !reused(&root),
+        "and refused once its package claims otherwise"
+    );
+    assert!(reused(&root), "then stored under the claims it has now");
+}
+
 /// A slot filed by one project must not answer for another's, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do.
 ///
 /// The store is shared whenever `CURIOS_CACHE` names one, so this is reachable.

@@ -33,7 +33,7 @@ fn main() -> ExitCode {
                 package: plugin.package,
                 name: plugin.name,
                 bytes: ModuleBytes::Precompiled(plugin.payload),
-                exports: plugin.exports,
+                answers: plugin.answers,
             })
             .collect();
 

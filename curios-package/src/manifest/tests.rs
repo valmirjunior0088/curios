@@ -392,8 +392,8 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
             path = "foreign/libsha2.wasm"
             hash = "f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-            [foreign.exports]
-            SHA256_Digest = "digest/sha256"
+            [foreign.answers]
+            "digest/sha256" = "SHA256_Digest"
 
             [[foreign]]
             name = "blake3"
@@ -410,10 +410,10 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
     );
     assert_eq!(
         package.foreign[0]
-            .exports
-            .get("SHA256_Digest")
+            .answers
+            .get("/crypto/digest/sha256")
             .map(String::as_str),
-        Some("/crypto/digest/sha256")
+        Some("SHA256_Digest")
     );
     assert_eq!(
         package.foreign[1].module,
@@ -421,10 +421,10 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
     );
 }
 
-/// A row's exports answer its own package's declarations: each is named from the package's root, so a claim on another package's row, or on the standard library's, has no spelling. A path a manifest once wrote in full is refused with the spelling it has now, and one that leads elsewhere with why it names nothing here.
+/// A row answers its own package's declarations: each is named from the package's root, so a claim on another package's row, or on the standard library's, has no spelling. A path a manifest once wrote in full is refused with the spelling it has now, and one that leads elsewhere with why it names nothing here.
 #[test]
 fn an_export_answers_a_declaration_named_from_its_own_package() {
-    const ROW: &str = "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\npath = \"m.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.exports]\n";
+    const ROW: &str = "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\npath = \"m.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.answers]\n";
 
     for (claim, expected) in [
         (
@@ -438,12 +438,39 @@ fn an_export_answers_a_declaration_named_from_its_own_package() {
         ("digest/let", "it is a keyword"),
         ("../other/give", "it is no identifier"),
     ] {
-        let refusal = format!("{ROW}answer = \"{claim}\"\n")
+        let refusal = format!("{ROW}\"{claim}\" = \"answer\"\n")
             .parse::<Manifest>()
             .expect_err("a claim outside the package");
 
         assert!(refusal.contains(expected), "{claim}: {refusal}");
     }
+}
+
+/// A declaration is answered once across a package's rows: a second row that names an export for it is refused where the manifest is read, naming both rows, since nothing chooses between two answers. Within a row the table is keyed by declaration, so one row cannot state two.
+#[test]
+fn a_declaration_two_rows_answer_is_refused() {
+    const PIN: &str =
+        "hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"";
+    let row = |name: &str, export: &str| {
+        format!(
+            "[[foreign]]\nname = \"{name}\"\npath = \"{name}.wasm\"\n{PIN}\n\n[foreign.answers]\n\"digest/sha256\" = \"{export}\"\n\n"
+        )
+    };
+
+    let refusal = format!(
+        "name = \"crypto\"\n\n{}{}",
+        row("sha2", "SHA256_Digest"),
+        row("other", "digest")
+    )
+    .parse::<Manifest>()
+    .expect_err("one declaration, two rows");
+
+    assert!(
+        refusal.contains(
+            "the foreign rows \"sha2\" and \"other\" both name an export that answers `/crypto/digest/sha256`"
+        ),
+        "{refusal}"
+    );
 }
 
 /// Every wrong combination of the delivery fields, each refused by name rather than by whichever shape was tried second.

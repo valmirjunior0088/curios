@@ -122,7 +122,7 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
         if let Some(foreign) = package
             .foreign
             .iter()
-            .find(|foreign| !foreign.exports.is_empty())
+            .find(|foreign| !foreign.answers.is_empty())
         {
             return Err(format!(
                 "the foreign row {:?} of {} names declarations its exports answer, and the package has no `{LIBRARY}` to declare them in: a module answers its own package's declarations",
@@ -139,8 +139,8 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
         .documented(&package.name, package.description.as_deref())
         .answering(package.foreign.iter().flat_map(|foreign| {
             foreign
-                .exports
-                .values()
+                .answers
+                .keys()
                 .map(|declaration| (declaration.clone(), foreign.name.clone()))
         }));
 
