@@ -88,6 +88,14 @@ impl SeqCarrier<'_> {
     }
 }
 
+/// Where a match stands: its scrutinee, the result it is typed at, and the hint of the binding its value goes to. Every elimination form is erased against one.
+#[derive(Clone, Copy)]
+struct Site<'a> {
+    head: &'a Term,
+    result: &'a MatchResult,
+    hint: Option<&'a str>,
+}
+
 /// The match-wide data an inductive elimination threads to each arm. The result is taken at the scrutinee's indices and the head — the case's target indices and value in an enumerated arm, the actual ones in the default.
 struct InductMatch<'a> {
     head: &'a Term,
@@ -111,17 +119,17 @@ impl Lowering<'_> {
             result,
             cases,
         } = m;
+        let site = Site { head, result, hint };
+
         match cases {
             Cases::Bool {
                 false_case,
                 true_case,
-            } => self.erase_bool(context, head, result, false_case, true_case, hint),
-            Cases::Switch { cases, default } => {
-                self.erase_switch(context, head, result, cases, default, hint)
-            }
+            } => self.erase_bool(context, site, false_case, true_case),
+            Cases::Switch { cases, default } => self.erase_switch(context, site, cases, default),
             // The instance a match states is a type, which erasure reads nothing of.
             Cases::Induct { cases, default, .. } => {
-                self.erase_induct(context, head, result, cases, default.as_ref(), hint)
+                self.erase_induct(context, site, cases, default.as_ref())
             }
             Cases::FreeMonoid {
                 carrier:
@@ -129,7 +137,7 @@ impl Lowering<'_> {
                         empty_case,
                         cons_case,
                     },
-            } => self.erase_nat_fold(context, head, result, empty_case, cons_case, hint),
+            } => self.erase_nat_fold(context, site, empty_case, cons_case),
             Cases::FreeMonoid {
                 carrier:
                     Carrier::List {
@@ -139,12 +147,10 @@ impl Lowering<'_> {
                     },
             } => self.erase_seq_fold(
                 context,
-                head,
-                result,
+                site,
                 SeqCarrier::List { element: elem },
                 empty_case,
                 cons_case,
-                hint,
             ),
             Cases::FreeMonoid {
                 carrier:
@@ -155,12 +161,10 @@ impl Lowering<'_> {
                     },
             } => self.erase_seq_fold(
                 context,
-                head,
-                result,
+                site,
                 SeqCarrier::Bin { grain: *grain },
                 empty_case,
                 cons_case,
-                hint,
             ),
         }
     }
@@ -235,12 +239,11 @@ impl Lowering<'_> {
     fn erase_bool(
         &mut self,
         context: &mut Retyping,
-        head: &Term,
-        result: &MatchResult,
+        site: Site<'_>,
         false_case: &Term,
         true_case: &Term,
-        hint: Option<&str>,
     ) -> Result<Outcome, Error> {
+        let Site { head, result, hint } = site;
         // The form states its scrutinee's type, so none is read.
         let head_type = Term::intrinsic(Intrinsic::BoolType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
@@ -274,12 +277,11 @@ impl Lowering<'_> {
     fn erase_switch(
         &mut self,
         context: &mut Retyping,
-        head: &Term,
-        result: &MatchResult,
+        site: Site<'_>,
         cases: &[(Natural, Term)],
         default: &Term,
-        hint: Option<&str>,
     ) -> Result<Outcome, Error> {
+        let Site { head, result, hint } = site;
         let head_type = Term::intrinsic(Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
@@ -314,12 +316,11 @@ impl Lowering<'_> {
     fn erase_nat_fold(
         &mut self,
         context: &mut Retyping,
-        head: &Term,
-        result: &MatchResult,
+        site: Site<'_>,
         empty_case: &Term,
         cons_case: &Scope<Two>,
-        hint: Option<&str>,
     ) -> Result<Outcome, Error> {
+        let Site { head, result, hint } = site;
         let head_type = Term::intrinsic(Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
@@ -501,20 +502,15 @@ impl Lowering<'_> {
     }
 
     /// A `List`/`Bin` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a first-class `UnconsSequence` binding the element and the suffix alone. Both hand the reads to `curios-ersd`'s lowering rather than emitting them, which is what keeps a window's operand convention out of this crate.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "one over the line: the eliminator's five parts as the match holds them, beside the walk's context and hint"
-    )]
     fn erase_seq_fold(
         &mut self,
         context: &mut Retyping,
-        head: &Term,
-        result: &MatchResult,
+        site: Site<'_>,
         carrier: SeqCarrier<'_>,
         empty_case: &Term,
         cons_case: &Scope<Three>,
-        hint: Option<&str>,
     ) -> Result<Outcome, Error> {
+        let Site { head, result, hint } = site;
         let head_type = carrier.sequence_type();
         let sequence = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
@@ -636,12 +632,11 @@ impl Lowering<'_> {
     fn erase_induct(
         &mut self,
         context: &mut Retyping,
-        head: &Term,
-        result: &MatchResult,
+        site: Site<'_>,
         cases: &[(Atom, InductArm)],
         default: Option<&Term>,
-        hint: Option<&str>,
     ) -> Result<Outcome, Error> {
+        let Site { head, result, hint } = site;
         if cases.is_empty() && default.is_none() {
             return Ok(Outcome::Diverged(curios_ersd::Terminator::Unreachable));
         }
