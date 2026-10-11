@@ -3,7 +3,7 @@
 use {
     crate::tests::{run, run_text},
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{Bits, ForeignBindings, MockHost, SocketEvent},
+    curios_runtime::{Bits, ForeignBindings, MockHost, SocketEvent, Termination},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::test_support::Temporary,
 };
@@ -286,6 +286,36 @@ fn http_perform_parses_a_scripted_response() {
         .build();
     run_text(HTTP_GET, system).expect("expected result");
     assert_eq!(io.output(), b"200 text/plain hello");
+}
+
+/// An embedder answers a row that does not return by ending the program, as the host answers `proc_exit`: the code its `Termination` carries is the run's, and nothing after the call runs.
+#[test]
+fn an_embedder_ends_the_program_through_a_row_that_does_not_return() {
+    let source = r#"
+        foreign abort(Byte) -> Never;
+        let _ = abort(@{}, 7)!;
+        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))!;
+        /std/Io/pure(())
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &source,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let mut bindings = ForeignBindings::empty();
+    bindings.define("/abort", Termination);
+
+    let (system, io) = MockHost::builder().build();
+    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+
+    assert_eq!(code, 7);
+    assert!(io.output().is_empty());
 }
 
 #[test]

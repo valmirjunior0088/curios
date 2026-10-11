@@ -1,5 +1,5 @@
 use {
-    super::{Bits, ExitTrap, Handle, Returned},
+    super::{Bits, ExitTrap, Handle, Returned, Termination},
     curios_abi::{Encoded, HostOp, ReplyShape, WireLeaf, WireReply, WireType, WireValue},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
@@ -338,7 +338,7 @@ impl Lower for Vec<Vec<u8>> {
     }
 }
 
-/// What an answer's closure comes back with: values that cross, which is every [`Lower`], or a reply of a host's row, which may also end the program.
+/// What an answer's closure comes back with: values that cross, which is every [`Lower`]; a [`Termination`], for a row that does not return; or a reply of a host's row, which is either.
 pub trait Reply {
     /// What the answer comes back with, as its type states it: what a run holds to the row's declaration where the two are linked.
     fn returned() -> Returned;
@@ -359,6 +359,17 @@ impl<T: Lower> Reply for T {
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         self.lower(caller, results)
+    }
+}
+
+/// A row that does not return is answered by ending the program: the code is carried out as the guest-exit trap, the one way an answer ends the instance, so what answers such a row cannot return into the guest, which holds no code for a return from it.
+impl Reply for Termination {
+    fn returned() -> Returned {
+        Returned::Never
+    }
+
+    fn reply(self, _: &mut Caller<'_, ()>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
+        Err(wasmtime::Error::from(ExitTrap(self.0)))
     }
 }
 

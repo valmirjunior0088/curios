@@ -2,7 +2,7 @@
 
 use {
     super::{Answers, ForeignBindings, host_rows, link, shared_engine},
-    crate::{Bits, MockHost},
+    crate::{Bits, MockHost, Termination},
     curios_abi::{
         ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults, WireReturn, WireSignature,
         WireType,
@@ -102,6 +102,31 @@ fn a_binding_the_program_cannot_use_is_refused_by_name() {
     assert_eq!(
         stray.answers.admit(&doubling()).unwrap_err(),
         "a binding answers `/halve`, which the program declares no foreign row for"
+    );
+}
+
+/// A row that does not return is answered by an answer that does not either, one whose reply is a `Termination`. An answer that returns nothing is another row's: it would come back into a guest that holds no code for it.
+#[test]
+fn a_row_that_does_not_return_is_answered_by_a_termination() {
+    let mut store = ForeignStore::new();
+    store.register(ForeignFunction {
+        name: "/abort".to_string(),
+        signature: WireSignature {
+            params: vec![WireType::Byte],
+            returns: WireReturn::Never,
+        },
+    });
+
+    let mut ending = ForeignBindings::empty();
+    ending.define("/abort", Termination);
+    linked(&store, &ending, "/abort").expect("the answer ends the program as the row does");
+
+    let mut returning = ForeignBindings::empty();
+    returning.define("/abort", |_: u8| ());
+
+    assert_eq!(
+        linked(&store, &returning, "/abort").unwrap_err(),
+        "a binding answers `/abort` as (Byte) -> (), and the program declares it (Byte) -> Never"
     );
 }
 
