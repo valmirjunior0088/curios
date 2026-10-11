@@ -79,6 +79,26 @@ fn a_workspace_step_names_no_feature() {
     }
 }
 
+/// The recorder's tests are one package's under one feature, so their run compiles nothing of the compiler's suite.
+#[test]
+fn the_recorder_s_tests_build_one_package() {
+    let arguments = recorder_testing(Some("fold"));
+
+    assert_eq!(
+        arguments[..6],
+        [
+            "nextest",
+            "run",
+            "--package",
+            "curios-profile",
+            "--features",
+            "enabled"
+        ]
+    );
+    assert!(!arguments.contains(&"--workspace"), "{arguments:?}");
+    assert_eq!(arguments.last(), Some(&"fold"));
+}
+
 #[test]
 fn formatting_writes_unless_it_checks() {
     assert_eq!(formatting(false), ["fmt", "--all"]);

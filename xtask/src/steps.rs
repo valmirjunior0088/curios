@@ -6,7 +6,7 @@
 //!
 //! **Day to day, one configuration: the one that ships.** `workspace`'s lint and tests build with default features, so a change is checked as the compiler a user runs and the prelude's images are built once for both. What only every feature compiles — the instrumentation `profile` turns on — is `instrumented`'s to lint, with `docs`, which documents every item there is.
 //!
-//! **The suite is compiled once.** `workspace test` is the one step that builds the tests, so a test is in that run or in no step: a second run in another configuration, for the tests a feature adds or for one package alone, compiles the compiler's whole suite again for a handful of tests.
+//! **The suite is compiled once.** `workspace test` is the one step that builds the compiler's tests, so a test of the compiler is in that run or in no step: a second run in another configuration, for the tests a feature adds or for one package alone, compiles the whole suite again for a handful of tests. The recorder's tests are the one second run, because theirs compiles none of it: `curios-profile` depends on nothing of the compiler, so its `enabled` feature is a build of that crate alone.
 //!
 //! **A bare subject is its steps in the table's order, one after another.** The order of the variants is the one order there is: a step that reads what another of its subject writes stands after it, as a test stands after its install and the Binaryen cache check, which deletes a build the compiler links, after every step of the workspace that builds one. No command runs every subject: what runs together is for whoever runs them to decide, and what orders two subjects is said where the subjects are listed, `.claude/commands/run-full-gate.md`.
 //!
@@ -76,6 +76,7 @@ pub(crate) enum Step {
     WorkspaceLint,
     WorkspaceLintWeb,
     WorkspaceTest,
+    WorkspaceRecorderTest,
     WorkspaceDoctest,
     WorkspaceBinaryenCache,
     InstrumentedLint,
@@ -166,6 +167,13 @@ impl Step {
                 &[Step::LauncherBuild],
                 &[Tool::Nextest],
                 "Run the workspace's tests as it ships, the one compilation of the suite; alone reaches the back end, through the cross-stage corpus, renders the standard library's pages end to end and runs an executable the compiler wrote",
+            ),
+            Step::WorkspaceRecorderTest => always(
+                Subject::Workspace,
+                Action::Test,
+                &[],
+                &[Tool::Nextest],
+                "Run the recorder's tests, which `curios-profile` compiles under its `enabled` feature alone: a build of that one crate, which depends on nothing of the compiler",
             ),
             Step::WorkspaceDoctest => always(
                 Subject::Workspace,

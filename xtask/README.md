@@ -30,7 +30,7 @@ A subject is a tree or something built from one. A tree is a manifest root — t
 
 ### A step runs in the configuration that ships
 
-**Decision.** `workspace`'s lint and tests build with default features, and every product builds as it is released. What only a feature compiles is `instrumented`'s to lint, with every feature on, and `docs` documents every feature. The suite is compiled once, by `workspace test`: no step runs tests in a second configuration. The workspace's lint table denies warnings, so no step passes a flag to deny them and a build no step lints fails on one all the same.
+**Decision.** `workspace`'s lint and tests build with default features, and every product builds as it is released. What only a feature compiles is `instrumented`'s to lint, with every feature on, and `docs` documents every feature. The compiler's suite is compiled once, by `workspace test`: no step runs it in a second configuration. The recorder's tests are the one second run, `curios-profile` under its `enabled` feature: that crate depends on nothing of the compiler, so the run compiles it alone. The workspace's lint table denies warnings, so no step passes a flag to deny them and a build no step lints fails on one all the same.
 
 **Rationale.** A check that runs in a configuration nothing ships finds what that configuration has and misses what the shipped one has: an import only a backend reads is used with every feature on and unused in the launcher. One configuration for the day-to-day lint and tests is also one build of the prelude's images for both. Denying warnings where the lints are stated holds every build anyone runs, in whatever configuration, without a list of configurations to keep.
 
@@ -38,6 +38,7 @@ A subject is a tree or something built from one. A tree is a manifest root — t
 
 - **Every feature for the day-to-day lint**, which sees all the code at once and never the compiler a user runs, and pays a second build of the prelude's images beside the tests'.
 - **A lint pass per product**, a list of configurations to maintain where the lint table needs none.
+- **A crate of its own for the recorder**, so that its tests need no feature: a crate, a second manifest naming `tracing` and every taker repointed, for tests one narrow step reaches.
 - **A test run with every feature on**, for the tests the profiling feature adds: a second compilation of the whole suite for a handful of tests, which are taken by hand as the measurements beside them are.
 - **Denying warnings through an environment variable or a flag**, a second place to set it and so one to forget; Cargo's own `build.warnings`, which the pinned toolchain does not yet read.
 

@@ -141,6 +141,11 @@ impl Step {
                 None => biome_linting(Tree::Workspace),
             },
             Step::WorkspaceTest => cargo(&testing(package, request.filter.as_deref())),
+            // The recorder is one package's, so a run narrowed to another has nothing of it to ask.
+            Step::WorkspaceRecorderTest => match package {
+                None | Some(RECORDER) => cargo(&recorder_testing(request.filter.as_deref())),
+                Some(_) => Ok(()),
+            },
             Step::WorkspaceDoctest => cargo(&doctesting(package)),
             Step::InstrumentedLint => cargo(&[
                 "clippy",
@@ -304,6 +309,29 @@ fn testing<'a>(package: Option<&'a str>, filter: Option<&'a str>) -> Vec<&'a str
         .chain(["--all-targets", "--no-fail-fast", "--no-tests=warn"])
         .chain(filter)
         .collect()
+}
+
+/// The package that holds the recorder.
+const RECORDER: &str = "curios-profile";
+
+/// The feature of [`RECORDER`] that compiles the recorder, and so its tests.
+const RECORDING: &str = "enabled";
+
+/// The `cargo nextest run` command line for the recorder's tests: [`RECORDER`] alone under [`RECORDING`], the one configuration that compiles them and one no shipped build of the workspace is.
+fn recorder_testing(filter: Option<&str>) -> Vec<&str> {
+    [
+        "nextest",
+        "run",
+        "--package",
+        RECORDER,
+        "--features",
+        RECORDING,
+        "--no-fail-fast",
+        "--no-tests=warn",
+    ]
+    .into_iter()
+    .chain(filter)
+    .collect()
 }
 
 /// The `cargo test --doc` command line for one selection: the examples nextest does not run.
