@@ -57,11 +57,11 @@ use {
     curios_archive::{Bytes, joined, parted},
     curios_document::Documentation,
     curios_utilities::{
-        Entropy, Mount, Plicity, Qualifier, Report, RootKind, Source, Span, SyntaxRegistry, grown,
+        Mount, Plicity, Qualifier, Report, RootKind, Source, Span, SyntaxRegistry, grown,
     },
     std::{
         borrow::Cow,
-        cell::{Cell, OnceCell, RefCell},
+        cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
         sync::Arc,
@@ -2287,47 +2287,8 @@ fn into_core_unit_within(
         Scoped::over(&predecessor_public),
     )?;
 
-    // Every counter starts at zero for each source declaration ([`Context::begin_declaration`]). No term in scope carries a local, a metavariable or a universe metavariable — a stored unit is refused one — so nothing minted here can alias an identity already there, and what a declaration mints depends on nothing compiled or written before it.
-    let metavars = Entropy::<usize>::new();
-    let universes = Entropy::<usize>::new();
-    let binders = Entropy::<usize>::new();
-    let minted = RefCell::new(curios_core::Minted::default());
-    // How many witnesses each module has declared so far: the place a witness is lowered under, until its signature is read for the name it keeps.
-    let witness_ids = RefCell::new(BTreeMap::new());
-    let unbound = RefCell::new(BTreeMap::new());
-    let imports = RefCell::new(curios_core::Imports::default());
-    let sites = RefCell::new(Vec::new());
-    let reached = RefCell::new(BTreeSet::new());
-    let lints = RefCell::new(Vec::new());
-    let anchoring = Anchoring::default();
-
-    let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
-    // The seed table of the declaration being lowered, from index zero, in step with `universes`.
-    let universe_seeds = RefCell::new(Vec::new());
-    let universe_allocations = RefCell::new(HashMap::new());
-    let sorts = WrittenSorts::default();
-
-    let mut context = Context::new(
-        &table,
-        &public,
-        reach,
-        &metavars,
-        &universes,
-        &universe_role,
-        &universe_seeds,
-        &universe_allocations,
-        &sorts,
-        &binders,
-        &minted,
-        &witness_ids,
-        &unbound,
-        &imports,
-        &sites,
-        &reached,
-        &lints,
-        &anchoring,
-        syntax,
-    );
+    let shared = Shared::new();
+    let mut context = Context::new(&table, &public, reach, &shared, syntax);
     // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what a predecessor already holds, and the predecessors' own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
     for mount in &mounts {
         if !mount.prefix.is_root() {
@@ -2400,9 +2361,9 @@ fn into_core_unit_within(
         Named {
             items: &mut flat_items,
             witnesses: &mut witnesses,
-            minted: &mut minted.borrow_mut(),
-            imports: &mut imports.borrow_mut(),
-            lints: &mut lints.borrow_mut(),
+            minted: &mut shared.minted.borrow_mut(),
+            imports: &mut shared.imports.borrow_mut(),
+            lints: &mut shared.lints.borrow_mut(),
         },
         &struct_decls,
         &concepts,
@@ -2413,7 +2374,7 @@ fn into_core_unit_within(
     context.record_import_scope(None);
     // Every scope is recorded: the members of the modules they import are the interfaces' to state, once for the unit.
     {
-        let mut imports = imports.borrow_mut();
+        let mut imports = shared.imports.borrow_mut();
         let members = module_members(&imports.entries, &public);
         imports.members = members;
     }
@@ -2457,7 +2418,7 @@ fn into_core_unit_within(
     let dead = unused_declarations(&Declarations {
         items: &flat_items,
         facts: &facts,
-        placed: &|extent| anchoring.resolved(extent),
+        placed: &|extent| shared.anchoring.resolved(extent),
         entry: entry.as_ref(),
         table: &table,
         public: &public,
@@ -2473,7 +2434,10 @@ fn into_core_unit_within(
         .map(FlatItem::into_core)
         .collect::<Vec<_>>();
 
-    curios_profile::sample!("into_core_unit::imports", imports.borrow().entries.len());
+    curios_profile::sample!(
+        "into_core_unit::imports",
+        shared.imports.borrow().entries.len()
+    );
     let mut unit = PreparedText {
         mounts: own.clone(),
         foreigns,
@@ -2492,22 +2456,22 @@ fn into_core_unit_within(
         },
         minted: curios_core::Minted {
             entry: entry_mints,
-            ..minted.into_inner()
+            ..shared.minted.into_inner()
         },
-        unbound: unbound.into_inner(),
-        imports: curios_archive::Deferred::held(imports.into_inner()),
+        unbound: shared.unbound.into_inner(),
+        imports: curios_archive::Deferred::held(shared.imports.into_inner()),
         visible: visible_mounts,
         broken,
         lints: ordered(
-            unused_imports(sites.into_inner())
+            unused_imports(shared.sites.into_inner())
                 .into_iter()
-                .chain(lints.into_inner())
+                .chain(shared.lints.into_inner())
                 .chain(dead)
                 .collect(),
         ),
         credited: BTreeSet::new(),
-        reached: reached.into_inner(),
-        anchors: curios_archive::Deferred::held(anchoring.into_anchors()),
+        reached: shared.reached.into_inner(),
+        anchors: curios_archive::Deferred::held(shared.anchoring.into_anchors()),
         baseline: curios_archive::Deferred::held(BaselineHalf {
             declarations,
             scans,

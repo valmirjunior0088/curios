@@ -33,6 +33,20 @@ pub(super) struct Anchoring {
     journal: RefCell<Journal>,
 }
 
+impl Anchoring {
+    /// Begin a declaration: its text and its journal start empty, and the anchors, which are the unit's, stay. Every field is named, as [`Declaring::begin`] names its own.
+    fn begin(&self) {
+        let Self {
+            anchors: _,
+            within,
+            journal,
+        } = self;
+
+        *within.borrow_mut() = None;
+        *journal.borrow_mut() = Journal::default();
+    }
+}
+
 /// Where a written `Sort` stands, as far as whether a caller can state it goes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) enum SortSite {
@@ -70,6 +84,21 @@ pub(super) struct WrittenSorts {
     /// The quality of each written `Sort`, by its span: one written `Sort` is one quality however many times its text is lowered.
     allocations: RefCell<HashMap<Span, curios_core::QualityMetaId>>,
     site: Cell<SortSite>,
+}
+
+impl WrittenSorts {
+    /// Begin a declaration with nothing written, every field named as [`Declaring::begin`] names its own.
+    fn begin(&self) {
+        let Self {
+            seeds,
+            allocations,
+            site,
+        } = self;
+
+        seeds.borrow_mut().clear();
+        allocations.borrow_mut().clear();
+        site.set(SortSite::default());
+    }
 }
 
 /// What a declaration's lowering asked of its scope and wrote beside its items, since [`Context::begin_declaration`]: what is recorded of it beside its items.
@@ -346,6 +375,88 @@ pub(super) struct UseResolved {
     binding: Option<Qualifier>,
 }
 
+/// What the declaration being lowered mints from and has written of universes and sorts: everything that begins afresh where a source declaration does ([`Context::begin_declaration`]). No term in scope carries a local, a metavariable or a universe metavariable — a stored unit is refused one — so nothing minted here can alias an identity already there, and what a declaration mints depends on nothing compiled or written before it.
+pub(super) struct Declaring {
+    // `Cell`-backed, as every counter here is, so it survives `Lowerer`'s immutable `&Context` borrow.
+    metavars: Entropy,
+    universes: Entropy,
+    // Every binder identity a lowered term closes over. Threaded (not a process-global atomic) for determinism: two runs over the same source must mint the same identities, or terms that should be equal would differ.
+    binders: Entropy,
+    // The seed table of the declaration being lowered, from index zero, in step with `universes`.
+    universe_seeds: RefCell<Vec<curios_core::UniverseSeed>>,
+    universe_allocations: RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
+    // The `Sort`s the declaration being lowered wrote — see `WrittenSorts`.
+    sorts: WrittenSorts,
+}
+
+impl Declaring {
+    /// Begin afresh. Every field is named, so one added later does not compile until this says what beginning a declaration does to it.
+    fn begin(&self) {
+        let Self {
+            metavars,
+            universes,
+            binders,
+            universe_seeds,
+            universe_allocations,
+            sorts,
+        } = self;
+
+        metavars.reset();
+        universes.reset();
+        binders.reset();
+        universe_seeds.borrow_mut().clear();
+        universe_allocations.borrow_mut().clear();
+        sorts.begin();
+    }
+}
+
+/// What every nested context of one unit's lowering shares, behind one reference: what the declaration being lowered mints from, and the unit's own tables, which every declaration writes into and the lowering's caller reads back when it is over.
+pub(super) struct Shared {
+    declaring: Declaring,
+    universe_role: Cell<curios_core::UniverseRole>,
+    // What each source declaration lowered so far minted, with the names it lowered to — see `curios_core::Minted`.
+    pub(super) minted: RefCell<curios_core::Minted>,
+    // One ordinal counter per declaring module. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the module that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
+    witnesses: RefCell<BTreeMap<Qualifier, u32>>,
+    // Every bare name that resolved to nothing, keyed by the binder identity it lowered to, with the public bindings in scope of that name: `curios-elab` reports the unbound binder, and this is what lets its report say what the reader probably meant.
+    pub(super) unbound: RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
+    // Every binding a `use` brought into some lexical scope of this unit, with the path the reader wrote it under, and per definition the ones in scope where it was written — see `curios_core::Imports`. Core keeps the canonical name, and only this stage knows the spelling that resolves at the use site, which is what a goal report's candidate must be pasteable under.
+    pub(super) imports: RefCell<curios_core::Imports>,
+    // Every `use` selector and glob of the unit, in the order resolution met them.
+    pub(super) sites: RefCell<Vec<UseSite>>,
+    // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
+    pub(super) reached: RefCell<BTreeSet<Qualifier>>,
+    // Every lint a `Lowerer` of this unit decided — see `Lowerer::flush`.
+    pub(super) lints: RefCell<Vec<Lint>>,
+    // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
+    pub(super) anchoring: Anchoring,
+}
+
+impl Shared {
+    /// Nothing lowered yet: every counter at zero and every table empty.
+    pub(super) fn new() -> Self {
+        Self {
+            declaring: Declaring {
+                metavars: Entropy::new(),
+                universes: Entropy::new(),
+                binders: Entropy::new(),
+                universe_seeds: RefCell::default(),
+                universe_allocations: RefCell::default(),
+                sorts: WrittenSorts::default(),
+            },
+            universe_role: Cell::new(curios_core::UniverseRole::Flexible),
+            minted: RefCell::default(),
+            witnesses: RefCell::default(),
+            unbound: RefCell::default(),
+            imports: RefCell::default(),
+            sites: RefCell::default(),
+            reached: RefCell::default(),
+            lints: RefCell::default(),
+            anchoring: Anchoring::default(),
+        }
+    }
+}
+
 // The per-body elaboration context. `table`/`public` are frozen interface views, shared read-only across all nested contexts. `qualifiers`/`bindings` are the lexical scope of the module body being elaborated, populated source-ordered by declarations and `use` imports.
 pub(super) struct Context<'a> {
     prefix: Qualifier,
@@ -355,63 +466,23 @@ pub(super) struct Context<'a> {
     public: &'a Scoped<'a, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
-    // The metavariable-id counter of the source declaration being lowered, shared with every nested `Context` and reset where a declaration begins ([`Context::begin_declaration`]). Shared by reference (like `table`/`public`) and `Cell`-backed so it survives `Lowerer`'s immutable `&Context` borrow.
-    metavars: &'a Entropy,
-    universes: &'a Entropy,
-    universe_role: &'a Cell<curios_core::UniverseRole>,
-    universe_seeds: &'a RefCell<Vec<curios_core::UniverseSeed>>,
-    universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
-    // The `Sort`s the declaration being lowered wrote — see `WrittenSorts`.
-    sorts: &'a WrittenSorts,
-    // Shared counter for every binder identity a lowered term closes over. Threaded (not a process-global atomic) for determinism: two runs over the same source must mint the same identities, or terms that should be equal would differ.
-    binders: &'a Entropy,
-    // What each source declaration lowered so far minted, with the names it lowered to — see `curios_core::Minted`. The unit's, shared across nested contexts like the counters it is read off.
-    minted: &'a RefCell<curios_core::Minted>,
-    // One ordinal counter per declaring module. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the module that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
-    witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
-    // Every bare name that resolved to nothing, keyed by the binder identity it lowered to, with the public bindings in scope of that name. Shared across nested contexts like the counters, because the table is the unit's: `curios-elab` reports the unbound binder, and this is what lets its report say what the reader probably meant.
-    unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
-    // Every binding a `use` brought into some lexical scope of this unit, with the path the reader wrote it under, and per definition the ones in scope where it was written — see `curios_core::Imports`. The entries are shared across nested contexts like `unbound`, and for the same reason: Core keeps the canonical name, and only this stage knows the spelling that resolves at the use site, which is what a goal report's candidate must be pasteable under. The scope is this body's alone: `use` binds from its position to the end of the body it is written in, and a nested body starts empty, so `in_scope` is per context and a snapshot of it is taken at each item.
-    imports: &'a RefCell<curios_core::Imports>,
+    // What the unit's lowering writes and mints from, shared with every nested context — see `Shared`.
+    shared: &'a Shared,
+    // The scope is this body's alone: `use` binds from its position to the end of the body it is written in, and a nested body starts empty, so `in_scope` is per context and a snapshot of it is taken at each item.
     in_scope: Vec<usize>,
-    // Every `use` selector and glob of the unit, in the order resolution met them, and per lexical scope the site each imported label came through — a reference resolving through a label marks its site used. Declarations enter `bindings` and `qualifiers` without a site, so nothing marks for them.
-    sites: &'a RefCell<Vec<UseSite>>,
+    // Per lexical scope, the site each imported label came through — a reference resolving through a label marks its site used. Declarations enter `bindings` and `qualifiers` without a site, so nothing marks for them.
     current_site: Option<usize>,
     binding_sites: HashMap<String, usize>,
     qualifier_sites: HashMap<String, usize>,
-    // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
-    reached: &'a RefCell<BTreeSet<Qualifier>>,
-    // Every lint a `Lowerer` of this unit decided — see `Lowerer::flush`.
-    lints: &'a RefCell<Vec<Lint>>,
-    // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
-    anchoring: &'a Anchoring,
     syntax: &'a SyntaxRegistry,
 }
 
 impl<'a> Context<'a> {
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "each argument is a table one lowering shares by reference, and its one caller builds each; how they group is still to settle"
-    )]
     pub(super) fn new(
         table: &'a Scoped<'a, ModuleInfo>,
         public: &'a Scoped<'a, PublicInterface>,
         reach: Reach<'a>,
-        metavars: &'a Entropy,
-        universes: &'a Entropy,
-        universe_role: &'a Cell<curios_core::UniverseRole>,
-        universe_seeds: &'a RefCell<Vec<curios_core::UniverseSeed>>,
-        universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
-        sorts: &'a WrittenSorts,
-        binders: &'a Entropy,
-        minted: &'a RefCell<curios_core::Minted>,
-        witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
-        unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
-        imports: &'a RefCell<curios_core::Imports>,
-        sites: &'a RefCell<Vec<UseSite>>,
-        reached: &'a RefCell<BTreeSet<Qualifier>>,
-        lints: &'a RefCell<Vec<Lint>>,
-        anchoring: &'a Anchoring,
+        shared: &'a Shared,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
@@ -421,25 +492,11 @@ impl<'a> Context<'a> {
             public,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
-            metavars,
-            universes,
-            universe_role,
-            universe_seeds,
-            universe_allocations,
-            sorts,
-            binders,
-            minted,
-            witnesses,
-            unbound,
-            imports,
+            shared,
             in_scope: Vec::new(),
-            sites,
             current_site: None,
             binding_sites: HashMap::new(),
             qualifier_sites: HashMap::new(),
-            reached,
-            lints,
-            anchoring,
             syntax,
         }
     }
@@ -452,42 +509,29 @@ impl<'a> Context<'a> {
             public: self.public,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
-            metavars: self.metavars,
-            universes: self.universes,
-            universe_role: self.universe_role,
-            universe_seeds: self.universe_seeds,
-            universe_allocations: self.universe_allocations,
-            sorts: self.sorts,
-            binders: self.binders,
-            minted: self.minted,
-            witnesses: self.witnesses,
-            unbound: self.unbound,
-            imports: self.imports,
+            shared: self.shared,
             in_scope: Vec::new(),
-            sites: self.sites,
             current_site: None,
             binding_sites: HashMap::new(),
             qualifier_sites: HashMap::new(),
-            reached: self.reached,
-            lints: self.lints,
-            anchoring: self.anchoring,
             syntax: self.syntax,
         }
     }
 
     pub(super) fn report(&self, lints: impl IntoIterator<Item = Lint>) {
         let lints = lints.into_iter().collect::<Vec<_>>();
-        self.anchoring
+        self.shared
+            .anchoring
             .journal
             .borrow_mut()
             .lints
             .extend(lints.iter().cloned());
-        self.lints.borrow_mut().extend(lints);
+        self.shared.lints.borrow_mut().extend(lints);
     }
 
     /// Open the `use` site every label imported until [`Self::close_site`] is credited to.
     pub(super) fn open_site(&mut self, site: UseSite) {
-        let mut sites = self.sites.borrow_mut();
+        let mut sites = self.shared.sites.borrow_mut();
         sites.push(site);
         self.current_site = Some(sites.len() - 1);
     }
@@ -499,13 +543,13 @@ impl<'a> Context<'a> {
     /// A reference resolved through the binding `label` brought into this scope: its `use`, if one did, is used.
     pub(super) fn note_binding_use(&self, label: &str) {
         if let Some(&site) = self.binding_sites.get(label) {
-            self.sites.borrow_mut()[site].used = true;
+            self.shared.sites.borrow_mut()[site].used = true;
         }
     }
 
     fn note_qualifier_use(&self, label: &str) {
         if let Some(&site) = self.qualifier_sites.get(label) {
-            self.sites.borrow_mut()[site].used = true;
+            self.shared.sites.borrow_mut()[site].used = true;
         }
     }
 
@@ -514,27 +558,19 @@ impl<'a> Context<'a> {
     /// **The path the reader wrote, never the one it resolved to.** A re-export means the two differ: `/std/Nat` is `pub use /sys/{Nat}`, so resolving `use /std/{Nat}` lands on `/sys/Nat` and a record of the *target* would say every program reached `/sys`. What a declared dependency is answerable to is what the reader spelled, which is also the only thing they can change.
     fn note_spelled(&self, spelled: &Qualifier) {
         if let Some(mount) = Mount::owning(self.reach.mounts(), spelled) {
-            self.reached.borrow_mut().insert(mount.prefix);
+            self.shared.reached.borrow_mut().insert(mount.prefix);
         }
     }
 
     /// Begin lowering a source declaration: every identity it mints counts from zero, and a written type is one level across the items the declaration lowers to and no further. What a declaration's lowered form holds then depends on nothing written before it.
     pub(super) fn begin_declaration(&self) {
-        self.metavars.reset();
-        self.universes.reset();
-        self.binders.reset();
-        self.universe_seeds.borrow_mut().clear();
-        self.universe_allocations.borrow_mut().clear();
-        self.sorts.seeds.borrow_mut().clear();
-        self.sorts.allocations.borrow_mut().clear();
-        self.sorts.site.set(SortSite::default());
-        *self.anchoring.within.borrow_mut() = None;
-        *self.anchoring.journal.borrow_mut() = Journal::default();
+        self.shared.declaring.begin();
+        self.shared.anchoring.begin();
     }
 
     /// What the declaration begun last has asked and reported, taken: its lowering is over.
     pub(super) fn journal(&self) -> Journal {
-        std::mem::take(&mut self.anchoring.journal.borrow_mut())
+        std::mem::take(&mut self.shared.anchoring.journal.borrow_mut())
     }
 
     /// The text the declaration being lowered was sited at, read by the anchor it is a text of with its stamp, and by the text itself. `None` between declarations and within one that was built rather than written.
@@ -542,7 +578,7 @@ impl<'a> Context<'a> {
         &self,
         read: impl FnOnce((curios_core::Anchor, u32), &str) -> T,
     ) -> Option<T> {
-        let within = self.anchoring.within.borrow();
+        let within = self.shared.anchoring.within.borrow();
         let within = within.as_ref()?;
 
         Some(read(within.key(), within.text()))
@@ -550,22 +586,23 @@ impl<'a> Context<'a> {
 
     /// The span `extent` lies on, among the declarations this lowering has reached.
     pub(super) fn resolved(&self, extent: &curios_core::Extent) -> Option<Span> {
-        self.anchoring.resolved(extent)
+        self.shared.anchoring.resolved(extent)
     }
 
     /// Lower what follows as the text of the source declaration `anchored` names, which `span` covers: every span written within it becomes an extent of it, so nothing the declaration lowers to says where in its file it stands.
     pub(super) fn anchor(&self, anchored: curios_core::Anchored, span: &Span) {
         let within = self
+            .shared
             .anchoring
             .anchors
             .borrow_mut()
             .site(curios_core::Anchor::of(anchored), span);
-        *self.anchoring.within.borrow_mut() = Some(within);
+        *self.shared.anchoring.within.borrow_mut() = Some(within);
     }
 
     /// The extent of `span` in the declaration being lowered: `None` outside one, and for a span that does not lie in its text.
     pub(super) fn extent(&self, span: &Span) -> Option<curios_core::Extent> {
-        self.anchoring.within.borrow().as_ref()?.extent(span)
+        self.shared.anchoring.within.borrow().as_ref()?.extent(span)
     }
 
     /// `term` at `span` — innermost wins if it already carries a position, per `curios_core::Term::with_extent`.
@@ -579,10 +616,10 @@ impl<'a> Context<'a> {
     /// What has been minted since [`Context::begin_declaration`].
     pub(super) fn mints(&self) -> curios_core::Mints {
         curios_core::Mints {
-            binders: self.binders.count(),
-            metavariables: self.metavars.count(),
-            universes: self.universe_seeds.borrow().clone(),
-            qualities: self.sorts.seeds.borrow().clone(),
+            binders: self.shared.declaring.binders.count(),
+            metavariables: self.shared.declaring.metavars.count(),
+            universes: self.shared.declaring.universe_seeds.borrow().clone(),
+            qualities: self.shared.declaring.sorts.seeds.borrow().clone(),
         }
     }
 
@@ -597,7 +634,7 @@ impl<'a> Context<'a> {
         mints: curios_core::Mints,
         names: impl IntoIterator<Item = curios_core::Global>,
     ) {
-        let mut minted = self.minted.borrow_mut();
+        let mut minted = self.shared.minted.borrow_mut();
         let declaration = minted.declarations.len();
         minted.declarations.push(mints);
         minted
@@ -607,7 +644,7 @@ impl<'a> Context<'a> {
 
     /// Mint a metavariable id for a surface hole, unique within its declaration.
     pub(super) fn fresh_metavar(&self) -> usize {
-        self.metavars.fresh()
+        self.shared.declaring.metavars.fresh()
     }
 
     pub(super) fn fresh_universe(
@@ -616,18 +653,23 @@ impl<'a> Context<'a> {
         written: curios_core::UniverseConstraintKind,
     ) -> curios_core::Level {
         if let Some(span) = span
-            && let Some(id) = self.universe_allocations.borrow().get(span)
+            && let Some(id) = self
+                .shared
+                .declaring
+                .universe_allocations
+                .borrow()
+                .get(span)
         {
             assert_eq!(
-                self.universe_seeds.borrow()[id.0].role,
+                self.shared.declaring.universe_seeds.borrow()[id.0].role,
                 self.universe_role(),
                 "one written Type was lowered under conflicting universe roles"
             );
             return curios_core::Level::meta(*id);
         }
 
-        let id = self.universes.fresh();
-        let mut seeds = self.universe_seeds.borrow_mut();
+        let id = self.shared.declaring.universes.fresh();
+        let mut seeds = self.shared.declaring.universe_seeds.borrow_mut();
         assert_eq!(id, seeds.len(), "universe seeds parallel their dense ids");
         seeds.push(curios_core::UniverseSeed {
             role: self.universe_role(),
@@ -640,7 +682,9 @@ impl<'a> Context<'a> {
         });
         let id = curios_core::UniverseMetaId(id);
         if let Some(span) = span {
-            self.universe_allocations
+            self.shared
+                .declaring
+                .universe_allocations
                 .borrow_mut()
                 .insert(span.clone(), id);
         }
@@ -653,18 +697,18 @@ impl<'a> Context<'a> {
         span: Option<&Span>,
     ) -> Result<curios_core::Quality, Error> {
         if let Some(span) = span
-            && let Some(id) = self.sorts.allocations.borrow().get(span)
+            && let Some(id) = self.shared.declaring.sorts.allocations.borrow().get(span)
         {
             return Ok(curios_core::Quality::Meta(*id));
         }
         // A `Sort` with no span is one the compiler built, in `/sys`: it stands in a signature by construction, and is lowered again, at no span to find it by, under the lambda its declaration is.
         if span.is_some()
-            && let Some(site) = self.sorts.site.get().refused()
+            && let Some(site) = self.shared.declaring.sorts.site.get().refused()
         {
             return Err(Error::SortOutsideSignature { site });
         }
 
-        let mut seeds = self.sorts.seeds.borrow_mut();
+        let mut seeds = self.shared.declaring.sorts.seeds.borrow_mut();
         let id = curios_core::QualityMetaId(seeds.len());
         seeds.push(span.map(|span| curios_core::UniverseConstraintOrigin {
             extent: self.extent(span),
@@ -673,7 +717,12 @@ impl<'a> Context<'a> {
             binder: None,
         }));
         if let Some(span) = span {
-            self.sorts.allocations.borrow_mut().insert(span.clone(), id);
+            self.shared
+                .declaring
+                .sorts
+                .allocations
+                .borrow_mut()
+                .insert(span.clone(), id);
         }
 
         Ok(curios_core::Quality::Meta(id))
@@ -685,19 +734,19 @@ impl<'a> Context<'a> {
         site: SortSite,
         f: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
-        let outer = self.sorts.site.replace(site);
+        let outer = self.shared.declaring.sorts.site.replace(site);
         let result = f();
-        self.sorts.site.set(outer);
+        self.shared.declaring.sorts.site.set(outer);
         result
     }
 
     /// From here to the end of the declaration being lowered, a written `Sort` stands in `site`: for a declaration that is one kind of site throughout.
     pub(super) fn sorts_stand_in(&self, site: SortSite) {
-        self.sorts.site.set(site);
+        self.shared.declaring.sorts.site.set(site);
     }
 
     pub(super) fn universe_role(&self) -> curios_core::UniverseRole {
-        self.universe_role.get()
+        self.shared.universe_role.get()
     }
 
     pub(super) fn with_universe_role<T>(
@@ -705,9 +754,9 @@ impl<'a> Context<'a> {
         role: curios_core::UniverseRole,
         f: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
-        let old = self.universe_role.replace(role);
+        let old = self.shared.universe_role.replace(role);
         let result = f();
-        self.universe_role.set(old);
+        self.shared.universe_role.set(old);
         result
     }
 
@@ -719,7 +768,7 @@ impl<'a> Context<'a> {
     pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
         let module = self.prefix;
 
-        let mut witnesses = self.witnesses.borrow_mut();
+        let mut witnesses = self.shared.witnesses.borrow_mut();
         let place = witnesses.entry(module).or_default();
         let minted = curios_core::WitnessId::Unspelled {
             module,
@@ -735,7 +784,7 @@ impl<'a> Context<'a> {
     /// Every binder a lowered term closes over comes from here, including the continuation binders `!` desugaring introduces. `curios-elab` mints more while elaborating and starts its counter above this declaration's count ([`curios_core::Mints::binders`]), so the two sources share one identity space per declaration without colliding.
     pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_core::Free {
         curios_core::Free::local(
-            u32::try_from(self.binders.fresh()).expect("binder space exhausted"),
+            u32::try_from(self.shared.declaring.binders.fresh()).expect("binder space exhausted"),
             hint,
         )
     }
@@ -747,7 +796,7 @@ impl<'a> Context<'a> {
         written: u32,
     ) -> curios_core::Free {
         curios_core::Free::local_written(
-            u32::try_from(self.binders.fresh()).expect("binder space exhausted"),
+            u32::try_from(self.shared.declaring.binders.fresh()).expect("binder space exhausted"),
             hint,
             written,
         )
@@ -792,8 +841,8 @@ impl<'a> Context<'a> {
         let found = self.binding_candidates(label);
 
         let binder = self.fresh_binder(Some(label));
-        self.unbound.borrow_mut().insert(binder, found);
-        self.anchoring.journal.borrow_mut().unbound = true;
+        self.shared.unbound.borrow_mut().insert(binder, found);
+        self.shared.anchoring.journal.borrow_mut().unbound = true;
         binder
     }
 
@@ -1000,7 +1049,7 @@ impl<'a> Context<'a> {
     }
 
     fn record(&mut self, import: curios_core::Import) {
-        let mut imports = self.imports.borrow_mut();
+        let mut imports = self.shared.imports.borrow_mut();
         imports.entries.push(import);
         self.in_scope.push(imports.entries.len() - 1);
     }
@@ -1009,11 +1058,16 @@ impl<'a> Context<'a> {
     //
     // Keyed by `Global` rather than by `Qualifier`, because a `satisfy` is anonymous: its identity is a `Global::Witness` and there is no name to hand over. Every other declaration wraps its own qualifier at the call site.
     pub(super) fn record_import_scope(&self, owner: Option<&curios_core::Global>) {
-        let mut imports = self.imports.borrow_mut();
+        let mut imports = self.shared.imports.borrow_mut();
         match owner {
             Some(owner) => {
                 imports.by_item.insert(*owner, self.in_scope.clone());
-                self.anchoring.journal.borrow_mut().scoped.push(*owner);
+                self.shared
+                    .anchoring
+                    .journal
+                    .borrow_mut()
+                    .scoped
+                    .push(*owner);
             }
             None => imports.tail = self.in_scope.clone(),
         }
@@ -1139,7 +1193,8 @@ impl<'a> Context<'a> {
             absolute: name.is_abs(),
             path: *name.qualifier(),
         };
-        self.anchoring
+        self.shared
+            .anchoring
             .journal
             .borrow_mut()
             .trace
@@ -1159,7 +1214,7 @@ impl<'a> Context<'a> {
 
     /// Drop what has been asked since the declaration began: the questions of a trace asked again are no questions of the declaration.
     pub(super) fn forget_asked(&self) {
-        self.anchoring.journal.borrow_mut().trace = curios_core::Trace::default();
+        self.shared.anchoring.journal.borrow_mut().trace = curios_core::Trace::default();
     }
 }
 
