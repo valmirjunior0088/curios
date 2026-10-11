@@ -528,8 +528,9 @@ pub(super) fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
 /// Run the raw (Binaryen-free) module: Cranelift-compile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args()!`, which drives the taint.
 pub(super) fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let (module, foreigns) = compile_raw_program(source);
-    let compiled = Compiled::compile(&to_bytes(&module), foreigns)
+    let code = curios_cranelift::compile(&to_bytes(&module))
         .expect("raw module validates and Cranelift-compiles without Binaryen");
+    let compiled = Compiled::of(code, foreigns);
 
     let (system, io) = MockHost::builder().args(args).build();
     compiled

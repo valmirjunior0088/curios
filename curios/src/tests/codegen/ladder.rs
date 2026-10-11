@@ -352,8 +352,10 @@ fn walk_mirror_attribution_measurements() {
     .map(|(label, source)| {
         let (module, foreigns) = compile_raw_program(source);
         let counts = mirror_counts(&module.to_string());
-        let raw =
-            Compiled::compile(&to_bytes(&module), foreigns.clone()).expect("raw module compiles");
+        let raw = Compiled::of(
+            curios_cranelift::compile(&to_bytes(&module)).expect("raw module compiles"),
+            foreigns.clone(),
+        );
         let optimized = crate::to_compiled(&module, foreigns).expect("binaryen path compiles");
 
         (label, counts, raw, optimized)

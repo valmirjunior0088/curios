@@ -2,7 +2,7 @@
 
 use {
     curios_runtime::{
-        Bundle, Compiled, DeclaredModule, ModuleBytes, OsHost, extract_bundle, plugin_bindings,
+        Bundle, Compiled, DeclaredModule, MachineCode, OsHost, extract_bundle, plugin_bindings,
     },
     std::{env, ffi::OsString, fs, process::ExitCode},
 };
@@ -29,13 +29,23 @@ fn main() -> ExitCode {
         let declared = bundle
             .plugins
             .into_iter()
-            .map(|plugin| DeclaredModule {
-                package: plugin.package,
-                name: plugin.name,
-                bytes: ModuleBytes::Precompiled(plugin.payload),
-                answers: plugin.answers,
+            .map(|plugin| {
+                // SAFETY: the payload is what this executable's own tail carries, written out by the compiler that embedded this launcher from the module it had resolved, past the point any other producer could substitute it. The wasmtime pin is one row, so the engine that wrote it and this one cannot drift, and wasmtime's own stamp inside the artifact stays the backstop.
+                let code = unsafe { MachineCode::deserialize(&plugin.payload) }.map_err(|error| {
+                    format!(
+                        "the module {:?} of {} is not machine code this engine accepts: {error}",
+                        plugin.name, plugin.package
+                    )
+                })?;
+
+                Ok(DeclaredModule {
+                    package: plugin.package,
+                    name: plugin.name,
+                    code,
+                    answers: plugin.answers,
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, String>>()?;
 
         let bindings = plugin_bindings(&bundle.foreigns, declared)?;
 

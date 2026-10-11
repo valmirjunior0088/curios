@@ -17,5 +17,5 @@ curios-package = { workspace = true }
 [dev-dependencies]
 curios = { workspace = true }
 curios-pipeline = { workspace = true }
-curios-runtime = { workspace = true, features = ["cranelift", "test-support"] }
+curios-runtime = { workspace = true }
 curios-wonder = { workspace = true }

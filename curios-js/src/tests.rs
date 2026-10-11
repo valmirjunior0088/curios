@@ -14,7 +14,9 @@ fn func_arity(sub_type: &SubType) -> (usize, usize) {
 }
 
 fn bridge() -> GuestInstance {
-    GuestInstance::instantiate(&crate::bridge_bytes()).expect("the bridge module instantiates")
+    let code = curios_cranelift::compile(&crate::bridge_bytes()).expect("the bridge compiles");
+
+    GuestInstance::instantiate(&code).expect("the bridge module instantiates")
 }
 
 /// Call `export` and return its single result. Untyped calls are the point: they type-check dynamically against the module's declared signatures, which succeeds exactly when the bridge's declared shapes are right.

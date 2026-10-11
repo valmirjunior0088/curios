@@ -26,14 +26,14 @@ use {
     clap::Parser,
     curios::optimize,
     curios_abi::ForeignStore,
+    curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_package::{
         Entry, Governing, Repoint, Spelling, Store, curate, declared_modules, pin, scaffold,
     },
     curios_pipeline::CompileError,
     curios_runtime::{
-        Bundle, Compiled, DeclaredModule, ForeignBindings, ModuleBytes, OsHost, host_answers,
-        module_exports, plugin_bindings,
+        Bundle, Compiled, DeclaredModule, ForeignBindings, OsHost, host_answers, plugin_bindings,
     },
     curios_text::Formatted,
     curios_utilities::Source,
@@ -93,7 +93,7 @@ impl From<CompileError> for Failure {
     }
 }
 
-/// The modules a program's package graph declares for the `foreign` declarations it reaches, each already accepted against the hash its row pins and handed over as the source `run`, `test` and `compile` alike resolve it from.
+/// The modules a program's package graph declares for the `foreign` declarations it reaches, each already accepted against the hash its row pins and compiled here, where Cranelift is, to the machine code `run`, `test` and `compile` alike resolve it from.
 ///
 /// **Nothing is read where the host answers every row the program reaches**, which is very nearly every program, since each reaches the standard library's rows and few any other: no manifest is walked and no module opened, so the common case pays one pass over its rows. A module answers a declaration of its own package alone, so none could answer for such a program.
 ///
@@ -123,9 +123,18 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Declar
                 .any(|declaration| foreigns.get(declaration).is_some())
         })
         .map(|(package, directory, foreign)| {
+            let code = curios_cranelift::compile(&foreign.bytes(&directory, &store)?).map_err(
+                |error| {
+                    format!(
+                        "the module {:?} of {package} is not a WebAssembly module this engine accepts: {error}",
+                        foreign.name
+                    )
+                },
+            )?;
+
             Ok(DeclaredModule {
                 package,
-                bytes: ModuleBytes::Source(foreign.bytes(&directory, &store)?),
+                code,
                 name: foreign.name,
                 answers: foreign.answers,
             })
@@ -334,8 +343,8 @@ fn dispatch() -> Result<(), Failure> {
             let bindings = bindings_of(root.as_deref(), &foreigns)?;
             bindings.check(&foreigns)?;
 
-            // Compiled here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
-            let plugins = bindings.bundled()?;
+            // Written out here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
+            let plugins = bindings.bundled(curios_cranelift::serialize)?;
 
             emit_exe(
                 &Bundle {

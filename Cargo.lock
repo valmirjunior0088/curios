@@ -565,6 +565,7 @@ dependencies = [
  "curios-cert",
  "curios-cont",
  "curios-core",
+ "curios-cranelift",
  "curios-document",
  "curios-elab",
  "curios-ersd",
@@ -671,6 +672,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "curios-cranelift"
+version = "0.15.9"
+dependencies = [
+ "curios-runtime",
+ "wasmtime",
+]
+
+[[package]]
 name = "curios-document"
 version = "0.15.9"
 dependencies = [
@@ -724,6 +733,7 @@ name = "curios-js"
 version = "0.15.9"
 dependencies = [
  "curios-abi",
+ "curios-cranelift",
  "curios-emit",
  "curios-pipeline",
  "curios-runtime",

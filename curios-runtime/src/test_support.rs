@@ -4,7 +4,7 @@
 //!
 //! So this module hands out two opaque types instead. [`GuestValue`](crate::test_support::GuestValue) carries a wasm value the caller cannot inspect except as an `i32` — which is what lets a test thread an opaque GC reference from one call into the next, the thing a scalar-only API could not express — and [`GuestInstance`](crate::test_support::GuestInstance) owns the store and the instance together, so no lifetime or borrow of wasmtime's escapes. Both are spelled from the crate root because this module's declaration carries a doc comment of its own, and a merged one resolves in the scope the outer half was written in.
 //!
-//! **Behind `test-support`, which implies `cranelift`:** instantiating compiles, so this cannot exist in a runtime-only build. That it is a feature rather than `#[cfg(test)]` is not a stylistic choice — `cfg(test)` is set only while *this* crate is compiled as its own test harness, so a `cfg(test)` item is invisible to another crate's tests, which is exactly the case here.
+//! **Behind `test-support`.** A test hands [`GuestInstance`](crate::test_support::GuestInstance) machine code the compiler's crate made, since this one links no backend. That it is a feature rather than `#[cfg(test)]` is not a stylistic choice — `cfg(test)` is set only while *this* crate is compiled as its own test harness, so a `cfg(test)` item is invisible to another crate's tests, which is exactly the case here.
 //!
 //! Calls are untyped, and deliberately: they type-check dynamically against the module's declared signatures, so a call succeeding *is* the assertion that the emitted shapes are right.
 //!
@@ -12,12 +12,12 @@
 
 use {
     super::{
-        Compiled, ForeignBindings, HostOps, Lower, host_rows, instantiate, lower_scalars,
-        on_guest_stack, shared_engine, words_array_type,
+        Compiled, ForeignBindings, HostOps, Lower, MachineCode, host_rows, instantiate,
+        lower_scalars, on_guest_stack, shared_engine, words_array_type,
     },
     curios_abi::HostOp,
     std::sync::Arc,
-    wasmtime::{Caller, Instance, Linker, Memory, Module, Store, Val},
+    wasmtime::{Caller, Instance, Linker, Memory, Store, Val},
 };
 
 /// One wasm value crossing into or out of a guest call, opaque by construction.
@@ -59,15 +59,14 @@ pub struct GuestInstance {
 }
 
 impl GuestInstance {
-    /// Compile and instantiate `bytes` against the shared engine — the same engine configuration a compiled program runs under, so the module is judged by the settings that will actually host it. Imports nothing: a module needing any is a mismatch this reports rather than papers over.
-    pub fn instantiate(bytes: &[u8]) -> Result<Self, String> {
+    /// Instantiate `code` against the shared engine — the same engine configuration a compiled program runs under, so the module is judged by the settings that will actually host it. Imports nothing: a module needing any is a mismatch this reports rather than papers over.
+    pub fn instantiate(code: &MachineCode) -> Result<Self, String> {
         let engine = shared_engine();
-        let module = Module::new(engine, bytes).map_err(|error| error.to_string())?;
         let (store, instance) = on_guest_stack(|| {
             let mut store = Store::new(engine, ());
 
             Linker::new(engine)
-                .instantiate(&mut store, &module)
+                .instantiate(&mut store, &code.0)
                 .map(|instance| (store, instance))
                 .map_err(|error| error.to_string())
         })??;

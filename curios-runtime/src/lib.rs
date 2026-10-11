@@ -1,22 +1,16 @@
 //! Runtime-only Curios engine: deserialize a precompiled module and run it on an embedded wasmtime, answering the rows it imports.
 //!
-//! **This crate is the workspace's only `wasmtime` dependency**, and nothing above it names a wasmtime type at all. The pin and the feature set live in its manifest — the arrangement `curios-archive` and `curios-num` use for rkyv and num-bigint — so the version `curios` precompiles a `.cwasm` against and the version the launcher deserializes it with cannot drift: there is only one row to change.
+//! **This crate is the engine, and `curios-cranelift` beside it is its compiler.** The two take Wasmtime from one row of the workspace manifest, so the version `curios` precompiles a `.cwasm` against and the version the launcher deserializes it with cannot drift, and nothing above the pair names a wasmtime type at all.
 //!
-//! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and every operation an outside caller needs has a wasmtime-free signature: [`validate`], [`precompile`], [`Compiled`], [`engine_compatibility`], and — under `test-support`, so it carries no link here — `test_support::GuestInstance` for driving a module by hand.
+//! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and in what `curios-cranelift` alone reaches for: [`shared_engine`], and the module a [`MachineCode`] is made of and hands back. Every operation another caller needs has a wasmtime-free signature: [`validate`], [`Compiled`], [`plugin_bindings`], and — under `test-support`, so it carries no link here — `test_support::GuestInstance` for driving a module by hand.
 //!
-//! **Runtime-only is a property of the default build, and it is checked.** The `cranelift` feature is never in `default`, so the isolated `cargo build -p curios-runtime` that `cargo xtask launcher build` runs cannot reach a compiler; `curios` turns it on for itself to get [`precompile`]. What holds it is `README.md`'s "The launcher is slim by exclusion": the guards in `curios/src/bundle.rs` scan the launcher image that ships.
+//! **Runtime-only is a property of the crate, and it is checked.** No feature here reaches a compiler, so the isolated `cargo build -p curios-runtime` that `cargo xtask launcher build` runs cannot reach one, and every check builds the one configuration the launcher ships in. What holds it is `README.md`'s "The launcher is slim by exclusion": the guards in `curios/src/bundle.rs` scan the launcher image that ships.
 //!
-//! The split of the AOT operations follows wasmtime's own: [`validate`] needs no compiler and is always present, while everything that does need one lives in the `cranelift` module, gated once on the module rather than item by item. Binaryen is named nowhere here and never will be — optimization belongs to the native product.
+//! The split of the AOT operations follows wasmtime's own: [`validate`] needs no compiler and is here, while everything that does need one is `curios-cranelift`'s. A module compiled there arrives as a [`MachineCode`], which only an engine makes; bytes are read back through [`MachineCode::deserialize`] alone, the one door whose caller vouches for what it hands over. Binaryen is named nowhere here and never will be — optimization belongs to the native product.
 
 mod bundle;
 pub use bundle::*;
 
-#[cfg(feature = "cranelift")]
-mod cranelift;
-#[cfg(feature = "cranelift")]
-pub use cranelift::*;
-
-// Not behind that gate, because a bundled launcher links plugins too: what needs a compiler is turning a `.wasm` into a module, not instantiating one. `ModuleBytes` splits exactly there — its `Source` variant is gated and its `Precompiled` variant is not — so a runtime-only build can link what `curios compile` already compiled while still having no way to spell compiling one.
 mod plugin;
 pub use plugin::*;
 

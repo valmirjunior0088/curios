@@ -13,14 +13,14 @@
 //! The ABI is the raw one every wasm toolchain already emits: a scalar crosses as itself, a byte string as a `(ptr, len)` pair into the plugin's memory, and a byte-string result comes back as the same pair through wasm's multi-value return. The plugin exports its `memory` and an allocator; what it is called and what it takes are [`ALLOC`] and the conformance check below.
 
 use {
-    super::{Answers, ForeignBindings, Lift, Lower, Stated, Trampoline, shared_engine},
+    super::{
+        Answers, BundledPlugin, ForeignBindings, Lift, Lower, MachineCode, Stated, Trampoline,
+        shared_engine,
+    },
     curios_abi::{ForeignFunction, ForeignStore, WireReturn, WireType},
     std::{collections::BTreeMap, fmt, sync::Arc},
     wasmtime::{Caller, ExternType, Func, Linker, Memory, Module, Store, TypedFunc, Val},
 };
-
-#[cfg(feature = "cranelift")]
-use super::BundledPlugin;
 
 /// The allocator a plugin exports, by the name every raw-ABI toolchain gives it: bytes in, an offset into the plugin's own memory out.
 ///
@@ -38,23 +38,10 @@ pub struct DeclaredModule {
     pub package: String,
     /// The row's own name, likewise.
     pub name: String,
-    /// The module itself, already accepted against its hash by whoever read it.
-    pub bytes: ModuleBytes,
+    /// The module itself as machine code: compiled where its manifest row was read, already accepted against its hash, or read back from the bundle that carries it.
+    pub code: MachineCode,
     /// The export of it that answers each declaration, as `fully qualified name -> export`: keyed by what is answered, so a module states one export a declaration.
     pub answers: BTreeMap<String, String>,
-}
-
-/// A plugin's module, and how this build is able to turn it into one.
-///
-/// **The split is the whole reason the launcher can link a plugin at all.** Compiling WebAssembly needs a backend; deserializing code this engine already emitted does not. `curios run` holds Cranelift and compiles the module a manifest pointed at, while a bundled executable carries what `curios compile` compiled and its launcher deserializes — so a plugin travels without a compiler travelling with it.
-///
-/// Gating the *variant* rather than a branch is what makes that structural: a runtime-only build has no way to spell a source module, so the case cannot be reached by a mistake rather than being reachable and refused.
-pub enum ModuleBytes {
-    /// A WebAssembly module, compiled here. Only a build carrying a backend can hold one.
-    #[cfg(feature = "cranelift")]
-    Source(Vec<u8>),
-    /// Machine code this engine already emitted, deserialized rather than compiled.
-    Precompiled(Vec<u8>),
 }
 
 /// The allocator of a module that follows the canonical ABI, by the name that ABI gives it: the old offset and size, an alignment and the new size in, an offset out.
@@ -108,38 +95,25 @@ impl fmt::Display for Subject {
     }
 }
 
-/// A module resolved against the rows a program reaches: compiled or read back, refused if no plugin can be made of it, and each export that answers a reached row held to that row's declaration. Nothing is instantiated here: an instance is made where a program is run ([`Plugin::instantiate`]), so one resolution serves every run of the program.
+/// A module resolved against the rows a program reaches: refused if no plugin can be made of it, and each export that answers a reached row held to that row's declaration. Nothing is instantiated here: an instance is made where a program is run ([`Plugin::instantiate`]), so one resolution serves every run of the program.
 pub(crate) struct Plugin {
     subject: Subject,
-    compiled: Module,
+    compiled: MachineCode,
     /// Whether the module follows the canonical ABI's conventions, which its allocator's name says.
     canonical: bool,
     rows: Vec<Row>,
 }
 
 impl Plugin {
-    /// Compile or read back `module`, refusing one that is not a plugin before it can become one.
+    /// Refuse a `module` that is not a plugin before it can become one.
     ///
     /// The checks are the whole of what "a plugin" means, each made of the module's own types and refused by name rather than left to a `LinkError` that would report one missing import and stop.
     fn of(module: &DeclaredModule) -> Result<Self, String> {
-        let engine = shared_engine();
         let subject = Subject {
             package: module.package.clone(),
             name: module.name.clone(),
         };
-
-        let compiled = match &module.bytes {
-            #[cfg(feature = "cranelift")]
-            ModuleBytes::Source(bytes) => Module::new(engine, bytes).map_err(|error| {
-                format!("{subject} is not a WebAssembly module this engine accepts: {error}")
-            })?,
-            // SAFETY: the payload was emitted by `curios compile` through `precompile`, which compiles on the very engine `shared_engine` builds here — the wasmtime pin is one manifest row, so a bundler's engine and its launcher's cannot drift — and it travels inside the executable's own image, past the point any other producer could substitute it. Wasmtime's own stamp inside the artifact stays the backstop for whatever that failed to separate.
-            ModuleBytes::Precompiled(bytes) => unsafe {
-                Module::deserialize(engine, bytes).map_err(|error| {
-                    format!("{subject} is not machine code this engine accepts: {error}")
-                })?
-            },
-        };
+        let compiled = &module.code.0;
 
         // Every import at once, rather than whichever one a linker would reach first.
         let demanded = compiled
@@ -159,11 +133,11 @@ impl Plugin {
             ));
         }
 
-        let canonical = if exported(&compiled, REALLOC)
+        let canonical = if exported(compiled, REALLOC)
             == Some((spelled(&["i32"; 4]), spelled(&["i32"])))
         {
             true
-        } else if exported(&compiled, ALLOC) == Some((spelled(&["i32"]), spelled(&["i32"]))) {
+        } else if exported(compiled, ALLOC) == Some((spelled(&["i32"]), spelled(&["i32"]))) {
             false
         } else {
             return Err(format!(
@@ -173,7 +147,7 @@ impl Plugin {
 
         Ok(Self {
             subject,
-            compiled,
+            compiled: module.code.clone(),
             canonical,
             rows: Vec::new(),
         })
@@ -187,6 +161,7 @@ impl Plugin {
     /// The names the module exports, for a refusal to list.
     fn exports(&self) -> Vec<String> {
         self.compiled
+            .0
             .exports()
             .map(|export| export.name().to_string())
             .collect()
@@ -204,7 +179,7 @@ impl Plugin {
 
         // Instantiating runs the module's start function, an entry into it like any other, on the stack the program is about to run on.
         let instance = Linker::new(shared_engine())
-            .instantiate(&mut *store, &self.compiled)
+            .instantiate(&mut *store, &self.compiled.0)
             .map_err(|error| {
                 format!(
                     "{subject} could not be instantiated: {}",
@@ -495,7 +470,7 @@ impl Row {
             }
         };
 
-        let found = exported(&plugin.compiled, export)
+        let found = exported(&plugin.compiled.0, export)
             .ok_or_else(|| format!("{subject} exports `{export}`, which is no function"))?;
         let expected = (
             params
@@ -646,9 +621,11 @@ impl Row {
 }
 
 impl ForeignBindings {
-    /// The modules resolved here as a bundle carries them, each as the machine code a launcher reads back. What was resolved and held to the program's rows is what travels, each module beside the answers it was held to: nothing is compiled a second time, no other module can stand in the executable for the one that was checked, and a claim on a row the program does not reach is left behind.
-    #[cfg(feature = "cranelift")]
-    pub fn bundled(&self) -> Result<Vec<BundledPlugin>, String> {
+    /// The modules resolved here as a bundle carries them, each as the machine code a launcher reads back, written out by `written`: writing machine code out is a compiler's operation, so the crate that links one supplies it. What was resolved and held to the program's rows is what travels, each module beside the answers it was held to: nothing is compiled a second time, no other module can stand in the executable for the one that was checked, and a claim on a row the program does not reach is left behind.
+    pub fn bundled(
+        &self,
+        written: impl Fn(&MachineCode) -> Result<Vec<u8>, String>,
+    ) -> Result<Vec<BundledPlugin>, String> {
         self.modules
             .iter()
             .map(|module| {
@@ -660,7 +637,7 @@ impl ForeignBindings {
                         .iter()
                         .map(|row| (row.function.name().to_string(), row.export.clone()))
                         .collect(),
-                    payload: module.compiled.serialize().map_err(|error| {
+                    payload: written(&module.compiled).map_err(|error| {
                         format!("{} could not be written out: {error}", module.subject)
                     })?,
                 })

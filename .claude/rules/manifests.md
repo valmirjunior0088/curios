@@ -9,10 +9,10 @@ paths:
 # Manifests, build scripts and build products
 
 - Data flows down the pipeline and Rust dependencies point up it: a lowering depends on the representation it constructs.
-- Crate boundaries, not Cargo features, separate the compiler, runtime and browser products. An external dependency with a surface worth governing is named in one manifest, whose crate is its authority.
+- Crate boundaries, not Cargo features, separate the compiler, runtime and browser products. An external dependency with a surface worth governing is named in one manifest, whose crate is its authority; `wasmtime` is one workspace row taken by the engine's two crates, `curios-runtime` and `curios-cranelift`.
 - The lint table is the root manifest's, inherited by every member and restated by `editors/zed/Cargo.toml`, which a test there holds equal. It denies warnings, so every build of every configuration fails on one and no step passes a flag for it.
 - Each tool's version is stated once, where its own installer reads it: `rust-toolchain.toml` for Rust and its targets, `.node-version` for Node, `xtask/src/tools.rs` for Biome.
 - A build script and its dependencies are compiled optimized under both profiles, the prelude's two being the compiler run over the library; a change to a build profile retakes `documentation/design/a-build-script-is-compiled-optimized.md`'s measurement.
-- `rust-toolchain.toml`'s floor is Wasmtime's; bump it when the pin in `curios-runtime/Cargo.toml` moves past it.
+- `rust-toolchain.toml`'s floor is Wasmtime's; bump it when the workspace manifest's `wasmtime` row moves past it.
 - A build product that outlives its build lives in `.artifacts/` beside its owner, never under `target/`; `cargo clean` leaves it, so delete one by hand to force a rebuild. Generated `.wasm` and other build products are never committed; `Cargo.lock` is.
 - `target/debug/incremental` is rustc cache, safe to delete when no build runs.

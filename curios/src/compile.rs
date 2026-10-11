@@ -1,8 +1,8 @@
 //! Optimize, precompile and run — the native back end, and the reason this crate exists.
 //!
-//! `curios` is the only crate that turns Cranelift on (through `curios-runtime`'s `cranelift` feature) and the only one that links Binaryen (via `curios-binaryen`); `curios-runtime` stays slim by default, and `curios-pipeline` stays clear of both. Everything here is downstream of a `curios_wasm::Module` and indifferent to where one came from — the compiling half is `curios_pipeline::compile_with_prelude` and its siblings, next to the fold it configures.
+//! `curios` is the only product that links Cranelift (through `curios-cranelift`) and the only one that links Binaryen (via `curios-binaryen`); `curios-runtime` links neither, and `curios-pipeline` stays clear of both. Everything here is downstream of a `curios_wasm::Module` and indifferent to where one came from — the compiling half is `curios_pipeline::compile_with_prelude` and its siblings, next to the fold it configures.
 //!
-//! No wasmtime operation below is spelled here. `curios_runtime::validate`, `curios_runtime::precompile` and `Compiled::compile` are, because they belong beside the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all, and its `curios-runtime` dependency row is a feature switch rather than an API dependency.
+//! No wasmtime operation below is spelled here. `curios_runtime::validate`, `curios_cranelift::precompile` and `curios_cranelift::compile` are, because they belong with the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all.
 
 use {
     curios_abi::ForeignStore, curios_runtime::Compiled, curios_utilities::Fingerprint,
@@ -11,11 +11,11 @@ use {
 
 /// What decides whether a payload compiled on this machine runs on another, as a key part — computed once, since it is a property of the process, and handed to `curios-verdicts`'s payload family beside every program it files.
 ///
-/// **The payload is the store's first machine-dependent artifact.** A unit is a judgment and travels wherever the compiler binary does; a payload is machine code Cranelift emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. `curios-runtime` describes its engine, `curios-utilities`'s `Fingerprint` turns the description into a digest, and `curios-verdicts` files under it; this is the one crate that names all three, so the crate that names wasmtime and the crate that names `sha2` stay apart.
+/// **The payload is the store's first machine-dependent artifact.** A unit is a judgment and travels wherever the compiler binary does; a payload is machine code Cranelift emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. `curios-cranelift` describes the engine, `curios-utilities`'s `Fingerprint` turns the description into a digest, and `curios-verdicts` files under it; this is the one crate that names all three, so the crate that names wasmtime and the crate that names `sha2` stay apart.
 pub fn engine() -> &'static str {
     static ENGINE: LazyLock<String> = LazyLock::new(|| {
         let mut fingerprint = Fingerprint::new();
-        curios_runtime::engine_compatibility(&mut fingerprint);
+        curios_cranelift::engine_compatibility(&mut fingerprint);
 
         fingerprint.hex()
     });
@@ -59,7 +59,7 @@ fn optimized(module: &curios_wasm::Module) -> Vec<u8> {
 pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
     let bytes = optimized(module);
 
-    curios_profile::profile!("precompile" => curios_runtime::precompile(&bytes))
+    curios_profile::profile!("precompile" => curios_cranelift::precompile(&bytes))
 }
 
 /// Optimize (Binaryen) and compile (Cranelift) a module to the program this process runs, on `curios-runtime`'s shared engine: [`to_cwasm`]'s machine code, held rather than written out, so running it reads nothing back. `foreigns` is the rows the compilation handed back beside `module`, which the program carries to its link.
@@ -69,7 +69,10 @@ pub fn to_compiled(
 ) -> Result<Compiled, String> {
     let bytes = optimized(module);
 
-    curios_profile::profile!("precompile" => Compiled::compile(&bytes, foreigns))
+    let code = curios_profile::profile!("precompile" => curios_cranelift::compile(&bytes))
+        .map_err(|error| format!("failed to compile module: {error}"))?;
+
+    Ok(Compiled::of(code, foreigns))
 }
 
 /// Compile a module and run it in-process on the shared runtime engine. `foreigns` is the rows the compilation handed back beside it, and `bindings` answers rows ahead of the host, the program's own `foreign` declarations among them (pass [`curios_runtime::ForeignBindings::empty`] where the host answers every row). Returns the process exit code.

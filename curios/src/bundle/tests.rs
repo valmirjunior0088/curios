@@ -7,7 +7,7 @@ const BACKEND_MARKERS: [&[u8]; 3] = [b"cranelift-codegen", b"cranelift_codegen",
 
 /// The launcher must not contain a native compiler, checked against the bytes that actually ship.
 ///
-/// This is deliberately not a `cargo tree` assertion. The graph answers a question about dependencies; [`LAUNCHER`] is the exact image appended into every bundled executable, so checking it holds however the feature and crate graph are later rearranged — including the case where something enables `curios-runtime`'s `cranelift` feature by default.
+/// This is deliberately not a `cargo tree` assertion. The graph answers a question about dependencies; [`LAUNCHER`] is the exact image appended into every bundled executable, so checking it holds however the feature and crate graph are later rearranged — including the case where the launcher's crate comes to reach a backend.
 #[test]
 fn the_embedded_launcher_carries_no_native_backend() {
     for marker in BACKEND_MARKERS {
@@ -15,7 +15,7 @@ fn the_embedded_launcher_carries_no_native_backend() {
             !LAUNCHER
                 .windows(marker.len())
                 .any(|window| window == marker),
-            "the embedded launcher contains `{}` — it was not built by `cargo xtask launcher build`, or a default feature now reaches a native backend",
+            "the embedded launcher contains `{}` — it was not built by `cargo xtask launcher build`, or its crate now reaches a native backend",
             String::from_utf8_lossy(marker),
         );
     }
@@ -41,9 +41,9 @@ fn the_embedded_launcher_stays_slim() {
 ///
 /// To rebuild the failing image (about 35 seconds):
 ///
-/// 1. `cargo build --release -p curios-runtime --target <triple> --features cranelift`
+/// 1. `cargo build --release -p curios-runtime --target <triple> --features wasmtime/cranelift`
 /// 2. inspect `target/<triple>/release/curios-runtime`
-/// 3. re-run `cargo xtask launcher build`, which rebuilds that path without the feature
+/// 3. re-run `cargo xtask launcher build`, which rebuilds that path without the backend
 ///
 /// **aarch64-apple-darwin, release profile (no `[profile]` section, so no stripping).** Slim: 3,633,792 bytes, zero occurrences of every marker. Cranelift-linked: **11,693,168 bytes**, `cranelift-codegen` ×113 and `cranelift_codegen` ×8. Both guards were run against that image and both failed, which is the evidence this test exists to record. Note that dead-code elimination does *not* remove the backend even though the launcher calls no compiling API — enabling the feature is enough.
 ///

@@ -25,7 +25,7 @@ mod tests;
 
 /// Reject a malformed module, against the same engine that will run it.
 ///
-/// Available without the `cranelift` feature: validation is a wasmparser pass over the bytes, not a compilation, so a runtime-only build can decide it. That is what lets the check live beside the engine whose feature set decides what counts as valid, rather than in whichever crate happens to link a compiler.
+/// Here rather than in the crate that links a compiler: validation is a wasmparser pass over the bytes, not a compilation, so a build with no backend can decide it. That is what lets the check live beside the engine whose feature set decides what counts as valid.
 ///
 /// Returns the failure as a `String` so no `wasmtime` type appears in the signature; callers are free to treat a refusal as fatal, and `curios` does.
 pub fn validate(bytes: &[u8]) -> Result<(), String> {
@@ -519,9 +519,39 @@ impl Ended for TestEnd {
     }
 }
 
+/// A module's machine code as this engine holds it: what a program is run from and what a declared module is linked from.
+///
+/// **Holding one is what makes instantiating safe, and making one is where the trust is taken.** Machine code read back from bytes is run on trust, since nothing can check that the bytes are a compiler's output. So there are two ways to one and no third: [`MachineCode::of`] takes the module a compiler made on [`shared_engine`], which is `curios-cranelift`'s to call since this crate links no compiler, and [`MachineCode::deserialize`] reads bytes back, its caller vouching for them.
+#[derive(Clone)]
+pub struct MachineCode(pub(crate) Module);
+
+impl MachineCode {
+    /// The machine code `module` is: an engine made it, so nothing is read back and nothing is vouched for.
+    pub fn of(module: Module) -> Self {
+        Self(module)
+    }
+
+    /// Read back a precompiled module: `.cwasm` bytes a compiler wrote out for this exact wasmtime version and engine configuration.
+    ///
+    /// # Safety
+    ///
+    /// `payload` must be unmodified output of this engine's compiler: `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code. The keyword is what carries that obligation to each caller, which names its provenance where it takes it on — the launcher its own footer, the compiler what it filed in the project's store.
+    pub unsafe fn deserialize(payload: &[u8]) -> Result<Self, String> {
+        // SAFETY: the caller's, restated in this function's contract — `payload` is our own precompiled output.
+        unsafe { Module::deserialize(shared_engine(), payload) }
+            .map(Self)
+            .map_err(|error| error.to_string())
+    }
+
+    /// The engine's own module, for the crate that links a compiler to write out.
+    pub fn module(&self) -> &Module {
+        &self.0
+    }
+}
+
 /// A program's machine code as this engine holds it, ready to run.
 ///
-/// **Holding one is what makes a run safe.** Machine code read back from bytes is run on trust, since nothing can check that the bytes are a compiler's output. So the trust is taken once, where a `Compiled` is made, and a run takes none: a program is either compiled on this engine ([`Compiled::compile`](Self::compile), where a compiler is linked) or read back by [`Compiled::deserialize`], whose caller vouches for the bytes.
+/// **Holding one is what makes a run safe.** The trust machine code read back from bytes is run on is taken once, where its [`MachineCode`] is made, and a run takes none: a program is either machine code a compiler's crate hands over ([`Compiled::of`]) or read back by [`Compiled::deserialize`], whose caller vouches for the bytes.
 ///
 /// **It carries the rows it imports.** The machine code names each `ffi` import and types it by its carriers alone, which cannot tell a `Nat` from an `Int`: what an import is declared as lives in the compilation, and travels here beside the code, so a run holds whatever answers a row to that row's own declaration and no caller hands the rows over a second time.
 pub struct Compiled {
@@ -530,15 +560,23 @@ pub struct Compiled {
 }
 
 impl Compiled {
-    /// Read back a precompiled module — `.cwasm` bytes [`precompile`](super::precompile) produced for this exact wasmtime version and engine configuration — beside `foreigns`, the rows the compilation that made it handed back.
+    /// The program `code` is, beside `foreigns`, the rows the compilation that emitted it handed back.
+    pub fn of(code: MachineCode, foreigns: ForeignStore) -> Self {
+        Self {
+            module: code.0,
+            foreigns,
+        }
+    }
+
+    /// Read back a precompiled program beside `foreigns`, the rows the compilation that made it handed back.
     ///
     /// # Safety
     ///
-    /// `payload` must be unmodified output of [`precompile`](super::precompile) for this engine: `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code. The keyword is what carries that obligation to each caller, which names its provenance where it takes it on — the launcher its own footer, the compiler what it precompiled or filed in the project's store.
+    /// [`MachineCode::deserialize`]'s: `payload` must be unmodified output of this engine's compiler.
     pub unsafe fn deserialize(payload: &[u8], foreigns: ForeignStore) -> Result<Self, String> {
         // SAFETY: the caller's, restated in this function's contract — `payload` is our own precompiled output.
-        unsafe { Module::deserialize(shared_engine(), payload) }
-            .map(|module| Self { module, foreigns })
+        unsafe { MachineCode::deserialize(payload) }
+            .map(|code| Self::of(code, foreigns))
             .map_err(|error| format!("failed to load wasm module: {error}"))
     }
 

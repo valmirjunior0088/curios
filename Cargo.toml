@@ -32,6 +32,7 @@ members = [
     "curios",
     "curios-binaryen",
     "curios-runtime",
+    "curios-cranelift",
     "xtask",
     "xboard",
     "xbench",
@@ -87,8 +88,11 @@ curios-wonder = { path = "curios-wonder" }
 curios-document = { path = "curios-document" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
+curios-cranelift = { path = "curios-cranelift" }
 curios = { path = "curios" }
 # The one pair that stays, and the exception is exactly as wide as its reason. These are two package names taken by two different members — `curios-js` and `xtask` — whose versions must move together, because the CLI support crate generates the glue for the runtime crate and any skew breaks the bindings. A per-crate pin cannot say "these two match"; a shared row is the only thing that can. Every other third-party dependency names its own pin in the one crate that owns it, as `documentation/design/one-crate-is-the-authority-for-one-external-concern.md` decides.
+# One row for the engine's two crates: `curios-runtime` takes the runtime, `curios-cranelift` the backend, and a `.cwasm` the second writes is read back by the first, which Wasmtime refuses across versions.
+wasmtime = { version = "47.0.3", default-features = false }
 wasm-bindgen = { version = "0.2.126" }
 wasm-bindgen-cli-support = { version = "0.2.126" }
 

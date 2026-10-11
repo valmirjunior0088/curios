@@ -26,3 +26,5 @@ js-sys = { version = "0.3.103" }
 
 [dev-dependencies]
 curios-runtime = { workspace = true, features = ["test-support"] }
+# What compiles the bridge module the suite drives by hand.
+curios-cranelift = { workspace = true }

@@ -30,14 +30,15 @@ curios-wonder = { workspace = true }
 curios-document = { workspace = true }
 curios-archive = { workspace = true }
 curios-binaryen = { workspace = true }
-# The switch that turns Cranelift on for the shared runtime engine, which is what gives `curios_runtime::precompile` its `precompile_module`. Named nowhere in this crate's code: wasmtime itself is `curios-runtime`'s to own.
-curios-runtime = { workspace = true, features = ["cranelift"] }
+curios-runtime = { workspace = true }
+# Cranelift behind the runtime's engine: what compiles a module, which the launcher never links. Wasmtime itself is named nowhere in this crate.
+curios-cranelift = { workspace = true }
 clap = { version = "4.6.1", features = ["derive"] }
 
 # The cross-stage suites in `src/tests` reach into individual pipeline stages; the product code never does.
 [dev-dependencies]
 # The runtime's test support too, for the replies no checked host gives that the guest's own checks of a reply are tested against.
-curios-runtime = { workspace = true, features = ["cranelift", "test-support"] }
+curios-runtime = { workspace = true, features = ["test-support"] }
 # The law table the generated grid states and holds at closed values.
 curios-algebra = { workspace = true }
 curios-cert = { workspace = true }

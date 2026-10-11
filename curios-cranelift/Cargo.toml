@@ -1,0 +1,15 @@
+[package]
+name = "curios-cranelift"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The compiling half of the Curios engine: Cranelift behind Wasmtime, linked by the compiler and never by the launcher"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The engine every module here is compiled on, and the machine-code value a compiled one is handed over as.
+curios-runtime = { workspace = true }
+# The backend, on the workspace's one row for Wasmtime, so the version that writes a `.cwasm` here is the version `curios-runtime` reads it back with. Compiling in parallel rides beside it, because only a build that compiles can use it: Wasmtime compiles a module's functions across a thread pool, and the artifact does not depend on how many threads produced it.
+wasmtime = { workspace = true, features = ["cranelift", "parallel-compilation"] }

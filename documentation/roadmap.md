@@ -12,7 +12,7 @@ Findings have no line here. Each is a bullet led by the finding in bold and nami
 
 When an item lands, its contracts go to the owning rustdoc, `README.md` and tests, its rationale and rejected alternatives to a design decision or the crate's `README.md`, and its line here becomes a checked summary; once nothing references the spec, the spec is deleted.
 
-- [x] Crate boundaries: a pipeline with no back end, a launcher with no Cranelift or Binaryen, the shared analyses apart from the certifier, and the emitter out of the prelude build
+- [x] Crate boundaries: a pipeline with no back end, a launcher with no Cranelift or Binaryen and the compiler behind its engine a crate of its own, the shared analyses apart from the certifier, and the emitter out of the prelude build
 - [x] [One crate is the authority for one external concern](design/one-crate-is-the-authority-for-one-external-concern.md), and [every gate step catches what no other step does](design/every-gate-step-catches-what-no-other-step-does.md)
 - [x] [A build script is compiled optimized](design/a-build-script-is-compiled-optimized.md), at the level of the debug or release build it serves, and [a test is compiled optimized, with its checks on](design/a-test-is-compiled-optimized-with-its-checks-on.md)
 - [x] The repository's steps as one table, `cargo xtask <subject> [action]`: the gate's order and what the check workflow must run are read off it, each tool's version is stated once, and a warning fails every build
