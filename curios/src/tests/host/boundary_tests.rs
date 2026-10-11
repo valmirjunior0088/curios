@@ -1,7 +1,7 @@
 //! What a program makes of a host's reply. A reply is a value of its wire type because whatever answered the row lowered it as one, so the program checks nothing where it receives one: the library reads the status as the outcome it names, whatever the status, and a failure's padding reaches no reader. Each reply here is written raw, past the native adapter, to show what that reading does with it.
 
 use {
-    crate::tests::compile,
+    crate::tests::{compile, typecheck},
     curios_abi::{HostOp, status},
     curios_runtime::{
         ForeignBindings, MockHost,
@@ -147,4 +147,21 @@ fn an_io_never_performed_asks_the_host_nothing() {
 
     run_raw(&compiled, host, vec![], ForeignBindings::empty()).expect("the program runs");
     assert_eq!(io.output(), b"done");
+}
+
+/// A row is private to the module that reads it, so no program reaches one unread: naming it is refused where the name is written.
+#[test]
+fn a_program_cannot_name_a_row_the_library_declares() {
+    let refusal = typecheck(
+        r#"
+        use /std/Handle/{handle_read};
+        /std/print("unread")
+        "#,
+    )
+    .expect_err("the row is private to `/std/Handle`");
+
+    assert!(
+        refusal.contains("private binding: handle_read"),
+        "{refusal}"
+    );
 }
