@@ -1,4 +1,4 @@
-//! Recursive heads: alpha-variant groups, a folded call compared against its unfolding, and the recurrence that is assumed rather than unfolded forever.
+//! Recursive heads: alpha-variant groups, two groups compared as binders, a folded call compared against its unfolding, the pair unfolded against itself once, and the recurrence that is assumed rather than unfolded forever.
 
 use {
     super::{History, convert_intrinsic, test_support::*},
@@ -218,6 +218,143 @@ fn two_groups_whose_bodies_part_are_apart() {
         ),
         Ok(false),
     );
+}
+
+/// `rec f : (n: Nat, x: Nat) -> Nat = (n, x) => match n | 0 => x | pred + 1 => f(pred, x); f`, or with its two parameters in the other order where `flipped`: one recursion on `n` that hands `x` back, over two orders of its arguments.
+fn handing_back(flipped: bool) -> Term {
+    let member = binder(110, "f");
+    let (n, x) = (binder(111, "n"), binder(112, "x"));
+    let (motive, pred, ih) = (binder(113, "m"), binder(114, "pred"), binder(115, "ih"));
+    let ordered = |n: Term, x: Term| match flipped {
+        false => [n, x],
+        true => [x, n],
+    };
+    let parameters = match flipped {
+        false => [(n, nat_type()), (x, nat_type())],
+        true => [(x, nat_type()), (n, nat_type())],
+    };
+
+    Term::rec(
+        [(
+            member,
+            Term::func_type(parameters.clone(), nat_type()),
+            Term::func(
+                parameters,
+                Term::nat_match(
+                    Term::free_var(&n),
+                    Some(&motive),
+                    nat_type(),
+                    Term::free_var(&x),
+                    &pred,
+                    &ih,
+                    Term::apply(
+                        Term::free_var(&member),
+                        ordered(Term::free_var(&pred), Term::free_var(&x)),
+                    ),
+                ),
+            ),
+        )],
+        Term::free_var(&member),
+    )
+}
+
+/// `rec g : (x: Nat, y: Nat, z: Nat) -> Nat = (x, y, z) => match z | 0 => 0 | pred + 1 => g(y, 0, pred); g`: a recursion that discards `x` at its first step and `y` at its second, so two calls apart in `x` are one after one unfolding, and two apart in `y` after two.
+fn shifting() -> Term {
+    let member = binder(120, "g");
+    let (x, y, z) = (binder(121, "x"), binder(122, "y"), binder(123, "z"));
+    let (motive, pred, ih) = (binder(124, "m"), binder(125, "pred"), binder(126, "ih"));
+    let parameters = [(x, nat_type()), (y, nat_type()), (z, nat_type())];
+
+    Term::rec(
+        [(
+            member,
+            Term::func_type(parameters.clone(), nat_type()),
+            Term::func(
+                parameters,
+                Term::nat_match(
+                    Term::free_var(&z),
+                    Some(&motive),
+                    nat_type(),
+                    nat(0),
+                    &pred,
+                    &ih,
+                    Term::apply(
+                        Term::free_var(&member),
+                        [Term::free_var(&y), nat(0), Term::free_var(&pred)],
+                    ),
+                ),
+            ),
+        )],
+        Term::free_var(&member),
+    )
+}
+
+/// A pair of calls is unfolded against itself once, and met again inside that unfolding it is apart. The first two are one recursion over two orders of its arguments, which no comparison as binders holds, one binder standing for both members where their calls take their arguments in two orders. Unfolded, they pose their two heads again one binder further in, and would again at every round, in a scope no round has met. The second two are two calls of one member that a second unfolding would reconcile: the first poses the same member against itself at two spines, and that is where it stops. What holds either pair is an induction, which a lemma states, and the calls one unfolding reconciles are still one. The elaborator's twin shares the name.
+///
+/// Mutation-checked: with a pair unfolded however often it is met, the budget, small here, runs out on the first two and the second two convert.
+#[test]
+fn a_pair_met_again_inside_its_own_unfolding_is_apart() {
+    let mut kernel = Kernel::new(10_000, SYNTAX);
+    let [a, b, c, d, n] = [
+        binder(92, "a"),
+        binder(93, "b"),
+        binder(94, "c"),
+        binder(95, "d"),
+        binder(96, "n"),
+    ]
+    .map(|local| {
+        kernel.assume(&local, &nat_type());
+        Term::free_var(&local)
+    });
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &nat_type(),
+            &Term::apply(handing_back(false), [n.clone(), a.clone()]),
+            &Term::apply(handing_back(true), [a.clone(), n.clone()]),
+        ),
+        Ok(false),
+    );
+
+    let call = |x: &Term, y: &Term| Term::apply(shifting(), [x.clone(), y.clone(), n.clone()]);
+    assert_eq!(
+        convert(&mut kernel, &nat_type(), &call(&a, &c), &call(&b, &d)),
+        Ok(false),
+    );
+    assert_eq!(
+        convert(&mut kernel, &nat_type(), &call(&a, &c), &call(&b, &c)),
+        Ok(true),
+    );
+}
+
+/// A verdict that rested on a pair left apart is not remembered. Two calls are apart inside their own unfolding and nowhere else, so a refusal that met one is true of the path it was reached on, and it is filed nowhere — where a comparison that met none is filed, and forgotten with the budget.
+///
+/// Mutation-checked: with a verdict filed whatever was left apart while deciding it, the two calls are remembered apart.
+#[test]
+fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
+    let mut kernel = Kernel::new(10_000, SYNTAX);
+    let (n, a) = (binder(92, "n"), binder(93, "a"));
+    kernel.assume(&n, &nat_type());
+    kernel.assume(&a, &nat_type());
+    let nat_ = nat_type();
+    let left = Term::apply(
+        handing_back(false),
+        [Term::free_var(&n), Term::free_var(&a)],
+    );
+    let right = Term::apply(handing_back(true), [Term::free_var(&a), Term::free_var(&n)]);
+
+    assert_eq!(convert(&mut kernel, &nat_, &left, &right), Ok(false));
+    assert_eq!(kernel.convert_hit(&nat_, &left, &right), None);
+
+    let ground = Term::type_ground();
+    let x = binder(40, "x");
+    let redex = Term::apply(
+        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
+        [nat_type()],
+    );
+    assert_eq!(convert(&mut kernel, &ground, &redex, &nat_type()), Ok(true));
+    assert_eq!(kernel.convert_hit(&ground, &redex, &nat_type()), Some(true));
 }
 
 /// Conversion keeps the constant function apart from the identity whatever index the local it mentions was minted at.

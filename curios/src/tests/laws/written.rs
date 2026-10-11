@@ -1280,18 +1280,24 @@ fn two_calls_of_a_recursive_function_that_differ_are_refused() {
     assert!(typecheck(&solved).is_err());
 }
 
-/// What the rows over two recursions are stated under: one recursion written with its step's sum both ways, and the second spelling again from another base case.
-const TWO_RECURSIONS: &str = "use /std/{Nat, Eq, Io};\nlet f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(k) + 2 end;\nlet h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + h(k) end;\nlet based(n: Nat) -> Nat = match n | 0 => 1 | k + 1 => 2 + based(k) end;";
+/// What the rows over two recursions are stated under: one recursion written with its step's sum both ways; the second spelling again from another base case, by another step, and in a group with a member more; one recursion over two orders of its arguments; and one whose first argument every call hands on.
+const TWO_RECURSIONS: &str = "use /std/{Nat, Eq, Io};\nlet f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(k) + 2 end;\nlet h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + h(k) end;\nlet based(n: Nat) -> Nat = match n | 0 => 1 | k + 1 => 2 + based(k) end;\nlet stepped(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 3 + stepped(k) end;\nlet paired(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + paired(k) end\nand _spare(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => _spare(k) end;\nlet over(n: Nat, x: Nat) -> Nat = match n | 0 => x | k + 1 => over(k, x) + 1 end;\nlet flipped(x: Nat, n: Nat) -> Nat = match n | 0 => x | k + 1 => 1 + flipped(x, k) end;\nlet halving(c: Nat, n: Nat) -> Nat = match n == 0 | true => 0 | false => halving(c, n / 2) end;";
 
 #[test]
 fn two_recursive_functions_whose_bodies_convert_are_one() {
     // `f` and `h` are one recursion whose step no spelling relates, `f(k) + 2` against `2 + h(k)`, and an unfolding of both poses the same two calls again under fresh binders. Each checker compares the two groups as the binders they are, at the head of two calls and bare, and unfolds neither. `based` parts from them in its base case, where the same comparison refuses it and the unfolding it is left to meets the two base cases.
+    //
+    // The rows after it are pairs the comparison does not hold and whose unfolding poses their two heads again: each checker unfolds the pair once and leaves it apart where it meets it inside that unfolding. `stepped` parts from `f` in its step. `paired` is `h` again in a group with a member more, which no position pairs with `f`'s. `over` and `flipped` are one recursion over two orders of its arguments, one binder standing for both members where their calls take their arguments in two orders. And two calls of `halving` part in an argument every call hands on.
     let name = "two recursive functions";
     let rows = [
         ("n: Nat", "Eq()(f(n), h(n))"),
         ("", "Eq()(f, h)"),
         ("n: Nat", "Eq()(f(n), based(n))"),
         ("", "Eq()(f, based)"),
+        ("n: Nat", "Eq()(f(n), stepped(n))"),
+        ("n: Nat", "Eq()(f(n), paired(n))"),
+        ("n: Nat, x: Nat", "Eq()(over(n, x), flipped(x, n))"),
+        ("x: Nat, y: Nat", "Eq()(halving(x, y), halving(2, y))"),
     ]
     .map(|(binders, claim)| (binders.to_owned(), claim.to_owned()));
     if let Err(failures) = closes(TWO_RECURSIONS, &rows[..2]) {

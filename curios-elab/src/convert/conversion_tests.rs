@@ -565,6 +565,103 @@ fn two_groups_whose_bodies_part_are_apart() {
     );
 }
 
+/// `rec f : (n: Nat, x: Nat) -> Nat = (n, x) => match n | 0 => x | pred + 1 => f(pred, x); f`, or with its two parameters in the other order where `flipped`: one recursion on `n` that hands `x` back, over two orders of its arguments.
+fn handing_back(context: &mut Context, flipped: bool) -> Term {
+    let member = context.fresh(Some("f"));
+    let (n, x) = (context.fresh(Some("n")), context.fresh(Some("x")));
+    let motive = context.fresh(Some("m"));
+    let pred = context.fresh(Some("pred"));
+    let ih = context.fresh(Some("ih"));
+    let ordered = |n: Term, x: Term| match flipped {
+        false => [n, x],
+        true => [x, n],
+    };
+    let parameters = match flipped {
+        false => [(n, nat_type()), (x, nat_type())],
+        true => [(x, nat_type()), (n, nat_type())],
+    };
+
+    Term::rec(
+        [(
+            member,
+            Term::func_type(parameters.clone(), nat_type()),
+            Term::func(
+                parameters,
+                Term::nat_match(
+                    Term::free_var(&n),
+                    Some(&motive),
+                    nat_type(),
+                    Term::free_var(&x),
+                    &pred,
+                    &ih,
+                    Term::apply(
+                        Term::free_var(&member),
+                        ordered(Term::free_var(&pred), Term::free_var(&x)),
+                    ),
+                ),
+            ),
+        )],
+        Term::free_var(&member),
+    )
+}
+
+/// `rec g : (x: Nat, y: Nat, z: Nat) -> Nat = (x, y, z) => match z | 0 => 0 | pred + 1 => g(y, 0, pred); g`: a recursion that discards `x` at its first step and `y` at its second, so two calls apart in `x` are one after one unfolding, and two apart in `y` after two.
+fn shifting(context: &mut Context) -> Term {
+    let member = context.fresh(Some("g"));
+    let (x, y, z) = (
+        context.fresh(Some("x")),
+        context.fresh(Some("y")),
+        context.fresh(Some("z")),
+    );
+    let motive = context.fresh(Some("m"));
+    let pred = context.fresh(Some("pred"));
+    let ih = context.fresh(Some("ih"));
+    let parameters = [(x, nat_type()), (y, nat_type()), (z, nat_type())];
+
+    Term::rec(
+        [(
+            member,
+            Term::func_type(parameters.clone(), nat_type()),
+            Term::func(
+                parameters,
+                Term::nat_match(
+                    Term::free_var(&z),
+                    Some(&motive),
+                    nat_type(),
+                    nat(0),
+                    &pred,
+                    &ih,
+                    Term::apply(
+                        Term::free_var(&member),
+                        [Term::free_var(&y), nat(0), Term::free_var(&pred)],
+                    ),
+                ),
+            ),
+        )],
+        Term::free_var(&member),
+    )
+}
+
+/// A pair of calls is unfolded against itself once, and met again inside that unfolding it is apart. The first two are one recursion over two orders of its arguments, which no comparison as binders holds; unfolded, they pose their two heads again one binder further in. The second two are two calls of one member that a second unfolding would reconcile, and the first poses the member against itself at two spines, which is where it stops. The calls one unfolding reconciles are still one. The kernel's twin shares the name.
+///
+/// Mutation-checked: with a pair unfolded however often it is met, the first two are held, a goal met again being assumed.
+#[test]
+fn a_pair_met_again_inside_its_own_unfolding_is_apart() {
+    let mut context = context();
+    let [a, b, c, d, n] =
+        ["a", "b", "c", "d", "n"].map(|hint| Term::free_var(&context.fresh(Some(hint))));
+
+    let this = Term::apply(handing_back(&mut context, false), [n.clone(), a.clone()]);
+    let that = Term::apply(handing_back(&mut context, true), [a.clone(), n.clone()]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+
+    let shifting = shifting(&mut context);
+    let call =
+        |x: &Term, y: &Term| Term::apply(shifting.clone(), [x.clone(), y.clone(), n.clone()]);
+    assert_eq!(conv(&mut context, &call(&a, &c), &call(&b, &d)), Ok(false));
+    assert_eq!(conv(&mut context, &call(&a, &c), &call(&b, &c)), Ok(true));
+}
+
 #[test]
 fn growing_recursive_unfolding_spends_the_budget() {
     // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, which a budget well under the shipped default shows as surely and sooner.

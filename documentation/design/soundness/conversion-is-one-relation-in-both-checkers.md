@@ -28,6 +28,7 @@
 - **Eta by a literal, where no type directs it**: taken against every term whose head shows no type, refused at a goal whose type is a former other than the literal's own, and fired by no literal that holds no field of data — the tuple with no field, and a struct literal whose every field is a proof.
 - **A child at the type its position has**: a spine's arguments under every head a lookup types, a family's parameters and indices, a struct's fields and a constructor's payload, an intrinsic's operands; and a binder at the type its position gives it, an arm's at its constructor's telescope and a motive's at its family's indices.
 - **A lookup types every side that is no literal of a function or a record**: a neutral by its head, a stuck elimination by its result at its scrutinee, a constructor's value by its declaration. It is a lookup, a substitution and a reduction, never a conversion.
+- **Two folded calls every rule above leaves apart, by one unfolding of both, last**: their two heads a pair unfolded against itself once, and apart where it is met again inside that unfolding, whatever its spines ([Conversion recurrence](conversion-recurrence.md)).
 
 The classifiers the two share — what a type former is, which heads show a type — are stated once, in `curios-core`, each a `match` a new former has to answer.
 

@@ -4,19 +4,21 @@
 //!
 //! The rules, in the order they are tried:
 //!
-//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **One definition's spines.** Two applications of one definition are compared argument by argument before either is unfolded; agreeing spines decide the goal and disagreeing ones decide nothing. 3. **Two groups as binders.** The same member of two recursive groups is one where the groups are: member for member their types and their bodies convert under one shared set of binders, with no member unfolded. 4. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type with a field both are projected and compared componentwise. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. The Σ with no field has no eta, and a nominal struct has none by its type — its literal opens one, where it holds a field that is no proof — so no type but a proposition makes two neutrals one: that a type has one inhabitant by its shape is read nowhere, since a substitution can make it so of a type it was not so of. 5. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children.
+//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **One definition's spines.** Two applications of one definition are compared argument by argument before either is unfolded; agreeing spines decide the goal and disagreeing ones decide nothing. 3. **Two groups as binders.** The same member of two recursive groups is one where the groups are: member for member their types and their bodies convert under one shared set of binders, with no member unfolded. 4. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type with a field both are projected and compared componentwise. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. The Σ with no field has no eta, and a nominal struct has none by its type — its literal opens one, where it holds a field that is no proof — so no type but a proposition makes two neutrals one: that a type has one inhabitant by its shape is read nowhere, since a substitution can make it so of a type it was not so of. 5. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children. 6. **One unfolding.** Two folded calls structure leaves apart are opened one definitional step, both of them, and compared again, once for their two heads on a path.
 //!
 //! # Termination, and the recurrence rule
 //!
 //! Two folded recursive calls can unfold forever without ever disagreeing — that is what an equirecursive type is. Conversion therefore keeps a history of the goals it is already inside, and a goal that recurs is *assumed to hold*. This is the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling goal before the cycle closes.
 //!
-//! That rule is where a conversion checker is most likely to be unsound, and the danger is precise: a history hit on two goals that are *not* the same goal accepts terms that are not equal. The guard here is that an entry records the local context alongside the goal, and that every binder in scope is renamed to its position before the entry is made. Two entries collide only when the same comparison is being made under binders of the same types in the same order — which is the same comparison.
+//! A chain of unfoldings that poses no goal twice is ended by another rule: a pair of heads is unfolded against itself once, and the same two met again inside that unfolding are apart (`History::unfold`). Each round of such a chain opens a binder no round has met, so its goals never recur; and a second unfolding decides nothing the first did not, so withholding it refuses only what an induction would hold.
+//!
+//! The recurrence rule is where a conversion checker is most likely to be unsound, and the danger is precise: a history hit on two goals that are *not* the same goal accepts terms that are not equal. The guard here is that an entry records the local context alongside the goal, and that every binder in scope is renamed to its position before the entry is made. Two entries collide only when the same comparison is being made under binders of the same types in the same order — which is the same comparison.
 //!
 //! `curios-elab`'s conversion checker canonicalizes differently: it renames the binders *it* minted, in mint order, and does not key on the context at all. For a strictly nested walk like this one the two orderings coincide, since the binders in scope at a goal are exactly the path to it. The elaborator's walk is not strictly nested — it has a worklist and it parks goals — so whether the two schemes agree there is a genuinely open question, recorded as such in `documentation/design/soundness/conversion-recurrence.md`. This module deliberately does not inherit the answer. For one population it is answered: two instances of one recursive group would collide under the elaborator's key where this one never could, and each checker decides such a pair by its levels instead — `rec_instances` here, the level identification there — so neither reaches its recurrence rule on it.
 //!
 //! # What is remembered
 //!
-//! A goal decided with no goal in progress assumed is a fact, and its verdict is kept for as long as what it read of the scope stands (`Memos`): two terms that are equal graphs built apart reach each pair of their nodes along every path, and remembered by pair each is compared once. A goal whose deciding met one in progress is not kept, whichever way it went: accepted, it may hold only by the assumption; refused, it may have been refused by a classing that left two atoms apart because their comparison was in progress. `History::assumed` counts both, and a verdict is filed only where the count stood still across it. The sets are plain, with no closure taken over accepted pairs, for the reason Lean's kernel gives for its own: a closure's result would depend on the order goals were met in.
+//! A goal decided with no goal in progress assumed is a fact, and its verdict is kept for as long as what it read of the scope stands (`Memos`): two terms that are equal graphs built apart reach each pair of their nodes along every path, and remembered by pair each is compared once. A goal whose deciding met one in progress is not kept, whichever way it went: accepted, it may hold only by the assumption; refused, it may have been refused by a classing that left two atoms apart because their comparison was in progress. A refusal that left a pair of heads apart inside its own unfolding is not kept either, the pair being one, perhaps, where it is met outside it. `History::assumed` counts all three, and a verdict is filed only where the count stood still across it. The sets are plain, with no closure taken over accepted pairs, for the reason Lean's kernel gives for its own: a closure's result would depend on the order goals were met in.
 //!
 //! # Where a child has no type of its own, and why refusing is the safe direction
 //!
@@ -70,8 +72,10 @@ pub fn convert(kernel: &mut Kernel, type_: &Term, this: &Term, that: &Term) -> R
 /// A goal is stored with the types of the binders in scope at it, and with every one of those binders renamed to its position. Without the rename, the same comparison reached on two rounds of an unfolding cycle differs in nothing but the identities of the binders opened on the way, and the cycle is never recognized; without the context, two different comparisons that happen to be spelled alike would be conflated, which is the unsound direction.
 #[derive(Default)]
 struct History {
+    /// The pairs of heads being unfolded against each other on the current path, innermost last ([`History::unfold`]).
+    unfolding: Vec<(Term, Term)>,
     seen: HashSet<Goal>,
-    /// How many times a goal was met while already in progress — and so assumed, or in a classing left apart. A verdict reached while this moved rests on the goals that were in progress then, and is a fact about that path alone; one reached while it stood still rests on none of them, and is what [`compare`] remembers.
+    /// How many times a goal was met while already in progress — and so assumed, or in a classing left apart — or a pair of heads was met inside its own unfolding and left apart. A verdict reached while this moved rests on the goals that were in progress then, and is a fact about that path alone; one reached while it stood still rests on none of them, and is what [`compare`] remembers.
     assumed: u64,
 }
 
@@ -114,13 +118,37 @@ impl History {
     fn leave(&mut self, goal: &Goal) {
         self.seen.remove(goal);
     }
+
+    /// Record that the heads `this` and `that` are being unfolded against each other, until [`History::refold`]: `false` where the pair is being unfolded already on this path, whichever side each was on.
+    ///
+    /// **A pair of calls is unfolded against itself once.** Two folded calls their heads and spines do not decide are opened one definitional step and compared again, and where that comparison poses the same two heads, a second unfolding reproduces the first without end. The pair is apart there: what it would take to hold it is an induction, which a lemma states. It only withholds an unfolding, so it accepts nothing.
+    ///
+    /// **Apart there is a verdict of the path**, the pair being one, perhaps, where it is met outside its own unfolding. So it is counted with the goals met again, and [`compare`] files no verdict reached across it.
+    fn unfold(&mut self, this: &Term, that: &Term) -> bool {
+        let unfolding = self.unfolding.iter().any(|(held_this, held_that)| {
+            (held_this == this && held_that == that) || (held_this == that && held_that == this)
+        });
+        if unfolding {
+            self.assumed += 1;
+
+            return false;
+        }
+        self.unfolding.push((this.clone(), that.clone()));
+
+        true
+    }
+
+    /// Release the pair the last [`History::unfold`] recorded, its comparison having returned.
+    fn refold(&mut self) {
+        self.unfolding.pop();
+    }
 }
 
 /// Compare `this` and `that` at `type_`, under the binders currently in scope.
 ///
 /// Every goal entered stays in `seen` until this call returns, because retry *N+1* is reached from inside retry *N* and both are in progress at once. The call stack is what records that, and unwinding it retires the innermost goal first.
 ///
-/// An unfolding retry recurses back into here, and what bounds that chain is the budget spent on entry rather than a count of how deep it has gone — a constant standing in for the call stack is what [`recurse`] makes unnecessary. One chain the budget could not bound in practice is closed at its head instead: two instances of one recursive group at two universe instances reproduce themselves under every unfolding, and [`rec_instances`] makes such a pair a verdict before any retry is granted. A family's former is the member that reproduces nothing, and a refusal of one is left to the nodes it builds ([`projects_a_former`]).
+/// An unfolding retry recurses back into here, and what bounds that chain is that a pair of heads is unfolded against itself once ([`History::unfold`]), the budget spent on entry standing behind it — a constant standing in for the call stack is what [`recurse`] makes unnecessary. One chain is closed at its head instead: two instances of one recursive group at two universe instances reproduce themselves under every unfolding, and [`rec_instances`] makes such a pair a verdict before any retry is granted. A family's former is the member that reproduces nothing, and a refusal of one is left to the nodes it builds ([`projects_a_former`]).
 fn compare(
     kernel: &mut Kernel,
     history: &mut History,
@@ -174,7 +202,7 @@ fn compare(
         };
 
         history.leave(&goal);
-        // Remembered where deciding it met no goal in progress, and never where it ran the budget out, which is no verdict.
+        // Remembered where deciding it met no goal in progress and left no pair apart inside its own unfolding, and never where it ran the budget out, which is no verdict.
         if let Ok(verdict) = &outcome
             && history.assumed == assumed
         {
@@ -202,21 +230,41 @@ fn by_the_type(
         Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
             eta_tuple(kernel, history, telescope.clone(), this, that)
         }
-        _ => {
-            let forced_this = kernel.reduce_forced(this.clone())?;
-            let forced_that = kernel.reduce_forced(that.clone())?;
-
-            // A side that was a redex as posed is a neutral a lookup types only now.
-            if matches!(&*at, Subterm::Sort(..))
-                && (forced_this != *this || forced_that != *that)
-                && by_their_own_type(kernel, history, &forced_this, &forced_that)?
-            {
-                return Ok(true);
+        // Two bare members are forced from here on, which unfolds them against each other: a pair, unfolded once as any other is.
+        _ if this.as_rec_proj().is_some() && that.as_rec_proj().is_some() => {
+            match history.unfold(this, that) {
+                true => {
+                    let outcome = forced(kernel, history, &at, this, that);
+                    history.refold();
+                    outcome
+                }
+                false => Ok(false),
             }
-
-            structural(kernel, history, &at, &forced_this, &forced_that)
         }
+        _ => forced(kernel, history, &at, this, that),
     }
+}
+
+/// A goal no eta directs, at `at`, its type in weak-head normal form: both sides forced, and their heads compared.
+fn forced(
+    kernel: &mut Kernel,
+    history: &mut History,
+    at: &Term,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, Error> {
+    let forced_this = kernel.reduce_forced(this.clone())?;
+    let forced_that = kernel.reduce_forced(that.clone())?;
+
+    // A side that was a redex as posed is a neutral a lookup types only now.
+    if matches!(&**at, Subterm::Sort(..))
+        && (forced_this != *this || forced_that != *that)
+        && by_their_own_type(kernel, history, &forced_this, &forced_that)?
+    {
+        return Ok(true);
+    }
+
+    structural(kernel, history, at, &forced_this, &forced_that)
 }
 
 /// What a type directs between two terms, asked of the type a lookup reads where the position handed none: two terms a lookup types at one proposition are equal.
@@ -1002,7 +1050,7 @@ fn struct_eta(
 
 /// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld, and compare the results. A refusal when neither side has a folded recursive spelling to open.
 ///
-/// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*, so its goals never recur into `seen` and the coinductive rule cannot close the chain; what stops an unproductive pair is [`compare`]'s budget, spent once per entry, rather than a count of how deep the retries have gone. One pair the budget never reaches is refused at the door: two instances of one group at unequal levels unfold to the same two instances, and every round adds two opaque binders to a context the history key copies whole, so the walk would grow until the host died with the budget barely spent. [`rec_instances`] answers that pair before and after the unfolding, and a retry is granted only to heads it does not decide.
+/// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*, so its goals never recur into `seen` and the coinductive rule cannot close the chain; what stops an unproductive pair is that a pair of heads is unfolded against itself once ([`History::unfold`]): where both sides are opened, the two heads are recorded for as long as the unfoldings are compared, and the same two met again there are apart. One pair is refused at the door: two instances of one group at unequal levels unfold to the same two instances, and [`rec_instances`] answers them before and after the unfolding, so a retry is granted only to heads it does not decide.
 fn unfolded_retry(
     kernel: &mut Kernel,
     history: &mut History,
@@ -1020,6 +1068,8 @@ fn unfolded_retry(
     match (left, right) {
         (None, None) => Ok(false),
         (left, right) => {
+            // Both sides opened is a pair unfolded against itself; one side opened against a term that has nothing to open is no pair, and ends where that term does.
+            let pair = left.is_some() && right.is_some();
             let left = left.unwrap_or_else(|| this.clone());
             let right = right.unwrap_or_else(|| that.clone());
 
@@ -1028,7 +1078,16 @@ fn unfolded_retry(
                 return Ok(false);
             }
 
-            ground(kernel, history, &left, &right)
+            if !pair {
+                return ground(kernel, history, &left, &right);
+            }
+            if !history.unfold(applied_head(this), applied_head(that)) {
+                return Ok(false);
+            }
+            let outcome = ground(kernel, history, &left, &right);
+            history.refold();
+
+            outcome
         }
     }
 }

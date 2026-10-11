@@ -10,6 +10,9 @@ pub(crate) use neutral::*;
 mod occurrence;
 use occurrence::*;
 
+mod pairs;
+pub(crate) use pairs::*;
+
 mod sort;
 pub(crate) use sort::*;
 
@@ -102,12 +105,30 @@ pub(crate) fn same_uncommitted(
     this: &Term,
     that: &Term,
 ) -> Result<bool, ReduceError> {
+    same_uncommitted_inside(context, &Pairs::default(), this, that)
+}
+
+/// [`same_uncommitted`] for a pair asked about inside the unfolding of `pairs`: what a comparison asks of a part of the problem it has in hand, a classing's atoms among them.
+pub(crate) fn same_uncommitted_inside(
+    context: &mut Context,
+    pairs: &Pairs,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, ReduceError> {
     // Hand-paired rather than bracketed by a closure, as the witness probe's is: this sits on conversion's recursion.
     let mark = context.solution_mark();
     let solutions = context.solutions_committed();
     let universes = context.universes().state_token();
     let outer = context.withhold(Some(false));
-    let converts = convert(context, &Term::type_ground(), this, that);
+    let converts = convert_under(
+        context,
+        &Binders::default(),
+        pairs,
+        &Term::type_ground(),
+        this,
+        that,
+    )
+    .map(|outcome| matches!(outcome, Outcome::Converts));
     let withheld = context.withhold(outer) == Some(true);
     let committed = context.solutions_committed() != solutions
         || !context
@@ -158,13 +179,21 @@ pub(crate) fn convert_outcome(
     this: &Term,
     that: &Term,
 ) -> Result<Outcome, ReduceError> {
-    convert_under(context, &Binders::default(), type_, this, that)
+    convert_under(
+        context,
+        &Binders::default(),
+        &Pairs::default(),
+        type_,
+        this,
+        that,
+    )
 }
 
-/// [`convert_outcome`] for a pair posed under `binders`: a comparison conversion makes of its own while it is under binders it opened.
+/// [`convert_outcome`] for a pair posed under `binders` and inside the unfolding of `pairs`: a comparison conversion makes of its own, of a part of the problem it has in hand.
 pub(crate) fn convert_under(
     context: &mut Context,
     binders: &Binders,
+    pairs: &Pairs,
     type_: &Term,
     this: &Term,
     that: &Term,
@@ -174,6 +203,7 @@ pub(crate) fn convert_under(
         this: this.clone(),
         that: that.clone(),
         binders: binders.clone(),
+        pairs: pairs.clone(),
         relation: Relation::Equal,
     };
 
@@ -192,6 +222,7 @@ pub(crate) fn subsume_outcome(
         this: lower.clone(),
         that: upper.clone(),
         binders: Binders::default(),
+        pairs: Pairs::default(),
         relation: Relation::Below,
     };
 
@@ -245,6 +276,8 @@ pub(crate) struct Problem {
     pub that: Term,
     /// The binders this problem is posed under, which a retry of it is posed under too.
     pub binders: Binders,
+    /// The pairs of heads it stands inside the unfolding of, which a retry of it stands inside too.
+    pub pairs: Pairs,
     /// The relation it is asked at, which a problem that waits keeps: one parked at below resumes at below.
     pub relation: Relation,
 }
@@ -274,6 +307,8 @@ pub(crate) struct Convert {
     placeholders: Vec<Term>,
     // The binders the problem in hand is posed under, and those this step has opened since: what a problem enqueued now is posed under.
     binders: Binders,
+    // The pairs of heads the problem in hand stands inside the unfolding of, and the one this step has unfolded since: what a problem enqueued now stands inside.
+    pairs: Pairs,
     // The level pairs the levels-only shortcut left to a curried head's type, in the order it met them. Nothing compares the two levels of one where the run goes on to hold its sides one, so each is a weak equation then and nothing where it does not.
     apart: Vec<(Level, Level)>,
     // The extent of the term this run was asked for, where it was asked for one: what a level bound raised at below reports.
@@ -364,10 +399,19 @@ impl Convert {
     }
 
     fn new(problem: Problem, extent: Option<Extent>) -> Self {
+        let mut run = Self::under(problem.binders.clone(), problem.pairs.clone(), extent);
+        run.pending.push_back(problem);
+
+        run
+    }
+
+    /// A run with nothing posed yet: what it is handed to compare is posed under `binders` and inside `pairs`.
+    fn under(binders: Binders, pairs: Pairs, extent: Option<Extent>) -> Self {
         Self {
             history: HashSet::new(),
-            binders: problem.binders.clone(),
-            pending: VecDeque::from([problem]),
+            binders,
+            pairs,
+            pending: VecDeque::new(),
             blocked: Vec::new(),
             progress: false,
             declined: None,
@@ -529,6 +573,7 @@ impl Convert {
             this,
             that,
             binders: self.binders.clone(),
+            pairs: self.pairs.clone(),
             relation,
         });
     }
@@ -728,34 +773,31 @@ impl Convert {
         Ok(())
     }
 
-    /// Whether two projections of one index of two recursive groups are one, the groups compared as the binders they are ([`Self::compare_rec`]): member for member their types and their bodies, every member of both opened at one shared label, so no member is unfolded and nothing recurs. It is asked in a run of its own, so a pair it does not hold leaves nothing behind and goes on to what its caller does next, and only where neither group binds a universe of its own, as the kernel asks it.
+    /// What two recursive groups are, compared as the binders they are ([`Self::compare_rec`]): member for member their types and their bodies, every member of both opened at one shared label, so no member is unfolded and nothing recurs. It is asked in a run of its own, under the binders and inside the pairs of the problem that asks, so a pair it does not hold leaves nothing behind and goes on to what its caller does next, and only where neither group binds a universe of its own, as the kernel asks it. A run that ends blocked has decided nothing, and says so: its caller neither holds the pair nor refuses it on that.
     fn two_groups(
         context: &mut Context,
         binders: &Binders,
-        this: &Term,
-        that: &Term,
-    ) -> Result<bool, ReduceError> {
-        let (Some((this_group, _)), Some((that_group, _))) =
-            (this.as_rec_proj(), that.as_rec_proj())
-        else {
-            return Ok(false);
-        };
-        if this_group.universe_context().width() != 0 || that_group.universe_context().width() != 0
+        pairs: &Pairs,
+        this: &Rec,
+        that: &Rec,
+    ) -> Result<Outcome, ReduceError> {
+        if this.group.universe_context().width() != 0 || that.group.universe_context().width() != 0
         {
-            return Ok(false);
+            return Ok(Outcome::Mismatch(None));
         }
 
         let mark = context.solution_mark();
-        let held = matches!(
-            convert_under(context, binders, &Term::type_ground(), this, that)?,
-            Outcome::Converts
-        );
-        match held {
-            true => context.end_solutions(mark),
-            false => context.rollback_solutions(mark),
+        let mut run = Self::under(binders.clone(), pairs.clone(), None);
+        let outcome = match run.compare_rec(context, this.clone(), that.clone())? {
+            true => run.outcome(context)?,
+            false => Outcome::Mismatch(None),
+        };
+        match &outcome {
+            Outcome::Converts => context.end_solutions(mark),
+            Outcome::Mismatch(_) | Outcome::Blocked(_) => context.rollback_solutions(mark),
         }
 
-        Ok(held)
+        Ok(outcome)
     }
 
     /// The first-order approximation for two applications of one global definition, taken on the raw spellings before either side is reduced. Reduction would unfold a `let`-defined head into its body on both sides — `trim(?t)` becomes a `match` stuck on `?t` — and lose the equation the spines state outright, `?t := X`. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds; this is the same rule for a head that does not survive, so what a program's unification does cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and the corpus fixture's `/big_nat/trim` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value. The attempt is bracketed: a solution it committed on the way to a verdict it did not reach is rolled back, so the fallthrough starts where the attempt did.
@@ -766,6 +808,7 @@ impl Convert {
     fn compare_same_global_apply(
         context: &mut Context,
         binders: &Binders,
+        pairs: &Pairs,
         this_term: &Term,
         that_term: &Term,
     ) -> Result<bool, ReduceError> {
@@ -816,6 +859,7 @@ impl Convert {
                 convert_under(
                     context,
                     binders,
+                    pairs,
                     &Term::type_ground(),
                     &this.head,
                     &that.head
@@ -839,7 +883,7 @@ impl Convert {
                 .and_then(|types| types.get(index).cloned())
                 .unwrap_or_else(Term::type_ground);
             converts = matches!(
-                convert_under(context, binders, &param_type, &a.term, &b.term)?,
+                convert_under(context, binders, pairs, &param_type, &a.term, &b.term)?,
                 Outcome::Converts
             );
         }
@@ -890,14 +934,20 @@ impl Convert {
                 .as_ref()
                 .and_then(|types| types.get(index).cloned())
                 .unwrap_or_else(Term::type_ground);
-            match convert_under(context, &self.binders, &param_type, a, b)? {
+            match convert_under(context, &self.binders, &self.pairs, &param_type, a, b)? {
                 Outcome::Converts => {}
                 Outcome::Blocked(_) => blocked = true,
                 Outcome::Mismatch(_) => {
+                    // A pair of calls is unfolded against itself once: inside its own unfolding it is apart, since unfolded again it poses itself again.
+                    if self.pairs.hold(&this.head, &that.head) {
+                        return Ok(false);
+                    }
+                    let pairs = self.pairs.unfolding(this.head.clone(), that.head.clone());
                     let this = unfold_rec_apply(context, this)?;
                     let that = unfold_rec_apply(context, that)?;
                     return match (this, that) {
                         (Some(this), Some(that)) => {
+                            self.pairs = pairs;
                             self.enqueue(type_, this, that);
                             Ok(true)
                         }
@@ -2497,11 +2547,13 @@ impl Convert {
             this,
             that,
             binders: posed,
+            pairs: posed_pairs,
             relation,
         }) = self.dequeue(context)?
         {
             self.declined = None;
             self.binders = posed.clone();
+            self.pairs = posed_pairs.clone();
             // Reflexivity needs no evaluation. In particular, do not force an identical folded recursive computation merely because it sits under a strict intrinsic operation.
             if this == that {
                 continue;
@@ -2544,7 +2596,8 @@ impl Convert {
             let that_raw = that.clone();
 
             // Two applications of one global definition are decided by their spines first, on these raw spellings — see `compare_same_global_apply` for why this must precede the reduction below.
-            if Self::compare_same_global_apply(context, &posed, &this_raw, &that_raw)? {
+            if Self::compare_same_global_apply(context, &posed, &posed_pairs, &this_raw, &that_raw)?
+            {
                 continue;
             }
 
@@ -2563,6 +2616,7 @@ impl Convert {
                 this: this_raw.clone(),
                 that: that_raw.clone(),
                 binders: posed.clone(),
+                pairs: posed_pairs.clone(),
                 relation,
             };
 
@@ -2580,7 +2634,14 @@ impl Convert {
                         let mut entrywise = true;
                         for (a, b) in this_m.spine.iter().zip(that_m.spine.iter()) {
                             if !matches!(
-                                convert_under(context, &posed, &Term::type_ground(), a, b)?,
+                                convert_under(
+                                    context,
+                                    &posed,
+                                    &posed_pairs,
+                                    &Term::type_ground(),
+                                    a,
+                                    b
+                                )?,
                                 Outcome::Converts
                             ) {
                                 entrywise = false;
@@ -2638,7 +2699,7 @@ impl Convert {
 
             // Where the problem's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand — a stuck elimination's scrutinee, a projection's head. What a type directs between two neutrals is then asked of the type a lookup gives both sides, as the kernel asks it.
             if matches!(&*type_, Subterm::Sort(..))
-                && by_their_own_type(context, &posed, &this, &that)?
+                && by_their_own_type(context, &posed, &posed_pairs, &this, &that)?
             {
                 continue;
             }
@@ -2648,6 +2709,7 @@ impl Convert {
                 this: this.clone(),
                 that: that.clone(),
                 binders: posed.clone(),
+                pairs: posed_pairs.clone(),
                 relation,
             };
 
@@ -2689,7 +2751,7 @@ impl Convert {
             if !matches!(
                 (&*this, &*that),
                 (Subterm::Intrinsic(_), Subterm::Intrinsic(_))
-            ) && connectives_convert(context, &this, &that)?
+            ) && connectives_convert(context, &posed_pairs, &this, &that)?
             {
                 continue;
             }
@@ -2795,13 +2857,28 @@ impl Convert {
                     }
 
                     // The same member of two groups whose skeletons part is one member where the groups are one as binders, and its two calls are then their spines. Sufficient and never necessary: a pair the comparison does not hold goes on to the delta step below.
-                    if instances == Some(LevelQuestion::Distinct)
-                        && this_a.arguments.len() == that_a.arguments.len()
-                        && Self::two_groups(context, &self.binders, &this_a.head, &that_a.head)?
-                    {
+                    let groups = match (&*this_a.head, &*that_a.head) {
+                        (Subterm::Rec(this_rec), Subterm::Rec(that_rec))
+                            if instances == Some(LevelQuestion::Distinct)
+                                && this_a.arguments.len() == that_a.arguments.len() =>
+                        {
+                            Some(Self::two_groups(
+                                context,
+                                &self.binders,
+                                &self.pairs,
+                                this_rec,
+                                that_rec,
+                            )?)
+                        }
+                        _ => None,
+                    };
+                    if matches!(groups, Some(Outcome::Converts)) {
                         self.compare_spines(context, this_a, that_a)?;
                         continue;
                     }
+                    // Whether an unsolved metavariable is what keeps a rule above from deciding the two heads: that they are one member, or one as binders.
+                    let undecided = instances == Some(LevelQuestion::Blocked)
+                        || matches!(groups, Some(Outcome::Blocked(_)));
 
                     match (this_head, that_head) {
                         (Some(this), Some(that))
@@ -2827,12 +2904,28 @@ impl Convert {
                             match (this_unfolded, that_unfolded) {
                                 (None, None) => self.compare_apply(context, this_a, that_a)?,
                                 (this_unfolded, that_unfolded) => {
-                                    let this = this_unfolded
-                                        .unwrap_or_else(|| Subterm::Apply(this_a).into());
-                                    let that = that_unfolded
-                                        .unwrap_or_else(|| Subterm::Apply(that_a).into());
-                                    self.enqueue(type_.clone(), this, that);
-                                    true
+                                    // Both opened is a pair unfolded against itself, once: inside its own unfolding it is apart, since unfolded again it poses itself again. Where a metavariable keeps its heads undecided it waits for that instead, as the question of its levels does: a pair refused there would be refused by the order its metavariables were solved in.
+                                    let pair = this_unfolded.is_some() && that_unfolded.is_some();
+                                    let nested =
+                                        pair && self.pairs.hold(&this_a.head, &that_a.head);
+                                    if nested && undecided {
+                                        self.history.remove(&key);
+                                        self.blocked.push(raw_problem(&type_));
+                                        continue;
+                                    }
+                                    if pair && !nested {
+                                        self.pairs = self
+                                            .pairs
+                                            .unfolding(this_a.head.clone(), that_a.head.clone());
+                                    }
+                                    if !nested {
+                                        let this = this_unfolded
+                                            .unwrap_or_else(|| Subterm::Apply(this_a).into());
+                                        let that = that_unfolded
+                                            .unwrap_or_else(|| Subterm::Apply(that_a).into());
+                                        self.enqueue(type_.clone(), this, that);
+                                    }
+                                    !nested
                                 }
                             }
                         }
@@ -2891,30 +2984,60 @@ impl Convert {
                 }
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     match (this.as_proj(), that.as_proj()) {
-                        // Two projections at *different* indices are still two `rec` blocks, but comparing their tails would only report that 0 is not 1. What is being asked is whether the members they select agree, so compare those.
-                        (Some(this_index), Some(that_index)) if this_index != that_index => {
-                            self.enqueue(
-                                type_,
-                                this.group.member_body(this_index),
-                                that.group.member_body(that_index),
-                            );
-                            true
-                        }
-                        // Two projections of one group at two universe instances are a level question before they are two groups: the member-wise comparison would commit the levels through the member types' sorts whatever the bodies then decide, an over-commitment the kernel's rule never makes, so the levels are identified only once nothing but levels keeps the sides apart, refused as the kernel refuses them, and parked while an unsolved metavariable is all that keeps the question open.
-                        (Some(_), Some(_)) => {
+                        (Some(this_index), Some(that_index)) => {
                             let this_term: Term = Subterm::Rec(this.clone()).into();
                             let that_term: Term = Subterm::Rec(that.clone()).into();
-                            match level_question(context, &this_term, &that_term)? {
-                                LevelQuestion::Identified => true,
-                                LevelQuestion::GroundUnequal
-                                | LevelQuestion::UnderBinder
-                                | LevelQuestion::Withheld => false,
-                                LevelQuestion::Blocked => {
-                                    self.history.remove(&key);
-                                    self.blocked.push(raw_problem(&type_));
-                                    continue;
+                            // Two projections of one group at two universe instances are a level question before they are two groups: the member-wise comparison would commit the levels through the member types' sorts whatever the bodies then decide, an over-commitment the kernel's rule never makes, so the levels are identified only once nothing but levels keeps the sides apart, refused as the kernel refuses them, and parked while an unsolved metavariable is all that keeps the question open. Two groups the skeletons keep apart are one where they are one as binders, the one index of both being what pairs them. Two projections at *different* indices are asked neither: comparing their tails would only report that 0 is not 1.
+                            let mut undecided = false;
+                            let decided = match this_index == that_index {
+                                false => None,
+                                true => match level_question(context, &this_term, &that_term)? {
+                                    LevelQuestion::Identified => Some(true),
+                                    LevelQuestion::GroundUnequal
+                                    | LevelQuestion::UnderBinder
+                                    | LevelQuestion::Withheld => Some(false),
+                                    LevelQuestion::Blocked => {
+                                        self.history.remove(&key);
+                                        self.blocked.push(raw_problem(&type_));
+                                        continue;
+                                    }
+                                    LevelQuestion::Distinct => match Self::two_groups(
+                                        context,
+                                        &self.binders,
+                                        &self.pairs,
+                                        &this,
+                                        &that,
+                                    )? {
+                                        Outcome::Converts => Some(true),
+                                        Outcome::Blocked(_) => {
+                                            undecided = true;
+                                            None
+                                        }
+                                        Outcome::Mismatch(_) => None,
+                                    },
+                                },
+                            };
+
+                            // Two members no rule above decides are their two bodies, as the kernel forces both, and that once: met again inside their own unfolding they are apart, or wait where a metavariable left them undecided.
+                            let nested =
+                                decided.is_none() && self.pairs.hold(&this_term, &that_term);
+                            if nested && undecided {
+                                self.history.remove(&key);
+                                self.blocked.push(raw_problem(&type_));
+                                continue;
+                            }
+                            match decided {
+                                Some(decided) => decided,
+                                None if nested => false,
+                                None => {
+                                    self.pairs = self.pairs.unfolding(this_term, that_term);
+                                    self.enqueue(
+                                        type_,
+                                        this.group.member_body(this_index),
+                                        that.group.member_body(that_index),
+                                    );
+                                    true
                                 }
-                                LevelQuestion::Distinct => self.compare_rec(context, this, that)?,
                             }
                         }
                         _ => self.compare_rec(context, this, that)?,
@@ -3092,6 +3215,7 @@ fn holds_data<B: Bound>(
 fn by_their_own_type(
     context: &mut Context,
     binders: &Binders,
+    pairs: &Pairs,
     this: &Term,
     that: &Term,
 ) -> Result<bool, ReduceError> {
@@ -3126,6 +3250,7 @@ fn by_their_own_type(
         convert_under(
             context,
             binders,
+            pairs,
             &Term::type_ground(),
             &this_type,
             &that_type
