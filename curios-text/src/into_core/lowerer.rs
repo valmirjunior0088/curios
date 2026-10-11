@@ -6,6 +6,7 @@ use {
         Name, NumLit, Pattern, PatternField, ProofLiteral, StructLit, StructLitEntry, Subterm,
         Term, func_sugar_params, func_sugar_type_params,
     },
+    curios_abi::ForeignFunction,
     curios_num::{Binary, Grain},
     curios_utilities::{Plicity, Span, recurse},
     std::{
@@ -224,6 +225,60 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         result
     }
 
+    /// The type a `foreign` declaration has and the body it binds, both read off its row: the function of the row's operands, none included, whose call is the row's own. The type is core's reading of the row (`curios_core::wire_term`, `curios_core::foreign_produced`), the one both checkers type the call by, so no second reading of a row stands beside it.
+    ///
+    /// A row that does not return takes the type its description yields ahead of its operands, an implicit of the same list. No binder has a hint: a declaration writes no operand name, and the binder for what a diverging call yields is the compiler's own.
+    pub(super) fn foreign(
+        &self,
+        function: &Arc<ForeignFunction>,
+    ) -> (curios_core::Term, curios_core::Term) {
+        let (telescope, operands) = self.foreign_telescope(function);
+        let produced = curios_core::foreign_produced(function, &operands, |label| {
+            self.mint([label.to_string()]).remove(0).1
+        });
+        let type_ = curios_core::Term::func_type_marked(telescope, produced);
+
+        let (telescope, operands) = self.foreign_telescope(function);
+        let body = curios_core::Term::func_marked(
+            telescope,
+            curios_core::Term::foreign(Arc::clone(function), operands),
+        );
+
+        (type_, body)
+    }
+
+    /// One fresh binder for each operand a call of `function` takes, under its mark and at its type, beside the operands as a call over those binders writes them.
+    fn foreign_telescope(
+        &self,
+        function: &ForeignFunction,
+    ) -> (LoweredParams, Vec<curios_core::Term>) {
+        let hintless = || self.mint([String::new()]).remove(0).1;
+        let yielded = function.diverges().then(|| {
+            let sort = curios_core::Term::type_at(
+                self.context
+                    .fresh_universe(None, curios_core::UniverseConstraintKind::WrittenType),
+            );
+
+            (Plicity::Implicit, hintless(), sort)
+        });
+        let telescope = yielded
+            .into_iter()
+            .chain(function.signature().params.iter().map(|wire_type| {
+                (
+                    Plicity::Explicit,
+                    hintless(),
+                    curios_core::wire_term(wire_type),
+                )
+            }))
+            .collect::<Vec<_>>();
+        let operands = telescope
+            .iter()
+            .map(|(_, binder, _)| curios_core::Term::free_var(binder))
+            .collect();
+
+        (telescope, operands)
+    }
+
     /// Lowers a *value* body — a top-level `let` body, a witness field, or the entrypoint tail. Every value body is a region root: each `!` in it hoists here (never past a boundary — a lambda body, match arm, or recursive-group member re-roots) and is rewired through `/std/Monad/bind`, whose `use` binder resolves the `Monad` witness per site. Types go through [`Self::term`], where `!` is rejected.
     pub(super) fn value(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.region(term)
@@ -367,53 +422,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Literal(literal) => curios_core::Term::intrinsic(self.literal(literal)?),
             Subterm::Intrinsic(intrinsic) => {
                 curios_core::Term::intrinsic(intrinsic.try_map(&mut |operand| self.term(operand))?)
-            }
-            Subterm::Foreign(function, args) => curios_core::Term::foreign(
-                Arc::clone(function),
-                args.iter()
-                    .map(|arg| self.term(arg))
-                    .collect::<Result<_, _>>()?,
-            ),
-            // The row as the function of its operands: one binder for each, with no name, in the row's order. A row that takes none is the call itself, a description being a constant already.
-            Subterm::ForeignRow(function) => {
-                let params = &function.signature().params;
-                // A row that does not return takes the type its description yields ahead of its wire operands, an implicit binder as the declaration's type states it.
-                let yielded = function
-                    .diverges()
-                    .then(|| self.mint(["A".to_string()]).remove(0).1);
-                let binders = self.mint(params.iter().map(|_| String::new()));
-                let call = curios_core::Term::foreign(
-                    Arc::clone(function),
-                    yielded
-                        .iter()
-                        .chain(binders.iter().map(|(_, binder)| binder))
-                        .map(curios_core::Term::free_var)
-                        .collect(),
-                );
-
-                match yielded.is_none() && binders.is_empty() {
-                    true => call,
-                    false => curios_core::Term::func_marked(
-                        yielded
-                            .map(|binder| {
-                                let sort = curios_core::Term::type_at(self.context.fresh_universe(
-                                    span,
-                                    curios_core::UniverseConstraintKind::WrittenType,
-                                ));
-
-                                (Plicity::Implicit, binder, sort)
-                            })
-                            .into_iter()
-                            .chain(binders.iter().zip(params).map(|((_, binder), wire_type)| {
-                                (
-                                    Plicity::Explicit,
-                                    *binder,
-                                    curios_core::wire_term(wire_type),
-                                )
-                            })),
-                        call,
-                    ),
-                }
             }
             Subterm::NumLit(num_lit) => {
                 curios_core::Term::num_lit(num_lit.magnitude.clone(), num_lit.sign)

@@ -50,10 +50,9 @@ use {
     crate::{
         Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
         LintedBinder, Module, Name, RootSource, StructLit, StructLitEntry, Subterm, Term, TopItem,
-        TupleField, UseGroup, foreign_signature, func_sugar_lambda, func_sugar_type_params,
-        ordered, tree_of,
+        TupleField, UseGroup, func_sugar_lambda, func_sugar_type_params, ordered, tree_of,
     },
-    curios_abi::ForeignStore,
+    curios_abi::{ForeignFunction, ForeignStore},
     curios_document::Documentation,
     curios_utilities::{
         Entropy, Mount, Plicity, Qualifier, Report, RootKind, Source, Span, SyntaxRegistry, grown,
@@ -1308,21 +1307,26 @@ fn process_items(
                 }));
             }
             TopItem::Foreign(f) => {
-                // All FFI-specific bookkeeping (the `ForeignFunction`, its registration, and `host_fn`'s wire-typed signature shape) stays inside `sys_module`'s `host_rows`; from here a `foreign` declaration lowers exactly like an ordinary `TopItem::Let`.
+                // A `foreign` is the function of its row. The row is registered under the name the declaration binds, which is its import, and the declaration's type and body are both read off it.
                 let path = context.prefixed(&f.label);
-                let signature = foreign_signature(f, &mut lowered.foreigns, path.join());
+                let function = ForeignFunction {
+                    name: path.join(),
+                    label: f.label.to_string(),
+                    signature: f.signature.clone(),
+                };
+                lowered.foreigns.register(function.clone());
 
                 let name = curios_core::Global::Authored(path);
                 context.record_import_scope(Some(&name));
                 let lower = Lowerer::new(context, Some(name));
-                let type_ = lower.term(&signature.type_())?;
+                let (type_, body) = lower.foreign(&Arc::new(function));
                 lowered.items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Authored,
                     span: f.label.span().cloned(),
                     name: curios_core::Global::Authored(path),
                     island: context.island(),
                     type_,
-                    body: lower.value(&signature.body())?,
+                    body,
                 }));
             }
             TopItem::Induct(group) => {

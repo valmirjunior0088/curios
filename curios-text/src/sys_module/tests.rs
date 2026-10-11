@@ -69,8 +69,10 @@ fn a_parameter_takes_the_type_of_the_operand_it_stands_as() {
         .iter()
         .map(|(_, label, type_)| (label.as_str(), type_.clone()))
         .collect::<Vec<_>>();
-    assert_eq!(types, [("count", nat()), ("value", int())]);
-    assert_eq!(declaration.output, int());
+    let int = intrinsic(Intrinsic::IntType);
+
+    assert_eq!(types, [("count", nat()), ("value", int.clone())]);
+    assert_eq!(declaration.output, int);
 }
 
 #[test]

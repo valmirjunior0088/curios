@@ -1186,12 +1186,6 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::Sort => pure("Sort"),
         Subterm::Literal(literal) => print_literal(literal),
         Subterm::Intrinsic(intrinsic) => print_intrinsic(intrinsic),
-        // A call across the wire reads as the name its declaration binds.
-        Subterm::Foreign(function, args) => {
-            print_intrinsic_call(function.label().to_string(), vec![], args)
-        }
-        // The row a declaration binds reads as the name it is bound under.
-        Subterm::ForeignRow(function) => pure(function.label().to_string()),
         Subterm::Name(name) => named(name.join()),
         // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),

@@ -6,17 +6,13 @@
 //!
 //! **An entry states its name, its parameters' names and its node; its types are `Intrinsic::signature`'s.** The table is `curios-core`'s and both checkers type a node by it, and a declaration here is that row read into a signature (`projected.rs`), so the roster cannot disagree with the checkers and there is no second statement to keep in step. What is the roster's own is which node a name builds: `gt` is `lt` with its operands the other way round, and `Nat/to_flt` rounds ties to even.
 //!
-//! This file holds the roster alone. How a declaration is built is `constructors.rs`, how a node's row is read into its types is `projected.rs`, how a term is built is `helpers.rs`, and how a host store's wire row becomes a declaration is `host_rows.rs`.
+//! This file holds the roster alone. How a declaration is built is `constructors.rs`, how a node's row is read into its types is `projected.rs`, and how a term is built is `helpers.rs`.
 
 mod constructors;
 use constructors::*;
 
 mod helpers;
 use helpers::*;
-
-mod host_rows;
-// `pub(crate)` rather than plain, and the one place this module widens anything: `foreign_signature` answers `into_core`'s user-written `foreign`, and it reaches the crate root through here.
-pub(crate) use host_rows::*;
 
 mod projected;
 use projected::*;

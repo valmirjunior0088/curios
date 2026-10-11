@@ -3,11 +3,8 @@
 //! One rung below `constructors.rs`, which builds declarations out of what this builds. Nothing here knows what is in the roster, and nothing here names a declaration: everything is a term.
 
 use {
-    crate::{
-        Apply, Argument, FuncType, FuncTypeParam, Intrinsic, Label, Name, Subterm, Term, TupleType,
-        TupleTypeParam,
-    },
-    curios_num::{Grain, Natural},
+    crate::{Apply, Argument, FuncType, FuncTypeParam, Intrinsic, Name, Subterm, Term, TupleType},
+    curios_num::Natural,
     curios_utilities::Plicity,
 };
 
@@ -57,46 +54,12 @@ pub(super) fn nat_lit(n: u64) -> Term {
     }
 }
 
-pub(super) fn int() -> Term {
-    intrinsic(Intrinsic::IntType)
-}
-
-pub(super) fn flt() -> Term {
-    intrinsic(Intrinsic::FltType)
-}
-
-pub(super) fn bin(grain: Grain) -> Term {
-    intrinsic(Intrinsic::BinType(grain))
-}
-
 pub(super) fn bool_() -> Term {
     intrinsic(Intrinsic::BoolType)
 }
 
-pub(super) fn handle() -> Term {
-    intrinsic(Intrinsic::HandleType)
-}
-
 pub(super) fn unit() -> Term {
     Subterm::TupleType(TupleType { fields: vec![] }).into()
-}
-
-pub(super) fn record(fields: Vec<(&str, Term)>) -> Term {
-    Subterm::TupleType(TupleType {
-        fields: fields
-            .into_iter()
-            .map(|(label, type_)| TupleTypeParam {
-                label: Some(Label::from(label)),
-                func_params: None,
-                type_,
-            })
-            .collect(),
-    })
-    .into()
-}
-
-pub(super) fn list_of(elem: Term) -> Term {
-    intrinsic(Intrinsic::ListType(elem))
 }
 
 // A function type over several explicit parameters `(domains…) -> output`, for the stepper of `List/fold`.
@@ -113,10 +76,6 @@ pub(super) fn fn_over(domains: Vec<Term>, output: Term) -> Term {
         output,
     })
     .into()
-}
-
-pub(super) fn io_of(result: Term) -> Term {
-    intrinsic(Intrinsic::IoType(result))
 }
 
 pub(super) fn type_() -> Term {
