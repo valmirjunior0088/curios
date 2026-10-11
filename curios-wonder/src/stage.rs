@@ -36,7 +36,10 @@ pub enum Refusal {
 }
 
 /// `program`'s representation at the rung `name`, compiled against `units` and the prelude, handed to `shown` where the driver emits it: nothing a later rung does unmakes a rung already handed on, a panic on an invariant of its own among it.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one over the line: what is staged becomes one value where a library can be staged too"
+)]
 pub fn stage(
     budget: u64,
     units: Vec<RootSource>,

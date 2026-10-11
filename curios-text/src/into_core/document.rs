@@ -61,8 +61,10 @@ fn chip(prefix: &Qualifier) -> Option<String> {
 /// # Panics
 ///
 /// Where `mounts` adopts a root no record of `records` documents.
-// One over the lint's line, and every argument is a table the lowering built or a fact about the scope it built them in — there is one caller, which has each of them to hand under these names, so a struct here would be a second spelling of the same eight things.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one over the line: each argument is a table the lowering built or a fact about its scope, and the one caller holds each under these names, so a struct would be a second spelling of the same eight"
+)]
 pub(super) fn document(
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &Scoped<'_, ModuleInfo>,

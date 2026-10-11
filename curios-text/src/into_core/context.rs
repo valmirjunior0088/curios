@@ -389,7 +389,10 @@ pub(super) struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "each argument is a table one lowering shares by reference, and its one caller builds each; how they group is still to settle"
+    )]
     pub(super) fn new(
         table: &'a Scoped<'a, ModuleInfo>,
         public: &'a Scoped<'a, PublicInterface>,

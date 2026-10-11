@@ -49,6 +49,8 @@ warnings = "deny"
 unreachable_pub = "warn"
 
 [workspace.lints.clippy]
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
 iter_over_hash_type = "warn"
 unused_self = "warn"
 

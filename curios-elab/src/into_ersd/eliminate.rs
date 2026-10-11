@@ -420,7 +420,10 @@ impl Lowering<'_> {
     /// The `List/fold` intrinsic as a bounded `Nat` fold over the list's length, one read per step: `fold-nat len(l) { zero => init; step(i, acc) => f(get(l, i), acc) }`. The loop is emitted here rather than spelled by the library, so the type level keeps the intrinsic's laws and the runtime keeps the loop. `FoldSequence` is the wrong shape for it, being a right fold whose accumulator is the suffix's result; a left fold threads its accumulator the other way, and the `Nat` loop runs that way already.
     ///
     /// The list and the stepper are aliased once through `scrutinee_operand`, so a compound operand is erased before the loop rather than once per step. The read inside the step carries a dead bound: erasure never reads a `get`'s proof, and `i < len(l)` holds by construction of the loop.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one over the line: the fold's five operands as the intrinsic states them, beside the walk's context and hint"
+    )]
     pub(super) fn erase_list_fold(
         &mut self,
         context: &mut Retyping,
@@ -498,7 +501,10 @@ impl Lowering<'_> {
     }
 
     /// A `List`/`Bin` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a first-class `UnconsSequence` binding the element and the suffix alone. Both hand the reads to `curios-ersd`'s lowering rather than emitting them, which is what keeps a window's operand convention out of this crate.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one over the line: the eliminator's five parts as the match holds them, beside the walk's context and hint"
+    )]
     fn erase_seq_fold(
         &mut self,
         context: &mut Retyping,
