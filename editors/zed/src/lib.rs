@@ -4,13 +4,13 @@
 //!
 //! Finding one is not the same as reading `PATH`, though. Zed inherits the `PATH` the desktop session launched it with, not the one an interactive shell assembles, so `~/.local/bin` — where the installer puts the binary — is routinely invisible here while every terminal on the machine can see it. Resolution therefore has three steps: an explicit setting, then `PATH`, then the installer's own directory.
 
+use zed_extension_api::{
+    Command, Extension, LanguageServerId, Result, Worktree, process, register_extension,
+    settings::LspSettings,
+};
+
 #[cfg(test)]
 mod tests;
-
-use zed_extension_api::{
-    process, register_extension, settings::LspSettings, Command, Extension, LanguageServerId,
-    Result, Worktree,
-};
 
 struct Curios;
 
@@ -22,8 +22,7 @@ const INSTALLED_PATH: &str = ".local/bin/curios";
 /// The one-line installer, named once because every message below ends in it.
 ///
 /// An extension cannot run it — it has no shell — and cannot offer a button either: the extension API is headless, so a language server command fails with a string and nothing more. Zed puts that string in a read-only buffer, reached from the status bar, which is why each message isolates the command on its own line: in an editor a whole line is one gesture to select and copy.
-const INSTALL_COMMAND: &str =
-    "curl -fsSL https://github.com/valmirjunior0088/curios/releases/latest/download/install.sh | sh";
+const INSTALL_COMMAND: &str = "curl -fsSL https://github.com/valmirjunior0088/curios/releases/latest/download/install.sh | sh";
 
 /// What to say when nothing was found and the search was able to look everywhere it knows of.
 ///

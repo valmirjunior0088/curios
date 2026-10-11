@@ -1,6 +1,11 @@
-//! Whether the grammar this extension publishes is the grammar this tree holds.
+//! What ties this extension to the tree around it: the grammar it publishes is the grammar the tree holds, and the lints it is held to are the workspace's.
 
-use std::{path::Path, process::Command};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env, fs,
+    path::Path,
+    process::{self, Command},
+};
 
 /// The directory Zed installs the grammar from, relative to the repository root.
 const GRAMMAR: &str = "editors/grammar";
@@ -23,7 +28,7 @@ fn tree(root: &Path, revision: &str) -> Option<String> {
 ///
 /// **A temporary index, because a working tree has no tree object until something writes one.** Seeding it from `HEAD` and staging the directory over it is what turns the files on disk into a hash comparable with a commit's: `git add` honours `.gitignore`, so `node_modules/` is excluded exactly as a commit excludes it, and a file deleted on disk registers as a deletion against the seed. Neither the real index nor any file is touched, and the index is removed before anything can assert.
 fn working(root: &Path) -> Option<String> {
-    let index = std::env::temp_dir().join(format!("curios-zed-index-{}", std::process::id()));
+    let index = env::temp_dir().join(format!("curios-zed-index-{}", process::id()));
     let git = |args: &[&str]| {
         Command::new("git")
             .current_dir(root)
@@ -40,7 +45,7 @@ fn working(root: &Path) -> Option<String> {
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
 
     // Before the caller asserts, so a mismatch cannot leak the index it was computed through.
-    let _ = std::fs::remove_file(&index);
+    let _ = fs::remove_file(&index);
 
     written
 }
@@ -55,7 +60,7 @@ fn the_pinned_rev_publishes_this_grammar() {
     let extension = Path::new(env!("CARGO_MANIFEST_DIR"));
     let root = extension.join("../..");
     let manifest =
-        std::fs::read_to_string(extension.join("extension.toml")).expect("extension.toml is read");
+        fs::read_to_string(extension.join("extension.toml")).expect("extension.toml is read");
     let rev = manifest
         .lines()
         .find_map(|line| line.strip_prefix("rev = \""))
@@ -77,4 +82,42 @@ fn the_pinned_rev_publishes_this_grammar() {
         published, held,
         "extension.toml pins {rev}, publishing grammar tree {published}, but this tree holds {held} — commit and push {GRAMMAR}, then move the rev"
     );
+}
+
+/// The lints a manifest states, by tool: each line of every table whose header is `prefix` and the tool's name.
+fn lints(manifest: &str, prefix: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let mut tables = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut tool = None;
+
+    for line in manifest.lines().map(str::trim) {
+        if let Some(header) = line.strip_prefix('[') {
+            tool = header
+                .strip_suffix(']')
+                .and_then(|header| header.strip_prefix(prefix))
+                .map(str::to_string);
+        } else if let Some(tool) = &tool
+            && !line.is_empty()
+            && !line.starts_with('#')
+        {
+            tables
+                .entry(tool.clone())
+                .or_default()
+                .insert(line.to_string());
+        }
+    }
+
+    tables
+}
+
+/// The extension is a workspace of its own, since Zed builds it from this directory, so it cannot inherit the compiler's lint table and states a copy. This holds the copy to its original: a lint the workspace gains, drops or moves fails here until the extension follows.
+#[test]
+fn the_lint_table_is_the_workspace_s() {
+    let extension = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace = fs::read_to_string(extension.join("../../Cargo.toml"))
+        .expect("the workspace's manifest is read");
+    let own = fs::read_to_string(extension.join("Cargo.toml")).expect("the manifest is read");
+
+    let held = lints(&workspace, "workspace.lints.");
+    assert!(!held.is_empty(), "the workspace states a lint table");
+    assert_eq!(lints(&own, "lints."), held);
 }

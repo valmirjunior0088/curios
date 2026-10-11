@@ -1,13 +1,27 @@
 [package]
 name = "curios-zed"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0"
 publish = false
 description = "The Zed extension for Curios: launches `curios wonder server` for the grammar the extension ships"
 
-# Its own root, not a member of the compiler's workspace: it builds for wasm32-wasip2 against Zed's extension API, and nothing in the compiler depends on it or it on the compiler.
+# Its own root, not a member of the compiler's workspace: Zed builds an extension from its own directory, with its own lock file, for wasm32-wasip2, and nothing in the compiler depends on it or it on the compiler.
 [workspace]
+
+# The compiler's workspace's lint table, restated because a workspace of its own cannot inherit one; `the_lint_table_is_the_workspace_s` holds the two equal.
+[lints.rust]
+warnings = "deny"
+unreachable_pub = "warn"
+
+[lints.clippy]
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+iter_over_hash_type = "warn"
+unused_self = "warn"
+
+[lints.rustdoc]
+all = "deny"
 
 [lib]
 path = "src/lib.rs"
