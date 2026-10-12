@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_core::{
-        Atom, InductDecl, InductParam, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, Quality,
-        Subterm, Telescope, Term, UniverseContext,
+        Atom, CalleeId, DefinitionKind, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId,
+        MetavarOrigin, Nat, Quality, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -1315,4 +1315,39 @@ fn a_type_and_a_proposition_met_from_below_are_refused_in_either_order() {
         met(Term::type_ground(), Term::prop()),
         Ok(Outcome::Mismatch(_))
     ));
+}
+
+// A `use` slot met against a dictionary's name is solved to the name: a witness names a structure of methods, and a slot committed reduced would spell the structure out wherever it stands. A hole of any other origin is solved to what the name reduces to, as it is for any value.
+#[test]
+fn a_use_slot_is_solved_to_the_dictionary_as_it_is_named() {
+    let dictionary = Free::from(&nominal("dictionary"));
+    let methods = || Term::tuple([nat(1), nat(2)]);
+    let solved = |origin: MetavarOrigin| {
+        let mut context = context();
+        let type_ = Term::tuple_type([
+            (context.fresh(Some("first")), nat_type()),
+            (context.fresh(Some("second")), nat_type()),
+        ]);
+        context.define_assuming(
+            &dictionary,
+            &type_,
+            &methods(),
+            Some(&DefinitionKind::Authored),
+        );
+        context.birth_metavar(MetavarId(0), Vec::new(), type_.clone());
+        let slot = Term::metavar_birthed(0, origin, Vec::new());
+        assert_eq!(
+            convert(&mut context, &type_, &slot, &Term::free_var(&dictionary)),
+            Ok(true)
+        );
+
+        context.metavar_solution(MetavarId(0)).cloned()
+    };
+    let premise = MetavarOrigin::Witness(WitnessOrigin {
+        func: CalleeId::Function(Free::from(&nominal("holds"))),
+        binder: "key".into(),
+    });
+
+    assert_eq!(solved(premise), Some(Term::free_var(&dictionary)));
+    assert_eq!(solved(MetavarOrigin::Hole), Some(methods()));
 }

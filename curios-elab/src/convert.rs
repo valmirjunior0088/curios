@@ -2445,8 +2445,11 @@ impl Convert {
 
         if context.refinements_are(&birth) {
             // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation the reduced spelling decides is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
-            let stalled = stalled_unfolding(rigid_raw, rigid);
-            if stalled
+            //
+            // A `use` slot is committed as written for the same reason, whatever its dictionary unfolds to: a witness is a name for a structure of methods, and committed reduced the slot would spell the structure out at every use, for the kernel to receive and for erasure to build again where the program calls a global.
+            let written = stalled_unfolding(rigid_raw, rigid)
+                || (matches!(metavar.origin, MetavarOrigin::Witness(_)) && rigid_raw != rigid);
+            if written
                 && let Solved::Done = self.solve_rigid(context, metavar, rigid_raw, standing)?
             {
                 return Ok(Solved::Done);
@@ -2454,7 +2457,7 @@ impl Convert {
 
             // A reduct need not re-check where what it was reduced from does. Typing a match reads its scrutinee's type as spelled, and a reduct that inlined a definition's absurd arm — `hop`'s `match some end`, typed there because the arm refines the variable `b` — spells that type afresh from the substituted scrutinee, where no equation reaches it, and re-validation refuses it; the kernel reads a match's scrutinee type the same way. A refused reduct is therefore tried as written before the problem fails, unless the rule above already tried that spelling — which can only turn a refusal into a solution. `implicit_tests`' `a_solution_whose_reduct_does_not_recheck_is_committed_as_written` is the program.
             return Ok(match self.solve_rigid(context, metavar, rigid, standing)? {
-                Solved::Failed if !stalled && rigid_raw != rigid => {
+                Solved::Failed if !written && rigid_raw != rigid => {
                     match self.solve_rigid(context, metavar, rigid_raw, standing)? {
                         Solved::Done => Solved::Done,
                         Solved::Postponed | Solved::Failed => Solved::Failed,
