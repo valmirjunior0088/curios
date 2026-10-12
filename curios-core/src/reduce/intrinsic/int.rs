@@ -3,11 +3,11 @@
 //! ℤ under `+` is a group, so every relation reads through the difference: `a ⋈ b` iff `a - b ⋈ 0`. [`int_cancel_common`] moves that difference to the two sides by sign, and a pair whose residuals are both constants is decided by comparing them; anything else is undecided and rebuilt from the residuals, so `i + a < i + b` and `a < b` reduce to one term, which conversion needs.
 
 use {
-    super::{Asked, lattice_verdict, sum_bound},
+    super::{Asked, image_bound, lattice_verdict, sum_bound},
     crate::{
-        Intrinsic, ReduceError, Reducer, Subterm, Term, int_cancellation, int_has_stuck_product,
-        int_monomial, int_normalize, int_preimage, int_rebuild_cancelled, int_residuals,
-        int_split_by_sign, int_terms,
+        Intrinsic, ReduceError, Reducer, Subterm, Term, int_cancellation, int_footprint,
+        int_has_stuck_product, int_monomial, int_normalize, int_preimage, int_rebuild_cancelled,
+        int_residuals, int_split_by_sign, int_terms,
     },
     curios_algebra::{Carrier, Comparison, apart_modulo},
     curios_num::Natural,
@@ -79,9 +79,12 @@ fn compare_preimages(
     left: &Term,
     right: &Term,
 ) -> Result<Comparison, ReduceError> {
-    // The two sides split by sign, and then their preimages: two sums written back, each as wide as both.
+    // The two sides split by sign, a sum written back as wide as both, and then their preimages, a monomial for each of theirs.
     let summands = int_terms(left).1.len() + int_terms(right).1.len();
-    reducer.spend(sum_bound(summands).saturating_mul(2))?;
+    reducer.spend(sum_bound(summands))?;
+    reducer.spend(
+        image_bound(&int_footprint(left)).saturating_add(image_bound(&int_footprint(right))),
+    )?;
     let (left, right) = int_split_by_sign(left, right);
     match (int_preimage(&left), int_preimage(&right)) {
         (Some(left), Some(right)) => asked.verdict(reducer, Carrier::Natural, left, right),

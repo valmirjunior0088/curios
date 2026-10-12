@@ -11,6 +11,10 @@ fn nat(value: u32) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(value)))
 }
 
+fn image(natural: &Term) -> Term {
+    int_of_nat(&mut Folding, natural).expect("a natural widens")
+}
+
 fn add(left: Term, right: Term) -> Term {
     Term::intrinsic(Intrinsic::nat_add(left, right))
 }
@@ -107,7 +111,7 @@ fn a_view_decides_exactly_when_every_atom_cancels() {
     assert_eq!(decided(Intrinsic::nat_lt(x.clone(), y.clone())), None);
 
     let (m, i) = (sym(0, "m"), sym(1, "i"));
-    let widened = int_of_nat(&m);
+    let widened = image(&m);
     assert_eq!(
         decided(Intrinsic::IntLe(
             int_sum(&widened, &i),
@@ -127,7 +131,7 @@ fn a_widened_natural_is_read_as_the_natural_it_widens() {
         .view(&Intrinsic::nat_lt(m.clone(), n.clone()))
         .expect("a `Nat` ordering");
     let widened = views
-        .view(&Intrinsic::IntLt(int_of_nat(&m), int_of_nat(&n)))
+        .view(&Intrinsic::IntLt(image(&m), image(&n)))
         .expect("an `Int` ordering");
 
     assert_eq!(natural, widened);
@@ -159,7 +163,7 @@ fn a_reader_reports_the_carrier_and_spells_each_atom() {
     assert!(spelled.contains(&x) && spelled.contains(&y));
 
     let (carrier, _) = views
-        .read(&Intrinsic::IntLe(int(0), int_of_nat(&x)))
+        .read(&Intrinsic::IntLe(int(0), image(&x)))
         .expect("an `Int` ordering");
     assert_eq!(carrier, Carrier::Integer);
 }

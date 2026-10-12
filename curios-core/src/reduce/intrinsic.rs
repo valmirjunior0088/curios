@@ -36,7 +36,7 @@ use {
     crate::{
         Aligned, Cost, Declaration, Element, Extremum, FUSION_CAP, FreeMonoid, Func, Intrinsic,
         LinearViews, Nat, Operands, Probe, Subterm, Telescope, Term, Words, int_cancel_common,
-        int_distributes, int_multiplicand, int_multiply, int_negate, int_of_nat, int_preimage,
+        int_distributes, int_footprint, int_multiply, int_negate, int_of_nat, int_preimage,
         int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
         same_atom,
     },
@@ -558,8 +558,8 @@ pub fn reduce_intrinsic(
             ))?;
             // A product over a symbol is written back distributed, as wide as its operands' monomials are long.
             reducer.spend(product_bound(
-                &Nat::multiplicand(&left),
-                &Nat::multiplicand(&right),
+                &Nat::footprint(&left),
+                &Nat::footprint(&right),
             ))?;
             Ok(Term::unwrap_or_clone(Nat::multiply(&left, &right)))
         }
@@ -722,10 +722,7 @@ pub fn reduce_intrinsic(
             if !int_distributes(&left, &right) {
                 return Ok(Subterm::Intrinsic(Intrinsic::IntMul(left, right)));
             }
-            reducer.spend(product_bound(
-                &int_multiplicand(&left),
-                &int_multiplicand(&right),
-            ))?;
+            reducer.spend(product_bound(&int_footprint(&left), &int_footprint(&right)))?;
             Ok(Term::unwrap_or_clone(int_multiply(&left, &right)))
         }
         Intrinsic::IntDiv {
@@ -1065,8 +1062,7 @@ pub fn reduce_intrinsic(
             }
 
             // Pushed through `Nat`'s normal form — a literal folds, a floor becomes the constant, a sum and a product widen summand by summand — since the widening is a semiring homomorphism; `int_of_nat` states it.
-            reducer.spend(sum_bound(nat_summands(&inner)))?;
-            Ok(Term::unwrap_or_clone(int_of_nat(&inner)))
+            Ok(Term::unwrap_or_clone(int_of_nat(reducer, &inner)?))
         }
         // Into `Flt` the conversions are total and take no proof: rounding is the canonical extension of the embedding, forced by the structure the way monus is for `Nat/sub`, in whichever direction the operation names, and a magnitude past the largest finite value answers what that direction sends an overflow to.
         Intrinsic::NatToFlt(rounding, inner) => reduce_nat_unary(
@@ -1090,7 +1086,7 @@ pub fn reduce_intrinsic(
                 return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
             if int.as_int().is_none() {
-                reducer.spend(sum_bound(int_terms(&int).1.len()))?;
+                reducer.spend(image_bound(&int_footprint(&int)))?;
                 if let Some(preimage) = int_preimage(&int) {
                     return Ok(Term::unwrap_or_clone(preimage));
                 }

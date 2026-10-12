@@ -9,9 +9,9 @@
 //! The operand is normalized before it is read, a product of sums distributed by name, so one value has one reading.
 
 use {
-    super::compare_int,
+    super::{compare_int, image_bound},
     crate::{
-        Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, int_from_linear,
+        Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, int_footprint, int_from_linear,
         int_has_stuck_product, int_linear, int_negate, int_normalize, int_preimage, int_terms,
         project_erased_universes,
     },
@@ -138,6 +138,8 @@ pub(super) fn reduce_int_abs(
     };
 
     let plain = reading.is_plain();
+    // What is left is written back as its preimage where it has one, a monomial for each of its own.
+    reducer.spend(image_bound(&int_footprint(&reading.rest)))?;
     let left = match int_preimage(&reading.rest) {
         Some(natural) => natural,
         None if plain => return Ok(Subterm::Intrinsic(Intrinsic::IntAbs(reading.rest))),

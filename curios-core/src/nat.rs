@@ -1,7 +1,7 @@
 use {
     super::{
-        Atoms, Intrinsic, Multiplicand, ReduceError, Reducer, Subterm, Term, product_bound,
-        same_atom, sum_bound,
+        Atoms, Footprint, Intrinsic, ReduceError, Reducer, Subterm, Term, product_bound, same_atom,
+        sum_bound,
     },
     curios_algebra::{
         Cancelled, Carrier, Combination, Deduction, Monomial, Progress, Recombination, Summand,
@@ -259,14 +259,20 @@ impl Nat {
         terms
     }
 
-    /// A reduced `Nat` as one operand of a product, counted for [`product_bound`] before [`Nat::multiply`] writes anything: its summands with the floor one of them, their factors, and the bits of their coefficients.
-    pub(crate) fn multiplicand(term: &Term) -> Multiplicand {
+    /// Whether a reduced `Nat` is one summand, a literal or a monomial over no floor: read off its sum alone, no product taken apart, so asking it of every node of a monomial costs the monomial once.
+    fn single(term: &Term) -> bool {
+        let (floor, inner) = Self::decompose(term);
+        Self::summands(&inner).len() + usize::from(!floor.is_zero()) <= 1
+    }
+
+    /// A reduced `Nat`'s footprint, counted before a fold writes it back: its summands with the floor one of them, their factors, and the bits of their coefficients.
+    pub(crate) fn footprint(term: &Term) -> Footprint {
         let (floor, inner) = Self::decompose(term);
         let monomials = Self::summands(&inner)
             .iter()
             .map(Self::monomial)
             .collect::<Vec<_>>();
-        Multiplicand {
+        Footprint {
             summands: monomials.len() + usize::from(!floor.is_zero()),
             factors: monomials.iter().map(|(_, factors)| factors.len()).sum(),
             bits: monomials
@@ -274,6 +280,34 @@ impl Nat {
                 .map(|(coefficient, _)| coefficient.bits())
                 .fold(floor.bits(), u64::saturating_add),
         }
+    }
+
+    /// The product of reduced `Nat`s in normal form, as [`Nat::multiply`] builds it a factor at a time: the monomial over them written once where each is an atom of the form, and a factor at a time where one is a literal, a sum or a product, whose summands have to meet the others'.
+    pub(crate) fn product_of(factors: &[Term]) -> Term {
+        let one = || Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+        let atomic = |factor: &Term| {
+            !matches!(
+                &**factor,
+                Subterm::Intrinsic(
+                    Intrinsic::Nat(_) | Intrinsic::NatAdd(..) | Intrinsic::NatMul(..)
+                )
+            )
+        };
+        if !factors.iter().all(atomic) {
+            return factors
+                .iter()
+                .fold(one(), |product, factor| Self::multiply(&product, factor));
+        }
+
+        let mut atoms = Atoms::default();
+        let monomial =
+            Monomial::product(factors.iter().map(|factor| atoms.exact(factor)).collect());
+        let ordered = monomial
+            .atoms()
+            .iter()
+            .map(|atom| atoms.term(*atom).clone())
+            .collect::<Vec<_>>();
+        Self::spine(&ordered).unwrap_or_else(one)
     }
 
     /// `coefficient · factor` in normal form: a zero coefficient is `0`, a unit coefficient is the factor itself, and anything else is the product with the literal on the left — so `x · 2` and `2 · x` are one term.
@@ -471,32 +505,46 @@ impl Nat {
 
     /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold does not perform on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s. See `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
     ///
-    /// The fold keeps every sum merged and every difference cancelled, so this walks only into products and the sums that hold them; a term with no stuck product comes back untouched. A memo keyed on node identity keeps a shared operand distributed once and holds each input alive beside its answer, since an identity is an address; the descent re-enters [`recurse`] per level. A product is charged here as the fold charges one it distributes, by what distribution writes ([`product_bound`]).
+    /// The fold keeps every sum merged and every difference cancelled, so this walks only into products and the sums that hold them; a term with no stuck product comes back untouched. A memo keyed on node identity keeps a shared operand distributed once and holds each input alive beside its answer, since an identity is an address; the descent re-enters [`recurse`] per level. A product it distributes is charged as the fold charges one, by what distribution writes ([`product_bound`]), and a monomial the fold already wrote is handed back as it stands.
+    ///
+    /// **The term is forced once, at its root.** A fold forces its operands before it writes, so every node under a weak-head `Nat` is weak-head already. Forcing each on the way down would probe the reducer's table at every level, by a comparison as long as the node's subtree: a square of a monomial's degree, to be told what it was handed.
     pub fn normalize(reducer: &mut impl Reducer, term: Term) -> Result<Term, ReduceError> {
         let mut memo: HashMap<usize, (Term, Term)> = HashMap::new();
-        Self::normalize_within(reducer, term, &mut memo)
+        let reduced = reducer.reduce_forced(term)?;
+        Self::normalize_within(reducer, reduced, &mut memo)
     }
 
+    /// [`Nat::normalize`] of a term that is weak-head already, as every node under one is.
     fn normalize_within(
         reducer: &mut impl Reducer,
-        term: Term,
+        reduced: Term,
         memo: &mut HashMap<usize, (Term, Term)>,
     ) -> Result<Term, ReduceError> {
         recurse(|| {
-            let key = term.identity();
+            let key = reduced.identity();
             if let Some((_, done)) = memo.get(&key) {
                 return Ok(done.clone());
             }
-            let reduced = reducer.reduce_forced(term.clone())?;
             let result = match &*reduced {
                 Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
+                    let read = (left.clone(), right.clone());
                     let left = Self::normalize_within(reducer, left.clone(), memo)?;
                     let right = Self::normalize_within(reducer, right.clone(), memo)?;
-                    reducer.spend(product_bound(
-                        &Self::multiplicand(&left),
-                        &Self::multiplicand(&right),
-                    ))?;
-                    Self::multiply(&left, &right)
+                    // A product of two single summands neither of which changed is the monomial the fold wrote, and stands as it left it; any other is distributed here, and charged as the fold charges one.
+                    let standing = read.0 == left
+                        && read.1 == right
+                        && Self::single(&left)
+                        && Self::single(&right);
+                    match standing {
+                        true => reduced.clone(),
+                        false => {
+                            reducer.spend(product_bound(
+                                &Self::footprint(&left),
+                                &Self::footprint(&right),
+                            ))?;
+                            Self::multiply(&left, &right)
+                        }
+                    }
                 }
                 Subterm::Intrinsic(Intrinsic::NatAdd(..))
                 | Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))) => {
@@ -508,16 +556,16 @@ impl Nat {
                         .collect::<Result<Vec<_>, _>>()?;
                     // A sum no product changed stands as the fold left it; one that changed is written back, and charged as a sum is.
                     match summands == read {
-                        true => reduced,
+                        true => reduced.clone(),
                         false => {
                             reducer.spend(sum_bound(summands.len()))?;
                             Self::sum_over_floor(summands, floor)
                         }
                     }
                 }
-                _ => reduced,
+                _ => reduced.clone(),
             };
-            memo.insert(key, (term, result.clone()));
+            memo.insert(key, (reduced, result.clone()));
             Ok(result)
         })
     }

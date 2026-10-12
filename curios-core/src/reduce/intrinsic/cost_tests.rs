@@ -1,7 +1,9 @@
 //! What a fold is charged for what it builds, and the shifts refused before they are built at all.
 
 use {
-    super::{Multiplicand, Reducer, operand_bound, product_bound, sum_bound, test_support::*},
+    super::{
+        Footprint, Reducer, image_bound, operand_bound, product_bound, sum_bound, test_support::*,
+    },
     crate::{Category, Cost, Intrinsic, Nat, ReduceError, Term, int_normalize},
     curios_num::{Binary, Grain, Integer, Natural},
 };
@@ -219,9 +221,17 @@ fn a_cancellation_is_charged_for_the_residuals_it_writes_back() {
     let int_lt: Join = |left, right| Term::intrinsic(Intrinsic::IntLt(left, right));
     let int_sub: Join = |left, right| Term::intrinsic(Intrinsic::IntSub(left, right));
     let (shared, other) = (sym(1_000, "s"), sym(1_001, "t"));
-    // The `Int` comparison goes on to read the preimages of what is left, two sums as wide as both sides: two summands fewer where the shared one cancelled.
-    let preimages = |summands: u32| 2 * sum_bound(summands as usize).get();
-    let narrower = preimages(2 * SUMMANDS + 2) - preimages(2 * SUMMANDS);
+    // The `Int` comparison goes on to split what is left by sign and read each side's preimage: a summand fewer a side where the shared one cancelled.
+    let preimages = |each: u32| {
+        let side = Footprint {
+            summands: each as usize,
+            factors: each as usize,
+            bits: u64::from(each),
+        };
+
+        sum_bound(2 * each as usize).get() + 2 * image_bound(&side).get()
+    };
+    let narrower = preimages(SUMMANDS + 1) - preimages(SUMMANDS);
 
     for (fold, join, over, saved) in [
         ("Nat/sub", add as Join, nat_sub, 0),
@@ -357,12 +367,12 @@ fn a_product_is_charged_for_every_monomial_it_writes_back() {
     let nat_mul: Join = |left, right| Term::intrinsic(Intrinsic::nat_mul(left, right));
     let int_mul: Join = |left, right| Term::intrinsic(Intrinsic::IntMul(left, right));
     // Every summand is one symbol under the coefficient one, a bit wide.
-    let sum = Multiplicand {
+    let sum = Footprint {
         summands: SUMMANDS as usize,
         factors: SUMMANDS as usize,
         bits: u64::from(SUMMANDS),
     };
-    let symbol = Multiplicand {
+    let symbol = Footprint {
         summands: 1,
         factors: 1,
         bits: 1,
@@ -461,7 +471,7 @@ fn a_coefficient_multiplied_over_a_sum_is_charged_by_its_width() {
     }
 }
 
-/// A product of two symbolic sums stands as written and costs nothing over its operands, on each carrier; it is charged where its value is asked for by name and distribution writes it, every summand of one against every summand of the other: normalizing it pays [`product_bound`] of the two over what reducing it and normalizing each operand cost.
+/// A product of two symbolic sums stands as written and costs nothing over its operands, on each carrier; it is charged where its value is asked for by name and distribution writes it, every summand of one against every summand of the other: normalizing it pays [`product_bound`] of the two over what reducing it costs.
 ///
 /// Mutation-checked: with the charge taken out of either normalization, its row pays nothing for the product.
 #[test]
@@ -474,7 +484,7 @@ fn a_product_of_two_sums_is_charged_where_it_is_distributed() {
     let int_add: Join = |left, right| Term::intrinsic(Intrinsic::IntAdd(left, right));
     let nat_mul: Join = |left, right| Term::intrinsic(Intrinsic::nat_mul(left, right));
     let int_mul: Join = |left, right| Term::intrinsic(Intrinsic::IntMul(left, right));
-    let each = Multiplicand {
+    let each = Footprint {
         summands: SUMMANDS as usize,
         factors: SUMMANDS as usize,
         bits: u64::from(SUMMANDS),
@@ -506,9 +516,96 @@ fn a_product_of_two_sums_is_charged_where_it_is_distributed() {
             "{carrier}: a product of two sums costs nothing where it stands"
         );
         assert_eq!(
-            normalized(stuck) - standing - normalized(sum(0)) - normalized(sum(SUMMANDS)),
+            normalized(stuck) - standing,
             bound,
             "{carrier}: normalizing is charged for the product it distributes"
+        );
+    }
+}
+
+/// A normalization forces its term once, at its root, on each carrier: a fold forces its operands before it writes, so the nodes under a weak-head term are weak-head already, and a monomial normalized costs what reducing it costs and nothing for its factors forced again.
+///
+/// Mutation-checked: with each node forced on the way down, a carrier's monomial costs a reduction a level.
+#[test]
+fn a_normalization_forces_its_term_once() {
+    const FACTORS: u32 = 16;
+    const AMPLE: u64 = 1_000_000_000;
+
+    type Join = fn(Term, Term) -> Term;
+    type Normalize = fn(&mut Budgeted, Term) -> Result<Term, ReduceError>;
+    let nat_mul: Join = |left, right| Term::intrinsic(Intrinsic::nat_mul(left, right));
+    let int_mul: Join = |left, right| Term::intrinsic(Intrinsic::IntMul(left, right));
+
+    for (carrier, over, normalize) in [
+        ("nat", nat_mul, Nat::normalize as Normalize),
+        ("int", int_mul, int_normalize as Normalize),
+    ] {
+        let monomial = (0..FACTORS)
+            .map(|index| sym(index, "x"))
+            .reduce(over)
+            .expect("a product of at least one factor");
+        let mut reducer = Budgeted { remaining: AMPLE };
+        normalize(&mut reducer, monomial.clone()).expect("the subject normalizes");
+
+        assert_eq!(AMPLE - reducer.remaining, charged(monomial), "{carrier}");
+    }
+}
+
+/// A monomial the fold wrote is handed back as it stands, the node it was, on each carrier: normalizing distributes, and is charged for, only a product of two sums and what holds one.
+///
+/// Mutation-checked: with every product distributed again, a carrier's answer is another node.
+#[test]
+fn a_monomial_the_fold_wrote_is_handed_back_unbuilt() {
+    type Join = fn(Term, Term) -> Term;
+    type Normalize = fn(&mut Inert, Term) -> Result<Term, ReduceError>;
+    let nat_mul: Join = |left, right| Term::intrinsic(Intrinsic::nat_mul(left, right));
+    let int_mul: Join = |left, right| Term::intrinsic(Intrinsic::IntMul(left, right));
+    let int = |value: i32| Term::intrinsic(Intrinsic::Int(Integer::from(value)));
+
+    for (carrier, over, two, normalize) in [
+        ("nat", nat_mul, lit(2), Nat::normalize as Normalize),
+        ("int", int_mul, int(2), int_normalize as Normalize),
+    ] {
+        let monomial = fold((0..8).map(|index| sym(index, "x")).fold(two, over));
+
+        let normalized = normalize(&mut Inert, monomial.clone()).expect("normalizes");
+
+        assert_eq!(normalized.identity(), monomial.identity(), "{carrier}");
+    }
+}
+
+/// A monomial's image under the embedding of `Nat` in `Int` is one spine, written once, so each fold that writes an image or reads one back is charged by the factors it holds and no more: a monomial of so many factors widened, narrowed and taken the magnitude of pays each a node a factor at least, and no fold pays for the square of them. The comparison that reads two images back is held to its figure by the cancellation above.
+///
+/// Mutation-checked: with the charge taken out of a fold, its row costs less than its factors.
+#[test]
+fn an_image_is_charged_for_every_factor_it_writes() {
+    const FACTORS: u32 = 64;
+
+    let monomial = || {
+        (0..FACTORS)
+            .map(|index| sym(index, "x"))
+            .reduce(|left, right| Term::intrinsic(Intrinsic::nat_mul(left, right)))
+            .expect("a product of at least one factor")
+    };
+    let widened = || Term::intrinsic(Intrinsic::NatToInt(monomial()));
+    let narrowed = Term::intrinsic(Intrinsic::IntToNat {
+        int: widened(),
+        non_neg: qed(),
+    });
+    let magnitude = Term::intrinsic(Intrinsic::IntAbs(widened()));
+    let factors = Cost::term(2).get() * u64::from(FACTORS);
+    let square = factors * u64::from(FACTORS) / 2;
+
+    for (fold, over, operand) in [
+        ("Nat/to_int", widened(), monomial()),
+        ("Int/to_nat", narrowed, widened()),
+        ("Int/abs", magnitude, widened()),
+    ] {
+        let image = charged(over) - charged(operand);
+
+        assert!(
+            (factors..square).contains(&image),
+            "{fold}: charged {image} for {FACTORS} factors"
         );
     }
 }

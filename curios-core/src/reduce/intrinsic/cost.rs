@@ -51,8 +51,8 @@ pub(crate) fn sum_bound(summands: usize) -> Cost {
     }
 }
 
-/// One operand of a product as distribution reads it: its summands, a literal part counted as one over no factor, the factors they hold between them, and the bits of their coefficients.
-pub(crate) struct Multiplicand {
+/// A reduced term's footprint in the sum normal form: its summands, a literal part counted as one over no factor, the factors they hold between them, and the bits of their coefficients. What a fold that writes the form back is charged by, counted before anything is written.
+pub(crate) struct Footprint {
     pub(crate) summands: usize,
     pub(crate) factors: usize,
     pub(crate) bits: u64,
@@ -61,8 +61,8 @@ pub(crate) struct Multiplicand {
 /// What a product of two operands costs to write back distributed: the collection its monomials are read into, a node for each monomial and for each factor it holds, and the limbs of its coefficients.
 ///
 /// Every summand of one operand meets every summand of the other, so an operand's factors and its coefficients are written once for each summand across from it: a monomial is as long as the two it is the product of and its coefficient as wide as theirs together, which a count of monomials alone prices as one node whatever its degree. Nothing for a product with no factor, which is a literal and [`operand_bound`]'s.
-pub(crate) fn product_bound(left: &Multiplicand, right: &Multiplicand) -> Cost {
-    let across = |own: u64, other: &Multiplicand| own.saturating_mul(other.summands as u64);
+pub(crate) fn product_bound(left: &Footprint, right: &Footprint) -> Cost {
+    let across = |own: u64, other: &Footprint| own.saturating_mul(other.summands as u64);
     let products = distribution_size(left.summands, right.summands);
     let factors =
         across(left.factors as u64, right).saturating_add(across(right.factors as u64, left));
@@ -73,5 +73,21 @@ pub(crate) fn product_bound(left: &Multiplicand, right: &Multiplicand) -> Cost {
         factors => Cost::collection(products)
             .saturating_add(Cost::term(2).saturating_mul(products.saturating_add(factors)))
             .saturating_add(Cost::big_number(bits)),
+    }
+}
+
+/// What the image of a normal form under the embedding of one carrier in the other costs to write, the widening's and the narrowing's alike: the collection its summands are read into, a node for each summand, two for each factor — the factor's image and its place in the monomial — and the limbs of its coefficients.
+///
+/// A monomial's image is one spine whatever its degree, so the bound is linear in the factors, which a count of summands prices as one node each. Nothing for a term with no factor, which is a literal.
+pub(crate) fn image_bound(operand: &Footprint) -> Cost {
+    let summands = operand.summands as u64;
+
+    match operand.factors as u64 {
+        0 => Cost::NOTHING,
+        factors => Cost::collection(summands)
+            .saturating_add(
+                Cost::term(2).saturating_mul(summands.saturating_add(factors.saturating_mul(2))),
+            )
+            .saturating_add(Cost::big_number(operand.bits)),
     }
 }

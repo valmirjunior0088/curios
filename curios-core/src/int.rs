@@ -8,8 +8,8 @@
 
 use {
     super::{
-        Atoms, Intrinsic, Multiplicand, Nat, ReduceError, Reducer, Subterm, Term, product_bound,
-        same_atom, sum_bound,
+        Atoms, Footprint, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, image_bound,
+        product_bound, same_atom, sum_bound,
     },
     curios_algebra::{
         Cancelled, Carrier, Combination, Deduction, Progress, Recombination, Summand, Wanted,
@@ -276,19 +276,56 @@ fn int_same_factors(left: &[Term], right: &[Term]) -> bool {
 /// `Nat/to_int` of a reduced `Nat`, pushed through its normal form: the successor floor becomes the constant, a sum the sum of the widened summands, a product the product of the widened factors, and anything else — a symbol, a truncated difference, a quotient, a remainder — the widened atom it is. ℕ → ℤ is a semiring homomorphism, so every step is an equation on values; it is what lets a sum of widened naturals cancel as `Int` sums do, and what [`int_preimage`] reads back.
 ///
 /// A product of two symbolic sums stays the stuck product of their images, the line [`int_product`] draws for every `Int` product.
-pub fn int_of_nat(nat: &Term) -> Term {
-    recurse(|| match &**nat {
-        Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => literal(zero()),
-        Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(floor, inner))) => {
-            int_sum(&int_of_nat(inner), &literal(Integer::from(floor.clone())))
+///
+/// **Written once, and charged as it is written.** Each level of the form — the term's own summands, and those of a sum standing as a factor of a stuck product — is charged [`image_bound`] of its footprint before its image is built, and a monomial over atoms is one spine whatever its degree: taken a factor at a time it is rebuilt at every factor, a square of its degree.
+pub fn int_of_nat(reducer: &mut impl Reducer, nat: &Term) -> Result<Term, ReduceError> {
+    recurse(|| {
+        reducer.spend(image_bound(&Nat::footprint(nat)))?;
+        let (floor, inner) = Nat::decompose(nat);
+        let summands = Nat::summands(&inner)
+            .iter()
+            .map(|summand| int_of_summand(reducer, summand))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // One summand over no floor is its own image, as it stands; anything else is merged as every `Int` sum is.
+        if let (true, [image]) = (floor.is_zero(), summands.as_slice()) {
+            return Ok(image.clone());
         }
-        Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) => {
-            int_sum(&int_of_nat(left), &int_of_nat(right))
-        }
-        Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
-            int_product(&int_of_nat(left), &int_of_nat(right))
-        }
-        _ => Term::intrinsic(Intrinsic::NatToInt(nat.clone())),
+
+        Ok(int_merged(Integer::from(floor), summands))
+    })
+}
+
+/// The image of one summand of a reduced `Nat`: its coefficient over the widened atoms of its monomial, in `Int`'s own canonical order, and the product of its factors' images where one of them is a sum, a stuck product's.
+fn int_of_summand(reducer: &mut impl Reducer, summand: &Term) -> Result<Term, ReduceError> {
+    let (coefficient, factors) = Nat::monomial(summand);
+    let sum = |factor: &Term| {
+        matches!(
+            &**factor,
+            Subterm::Intrinsic(Intrinsic::Nat(_) | Intrinsic::NatAdd(..))
+        )
+    };
+    if factors.iter().any(sum) {
+        return int_of_factors(reducer, summand);
+    }
+
+    let mut images = factors
+        .into_iter()
+        .map(|factor| Term::intrinsic(Intrinsic::NatToInt(factor)))
+        .collect::<Vec<_>>();
+    images.sort_by_key(Term::structural_hash);
+
+    Ok(int_scaled(Integer::from(coefficient), &images))
+}
+
+/// The image of a product one of whose factors is a sum, taken as the product is nested: the product of its operands' images as [`int_product`] takes one, which leaves two sums the stuck product of theirs.
+fn int_of_factors(reducer: &mut impl Reducer, product: &Term) -> Result<Term, ReduceError> {
+    recurse(|| match &**product {
+        Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => Ok(int_product(
+            &int_of_factors(reducer, left)?,
+            &int_of_factors(reducer, right)?,
+        )),
+        _ => int_of_nat(reducer, product),
     })
 }
 
@@ -302,14 +339,15 @@ pub fn int_preimage(term: &Term) -> Option<Term> {
     natural.and_then(|natural| {
         let mut preimages = Vec::with_capacity(natural.summands.len());
         for summand in natural.summands {
-            let mut product = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
-            for factor in &summand.origin {
-                let Subterm::Intrinsic(Intrinsic::NatToInt(nat)) = &**factor else {
-                    return None;
-                };
-                product = Nat::multiply(&product, nat);
-            }
-            preimages.push(Nat::scaled(summand.coefficient, product));
+            let naturals = summand
+                .origin
+                .iter()
+                .map(|factor| match &**factor {
+                    Subterm::Intrinsic(Intrinsic::NatToInt(nat)) => Some(nat.clone()),
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()?;
+            preimages.push(Nat::scaled(summand.coefficient, Nat::product_of(&naturals)));
         }
         Some(Nat::sum_over_floor(preimages, natural.constant))
     })
@@ -372,10 +410,10 @@ pub(crate) fn int_multiply(left: &Term, right: &Term) -> Term {
     int_merged(constant, summands)
 }
 
-/// A reduced term as one operand of a product, counted for [`product_bound`] before [`int_multiply`] writes anything, as `Nat::multiplicand` counts: its monomials with the constant one of them, their factors, and the bits of their coefficients.
-pub(crate) fn int_multiplicand(term: &Term) -> Multiplicand {
+/// A reduced term's footprint, counted before a fold writes it back, as `Nat::footprint` counts: its monomials with the constant one of them, their factors, and the bits of their coefficients.
+pub(crate) fn int_footprint(term: &Term) -> Footprint {
     let monomials = int_monomials(term);
-    Multiplicand {
+    Footprint {
         summands: monomials.len(),
         factors: monomials.iter().map(|(_, factors)| factors.len()).sum(),
         bits: monomials
@@ -387,8 +425,13 @@ pub(crate) fn int_multiplicand(term: &Term) -> Multiplicand {
 
 /// Whether the fold distributes a product of two reduced terms: where either is a constant or a single monomial — the same line `NatMul` draws, and [`int_normalize`] is what crosses it on demand.
 pub(crate) fn int_distributes(left: &Term, right: &Term) -> bool {
-    let single = |term: &Term| int_monomials(term).len() <= 1;
-    single(left) || single(right)
+    int_single(left) || int_single(right)
+}
+
+/// Whether a reduced term is one monomial, its constant counted as one: read off its sum alone, no product taken apart, so asking it of every node of a monomial costs the monomial once.
+fn int_single(term: &Term) -> bool {
+    let (constant, summands) = int_terms(term);
+    summands.len() + usize::from(!constant.is_zero()) <= 1
 }
 
 /// The product as the fold takes it: distributed where [`int_distributes`] says, and left as a stuck `IntMul` of the two reduced operands otherwise.
@@ -424,29 +467,37 @@ pub fn int_has_stuck_product(term: &Term) -> bool {
 /// A weak-head `Int` with every product of two symbolic sums distributed and the result re-merged — asked for by name where a comparison needs the value, as `Nat::normalize` is. A term with no stuck product comes back untouched.
 pub fn int_normalize(reducer: &mut impl Reducer, term: Term) -> Result<Term, ReduceError> {
     let mut memo: HashMap<usize, (Term, Term)> = HashMap::new();
-    int_normalize_within(reducer, term, &mut memo)
+    let reduced = reducer.reduce_forced(term)?;
+    int_normalize_within(reducer, reduced, &mut memo)
 }
 
+/// [`int_normalize`] of a term that is weak-head already, as every node under one is: forced once at its root, for the reason `Nat::normalize` gives.
 fn int_normalize_within(
     reducer: &mut impl Reducer,
-    term: Term,
+    reduced: Term,
     memo: &mut HashMap<usize, (Term, Term)>,
 ) -> Result<Term, ReduceError> {
     recurse(|| {
-        let key = term.identity();
+        let key = reduced.identity();
         if let Some((_, done)) = memo.get(&key) {
             return Ok(done.clone());
         }
-        let reduced = reducer.reduce_forced(term.clone())?;
         let result = match &*reduced {
             Subterm::Intrinsic(Intrinsic::IntMul(left, right)) => {
+                let read = (left.clone(), right.clone());
                 let left = int_normalize_within(reducer, left.clone(), memo)?;
                 let right = int_normalize_within(reducer, right.clone(), memo)?;
-                reducer.spend(product_bound(
-                    &int_multiplicand(&left),
-                    &int_multiplicand(&right),
-                ))?;
-                int_multiply(&left, &right)
+                // As `Nat::normalize` hands back a monomial the fold wrote, and charges a product it distributes.
+                let standing =
+                    read.0 == left && read.1 == right && int_single(&left) && int_single(&right);
+                match standing {
+                    true => reduced.clone(),
+                    false => {
+                        reducer
+                            .spend(product_bound(&int_footprint(&left), &int_footprint(&right)))?;
+                        int_multiply(&left, &right)
+                    }
+                }
             }
             Subterm::Intrinsic(Intrinsic::IntAdd(..)) => {
                 let (constant, read) = int_terms(&reduced);
@@ -456,16 +507,16 @@ fn int_normalize_within(
                     .collect::<Result<Vec<_>, _>>()?;
                 // As `Nat::normalize` leaves a sum no product changed, and charges one it writes back.
                 match summands == read {
-                    true => reduced,
+                    true => reduced.clone(),
                     false => {
                         reducer.spend(sum_bound(summands.len()))?;
                         int_merged(constant, summands)
                     }
                 }
             }
-            _ => reduced,
+            _ => reduced.clone(),
         };
-        memo.insert(key, (term, result.clone()));
+        memo.insert(key, (reduced, result.clone()));
         Ok(result)
     })
 }
