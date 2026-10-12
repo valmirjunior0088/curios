@@ -16,6 +16,9 @@ pub(crate) use credits::*;
 mod declared;
 pub(crate) use declared::*;
 
+mod frame;
+pub(crate) use frame::*;
+
 mod frames;
 pub(crate) use frames::*;
 
@@ -771,7 +774,7 @@ impl<'s> Context<'s> {
         self.typing.caches.proof_insert(name, proof);
     }
 
-    /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frames::scrutinee_spellings`] carries how long one stands.
+    /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frame::scrutinee_spellings`] carries how long one stands.
     pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
         self.typing.frames.settled_spelling(
             frame,
@@ -1025,7 +1028,8 @@ impl<'s> Context<'s> {
         }
     }
 
-    pub(crate) fn witness_scope(&self) -> &[(Free, Term)] {
+    /// [`Frames::witness_scope`].
+    pub(crate) fn witness_scope(&self) -> impl DoubleEndedIterator<Item = &(Free, Term)> + Clone {
         self.typing.frames.witness_scope()
     }
 
@@ -1285,7 +1289,8 @@ impl<'s> Context<'s> {
         self.typing.frames.is_defined(name)
     }
 
-    pub(crate) fn locals(&self) -> &[(Free, Term)] {
+    /// [`Frames::locals`].
+    pub(crate) fn locals(&self) -> impl DoubleEndedIterator<Item = &(Free, Term)> + Clone {
         self.typing.frames.locals()
     }
 
@@ -1989,7 +1994,7 @@ impl<'s> Context<'s> {
         self.underway.attempt.universe_solver.state_token()
     }
 
-    /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frames::scrutinee_spellings`) are all filed by which reduction took them.
+    /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frame::scrutinee_spellings`) are all filed by which reduction took them.
     pub(crate) fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.typing.asking.set_plain(true);
         let answer = read(self);
@@ -2019,7 +2024,7 @@ impl<'s> Context<'s> {
     ) {
         self.typing.caches.note_write();
         let refinements = self.typing.frames.refinement_snapshot();
-        let witnesses = self.witness_scope();
+        let witnesses = self.witness_scope().cloned().collect::<Vec<_>>();
         let witnesses = (!witnesses.is_empty()).then(|| Rc::from(witnesses));
         self.underway.attempt.solutions.birth_with_kind(
             id,

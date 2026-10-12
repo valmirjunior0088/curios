@@ -1339,7 +1339,6 @@ fn solved(context: &mut Context, term: &Term) -> Result<Term, Error> {
 pub(super) fn binders(context: &Context) -> Vec<(Free, Term)> {
     context
         .locals()
-        .iter()
         .filter(|(name, _)| name.as_global().is_none())
         .cloned()
         .collect()

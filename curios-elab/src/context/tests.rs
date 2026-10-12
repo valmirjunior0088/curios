@@ -508,13 +508,8 @@ fn a_forgotten_declaration_is_bound_nowhere() {
 
     assert!(context.assumption(&name).is_none());
     assert!(context.definition_body(&name).is_none());
-    assert!(!context.locals().iter().any(|(bound, _)| *bound == name));
-    assert!(
-        !context
-            .witness_scope()
-            .iter()
-            .any(|(bound, _)| *bound == name)
-    );
+    assert!(!context.locals().any(|(bound, _)| *bound == name));
+    assert!(!context.witness_scope().any(|(bound, _)| *bound == name));
 }
 
 fn nat() -> Term {
@@ -655,9 +650,11 @@ fn a_retry_resolves_through_the_frozen_witness_scope_alone() {
 
     context.with_frame(|context| {
         context.assume_witness(&live, &nat());
-        let scope = context.with_retry_frame(&frozen, |context| context.witness_scope().to_vec());
+        let scope = context.with_retry_frame(&frozen, |context| {
+            context.witness_scope().cloned().collect::<Vec<_>>()
+        });
         assert!(scope.is_empty(), "{scope:?}");
-        assert_eq!(context.witness_scope().len(), 1);
+        assert_eq!(context.witness_scope().count(), 1);
     });
 }
 

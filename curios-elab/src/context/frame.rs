@@ -1,0 +1,207 @@
+//! One frame of the context: everything a binder scope holds, as one value.
+//!
+//! A frame is entered where a scope opens and left where it closes, and what a lookup reads of the context it reads of the frames that stand, innermost first ([`Frames`](super::Frames)). Each holds its assumptions, its definitions, its refinements of a variable, of a projection and of a stuck application, the reduced spelling each of the last was settled to, why its arm is dead where it is, and its locals and witness binders in the order they were bound.
+//!
+//! **A frame may hold a name twice.** An arm assumes its own payload binder again at the type its case's solution gives it (`retype_locals`), so the locals are a list, read by the later entry, with the assumptions beside them by name.
+
+use {
+    crate::{DeadArm, UniverseStateToken},
+    curios_core::{DefinitionKind, Free, Term, UniverseContext},
+    curios_utilities::Keyed,
+    std::{collections::HashMap, hash::Hash, rc::Rc},
+};
+
+/// One definition: the definiens, plus the [`DefinitionKind`] of the module item that introduced it. Every `DefEntry` — whether a plain `let`/`rec` member or mid-window rec-group registration — is treated uniformly; there is no `recursive` marker distinguishing them.
+///
+/// `kind` is `None` for a genuine *local* binding — a `let` binder, an opened match scrutinee, a lambda parameter — which no module item declared. It is carried rather than re-derived: the kind is elaboration metadata `into_core` attached where the item was generated, and splitting the definition's name apart to recover it would misread an ordinary definition that merely happens to sit under a generated namespace (see [`DefinitionKind`]'s own docs).
+#[derive(Debug, Clone)]
+pub(crate) struct DefEntry {
+    term: Term,
+    kind: Option<DefinitionKind>,
+    /// Whether the name is a proof its item published ([`curios_core::Definition::proof`]): it stays bound to `term`, which is what says which group it is a member of, and unfolds to nothing.
+    proof: bool,
+}
+
+impl DefEntry {
+    pub(crate) fn new(term: Term, kind: Option<DefinitionKind>) -> Self {
+        Self {
+            term,
+            kind,
+            proof: false,
+        }
+    }
+
+    /// The entry a published item's name is bound by: `term`, and a proof where `proof`.
+    pub(crate) fn published(term: Term, kind: DefinitionKind, proof: bool) -> Self {
+        Self {
+            term,
+            kind: Some(kind),
+            proof,
+        }
+    }
+
+    pub(crate) fn body(&self) -> &Term {
+        &self.term
+    }
+
+    pub(crate) fn kind(&self) -> Option<&DefinitionKind> {
+        self.kind.as_ref()
+    }
+
+    /// What the name unfolds to: its term, and nothing where it is a proof.
+    pub(super) fn reduct(&self) -> Option<&Term> {
+        (!self.proof).then_some(&self.term)
+    }
+}
+
+/// One stuck-application refinement: the scrutinee as *written* (unerased, so a settlement can still unfold its polymorphic heads — erasure strips the `Instance` a global unfolds through, so reduce-then-erase and erase-then-reduce disagree exactly there), and the arm's value.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ScrutineeEntry {
+    pub(crate) original: Term,
+    pub(crate) value: Term,
+    /// Whether this spelling is an alias of an equation recorded under another: the kernel's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement skips it, which leaves a reduct over the definitions' values unanswered — `typing`'s registration states the case.
+    pub(crate) alias: bool,
+    /// Whether this entry withholds the equation its key holds in a frame outside, rather than recording one: an arm that refines a variable leaves it under every equation whose scrutinee, as the kernel spells it under the arm's solution, names no local. `Context::withhold_closed_equations` states the rule. It keeps the equation's spelling and value, which a report on the arm names.
+    pub(crate) withheld: bool,
+}
+
+/// A scrutinee entry's reduced spelling once settled: the form a probe is compared at — solved metavariables materialized and universe instances erased, once, when it settles — and the unerased reduct a hit reads its instance from.
+#[derive(Debug, Clone)]
+pub(crate) struct Settled {
+    pub(crate) compared: Term,
+    pub(crate) unerased: Term,
+}
+
+/// What a settlement left for one scrutinee entry.
+#[derive(Debug)]
+pub(super) struct Spelling {
+    /// The reduced spelling, or `None` where reducing the key refused or outran its allowance.
+    pub(super) settled: Option<Settled>,
+    /// How many solutions had been committed when it settled, where the key or the spelling held an unsolved metavariable — `None` where neither did, and no solution can change what the key reduces to.
+    pub(super) solved: Option<usize>,
+    /// The universe solver's state when it settled, where a question put to conversion on the way was declined for a commit: the spelling is then what the key reduces to only while that state stands.
+    pub(super) levels: Option<UniverseStateToken>,
+}
+
+/// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
+///
+/// The key beside it is universes-erased, which is what lets two occurrences of one polymorphic base merge while their instances are still undecided. Erasure cannot tell one instance from another, so the base is kept whole and [`Context::proj_reduct`](crate::Context) holds the two to one instance at the read.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ProjectionEntry {
+    pub(crate) original: Term,
+    pub(crate) value: Term,
+}
+
+/// One frame's definitions, or its refinements of one kind, read back in the order they were recorded.
+///
+/// A hash map's own order differs from one process to the next, and a frame's entries are read in order: the guards a proof the elaborator writes is built from are admitted as they are met, so a frame holding two would yield two proofs of one bound, by the run; and a report names an unfolded `rec` group by the first definition it finds of that structure, so two groups of one structure would be spelled either way.
+#[derive(Debug)]
+pub(super) struct Recorded<K, V> {
+    places: HashMap<K, usize>,
+    entries: Vec<(K, V)>,
+}
+
+impl<K: Eq + Hash + Clone, V> Recorded<K, V> {
+    fn new() -> Self {
+        Self {
+            places: HashMap::new(),
+            entries: Vec::new(),
+        }
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub(super) fn get(&self, key: &K) -> Option<&V> {
+        self.places.get(key).map(|&place| &self.entries[place].1)
+    }
+
+    pub(super) fn contains_key(&self, key: &K) -> bool {
+        self.places.contains_key(key)
+    }
+
+    /// Record `value` under `key`, in the place the key already holds where it was recorded before.
+    pub(super) fn insert(&mut self, key: K, value: V) {
+        match self.places.get(&key) {
+            Some(&place) => self.entries[place].1 = value,
+            None => {
+                self.places.insert(key.clone(), self.entries.len());
+                self.entries.push((key, value));
+            }
+        }
+    }
+
+    pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = (&K, &V)> {
+        self.entries.iter().map(|(key, value)| (key, value))
+    }
+
+    pub(super) fn keys(&self) -> impl Iterator<Item = &K> {
+        self.entries.iter().map(|(key, _)| key)
+    }
+
+    /// Forget `key`, the entries recorded after it each moving up one place.
+    pub(super) fn remove(&mut self, key: &K) {
+        let Some(place) = self.places.remove(key) else {
+            return;
+        };
+        self.entries.remove(place);
+        for (later, _) in &self.entries[place..] {
+            *self.places.get_mut(later).expect("an entry has a place") -= 1;
+        }
+    }
+}
+
+/// The projection a refinement is registered under, its base's universe instances erased: told apart from another by its hash, so a probe compares no base but the one it asks for.
+pub(super) type Projected = Keyed<(Term, usize)>;
+
+/// One frame: what the scope it was entered for holds. See the module documentation.
+#[derive(Debug)]
+pub(crate) struct Frame {
+    pub(super) assumptions: HashMap<Free, Term>,
+    pub(super) assumption_universes: HashMap<Free, UniverseContext>,
+    pub(super) definitions: Recorded<Free, DefEntry>,
+    /// Counterfactual match-arm refinements of a variable (`refine_head`), kept beside the definitions but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
+    pub(super) refinements: Recorded<Free, Term>,
+    pub(super) refinement_projections: Recorded<Projected, ProjectionEntry>,
+    /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by the scrutinee as written, its metavariables and universes normalized (`reduce`'s `shallow_scrutinee`); an occurrence that surfaces spelled differently is met at the entry's reduced spelling (`scrutinee_spellings`). The term-keyed analogue of the two stores above, suppressed by the same flag.
+    pub(super) refinement_scrutinees: Recorded<Term, ScrutineeEntry>,
+    /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
+    ///
+    /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration, the exit of an inner frame and a suppression bracket leave it alone, and it is forgotten with its frame, where its key is registered again, at a redefinition, a rollback and a universe rewrite, and at a declaration's boundary, which nothing a budget paid for outlives. A fresh definition forgets the spellings naming it, as it does the reducts; and one settled while its key or its reduct held an unsolved metavariable is asked for again once a solution has landed.
+    ///
+    /// An entry is visible under one window floor only, the one in force where it was registered: a suppression bracket and a retry frame hide every frame that stood when they began, and leave after every frame entered inside them. So a spelling is never read under a floor other than the one it was settled under.
+    ///
+    /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
+    pub(super) scrutinee_spellings: [HashMap<Term, Spelling>; 2],
+    /// Why the frame's arm is never taken, where the frame is an arm its scrutinee's indices rule out — `None` for every other frame. The reason is known where the arm opens, and an implicit bound nothing discharges under it is reported once the arm has closed, so it is kept here for the metavariable born there to take ([`Frames::dead_arm`](super::Frames::dead_arm)).
+    pub(super) dead_arm: Option<Rc<DeadArm>>,
+    /// The frame's assumptions in binding order, a companion to `assumptions`, which is keyed by name and loses order.
+    pub(super) locals: Vec<(Free, Term)>,
+    /// The frame's `use`-plicity binders in binding order, a subset of `locals`: resolution's search space, scanned innermost first.
+    pub(super) witnesses: Vec<(Free, Term)>,
+}
+
+impl Frame {
+    pub(super) fn new() -> Self {
+        Self {
+            assumptions: HashMap::new(),
+            assumption_universes: HashMap::new(),
+            definitions: Recorded::new(),
+            refinements: Recorded::new(),
+            refinement_projections: Recorded::new(),
+            refinement_scrutinees: Recorded::new(),
+            scrutinee_spellings: Default::default(),
+            dead_arm: None,
+            locals: Vec::new(),
+            witnesses: Vec::new(),
+        }
+    }
+
+    /// Whether the frame registers a refinement of any kind.
+    pub(super) fn refined(&self) -> bool {
+        !self.refinements.is_empty()
+            || !self.refinement_projections.is_empty()
+            || !self.refinement_scrutinees.is_empty()
+    }
+}

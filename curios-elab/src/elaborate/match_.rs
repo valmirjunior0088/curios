@@ -1127,7 +1127,7 @@ fn retype_locals(
         solutions.push(solution);
     }
 
-    let locals = context.locals().to_vec();
+    let locals = context.locals().cloned().collect::<Vec<_>>();
     for (name, type_) in retyped(&*context, &locals, &solutions) {
         context.assume(&name, &type_);
     }

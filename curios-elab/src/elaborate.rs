@@ -76,7 +76,7 @@ pub(crate) fn elaborate(
         let (rebuilt, type_) = result.map_err(|error| {
             error
                 .at_opt(term.extent())
-                .in_scope(context.witness_scope())
+                .in_scope(&context.witness_scope().cloned().collect::<Vec<_>>())
         })?;
 
         let rebuilt = match term.extent() {
@@ -118,7 +118,7 @@ pub(crate) fn elaborate_func_settle(
             |error| {
                 error
                     .at_opt(term.extent())
-                    .in_scope(context.witness_scope())
+                    .in_scope(&context.witness_scope().cloned().collect::<Vec<_>>())
             },
         )?;
     let rebuilt = match term.extent() {
