@@ -59,6 +59,7 @@ pub fn from_core(
         spelling,
         mint,
         witnesses: None,
+        inferred: false,
     };
 
     within_reader(term.clone(), frame, &spelling.reader().witnesses)
@@ -71,6 +72,8 @@ struct Frame<'a> {
     mint: &'a curios_core::Minting,
     /// The innermost witness binder in scope, chained outward. Each node lives on the stack of the arm that opened its binder.
     witnesses: Option<&'a WitnessNode<'a>>,
+    /// Whether the term this frame is handed stands where no expected type reaches it: the head of a call or of a projection, a scrutinee. What a checked position would supply is then written, a lambda's parameter types and a match's motive. Read by the node the frame is handed to and by none below it ([`sub`], [`unchecked`]).
+    inferred: bool,
 }
 
 impl<'a> Frame<'a> {
@@ -83,6 +86,7 @@ impl<'a> Frame<'a> {
             spelling: self.spelling,
             mint: self.mint,
             witnesses: Some(node),
+            inferred: self.inferred,
         }
     }
 
@@ -140,13 +144,22 @@ fn within_reader(
     }
 }
 
-/// A child of the tree, or `None` past what a report prints: the one place the walk is bounded, and the one place its depth is guarded.
+/// A child of the tree, standing where its type is expected, or `None` past what a report prints: the one place the walk is bounded, and the one place its depth is guarded.
 fn sub(term: curios_core::Term, frame: Frame) -> Option<Term> {
+    placed(term, frame, false)
+}
+
+/// [`sub`] for a child no expected type reaches: the head of a call or of a projection, a scrutinee.
+fn unchecked(term: curios_core::Term, frame: Frame) -> Option<Term> {
+    placed(term, frame, true)
+}
+
+fn placed(term: curios_core::Term, frame: Frame, inferred: bool) -> Option<Term> {
     if frame.mint.elides(&term) {
         return None;
     }
 
-    recurse(|| tree(term, frame))
+    recurse(|| tree(term, Frame { inferred, ..frame }))
 }
 
 /// A name as it is written: a path from the root where it leads with a slash, a path from the scope otherwise.
@@ -233,12 +246,20 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         }
         Core::Func(curios_core::Func { telescope }) => {
             let marks = telescope.marks();
-            // A type-former lambda reads as the former it eta-expands, which is how a program writes it.
-            if let Some(former) = curios_core::former_eta(&telescope, &marks) {
+            // A type-former lambda reads as the former it eta-expands, where a program writes that former.
+            if let Some(former) = curios_core::former_eta(&telescope, &marks)
+                && writable_former(&former, telescope.terminal())
+            {
                 return written_former(former, frame);
             }
             let mut params = Vec::with_capacity(telescope.len());
-            let body = lambda_parameters(telescope.cursor(), &marks, frame, &mut params)?;
+            let body = lambda_parameters(
+                telescope.cursor(),
+                &marks,
+                frame,
+                frame.inferred,
+                &mut params,
+            )?;
 
             Subterm::Func(Func {
                 params: params
@@ -259,7 +280,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 return method;
             }
 
-            apply(sub(head, frame)?, call_arguments(arguments, frame)?)
+            apply(unchecked(head, frame)?, call_arguments(arguments, frame)?)
         }
         Core::TupleType(curios_core::TupleType { telescope }) => {
             let mut fields = Vec::with_capacity(telescope.len());
@@ -303,7 +324,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             let field = written_field(&field, frame)?;
 
             Subterm::Proj(Proj {
-                head: sub(head, frame)?,
+                head: unchecked(head, frame)?,
                 field,
             })
             .into()
@@ -330,32 +351,46 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         }
         // The constructor called, the type's parameters left to where it stands: `Result/success(42)`.
         Core::Variant(curios_core::Variant {
-            name, tag, payload, ..
+            name,
+            params,
+            tag,
+            payload,
+            ..
         }) => {
             let constructor = name
                 .qualifier()
                 .map(|path| curios_core::Global::Authored(path.with(&tag.as_string())))?;
-            // The marks a constructor is called by lead with the family's parameters, which its value does not hold: the payload's are the tail.
-            let marks = frame
-                .spelling
-                .payload_marks(&name, &tag)
-                .map(|marks| &marks[marks.len().saturating_sub(payload.len())..]);
+            // The marks a constructor is called by lead with the family's parameters, every one hidden, and end with its payload's.
+            let called = frame.spelling.payload_marks(&name, &tag);
+            let leading = called.map_or(0, |marks| marks.len().saturating_sub(payload.len()));
+            let mark = |slot: usize, otherwise: Plicity| {
+                called
+                    .and_then(|marks| marks.get(slot))
+                    .copied()
+                    .unwrap_or(otherwise)
+            };
             // Called with no argument where it has no payload, as a program writes one: the bare name is the constructor, and `Option/none()` its value.
             let head = global(&constructor, frame)?;
-            let arguments = payload
+            // The family's parameters are left to where the value stands, and written where nothing there states them, and where the payload opens with a hidden member: that one stands in the parameters' run, and written alone it would be read as the first of them.
+            let opens_hidden =
+                !payload.is_empty() && mark(leading, Plicity::Explicit) != Plicity::Explicit;
+            let stated = match (frame.inferred || opens_hidden) && params.len() == leading {
+                true => params,
+                false => Vec::new(),
+            };
+            let members = stated
                 .into_iter()
                 .enumerate()
-                .map(|(slot, member)| {
-                    let mark = marks.and_then(|marks| marks.get(slot)).copied();
+                .map(|(slot, parameter)| (mark(slot, Plicity::Implicit), parameter))
+                .chain(
+                    payload
+                        .into_iter()
+                        .enumerate()
+                        .map(|(slot, member)| (mark(leading + slot, Plicity::Explicit), member)),
+                )
+                .collect();
 
-                    Some(argument(
-                        mark.unwrap_or(Plicity::Explicit),
-                        sub(member, frame)?,
-                    ))
-                })
-                .collect::<Option<Vec<_>>>()?;
-
-            apply(head, arguments)
+            apply(head, hidden_run(members, frame)?)
         }
         Core::StructType(curios_core::StructType { name, params, .. }) => {
             let marks = frame.spelling.nominal_marks(&name, params.len());
@@ -518,10 +553,13 @@ fn parameter_types(
 }
 
 /// A lambda's parameters from `cursor` on, written into `params`, then its body, a witness binder's node in scope for it. A lambda's witness member is `use _`, as the surface writes it: one the body still refers to by a name resolution would not restore is a term no source spells.
+///
+/// `annotated` writes each parameter's type beside it: what a lambda needs where no expected type states them. The grammar writes none beside a witness, so a lambda taking one is written only where its type is expected.
 fn lambda_parameters(
     mut cursor: curios_core::Cursor<'_, curios_core::Term>,
     marks: &[Plicity],
     frame: Frame,
+    annotated: bool,
     params: &mut Vec<Option<FuncParam>>,
 ) -> Option<Term> {
     let Some((hint, type_)) = cursor.entry() else {
@@ -535,6 +573,11 @@ fn lambda_parameters(
     // Asked before the cursor moves past the binder it asks about.
     let named = hint.is_some() || cursor.binder_used();
     let word = frame.word(&label);
+    let annotation = match (annotated, plicity) {
+        (false, _) => None,
+        (true, Plicity::Witness) => return None,
+        (true, _) => Some(sub(type_.clone(), frame)?),
+    };
     let slot = params.len();
     params.push(None);
     cursor.advance(curios_core::Term::free_var(&label));
@@ -542,14 +585,18 @@ fn lambda_parameters(
     let (body, named) = match plicity == Plicity::Witness {
         true => {
             let node = WitnessNode::new(label, &type_, frame);
-            let body = lambda_parameters(cursor, marks, frame.with_witness(&node), params)?;
+            let body =
+                lambda_parameters(cursor, marks, frame.with_witness(&node), annotated, params)?;
             if node.used.get() {
                 return None;
             }
 
             (body, false)
         }
-        false => (lambda_parameters(cursor, marks, frame, params)?, named),
+        false => (
+            lambda_parameters(cursor, marks, frame, annotated, params)?,
+            named,
+        ),
     };
 
     params[slot] = Some(FuncParam {
@@ -558,7 +605,7 @@ fn lambda_parameters(
             true => word,
             false => "_".to_string(),
         })),
-        annotation: None,
+        annotation,
     });
     Some(body)
 }
@@ -620,6 +667,21 @@ fn nominal_arguments(
         .collect();
 
     hidden_run(members, frame)
+}
+
+/// Whether a program writes the former a lambda eta-expands: its bare name, where the binders took every argument, or an indexed family at its parameters, which takes its indices in a call of their own. A family at some of its parameters is no call the grammar has — `Result(Error)` for `(A) => Result(Error, A)` — and the lambda is written as it stands.
+fn writable_former(former: &curios_core::FormerEta, terminal: &curios_core::Term) -> bool {
+    match former {
+        curios_core::FormerEta::Intrinsic(_) => true,
+        curios_core::FormerEta::Nominal(_, prefix, _) => {
+            prefix.is_empty()
+                || matches!(
+                    &**terminal,
+                    curios_core::Subterm::InductType(curios_core::InductType { indices, .. })
+                        if !indices.is_empty()
+                )
+        }
+    }
 }
 
 /// A type former a lambda eta-expands: the name alone where the binders took every argument, the application to what they left otherwise, each argument under the mark the declaration gives it.
@@ -866,13 +928,14 @@ fn restorable(argument: &curios_core::Term, frame: Frame) -> bool {
     match witness_form(argument, frame) {
         None => false,
         Some(WitnessForm::Pending) => true,
-        // A direct match: the first binder of its concept, innermost out, is the one resolution takes.
+        // A direct match: the first binder of its concept the goal meets, innermost out, is the one resolution takes. A binder of the concept at another argument answers another goal and is passed over ([`apart`]).
         Some(WitnessForm::Local {
             node,
             concept,
             depth: 0,
         }) => chain(frame.witnesses)
-            .find(|candidate| candidate.concept() == Some(&concept))
+            .filter(|candidate| candidate.concept() == Some(&concept))
+            .find(|candidate| std::ptr::eq(*candidate, node) || !apart(candidate, node))
             .is_some_and(|first| std::ptr::eq(first, node)),
         // A superclass path: no binder of the concept itself, and this the one route of the least length.
         Some(WitnessForm::Local {
@@ -891,6 +954,26 @@ fn restorable(argument: &curios_core::Term, frame: Frame) -> bool {
                 && !chain(frame.witnesses).any(|candidate| candidate.concept() == Some(&concept))
         }
     }
+}
+
+/// Whether two binders of one concept answer goals no term makes one: their applications differ at an argument where each holds a binder of its own, which nothing unifies. `Ord(A)` and `Ord(E)` under `(@A, @E, use Ord(A), use Ord(E))` are apart, and a call at `A` is answered by the first whichever stands innermost.
+fn apart(this: &WitnessNode, that: &WitnessNode) -> bool {
+    let binder = |term: &curios_core::Term| {
+        matches!(
+            &**term,
+            curios_core::Subterm::Var(var)
+                if matches!(var.as_free(), Some(curios_core::Free::Local(_)))
+        )
+    };
+    let (Some((_, these)), Some((_, those))) = (&this.concept, &that.concept) else {
+        return false;
+    };
+
+    these.len() == those.len()
+        && these
+            .iter()
+            .zip(those)
+            .any(|(this, that)| binder(this) && binder(that) && this != that)
 }
 
 /// The least superclass depth at which any binder in scope reaches `concept`, beside every binder reaching it there — one entry per path, so a diamond counts twice. `None` when no binder reaches it through a superclass.
@@ -968,7 +1051,7 @@ fn method_operator(
     }
 }
 
-/// The method a projection off a witness stands for, written as a program reaches it: the operator dispatching to it between exactly two operands, or its wrapper — called with the concept's parameters marked `@`, the witness only where resolution would not restore it, and, for a wrapper taking the method's own parameters in its group, those in the same call. `arguments` is the call the projection heads, when it heads one.
+/// The method a projection off a witness stands for, written as a program reaches it: the operator dispatching to it between its two operands, whatever hidden arguments its elaboration filled after them, or its wrapper — called with the concept's parameters marked `@`, the witness only where resolution would not restore it, and, for a wrapper taking the method's own parameters in its group, those in the same call. `arguments` is the call the projection heads, when it heads one.
 ///
 /// The outer `None` is a projection that is no method's, written as the projection it is; the inner one a method this walk cannot write.
 fn method(
@@ -978,8 +1061,12 @@ fn method(
     frame: Frame,
 ) -> Option<Option<Term>> {
     let table = frame.table()?;
-    if let Some(arguments @ [left, right]) = arguments
-        && let Some(op) = method_operator(witness, index, arguments, frame)
+    // What stands after an operator's two operands is what its own elaboration put there, a bound's proof, as an intrinsic operation's is: the reader wrote none, and the operator written again asks for it again.
+    if let Some([left, right, filled @ ..]) = arguments
+        && filled
+            .iter()
+            .all(|argument| argument.plicity == Plicity::Implicit)
+        && let Some(op) = method_operator(witness, index, &[left.clone(), right.clone()], frame)
     {
         let written = sub(left.term.clone(), frame)
             .zip(sub(right.term.clone(), frame))
@@ -1017,12 +1104,13 @@ fn method(
     };
 
     let restored = restorable(witness, frame);
+    // The witness is handed on with the parameters: whether it is left out or holds its place as `use _` is the rule every call's hidden run follows ([`call_arguments`]), and a method's own `@` arguments come after it.
     let reference =
         curios_core::Term::var(curios_core::Var::free(curios_core::Free::Global(wrapper)));
     let leading = parameters
         .into_iter()
         .map(|parameter| (Plicity::Implicit, parameter))
-        .chain((!restored).then(|| (Plicity::Witness, witness.clone())))
+        .chain(std::iter::once((Plicity::Witness, witness.clone())))
         .collect::<Vec<_>>();
     let own = arguments.map(|arguments| {
         arguments
@@ -1147,10 +1235,20 @@ fn written_struct(literal: curios_core::Struct, frame: Frame) -> Option<Term> {
         }
     }
 
+    // Where no expected type states the structure's parameters the head is applied to them, as a program pins them: `Gcd(a, b) { … }`.
+    let params = match frame.inferred && !params.is_empty() {
+        true => {
+            let marks = frame.spelling.nominal_marks(&name, params.len());
+
+            Some(nominal_arguments(params, marks, 0, frame)?)
+        }
+        false => None,
+    };
+
     Some(
         Subterm::StructLit(StructLit {
             head,
-            params: None,
+            params,
             entries,
         })
         .into(),
@@ -1215,7 +1313,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
             .collect::<Vec<_>>()
     };
 
-    // A motive is the lambda a program writes after the scrutinee, binding its indices and then itself. It is written where the result depends on what it binds: one that names none of its binders states the type the match already has where it stands, as a goal taken from there does, and a program writes neither.
+    // A motive is the lambda a program writes after the scrutinee, binding its indices and then itself. It is written where the result depends on what it binds, and where the match stands with no expected type to take its result from: elsewhere one that names none of its binders states the type the match already has where it stands, as a goal taken from there does, and a program writes neither.
     let motive = match result {
         MatchResult::Family(motive) => {
             let labels = frame.mint.scope_labels(&motive);
@@ -1230,7 +1328,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                 })
                 .collect();
 
-            match labels.iter().any(|label| body.mentions_free(label)) {
+            match frame.inferred || labels.iter().any(|label| body.mentions_free(label)) {
                 true => Some(
                     Subterm::Func(Func {
                         params,
@@ -1243,7 +1341,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
         }
         MatchResult::Ambient(_) => None,
     };
-    let head = sub(head, frame)?;
+    let head = unchecked(head, frame)?;
     let arm = |pattern: MatchPattern, body: Term| MatrixArm {
         pattern,
         body,

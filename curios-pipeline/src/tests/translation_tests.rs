@@ -95,6 +95,20 @@ fn an_operator_is_written_as_the_operator() {
 }
 
 #[test]
+fn an_operator_that_takes_a_bound_is_written_without_its_proof() {
+    let source = r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+        pub let subject(n: Nat, d: Nat, @positive: Holds(0 < d)) -> Nat = n / d + n % d;
+    "#;
+
+    assert_eq!(
+        body(source, "subject"),
+        "(n, d, @positive) => n / d + n % d"
+    );
+}
+
+#[test]
 fn a_function_type_keeps_its_marks_and_its_names() {
     let source = r#"
         use /std/{Nat, List};

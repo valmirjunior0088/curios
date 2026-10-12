@@ -1,23 +1,24 @@
-//! Which unit takes an archived root's place, what it is granted, and what it is offered.
+//! Which unit takes an archived root's place, what it is granted, and what it is offered; and the library compiled from its own terms as a report prints them.
 
 use {
     super::{granted, withheld},
     crate::{
-        Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over,
+        Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over, recheck_over,
         tests::test_support::{assert_stored_alike, compile_with_units},
     },
     curios_core::{
         Anchors, Certification, Definition, DefinitionKind, Global, Imports, Item, Module, Nominal,
-        Sharing, Totality,
+        ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
     },
     curios_elab::{
-        Context, ErasedUnit, Error, Established, Recompile, Recompiled, Traces,
+        Context, ErasedUnit, Error, Established, Reading, Recompile, Recompiled, Traces,
         elaborate_and_zonk_unit_over,
     },
     curios_prelude::with_prelude,
     curios_std::std_directory,
     curios_text::{
-        Overlay, PreparedText, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over,
+        Label, LetSignature, Overlay, PreparedText, RootSource, SYNTAX, TopItem, TopLet, TopMod,
+        Translation, UnitSource, into_core_unit, into_core_unit_over, spell,
     },
     curios_unit::{Predecessors, Unit, apart_parts, halves},
     curios_utilities::{Qualifier, RootKind, digest, test_support::Temporary},
@@ -25,6 +26,8 @@ use {
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
         fs,
+        path::{Path, PathBuf},
+        rc::Rc,
         time::{Duration, Instant},
     },
 };
@@ -938,4 +941,430 @@ fn the_withheld_root_is_offered_to_the_unit_taking_its_place() {
 
         assert_eq!(*recording.0.borrow(), [offered], "a unit claiming /{claim}");
     }
+}
+
+/// Every authored source of the library with the module it is, by where it lies under the library's directory: `lib.crs` the root, `Nat/le.crs` the module `/std/Nat/le`. The library's own tests are units of their own and are left out.
+fn library_files() -> Vec<(PathBuf, Qualifier, String)> {
+    fn walk(directory: &Path, found: &mut Vec<PathBuf>) {
+        let mut entries = fs::read_dir(directory)
+            .expect("a directory of the library")
+            .map(|entry| entry.expect("a directory entry").path())
+            .collect::<Vec<_>>();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                if path.file_name().is_some_and(|name| name != "tests") {
+                    walk(&path, found);
+                }
+            } else if path.extension().is_some_and(|extension| extension == "crs") {
+                found.push(path);
+            }
+        }
+    }
+
+    let directory = std_directory();
+    let mut found = Vec::new();
+    walk(&directory, &mut found);
+
+    found
+        .into_iter()
+        .map(|path| {
+            let relative = path
+                .strip_prefix(&directory)
+                .expect("a path under the library")
+                .with_extension("");
+            let segments = relative
+                .components()
+                .map(|component| component.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+            let module = match segments.as_slice() {
+                [root] if root == "lib" => Qualifier::from(["std"]),
+                below => {
+                    Qualifier::from(std::iter::once("std".to_string()).chain(below.iter().cloned()))
+                }
+            };
+            let text = fs::read_to_string(&path).expect("an authored source");
+
+            (path, module, text)
+        })
+        .collect()
+}
+
+/// Write after every `let` group of `items`, the items of `module`, the `let`s `added` answers for each of its members, the groups of a module written inline among them.
+fn add_beside_each_let(
+    items: &mut Vec<TopItem>,
+    module: &Qualifier,
+    added: &mut dyn FnMut(&Qualifier, &TopLet) -> Vec<TopLet>,
+) {
+    let mut index = 0;
+    while index < items.len() {
+        let beside = match &mut items[index] {
+            TopItem::Let(members) => members
+                .iter()
+                .flat_map(|member| added(module, member))
+                .collect::<Vec<_>>(),
+            TopItem::Mod(TopMod {
+                label,
+                module: Some(inline),
+                ..
+            }) => {
+                add_beside_each_let(&mut inline.items, &module.with(label.as_str()), added);
+                Vec::new()
+            }
+            _ => Vec::new(),
+        };
+        let count = beside.len();
+        items.splice(
+            index + 1..index + 1,
+            beside.into_iter().map(|member| TopItem::Let(vec![member])),
+        );
+        index += 1 + count;
+    }
+}
+
+/// The declarations a refusal is of: each member's, wherever it is wrapped.
+fn refused(error: &Error) -> BTreeSet<Global> {
+    fn names(error: &Error, found: &mut BTreeSet<Global>) {
+        match error {
+            Error::InDeclaration { names, .. } => found.extend(names.iter().copied()),
+            Error::Located { error, .. } | Error::InScope { error, .. } => names(error, found),
+            _ => {}
+        }
+    }
+
+    let mut found = BTreeSet::new();
+    for member in error.each() {
+        names(member, &mut found);
+    }
+
+    found
+}
+
+/// What a refusal says, to a length a failure is read at.
+fn clipped(said: &str) -> String {
+    said.chars().take(4000).collect()
+}
+
+/// The `let`s of the library the translation declines, each holding a form no program spells, in the order of their names. A report raised in one shows the term as the compiler holds it.
+const DECLINED: [&str; 5] = [
+    // Each unfolds `/std/Map/Node/first`, whose own `use Key(K)` stands beside the declaration's. The two reach `Hash` by paths of one length, and the translation, which holds no edge's arguments, restores a superclass path only where it is the one of its length.
+    "/std/Map/Node/across",
+    "/std/Map/Node/read",
+    "/std/Map/Node/zero_side",
+    // Each holds a string past the length a report prints one whole.
+    "/std/http/Url/part",
+    "/std/http/syntax/status_line",
+];
+
+/// The `let`s of the library whose elaborated term names a declaration their module cannot: another module's own, reached by unfolding. No name writes it from there, and a report shows it by its full path.
+const UNREACHED: [&str; 11] = [
+    "/std/Nat/Coprime/cancel",
+    "/std/Nat/Coprime/common",
+    "/std/Nat/Coprime/quotients",
+    "/std/Nat/Coprime/symmetric",
+    "/std/Nat/Gcd/common",
+    "/std/Nat/Gcd/euclid",
+    "/std/Nat/Gcd/scaled",
+    "/std/Nat/Gcd/unique",
+    "/std/Tui/Field/draw",
+    "/std/Tui/Listing/draw",
+    "/std/Tui/border/edge",
+];
+
+/// The `let`s of the library that are refused as a report prints them.
+const REFUSED: [&str; 1] = [
+    // A bound's proof holds a copy of a `let`'s value, a match whose arms call `True/proved`. Written back, the copy is elaborated at universe metavariables of its own, and the conversion that holds it to the value is asked before they are solved.
+    "/std/Flt/of_decimal_in",
+];
+
+/// The `let`s of the library whose printed form elaborates and is not proved to be the `let`.
+const UNPROVED: [&str; 1] = [
+    // Its printed form is generalized over nine universe levels the `let` holds at zero, and the proof asks that their maximum be zero, which elaboration does not solve for.
+    "/std/Command/spawn",
+];
+
+/// The `let`s of the library whose proof elaboration accepts and the kernel refuses, each a finding of `documentation/roadmap/soundness/000-findings.md`.
+const UNCERTIFIED: [&str; 13] = [
+    // Each runs an effect: the kernel holds no two such definitions to be one, whatever they unfold to.
+    "/std/Async/poll_ready",
+    "/std/Command/Pipe/close",
+    "/std/File/close",
+    // The kernel's conversion stops short of elaboration's between the body and its printed form.
+    "/std/Flt/signals/scaled_prod_diff",
+    "/std/Flt/signals/scaled_prod_sum",
+    "/std/Flt/significant",
+    "/std/Flt/to_str",
+    // Each runs an effect, as the first three do.
+    "/std/Handle/close",
+    "/std/Serial/close",
+    "/std/proc/args",
+    "/std/rand/bytes",
+    "/std/tcp/Listener/close",
+    "/std/tcp/Socket/close",
+];
+
+/// **A report's term reads back.** Beside every `let` of the library two declarations are written: its type and its body as a report raised in it prints them, and a proof by `Eq/refl()` that what those declare is the `let`. The files are lowered and elaborated as the library, over the archive, and the kernel walks what comes of it. So each printed term is accepted where its reader stands, and is the term it was printed from by the conversion of each checker, at the universe levels that checker is handed: a printed term states none, and elaboration solves for them. A `let` not known to terminate is named by no type, so what is written for one is that it has its printed type.
+///
+/// A `let` the translation declines and one naming what its module cannot have nothing written beside them, and each is listed ([`DECLINED`], [`UNREACHED`]). One refused as printed, or whose proof is, is found by leaving it out and compiling again, so every `let` that does not read back is named, and not the first alone ([`REFUSED`], [`UNPROVED`]); and the proofs the kernel refuses are listed with the `let`s they are of ([`UNCERTIFIED`]).
+#[test]
+fn every_let_of_the_library_reads_back_as_a_report_prints_it() {
+    let files = library_files();
+
+    with_prelude(|prelude| {
+        let [sys, std] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let predecessors = Predecessors::over(&roots);
+        let lexicons = predecessors.lexicons(&SYNTAX);
+        let spellings = Rc::new(std.text().spellings(&predecessors.text()));
+        let reading = Reading {
+            module: std.core(),
+            scope: &lexicons,
+            syntax: &SYNTAX,
+            spellings: Some(&spellings),
+            anchors: &[],
+            printer: Some(Rc::new(Translation)),
+        };
+        // Made once: the library's own lexicon is what every reader of it is spelled by.
+        let unplaced = reading.spelling();
+        let definitions = std
+            .core()
+            .items
+            .iter()
+            .flat_map(Item::definitions)
+            .map(|definition| (definition.name, definition))
+            .collect::<BTreeMap<_, _>>();
+
+        let parsed = |text: &str, owner: Global| {
+            text.parse::<curios_text::Term>().unwrap_or_else(|error| {
+                panic!(
+                    "a term written for {} parses:\n{text}\n{error:?}",
+                    owner.faithful()
+                )
+            })
+        };
+        // A term as a report raised in `owner` prints it, read back as the tree it parses to: `None` where the translation declines it.
+        let written = |term: &Term, owner: Global| {
+            let spelling = unplaced.clone().for_reader(ReaderPosition {
+                owner: Some(owner),
+                witnesses: Rc::default(),
+            });
+            let rename = build_rename(&display_names(term), &spelling);
+            let spelling = Rc::new(spelling.with_pretty_names(Rc::new(rename)));
+            let printed = term.spelled(&spelling).to_string();
+
+            (!spelling.declined()).then(|| parsed(&printed, owner))
+        };
+
+        let mut left_out = BTreeSet::<Global>::new();
+        let mut refusals = Vec::new();
+        let mut unlike = BTreeSet::<Global>::new();
+        let (recompiled, beside, declined, unreached) = loop {
+            // The `let` each added declaration stands beside, and whether it is the proof.
+            let mut beside = BTreeMap::<Global, (Global, bool)>::new();
+            let mut declined = BTreeSet::new();
+            let mut unreached = BTreeSet::new();
+            let overlay = files
+                .iter()
+                .map(|(path, module, text)| {
+                    let mut tree = text
+                        .parse::<curios_text::Module>()
+                        .unwrap_or_else(|error| panic!("{} parses: {error:?}", path.display()));
+                    add_beside_each_let(&mut tree.items, module, &mut |module, member| {
+                        let label = member.label.as_str();
+                        let name = Global::Authored(module.with(label));
+                        let definition = definitions.get(&name).unwrap_or_else(|| {
+                            panic!(
+                                "the library defines {}, a `let` of its source",
+                                name.faithful()
+                            )
+                        });
+                        if left_out.contains(&name) {
+                            return Vec::new();
+                        }
+                        // A term elaboration built may name a declaration its reader cannot: another module's own, reached by unfolding.
+                        let reaches = |term: &Term| {
+                            term.free_vars()
+                                .into_iter()
+                                .filter_map(|free| free.as_global().copied())
+                                .chain(term.construction_names())
+                                .filter(|global| matches!(global, Global::Authored(_)))
+                                .all(|global| {
+                                    spell(&spellings, &definition.island, Some(&name), &global)
+                                        .is_some()
+                                })
+                        };
+                        if !(reaches(&definition.type_) && reaches(&definition.body)) {
+                            unreached.insert(name);
+                            return Vec::new();
+                        }
+                        let (Some(type_), Some(body)) = (
+                            written(&definition.type_, name),
+                            written(&definition.body, name),
+                        ) else {
+                            declined.insert(name);
+                            return Vec::new();
+                        };
+
+                        let (printed, same) =
+                            (format!("{label}_as_printed"), format!("{label}_reads_back"));
+                        for (added, is_proof) in [(&printed, false), (&same, true)] {
+                            let added = Global::Authored(module.with(added.as_str()));
+                            assert!(
+                                !definitions.contains_key(&added),
+                                "the library declares {}, the name the sweep writes beside {}",
+                                added.faithful(),
+                                name.faithful()
+                            );
+                            beside.insert(added, (name, is_proof));
+                        }
+                        // A type names only what is known to terminate, so no proposition states that a `let` which is not is its printed form: what is written for one is that it has the printed type.
+                        let (stated, by) = match definition.totality.is_total() {
+                            true => (
+                                parsed(&format!("/std/Eq/Eq()({label}, {printed})"), name),
+                                parsed("/std/Eq/Eq/refl()", name),
+                            ),
+                            false => (type_.clone(), parsed(label, name)),
+                        };
+                        let declared = |label: String, type_, body| TopLet {
+                            doc: None,
+                            vis_pub: false,
+                            label: Label::from(label),
+                            signature: LetSignature::Name {
+                                type_: Some(type_),
+                                body,
+                            },
+                        };
+
+                        vec![declared(printed, type_, body), declared(same, stated, by)]
+                    });
+
+                    (path.clone(), tree.to_string())
+                })
+                .collect::<Vec<_>>();
+
+            let source = std_from_its_tree().with_overlay(Overlay::of(overlay));
+            let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+            let lowered = into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text())
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "the library lowers with its printed terms beside it:\n{}",
+                        error.format()
+                    )
+                });
+            let kept = lowered.kept_from(std.text());
+            match elaborated_over(predecessors, std, &lowered, &kept) {
+                Ok(recompiled) => break (recompiled, beside, declined, unreached),
+                Err(error) => {
+                    let failed = refused(&error);
+                    let said = error
+                        .each()
+                        .map(|member| clipped(&member.to_string()))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let of = |proofs: bool| {
+                        failed
+                            .iter()
+                            .filter_map(|added| beside.get(added))
+                            .filter(|(_, is_proof)| *is_proof == proofs)
+                            .map(|(name, _)| *name)
+                            .collect::<BTreeSet<_>>()
+                    };
+                    // A printed term that is refused takes its proof with it, and is no other term for that.
+                    let printed_refused = of(false);
+                    let proof_refused = of(true)
+                        .difference(&printed_refused)
+                        .copied()
+                        .collect::<BTreeSet<_>>();
+                    // Each round leaves out a `let` the one before it wrote beside, so the rounds end.
+                    assert!(
+                        !(printed_refused.is_empty() && proof_refused.is_empty()),
+                        "the library is refused for nothing the sweep wrote:\n{said}"
+                    );
+                    refusals.push(said);
+                    left_out.extend(printed_refused);
+                    left_out.extend(proof_refused.iter().copied());
+                    unlike.extend(proof_refused);
+                }
+            }
+        };
+
+        // The kernel's own walk: a declaration the source wrote stands on the verdict filed with the archive, and each one written beside it is judged.
+        let finished = Zonked::project(&recompiled.module)
+            .unwrap_or_else(|refusal| panic!("what elaboration finished is finished: {refusal}"));
+        let judged = recheck_over(
+            &finished,
+            DEFAULT_STEP_BUDGET,
+            predecessors,
+            std,
+            &[false],
+            &SYNTAX,
+        );
+
+        let names = |names: &BTreeSet<Global>| {
+            let mut names = names
+                .iter()
+                .map(|name| name.faithful().to_string())
+                .collect::<Vec<_>>();
+            names.sort();
+            names
+        };
+        let refused_as_printed = left_out
+            .difference(&unlike)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        // A verdict is of a declaration written beside a `let`, the others standing on the archive's.
+        let uncertified = judged
+            .verdicts
+            .iter()
+            .filter_map(|verdict| beside.get(&verdict.name?))
+            .map(|(name, _)| *name)
+            .collect::<BTreeSet<_>>();
+        // Everything the sweep found is said at once: a run costs the library over again.
+        let mut found = Vec::new();
+        if names(&refused_as_printed) != REFUSED || names(&unlike) != UNPROVED {
+            found.push(format!(
+                "as printed, {:?} are refused, where {REFUSED:?} are the `let`s known to be, and {:?} are not proved the `let` they were printed from, where {UNPROVED:?} are known not to be:\n{}",
+                names(&refused_as_printed),
+                names(&unlike),
+                refusals.join("\n")
+            ));
+        }
+        if names(&declined) != DECLINED {
+            found.push(format!(
+                "the translation declines {:?}, and {DECLINED:?} are the `let`s it is known to",
+                names(&declined)
+            ));
+        }
+        if names(&unreached) != UNREACHED {
+            found.push(format!(
+                "{:?} name what their module cannot, and {UNREACHED:?} are the `let`s known to",
+                names(&unreached)
+            ));
+        }
+        if names(&uncertified) != UNCERTIFIED || uncertified.len() != judged.verdicts.len() {
+            found.push(format!(
+                "of the {} declarations written beside a `let` the kernel refuses {}, those of {:?}, where {UNCERTIFIED:?} are the `let`s known to be refused theirs:\n{}",
+                beside.len(),
+                judged.verdicts.len(),
+                names(&uncertified),
+                judged
+                    .verdicts
+                    .iter()
+                    .map(|verdict| {
+                        format!(
+                            "{}: {}",
+                            verdict
+                                .name
+                                .map_or_else(String::new, |name| name.faithful().to_string()),
+                            clipped(&verdict.error.to_string())
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ));
+        }
+        assert!(found.is_empty(), "{}", found.join("\n\n"));
+    });
 }
