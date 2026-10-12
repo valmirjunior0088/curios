@@ -3,7 +3,7 @@
 //! Terms, not strings: the report is spelled where it is displayed, for the reader the bound's own spelling is for, so a fact reads as the author would write it.
 
 use {
-    super::{Facts, Origin, Rational},
+    super::{Facts, Origin, Rational, respelled},
     curios_algebra::Monomial,
     curios_core::{LinearViews, Term},
 };
@@ -66,6 +66,16 @@ impl Refusal {
             .chain(values.iter().map(|(atom, _)| atom))
     }
 
+    /// The refusal with its counterexample's atoms written through `spelled`, each reduct as the operand stated beside it.
+    pub(super) fn respelled(mut self, spelled: &[(Term, Term)]) -> Self {
+        if let Conclusion::Counterexample(values) = &mut self.conclusion {
+            for (atom, _) in values {
+                *atom = respelled(spelled, atom);
+            }
+        }
+        self
+    }
+
     /// The report of a search over `facts`, read by `views`, that ended in `outcome`.
     pub(super) fn of(
         facts: &Facts,
@@ -83,7 +93,7 @@ impl Refusal {
         }
         let outcome = match outcome {
             SearchOutcome::Counterexample(assignment) => {
-                Conclusion::Counterexample(counterexample(views, &assignment))
+                Conclusion::Counterexample(counterexample(facts, views, &assignment))
             }
             SearchOutcome::Exhausted(cap) => Conclusion::Exhausted(cap),
             SearchOutcome::Unwritten => Conclusion::Unwritten,
@@ -98,8 +108,12 @@ impl Refusal {
     }
 }
 
-/// Each atom's term and value, where every unknown is an atom; nothing where one is a product.
-fn counterexample(views: &LinearViews, assignment: &[(Monomial, Rational)]) -> Vec<(Term, String)> {
+/// Each atom's term and value, where every unknown is an atom; nothing where one is a product. An atom is the reduct the view read, and is written as the operand `facts` read it from states it, as the facts beside it are.
+fn counterexample(
+    facts: &Facts,
+    views: &LinearViews,
+    assignment: &[(Monomial, Rational)],
+) -> Vec<(Term, String)> {
     if assignment
         .iter()
         .any(|(monomial, _)| monomial.atoms().len() != 1)
@@ -114,6 +128,6 @@ fn counterexample(views: &LinearViews, assignment: &[(Monomial, Rational)]) -> V
     values.sort_by_key(|(atom, _)| atom.index());
     values
         .into_iter()
-        .map(|(atom, value)| (views.term(atom).clone(), value.to_string()))
+        .map(|(atom, value)| (facts.respell(views.term(atom)), value.to_string()))
         .collect()
 }

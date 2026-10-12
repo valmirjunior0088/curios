@@ -137,19 +137,7 @@ pub(super) struct Facts {
 impl Facts {
     /// `term` with every reduct an operand was read through written as the operand was stated: what the facts invent over atoms — a natural's sign, a quotient's bounds, a subtraction's cases — is built from the atoms' reducts, and is written over the spellings in scope. An outer reduct is replaced before one inside it.
     pub(super) fn respell(&self, term: &Term) -> Term {
-        let mut pending = self.spelled.iter().collect::<Vec<_>>();
-        let mut term = term.clone();
-        while let Some(at) = (0..pending.len()).find(|&index| {
-            let (reduct, _) = pending[index];
-            !pending
-                .iter()
-                .enumerate()
-                .any(|(other, (outer, _))| other != index && outer.mentions_term(reduct))
-        }) {
-            let (reduct, stated) = pending.swap_remove(at);
-            term = term.replace_term(reduct, stated);
-        }
-        term
+        respelled(&self.spelled, term)
     }
 
     /// Whether `form` holds a remainder the facts were lifted over: a goal that does is not met by their sum, which is over the dividend, and is proved by refuting its negation, lifted as they were.
@@ -158,6 +146,23 @@ impl Facts {
             .iter()
             .any(|lift| lift.coefficient(form).is_some())
     }
+}
+
+/// `term` with each reduct of `spelled` written as the operand stated beside it, an outer reduct before one inside it.
+pub(super) fn respelled(spelled: &[(Term, Term)], term: &Term) -> Term {
+    let mut pending = spelled.iter().collect::<Vec<_>>();
+    let mut term = term.clone();
+    while let Some(at) = (0..pending.len()).find(|&index| {
+        let (reduct, _) = pending[index];
+        !pending
+            .iter()
+            .enumerate()
+            .any(|(other, (outer, _))| other != index && outer.mentions_term(reduct))
+    }) {
+        let (reduct, stated) = pending.swap_remove(at);
+        term = term.replace_term(reduct, stated);
+    }
+    term
 }
 
 /// A case split an operation defines on an order of its operands, with the facts each case adds: a truncated subtraction `a - b` on `b <= a`, a `min` or a `max` over `a` and `b` on `a <= b`, an `abs` on `+0 <= a`, and a `sign` on each of `+0 < a` and `a < +0`. Operations whose guards are one comparison to conversion share one split ([`Reader::open`]).
@@ -1232,8 +1237,8 @@ impl<'a> Reader<'a> {
         left: &Term,
         right: &Term,
     ) -> Result<Option<LinearForm>, Error> {
-        self.spell(context, left)?;
-        self.spell(context, right)?;
+        spell(context, left, &mut self.read.spelled)?;
+        spell(context, right, &mut self.read.spelled)?;
         let read = comparison_of(
             carrier,
             relation,
@@ -1245,21 +1250,6 @@ impl<'a> Reader<'a> {
         };
         let (aligned, form) = view.form().clone().aligned(view.relation());
         Ok((aligned == Operation::AtMost).then_some(form))
-    }
-
-    /// Each leaf of `stated` — what is no intrinsic, walked to through the intrinsics around it — recorded beside its reduct where the two differ, for [`Facts::respell`] to write what is built from the reduct over the leaf.
-    fn spell(&mut self, context: &mut Context, stated: &Term) -> Result<(), Error> {
-        if let Subterm::Intrinsic(intrinsic) = &**stated {
-            for operand in intrinsic.operands() {
-                self.spell(context, operand)?;
-            }
-            return Ok(());
-        }
-        let reduct = solved(context, stated)?;
-        if reduct != *stated && !self.read.spelled.iter().any(|(known, _)| *known == reduct) {
-            self.read.spelled.push((reduct, stated.clone()));
-        }
-        Ok(())
     }
 
     /// One side of a comparison at `carrier` as the view reads it: its reading ([`Reader::reading`]) with its products distributed, as conversion's own linear solving reads a side ([`distributed`]).
@@ -1299,6 +1289,43 @@ impl<'a> Reader<'a> {
             })
         })
     }
+}
+
+/// Each leaf of `stated` — what is no intrinsic, walked to through the intrinsics around it — recorded in `spelled` beside its reduct where the two differ, for [`respelled`] to write what is built from the reduct over the leaf.
+fn spell(
+    context: &mut Context,
+    stated: &Term,
+    spelled: &mut Vec<(Term, Term)>,
+) -> Result<(), Error> {
+    if let Subterm::Intrinsic(intrinsic) = &**stated {
+        for operand in intrinsic.operands() {
+            spell(context, operand, spelled)?;
+        }
+        return Ok(());
+    }
+    let reduct = solved(context, stated)?;
+    if reduct != *stated && !spelled.iter().any(|(known, _)| *known == reduct) {
+        spelled.push((reduct, stated.clone()));
+    }
+    Ok(())
+}
+
+/// The spellings of the comparison `bound` states, opened as a stated bound is: each operand's reduct beside the operand. What a report writes a counterexample's atoms by where the search read the bound by its reduct alone.
+pub(super) fn stated_spellings(
+    context: &mut Context,
+    bound: &Term,
+) -> Result<Vec<(Term, Term)>, Error> {
+    let mut spelled = Vec::new();
+    let Some(decision) = held(context, bound)? else {
+        return Ok(spelled);
+    };
+    if let Some(Opened::Comparison(comparison)) = opened(context, &decision)?
+        && let Some((_, _, left, right)) = sides(&comparison)
+    {
+        spell(context, &left, &mut spelled)?;
+        spell(context, &right, &mut spelled)?;
+    }
+    Ok(spelled)
 }
 
 /// `term` reduced, and the reduct with the metavariables elaboration has solved substituted: an operand's own reduct, before its atoms are classed, which is what [`Facts::respell`] writes the operand in place of.

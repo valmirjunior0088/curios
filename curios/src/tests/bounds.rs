@@ -723,6 +723,22 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     assert!(!silent.contains("facts in scope"), "{silent}");
 }
 
+/// A counterexample names an atom as the bound states it, as the facts beside it are named: a call by its name, where the view read the body it unfolds to. Through a parameter's bound the statement is the signature's, and through the proposition `True/proved()` leaves implicit it is the solution of a metavariable, which is read for the report alone.
+#[test]
+fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
+    for body in [
+        "let needs(n: Nat, @_: Holds(0 < Nat/log2(n))) -> Nat = n;\nlet row(n: Nat) -> Nat = needs(n);",
+        "let row(n: Nat) -> Holds(0 < Nat/log2(n)) = True/proved();",
+    ] {
+        let refused = typecheck(&format!("{HEADER}\n{body}\nIo/pure(())"))
+            .expect_err("the control is refused");
+        assert!(
+            refused.contains("it fails at Nat/log2(n) = 0"),
+            "{body:?} reported {refused}"
+        );
+    }
+}
+
 #[test]
 fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
     let goal = |binders: &str| {

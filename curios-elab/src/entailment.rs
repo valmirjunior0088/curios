@@ -128,7 +128,17 @@ pub(crate) fn entail(
     if let Entailed::Proved(proof) = &entailed {
         context.credit(proof);
     }
-    Ok(entailed)
+    Ok(match entailed {
+        // A bound that is a metavariable elaboration has solved, as the statement `True/proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and a counterexample would name an atom by the body it unfolds to. What the solution states is read here, for the report alone: the proof is written over what the search read, and one written over the solution does not check. A reading that runs out leaves the report as the search made it.
+        Entailed::Refused(refusal) if stated.is_none() => {
+            let solved = zonk_solved_term_metas(context, bound);
+            match stated_spellings(context, &solved) {
+                Ok(spelled) => Entailed::Refused(refusal.respelled(&spelled)),
+                Err(_) => Entailed::Refused(refusal),
+            }
+        }
+        entailed => entailed,
+    })
 }
 
 /// The fact that states `bound` outright, as its proof: the first hypothesis, or proof field one level down, in scope order, whose statement converts with the bound and checks against it.
