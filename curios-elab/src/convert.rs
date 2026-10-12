@@ -2565,6 +2565,14 @@ impl Convert {
             // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation the reduced spelling decides is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
             //
             // A `use` slot is committed as written for the same reason, whatever its dictionary unfolds to: a witness is a name for a structure of methods, and committed reduced the slot would spell the structure out at every use, for the kernel to receive and for erasure to build again where the program calls a global.
+            // A raw side headed by a solved metavariable spells what that one was solved to: an implicit another call hands on, as `Eq/sym` does each side of the equation it turns, holds the name its reduct no longer shows.
+            let behind = match &**applied_head(rigid_raw) {
+                Subterm::Metavar(Metavar { id, .. }) if context.metavar_solution(*id).is_some() => {
+                    Some(zonk_solved_term_metas(context, rigid_raw))
+                }
+                _ => None,
+            };
+            let rigid_raw = behind.as_ref().unwrap_or(rigid_raw);
             let written = stalled_unfolding(rigid_raw, rigid)
                 || (matches!(metavar.origin, MetavarOrigin::Witness(_)) && rigid_raw != rigid);
             if written

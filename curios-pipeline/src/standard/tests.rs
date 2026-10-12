@@ -1046,11 +1046,7 @@ fn clipped(said: &str) -> String {
 }
 
 /// The `let`s of the library the translation declines, each holding a form no program spells, in the order of their names. A report raised in one shows the term as the compiler holds it.
-const DECLINED: [&str; 5] = [
-    // Each unfolds `/std/Map/Node/first`, whose own `use Key(K)` stands beside the declaration's. The two reach `Hash` by paths of one length, and the translation, which holds no edge's arguments, restores a superclass path only where it is the one of its length.
-    "/std/Map/Node/across",
-    "/std/Map/Node/read",
-    "/std/Map/Node/zero_side",
+const DECLINED: [&str; 2] = [
     // Each holds a string past the length a report prints one whole.
     "/std/http/Url/part",
     "/std/http/syntax/status_line",
@@ -1071,11 +1067,8 @@ const UNREACHED: [&str; 11] = [
     "/std/Tui/border/edge",
 ];
 
-/// The `let`s of the library that are refused as a report prints them.
-const REFUSED: [&str; 1] = [
-    // A bound's proof holds a copy of a `let`'s value, a match whose arms call `True/proved`. Written back, the copy is elaborated at universe metavariables of its own, and the conversion that holds it to the value is asked before they are solved.
-    "/std/Flt/of_decimal_in",
-];
+/// The `let`s of the library that are refused as a report prints them: none.
+const REFUSED: [&str; 0] = [];
 
 /// The `let`s of the library whose printed form elaborates and is not proved to be the `let`.
 const UNPROVED: [&str; 1] = [

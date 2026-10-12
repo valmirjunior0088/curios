@@ -1352,6 +1352,35 @@ fn a_use_slot_is_solved_to_the_dictionary_as_it_is_named() {
     assert_eq!(solved(MetavarOrigin::Hole), Some(methods()));
 }
 
+// A metavariable met against another's solution is solved to what that one spells: `?0` holds the name `flat`, and `?1`, met against `?0`, holds the name too, where the reduct of either is the definition's lambda.
+#[test]
+fn a_solution_met_through_a_solved_metavariable_keeps_the_name_it_spells() {
+    let mut context = context();
+    let flat = Free::from(&nominal("flat"));
+    let argument = context.fresh(Some("n"));
+    let type_ = Term::func_type([(argument, nat_type())], nat_type());
+    context.define_assuming(
+        &flat,
+        &type_,
+        &Term::func([(argument, nat_type())], nat(0)),
+        Some(&DefinitionKind::Authored),
+    );
+    context.birth_metavar(MetavarId(0), Vec::new(), type_.clone());
+    context.birth_metavar(MetavarId(1), Vec::new(), type_.clone());
+
+    let name = Term::free_var(&flat);
+    assert_eq!(
+        convert(&mut context, &type_, &Term::hole(0), &name),
+        Ok(true)
+    );
+    assert_eq!(
+        convert(&mut context, &type_, &Term::hole(1), &Term::hole(0)),
+        Ok(true)
+    );
+    assert_eq!(context.metavar_solution(MetavarId(0)), Some(&name));
+    assert_eq!(context.metavar_solution(MetavarId(1)), Some(&name));
+}
+
 /// `flat(?0)` against `flat(1)`, where `flat` forgets its argument: the two are equal whatever `?0` is, and their spines agree at `?0 := 1`.
 fn two_calls_of_a_definition_that_forgets_its_argument(context: &mut Context) -> Problem {
     let flat = Free::from(&nominal("flat"));
