@@ -1,11 +1,11 @@
 //! The unification state: metavariable birth records and solutions, the solve journal, and the parked-work store.
 //!
-//! Everything here is frame-independent — a metavariable's record freezes the Γ it was born under, and parked work freezes the frame it blocked in, so neither is touched by `enter_frame`/`leave_frame`. Writes that must reach the cache stamps are stamped by the `Context` façade; the transactional watermark (`SolutionMark`) also stays there, because it spans this store and the universe solver together.
+//! Everything here is frame-independent — a metavariable's record freezes the Γ it was born under, and parked work holds the frames it blocked under ([`HeldFrames`]), shared with the context and copied for whatever writes to one, so neither is touched by `enter_frame`/`leave_frame`. Writes that must reach the cache stamps are stamped by the `Context` façade; the transactional watermark (`SolutionMark`) also stays there, because it spans this store and the universe solver together.
 //!
 //! **Which term awaits a metavariable is kept here, and written at three doors.** A term that reads its parts against types holding metavariables awaits them until it has read them all ([`Solutions::enter_awaiting`]): a metavariable is awaited from its birth by the term being read, and the relation moves only where a link is made — a committed solution holds what it mentions to what it solves, a parked problem holds together what it watches ([`Solutions::birth_with_kind`], [`Solutions::solve`], [`Solutions::park`]). What links hold together is a class ([`Held`]), joined where the link is made and awaited whole by the outermost standing term that awaited any of it, so a chain of links holds its ends: a numeral under two calls waits for the outer one, which no one link says of it. A term that has completed awaits nothing, which a reader sees without a pass: the record stays and the term no longer stands. So whether a choice may still be informed by what encloses it is read off the metavariable's class, and no pass over the store answers it.
 
 use {
-    super::{FrozenFrame, SharedRefinements, SharedTelescope},
+    super::{HeldFrames, SharedRefinements, SharedTelescope},
     crate::{DeadArm, Problem, Refusal},
     curios_core::{
         Bound, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm, Term,
@@ -103,7 +103,7 @@ pub(crate) enum ParkedWork {
         expected: Term,
         placeholder: MetavarId,
     },
-    /// A witness-resolution goal whose key type is not yet rigid: `slot` is the metavariable standing in the omitted `use`-argument's place, `goal` its (concept application) type. Woken when a watched metavariable solves; resolution then retries under the frozen frame.
+    /// A witness-resolution goal whose key type is not yet rigid: `slot` is the metavariable standing in the omitted `use`-argument's place, `goal` its (concept application) type. Woken when a watched metavariable solves; resolution then retries standing on the frames the goal holds.
     Witness {
         slot: MetavarId,
         goal: Term,
@@ -117,24 +117,24 @@ pub(crate) enum ParkedWork {
     },
 }
 
-/// A problem parked by `expect` (or a blocked intro-form check) to outlive its call. Like a [`MetaEntry`], it freezes the local frame it was born under.
+/// A problem parked by `expect` (or a blocked intro-form check) to outlive its call. It holds the local frames it was parked under, and its retry stands on them ([`Context::standing_on`](super::Context::standing_on)).
 #[derive(Debug)]
 pub(crate) struct ParkedProblem {
     pub work: ParkedWork,
     /// The term being checked at park time; its extent anchors the eventual error if the problem never resolves.
     pub origin: Term,
-    pub frame: FrozenFrame,
+    pub frames: HeldFrames,
     /// The unsolved metavariables whose solutions could unblock this — solving any of them is the wake signal.
     pub watching: BTreeSet<MetavarId>,
 }
 
-/// A parked conversion as a completing term reads it ([`Solutions::conversions_awaited_by`]): where it stands in the store, the problem, the term it was parked for and the frame it froze.
+/// A parked conversion as a completing term reads it ([`Solutions::conversions_awaited_by`]): where it stands in the store, the problem, the term it was parked for and the frames it holds.
 #[derive(Debug)]
 pub(crate) struct ParkedConversion {
     pub at: usize,
     pub problem: Problem,
     pub origin: Term,
-    pub frame: FrozenFrame,
+    pub frames: HeldFrames,
 }
 
 /// What a completing term may do for a parked problem nothing else answers: the problem's own answer, one among those it admits ([`ParkedWork::choice`]). Their order is the order they are taken in, each committing less than the next and able to decide it, with one exception the store cannot tell by a problem's shape: a lambda with a domain left open is read after the spines are held, which may be what gives the domain ([`Context::complete`](crate::Context::complete)).
@@ -170,14 +170,14 @@ impl ParkedWork {
     }
 }
 
-/// A parked check with a choice a completing term may take for it ([`ParkedWork::choice`]): the term as written, the type it waits at, the placeholder that stands for it and the frame it froze.
+/// A parked check with a choice a completing term may take for it ([`ParkedWork::choice`]): the term as written, the type it waits at, the placeholder that stands for it and the frames it holds.
 #[derive(Debug, Clone)]
 pub(crate) struct ParkedChoice {
     pub choice: Choice,
     pub written: Term,
     pub expected: Term,
     pub placeholder: MetavarId,
-    pub frame: FrozenFrame,
+    pub frames: HeldFrames,
 }
 
 impl ParkedProblem {
@@ -196,7 +196,7 @@ impl ParkedProblem {
                 written: term.clone(),
                 expected: expected.clone(),
                 placeholder: *placeholder,
-                frame: self.frame.clone(),
+                frames: self.frames.clone(),
             }),
             _ => None,
         }
@@ -396,7 +396,7 @@ impl Solutions {
                     at,
                     problem: problem.clone(),
                     origin: parked.origin.clone(),
-                    frame: parked.frame.clone(),
+                    frames: parked.frames.clone(),
                 }),
                 _ => None,
             })
@@ -695,8 +695,8 @@ impl Solutions {
         }
     }
 
-    /// Park work under its frozen frame, recomputing the watch set from the work's currently unsolved metavariables.
-    pub(crate) fn park(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
+    /// Park work with the frames it holds, recomputing the watch set from the work's currently unsolved metavariables.
+    pub(crate) fn park(&mut self, work: ParkedWork, origin: Term, frames: HeldFrames) {
         let watching = match &work {
             // Its type as well as its sides: a goal postponed because the type it is compared at is unsolved wakes when that type is.
             ParkedWork::Conversion(goal) => self.unsolved_in([&goal.this, &goal.that, &goal.type_]),
@@ -718,7 +718,7 @@ impl Solutions {
         self.parked.push(ParkedProblem {
             work,
             origin,
-            frame,
+            frames,
             watching,
         });
     }

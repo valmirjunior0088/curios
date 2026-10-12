@@ -2,13 +2,15 @@
 //!
 //! A frame is entered where a scope opens and left where it closes, and what a lookup reads of the context it reads of the frames that stand, innermost first ([`Frames`](super::Frames)). Each holds its assumptions, its definitions, its refinements of a variable, of a projection and of a stuck application, the reduced spelling each of the last was settled to, why its arm is dead where it is, and its locals and witness binders in the order they were bound.
 //!
+//! **A frame is shared.** The context holds each behind a count, and so does what waits in it ([`HeldFrames`]). A frame written to while something else holds it is copied for the writer first ([`Frames`](super::Frames) writes through `Rc::make_mut`), so a holder has what stood and nothing written since. What a frame remembers of its guards' reduced spellings is the one thing written through a shared frame, since it is the frame's wherever the frame is held.
+//!
 //! **A frame may hold a name twice.** An arm assumes its own payload binder again at the type its case's solution gives it (`retype_locals`), so the locals are a list, read by the later entry, with the assumptions beside them by name.
 
 use {
     crate::{DeadArm, UniverseStateToken},
     curios_core::{DefinitionKind, Free, Term, UniverseContext},
     curios_utilities::Keyed,
-    std::{collections::HashMap, hash::Hash, rc::Rc},
+    std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc},
 };
 
 /// One definition: the definiens, plus the [`DefinitionKind`] of the module item that introduced it. Every `DefEntry` — whether a plain `let`/`rec` member or mid-window rec-group registration — is treated uniformly; there is no `recursive` marker distinguishing them.
@@ -73,7 +75,7 @@ pub(crate) struct Settled {
 }
 
 /// What a settlement left for one scrutinee entry.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Spelling {
     /// The reduced spelling, or `None` where reducing the key refused or outran its allowance.
     pub(super) settled: Option<Settled>,
@@ -81,6 +83,8 @@ pub(super) struct Spelling {
     pub(super) solved: Option<usize>,
     /// The universe solver's state when it settled, where a question put to conversion on the way was declined for a commit: the spelling is then what the key reduces to only while that state stands.
     pub(super) levels: Option<UniverseStateToken>,
+    /// How many times every spelling had been forgotten at once when it settled ([`Frames::forget_spellings`](super::Frames::forget_spellings)): it is what its key reduces to only while that count stands.
+    pub(super) forgotten: usize,
 }
 
 /// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
@@ -95,7 +99,7 @@ pub(crate) struct ProjectionEntry {
 /// One frame's definitions, or its refinements of one kind, read back in the order they were recorded.
 ///
 /// A hash map's own order differs from one process to the next, and a frame's entries are read in order: the guards a proof the elaborator writes is built from are admitted as they are met, so a frame holding two would yield two proofs of one bound, by the run; and a report names an unfolded `rec` group by the first definition it finds of that structure, so two groups of one structure would be spelled either way.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Recorded<K, V> {
     places: HashMap<K, usize>,
     entries: Vec<(K, V)>,
@@ -156,7 +160,7 @@ impl<K: Eq + Hash + Clone, V> Recorded<K, V> {
 pub(super) type Projected = Keyed<(Term, usize)>;
 
 /// One frame: what the scope it was entered for holds. See the module documentation.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Frame {
     pub(super) assumptions: HashMap<Free, Term>,
     pub(super) assumption_universes: HashMap<Free, UniverseContext>,
@@ -168,12 +172,14 @@ pub(crate) struct Frame {
     pub(super) refinement_scrutinees: Recorded<Term, ScrutineeEntry>,
     /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
     ///
-    /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration, the exit of an inner frame and a suppression bracket leave it alone, and it is forgotten with its frame, where its key is registered again, at a redefinition, a rollback and a universe rewrite, and at a declaration's boundary, which nothing a budget paid for outlives. A fresh definition forgets the spellings naming it, as it does the reducts; and one settled while its key or its reduct held an unsolved metavariable is asked for again once a solution has landed.
+    /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration, the exit of an inner frame and a suppression bracket leave it alone, and it is forgotten with its frame, where its key is registered again, at a redefinition, a rollback and a universe rewrite, and at a declaration's boundary, which nothing a budget paid for outlives: each of those advances a count every spelling is stamped with, so a frame only a parked problem holds forgets as the live ones do. A fresh definition forgets the spellings naming it, as it does the reducts; and one settled while its key or its reduct held an unsolved metavariable is asked for again once a solution has landed.
     ///
-    /// An entry is visible under one window floor only, the one in force where it was registered: a suppression bracket and a retry frame hide every frame that stood when they began, and leave after every frame entered inside them. So a spelling is never read under a floor other than the one it was settled under.
+    /// **It is the frame's, behind a cell.** The live context and every judgment that stands on the frame read one memo and settle a key once between them: a spelling rests on the frames below its own, and a frame stands on the same ones wherever it is held.
+    ///
+    /// An entry is visible under one window floor only, the one in force where it was registered: a suppression bracket hides every frame that stood when it began, and leaves after every frame entered inside it. So a spelling is never read under a floor other than the one it was settled under.
     ///
     /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
-    pub(super) scrutinee_spellings: [HashMap<Term, Spelling>; 2],
+    pub(super) scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
     /// Why the frame's arm is never taken, where the frame is an arm its scrutinee's indices rule out — `None` for every other frame. The reason is known where the arm opens, and an implicit bound nothing discharges under it is reported once the arm has closed, so it is kept here for the metavariable born there to take ([`Frames::dead_arm`](super::Frames::dead_arm)).
     pub(super) dead_arm: Option<Rc<DeadArm>>,
     /// The frame's assumptions in binding order, a companion to `assumptions`, which is keyed by name and loses order.
@@ -203,5 +209,36 @@ impl Frame {
         !self.refinements.is_empty()
             || !self.refinement_projections.is_empty()
             || !self.refinement_scrutinees.is_empty()
+    }
+}
+
+/// The frames above the base as they stood where something that waits took them: a parked problem where it parks. Shared with the context and with every other holder, never copied: a frame written to since was copied for its writer, so these are what stood. A judgment made for what holds them stands on them ([`Context::standing_on`](crate::Context::standing_on)).
+///
+/// The base frame is the elaboration's and is never held: what waits with no local frame standing holds none.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct HeldFrames(Rc<[Rc<Frame>]>);
+
+impl HeldFrames {
+    pub(super) fn of(frames: &[Rc<Frame>]) -> Self {
+        Self(frames.iter().cloned().collect())
+    }
+
+    pub(super) fn frames(&self) -> &[Rc<Frame>] {
+        &self.0
+    }
+
+    /// Whether a frame held registers a refinement of any kind: the residual-constraint report notes it, and the caches are told of a judgment that stands on one.
+    pub(crate) fn refined(&self) -> bool {
+        self.0.iter().any(|frame| frame.refined())
+    }
+
+    /// Whether a frame held binds a local: what a judgment standing on these reads that the base frame does not hold.
+    pub(crate) fn binds(&self) -> bool {
+        self.0.iter().any(|frame| !frame.locals.is_empty())
+    }
+
+    /// Every definition the frames hold, outermost frame first, each frame's in the order it recorded them.
+    pub(crate) fn definitions(&self) -> impl Iterator<Item = (&Free, &DefEntry)> {
+        self.0.iter().flat_map(|frame| frame.definitions.iter())
     }
 }

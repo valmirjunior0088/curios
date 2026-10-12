@@ -506,7 +506,7 @@ pub enum Error {
         that: Box<Term>,
         /// The still-unsolved watched metavariables, each by what it is.
         watching: Vec<Watched>,
-        /// Whether the goal's frozen frame carried live match-arm refinements — a solution holding only under them is deliberately never committed, one way a goal stays undecided.
+        /// Whether the frames the goal holds carry match-arm refinements — a solution holding only under them is deliberately never committed, one way a goal stays undecided.
         under_refinements: bool,
     },
     /// A metavariable two of a term's parked conversions each give an answer, where the answers differ. Each conversion is one holding spines decides, two applications of one definition or an application of a metavariable against a type former's node, and neither answer is forced: a definition that is not injective is equal at both, and an imitation is one function among those the application may stand for. Taking either would be taking the order the two were parked in, so the term is refused where it completes, at the second's origin.

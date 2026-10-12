@@ -1,7 +1,7 @@
 use {
     super::{Misaligned, align, flexible, park_checking, trivially_inhabited},
     crate::{
-        ArgumentSite, Context, Entailed, ErasedSite, Error, FrozenFrame, Mode, ParkedWork, Sort,
+        ArgumentSite, Context, Entailed, ErasedSite, Error, HeldFrames, Mode, ParkedWork, Sort,
         attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, elaborate, entail,
         exhausted_bound, expect, is_prop, reduce_with, resolve_witness_goal, transitively_ground,
         zonk_solved_term_metas,
@@ -272,17 +272,17 @@ pub(crate) fn attempt_discharge(
     Ok(false)
 }
 
-/// Retry a parked discharge under the frame it was parked in ([`attempt_discharge`]), parking it again while it still waits.
+/// Retry a parked discharge standing on the frames it was parked under ([`attempt_discharge`]), parking it again while it still waits.
 pub(crate) fn retry_discharge(
     context: &mut Context,
     slot: MetavarId,
     bound: Term,
     provenance: ImplicitOrigin,
     origin: Term,
-    frame: FrozenFrame,
+    frames: HeldFrames,
 ) -> Result<(), Error> {
     let waiting = context
-        .with_retry_frame(&frame, |context| {
+        .standing_on(&frames, |context| {
             attempt_discharge(context, slot, &bound, &provenance)
         })
         .map_err(|error| error.at_opt(origin.extent()))?;
@@ -294,7 +294,7 @@ pub(crate) fn retry_discharge(
                 provenance,
             },
             origin,
-            frame,
+            frames,
         );
     }
     Ok(())

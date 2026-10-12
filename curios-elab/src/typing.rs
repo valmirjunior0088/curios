@@ -3,13 +3,13 @@ mod tests;
 
 use {
     super::{
-        AwaitId, Beside, Binders, Choice, Context, Error, FrozenFrame, HeldConversion, Mode,
-        Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
-        Rejected, Sort, Spines, Watched, answer_witness, answers_differ, callee, convert,
-        diagnose_embedding, diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines,
-        is_monad, monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome,
-        reduce_forced, refold_recs, retry_discharge, retry_witness, settle_qualities,
-        shallow_scrutinee, subsume_outcome, synth_neutral, zonk_solved_term_metas,
+        AwaitId, Beside, Binders, Choice, Context, Error, HeldConversion, HeldFrames, Mode, Opened,
+        Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem, Rejected,
+        Sort, Spines, Watched, answer_witness, answers_differ, callee, convert, diagnose_embedding,
+        diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines, is_monad,
+        monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome, reduce_forced,
+        refold_recs, retry_discharge, retry_witness, settle_qualities, shallow_scrutinee,
+        subsume_outcome, synth_neutral, zonk_solved_term_metas,
     },
     curios_analysis::{
         RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
@@ -579,7 +579,7 @@ pub(crate) fn transitively_ground(context: &Context, id: MetavarId) -> bool {
 }
 
 impl Context<'_> {
-    /// Retry parked constraints woken by freshly landed solutions, to fixpoint. A woken goal re-runs under its frozen frame: converts and is dropped, mismatches and errors at its origin, or re-parks still blocked. Each round consumes wake signals and ids solve exactly once, so this terminates.
+    /// Retry parked constraints woken by freshly landed solutions, to fixpoint. A woken goal re-runs standing on the frames it holds: converts and is dropped, mismatches and errors at its origin, or re-parks still blocked. Each round consumes wake signals and ids solve exactly once, so this terminates.
     pub(crate) fn retry_parked(&mut self) -> Result<(), Error> {
         // Never retry inside an oracle: re-validation reads every failure but exhaustion as a rejected candidate, so a woken goal's mismatch would vanish along with the goal itself — a silently dropped obligation. The wake signals stay queued; the next unsuppressed turnaround retries them.
         if self.parking_suppressed() {
@@ -633,7 +633,7 @@ impl Context<'_> {
         // Each check with what its type has come to, and the bare metavariable where that is one.
         let mut waiting = Vec::with_capacity(choices.len());
         for choice in choices {
-            let reduced = self.with_retry_frame(&choice.frame, |context| {
+            let reduced = self.standing_on(&choice.frames, |context| {
                 reduce_with(context, &choice.expected)
             })?;
             let bare = match &*reduced {
@@ -688,7 +688,7 @@ impl Context<'_> {
                 });
             let default = numeral_default(self, literals);
             let choice = &waiting[at].2;
-            self.with_retry_frame(&choice.frame, |context| {
+            self.standing_on(&choice.frames, |context| {
                 expect(context, &choice.written, &default, &choice.expected)
             })?;
             return Ok(true);
@@ -728,7 +728,7 @@ impl Context<'_> {
         if let Some((_, _, choice)) = lambda {
             taken.insert(choice.placeholder);
             if self.take_checking(choice.placeholder).is_some() {
-                let checked = self.with_retry_frame(&choice.frame, |context| {
+                let checked = self.standing_on(&choice.frames, |context| {
                     check(context, &choice.written, choice.expected.clone())
                 })?;
                 self.fill_placeholder(choice.placeholder, checked);
@@ -802,13 +802,13 @@ impl Context<'_> {
             }
         }
         self.drop_conversions(&held);
-        // What a held conversion left undecided waits in its place, under the frame it froze.
+        // What a held conversion left undecided waits in its place, with the frames it holds.
         for (conversion, problems) in left {
             for problem in problems {
                 self.repark(
                     ParkedWork::Conversion(problem),
                     conversion.origin.clone(),
-                    conversion.frame.clone(),
+                    conversion.frames.clone(),
                 );
             }
         }
@@ -816,14 +816,16 @@ impl Context<'_> {
         Ok(!held.is_empty())
     }
 
-    /// [`hold_spines`] of a conversion a term awaits, under the frame it froze.
+    /// [`hold_spines`] of a conversion a term awaits, standing on the frames it holds.
     fn spines_of(
         &mut self,
         conversion: &ParkedConversion,
         reading: Spines,
     ) -> Result<Option<HeldConversion>, Error> {
-        let ParkedConversion { problem, frame, .. } = conversion;
-        self.with_retry_frame(frame, |context| {
+        let ParkedConversion {
+            problem, frames, ..
+        } = conversion;
+        self.standing_on(frames, |context| {
             hold_spines(context, problem, reading).map_err(|error| {
                 Error::from_reduce(error, |refusal| {
                     Error::convert_exhausted(problem.this.clone(), problem.that.clone(), refusal)
@@ -841,12 +843,12 @@ impl Context<'_> {
         if self.take_checking(choice.placeholder).is_none() {
             return Ok(());
         }
-        let (rebuilt, stated) = self.with_retry_frame(&choice.frame, |context| {
+        let (rebuilt, stated) = self.standing_on(&choice.frames, |context| {
             elaborate_func_settle(context, func, &choice.written)
         })?;
         self.fill_placeholder(choice.placeholder, rebuilt);
 
-        self.with_retry_frame(&choice.frame, |context| {
+        self.standing_on(&choice.frames, |context| {
             expect(context, &choice.written, &stated, &choice.expected)
         })
     }
@@ -869,37 +871,36 @@ impl Context<'_> {
             .map(|entry| entry.result.clone())
             .expect("a metavariable waited on has a birth record");
 
-        let (product, parts, checked, declared) =
-            self.with_retry_frame(&choice.frame, |context| {
-                let declared = match &*reduce_with(context, &sort)? {
-                    Subterm::Sort(quality, _) => Some(context.universes().quality(*quality)),
-                    _ => None,
+        let (product, parts, checked, declared) = self.standing_on(&choice.frames, |context| {
+            let declared = match &*reduce_with(context, &sort)? {
+                Subterm::Sort(quality, _) => Some(context.universes().quality(*quality)),
+                _ => None,
+            };
+            let mut fields = Vec::with_capacity(tuple.fields.len());
+            let mut parts = Vec::with_capacity(tuple.fields.len());
+            for position in 0..tuple.fields.len() {
+                let part = match declared {
+                    Some(Quality::Prop) => context.fresh_prop_sort("literal field"),
+                    _ => context.fresh_sort("literal field"),
                 };
-                let mut fields = Vec::with_capacity(tuple.fields.len());
-                let mut parts = Vec::with_capacity(tuple.fields.len());
-                for position in 0..tuple.fields.len() {
-                    let part = match declared {
-                        Some(Quality::Prop) => context.fresh_prop_sort("literal field"),
-                        _ => context.fresh_sort("literal field"),
-                    };
-                    let (part, hole) = context.fresh_hole(part, choice.written.extent());
-                    parts.push(part);
-                    // `names` is empty for a positional literal, not a row of `None`s, so the label is read by position.
-                    let name = tuple.names.get(position).and_then(|name| name.as_deref());
-                    fields.push((context.fresh(name), hole));
-                }
-                let product = Term::tuple_type(fields);
-                let checked = check(context, &choice.written, product.clone())?;
+                let (part, hole) = context.fresh_hole(part, choice.written.extent());
+                parts.push(part);
+                // `names` is empty for a positional literal, not a row of `None`s, so the label is read by position.
+                let name = tuple.names.get(position).and_then(|name| name.as_deref());
+                fields.push((context.fresh(name), hole));
+            }
+            let product = Term::tuple_type(fields);
+            let checked = check(context, &choice.written, product.clone())?;
 
-                Ok::<_, Error>((product, parts, checked, declared))
-            })?;
+            Ok::<_, Error>((product, parts, checked, declared))
+        })?;
         self.fill_placeholder(choice.placeholder, checked);
 
         for part in parts {
             self.structure(part)?;
         }
 
-        self.with_retry_frame(&choice.frame, |context| {
+        self.standing_on(&choice.frames, |context| {
             expect(context, &choice.written, &product, &choice.expected)
         })?;
         // Where the metavariable was declared a type, the product is read again once the item has settled its fields ([`Context::hold_shapes`]). Where its sort was left to inference there is nothing declared to hold it to.
@@ -936,7 +937,7 @@ impl Context<'_> {
             else {
                 continue;
             };
-            let refused = self.with_retry_frame(&shaped.frame, |context| {
+            let refused = self.standing_on(&shaped.frames, |context| {
                 let product = zonk_solved_term_metas(context, &shaped.expected);
                 if quality_of(context, &product)? != Quality::Prop {
                     return Ok(None);
@@ -988,20 +989,20 @@ impl Context<'_> {
                         provenance,
                     },
                 origin,
-                frame,
+                frames,
                 ..
             }) = self.take_witness(slot)
             else {
                 continue;
             };
-            answer_witness(self, slot, goal, provenance, origin, frame)?;
+            answer_witness(self, slot, goal, provenance, origin, frames)?;
             answered |= self.metavar_solution(slot).is_some();
         }
 
         Ok(answered)
     }
 
-    /// Drain the parked store ([`Context::drain_store`]), then hold each product a literal shaped to the sort its metavariable was declared at ([`Context::hold_shapes`]). Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and frozen frames do not pile up.
+    /// Drain the parked store ([`Context::drain_store`]), then hold each product a literal shaped to the sort its metavariable was declared at ([`Context::hold_shapes`]). Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and held frames do not pile up.
     pub(crate) fn drain_parked(&mut self) -> Result<(), Error> {
         self.drain_store()?;
         self.hold_shapes()
@@ -1038,7 +1039,7 @@ impl Context<'_> {
                     let ParkedProblem {
                         work,
                         origin: parked_origin,
-                        frame,
+                        frames,
                         watching,
                     } = parked;
                     if let ParkedWork::Conversion(goal) = &work
@@ -1093,7 +1094,7 @@ impl Context<'_> {
                                         resolved_for_display(self, &goal.this),
                                         resolved_for_display(self, &goal.that),
                                         blockers,
-                                        frame.carries_refinements(),
+                                        frames.refined(),
                                     )
                                     .at_opt(parked_origin.extent())
                                 }
@@ -1372,21 +1373,21 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
     let ParkedProblem {
         work,
         origin,
-        frame,
+        frames,
         watching,
     } = parked;
 
     context.retried_under(&watching, |context| {
-        retry_work(context, work, origin, frame)
+        retry_work(context, work, origin, frames)
     })
 }
 
-/// Retry one problem's work under its frozen frame ([`retry_one`]).
+/// Retry one problem's work standing on the frames it holds ([`retry_one`]).
 fn retry_work(
     context: &mut Context,
     work: ParkedWork,
     origin: Term,
-    frame: FrozenFrame,
+    frames: HeldFrames,
 ) -> Result<(), Error> {
     let goal = match work {
         ParkedWork::Conversion(goal) => goal,
@@ -1394,20 +1395,20 @@ fn retry_work(
             term,
             expected,
             placeholder,
-        } => return retry_checking(context, term, expected, placeholder, origin, frame),
+        } => return retry_checking(context, term, expected, placeholder, origin, frames),
         ParkedWork::Witness {
             slot,
             goal,
             provenance,
         } => {
-            retry_witness(context, slot, goal, provenance, origin, frame);
+            retry_witness(context, slot, goal, provenance, origin, frames);
             return Ok(());
         }
         ParkedWork::Discharge {
             slot,
             bound,
             provenance,
-        } => return retry_discharge(context, slot, bound, provenance, origin, frame),
+        } => return retry_discharge(context, slot, bound, provenance, origin, frames),
     };
 
     enum Retry {
@@ -1416,11 +1417,11 @@ fn retry_work(
         Blocked(Vec<Problem>),
     }
 
-    let outcome = context.with_retry_frame(&frame, |context| {
+    let outcome = context.standing_on(&frames, |context| {
         Ok(
             match problem_outcome(context, goal.clone(), origin.extent())? {
                 Outcome::Converts => Retry::Converts,
-                // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
+                // Built here, standing on the problem's frames, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
                 // What was compared is read off the type the problem is posed at: at a sort the two are types, one inferred and one expected, and anywhere else they are terms a type states at one position. A residual of the carriers' algebra is posed at `Type` for want of the type it stands at, and is told from two types by what it is: a value an intrinsic builds is no type.
                 Outcome::Mismatch(beside) => {
                     let report = match &*goal.type_ {
@@ -1454,7 +1455,7 @@ fn retry_work(
         Retry::Mismatch(error) => Err(error.at_opt(origin.extent())),
         Retry::Blocked(goals) => {
             for goal in goals {
-                context.repark(ParkedWork::Conversion(goal), origin.clone(), frame.clone());
+                context.repark(ParkedWork::Conversion(goal), origin.clone(), frames.clone());
             }
             Ok(())
         }
@@ -1470,7 +1471,7 @@ fn intrinsic_value(context: &Context, term: &Term) -> bool {
     )
 }
 
-/// Retry a parked *checking problem*: under the frozen frame, the expected type either still reduces to a bare metavariable (re-park) or has gained structure — run the check for real and fill the placeholder with the rebuilt term. Errors propagate carrying the term's own extents.
+/// Retry a parked *checking problem*: standing on the frames it holds, the expected type either still reduces to a bare metavariable (re-park) or has gained structure — run the check for real and fill the placeholder with the rebuilt term. Errors propagate carrying the term's own extents.
 ///
 /// The term is elaborated here for the first time, and no second: a term's lowering-minted holes are birthed where it is first elaborated, and an occurrence rebuilt by another run would drop their spines. So whatever runs a parked check holds it out of the store, and nothing but its check fills its placeholder ([`Context::fill_placeholder`]).
 fn retry_checking(
@@ -1479,9 +1480,9 @@ fn retry_checking(
     expected: Term,
     placeholder: MetavarId,
     origin: Term,
-    frame: FrozenFrame,
+    frames: HeldFrames,
 ) -> Result<(), Error> {
-    let rebuilt = context.with_retry_frame(&frame, |context| {
+    let rebuilt = context.standing_on(&frames, |context| {
         // Re-park while the term is still blocked on its expected type's structure — the same predicate that parked it, with the result-directed refinements off: at retry there is no output turnaround left to wait for, so a codomain-only block checks eagerly.
         if blocked_on_metavar(context, &term, &expected, &BTreeSet::new(), false)? {
             return Ok(None);
@@ -1499,7 +1500,7 @@ fn retry_checking(
                 placeholder,
             },
             origin,
-            frame,
+            frames,
         ),
     }
 

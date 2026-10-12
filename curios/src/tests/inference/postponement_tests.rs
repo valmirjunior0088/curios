@@ -1,6 +1,6 @@
 //! A checking problem that cannot proceed yet, and what wakes it.
 //!
-//! A checked-only form met by an expectation with no structure is postponed rather than judged, and re-checked under its frozen frame once a watched metavariable lands. These pin both halves: the problems an outer pin resolves, and the ones nothing ever will — which must be reported at their own span rather than accepted.
+//! A checked-only form met by an expectation with no structure is postponed rather than judged, and re-checked standing on the frames it parked under once a watched metavariable lands. These pin both halves: the problems an outer pin resolves, and the ones nothing ever will — which must be reported at their own span rather than accepted.
 
 use crate::tests::{error, run};
 

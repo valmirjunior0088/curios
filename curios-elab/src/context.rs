@@ -55,6 +55,8 @@ pub(crate) use underway::*;
 #[cfg(test)]
 mod awaiting_tests;
 #[cfg(test)]
+mod held_tests;
+#[cfg(test)]
 mod restriction_tests;
 #[cfg(test)]
 mod tests;
@@ -775,7 +777,7 @@ impl<'s> Context<'s> {
     }
 
     /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frame::scrutinee_spellings`] carries how long one stands.
-    pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
+    pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<Option<Settled>> {
         self.typing.frames.settled_spelling(
             frame,
             key,
@@ -2790,66 +2792,67 @@ impl<'s> Context<'s> {
 
     // === Parked constraints ============================================
 
-    pub(crate) fn freeze_frame(&self) -> FrozenFrame {
-        self.typing.frames.freeze()
+    /// [`Frames::hold`]: the frames above the base as they stand, which a parked problem takes where it parks.
+    pub(crate) fn hold_frames(&self) -> HeldFrames {
+        self.typing.frames.hold()
     }
 
-    /// Decide a parked problem in exactly the context it froze: enter a frame, hide every local frame below it ([`Frames::hide_frames_below_here`]), restore `frame` above the floor, and run `work` there.
+    /// Run `work`, a judgment made for what holds `held`, standing on those frames: the live frames above the base are set aside, the held ones stand in their place, `work` runs in a frame of its own above them, and the live ones come back. A parked problem's retry is this, decided in exactly the context the problem parked in.
     ///
-    /// A retry is scheduled wherever a solution lands — a turnaround inside the same item, a nested or sibling arm, the drain after the item — and the live context at that point is not the problem's. Running on top of it would go wrong both ways: an arm's re-typed local would lose to the same name live at its unspecialized type when the retry runs outside the arm, and a nested arm's re-typings and refinements would decide a problem from an arm outside it. The floor makes the verdict a function of the problem and its frozen context alone, which is what parking promises.
+    /// A retry is scheduled wherever a solution lands — a turnaround inside the same item, a nested or sibling arm, the drain after the item — and the live context at that point is not the problem's. Running on top of it would go wrong both ways: an arm's re-typed local would lose to the same name live at its unspecialized type when the retry runs outside the arm, and a nested arm's re-typings and refinements would decide a problem from an arm outside it. Standing on the frames held makes the verdict a function of the problem and its context alone, which is what parking promises.
     ///
-    /// The caches are told when the floor hides a refinement, exactly as a suppression boundary tells them: a reduct computed with it visible must not answer under the floor, nor the other way round.
-    pub(crate) fn with_retry_frame<R>(
+    /// **Nothing is assumed, defined or registered again**, so the frame an entry stands in is the frame it was registered in: two guards, one read under the other, stand one under the other, and a guard's reduced spelling is the one its frame settled. What `work` writes is written to its own frame and goes with it, and what parks or is born meanwhile holds the frames stood on and that frame.
+    ///
+    /// **The caches are told what a context rebuilt told them.** A reduct taken with a refinement in view must not answer where it is not, nor the other way round, so the reducts and the elaborations clear at both ends where the frames set aside or stood on hold one, whether or not they are the same frames; a definition the frames held bring into view is a fresh one to the reducts stuck on its absence, or a redefinition where the live context defines the name otherwise, and goes at the end as a frame's definitions go; and the binders in view are a write.
+    pub(crate) fn standing_on<R>(
         &mut self,
-        frame: &FrozenFrame,
+        held: &HeldFrames,
         work: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        curios_profile::profile!("ctx::retry_frame");
-        self.with_frame(|context| {
-            let (previous, hid_refinements) = context.typing.frames.hide_frames_below_here();
-            if hid_refinements {
-                context.typing.caches.invalidate_suppression_boundary();
+        curios_profile::profile!("ctx::standing_on");
+        let set_aside_refined = self.typing.frames.locally_refined();
+        let stood_on_refined = held.refined();
+        // What the frames held define that the frames in view do not, or define otherwise.
+        let mut fresh = Vec::new();
+        let mut redefined = false;
+        for (name, entry) in held.definitions() {
+            match self.typing.frames.definition(name) {
+                Some(live) if live.body() == entry.body() && live.kind() == entry.kind() => {}
+                Some(_) => redefined = true,
+                None => fresh.push(*name),
             }
-
-            context.restore_frame(frame);
-            let result = work(context);
-
-            context.typing.frames.restore_hidden_frames(previous);
-            if hid_refinements {
-                context.typing.caches.invalidate_suppression_boundary();
-            }
-
-            result
-        })
-    }
-
-    /// Reapply a frozen frame above the floor [`Context::with_retry_frame`] set, restoring the context the parked problem's origin saw.
-    ///
-    /// Every assumption is reapplied, in binding order, so a name the frozen frame re-typed — an arm's specialization of a local — ends at its innermost type. Re-assuming a live identity doubles nothing: the floor hides whatever was live, and a birth telescope keeps one entry per name, so no metavariable born here gets the non-linear identity spine inversion cannot invert, and nothing is skipped.
-    fn restore_frame(&mut self, frame: &FrozenFrame) {
-        for (name, type_) in &frame.assumptions {
-            self.assume(name, type_);
         }
 
-        // Definitions take the same test as the assumptions above, and for a sharper reason: a name still defined with the frozen body *is* the frozen definition, and re-defining it reads to the cache protocol as a redefinition, which clears both caches wholesale. A witness parked under a hundred `let` binders would be retried a hundred clears at a time, every reduct the region had memoized recomputed after each.
-        for (name, entry) in &frame.definitions {
-            if self.definition_body(name) == Some(entry.body())
-                && self.definition_kind(name) == entry.kind()
-            {
-                continue;
-            }
-            self.define_entry(*name, entry.clone());
+        if set_aside_refined {
+            self.typing.caches.invalidate_suppression_boundary();
+        }
+        if held.binds() {
+            self.typing.caches.note_write();
+        }
+        if redefined {
+            self.typing.caches.invalidate_for_redefinition();
+            self.typing.frames.forget_spellings();
+        }
+        for name in &fresh {
+            self.typing.caches.retain_reductions_without(name);
+            self.typing.frames.forget_spellings_naming(name);
+        }
+        if stood_on_refined {
+            self.typing.caches.invalidate_for_refinement();
         }
 
-        self.install_refinements(&frame.refinements);
-        if let Some(dead) = &frame.dead_arm {
-            self.typing.frames.rule_out(Rc::clone(dead));
-        }
+        let aside = self.typing.frames.stand_on(held);
+        let result = self.with_frame(work);
+        self.typing.frames.stand_back(aside);
 
-        // The witness binders were already re-assumed by the loop above (they are a subset of `assumptions`); only the scope membership is restored here. The enclosing frame's mark truncates it on exit.
+        if set_aside_refined {
+            self.typing.caches.invalidate_suppression_boundary();
+        }
         self.typing
-            .frames
-            .extend_witness_scope(&frame.witness_binders);
+            .caches
+            .invalidate_frame_exit(stood_on_refined, redefined || !fresh.is_empty());
+
+        result
     }
 
     /// Read `body` as a term that awaits: a metavariable born while it runs is awaited by it, and once it has read its parts and met its expectation it takes the choices left among the problems it awaits ([`Context::complete`]). A refusal completes nothing.
@@ -2947,17 +2950,17 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.take_shaped()
     }
 
-    /// Park blocked work: freeze the live local frame around it and record which unsolved metavariables could unblock it.
+    /// Park blocked work: hold the local frames as they stand around it and record which unsolved metavariables could unblock it.
     pub(crate) fn park(&mut self, work: ParkedWork, origin: Term) {
         curios_profile::profile!("ctx::park");
-        let frame = self.freeze_frame();
-        self.repark(work, origin, frame);
+        let frames = self.hold_frames();
+        self.repark(work, origin, frames);
     }
 
-    /// Re-park work that is still blocked after a retry, keeping its originally frozen frame ([`Solutions::park`]), stamping the write.
-    pub(crate) fn repark(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
+    /// Re-park work that is still blocked after a retry, with the frames it held ([`Solutions::park`]), stamping the write.
+    pub(crate) fn repark(&mut self, work: ParkedWork, origin: Term, frames: HeldFrames) {
         self.typing.caches.note_write();
-        self.underway.attempt.solutions.park(work, origin, frame);
+        self.underway.attempt.solutions.park(work, origin, frames);
     }
 
     /// Mint the placeholder metavariable for a parked checking problem: birthed like any hole — frozen Γ, identity spine — with no insertion provenance, and of its own kind, since its check is what fills it ([`MetaKind::Placeholder`]). If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.

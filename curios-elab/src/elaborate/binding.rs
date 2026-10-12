@@ -266,7 +266,7 @@ pub(super) fn elaborate_func(
     }
 }
 
-/// Park a whole *checking problem*: a checked-only introduction form met an expected type whose structure is still an unsolved metavariable — possibly pinned by a constraint parked moments ago. A fresh placeholder metavariable stands in the rebuilt tree; once the expected type's metas solve, the problem re-checks under its frozen frame and the placeholder is solved with the rebuilt term (the spine machinery splices it wherever the occurrence travelled).
+/// Park a whole *checking problem*: a checked-only introduction form met an expected type whose structure is still an unsolved metavariable — possibly pinned by a constraint parked moments ago. A fresh placeholder metavariable stands in the rebuilt tree; once the expected type's metas solve, the problem re-checks standing on the frames it holds and the placeholder is solved with the rebuilt term (the spine machinery splices it wherever the occurrence travelled).
 pub(super) fn park_checking(
     context: &mut Context,
     term: &Term,

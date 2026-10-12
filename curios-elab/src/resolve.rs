@@ -13,7 +13,7 @@
 
 use {
     super::{
-        Callee, Context, EmbeddingDiagnosis, Error, FrozenFrame, Outcome, ParkedWork,
+        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Outcome, ParkedWork,
         ShapeDiagnosis, Witness, attempt_discharge, convert_outcome, reduce_with,
         resolved_for_display,
     },
@@ -410,7 +410,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
 
     // Step 1: local `use` binders, innermost-first, first match wins.
     //
-    // Retrying a parked goal restores its frozen frame's witness binders on top of whatever scope is live at retry time, so a binder that was already in scope at park time can appear twice. Binder names are globally fresh and unique, so a repeated name denotes the *same* binder; dedup by name (the retained occurrence is arbitrary but identical) to keep the superclass search from reporting a projection against itself as ambiguous.
+    // Binder names are globally fresh and unique, so a name that stands in the scope twice denotes the *same* binder; dedup by name (the retained occurrence is arbitrary but identical) to keep the superclass search from reporting a projection against itself as ambiguous.
     let mut binders = context.witness_scope().cloned().collect::<Vec<_>>();
     let mut seen = HashSet::new();
     binders.retain(|(name, _)| seen.insert(*name));
@@ -846,7 +846,7 @@ pub(crate) fn retry_witness(
     goal: Term,
     provenance: WitnessOrigin,
     origin: Term,
-    frame: FrozenFrame,
+    frames: HeldFrames,
 ) {
     if context.metavar_solution(slot).is_some() {
         return;
@@ -859,25 +859,25 @@ pub(crate) fn retry_witness(
             provenance,
         },
         origin,
-        frame,
+        frames,
     );
 }
 
-/// Answer a parked witness goal under its frozen frame, where the term that awaited its slot completes or the item drains: the witness resolution finds solves the slot, a key still flex leaves the goal parked, and a definite miss is the error [`attempt_witness_goal`] raises. A goal whose slot was solved while it waited is dropped.
+/// Answer a parked witness goal standing on the frames it holds, where the term that awaited its slot completes or the item drains: the witness resolution finds solves the slot, a key still flex leaves the goal parked, and a definite miss is the error [`attempt_witness_goal`] raises. A goal whose slot was solved while it waited is dropped.
 pub(crate) fn answer_witness(
     context: &mut Context,
     slot: MetavarId,
     goal: Term,
     provenance: WitnessOrigin,
     origin: Term,
-    frame: FrozenFrame,
+    frames: HeldFrames,
 ) -> Result<(), Error> {
     if context.metavar_solution(slot).is_some() {
         return Ok(());
     }
 
     let resolution =
-        context.with_retry_frame(&frame, |context| resolve_witness(context, &goal, &origin))?;
+        context.standing_on(&frames, |context| resolve_witness(context, &goal, &origin))?;
 
     match resolution {
         Resolution::Solved(term) => {
@@ -892,7 +892,7 @@ pub(crate) fn answer_witness(
                     provenance,
                 },
                 origin,
-                frame,
+                frames,
             );
             Ok(())
         }

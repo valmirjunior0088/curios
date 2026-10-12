@@ -391,9 +391,9 @@ fn a_metavariable_born_in_an_arm_is_restricted_to_the_candidate_that_embeds_it()
         panic!("the embedded metavariable is solved to its restriction");
     };
     assert!(
-        context
-            .metavar_entry(narrowed.id)
-            .is_some_and(|entry| entry.refinements.is_empty() && entry.solution.is_none()),
+        context.metavar_entry(narrowed.id).is_some_and(|entry| {
+            entry.refinements.same_as(&Refinements::default()) && entry.solution.is_none()
+        }),
         "the restriction is born under the refinements the two share — none — and left open"
     );
 

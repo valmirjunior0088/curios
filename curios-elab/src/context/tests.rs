@@ -520,27 +520,27 @@ fn bool_type() -> Term {
     Term::intrinsic(Intrinsic::BoolType)
 }
 
-/// An arm re-types `x` under its own name; a problem parked there is retried where `x` is live at its unspecialized type — the enclosing frame, where a drain or a turnaround after the arm runs it. The retry sees the arm's type, because the frame it runs in is the one the problem froze. Reapplying only names not already live would lose exactly this.
+/// An arm re-types `x` under its own name; a problem parked there is retried where `x` is live at its unspecialized type — the enclosing frame, where a drain or a turnaround after the arm runs it. The retry sees the arm's type, because it stands on the frames the problem holds, the arm's among them.
 #[test]
-fn a_retry_sees_a_local_at_the_type_its_problem_froze() {
+fn a_retry_sees_a_local_at_the_type_its_problem_holds() {
     let mut context = context();
     let x = context.fresh(Some("x"));
 
     context.with_frame(|context| {
         context.assume(&x, &nat());
-        let frozen = context.with_frame(|context| {
+        let held = context.with_frame(|context| {
             context.assume(&x, &bool_type());
-            context.freeze_frame()
+            context.hold_frames()
         });
 
         assert_eq!(context.assumption(&x), Some(&nat()));
-        let seen = context.with_retry_frame(&frozen, |context| context.assumption(&x).cloned());
+        let seen = context.standing_on(&held, |context| context.assumption(&x).cloned());
         assert_eq!(seen, Some(bool_type()));
         assert_eq!(context.assumption(&x), Some(&nat()));
     });
 }
 
-/// A refinement of the context a retry happens to run in is none of the problem's: the problem froze before the arm registering it was entered, so the retry decides it without the equation, and the arm has it again once the retry is over.
+/// A refinement of the context a retry happens to run in is none of the problem's: the problem parked before the arm registering it was entered, so the retry, which sets that arm's frame aside, decides it without the equation, and the arm has it again once the retry is over.
 #[test]
 fn a_retry_does_not_see_a_refinement_of_the_context_it_runs_in() {
     let mut context = context();
@@ -549,20 +549,20 @@ fn a_retry_does_not_see_a_refinement_of_the_context_it_runs_in() {
 
     context.with_frame(|context| {
         context.assume(&x, &nat());
-        let frozen = context.freeze_frame();
+        let held = context.hold_frames();
 
         context.with_frame(|context| {
             context.refine(&x, &zero);
             assert_eq!(context.var_reduct(&x), Some(&zero));
 
-            let seen = context.with_retry_frame(&frozen, |context| context.var_reduct(&x).cloned());
+            let seen = context.standing_on(&held, |context| context.var_reduct(&x).cloned());
             assert_eq!(seen, None);
             assert_eq!(context.var_reduct(&x), Some(&zero));
         });
     });
 }
 
-/// A frame's guards are read back in the order they were recorded, and a frozen frame restores them in it. A proof the elaborator writes admits its guards as it meets them, so their order is the proof's; a hash map's own order differs from one run to the next, and eight keys agreeing with it by chance is one run in forty thousand. Mutation-checked: reading the store back in its map's order fails it.
+/// A frame's guards are read back in the order they were recorded, by the context and by a judgment standing on the frame alike. A proof the elaborator writes admits its guards as it meets them, so their order is the proof's; a hash map's own order differs from one run to the next, and eight keys agreeing with it by chance is one run in forty thousand. Mutation-checked: reading the store back in its map's order fails it.
 #[test]
 fn a_frames_guards_are_read_back_in_the_order_they_were_recorded() {
     let mut context = context();
@@ -589,13 +589,13 @@ fn a_frames_guards_are_read_back_in_the_order_they_were_recorded() {
         }
         assert_eq!(recorded(context), guards);
 
-        let frozen = context.freeze_frame();
-        let restored = context.with_retry_frame(&frozen, |context| recorded(context));
-        assert_eq!(restored, guards);
+        let held = context.hold_frames();
+        let stood = context.standing_on(&held, |context| recorded(context));
+        assert_eq!(stood, guards);
     });
 }
 
-/// A frame's definitions are read back in the order they were defined, as its guards are: a frozen frame hands them to a retry in it, and a report names an unfolded `rec` group by the first definition of its structure it finds. Eight names agreeing with a hash map's own order by chance is one run in forty thousand.
+/// A frame's definitions are read back in the order they were defined, as its guards are: a report names an unfolded `rec` group by the first definition of its structure it finds, and what holds the frame reads them in that order too. Eight names agreeing with a hash map's own order by chance is one run in forty thousand.
 #[test]
 fn a_frames_definitions_are_read_back_in_the_order_they_were_defined() {
     let mut context = context();
@@ -608,31 +608,30 @@ fn a_frames_definitions_are_read_back_in_the_order_they_were_defined() {
             context.define(name, &Term::intrinsic(Intrinsic::Nat(Nat::new(n))), None);
         }
 
-        let frozen = context.freeze_frame();
-        let defined = frozen
-            .definitions
-            .iter()
+        let held = context.hold_frames();
+        let defined = held
+            .definitions()
             .map(|(name, _)| *name)
             .collect::<Vec<_>>();
         assert_eq!(defined, names);
     });
 }
 
-/// A metavariable born in a retry is born in the problem's context: its telescope holds the locals the problem froze, and none of the live context's, which its spine would otherwise carry into a term that never bound them.
+/// A metavariable born in a retry is born in the problem's context: its telescope holds the locals of the frames the problem holds, and none of the live context's, which its spine would otherwise carry into a term that never bound them.
 #[test]
-fn a_metavariable_born_in_a_retry_has_exactly_the_frozen_locals() {
+fn a_metavariable_born_in_a_retry_has_exactly_the_locals_its_problem_holds() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
 
-    let frozen = context.with_frame(|context| {
+    let held = context.with_frame(|context| {
         context.assume(&a, &nat());
-        context.freeze_frame()
+        context.hold_frames()
     });
 
     context.with_frame(|context| {
         context.assume(&b, &nat());
-        let names = context.with_retry_frame(&frozen, |context| {
+        let names = context.standing_on(&held, |context| {
             let (telescope, _) = context.identity_snapshot();
             telescope.iter().map(|(name, _)| *name).collect::<Vec<_>>()
         });
@@ -640,17 +639,17 @@ fn a_metavariable_born_in_a_retry_has_exactly_the_frozen_locals() {
     });
 }
 
-/// A retry resolves witnesses through the `use` binders its problem froze, never through the live context's.
+/// A retry resolves witnesses through the `use` binders of the frames its problem holds, never through the live context's.
 #[test]
-fn a_retry_resolves_through_the_frozen_witness_scope_alone() {
+fn a_retry_resolves_through_the_witness_scope_its_problem_holds() {
     let mut context = context();
     let live = context.fresh(Some("live"));
 
-    let frozen = context.with_frame(|context| context.freeze_frame());
+    let held = context.with_frame(|context| context.hold_frames());
 
     context.with_frame(|context| {
         context.assume_witness(&live, &nat());
-        let scope = context.with_retry_frame(&frozen, |context| {
+        let scope = context.standing_on(&held, |context| {
             context.witness_scope().cloned().collect::<Vec<_>>()
         });
         assert!(scope.is_empty(), "{scope:?}");
@@ -658,9 +657,9 @@ fn a_retry_resolves_through_the_frozen_witness_scope_alone() {
     });
 }
 
-/// A retry inside a retry hides the outer retry's frame in turn, and gives the outer retry its own floor back when it ends: the live context the outer retry hid stays hidden until the outer retry is over.
+/// A retry inside a retry sets the outer retry's frames aside in turn, and gives them back when it ends: the live context the outer retry set aside stays aside until the outer retry is over.
 #[test]
-fn a_nested_retry_restores_the_floor_around_it() {
+fn a_retry_inside_a_retry_gives_the_outer_one_its_frames_back() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
@@ -668,17 +667,17 @@ fn a_nested_retry_restores_the_floor_around_it() {
 
     let outer = context.with_frame(|context| {
         context.assume(&a, &nat());
-        context.freeze_frame()
+        context.hold_frames()
     });
     let inner = context.with_frame(|context| {
         context.assume(&b, &nat());
-        context.freeze_frame()
+        context.hold_frames()
     });
 
     context.with_frame(|context| {
         context.assume(&live, &nat());
-        context.with_retry_frame(&outer, |context| {
-            let (sees_a, sees_b) = context.with_retry_frame(&inner, |context| {
+        context.standing_on(&outer, |context| {
+            let (sees_a, sees_b) = context.standing_on(&inner, |context| {
                 (
                     context.assumption(&a).is_some(),
                     context.assumption(&b).is_some(),
@@ -688,7 +687,7 @@ fn a_nested_retry_restores_the_floor_around_it() {
             assert!(context.assumption(&a).is_some());
             assert!(
                 context.assumption(&live).is_none(),
-                "the outer retry's floor is back"
+                "the outer retry's frames are back"
             );
         });
         assert!(context.assumption(&live).is_some());

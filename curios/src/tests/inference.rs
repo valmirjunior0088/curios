@@ -12,5 +12,6 @@ mod implicit_tests;
 mod lambda_tests;
 mod numeral_tests;
 mod postponement_tests;
+mod retry_tests;
 mod spine_tests;
 mod tuple_tests;
