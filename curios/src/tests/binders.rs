@@ -442,7 +442,7 @@ fn an_unnamed_member_is_reached_by_no_name() {
         print("no")
         "#,
     );
-    assert!(payload.contains("unbound variable: _0"), "got: {payload}");
+    assert!(payload.contains("`_0` is not in scope"), "got: {payload}");
 
     let field = error(
         r#"

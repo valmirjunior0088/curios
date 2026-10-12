@@ -360,6 +360,20 @@ impl<'s> Context<'s> {
         self.exchange(Attempted::above(mints));
     }
 
+    /// The refusal of `term`, a variable nothing binds, with the reason the lowering filed for it where it is a name the lowering could not resolve. Read off what the declaration under way minted, as its state is ([`Context::begin_state`]): a binder's identity is that declaration's, and so is what was filed under it.
+    pub(crate) fn unbound_variable(&self, term: Term) -> Error {
+        let mints = match self.underway.needs.attempted() {
+            Some(name) => self.underway.minted.of(name),
+            None => &self.underway.minted.entry,
+        };
+        let why = match &*term {
+            Subterm::Var(var) => var.as_free().and_then(|free| mints.unbound.get(free)),
+            _ => None,
+        };
+
+        Error::unbound_variable(term, why)
+    }
+
     /// Elaborate in `state` from here on, and hand back the state the context elaborated in until now.
     pub(crate) fn exchange(&mut self, state: Attempted) -> Attempted {
         let replaced = Attempted {

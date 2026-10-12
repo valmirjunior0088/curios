@@ -228,7 +228,6 @@ pub(crate) fn elaborator_refusal(
         module,
         scope: lexicons,
         syntax,
-        unbound: text.unbound(),
         spellings: Some(&spellings),
         anchors: &anchors_of(text, predecessors),
     };
@@ -531,7 +530,6 @@ where
         program: mut lowered,
         minted,
         foreigns: user_foreigns,
-        unbound,
         names,
         lints: _,
         reached: _,
@@ -595,7 +593,6 @@ where
         module: &lowered.module,
         scope: &lexicons,
         syntax,
-        unbound: &unbound,
         spellings: Some(&*spellings),
         anchors: &anchors,
     };

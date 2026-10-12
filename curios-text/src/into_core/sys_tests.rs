@@ -67,9 +67,30 @@ fn rejects_sys_pub_use_reexport_from_user_code() {
 fn does_not_offer_a_closed_root_as_a_way_out_of_an_unresolved_name() {
     let error = lower_with_prelude("Nat/add(1, 2)").unwrap_err();
     assert!(
-        error.contains("unresolved qualifier: Nat")
+        error.contains("`Nat` is not in scope")
             && error.contains("`Nat` is `/std/Nat`")
             && !error.contains("/sys/Nat"),
+        "unexpected error: {error}"
+    );
+}
+
+// **A reach into the closed root is refused as a name that does not resolve, and offered what any is.** The root is the step that failed; what the reader reached for under it is found by its name among the paths the unit may write, in the namespace it was sought in. Nothing pairs `/sys/Nat` with a path that exports the same declaration: `/std/Nat` is offered because it carries a `Nat`.
+#[test]
+fn a_name_under_the_closed_root_is_offered_the_paths_that_carry_it() {
+    let error = lower_with_prelude("let n: /sys/Nat = Type; Type").unwrap_err();
+    assert!(
+        error.contains(
+            "`sys` is internal to the standard library\n  `Nat` is `/std/Nat`: write it absolute, or `use /std/{Nat};`"
+        ),
+        "unexpected error: {error}"
+    );
+
+    // A step further in is a module the path walks through, and is offered as one.
+    let error = lower_with_prelude("let n: Type = /sys/Nat/add; Type").unwrap_err();
+    assert!(
+        error.contains(
+            "`sys` is internal to the standard library\n  `Nat` is `/std/Nat`: write it absolute, or `use /std/{Nat};`"
+        ),
         "unexpected error: {error}"
     );
 }
@@ -135,7 +156,7 @@ fn rejects_private_module_from_outside_its_declaring_subtree() {
         Type
     "#
         )
-        .contains("private child module")
+        .contains("`Foo` is private to `/Owner`")
     );
 }
 

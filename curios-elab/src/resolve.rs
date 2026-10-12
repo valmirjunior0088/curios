@@ -567,7 +567,7 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
         Subterm::Var(var) => context
             .instantiate_assumption(var.unwrap())?
             .map(|(type_, _)| type_)
-            .ok_or_else(|| Error::unbound_variable(node.clone())),
+            .ok_or_else(|| context.unbound_variable(node.clone())),
         Subterm::Proj(proj) => {
             let Field::Index(index) = proj.field else {
                 unreachable!("step-2 projections are built positionally");

@@ -68,6 +68,9 @@ pub use machine::*;
 mod names;
 pub use names::*;
 
+mod unresolved;
+pub use unresolved::*;
+
 mod extent;
 pub use extent::*;
 

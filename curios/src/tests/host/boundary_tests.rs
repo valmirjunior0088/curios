@@ -161,7 +161,7 @@ fn a_program_cannot_name_a_row_the_library_declares() {
     .expect_err("the row is private to `/std/Handle`");
 
     assert!(
-        refusal.contains("private binding: handle_read"),
+        refusal.contains("`handle_read` is private to `/std/Handle`"),
         "{refusal}"
     );
 }

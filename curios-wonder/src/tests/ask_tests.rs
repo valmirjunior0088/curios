@@ -36,7 +36,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
     let [one] = same.as_slice() else {
         panic!("two subjects, one fact, got {same:?}");
     };
-    assert!(one.contains("unbound variable: nope"), "{one}");
+    assert!(one.contains("`nope` is not in scope"), "{one}");
 
     let (different, _) = rendered(
         vec![asked("/std/print(nope)"), asked("/std/print(other)")],

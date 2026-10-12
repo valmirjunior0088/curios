@@ -346,9 +346,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Resolve a surface name to its qualified (joined) core name — the same rule the `Subterm::Name` term-reference arm uses.
     pub(super) fn resolve_name(&self, name: &Name) -> Result<curios_core::Free, Error> {
         if name.is_abs() || !name.is_single() {
-            return Ok(curios_core::Free::global(
-                self.context.resolve_term_name(name)?,
-            ));
+            // A path that names nothing refuses the declaration it is written in and no other, as a bare name does below: it lowers to the same binder nothing binds, and what failed is filed under it.
+            return match self.context.resolve_term_name(name) {
+                Ok(target) => Ok(curios_core::Free::global(target)),
+                Err(error) => match error.into_unresolved() {
+                    Ok(failure) => Ok(self.context.unbound(&name.join(), failure)),
+                    Err(error) => Err(error),
+                },
+            };
         }
         // A local binder shadows any like-named module binding, and the innermost one wins. Resolving here — rather than emitting the spelling for a later stage to re-resolve — is what makes shadowing exact: two binders written `go` are two identities from the start.
         if let Some((_, id)) = self
@@ -366,7 +371,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // Unresolved, and `curios-elab` is what reports it — so this must lower to something no definition can ever be. A binder identity is unbound by construction (nothing closes over it) and carries the written name as its hint, so the diagnostic still names it; what this stage adds beside it is what the name could have meant, which only this stage can say.
             //
             // A root-level global would *not* do: `Qualifier::from([head])` is exactly what an entry-module `let helper` lowers to, so an unresolvable reference in a nested module would silently capture it.
-            None => Ok(self.context.unbound_binder(name.head())),
+            None => {
+                let failure = self.unbound_here(name.head(), curios_core::Sought::Binding);
+
+                Ok(self.context.unbound(name.head(), failure))
+            }
         }
     }
 
@@ -486,41 +495,38 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 }
             }
             // A struct literal lowers to a `curios_core::Struct` carrying the resolved (qualified) struct name, no parameters (core elaboration mints metavariables for them), and the written entries — plain field values with their names (validated positionally and dropped by elaborate), `use <term>` fills for a concept's `use`-marked positions, and a `..base` spread carrying its base — stated at its head's type where the head is applied ([`Self::headed`]). Construction privacy and spread shape are enforced in core (`elaborate_struct`), alongside projection privacy.
-            Subterm::StructLit(lit) => self.headed(
+            Subterm::StructLit(lit) => self.struct_literal(
                 lit,
-                curios_core::Term::struct_entries(
-                    self.resolve_nominal(&lit.head)?,
-                    Vec::<curios_core::Term>::new(),
-                    lit.entries
-                        .iter()
-                        .map(|entry| match entry {
-                            StructLitEntry::Field(field) => Ok((
-                                curios_core::StructEntry::Field(field.label.clone()),
-                                self.term(&field.desugared_value())?,
-                            )),
-                            StructLitEntry::Implicit(field) => {
-                                let value = field.desugared_value();
-                                Ok((
-                                    curios_core::StructEntry::Implicit(field.label.clone()),
-                                    match self.placeholder(Plicity::Implicit, &value) {
-                                        Some(hole) => hole,
-                                        None => self.term(&value)?,
-                                    },
-                                ))
-                            }
-                            StructLitEntry::Use(term) => Ok((
-                                curios_core::StructEntry::Use,
-                                match self.placeholder(Plicity::Witness, term) {
+                self.resolve_nominal(&lit.head)?,
+                lit.entries
+                    .iter()
+                    .map(|entry| match entry {
+                        StructLitEntry::Field(field) => Ok((
+                            curios_core::StructEntry::Field(field.label.clone()),
+                            self.term(&field.desugared_value())?,
+                        )),
+                        StructLitEntry::Implicit(field) => {
+                            let value = field.desugared_value();
+                            Ok((
+                                curios_core::StructEntry::Implicit(field.label.clone()),
+                                match self.placeholder(Plicity::Implicit, &value) {
                                     Some(hole) => hole,
-                                    None => self.term(term)?,
+                                    None => self.term(&value)?,
                                 },
-                            )),
-                            StructLitEntry::Spread(term) => {
-                                Ok((curios_core::StructEntry::Spread, self.term(term)?))
-                            }
-                        })
-                        .collect::<Result<Vec<_>, Error>>()?,
-                ),
+                            ))
+                        }
+                        StructLitEntry::Use(term) => Ok((
+                            curios_core::StructEntry::Use,
+                            match self.placeholder(Plicity::Witness, term) {
+                                Some(hole) => hole,
+                                None => self.term(term)?,
+                            },
+                        )),
+                        StructLitEntry::Spread(term) => {
+                            Ok((curios_core::StructEntry::Spread, self.term(term)?))
+                        }
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?,
             )?,
             // A `choose` right-folds into nested `Bool` matches: each `cond => body` becomes `match cond | false => <rest> | true => body end`, the `_` default sitting at the innermost false branch. No motive at any level (a fresh hole each), matching the surface form's absence of one. Arms inherit the definitional refinement of their conditions for free — that is exactly what nesting `Bool` matches buys.
             Subterm::Choose(Choose { arms, default }) => {
@@ -807,44 +813,41 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 }
             }
             // A struct literal's entry values hoist their bangs into this region, exactly like a tuple's fields. Its head is a type, which has no region to hoist into.
-            Subterm::StructLit(lit) => self.headed(
+            Subterm::StructLit(lit) => self.struct_literal(
                 lit,
-                curios_core::Term::struct_entries(
-                    self.resolve_nominal(&lit.head)?,
-                    Vec::<curios_core::Term>::new(),
-                    lit.entries
-                        .iter()
-                        .map(|entry| match entry {
-                            StructLitEntry::Field(field) => {
-                                let value = field.desugared_value();
-                                Ok((
-                                    curios_core::StructEntry::Field(field.label.clone()),
-                                    self.collect(&value, binds)?,
-                                ))
-                            }
-                            StructLitEntry::Implicit(field) => {
-                                let value = field.desugared_value();
-                                Ok((
-                                    curios_core::StructEntry::Implicit(field.label.clone()),
-                                    match self.placeholder(Plicity::Implicit, &value) {
-                                        Some(hole) => hole,
-                                        None => self.collect(&value, binds)?,
-                                    },
-                                ))
-                            }
-                            StructLitEntry::Use(term) => Ok((
-                                curios_core::StructEntry::Use,
-                                match self.placeholder(Plicity::Witness, term) {
+                self.resolve_nominal(&lit.head)?,
+                lit.entries
+                    .iter()
+                    .map(|entry| match entry {
+                        StructLitEntry::Field(field) => {
+                            let value = field.desugared_value();
+                            Ok((
+                                curios_core::StructEntry::Field(field.label.clone()),
+                                self.collect(&value, binds)?,
+                            ))
+                        }
+                        StructLitEntry::Implicit(field) => {
+                            let value = field.desugared_value();
+                            Ok((
+                                curios_core::StructEntry::Implicit(field.label.clone()),
+                                match self.placeholder(Plicity::Implicit, &value) {
                                     Some(hole) => hole,
-                                    None => self.collect(term, binds)?,
+                                    None => self.collect(&value, binds)?,
                                 },
-                            )),
-                            StructLitEntry::Spread(term) => {
-                                Ok((curios_core::StructEntry::Spread, self.collect(term, binds)?))
-                            }
-                        })
-                        .collect::<Result<Vec<_>, Error>>()?,
-                ),
+                            ))
+                        }
+                        StructLitEntry::Use(term) => Ok((
+                            curios_core::StructEntry::Use,
+                            match self.placeholder(Plicity::Witness, term) {
+                                Some(hole) => hole,
+                                None => self.collect(term, binds)?,
+                            },
+                        )),
+                        StructLitEntry::Spread(term) => {
+                            Ok((curios_core::StructEntry::Spread, self.collect(term, binds)?))
+                        }
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?,
             )?,
             // An infix operator's operands hoist their bangs into this region, exactly like an application's arguments.
             Subterm::Infix(infix) => curios_core::Term::infix(
@@ -1007,15 +1010,45 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(curios_core::Term::ascribed(literal, self.term(&applied)?))
     }
 
-    /// A nominal head's resolved name. Only a global declares a structure, so a head resolving to a local or to nothing is refused here, where the bindings it could have meant are known — lowering it to the root-level global its spelling names would let it capture an entry module's binding of that name, as [`Self::resolve_name`] records for a bare reference.
-    pub(super) fn resolve_nominal(&self, name: &Name) -> Result<curios_core::Global, Error> {
-        match self.resolve_name(name)?.as_global() {
-            Some(global) => Ok(*global),
-            None => Err(Error::UnresolvedNominal {
-                name: name.head().to_string(),
-                candidates: self.context.binding_candidates(name.head()),
-            }),
+    /// A nominal head's resolved name, or the binder the head lowers to where it names no structure. Only a global declares one, so a head resolving to a local or to nothing names none: lowering it to the root-level global its spelling names would let it capture an entry module's binding of that name, as [`Self::resolve_name`] records for a bare reference. A head that resolved to nothing is filed already; one that is a local is filed here, as a name that is in scope and names no structure.
+    pub(super) fn resolve_nominal(
+        &self,
+        name: &Name,
+    ) -> Result<Result<curios_core::Global, curios_core::Free>, Error> {
+        let resolved = self.resolve_name(name)?;
+        if let Some(global) = resolved.as_global() {
+            return Ok(Ok(*global));
         }
+        if self.context.is_unbound(&resolved) {
+            return Ok(Err(resolved));
+        }
+
+        let failure = self.unbound_here(name.head(), curios_core::Sought::Structure);
+        Ok(Err(self.context.unbound(&name.join(), failure)))
+    }
+
+    /// The struct literal `lit` under the head it was written with, over its lowered `entries`. A head that names no structure refuses the declaration it is written in and no other, as any name that resolves to nothing does: the literal lowers to the binder its head does, its entries lowered for what they report and left out.
+    fn struct_literal(
+        &self,
+        lit: &StructLit,
+        head: Result<curios_core::Global, curios_core::Free>,
+        entries: Vec<(curios_core::StructEntry, curios_core::Term)>,
+    ) -> Result<curios_core::Term, Error> {
+        match head {
+            Ok(head) => self.headed(
+                lit,
+                curios_core::Term::struct_entries(head, Vec::<curios_core::Term>::new(), entries),
+            ),
+            Err(unbound) => Ok(curios_core::Term::var(curios_core::Var::free(unbound))),
+        }
+    }
+
+    /// Why the bare name `label` resolved to nothing where this lowerer stands, sought as `sought`: the binders in scope here and the bindings of the module's scope are what the nearest name is chosen among.
+    fn unbound_here(&self, label: &str, sought: curios_core::Sought) -> curios_core::Unresolved {
+        let scope = self.scope.borrow();
+        let locals = scope.iter().map(|(bound, _)| bound.as_str());
+
+        self.context.unresolved_bare(label, sought, locals)
     }
 
     /// Builds `let pat = value : type_; tail` for a pattern in any of the three binder positions: `Pattern::Binder` is a single core `let_` call — the plain-name path is a zero-cost passthrough. A compound pattern mints one fresh synthetic binder (via [`Context::fresh_binder`]) carrying `type_` (the caller's own annotation, so it is still checked), then projects each field off it via [`Self::lower_pattern_fields`]. The synthetic binder is minted unconditionally, even when `value` is already a bare variable reference: reusing it directly would risk silently dropping `type_`'s check (e.g. `let (x, y) : Point = pair;` must still check `pair : Point`). The extra trivial `let` this occasionally emits is exactly the shape `cont`'s copy-threading optimization already collapses, so it costs nothing at runtime. `binders` are the identities minted for this pattern's written leaves, in `pattern_names` order — the same ones the scope this `let` opened was entered with, so the tail's references land on them.

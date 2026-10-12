@@ -1,42 +1,23 @@
 use {
     curios_parse::ParserError,
-    curios_utilities::{Qualifier, Report, Span},
+    curios_utilities::{Report, Span},
     std::{fmt, io, path::PathBuf},
 };
 
 /// Everything that can go wrong between a parsed surface tree and a core module: module discovery and loading, `use`/name resolution and visibility, and the structural checks `into_core` lowering enforces. As an error propagates it is wrapped in `Located` with the *innermost* relevant span (`at` never overwrites an existing location), which [`Error::format`] renders as a source snippet.
 #[derive(Debug)]
 pub enum Error {
-    /// A relative path's head names no module in scope. `candidates` are the modules in the public interfaces that carry the name, shortest paths only, so the report can spell the way out as the elaborator's `unbound variable` does.
-    UnresolvedQualifier {
-        qualifier: String,
-        candidates: Vec<Qualifier>,
-    },
-    /// A structure literal's head names no global in scope — a local or an unresolved name, neither of which can declare a structure. `candidates` are the bindings in the public interfaces that carry the name, as an unresolved qualifier's are the modules.
-    UnresolvedNominal {
-        name: String,
-        candidates: Vec<Qualifier>,
+    /// A name that did not resolve: the one refusal of a step of a path, a `use` selector or a relative head that finds nothing it may use — see `curios_core::Unresolved`, which says what failed and renders it. A step into a root the unit may not name is one of these: a root only the compiler supplies (`sys`), whose roster is the compiler's own vocabulary with no compatibility promise (`curios_utilities::RootKind::Internal` says why), and a prefix the compilation mounts and the unit never declared a dependency on. Raised for a `use`, which refuses its unit; a name written in a declaration hands the same value to elaboration instead (`Error::into_unresolved`). `leaf` is whether the step that failed is the last segment of the name it was written in, which is what a report of a `use m/{a}` is placed by.
+    Unresolved {
+        failure: Box<curios_core::Unresolved>,
+        leaf: bool,
     },
     ModuleNotFound {
         path: String,
     },
-    ChildModuleNotFound {
-        segment: String,
-    },
-    PrivateChildModule {
-        segment: String,
-    },
     /// A `pub use` in an inductive's declaring module attempted to expose the constructors of a representation-private inductive.
     OpaqueConstructorsCannotBeReExported {
         induct_decl: String,
-    },
-    /// A root only the compiler supplies (`sys`) was referenced by a unit that did not declare it. Its roster is the compiler's own vocabulary, with no compatibility promise (`curios_utilities::RootKind::Internal` says why), so a program reaches it through its `/std` facade.
-    InternalRootModule {
-        segment: String,
-    },
-    /// A reference named a prefix the compilation mounts but the unit being compiled never declared a dependency on. The name exists; this unit did not ask to see it.
-    UndeclaredPrefix {
-        prefix: String,
     },
     /// Two claimed prefixes are not disjoint: the same prefix twice, one lying inside the other's subtree, or a prefix the entry program already declares as a module. All are the same collision seen from a different side, and all name both parties — a reader has to know which two things to change, and only the mount table knows both.
     ///
@@ -49,12 +30,6 @@ pub enum Error {
         /// Who claims it.
         claimant: String,
     },
-    BindingNotFound {
-        binding: String,
-    },
-    PrivateBinding {
-        binding: String,
-    },
     /// A scope is given one module under one label twice: by two `use` selectors, or by a `use` beside a declaration of the module's own. `first` is where the label was claimed by the claim that stood when this one was refused, where that claim was written.
     QualifierConflict {
         qualifier: String,
@@ -64,18 +39,6 @@ pub enum Error {
     BindingConflict {
         label: String,
         first: Option<Span>,
-    },
-    NotAModule {
-        label: String,
-        parent: String,
-    },
-    NotABinding {
-        label: String,
-        parent: String,
-    },
-    NoSuchUseTarget {
-        label: String,
-        parent: String,
     },
     /// A module declares one name twice. About the name occupying a slot rather than about `pub`, which is why neither declaration's visibility appears: two private `let`s collide exactly as two public ones do.
     DuplicateDeclaration {
@@ -155,15 +118,31 @@ impl Error {
     pub(crate) fn names_the_leaf(&self) -> bool {
         match self {
             Self::Located { error, .. } => error.names_the_leaf(),
-            Self::PrivateChildModule { .. }
-            | Self::PrivateBinding { .. }
-            | Self::BindingNotFound { .. }
-            | Self::NotAModule { .. }
-            | Self::NotABinding { .. }
-            | Self::NoSuchUseTarget { .. }
-            | Self::QualifierConflict { .. }
-            | Self::BindingConflict { .. } => true,
+            Self::Unresolved { leaf, .. } => *leaf,
+            Self::QualifierConflict { .. } | Self::BindingConflict { .. } => true,
             _ => false,
+        }
+    }
+
+    /// The refusal of a name that did not resolve — see [`Error::Unresolved`].
+    pub(crate) fn unresolved(failure: curios_core::Unresolved, leaf: bool) -> Self {
+        Self::Unresolved {
+            failure: Box::new(failure),
+            leaf,
+        }
+    }
+
+    /// What failed, where this is the refusal of a name that did not resolve, and the error back where it is any other: a name written in a declaration hands the failure on to elaboration, and nothing else is the declaration's alone to answer for.
+    pub(crate) fn into_unresolved(self) -> Result<curios_core::Unresolved, Self> {
+        match self {
+            Self::Unresolved { failure, .. } => Ok(*failure),
+            Self::Located { span, error } => {
+                error.into_unresolved().map_err(|error| Self::Located {
+                    span,
+                    error: Box::new(error),
+                })
+            }
+            error => Err(error),
         }
     }
 
@@ -237,39 +216,11 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::UnresolvedQualifier {
-                qualifier,
-                candidates,
-            } => {
-                write!(f, "unresolved qualifier: {qualifier}")?;
-                for candidate in candidates {
-                    write!(f, "\n{}", candidate.reach_hint(qualifier))?;
-                }
-                Ok(())
-            }
-            Error::UnresolvedNominal { name, candidates } => {
-                write!(f, "unresolved struct name: {name}")?;
-                for candidate in candidates {
-                    write!(f, "\n{}", candidate.reach_hint(name))?;
-                }
-                Ok(())
-            }
+            Error::Unresolved { failure, .. } => write!(f, "{failure}"),
             Error::ModuleNotFound { path } => write!(f, "module not found: {path}"),
-            Error::ChildModuleNotFound { segment } => {
-                write!(f, "child module not found: {segment}")
-            }
-            Error::PrivateChildModule { segment } => write!(f, "private child module: {segment}"),
             Error::OpaqueConstructorsCannotBeReExported { induct_decl } => write!(
                 f,
                 "constructors of opaque inductive '{induct_decl}' cannot be re-exported\n  mark its representation public (`: pub Type` or `: pub Prop`)"
-            ),
-            Error::InternalRootModule { segment } => write!(
-                f,
-                "`{segment}` is internal to the standard library; use the corresponding `/std` module"
-            ),
-            Error::UndeclaredPrefix { prefix } => write!(
-                f,
-                "`{prefix}` is mounted by this compilation but `{prefix}` is not a declared dependency of this unit; declare it to reach its names"
             ),
             Error::MountCollision {
                 claim,
@@ -279,8 +230,6 @@ impl fmt::Display for Error {
                 f,
                 "{claim} collides with `{claimed}`, claimed by {claimant}; a prefix belongs to exactly one unit, and no claimed prefix may lie within another's subtree"
             ),
-            Error::BindingNotFound { binding } => write!(f, "binding not found: {binding}"),
-            Error::PrivateBinding { binding } => write!(f, "private binding: {binding}"),
             Error::PrivateItemInPublicInterface { item, referent } => write!(
                 f,
                 "public item '{item}' exposes private item '{referent}' in its signature\n  mark '{referent}' pub, or make '{item}' private"
@@ -290,15 +239,6 @@ impl fmt::Display for Error {
             }
             Error::BindingConflict { label, .. } => {
                 write!(f, "`{label}` is already in scope here")
-            }
-            Error::NotAModule { label, parent } => {
-                write!(f, "not a module: {label} in {parent}")
-            }
-            Error::NotABinding { label, parent } => {
-                write!(f, "not a binding: {label} in {parent}")
-            }
-            Error::NoSuchUseTarget { label, parent } => {
-                write!(f, "no module or binding named {label} in {parent}")
             }
             Error::DuplicateDeclaration { label } => {
                 write!(f, "`{label}` is already declared in this module")

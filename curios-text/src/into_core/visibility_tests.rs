@@ -37,7 +37,7 @@ fn sibling_cannot_read_a_siblings_private_binding() {
         Type
     "#
         )
-        .contains("private binding")
+        .contains("`secret` is private to `/Owner/A`")
     );
 }
 
@@ -56,7 +56,7 @@ fn parent_cannot_read_its_childs_private_binding() {
         Type
     "#
         )
-        .contains("private binding")
+        .contains("`secret` is private to `/Owner/Impl`")
     );
 }
 
@@ -90,7 +90,7 @@ fn pub_inside_a_private_module_reaches_the_subtree_only() {
         Type
     "#
         )
-        .contains("private child module")
+        .contains("`Impl` is private to `/Owner`")
     );
 }
 

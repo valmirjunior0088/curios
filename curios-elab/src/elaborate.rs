@@ -186,7 +186,7 @@ fn elaborate_subterm(
                 }
                 InstanceHead::Var(var) => context
                     .instantiate_assumption_at(var.unwrap(), &instance.universes)?
-                    .ok_or_else(|| Error::unbound_variable(instance.head.to_term()))?,
+                    .ok_or_else(|| context.unbound_variable(instance.head.to_term()))?,
             };
             (term.clone(), type_)
         }
@@ -214,7 +214,7 @@ fn elaborate_subterm(
                 };
                 (rebuilt, type_)
             }
-            None => return Err(Error::unbound_variable(Term::var(var.clone()))),
+            None => return Err(context.unbound_variable(Term::var(var.clone()))),
         },
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),
         Subterm::Tuple(tuple) => return elaborate_tuple(context, tuple, term, mode),

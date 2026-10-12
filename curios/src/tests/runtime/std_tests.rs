@@ -218,6 +218,6 @@ fn a_handle_wrapper_is_built_only_beneath_its_module() {
             "{written}"
         );
         let named = forged(&format!("{wrapper}/of_handle(h)"));
-        assert!(named.contains("binding not found: of_handle"), "{named}");
+        assert!(named.contains("has no `of_handle`"), "{named}");
     }
 }

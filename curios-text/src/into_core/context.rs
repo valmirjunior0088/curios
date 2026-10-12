@@ -1,7 +1,10 @@
 use {
-    super::{Lookup, PublicInterface, Reach, Scoped, named, visible_binding, visible_child},
+    super::{
+        Lookup, PublicInterface, Reach, Scoped, carriers, named, out_of_reach, unresolved,
+        visible_binding, visible_child,
+    },
     crate::{Error, Label, Lint, Name, OrderedMap},
-    curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
+    curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -383,6 +386,8 @@ pub(super) struct Declaring {
     universe_allocations: RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
     // The `Sort`s the declaration being lowered wrote — see `WrittenSorts`.
     sorts: WrittenSorts,
+    // Every name the declaration being lowered wrote that resolved to nothing, keyed by the binder identity it lowered to, with why: `curios-elab` reports the unbound binder, and this is what its report says. The declaration's, since a binder's identity is.
+    unbound: RefCell<BTreeMap<curios_core::Free, curios_core::Unresolved>>,
 }
 
 impl Declaring {
@@ -395,6 +400,7 @@ impl Declaring {
             universe_seeds,
             universe_allocations,
             sorts,
+            unbound,
         } = self;
 
         metavars.reset();
@@ -403,6 +409,7 @@ impl Declaring {
         universe_seeds.borrow_mut().clear();
         universe_allocations.borrow_mut().clear();
         sorts.begin();
+        unbound.borrow_mut().clear();
     }
 }
 
@@ -414,8 +421,6 @@ pub(super) struct Shared {
     pub(super) minted: RefCell<curios_core::Minted>,
     // One ordinal counter per declaring module. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the module that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
     witnesses: RefCell<BTreeMap<Qualifier, u32>>,
-    // Every bare name that resolved to nothing, keyed by the binder identity it lowered to, with the public bindings in scope of that name: `curios-elab` reports the unbound binder, and this is what lets its report say what the reader probably meant.
-    pub(super) unbound: RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
     // Every binding a `use` brought into some lexical scope of this unit, with the path the reader wrote it under, and per definition the ones in scope where it was written — see `curios_core::Imports`. Core keeps the canonical name, and only this stage knows the spelling that resolves at the use site, which is what a goal report's candidate must be pasteable under.
     pub(super) imports: RefCell<curios_core::Imports>,
     // Every `use` selector and glob of the unit, in the order resolution met them.
@@ -439,11 +444,11 @@ impl Shared {
                 universe_seeds: RefCell::default(),
                 universe_allocations: RefCell::default(),
                 sorts: WrittenSorts::default(),
+                unbound: RefCell::default(),
             },
             universe_role: Cell::new(curios_core::UniverseRole::Flexible),
             minted: RefCell::default(),
             witnesses: RefCell::default(),
-            unbound: RefCell::default(),
             imports: RefCell::default(),
             sites: RefCell::default(),
             reached: RefCell::default(),
@@ -620,6 +625,7 @@ impl<'a> Context<'a> {
     pub(super) fn mints(&self) -> curios_core::Mints {
         curios_core::Mints {
             binders: self.shared.declaring.binders.count(),
+            unbound: self.shared.declaring.unbound.borrow().clone(),
             metavariables: self.shared.declaring.metavars.count(),
             universes: self.shared.declaring.universe_seeds.borrow().clone(),
             qualities: self.shared.declaring.sorts.seeds.borrow().clone(),
@@ -818,45 +824,77 @@ impl<'a> Context<'a> {
         self.prefix
     }
 
-    /// Every public interface in scope that `carries` `label`, as the absolute path `label` names there — the candidates an unresolved name's report spells the way out with. Read off the public interfaces, where a `pub use` is a binding of the re-exporting module, rather than the declaration table, because the facade's spelling is the one a reader is told everything comes from: `/std/Bool` is `pub use Bool/{let Bool}`, and Core knows only the `/sys/Bool/Bool` it stands for. Only the shortest paths are kept — a longer one is the same name through a deeper module — in the path's own order, which is deterministic and nothing more.
-    ///
-    /// A candidate this module may not reference is dropped first, because a report that offered one would spell a way out the next compile refuses — and refuses with the redirect that belonged in *this* message. Dropping before the shortest paths are kept rather than after is what makes the rule reachability instead of depth: `/sys/Nat` stands beside `/std/Nat` at the same length, and a reachable route below an internal one is still worth offering.
-    fn candidates(
+    /// Mint the binder a name that resolved to nothing lowers to, hinted by the name as `written`, and file why it resolved to nothing beside it: what elaboration reports where it meets the binder, in the declaration that wrote the name and no other.
+    pub(super) fn unbound(
         &self,
-        label: &str,
-        carries: impl Fn(&PublicInterface) -> bool,
-    ) -> Vec<Qualifier> {
-        let mut found = self
-            .public
-            .iter()
-            .filter(|(_, interface)| carries(interface))
-            .map(|(module, _)| module.with(label))
-            .filter(|path| self.reach.guard(&self.prefix, path.segments()).is_ok())
-            .collect::<Vec<_>>();
-        found.sort_by_key(|path| (path.segments().len(), path.join()));
-        let shortest = found.first().map(|path| path.segments().len());
-        found.retain(|path| Some(path.segments().len()) == shortest);
-        found
-    }
-
-    /// Mint the binder an unresolved bare name lowers to, and record beside it every binding in scope that could have been meant.
-    pub(super) fn unbound_binder(&self, label: &str) -> curios_core::Free {
-        let found = self.binding_candidates(label);
-
-        let binder = self.fresh_binder(Some(label));
-        self.shared.unbound.borrow_mut().insert(binder, found);
+        written: &str,
+        failure: curios_core::Unresolved,
+    ) -> curios_core::Free {
+        let binder = self.fresh_binder(Some(written));
+        self.shared
+            .declaring
+            .unbound
+            .borrow_mut()
+            .insert(binder, failure);
         self.shared.anchoring.journal.borrow_mut().unbound = true;
         binder
     }
 
-    /// Every public binding in scope that carries `label` — what an unresolved name could have meant; see [`Context::candidates`].
-    pub(super) fn binding_candidates(&self, label: &str) -> Vec<Qualifier> {
-        self.candidates(label, |interface| interface.bindings.contains_key(label))
+    /// Whether `binder` is one a name that resolved to nothing lowered to.
+    pub(super) fn is_unbound(&self, binder: &curios_core::Free) -> bool {
+        self.shared.declaring.unbound.borrow().contains_key(binder)
     }
 
-    /// Every public child module in scope that carries `label` — what an unresolved qualifier could have meant, gathered as [`Context::unbound_binder`] gathers a binding's candidates.
-    fn unbound_qualifier(&self, label: &str) -> Vec<Qualifier> {
-        self.candidates(label, |interface| interface.children.contains_key(label))
+    /// Why the bare name `label`, sought as `sought`, resolved to nothing in this module's scope: the nearest name among `locals`, the binders in scope where it was written, and the scope's own bindings, and every public binding elsewhere that carries the label ([`carriers`]).
+    pub(super) fn unresolved_bare<'l>(
+        &'l self,
+        label: &str,
+        sought: curios_core::Sought,
+        locals: impl Iterator<Item = &'l str>,
+    ) -> curios_core::Unresolved {
+        let scope = locals.chain(self.bindings.keys().map(String::as_str));
+
+        curios_core::Unresolved {
+            segment: label.to_string(),
+            sought,
+            within: None,
+            missing: curios_core::Missing::Absent,
+            nearest: nearest(label, scope).map(str::to_string),
+            elsewhere: carriers(self.public, self.reach, label, curios_core::Sought::Binding),
+        }
+    }
+
+    // Why the head `label` of a relative path names no module of this scope: [`Context::unresolved_bare`] for the qualifiers it holds.
+    fn unresolved_head(&self, label: &str) -> curios_core::Unresolved {
+        curios_core::Unresolved {
+            segment: label.to_string(),
+            sought: curios_core::Sought::Module,
+            within: None,
+            missing: curios_core::Missing::Absent,
+            nearest: nearest(label, self.qualifiers.keys().map(String::as_str)).map(str::to_string),
+            elsewhere: carriers(self.public, self.reach, label, curios_core::Sought::Module),
+        }
+    }
+
+    // The refusal of the step from `parent` to `segment`, sought as `sought`, as this module may take it: `leaf` where the step is the last segment of the name it was written in.
+    fn unresolved_step(
+        &self,
+        parent: &Qualifier,
+        segment: &str,
+        sought: curios_core::Sought,
+        leaf: bool,
+    ) -> Error {
+        Error::unresolved(
+            unresolved(
+                self.public,
+                self.table,
+                &self.prefix,
+                parent,
+                segment,
+                sought,
+            ),
+            leaf,
+        )
     }
 
     /// Bring the module `name` into this scope as `qualifier`, claimed at `at` where the claim was written. A label claimed twice is refused with where it was claimed first.
@@ -904,33 +942,25 @@ impl<'a> Context<'a> {
         self.shared.sites.borrow()[self.current_site?].span.clone()
     }
 
-    // Walk from `start` through `segments` as child modules visible to this module, following each entry's re-export target. A failing segment is classified against the direct table: present-but-private vs. absent.
+    // Walk from `start` through `segments` as child modules visible to this module, following each entry's re-export target. A step that fails is refused where it stopped ([`unresolved`]).
     fn walk_children(&self, start: Qualifier, segments: &[String]) -> Result<Qualifier, Error> {
         let mut current = start;
 
         for segment in segments {
             match visible_child(self.public, self.table, &self.prefix, &current, segment) {
                 Some(target) => current = target,
-                None => return Err(self.child_error(&current, segment)),
+                None => {
+                    return Err(self.unresolved_step(
+                        &current,
+                        segment,
+                        curios_core::Sought::Module,
+                        false,
+                    ));
+                }
             }
         }
 
         Ok(current)
-    }
-
-    fn child_error(&self, module: &Qualifier, segment: &str) -> Error {
-        match self
-            .table
-            .get(module)
-            .and_then(|info| info.get_child(segment))
-        {
-            Some(false) => Error::PrivateChildModule {
-                segment: segment.to_string(),
-            },
-            _ => Error::ChildModuleNotFound {
-                segment: segment.to_string(),
-            },
-        }
     }
 
     // Resolve the module named by `name`'s first `upto` segments: from the module root (absolute) or the lexically-bound head qualifier (relative — the head is consumed as the start, so the walk runs over `segments[1..upto]`).
@@ -941,28 +971,51 @@ impl<'a> Context<'a> {
 
         let resolved = if name.is_abs() {
             let resolved = self.walk_children(Qualifier::empty(), &segments[..upto])?;
-            self.reach.guard(&self.prefix, resolved.segments())?;
+            self.guarded(&resolved, name, upto)?;
             resolved
         } else {
             let head = name.head();
             let start = *self
                 .qualifiers
                 .get(head)
-                .ok_or_else(|| Error::UnresolvedQualifier {
-                    qualifier: head.to_string(),
-                    candidates: self.unbound_qualifier(head),
-                })?;
+                .ok_or_else(|| Error::unresolved(self.unresolved_head(head), false))?;
             self.note_qualifier_use(head);
 
             // An imported label carries the site its `use` came through; a declaration and an ambient sibling module carry none, and those are the heads a guard still answers for.
             if !self.qualifier_sites.contains_key(head) {
-                self.reach.guard(&self.prefix, start.segments())?;
+                self.guarded(&start, name, 1)?;
             }
 
             self.walk_children(start, &segments[1..upto])?
         };
 
         Ok(resolved)
+    }
+
+    // Refuse a reach into a root this unit may not name, `module` being what `name` resolved to up to its segment `after`: the refusal of a name that does not resolve, for the reason the reach gives ([`out_of_reach`]).
+    fn guarded(&self, module: &Qualifier, name: &Name, after: usize) -> Result<(), Error> {
+        let Some(missing) = self.reach.refused(module.segments()) else {
+            return Ok(());
+        };
+
+        // What was reached for under the root: the module the path stepped to next, or, where the root is all that resolved, the segment written after it — a module where more follow, and either a module or a binding where it is the name's last.
+        let written = name.qualifier().segments();
+        let wanted = match module.segments().get(1) {
+            Some(next) => Some((next.as_str(), curios_core::Sought::Module)),
+            None => written.get(after).map(|next| {
+                let sought = match after + 1 == written.len() {
+                    true => curios_core::Sought::Either,
+                    false => curios_core::Sought::Module,
+                };
+
+                (next.as_str(), sought)
+            }),
+        };
+
+        Err(Error::unresolved(
+            out_of_reach(self.public, self.reach, module.segments(), missing, wanted),
+            false,
+        ))
     }
 
     // The module that should contain `name`'s final segment, plus that segment.
@@ -984,17 +1037,7 @@ impl<'a> Context<'a> {
                 self.record_module_import(&target, label);
                 Ok(target)
             }
-            None => Err(
-                match self.table.get(parent).and_then(|i| i.get_child(label)) {
-                    Some(false) => Error::PrivateChildModule {
-                        segment: label.to_string(),
-                    },
-                    _ => Error::NotAModule {
-                        label: label.to_string(),
-                        parent: parent.join(),
-                    },
-                },
-            ),
+            None => Err(self.unresolved_step(parent, label, curios_core::Sought::Module, true)),
         }
     }
 
@@ -1014,17 +1057,7 @@ impl<'a> Context<'a> {
                 self.record_import(&target, label.to_string());
                 Ok(target)
             }
-            None => Err(
-                match self.table.get(parent).and_then(|i| i.get_binding(label)) {
-                    Some(false) => Error::PrivateBinding {
-                        binding: label.to_string(),
-                    },
-                    _ => Error::NotABinding {
-                        label: label.to_string(),
-                        parent: parent.join(),
-                    },
-                },
-            ),
+            None => Err(self.unresolved_step(parent, label, curios_core::Sought::Binding, true)),
         }
     }
 
@@ -1129,21 +1162,12 @@ impl<'a> Context<'a> {
                 visible_binding(self.public, self.table, &self.prefix, &parent, &label).is_some();
 
             if !has_module && !has_binding {
-                let child = self.table.get(&parent).and_then(|i| i.get_child(&label));
-                let binding = self.table.get(&parent).and_then(|i| i.get_binding(&label));
-
-                return Err(match (child, binding) {
-                    (Some(false), _) => Error::PrivateChildModule {
-                        segment: label.clone(),
-                    },
-                    (_, Some(false)) => Error::PrivateBinding {
-                        binding: label.clone(),
-                    },
-                    _ => Error::NoSuchUseTarget {
-                        label: label.clone(),
-                        parent: parent.join(),
-                    },
-                });
+                return Err(self.unresolved_step(
+                    &parent,
+                    &label,
+                    curios_core::Sought::Either,
+                    true,
+                ));
             }
 
             self.import_dual_label(&parent, &label)
@@ -1197,12 +1221,9 @@ impl<'a> Context<'a> {
                     self.asked(name, target);
                     Ok(target)
                 }
-                None => Err(
-                    match self.table.get(&parent).and_then(|i| i.get_binding(&label)) {
-                        Some(false) => Error::PrivateBinding { binding: label },
-                        _ => Error::BindingNotFound { binding: label },
-                    },
-                ),
+                None => {
+                    Err(self.unresolved_step(&parent, &label, curios_core::Sought::Binding, true))
+                }
             }
         })();
         result.map_err(|e| attach(e, name))

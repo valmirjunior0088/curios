@@ -10,7 +10,7 @@ use {
     curios_core::{
         Anchors, Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Extent, Free, Global,
         Item, Level, Lexicon, Module, Polarity, ReaderNames, ReaderPosition, ReduceError, Rename,
-        Spelling, Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError, WitnessKey,
+        Spelling, Spellings, Term, UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey,
         build_rename,
     },
     curios_num::{Grain, Integer, Natural},
@@ -482,8 +482,10 @@ pub enum Error {
     },
     /// A `Derive` transient met anywhere but as a witness body checked against its concept application — unreachable from the surface, where only the witness lowering mints one.
     DeriveOutsideWitness,
+    /// A variable nothing binds. `why` is what the lowering filed for a name it could not resolve, which lowers to such a binder: the declaration's own record of it (`curios_core::Mints::unbound`), read where the error is raised, since a binder's identity means something within its declaration alone. `None` for a binder no lowering filed a reason for, one a term built by hand names.
     UnboundVariable {
         term: Box<Term>,
+        why: Option<Box<Unresolved>>,
     },
     CannotInfer,
     /// A parked checking problem that survived every retry: the expression's expected type never gained the structure the check was waiting on. Reported at the expression's own extent by the item drain.
@@ -1133,9 +1135,10 @@ impl Error {
         }
     }
 
-    pub(crate) fn unbound_variable<T: Into<Term>>(var: T) -> Self {
+    pub(crate) fn unbound_variable<T: Into<Term>>(var: T, why: Option<&Unresolved>) -> Self {
         Self::UnboundVariable {
             term: Box::new(var.into()),
+            why: why.cloned().map(Box::new),
         }
     }
 
@@ -1590,52 +1593,18 @@ impl Error {
             None => spelling,
         };
 
-        self.located(&Rc::new(spelling), reading.unbound, reading.anchors)
-    }
-
-    /// The lines an `unbound variable` report adds from the text stage's table, or `None` for any other error or an unknown binder — one [`Qualifier::reach_hint`] per candidate, the line the text stage's `unresolved qualifier` report spells its own candidates with.
-    fn unbound_suggestion(
-        &self,
-        unbound: &BTreeMap<Free, Vec<Qualifier>>,
-        spelling: &Rc<Spelling>,
-    ) -> Option<String> {
-        let term = match self {
-            Self::Located { error, .. }
-            | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. }
-            | Self::InScope { error, .. } => {
-                return error.unbound_suggestion(unbound, spelling);
-            }
-            Self::UnboundVariable { term } => term,
-            _ => return None,
-        };
-        let Subterm::Var(var) = &***term else {
-            return None;
-        };
-        let candidates = unbound.get(var.unwrap())?;
-        let written = term.spelled(spelling).to_string();
-
-        let lines = candidates
-            .iter()
-            .map(|candidate| candidate.reach_hint(&written))
-            .collect::<Vec<_>>();
-        (!lines.is_empty()).then(|| lines.join("\n"))
+        self.located(&Rc::new(spelling), reading.anchors)
     }
 
     /// One report per rendered error, at the innermost extent attached to it, and at the name of the declaration it arose in where it has none — or one per goal for a goal batch, each at its own occurrence, under whatever declaration prefix the wrappers add — and for a batch of refusals, every member's reports in order.
     ///
     /// [`Error::at`] is first-wins *per wrapper*, so the innermost extent is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser extent outermost. Locating therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner extent silently.
-    fn located(
-        &self,
-        spelling: &Rc<Spelling>,
-        unbound: &BTreeMap<Free, Vec<Qualifier>>,
-        anchors: &[&Anchors],
-    ) -> Vec<Report> {
+    fn located(&self, spelling: &Rc<Spelling>, anchors: &[&Anchors]) -> Vec<Report> {
         // Each member under its own rename map, as each entry of a goal batch is: a binder is suffixed only against a collision the reader can see in the one report that shows it, not against a binder of the same name in another member's terms.
         if let Self::Batch(errors) = self {
             return errors
                 .iter()
-                .flat_map(|error| error.located(spelling, unbound, anchors))
+                .flat_map(|error| error.located(spelling, anchors))
                 .collect();
         }
 
@@ -1679,14 +1648,9 @@ impl Error {
                 .clone()
                 .with_pretty_names(self.rename_map(&spelling)),
         );
-        let mut body = self.render_body(spelling, anchors);
-        if let Some(suggestion) = self.unbound_suggestion(unbound, spelling) {
-            body.push('\n');
-            body.push_str(&suggestion);
-        }
         vec![Report {
             span: placed(self.innermost_extent(), self.owner()),
-            message: body,
+            message: self.render_body(spelling, anchors),
             notes: self.notes(spelling, anchors),
         }]
     }
@@ -1878,7 +1842,7 @@ impl Error {
                 }
             }
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
-            Self::UnboundVariable { term } => out.push(term),
+            Self::UnboundVariable { term, .. } => out.push(term),
             Self::Underivable { key, .. } => out.push(key),
             Self::PostponedCheck { expected } => out.push(expected),
             Self::PostponedConversion { this, that, .. } => {
@@ -2043,8 +2007,6 @@ pub struct Reading<'a> {
     /// The lexicon each unit in scope keeps.
     pub scope: &'a [&'a Lexicon],
     pub syntax: &'a SyntaxRegistry,
-    /// What each unresolved bare name could have meant, keyed by the binder the name lowered to and valued by the absolute paths of the public bindings in scope that carry it. An `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it.
-    pub unbound: &'a BTreeMap<Free, Vec<Qualifier>>,
     /// How each of the unit's names can be written and where: the imports each definition's `use` lines brought into scope, and the absolute paths each global is reachable by with who may write them. With it a global displays as resolution would find it from where the report's reader stands, rather than as its shortest unambiguous suffix, which is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported). By pointer, since every member of a batch is rendered against the one table. `None` where no lowering's tables stand behind the unit: a root of the prelude as its build refuses it, a module built by hand.
     pub spellings: Option<&'a Rc<Spellings>>,
     /// Where the declarations an error's positions lie in were written, the unit's own first and then its scope's: an error holds extents of declarations ([`curios_core::Extent`]), and this is where one becomes a line of a file.

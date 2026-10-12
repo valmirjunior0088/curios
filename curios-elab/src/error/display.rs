@@ -973,9 +973,11 @@ impl fmt::Display for Displayed<'_> {
                     "constructor '{atom}' takes {expected} argument(s) but the match arm binds {got}"
                 )
             }
-            Error::UnboundVariable { term } => {
+            // A name a program wrote is reported by the reason the lowering filed for it, in that value's own words, so a misspelled name reads the same whichever stage refuses for it.
+            Error::UnboundVariable { why: Some(why), .. } => write!(f, "{why}"),
+            Error::UnboundVariable { term, why: None } => {
                 let term = term.spelled(spelling);
-                write!(f, "unbound variable: {term}")
+                write!(f, "`{term}` is not in scope")
             }
             Error::CannotInfer => {
                 write!(f, "cannot infer type of expression")

@@ -280,17 +280,38 @@ pub(super) fn lints(src: &str) -> Vec<String> {
     .collect()
 }
 
+/// What stops `src` compiling, as its lowering knows it: the refusal it raised, or, where it raised none, every name it filed as resolving to nothing, each as elaboration reports it of the declaration that wrote it. A name written in a declaration refuses that declaration and not the lowering, so a fixture about a name reads both.
 pub(super) fn run_err(src: &str) -> String {
-    super::into_core(
-        &src.parse::<Entrypoint>().unwrap(),
-        &RootSource::none(),
+    let entrypoint = src.parse::<Entrypoint>().unwrap();
+    let loader = RootSource::none();
+
+    match super::into_core_unit(
+        &super::UnitSource::entry(&entrypoint, &loader),
+        &[],
         syntax(),
-    )
-    .unwrap_err()
-    .to_string()
+    ) {
+        Err(error) => error.to_string(),
+        Ok(unit) => unresolved(unit.minted()).expect_err("the source lowers, every name resolved"),
+    }
 }
 
-// `run_err` rendered as the reader sees it: the message and, where the error was placed, its snippet.
+/// The names a lowering filed as resolving to nothing, as the refusal they are: each rendered as elaboration reports it, a line apart, declaration by declaration in the order the lowering met them, the entry's last. `Ok` where it filed none.
+fn unresolved(minted: &curios_core::Minted) -> Result<(), String> {
+    let filed = minted
+        .declarations
+        .iter()
+        .chain([&minted.entry])
+        .flat_map(|mints| mints.unbound.values())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    match filed.is_empty() {
+        true => Ok(()),
+        false => Err(filed.join("\n")),
+    }
+}
+
+// A refusal the lowering raised, rendered as the reader sees it: the message and, where the error was placed, its snippet.
 pub(super) fn run_err_report(src: &str) -> String {
     super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
@@ -301,22 +322,23 @@ pub(super) fn run_err_report(src: &str) -> String {
     .format()
 }
 
-// Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate.
+// Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate. A name the lowering filed as resolving to nothing is an error here as one it raised is.
 pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
     let modules = prelude_fixture();
     let prepared =
         super::prepare_prelude(&modules, &[], syntax()).map_err(|error| error.to_string())?;
-    super::into_core_with_prelude(
+    let lowered = super::into_core_with_prelude(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         std::slice::from_ref(&&prepared),
         syntax(),
     )
-    .map(|_| ())
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+
+    unresolved(&lowered.minted)
 }
 
-/// The prelude these tests lower against: the real `/sys` roster, and a `/std` of stubs deep enough for every name `/sys` reaches through the registry — with one concept beside them, for the order a unit takes around a row it registers into a concept declared before it.
+/// The prelude these tests lower against: the real `/sys` roster, and a `/std` of stubs deep enough for every name `/sys` reaches through the registry — with one concept beside them, for the order a unit takes around a row it registers into a concept declared before it. `Nat` is a module and a declaration at its root, as the library's own is, so a fixture that imports it writes the type bare.
 fn prelude_fixture() -> RootSource {
     let mut modules = RootSource::supplied();
     modules.insert_root("sys", RootKind::Internal, sys_module(&SYNTAX));
@@ -331,6 +353,7 @@ fn prelude_fixture() -> RootSource {
                 pub let Nat : Type = Type;
                 pub let add : Type = Type;
             end
+            pub use Nat/{let Nat};
             pub mod Bool
                 pub let Holds : Type = Type;
                 pub use /sys/Bool/{True};
@@ -356,7 +379,7 @@ pub(super) fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String
     let entrypoint = src.parse::<Entrypoint>().unwrap();
     let loader = RootSource::none();
 
-    super::into_core_unit(
+    let unit = super::into_core_unit(
         &super::UnitSource::entry(&entrypoint, &loader).seeing(
             declared
                 .iter()
@@ -366,8 +389,9 @@ pub(super) fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String
         std::slice::from_ref(&&prepared),
         syntax(),
     )
-    .map(|_| ())
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+
+    unresolved(unit.minted())
 }
 
 /// A directory of its own, removed however the test that holds it ends.

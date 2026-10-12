@@ -54,7 +54,7 @@ fn a_hidden_argument_out_of_its_run_is_refused() {
 #[test]
 fn a_plain_argument_is_never_a_placeholder() {
     let message = error(&format!("{TWO}        print(two(_, true))\n"));
-    assert!(message.contains("unbound variable: _"), "got: {message}");
+    assert!(message.contains("`_` is not in scope"), "got: {message}");
 }
 
 // A lambda's binders meet their slots by the same rule: a hidden binder written first binds the first slot of the run, whatever it is called, and a `use _` written where the run opens with `@` is refused rather than skipping to the witness slot.

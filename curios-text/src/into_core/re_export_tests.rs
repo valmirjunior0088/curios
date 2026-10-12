@@ -4,7 +4,7 @@ use super::test_support::*;
 
 #[test]
 fn rejects_unresolved_qualifier_in_term() {
-    assert!(run_err("Foo/f").contains("unresolved qualifier"));
+    assert!(run_err("Foo/f").contains("`Foo` is not in scope"));
 }
 
 #[test]
@@ -18,7 +18,7 @@ fn rejects_private_binding_access() {
         Foo/f
     "#
         )
-        .contains("private binding")
+        .contains("`f` is private to `/Foo`")
     );
 }
 
@@ -35,7 +35,7 @@ fn rejects_private_module_in_path() {
         Foo/Bar/f
     "#
         )
-        .contains("private child module")
+        .contains("`Bar` is private to `/Foo`")
     );
 }
 
@@ -74,7 +74,7 @@ fn rejects_use_of_nonexistent_child() {
         Type
     "#
         )
-        .contains("no module or binding named Nonexistent")
+        .contains("`/Foo` has no `Nonexistent`")
     );
 }
 
@@ -87,7 +87,7 @@ fn rejects_absolute_use_of_nonexistent_module() {
         Type
     "#
         )
-        .contains("no module or binding named Nonexistent")
+        .contains("`/Nonexistent` names nothing")
     );
 }
 
@@ -319,7 +319,7 @@ fn rejects_re_export_through_other_modules_private_child() {
         Type
     "#
         )
-        .contains("private child module")
+        .contains("`Impl` is private to `/Other`")
     );
 }
 
@@ -387,7 +387,7 @@ fn opaque_inductive_constructor_namespace_cannot_be_re_exported() {
     );
 
     assert!(
-        error.contains("private child module"),
+        error.contains("`U` is private to `/Foo`"),
         "unexpected error: {error}"
     );
 }

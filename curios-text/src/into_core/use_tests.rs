@@ -21,7 +21,7 @@ fn private_use_does_not_expose_qualifier() {
         MyMod/Bar/f
     "#
         )
-        .contains("child module not found")
+        .contains("`/MyMod` has no module `Bar`")
     );
 }
 
@@ -48,7 +48,7 @@ fn rejects_use_of_private_binding() {
         x
     "#
         )
-        .contains("private binding: x")
+        .contains("`x` is private to `/Foo`")
     );
 }
 
@@ -143,7 +143,7 @@ fn rejects_use_of_unknown_item() {
         Type
     "#
         )
-        .contains("no module or binding named nope")
+        .contains("`/Foo` has no `nope`")
     );
 }
 
@@ -174,7 +174,7 @@ fn an_unknown_group_member_is_located_at_the_member() {
     "#,
     );
     assert!(
-        report.contains("no module or binding named nonesuch") && underline(&report) == "^^^^^^^^",
+        report.contains("`/Foo` has no `nonesuch`") && underline(&report) == "^^^^^^^^",
         "reported {report}"
     );
 }
@@ -191,7 +191,7 @@ fn an_unknown_group_path_is_located_at_the_path() {
     "#,
     );
     assert!(
-        report.contains("child module not found: Nonesuch") && underline(&report) == "^^^^^^^^^",
+        report.contains("`/Nonesuch` names no module") && underline(&report) == "^^^^^^^^^",
         "reported {report}"
     );
 }
@@ -363,7 +363,7 @@ fn rejects_use_when_both_sides_private() {
         Type
     "#
         )
-        .contains("private child module: X")
+        .contains("`X` is private to `/Foo`")
     );
 }
 
@@ -406,7 +406,7 @@ fn glob_imports_child_modules_as_qualifiers() {
     "#);
 }
 
-/// A sibling module is not in scope bare, and the refusal says where it is, as the elaborator's `unbound variable` does for a binding: the absolute path and the import.
+/// A sibling module is not in scope bare, and the refusal says where it is, as it does for a binding: the absolute path and the import.
 #[test]
 fn an_unresolved_qualifier_names_the_modules_it_could_mean() {
     let report = run_err(
@@ -424,13 +424,13 @@ fn an_unresolved_qualifier_names_the_modules_it_could_mean() {
     );
     assert!(
         report.contains(
-            "unresolved qualifier: Worker\n  `Worker` is `/Owner/Worker`: write it absolute, or `use /Owner/{Worker};`"
+            "`Worker` is not in scope\n  `Worker` is `/Owner/Worker`: write it absolute, or `use /Owner/{Worker};`"
         ),
         "reported {report}"
     );
 }
 
-/// A structure literal's head that names no global in scope is refused where it is written, with the binding it could have meant, as an unresolved qualifier is.
+/// A structure literal's head that names no global in scope is refused as any name that resolves to nothing is, with the binding it could have meant.
 #[test]
 fn an_unresolved_struct_name_names_the_binding_it_could_mean() {
     let report = run_err(
@@ -446,7 +446,7 @@ fn an_unresolved_struct_name_names_the_binding_it_could_mean() {
     );
     assert!(
         report.contains(
-            "unresolved struct name: Point\n  `Point` is `/Shapes/Point`: write it absolute, or `use /Shapes/{Point};`"
+            "`Point` is not in scope\n  `Point` is `/Shapes/Point`: write it absolute, or `use /Shapes/{Point};`"
         ),
         "reported {report}"
     );
@@ -466,7 +466,7 @@ fn glob_skips_private_child_modules() {
         Bar/f
     "#
         )
-        .contains("unresolved qualifier")
+        .contains("`Bar` is not in scope")
     );
 }
 

@@ -1,7 +1,7 @@
 use {
     super::{Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped},
     crate::{Error, GroupItem, Name, OrderedMap, UseGroup},
-    curios_utilities::{Mount, Qualifier},
+    curios_utilities::{Mount, Qualifier, nearest},
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,
@@ -51,13 +51,19 @@ struct PubUse {
 impl PubUse {
     // A refusal of this `pub use`, placed at the half of it the refusal is about: the selector it names, where this `use` wrote one of that label, and the path otherwise, which is all a glob writes.
     fn placed(&self, error: Error) -> Error {
-        let selector = match (&error, &self.group) {
-            (
-                Error::ExportConflict { label }
-                | Error::CyclicReExport { label }
-                | Error::NoSuchUseTarget { label, .. },
-                UseGroup::Named(items),
-            ) => items
+        let label = match &error {
+            Error::ExportConflict { label } | Error::CyclicReExport { label } => {
+                Some(label.as_str())
+            }
+            // The step that failed is the selector, where it is the name's last.
+            Error::Unresolved {
+                failure,
+                leaf: true,
+            } => Some(failure.segment.as_str()),
+            _ => None,
+        };
+        let selector = match (label, &self.group) {
+            (Some(label), UseGroup::Named(items)) => items
                 .iter()
                 .map(GroupItem::label)
                 .find(|item| item.as_str() == label)
@@ -317,6 +323,110 @@ pub(crate) fn visible_binding(
         .is_some();
 
     (within && declared).then(|| parent.with(label))
+}
+
+/// Why `consumer` cannot step from `parent` to `label`, sought as `sought`: the one value every resolution that stops in a module raises, the lowering's and the export view's alike. Private where `parent` declares the label out of the consumer's view, since a consumer inside `parent` would have been answered; absent otherwise. The nearest name is chosen among what the consumer may write there: what `parent` exports, and what it declares where the consumer lies within it.
+pub(super) fn unresolved(
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
+    consumer: &Qualifier,
+    parent: &Qualifier,
+    label: &str,
+    sought: curios_core::Sought,
+) -> curios_core::Unresolved {
+    let (modules, bindings) = match sought {
+        curios_core::Sought::Module => (true, false),
+        curios_core::Sought::Binding | curios_core::Sought::Structure => (false, true),
+        curios_core::Sought::Either => (true, true),
+    };
+    let declared = table.get(parent);
+    let exported = public.get(parent);
+
+    let hidden = |held: Option<bool>| held == Some(false);
+    let private = declared.is_some_and(|info| {
+        (modules && hidden(info.get_child(label))) || (bindings && hidden(info.get_binding(label)))
+    });
+
+    let own = declared.filter(|_| consumer.is_within(parent));
+    let children = exported
+        .into_iter()
+        .flat_map(|interface| interface.children.keys().map(String::as_str))
+        .chain(
+            own.into_iter()
+                .flat_map(|info| info.children().map(|(name, _)| name)),
+        )
+        .filter(|_| modules);
+    let members = exported
+        .into_iter()
+        .flat_map(|interface| interface.bindings.keys().map(String::as_str))
+        .chain(
+            own.into_iter()
+                .flat_map(|info| info.bindings().map(|(name, _)| name)),
+        )
+        .filter(|_| bindings);
+
+    curios_core::Unresolved {
+        segment: label.to_string(),
+        sought,
+        within: Some(*parent),
+        missing: match private {
+            true => curios_core::Missing::Private,
+            false => curios_core::Missing::Absent,
+        },
+        nearest: nearest(label, children.chain(members)).map(str::to_string),
+        elsewhere: Vec::new(),
+    }
+}
+
+/// Every public interface in scope that carries `label` in the namespace `sought` names, as the absolute path the label has there: the paths a refusal offers for a name that resolved to nothing. Found by the label alone — a module and a declaration of one name are two things, and nothing here pairs a path with another that exports the same declaration. Read off the public interfaces, where a `pub use` is a binding of the re-exporting module, rather than the declaration table, because the path a reader may write is the exporting module's: `/std/Bool` is `pub use Bool/{let Bool}`, and Core knows only the `/sys/Bool/Bool` it stands for. Only the shortest paths are kept — a longer one is the same name through a deeper module — in the path's own order, which is deterministic and nothing more.
+///
+/// A candidate the unit may not reference is dropped first, because a report that offered one would spell a way out the next compile refuses. Dropping before the shortest paths are kept rather than after is what makes the rule reachability instead of depth: `/sys/Nat` stands beside `/std/Nat` at the same length, and a reachable route below an internal one is still worth offering.
+pub(super) fn carriers(
+    public: &Scoped<'_, PublicInterface>,
+    reach: Reach<'_>,
+    label: &str,
+    sought: curios_core::Sought,
+) -> Vec<Qualifier> {
+    let (modules, bindings) = match sought {
+        curios_core::Sought::Module => (true, false),
+        curios_core::Sought::Binding | curios_core::Sought::Structure => (false, true),
+        curios_core::Sought::Either => (true, true),
+    };
+
+    let mut found = public
+        .iter()
+        .filter(|(_, interface)| {
+            (modules && interface.children.contains_key(label))
+                || (bindings && interface.bindings.contains_key(label))
+        })
+        .map(|(module, _)| module.with(label))
+        .filter(|path| reach.refused(path.segments()).is_none())
+        .collect::<Vec<_>>();
+    found.sort_by_key(|path| (path.segments().len(), path.join()));
+    let shortest = found.first().map(|path| path.segments().len());
+    found.retain(|path| Some(path.segments().len()) == shortest);
+    found
+}
+
+/// The refusal of a reach into a root the unit may not name: the root of `resolved` as the step that failed, for the reason `missing` gives, with every path the unit may write that carries `wanted`, the name it reached for under that root and the namespace it sought it in.
+pub(super) fn out_of_reach(
+    public: &Scoped<'_, PublicInterface>,
+    reach: Reach<'_>,
+    resolved: &[String],
+    missing: curios_core::Missing,
+    wanted: Option<(&str, curios_core::Sought)>,
+) -> curios_core::Unresolved {
+    curios_core::Unresolved {
+        segment: resolved.first().cloned().unwrap_or_default(),
+        sought: curios_core::Sought::Module,
+        within: Some(Qualifier::empty()),
+        missing,
+        nearest: None,
+        elsewhere: match wanted {
+            Some((label, sought)) => carriers(public, reach, label, sought),
+            None => Vec::new(),
+        },
+    }
 }
 
 /// Seed this unit's interfaces over its scope's — constructor modules included, which are also added to `table`, the direct-interface view, so lowering (`process_items`) can classify private-vs-missing accesses through them — then resolve every `pub use` to a fixed point. Runs after discovery has built `table` and before any item is lowered.
@@ -697,9 +807,23 @@ fn classify_dead(
 
                     if !resolved {
                         let ns = if in_binding { Ns::Binding } else { Ns::Module };
-                        return Err(use_.placed(classify_label(
-                            public, table, reach, pub_uses, &provider, ns, label,
-                        )));
+                        let cyclic = cycles(public, table, reach, pub_uses, &provider, ns, label);
+                        let sought = match item {
+                            GroupItem::Mod(_) => curios_core::Sought::Module,
+                            GroupItem::Let(_) => curios_core::Sought::Binding,
+                            GroupItem::Both(_) => curios_core::Sought::Either,
+                        };
+                        let error = match cyclic {
+                            true => Error::CyclicReExport {
+                                label: label.to_string(),
+                            },
+                            false => Error::unresolved(
+                                unresolved(public, table, &use_.module, &provider, label, sought),
+                                true,
+                            ),
+                        };
+
+                        return Err(use_.placed(error));
                     }
                 }
             }
@@ -709,8 +833,8 @@ fn classify_dead(
     Ok(())
 }
 
-// Walk the re-export chain for an unresolved `(module, ns, label)` to decide whether it is a cycle or a genuine miss.
-fn classify_label(
+// Walk the re-export chain for an unresolved `(module, ns, label)` to decide whether it is a cycle or a genuine miss: whether the chain comes back to a module it has passed.
+fn cycles(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     reach: Reach<'_>,
@@ -718,25 +842,18 @@ fn classify_label(
     module: &Qualifier,
     ns: Ns,
     label: &str,
-) -> Error {
+) -> bool {
     let mut visited = HashSet::new();
     let mut current = *module;
 
     loop {
         if !visited.insert(current) {
-            return Error::CyclicReExport {
-                label: label.to_string(),
-            };
+            return true;
         }
 
         match producer(public, table, reach, pub_uses, &current, ns, label) {
             Some(next) => current = next,
-            None => {
-                return Error::NoSuchUseTarget {
-                    label: label.to_string(),
-                    parent: module.join(),
-                };
-            }
+            None => return false,
         }
     }
 }
@@ -782,6 +899,31 @@ fn resolve_provider(
     name: &Name,
 ) -> Result<Qualifier, Error> {
     let segments = name.qualifier().segments();
+    // The refusal of a step this module may not take from `parent`.
+    let step = |parent: &Qualifier, segment: &str| {
+        let sought = curios_core::Sought::Module;
+
+        Error::unresolved(
+            unresolved(public, table, module, parent, segment, sought),
+            false,
+        )
+    };
+    // Refuse a hop into a root this unit may not name, `next` being the segment the path steps to from there.
+    let reachable = |reached: &Qualifier, next: Option<&String>| {
+        let Some(missing) = reach.refused(reached.segments()) else {
+            return Ok(());
+        };
+        let wanted = reached
+            .segments()
+            .get(1)
+            .or(next)
+            .map(|wanted| (wanted.as_str(), curios_core::Sought::Module));
+
+        Err(Error::unresolved(
+            out_of_reach(public, reach, reached.segments(), missing, wanted),
+            false,
+        ))
+    };
 
     let (mut current, walk) = if name.is_abs() {
         (Qualifier::empty(), segments)
@@ -802,34 +944,20 @@ fn resolve_provider(
             });
         }
 
-        let start = visible_child(public, table, module, module, first).ok_or_else(|| {
-            Error::ChildModuleNotFound {
-                segment: first.clone(),
-            }
-        })?;
+        let start = visible_child(public, table, module, module, first)
+            .ok_or_else(|| step(module, first))?;
 
         (start, &segments[1..])
     };
 
-    reach.guard(module, current.segments())?;
-    for segment in walk {
+    reachable(&current, walk.first())?;
+    for (index, segment) in walk.iter().enumerate() {
         match visible_child(public, table, module, &current, segment) {
             Some(target) => current = target,
-            None => return Err(segment_error(table, &current, segment)),
+            None => return Err(step(&current, segment)),
         }
-        reach.guard(module, current.segments())?;
+        reachable(&current, walk.get(index + 1))?;
     }
 
     Ok(current)
-}
-
-fn segment_error(table: &Scoped<'_, ModuleInfo>, module: &Qualifier, segment: &str) -> Error {
-    match table.get(module).and_then(|info| info.get_child(segment)) {
-        Some(false) => Error::PrivateChildModule {
-            segment: segment.to_string(),
-        },
-        _ => Error::ChildModuleNotFound {
-            segment: segment.to_string(),
-        },
-    }
 }

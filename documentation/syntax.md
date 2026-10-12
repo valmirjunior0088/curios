@@ -78,7 +78,7 @@ Option/some         -- member of Option
 /std/Nat/lt         -- absolute name through a nested module
 ```
 
-The root `/sys` is the compiler's own and a program may not name it: it holds the intrinsic types, the host's operations, and the propositions a decided bound is stated in. Naming it is refused, pointing at the `/std` module that stands in front of it — `Nat` is reached as `/std/Nat`. It is named in this document only where the mechanism behind a form is the point.
+The root `/sys` is the compiler's own and a program may not name it: it holds the intrinsic types, the host's operations, and the propositions a decided bound is stated in. Naming it is refused as any name that does not resolve is, with the paths a program may write that carry the name it reached for — `Nat` is reached as `/std/Nat`. It is named in this document only where the mechanism behind a form is the point.
 
 That refusal is one case of a general rule: **a unit reaches the prefixes it declared a dependency on, plus `/std`, and no others.** A package declares them in its manifest; a transitive dependency is in the compilation but is not one of them. Every unit is mounted, so an undeclared prefix is still there, and writing one is refused at the reference, naming the prefix and saying it was not declared — a name is never reported unbound because a dependency was missing. The concepts the surface forms desugar into are ordinary `/std` declarations: `+` dispatches through `/std/ops/Add`, a `!` through `/std/Monad`, and a `test` through `/std/Test`.
 

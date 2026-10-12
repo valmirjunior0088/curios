@@ -11,8 +11,8 @@ use {
 
 #[test]
 fn display_unbound_variable() {
-    let err = Error::unbound_variable(Subterm::Intrinsic(Intrinsic::NatType));
-    assert_eq!(err.to_string(), "unbound variable: Nat");
+    let err = Error::unbound_variable(Subterm::Intrinsic(Intrinsic::NatType), None);
+    assert_eq!(err.to_string(), "`Nat` is not in scope");
 }
 
 #[test]

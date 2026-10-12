@@ -45,6 +45,9 @@ pub use recurse::*;
 mod digest;
 pub use digest::*;
 
+mod nearest;
+pub use nearest::*;
+
 // A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: `curios_utilities::test_support::Temporary` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(feature = "test-support")]
 pub mod test_support;

@@ -117,37 +117,31 @@ impl<'a> Reach<'a> {
         self.mounts
     }
 
-    /// Reject a reference that *resolves into* a prefix this unit cannot name.
+    /// Why this unit may not write a reference that *resolves into* `resolved`, where it may not: its root is a prefix this unit cannot name.
     ///
     /// `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A target inside a visible prefix, or inside the reader's own, passes through.
     ///
-    /// **Visibility is the whole rule, and the root's kind only chooses the wording.** `/sys` is closed because no unit but the standard library declares a dependency on it, and the standard library does — the rule a package's manifest already states, with no privilege comparison between roots beside it. Whether the prefix is a closed root decides which refusal a reader gets — "use the `/std` module" rather than "declare it" — because telling a program to declare `/sys` would be advice it cannot take.
+    /// **Visibility is the whole rule, and the root's kind only chooses the wording.** `/sys` is closed because no unit but the standard library declares a dependency on it, and the standard library does — the rule a package's manifest already states, with no privilege comparison between roots beside it. Whether the prefix is a closed root decides which reason a reader is given — that the root is internal rather than "declare it" — because telling a program to declare `/sys` would be advice it cannot take.
     ///
-    /// **The prefix stays discoverable and the reference is refused**, rather than the prefix being hidden and the name reported unbound. A hidden prefix makes `use /sys/{Nat}` read as a typo; a refused one says which unit holds the name and why this one may not write it, which is the difference between a diagnostic and a riddle.
-    fn guard(&self, _consumer: &Qualifier, resolved: &[String]) -> Result<(), Error> {
-        let Some(root) = resolved.first() else {
-            return Ok(());
-        };
+    /// **The prefix stays discoverable and the reference is refused**, rather than the prefix being hidden and the name reported unbound. A hidden prefix makes `use /sys/{Nat}` read as a typo; a refused one says which unit holds the name and why this one may not write it, which is the difference between a diagnostic and a riddle. The refusal is the one a name that does not resolve gets ([`out_of_reach`]), for this reason, so it names what the unit may write instead as any such refusal does.
+    fn refused(&self, resolved: &[String]) -> Option<curios_core::Missing> {
+        let root = resolved.first()?;
 
         let prefix = Qualifier::from([root.as_str()]);
         // Not a mount at all: an ordinary name under the compilation root, or one that will fail to resolve on its own terms.
         if !self.mounts.iter().any(|mount| mount.prefix == prefix) {
-            return Ok(());
+            return None;
         }
 
         // A prefix the unit declared, or its own — `visible` carries both, because a unit does not declare a dependency on itself.
         if self.visible.iter().any(|mount| mount.prefix == prefix) {
-            return Ok(());
+            return None;
         }
 
-        match is_internal_root(self.mounts, root) {
-            true => Err(Error::InternalRootModule {
-                segment: root.clone(),
-            }),
-            false => Err(Error::UndeclaredPrefix {
-                prefix: root.clone(),
-            }),
-        }
+        Some(match is_internal_root(self.mounts, root) {
+            true => curios_core::Missing::Internal,
+            false => curios_core::Missing::Undeclared,
+        })
     }
 }
 
@@ -395,10 +389,8 @@ pub struct PreparedText {
     /// The bytes a baseline stored an item as, for each item this unit took from one whole ([`PreparedText::taken_from`]), by the item's place: what the item is stored as again, since it is the baseline's. Empty for a unit lowered over none.
     #[archived_with(curios_archive::Skip)]
     carried: Vec<Option<curios_archive::Bytes>>,
-    /// What this unit's lowering minted, which its elaboration's counters start above. A count within the unit: nothing here resumes above a predecessor.
+    /// What this unit's lowering minted, which its elaboration's counters start above, with the names of each declaration that resolved to nothing. A count within the unit: nothing here resumes above a predecessor.
     minted: curios_core::Minted,
-    /// Every bare name that resolved to nothing, by the binder it lowered to, with what it could have meant — see `Context::unbound_binder`. Empty for any unit that compiles, the prelude included.
-    unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
     /// Every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and half of what a report spells a name by ([`PreparedText::spellings`]).
     ///
     /// **Stored apart from the unit** ([`PreparedText::imports_bytes`]): they are read by the unit's own reports and its documentation, and by nothing compiled after it.
@@ -604,11 +596,6 @@ impl PreparedText {
     /// What this unit's lowering minted — see the field.
     pub fn minted(&self) -> &curios_core::Minted {
         &self.minted
-    }
-
-    /// What each unresolved bare name could have meant, by the binder it lowered to — the table `curios-elab`'s `unbound variable` report reads its suggestion from.
-    pub fn unbound(&self) -> &BTreeMap<curios_core::Free, Vec<Qualifier>> {
-        &self.unbound
     }
 
     /// What each source declaration of this unit lowered to beside its items — see the field. Read out of the unit's baseline half now, where the unit was restored and no lowering has asked before.
@@ -2487,7 +2474,6 @@ fn into_core_unit_within(
             entry: entry_mints,
             ..shared.minted.into_inner()
         },
-        unbound: shared.unbound.into_inner(),
         imports: curios_archive::Deferred::held(shared.imports.into_inner()),
         visible: visible_mounts,
         broken,
@@ -2611,13 +2597,11 @@ pub fn prepare_prelude(
     into_core_unit(&UnitSource::mounted(input), predecessors, syntax)
 }
 
-/// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, the unresolved-name table its `unbound variable` reports read from, and its lints.
+/// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, and its lints. A name that resolved to nothing is among what its declaration minted (`curios_core::Mints::unbound`).
 pub struct LoweredEntry {
     pub program: curios_core::Program,
     pub minted: curios_core::Minted,
     pub foreigns: ForeignStore,
-    /// See [`PreparedText::unbound`].
-    pub unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
     /// How the entry's names can be written, where — see [`EntryNames`].
     pub names: EntryNames,
     /// See [`PreparedText::lints`].
@@ -2729,7 +2713,6 @@ pub fn into_core_with_prelude(
         },
         minted: unit.minted,
         foreigns: unit.foreigns,
-        unbound: unit.unbound,
         names: EntryNames {
             imports: unit
                 .imports

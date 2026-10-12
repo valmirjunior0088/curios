@@ -110,7 +110,7 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     "#;
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("unbound variable: cong")
+        error.contains("`cong` is not in scope")
             && error.contains(
                 "`cong` is `/std/Eq/cong`: write `Eq/cong` if `Eq` is imported, or `use /std/Eq/{cong};`"
             ),
@@ -126,7 +126,7 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     "#;
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("unbound variable: Bool")
+        error.contains("`Bool` is not in scope")
             && error.contains("`Bool` is `/std/Bool`: write it absolute, or `use /std/{Bool};`"),
         "unexpected report: {error}"
     );

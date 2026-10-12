@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{UniverseConstraintOrigin, UniverseSeed, WitnessId},
+    crate::{UniverseConstraintOrigin, UniverseSeed, Unresolved, WitnessId},
     curios_utilities::{InfixOp, Qualifier, Symbol, name},
     std::{cmp::Ordering, collections::BTreeMap, fmt, hash, rc::Rc},
 };
@@ -144,6 +144,8 @@ pub enum CalleeId {
 pub struct Mints {
     /// Binder identities. A lowered scope is closed before the elaborator sees it, so the ones that survive into a lowered term are the unbound names — each lowered to a free local that elaboration must report rather than find bound.
     pub binders: usize,
+    /// Why each of those names resolved to nothing, by the binder it lowered to: what elaboration reports where it meets the binder ([`Unresolved`]). Held here, with the counter the binder was minted from, because a binder's index means something within its declaration alone: a table of the unit's would have two declarations answer for one another's names. Empty for every declaration of a unit that compiles.
+    pub unbound: BTreeMap<Free, Unresolved>,
     /// Term metavariables, one per hole the lowering left for elaboration to solve.
     pub metavariables: usize,
     /// One seed per universe level the lowering minted, by its id: the role the solver reads the level's provenance off, and where it was written. Every copy of one written `Type` shares a level, so there are as many seeds as written types, not as occurrences.
@@ -173,6 +175,7 @@ impl Minted {
     pub fn of(&self, name: &Global) -> &Mints {
         static NOTHING: Mints = Mints {
             binders: 0,
+            unbound: BTreeMap::new(),
             metavariables: 0,
             universes: Vec::new(),
             qualities: Vec::new(),

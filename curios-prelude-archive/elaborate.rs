@@ -16,7 +16,7 @@ use {
     curios_unit::{Record, Uncertified, framed},
     curios_utilities::{Qualifier, Report, Source, digest},
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::BTreeSet,
         fs,
         path::{Path, PathBuf},
         sync::Arc,
@@ -108,7 +108,6 @@ fn reported(
         module,
         scope: &lexicons.iter().collect::<Vec<_>>(),
         syntax: &SYNTAX,
-        unbound: &BTreeMap::new(),
         spellings: None,
         anchors: &[anchors],
     })
