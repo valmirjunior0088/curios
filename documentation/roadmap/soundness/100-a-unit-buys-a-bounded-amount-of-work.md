@@ -42,11 +42,10 @@ A walk costs its graph, so it is bounded by the nodes the budget charged when th
 
 Each lands alone, on its own check.
 
-1. **The decisions say why a walk is not priced.** The rejected alternative of [Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) keeps its verdict with the reasons above, and [A reduction step costs what it builds](../../design/soundness/a-reduction-step-costs-what-it-builds.md) names the fixtures and the measurement.
-2. **A key that holds a term is told apart by its hash.** One key type over the tables named under *The gap*, its hash kept beside it and compared first. Check: two runs of each half of `/std`'s build agree in every judgment's looks; the images' digests stand; `cargo xtask workspace lint`.
-3. **The kernel's nesting is measured, and charged where it grows.** The deepest nesting of `compare` over `/std` and over two deep terms compared a level at a time, with what a level costs in units and in stack.
-4. **An `Int` sum is charged by its factors**, or keeps the monomial it read as `Nat`'s does.
-5. **Completion**, below.
+1. **A key that holds a term is told apart by its hash.** One key type over the tables named under *The gap*, its hash kept beside it and compared first. Check: two runs of each half of `/std`'s build agree in every judgment's looks; the images' digests stand; `cargo xtask workspace lint`.
+2. **The kernel's nesting is measured, and charged where it grows.** The deepest nesting of `compare` over `/std` and over two deep terms compared a level at a time, with what a level costs in units and in stack.
+3. **An `Int` sum is charged by its factors**, or keeps the monomial it read as `Nat`'s does.
+4. **Completion**, below.
 
 ## Verification
 

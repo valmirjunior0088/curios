@@ -21,6 +21,6 @@ What holds the rule is counted, not timed. Each crate that owns walks runs them 
 **Rejected.**
 
 - **Interning every node where it is built.** A table keyed on a term already hashes and compares a shared graph in its size, and interning does nothing for what reduction builds ([smalltt](https://github.com/AndrasKovacs/smalltt): "hash consing alone is inadequate for eliminating size explosions").
-- **Charging a walk to the budget.** A walk that costs its graph is bounded by the nodes the budget charged when they were built; a charge would move verdicts.
+- **Charging a walk to the budget.** A walk that costs its graph is bounded by the nodes the budget charged when they were built. What a walk enters follows how its graphs share their nodes, which nothing holds the same between a term elaborated here and one restored from a stored unit, so a charge by the node is a second price list, and one the program does not determine. A walk that outgrew its graph was a loop repeating it — a table probed at every level of a spine, a comparison meeting its own goal again — and the loop is what is removed.
 - **A memo argued per walk.** One shape was reported walk by walk; a rule per kind of work is what a new walk is held to.
 - **A closure over the pairs conversion accepted.** Its result would depend on the order goals were met in.
