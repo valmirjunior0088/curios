@@ -947,29 +947,26 @@ fn scan_module_info(heads: &[Headed]) -> Result<ModuleInfo, Error> {
 
 // The surface concept application `C(args)` for a witness's declared type: the witnessed concept applied to the annotation's arguments under the marks they were written with, as any application is — a list with nothing written included, which is the application `C()` and not the bare name.
 //
-// **Spanned over the written `C(args)`, because this is the only thing a `satisfy` refusal can point at.** A witness is anonymous, so nothing else in its declaration names it: `elaborate_module_let` locates a registration failure with `error.at_opt(def.type_.span())`, and this synthesized node is that type. Left spanless, every duplicate, orphan, unkeyable and irregular-premise refusal would arrive with no line at all — and a duplicate between two witnesses of one module would name that module twice and nothing else, which a reader cannot act on. The head name and each argument carry the spans this joins; `Term::with_span` keeps an innermost span already present, so the arguments are untouched.
-fn witness_concept_application(concept: &Name, args: Option<&[Argument]>) -> Term {
+// **Spanned over the written `C(args)`, because this is the only thing a `satisfy` refusal can point at.** A witness is anonymous, so nothing else in its declaration names it: `elaborate_module_let` locates a registration failure with `error.at_opt(def.type_.span())`, and this synthesized node is that type. Left spanless, every duplicate, orphan, unkeyable and irregular-premise refusal would arrive with no line at all — and a duplicate between two witnesses of one module would name that module twice and nothing else, which a reader cannot act on. `written` is the head as the parser read it, through the parenthesis that closes its arguments; `Term::with_span` keeps an innermost span already present, so the arguments are untouched.
+fn witness_concept_application(
+    concept: &Name,
+    args: Option<&[Argument]>,
+    written: Option<&Span>,
+) -> Term {
     let head: Term = Subterm::Name(concept.clone()).into();
-    let written = |head: Term, last: Option<&Span>| match (concept.span(), last) {
-        (Some(open), Some(close)) => {
-            head.with_span(Span::new(open.source.clone(), open.start, close.end))
-        }
-        (Some(open), None) => head.with_span(open.clone()),
-        (None, _) => head,
+    let applied: Term = match args {
+        Some(args) => Subterm::Apply(Apply {
+            head,
+            arguments: args.to_vec(),
+        })
+        .into(),
+        None => head,
     };
 
-    let Some(args) = args else {
-        return written(head, None);
-    };
-
-    let applied: Term = Subterm::Apply(Apply {
-        head,
-        arguments: args.to_vec(),
-    })
-    .into();
-
-    // The last argument's own span closes the range. An argument the parser gave none — a desugar's product — leaves the head's span alone, which still names the declaration.
-    written(applied, args.last().and_then(|arg| arg.term.span()))
+    match written {
+        Some(span) => applied.with_span(span.clone()),
+        None => applied,
+    }
 }
 
 /// The name a declaration's parameter is minted under: its own, or none for a `use` parameter, which occupies a binder and names nothing.
@@ -1905,8 +1902,11 @@ fn process_items(
                         let name = curios_core::Global::Witness(context.fresh_witness());
                         context.record_import_scope(Some(&name));
 
-                        let concept_app =
-                            witness_concept_application(&witness.concept, witness.args.as_deref());
+                        let concept_app = witness_concept_application(
+                            &witness.concept,
+                            witness.args.as_deref(),
+                            witness.head.as_ref(),
+                        );
                         // A written body is the concept literal over its fields alone, so every `use`-marked position is left to resolution, under a bare head: the declared type states the arguments once, and the literal is checked against it. A derived one is the `Derive` transient, spanned at the concept application so a refusal lands on the declaration. Either way the telescope below wraps it identically.
                         let body: Term = match &witness.body {
                             Some(fields) => Subterm::StructLit(StructLit {

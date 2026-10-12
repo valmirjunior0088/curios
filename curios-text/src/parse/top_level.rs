@@ -811,14 +811,15 @@ fn parse_witness_member<'a>(doc: Option<Doc>) -> Parser<'a, TopWitness> {
         // Past the separator this is a witness's telescope, so a member it refuses is its own to report.
         .flat_map(members)
         .or(pure(vec![]))
-        .and(parse_name)
+        .and(mark().and(parse_name))
         // Past the concept's name this is a witness and nothing else, so the fall-through ends here as `test`'s ends at its label. `satisfy Name` is two names in a row and so no term, and the call `satisfy(…)` the dispatch keeps this arm recoverable for never reaches this point: its argument list is no telescope, and a `(` is no name.
         .and(commit(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_apply_argument, || {
                     parse_literal(",")
                 }))
-                .and_drop(parse_literal(")"))
+                // Marked at the parenthesis, before the whitespace after it: where the written head ends.
+                .and(take_exact(")").and_keep(mark).and_drop(parse_whitespace))
                 .map(Some)
                 .or(pure(None))
                 .and(
@@ -832,12 +833,20 @@ fn parse_witness_member<'a>(doc: Option<Doc>) -> Parser<'a, TopWitness> {
                     ),
                 ),
         ))
-        .map(move |((params, concept), (args, body))| TopWitness {
-            doc,
-            params,
-            concept,
-            args,
-            body,
+        .map(move |((params, (start, concept)), (args, body))| {
+            let (args, head) = match args {
+                Some((args, closed)) => (Some(args), Some(start.to(&closed))),
+                None => (None, concept.span().cloned()),
+            };
+
+            TopWitness {
+                doc,
+                params,
+                concept,
+                args,
+                head,
+                body,
+            }
         })
 }
 

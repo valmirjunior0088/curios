@@ -239,15 +239,27 @@ pub struct WitnessField {
 }
 
 /// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness@N(tele) -> C(args) = C { … }` registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application — an application like any other, so its arguments take the marks a call's do — which is the witness's declared type and what its body is checked against. The body is written, or `..` alone as `satisfy C(args) { .. }` — the derived form, whose body the compiler writes.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TopWitness {
     pub doc: Option<Doc>,
     pub params: Vec<FuncSugarParam>,
     pub concept: Name,
     /// The concept's argument list where one was written: `None` for a bare concept name, and the empty list for `C()`, the application with nothing written.
     pub args: Option<Vec<Argument>>,
+    /// Where the witnessed concept application was written, from the concept's name through the parenthesis that closes its arguments, or the name alone where it takes none: what a refusal about the witness points at, a witness having no name of its own. Excluded from `PartialEq`, as a `Term`'s span is.
+    pub head: Option<Span>,
     /// The written fields, or `None` for the derived form. A body holds implementation fields and nothing else: the concept's `use`-marked (superclass) positions are never written in a witness, so resolution fills each one and every path to a superclass finds the one registered witness.
     pub body: Option<Vec<WitnessField>>,
+}
+
+impl PartialEq for TopWitness {
+    fn eq(&self, other: &Self) -> bool {
+        self.doc == other.doc
+            && self.params == other.params
+            && self.concept == other.concept
+            && self.args == other.args
+            && self.body == other.body
+    }
 }
 
 /// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to a `() -> Test` thunk: only the selected test's body is forced.
