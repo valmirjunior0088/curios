@@ -125,7 +125,7 @@ pub(crate) struct ParkedConversion {
     pub frame: FrozenFrame,
 }
 
-/// What a completing term may do for a parked problem nothing else answers: the problem's own answer, one among those it admits ([`ParkedWork::choice`]). Their order is the order they are taken in, each committing less than the next and able to decide it, with one exception the store cannot tell by a problem's shape: a lambda with a domain left open is read after the spines are held, which may be what gives the domain ([`Context::complete`]).
+/// What a completing term may do for a parked problem nothing else answers: the problem's own answer, one among those it admits ([`ParkedWork::choice`]). Their order is the order they are taken in, each committing less than the next and able to decide it, with one exception the store cannot tell by a problem's shape: a lambda with a domain left open is read after the spines are held, which may be what gives the domain ([`Context::complete`](crate::Context::complete)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Choice {
     /// A `use` slot nothing solved takes the witness resolution finds for its goal, where the goal's key has come to a head resolution reads.
@@ -805,12 +805,12 @@ impl Solutions {
         self.imitating || self.holds_spines()
     }
 
-    /// Begin or end reading a region's monad, answering what stood before: [`Context::imitating`]'s bracket.
+    /// Begin or end reading a region's monad, answering what stood before: [`Context::imitating`](crate::Context::imitating)'s bracket.
     pub(crate) fn set_imitating(&mut self, imitating: bool) -> bool {
         mem::replace(&mut self.imitating, imitating)
     }
 
-    /// Begin or end holding spines, answering what stood before: [`Context::holding_spines`]'s bracket.
+    /// Begin or end holding spines, answering what stood before: [`Context::holding_spines`](crate::Context::holding_spines)'s bracket.
     pub(crate) fn set_holding(&mut self, holding: bool) -> bool {
         mem::replace(&mut self.holding, holding)
     }

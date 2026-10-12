@@ -332,7 +332,7 @@ fn int_same_factors(left: &[Term], right: &[Term]) -> bool {
 ///
 /// A product of two symbolic sums stays the stuck product of their images, the line [`int_product`] draws for every `Int` product.
 ///
-/// **Written once, and charged as it is written.** Each level of the form — the term's own summands, and those of a sum standing as a factor of a stuck product — is charged [`image_bound`] of its footprint before its image is built, and a monomial over atoms is one spine whatever its degree: taken a factor at a time it is rebuilt at every factor, a square of its degree.
+/// **Written once, and charged as it is written.** Each level of the form — the term's own summands, and those of a sum standing as a factor of a stuck product — is charged `image_bound` of its footprint before its image is built, and a monomial over atoms is one spine whatever its degree: taken a factor at a time it is rebuilt at every factor, a square of its degree.
 pub fn int_of_nat(reducer: &mut impl Reducer, nat: &Term) -> Result<Term, ReduceError> {
     recurse(|| {
         reducer.spend(image_bound(&Nat::footprint(nat)))?;
@@ -490,7 +490,7 @@ fn int_single(term: &Term) -> bool {
     summands.len() + usize::from(!constant.is_zero()) <= 1
 }
 
-/// The product as the fold takes it: distributed where [`int_distributes`] says, and left as a stuck `IntMul` of the two reduced operands otherwise.
+/// The product as the fold takes it: distributed where `int_distributes` says, and left as a stuck `IntMul` of the two reduced operands otherwise.
 pub fn int_product(left: &Term, right: &Term) -> Term {
     match int_distributes(left, right) {
         true => int_multiply(left, right),

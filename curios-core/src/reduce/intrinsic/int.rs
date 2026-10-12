@@ -1,6 +1,6 @@
-//! Deciding an `Int` comparison, including under symbols — [`compare_nat`]'s signed twin over the group normal form.
+//! Deciding an `Int` comparison, including under symbols — [`compare_nat`](super::compare_nat)'s signed twin over the group normal form.
 //!
-//! ℤ under `+` is a group, so every relation reads through the difference: `a ⋈ b` iff `a - b ⋈ 0`. [`int_cancel_common`] moves that difference to the two sides by sign, and a pair whose residuals are both constants is decided by comparing them; anything else is undecided and rebuilt from the residuals, so `i + a < i + b` and `a < b` reduce to one term, which conversion needs.
+//! ℤ under `+` is a group, so every relation reads through the difference: `a ⋈ b` iff `a - b ⋈ 0`. [`int_cancel_common`](crate::int_cancel_common) moves that difference to the two sides by sign, and a pair whose residuals are both constants is decided by comparing them; anything else is undecided and rebuilt from the residuals, so `i + a < i + b` and `a < b` reduce to one term, which conversion needs.
 
 use {
     super::{Asked, image_bound, lattice_verdict, sum_bound},
