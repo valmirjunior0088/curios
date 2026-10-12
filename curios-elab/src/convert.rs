@@ -1757,6 +1757,8 @@ impl Convert {
 
         // Embedded-metavariable guard: any *other* unsolved metavariable in the candidate may carry a wider context than `id`'s, so solving now could let the solution escape its scope. A metavariable whose birth context is *contained* in `id`'s provably cannot smuggle a name out: everything it can ever inject — its spine entries now, its own solution's names later, arriving only through that scope-checked spine — lies inside `id`'s scope already. The exemption is what lets a settle-synthesized lambda type, whose unannotated domains are metavariables minted at the settling expectation's own scope, commit instead of stranding.
         //
+        // Nor can one whose birth context goes past `id`'s only by binders the candidate binds itself at each occurrence ([`Context::metavar_bound_by_candidate`]): the occurrence sits where the metavariable was born, so what it comes to names nothing the candidate does not bind. That is a settled lambda's codomain, born under the lambda's binders so that the body's type may name them, in the function type the lambda states.
+        //
         // One not contained is *restricted* to `id`'s context instead of holding the candidate back ([`Context::metavar_restriction`]): solved to a stand-in born over `id`'s binders, under the refinements both were born under, and the candidate solved again through it — contained, so the retry does not come back here. Waiting would be for a solution that, once `id` embeds it, could only escape: an implicit minted under a match arm's `v` and embedded in the match's type would leave that type open until a later `read!` pinned it to the region's monad. What cannot be restricted still waits, and so does a candidate the retry does not commit, which leaves no restriction behind.
         let blocking = metavars
             .iter()
@@ -1764,6 +1766,7 @@ impl Convert {
             .filter(|other| {
                 context.metavar_solution(*other).is_none()
                     && !context.metavar_context_contained(*other, id)
+                    && !context.metavar_bound_by_candidate(*other, &metavar_spines(t, *other), id)
             })
             .collect::<Vec<_>>();
         if !blocking.is_empty() {

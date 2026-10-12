@@ -1154,7 +1154,17 @@ pub(super) fn elaborate_func_infer(
         }
 
         let body = cursor.body().expect("a cursor past every entry");
-        elaborate(context, &body, Mode::Infer)
+        match settle {
+            // A settled lambda's body is read at a codomain left open: born here, under the binders, so that it may name them, and awaited by the term settling the lambda, so that a choice the body owns waits for that term as one in an argument does. What the body says of its type solves it.
+            Some((lambda, _)) => {
+                let sort = context.fresh_sort("lambda codomain");
+                let codomain = context.fresh_hole_metavar(sort, lambda.extent());
+                let body = check(context, &body, codomain.clone())?;
+
+                Ok((body, codomain))
+            }
+            None => elaborate(context, &body, Mode::Infer),
+        }
     }
 
     let mut domains = Vec::new();

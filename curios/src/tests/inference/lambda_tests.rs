@@ -77,6 +77,105 @@ fn a_lambda_under_nested_calls_is_typed_by_the_lambda_beside_the_outermost() {
     assert_eq!(run(&source), b"7 7");
 }
 
+// A settled lambda's body is read at a codomain left open, so a choice the body owns waits for the call as one in an argument does: a numeral, a tuple, a list, a lambda, a call and a match that is the body each take the type the lambda beside it gives, whichever of the two is written first.
+#[test]
+fn a_choice_in_a_settled_lambdas_body_takes_the_type_a_lambda_beside_it_gives() {
+    let source = program(
+        r#"
+        let head(xs: List(Byte)) -> Byte = match xs | [] => b | [h, ..t] => h end;
+        let numeral = and(
+            Show/show(first((x: Byte) => 0, (y: Byte) => b)(b)),
+            Show/show(second((y: Byte) => b, (x: Byte) => 0)(b)));
+        let tuple = and(
+            Show/show(first((x: Byte) => (0, x), (y: Byte) => (b, y))(b).0),
+            Show/show(second((y: Byte) => (b, y), (x: Byte) => (0, x))(b).0));
+        let list = and(
+            Show/show(head(first((x: Byte) => [0, 1], (y: Byte) => [b])(b))),
+            Show/show(head(second((y: Byte) => [b], (x: Byte) => [0, 1])(b))));
+        let curried = and(
+            Show/show(first((x: Byte) => (y: Byte) => 0, (x: Byte) => (y: Byte) => b)(b)(b)),
+            Show/show(second((x: Byte) => (y: Byte) => b, (x: Byte) => (y: Byte) => 0)(b)(b)));
+        let call = and(
+            Show/show(first((x: Byte) => id(id(0)), (y: Byte) => b)(b)),
+            Show/show(second((y: Byte) => b, (x: Byte) => id(id(0)))(b)));
+        let matched = and(
+            Show/show(first((x: Bool) => match x | true => 0 | false => 1 end, (y: Bool) => b)(c)),
+            Show/show(second((y: Bool) => b, (x: Bool) => match x | true => 0 | false => 1 end)(c)));
+        print(Str/join(" ", [numeral, tuple, list, curried, call, matched]))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"0 0 0 0 0 0 0 0 0 0 0 0");
+}
+
+// The codomain is born under the lambda's binders, so the type the body states may name them: bound through a call the lambda keeps a codomain that depends on its parameter, and two such lambdas beside each other are held to one.
+#[test]
+fn a_settled_lambdas_codomain_may_name_its_parameter() {
+    let source = program(
+        r#"
+        induct Tagged: (Nat) -> Type | tag(n: Nat): (n) end
+        let untag(@n: Nat, t: Tagged(n)) -> Nat = n;
+        let dep = id((n: Nat) => Tagged/tag(n));
+        let pair = first((n: Nat) => Tagged/tag(n), (m: Nat) => Tagged/tag(m));
+        print(and(Nat/to_str(untag(dep(3))), Nat/to_str(untag(pair(4)))))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"3 4");
+
+    let report = error(&program(
+        r#"
+        induct Tagged: (Nat) -> Type | tag(n: Nat): (n) end
+        let pair = first((n: Nat) => Tagged/tag(n), (m: Nat) => Tagged/tag(m + 1));
+        print("unreachable")
+        "#,
+    ));
+
+    assert!(
+        report.contains("type mismatch") && report.contains("Tagged(m + 1)"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// A body no type can be given is refused alike in either order: the operator waits for its operand type, which the lambda beside it gives, and bytes do not add.
+#[test]
+fn a_body_the_other_lambdas_type_refuses_is_refused_in_either_order() {
+    for call in [
+        "first((x: Byte) => 0 + 1, (y: Byte) => b)",
+        "second((y: Byte) => b, (x: Byte) => 0 + 1)",
+    ] {
+        let report = error(&program(&format!(
+            r#"
+            let r = {call};
+            print("unreachable")
+            "#
+        )));
+
+        assert!(
+            report.contains("no witness of /std/ops/Add(Byte) found"),
+            "unexpected report for `{call}`:\n{report}"
+        );
+    }
+}
+
+// Inference is local to a statement for a body's choice as for an argument's: the numeral takes its default where the call that settles its lambda completes, and the line after reads a function into `Nat`.
+#[test]
+fn a_choice_in_a_body_is_taken_where_its_lambdas_call_completes() {
+    let report = error(&program(
+        r#"
+        let z = id((x: Byte) => 0);
+        let h: (Byte) -> Byte = z;
+        print("unreachable")
+        "#,
+    ));
+
+    assert!(
+        report.contains("inferred: (x: Byte) -> Nat")
+            && report.contains("expected: (Byte) -> Byte"),
+        "unexpected report:\n{report}"
+    );
+}
+
 // A list's elements and a match's arms wait on one type as a call's arguments do.
 #[test]
 fn lambdas_in_a_list_and_in_a_match_type_each_other() {

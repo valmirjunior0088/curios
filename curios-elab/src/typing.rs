@@ -1007,7 +1007,9 @@ impl Context<'_> {
                     continue;
                 }
 
-                for parked in self.take_parked() {
+                let survivors = self.take_parked();
+                let held = held_to_a_domain(self, &survivors);
+                for parked in survivors {
                     let ParkedProblem {
                         work,
                         origin: parked_origin,
@@ -1020,6 +1022,13 @@ impl Context<'_> {
                         let this = resolved_for_display(self, &goal.this);
                         let that = resolved_for_display(self, &goal.that);
                         self.note_goal_obligation(goals, this, that);
+                        continue;
+                    }
+                    // A conversion or a witness goal held up by a lambda's parameter nothing typed is that parameter's report: the domain stays unsolved, so the program is refused at the binder, by name, and what is surrendered here is never unchecked.
+                    if waited_on(self, &watching, &work)
+                        .keys()
+                        .any(|id| held.contains(id))
+                    {
                         continue;
                     }
                     return Err(match work {
@@ -1130,17 +1139,76 @@ fn blocked_on_written_goals(
         .then_some(unsolved)
 }
 
-/// Render a surviving conversion goal's still-unsolved watched metavariables, each by what it *is* — the implicit or witness argument it fills, the written goal it stands for — never by its id: an id is elaboration state the reader cannot decode, and two blockers rendering alike decides nothing, for the reason the printer's anonymous-metavariable axis gives. Insertion provenance rides the *occurrence*, not the birth entry, so both sides are scanned for the watched ids; a watched metavariable no occurrence names (solved away from the spelling, or watched through a spine) is an inferred hole.
+/// What a surviving conversion or witness goal waits on: the metavariables it watched that are still unsolved and those standing unsolved in it behind the solutions landed since, each with whether it stands there as a lambda's domain ([`MetavarOrigin::Domain`]).
+fn waited_on(
+    context: &Context,
+    watching: &BTreeSet<MetavarId>,
+    work: &ParkedWork,
+) -> BTreeMap<MetavarId, bool> {
+    let waited = match work {
+        ParkedWork::Conversion(goal) => vec![&goal.this, &goal.that],
+        ParkedWork::Witness { goal, .. } => vec![goal],
+        _ => return BTreeMap::new(),
+    };
+    let waited = waited
+        .into_iter()
+        .map(|term| zonk_solved_term_metas(context, term))
+        .collect::<Vec<_>>();
+    let origins = metavar_origins(&waited.iter().collect::<Vec<_>>());
+
+    watching
+        .iter()
+        .chain(origins.keys())
+        .filter(|id| context.metavar_solution(**id).is_none())
+        .map(|id| {
+            let domain = matches!(origins.get(id), Some((MetavarOrigin::Domain(_), _)));
+            (*id, domain)
+        })
+        .collect()
+}
+
+/// The metavariables the drain's survivors wait on that are held, through the survivors themselves, to a lambda's domain nothing has given. A survivor need not name the domain to wait for it: an operator's operand type is held to the parameter's by one parked conversion and to the body's by another, and which of the two the drain meets first is no fact about the program.
+fn held_to_a_domain(context: &Context, survivors: &[ParkedProblem]) -> BTreeSet<MetavarId> {
+    let waited = survivors
+        .iter()
+        .map(|parked| waited_on(context, &parked.watching, &parked.work))
+        .collect::<Vec<_>>();
+    let mut held = waited
+        .iter()
+        .flat_map(|ids| ids.iter().filter(|(_, domain)| **domain).map(|(id, _)| *id))
+        .collect::<BTreeSet<_>>();
+    loop {
+        let before = held.len();
+        for ids in &waited {
+            if ids.keys().any(|id| held.contains(id)) {
+                held.extend(ids.keys().copied());
+            }
+        }
+        if held.len() == before {
+            return held;
+        }
+    }
+}
+
+/// Render what a surviving conversion goal waits on, the metavariables it watched that are still unsolved and those standing unsolved in its sides behind the solutions landed since, each by what it *is* — the implicit or witness argument it fills, the written goal it stands for — never by its id: an id is elaboration state the reader cannot decode, and two blockers rendering alike decides nothing, for the reason the printer's anonymous-metavariable axis gives. Insertion provenance rides the *occurrence*, not the birth entry, so both sides are scanned for the watched ids; a watched metavariable no occurrence names (solved away from the spelling, or watched through a spine) is an inferred hole.
 fn watched_blockers(
     context: &Context,
     watching: &BTreeSet<MetavarId>,
     this: &Term,
     that: &Term,
 ) -> Vec<Watched> {
+    // Read behind what was solved since the conversion parked: a blocker a solution brought in stands in neither side as written.
+    let (this, that) = (
+        &zonk_solved_term_metas(context, this),
+        &zonk_solved_term_metas(context, that),
+    );
     let origins = metavar_origins(&[this, that]);
     watching
         .iter()
+        .chain(origins.keys())
         .filter(|id| context.metavar_solution(**id).is_none())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
         .map(|id| match origins.get(id) {
             Some((MetavarOrigin::Implicit(origin), _)) => Watched::Slot {
                 callee: callee(context, &origin.func),

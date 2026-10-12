@@ -170,7 +170,7 @@ fn an_operator_with_no_literal_operand_takes_no_default() {
         "#,
     );
     assert!(
-        report.contains("never solved: the type of parameter 'x'"),
+        report.contains("the type of parameter 'x' was never determined"),
         "unexpected report:\n{report}"
     );
 }

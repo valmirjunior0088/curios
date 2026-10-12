@@ -2190,6 +2190,36 @@ impl<'s> Context<'s> {
             && inner_entry.refinements.within(&outer_entry.refinements)
     }
 
+    /// Whether a candidate for `outer` binds what `inner`'s birth context holds beyond `outer`'s: `inner` was born under no refinement `outer` was not, and each binder of its telescope that is none of `outer`'s stands, at every one of `occurrences`, as a variable the candidate binds itself. The occurrence then sits where `inner` was born, a binder of the candidate's own in the binder's place, and whatever `inner` comes to arrives through that spine and names nothing the candidate does not bind. It is what a settled lambda's codomain is in the function type the lambda states: born under the lambda's binders, so that the body's type may name them.
+    pub(crate) fn metavar_bound_by_candidate(
+        &self,
+        inner: MetavarId,
+        occurrences: &[Rc<Vec<Term>>],
+        outer: MetavarId,
+    ) -> bool {
+        let (Some(inner_entry), Some(outer_entry)) =
+            (self.metavar_entry(inner), self.metavar_entry(outer))
+        else {
+            return false;
+        };
+        if occurrences.is_empty() || !inner_entry.refinements.within(&outer_entry.refinements) {
+            return false;
+        }
+        let outer_names: BTreeSet<&Free> =
+            outer_entry.telescope.iter().map(|(name, _)| name).collect();
+
+        occurrences.iter().all(|spine| {
+            spine.len() == inner_entry.telescope.len()
+                && spine
+                    .iter()
+                    .zip(inner_entry.telescope.iter())
+                    .all(|(entry, (name, _))| {
+                        outer_names.contains(name)
+                            || matches!(&**entry, Subterm::Var(var) if var.as_free().is_none())
+                    })
+        })
+    }
+
     /// The names half of [`Context::metavar_context_contained`]: every binder of `inner`'s birth telescope is one of `outer`'s.
     fn metavar_names_contained(&self, inner: MetavarId, outer: MetavarId) -> bool {
         let (Some(inner_entry), Some(outer_entry)) =

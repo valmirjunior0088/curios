@@ -12,14 +12,13 @@ fn an_entry_that_describes_nothing_is_a_type_mismatch() {
 
 #[test]
 fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
-    // `f`'s implicit domain meets `(Nat) -> Option(?X)` with `?X` never pinned — and minted under the lambda's own binder, so the embedded-metavariable guard's containment exemption cannot commit the candidate and it postpones. The goal parks and survives the drain. The report must say the conversion was postponed — not that the types rigidly mismatched — and name the blockers it watched. (A bare `f(Option/none())` does not serve: `?X` is then contained in the implicit's own scope, the forced solution commits, and the honest residue is the uninferred implicit itself.)
+    // Each `Option/none()` leaves its payload type open, and `same` holds the two to one type: a pair of unsolved metavariables, which conversion solves neither of to the other. The goal parks and survives the drain. The report must say the conversion was postponed — not that the types rigidly mismatched — and name the blockers it watched.
     let source = r#"
         use /std/{Nat, Option, Io};
-        use /std/Bool/{Holds};
 
-        let f(@A: Type, a: A) -> {} = ();
+        let same(@A: Type, a: A, b: A) -> {} = ();
 
-        let stuck: {} = f((n: Nat) => Option/none());
+        let stuck: {} = same(Option/none(), Option/none());
 
         Io/pure(())
     "#;
@@ -30,6 +29,29 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
     );
     assert!(error.contains("never solved"), "unexpected report: {error}");
     assert!(!mentions_metavar_id(&error), "id leaked: {error}");
+}
+
+#[test]
+fn a_candidate_over_a_lambdas_binder_commits_and_leaves_the_implicit_to_its_own_report() {
+    // `f`'s implicit meets `(n: Nat) -> Option(?X)` with `?X` never pinned and minted under the lambda's own binder. The function type binds that binder itself, so the candidate commits with `?X` riding in it, and the honest residue is the implicit nothing inferred, reported at its call.
+    let source = r#"
+        use /std/{Nat, Option, Io};
+
+        let f(@A: Type, a: A) -> {} = ();
+
+        let stuck: {} = f((n: Nat) => Option/none());
+
+        Io/pure(())
+    "#;
+    let error = compile(source).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("implicit argument 'A' of 'Option/none' was not inferred"),
+        "unexpected report: {error}"
+    );
+    assert!(
+        !error.contains("postponed conversion"),
+        "unexpected report: {error}"
+    );
 }
 
 #[test]

@@ -285,6 +285,25 @@ fn embedded_metavar_within_the_target_context_commits() {
     assert_eq!(context.metavar_solution(MetavarId(1)), None);
 }
 
+// A candidate may embed a metavariable born under more than the solved one's context where the candidate binds the rest itself: `?0 ≟ (x: Nat) -> ?1`, with `?1` born under `x` and standing under the function type's own binder. Whatever `?1` comes to arrives through that occurrence and names nothing the function type does not bind, so the candidate commits. It is what a settled lambda's codomain is in the type the lambda states.
+#[test]
+fn a_candidate_embeds_a_metavariable_born_under_a_binder_of_its_own() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+    context.birth_metavar(
+        MetavarId(1),
+        vec![(x, Term::intrinsic(Intrinsic::NatType))],
+        Term::type_ground(),
+    );
+
+    let codomain = Term::metavar_birthed(1, MetavarOrigin::Hole, vec![Term::free_var(&x)]);
+    let candidate = Term::func_type([(x, Term::intrinsic(Intrinsic::NatType))], codomain);
+    assert_eq!(conv(&mut context, &Term::hole(0), &candidate), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    assert_eq!(context.metavar_solution(MetavarId(1)), None);
+}
+
 #[test]
 fn embedded_metavar_of_a_wider_context_postpones_to_residual() {
     let mut context = context();
