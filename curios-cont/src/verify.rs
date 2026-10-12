@@ -190,16 +190,10 @@ impl Module {
             owners: &returns,
             arities: &arities,
         };
-        let mut node_owners = BTreeMap::<NodeId, FunctionId>::new();
+        let node_owners = self.node_owners()?;
         let mut bound_continuations = BTreeSet::<ContinuationId>::new();
         for (id, function) in self.live_functions() {
-            self.verify_function_body(
-                id,
-                function,
-                &facts,
-                &mut node_owners,
-                &mut bound_continuations,
-            )?;
+            self.verify_function_body(id, function, &facts, &mut bound_continuations)?;
         }
         self.verify_lexical_scopes(entry)?;
         if rows {
@@ -576,31 +570,76 @@ impl Module {
         step
     }
 
+    /// The function each node belongs to, where every node a function's body reaches has exactly one structural parent: a `next`, a `body`, or a continuation's, in one function. The one statement of that rule, read by [`Module::verify`] and by the pass that rests on it between verifications, scoped CSE.
+    ///
+    /// A node reached twice is a region that runs on two paths while binding its values once, which the scope check cannot see, since it admits the bindings on whichever path reached it first. It is also what a nesting printer would duplicate. A link to a node the arena does not hold is recorded and not followed: it is the verifier's to refuse, by the reference.
+    pub(crate) fn node_owners(&self) -> Result<BTreeMap<NodeId, FunctionId>, VerifyError> {
+        let mut owners = BTreeMap::<NodeId, FunctionId>::new();
+        for (owner, function) in self.live_functions() {
+            let mut work = vec![function.body];
+            while let Some(id) = work.pop() {
+                match owners.insert(id, owner) {
+                    Some(previous) if previous == owner => {
+                        return Err(VerifyError(format!(
+                            "{id} is reached from more than one place in {owner}"
+                        )));
+                    }
+                    Some(previous) => {
+                        return Err(VerifyError(format!(
+                            "{id} is owned by both {previous} and {owner}"
+                        )));
+                    }
+                    None => {}
+                }
+                match self.node(id) {
+                    Some(Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. }) => {
+                        work.push(*next);
+                    }
+                    Some(Node::LetFun { body, .. }) => work.push(*body),
+                    Some(Node::LetCont {
+                        continuations,
+                        body,
+                    }) => {
+                        work.push(*body);
+                        work.extend(
+                            continuations
+                                .iter()
+                                .rev()
+                                .filter_map(|continuation| self.continuation(*continuation))
+                                .map(|continuation| continuation.body),
+                        );
+                    }
+                    Some(
+                        Node::ApplyFun { .. }
+                        | Node::ApplyCont(_)
+                        | Node::Switch { .. }
+                        | Node::Foreign { .. }
+                        | Node::Cell { .. }
+                        | Node::Channel { .. }
+                        | Node::Intrinsic { .. }
+                        | Node::Halt { .. }
+                        | Node::Panic(_)
+                        | Node::Unreachable,
+                    )
+                    | None => {}
+                }
+            }
+        }
+
+        Ok(owners)
+    }
+
+    /// One function's body, each node checked under the continuations in scope at it. Every node is reached once ([`Module::node_owners`]), so the walk keeps no record of where it has been.
     fn verify_function_body(
         &self,
         owner: FunctionId,
         function: &Function,
         facts: &ReturnFacts<'_>,
-        node_owners: &mut BTreeMap<NodeId, FunctionId>,
         bound_continuations: &mut BTreeSet<ContinuationId>,
     ) -> Result<(), VerifyError> {
         let mut work = vec![(function.body, BTreeSet::<ContinuationId>::new())];
-        let mut visited = BTreeSet::<NodeId>::new();
 
         while let Some((id, scope)) = work.pop() {
-            // Every node has exactly one structural parent: a `next`, a `body`, or a continuation's. Skipping a node already reached would catch a node shared between two *functions* through `node_owners` and let one shared within one function pass — and a shared node is a region that runs on two paths while binding its values once, which the scope check cannot see either, since it admits the bindings on whichever path reached it first. It is also what a nesting printer would duplicate.
-            if !visited.insert(id) {
-                return Err(VerifyError(format!(
-                    "{id} is reached from more than one place in {owner}"
-                )));
-            }
-            if let Some(previous) = node_owners.insert(id, owner)
-                && previous != owner
-            {
-                return Err(VerifyError(format!(
-                    "{id} is owned by both {previous} and {owner}"
-                )));
-            }
             let node = self
                 .node(id)
                 .ok_or_else(|| VerifyError(format!("function body references missing {id}")))?;

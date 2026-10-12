@@ -137,34 +137,12 @@ pub(crate) fn dedupe_intrinsics(module: &mut Module) -> bool {
     true
 }
 
-/// The scope-is-dominance argument requires the node graph to be a tree: every live node owned by exactly one of a function body, a continuation body, or a predecessor's `next`/`body` link. No pass creates sharing and [`Module::verify`] refuses a node reached twice; this assertion states the invariant where this pass relies on it, which is mid-round, between verifications.
+/// The scope-is-dominance argument requires the node graph to be a tree: every node a function's body reaches is reached once. No pass creates sharing and [`Module::verify`] refuses a node reached twice; this holds the module to the verifier's own statement of the rule ([`Module::node_owners`]) where this pass relies on it, which is mid-round, between verifications.
 fn debug_assert_single_owner(module: &Module) {
-    if cfg!(debug_assertions) {
-        let mut counts = BTreeMap::<NodeId, usize>::new();
-        for (_, function) in module.live_functions() {
-            *counts.entry(function.body).or_insert(0) += 1;
-        }
-        for (_, continuation) in module.live_continuations() {
-            *counts.entry(continuation.body).or_insert(0) += 1;
-        }
-        for (_, node) in module.live_nodes() {
-            match node {
-                Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
-                    *counts.entry(*next).or_insert(0) += 1;
-                }
-                Node::LetFun { body, .. } | Node::LetCont { body, .. } => {
-                    *counts.entry(*body).or_insert(0) += 1;
-                }
-                _ => {}
-            }
-        }
-        for (id, _) in module.live_nodes() {
-            assert_eq!(
-                counts.get(&id).copied().unwrap_or(0),
-                1,
-                "{id} must have exactly one owning link for scoped CSE"
-            );
-        }
+    if cfg!(debug_assertions)
+        && let Err(error) = module.node_owners()
+    {
+        panic!("scoped CSE reads a node graph that is no tree: {error}");
     }
 }
 
