@@ -57,6 +57,14 @@ impl ClosedHost for Context<'_> {
     fn closed_memo(&mut self) -> &mut ClosedMemo {
         self.closed_memo_mut()
     }
+
+    fn opened_instance(
+        &mut self,
+        group: &RecGroup,
+        universes: &Universes,
+    ) -> Result<RecGroup, ReduceError> {
+        Context::opened_instance(self, group, universes)
+    }
 }
 
 /// Whether the closed machine may take `term` in this context: the representation-side gate ([`accelerable`]) plus the judgment-side one — no refinement of any kind registered, suppressed or live, because a refined closed scrutinee *is* the arm's assumed value, a refined projection is its recorded reduct, and a *suppressed* key must stay withheld rather than be evaluated.
@@ -780,7 +788,7 @@ fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, 
         },
         InstanceHead::RecProj(group, index) => {
             return Ok(Reduce::Continue(Term::rec_proj(
-                opened_instance(context, group, &universes)?,
+                context.opened_instance(group, &universes)?,
                 *index,
             )));
         }
@@ -788,23 +796,10 @@ fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, 
 
     // The variable's stored value may itself be a projection, whose group takes the instance whole rather than a per-level rewrite.
     let reduct = match reduct.as_rec_proj() {
-        Some((group, index)) => Term::rec_proj(opened_instance(context, group, &universes)?, index),
+        Some((group, index)) => Term::rec_proj(context.opened_instance(group, &universes)?, index),
         None => instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?,
     };
     Ok(Reduce::Continue(reduct))
-}
-
-/// `group` at `universes`, remembered as that instance of it ([`Context::opened_instance`]): the instance holds them substituted through every member, and what names a member of it again needs the two apart.
-fn opened_instance(
-    context: &mut Context,
-    group: &RecGroup,
-    universes: &Universes,
-) -> Result<RecGroup, ReduceError> {
-    let instance = group
-        .instantiate_universes(universes)
-        .map_err(ReduceError::Universe)?;
-    context.opened_instance(&instance, group, universes);
-    Ok(instance)
 }
 
 /// What settling one entry's reduced spelling may spend before the attempt is abandoned.

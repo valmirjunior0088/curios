@@ -339,9 +339,7 @@ pub(crate) fn synth_neutral(
         // A universe-polymorphic head, at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at `levels`; going through the `Var` arm below would instead instantiate it at fresh levels and then have nothing left to substitute.
         Subterm::Instance(Instance { head, universes }) => match head {
             InstanceHead::RecProj(group, index) => {
-                let group = group
-                    .instantiate_universes(universes)
-                    .map_err(ReduceError::Universe)?;
+                let group = context.opened_instance(group, universes)?;
 
                 Ok(Some(group.member_type(*index)))
             }

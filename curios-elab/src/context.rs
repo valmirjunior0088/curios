@@ -710,7 +710,7 @@ impl<'s> Context<'s> {
     /// The read half of the reduction cache. The reducer probes it wherever a term's reduction begins — at entry, and at the scrutinee stack's frame push, where a warm scrutinee dispatches in place instead of framing.
     ///
     /// **A universe metavariable in the term does not exclude it.** Reduction is parametric in levels — no rule reads one, `Type u` being a payload and not a scrutinee, and an instantiation substitutes a parameter with whatever level stands in the instance, a metavariable included — so a reduct is the same function of its term whether the metas in it are solved or not, and the in-place rewrites that do change what a level *spells* (defaulting, finalization, instance closure) clear the cache where they happen. Excluding one would remember nothing of a web of universe-polymorphic definitions inside the declaration that instantiates them, whose occurrences all carry that declaration's level metas, and a reduct shared as a graph would be re-derived once per occurrence — the `2^n` `curios`' `scrutinee_refinement_measurements` guards under `numeric, proved`.
-    pub(crate) fn cached_reduced(&self, term: &Term) -> Option<Term> {
+    pub(crate) fn cached_reduced(&mut self, term: &Term) -> Option<Term> {
         self.typing
             .caches
             .reduction_get(term, self.typing.asking.plain())
@@ -1058,19 +1058,19 @@ impl<'s> Context<'s> {
         names
     }
 
-    /// Remember that `instance` is `group` opened at `universes`, for the declaration in progress: reduction's own record, read back by [`Context::instance_of`].
+    /// `group` at `universes`, remembered as that instance of it for the declaration in progress and read back by [`Context::instance_of`]. An instance holds its levels substituted through every member, so a copy does not say which instance of which group it is, and a term that names a group's members again ([`named_members`](crate::named_members)) knows one by this record alone. So this is the one way an instance is opened here: by the reducer where it unfolds a name, by the closed machine through its host, by the neutral typer where it reads a member's type, and by the reduction table where it serves a reduct at another spelling's levels ([`Caches::reduction_get`]).
     pub(crate) fn opened_instance(
         &mut self,
-        instance: &RecGroup,
         group: &RecGroup,
         universes: &Universes,
-    ) {
+    ) -> Result<RecGroup, ReduceError> {
         self.typing
             .caches
-            .instance_insert(instance.clone(), group.clone(), universes.clone());
+            .opened_instance(group, universes)
+            .map_err(ReduceError::Universe)
     }
 
-    /// The group `instance` was opened from and the instance it was opened at, where reduction opened it in the declaration in progress.
+    /// The group `instance` was opened from and the instance it was opened at, where it was opened in the declaration in progress.
     pub(crate) fn instance_of(&self, instance: &RecGroup) -> Option<&(RecGroup, Universes)> {
         self.typing.caches.instance_get(instance)
     }

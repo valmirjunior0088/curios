@@ -2,8 +2,8 @@ use {
     crate::Context,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Free, Global, Intrinsic, Level, Nat, Rec, Subterm, Term, UniverseContext, UniverseParam,
-        Universes,
+        Free, Global, Intrinsic, Level, Nat, Rec, RecGroup, Subterm, Term, UniverseContext,
+        UniverseParam, UniverseRole, Universes,
     },
     curios_utilities::Qualifier,
     std::rc::Rc,
@@ -57,15 +57,12 @@ fn an_applied_lambda_is_contracted_where_it_stands() {
     assert_eq!(super::contract_redexes(&applied), shown);
 }
 
-/// A group reduction opened at an instance is spelled by its member's name at that instance: two calls of one definition apart in a level alone are two spellings, which a report that shows universes tells apart.
-#[test]
-fn a_member_of_an_opened_instance_is_spelled_at_its_levels() {
-    let mut context = Context::new(100_000, SYNTAX);
+/// `rec sized(A: Type u): Nat = sized(A)`, whose level only sizes the parameter, defined under the name it is called by: the name, and the group.
+fn sized(context: &mut Context) -> (Free, RecGroup) {
     let sized = context.fresh(Some("sized"));
     let a = context.fresh(Some("A"));
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let domain = || Term::type_at(Level::param(UniverseParam(0)));
-    // `rec sized(A: Type u): Nat = sized(A)`: the level only sizes the parameter.
     let written = Term::rec(
         [(
             sized,
@@ -88,16 +85,54 @@ fn a_member_of_an_opened_instance_is_spelled_at_its_levels() {
     let name = Free::Global(Global::Authored(Qualifier::from(["sized"])));
     context.define(&name, &Term::rec_proj(group.clone(), 0), None);
 
+    (name, group)
+}
+
+/// A group reduction opened at an instance is spelled by its member's name at that instance: two calls of one definition apart in a level alone are two spellings, which a report that shows universes tells apart.
+#[test]
+fn a_member_of_an_opened_instance_is_spelled_at_its_levels() {
+    let mut context = Context::new(100_000, SYNTAX);
+    let (name, group) = sized(&mut context);
+
     for level in [Level::constant(1), Level::constant(2)] {
-        let universes = Universes::levels(vec![level.clone()]);
-        let instance = group
-            .instantiate_universes(&universes)
+        let instance = context
+            .opened_instance(&group, &Universes::levels(vec![level.clone()]))
             .expect("one level for the group's one parameter");
-        context.opened_instance(&instance, &group, &universes);
 
         assert_eq!(
             super::refold_recs(&context, &Term::rec_proj(instance, 0)),
             Term::instance_of(&name, vec![level])
         );
     }
+}
+
+/// A reduct the table serves at another spelling's levels holds the instance reduction would have opened there, and its member is named at those levels as that one's would be: `sized` at one level is reduced, the entry answers `sized` at another, and what it hands back names `sized` at the level asked. Served unrecorded, the instance would stand in whatever is committed from it as a copy of the group.
+#[test]
+fn a_member_of_an_instance_served_at_other_levels_is_named_at_them() {
+    let mut context = Context::new(100_000, SYNTAX);
+    let (name, group) = sized(&mut context);
+    let mut level = || {
+        Level::meta(
+            context
+                .universes_mut()
+                .fresh(UniverseRole::Generalizable, None),
+        )
+    };
+    let (stored, asked) = (level(), level());
+
+    let instance = context
+        .opened_instance(&group, &Universes::levels(vec![stored.clone()]))
+        .expect("one level for the group's one parameter");
+    context.reduce(
+        Term::instance_of(&name, vec![stored]),
+        &Term::rec_proj(instance, 0),
+    );
+
+    let served = context
+        .cached_reduced(&Term::instance_of(&name, vec![asked.clone()]))
+        .expect("the entry answers at another level");
+    assert_eq!(
+        super::named_members(&context, &served),
+        Term::instance_of(&name, vec![asked])
+    );
 }

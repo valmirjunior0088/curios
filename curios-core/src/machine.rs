@@ -37,7 +37,7 @@ use {
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
         Func, Global, Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match,
         MatchResult, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope,
-        Term, instantiate_universes_scoped, project_literal, reduce_intrinsic,
+        Term, Universes, instantiate_universes_scoped, project_literal, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -66,6 +66,17 @@ pub trait ClosedHost: Reducer {
 
     /// What this host's closed runs have answered, for as long as a closed term's value stands with it: the machine reads and writes it at every run, and the host discards it where what a name unfolds to may have changed.
     fn closed_memo(&mut self) -> &mut ClosedMemo;
+
+    /// `group` at `universes`: the instance a run unfolds a member of. An instance holds its levels substituted through every member, so a copy does not say which instance of which group it is, and a host that names a group's members again is told here, where one is opened. A host that never does opens it and no more.
+    fn opened_instance(
+        &mut self,
+        group: &RecGroup,
+        universes: &Universes,
+    ) -> Result<RecGroup, ReduceError> {
+        group
+            .instantiate_universes(universes)
+            .map_err(ReduceError::Universe)
+    }
 }
 
 /// What closed runs have answered, by the closed term asked: the machine's memo, which its host keeps past the run that filled it.
@@ -525,22 +536,16 @@ impl Machine {
                         };
                         // The variable's stored body may itself be a projection, whose group takes the instance whole rather than a per-level rewrite.
                         match reduct.as_rec_proj() {
-                            Some((group, index)) => Term::rec_proj(
-                                group
-                                    .instantiate_universes(&universes)
-                                    .map_err(ReduceError::Universe)?,
-                                index,
-                            ),
+                            Some((group, index)) => {
+                                Term::rec_proj(host.opened_instance(group, &universes)?, index)
+                            }
                             None => instantiate_universes_scoped(&reduct, &universes)
                                 .map_err(ReduceError::Universe)?,
                         }
                     }
-                    InstanceHead::RecProj(group, index) => Term::rec_proj(
-                        group
-                            .instantiate_universes(&universes)
-                            .map_err(ReduceError::Universe)?,
-                        index,
-                    ),
+                    InstanceHead::RecProj(group, index) => {
+                        Term::rec_proj(host.opened_instance(&group, &universes)?, index)
+                    }
                 };
 
                 Ok(Step::Eval(reduct, demand))
