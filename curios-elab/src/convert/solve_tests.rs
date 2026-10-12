@@ -1,11 +1,11 @@
-//! Metavariable solving: flex-rigid, occurs and scope checks, pattern inversion and pruning, flex-flex, revalidation, and the goal history key.
+//! Metavariable solving: flex-rigid, occurs and scope checks, pattern inversion and pruning, flex-flex, and revalidation.
 
 use {
     super::test_support::*,
     crate::*,
     curios_core::{
-        Atom, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId, MetavarOrigin, Nat,
-        Quality, Subterm, Telescope, Term, UniverseContext,
+        Atom, InductDecl, InductParam, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, Quality,
+        Subterm, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -1024,127 +1024,6 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
     assert_eq!(
         context.metavar_solution(MetavarId(0)),
         Some(&Term::free_var(&n))
-    );
-}
-
-/// Two goals distinct under their binder types land on one history fingerprint; see `documentation/design/soundness/conversion-recurrence.md`.
-///
-/// `history_key` renames the openings a conversion minted to placeholders by mint order and records no local context, so the body goals two telescope walks open — one under a `Nat` binder, one under a `Bool` binder, minted apart — rename onto the same entry. The drain consults `in_history` before the structural dispatch, so when both arise in one run the second is *assumed* rather than compared. The goals here are built through the same `compare_func_type` walk the drain dispatches to, and the collision fires inside a real drain too: `a_goal_assumed_by_key_collision_cannot_move_the_verdict`'s `Bool`-bound goal is skipped on the `Nat`-bound goal's entry, in both of that fixture's halves.
-///
-/// What keeps the assumption from admitting anything is not the key but the openings' uniformity, which the fixture below holds in both directions.
-#[test]
-fn two_goals_distinct_under_their_binder_types_share_one_history_key() {
-    let mut context = context();
-    let f = context.fresh(Some("f"));
-    let g = context.fresh(Some("g"));
-    let x = context.fresh(Some("x"));
-
-    // `(x : domain) -> head(x)` — the walk compares the domains as a sibling goal and opens the bodies at a shared fresh binder, so the domain is exactly the part of the goal's provenance the key forgets.
-    let arrow = |domain: Term, head: &Free| {
-        as_func_type(Term::func_type(
-            [(x, domain)],
-            Term::apply(Term::free_var(head), [Term::free_var(&x)]),
-        ))
-    };
-
-    let mut cmp = Convert::new(
-        Problem {
-            type_: Term::type_ground(),
-            this: Term::type_ground(),
-            that: Term::type_ground(),
-            binders: Binders::default(),
-            pairs: Pairs::default(),
-            relation: Relation::Equal,
-        },
-        None,
-    );
-    cmp.pending.clear();
-
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let bool_ = Term::intrinsic(Intrinsic::BoolType);
-    assert_eq!(
-        cmp.compare_func_type(
-            &mut context,
-            arrow(nat.clone(), &f),
-            arrow(nat, &g),
-            Relation::Equal
-        ),
-        Ok(true)
-    );
-    assert_eq!(
-        cmp.compare_func_type(
-            &mut context,
-            arrow(bool_.clone(), &f),
-            arrow(bool_, &g),
-            Relation::Equal
-        ),
-        Ok(true)
-    );
-
-    // Each walk enqueued its domain goal then its body goal: [Nat ≡ Nat, f v1 ≡ g v1, Bool ≡ Bool, f v2 ≡ g v2].
-    assert_eq!(cmp.pending.len(), 4);
-    let under_nat = cmp.pending[1].clone();
-    let under_bool = cmp.pending[3].clone();
-    assert_ne!(under_nat, under_bool);
-
-    let first = cmp.history_key(&mut context, &under_nat);
-    let second = cmp.history_key(&mut context, &under_bool);
-    assert_eq!(first, second);
-
-    // The drain's guard: the first visit inserts, and the collided second hits — the branch that assumes rather than compares.
-    assert!(!cmp.in_history(&first));
-    assert!(cmp.in_history(&second));
-}
-
-/// A goal assumed through a cross-branch key collision cannot move the verdict, and the reason is the openings' uniformity rather than the key: `Context::fresh` mints a bare label, no rule assumes a type for it, and `synth_neutral` and `apply_param_types` answer `None` for one, so every rule behind the history guard treats two openings alike. A collided goal is therefore its twin under an injective relabeling of openings, and whatever finite disagreement it hides is also the twin's, whose own children surface it — the refusing half below. That uniformity is an inventory of the same kind `ground_scope`'s is in `curios-cert`: a rule taught to read an opening's type would invalidate it in silence, and this fixture is what would notice.
-///
-/// Both halves run the collision the fixture above demonstrates at the key level, inside a real drain: the tuple type's two function-type fields put the `Nat`-bound body goal in history first, and the `Bool`-bound twin arrives at the same fingerprint and is assumed (see the fixture above).
-#[test]
-fn a_goal_assumed_by_key_collision_cannot_move_the_verdict() {
-    let mut context = context();
-    let c = context.fresh(Some("c"));
-    let p = context.fresh(Some("p"));
-    let q = context.fresh(Some("q"));
-    let x = context.fresh(Some("x"));
-
-    // `{ p : (x : Nat) -> c(x, d), q : (x : Bool) -> c(x, d) }`, one side per `d`. The head `c` stays an untyped neutral so both body goals stick, and `d` is the only place the sides disagree.
-    let side = |d: &Term| {
-        Term::tuple_type([
-            (
-                p,
-                Term::func_type(
-                    [(x, Term::intrinsic(Intrinsic::NatType))],
-                    Term::apply(Term::free_var(&c), [Term::free_var(&x), d.clone()]),
-                ),
-            ),
-            (
-                q,
-                Term::func_type(
-                    [(x, Term::intrinsic(Intrinsic::BoolType))],
-                    Term::apply(Term::free_var(&c), [Term::free_var(&x), d.clone()]),
-                ),
-            ),
-        ])
-    };
-
-    // Accepting: `one` and `uno` are distinct spellings of one definition, so the sides differ as terms (weak-head reduction leaves spine arguments unread), the `Bool` goal is assumed on the `Nat` goal's entry, and every goal actually compared agrees.
-    let one = context.fresh(Some("one"));
-    let uno = context.fresh(Some("uno"));
-    context.define(&one, &nat(1), None);
-    context.define(&uno, &nat(1), None);
-    assert_eq!(
-        conv(
-            &mut context,
-            &side(&Term::free_var(&one)),
-            &side(&Term::free_var(&uno))
-        ),
-        Ok(true)
-    );
-
-    // Refusing: the assumed `Bool` goal hides a real disagreement (`1` against `2`), and the conversion still refuses — the same disagreement is the `Nat` twin's, and the twin's spine child entered the queue before the collision was consulted.
-    assert_eq!(
-        conv(&mut context, &side(&nat(1)), &side(&nat(2))),
-        Ok(false)
     );
 }
 

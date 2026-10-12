@@ -252,7 +252,7 @@ pub(super) enum Curried {
 
 /// Binders opened locally by [`Sort::of`](super::Sort::of) while walking a telescope, innermost last.
 ///
-/// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a coinductive comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only, which the conversion history relies on: labels minted here are never recorded in `Convert::minted`, so they must never reach a problem. They cannot, because `Sort::of` returns a `Sort`.
+/// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only: a label minted here is among no problem's [`Binders`], so it must never reach one. It cannot, because `Sort::of` returns a `Sort`.
 pub(crate) type Opened = [(Free, Term)];
 
 /// The binders a conversion problem is posed under, each at the type its position gave it, innermost first.

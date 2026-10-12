@@ -276,25 +276,26 @@ pub(crate) struct Problem {
     pub that: Term,
     /// The binders this problem is posed under, which a retry of it is posed under too.
     pub binders: Binders,
-    /// The pairs of heads it stands inside the unfolding of, which a retry of it stands inside too.
+    /// The unfoldings it stands inside, which a retry of it stands inside too.
     pub pairs: Pairs,
     /// The relation it is asked at, which a problem that waits keeps: one parked at below resumes at below.
     pub relation: Relation,
 }
 
-/// A problem as the recurrence rule keys it: its type, its sides and the relation it is asked at, every label this conversion minted renamed to a placeholder ([`Convert::history_key`]). The binders it is posed under are no part of it — a label's type is fixed where the label is minted, so two problems equal up to their labels are one problem.
+/// A problem as a run remembers having posed it: its type, its two sides, the relation it is asked at and the unfoldings it stands inside. The binders it is posed under are no part of it: a label is minted once and at one type, so two problems equal in their terms stand under the same binders.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct Recurrence {
+pub(crate) struct Posed {
     type_: Term,
     this: Term,
     that: Term,
     relation: Relation,
+    pairs: Pairs,
 }
 
 #[derive(Debug)]
 pub(crate) struct Convert {
-    // Structural problems already seen, stored as `history_key` fingerprints. A recurring problem is assumed to hold — the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling problem first. The one disagreement no sibling surfaces is a universe level inside a `rec` group, so a recurrence whose sides agree modulo levels is a level question rather than a cycle: `level_question` identifies, refuses, or parks it, and never assumes it — at the recurrence, and at the applied head before any unfolding can decide the pair past its levels.
-    history: HashSet<Recurrence>,
+    // Every problem this run has posed. A run holds where each of its problems does, so one posed again adds nothing it does not already owe, and is not posed: what lets the walk take two equal graphs built apart in their size. Nothing is assumed by it, a problem never being the one posed inside its own unfolding ([`Pairs`]).
+    posed: HashSet<Posed>,
     pending: VecDeque<Problem>,
     // Constraints postponed because a side is flexible but not yet solvable (flex–flex with distinct heads, or a candidate carrying an unsolved metavariable). Retried whenever a fresh solution lands.
     blocked: Vec<Problem>,
@@ -302,12 +303,9 @@ pub(crate) struct Convert {
     progress: bool,
     // What the problem in hand declined to compare. Cleared as each problem is taken up, so one that is parked leaves nothing behind and only the problem a mismatch ends on speaks in its report.
     declined: Option<Declined>,
-    // The opening labels this conversion minted to compare under binders (label → mint sequence), and the placeholder pool `history_key` renames them into. Fingerprints only — the problems actually processed keep their globally-unique labels.
-    minted: HashMap<Free, usize>,
-    placeholders: Vec<Term>,
     // The binders the problem in hand is posed under, and those this step has opened since: what a problem enqueued now is posed under.
     binders: Binders,
-    // The pairs of heads the problem in hand stands inside the unfolding of, and the one this step has unfolded since: what a problem enqueued now stands inside.
+    // The unfoldings the problem in hand stands inside, and the one this step has opened since: what a problem enqueued now stands inside.
     pairs: Pairs,
     // The level pairs the levels-only shortcut left to a curried head's type, in the order it met them. Nothing compares the two levels of one where the run goes on to hold its sides one, so each is a weak equation then and nothing where it does not.
     apart: Vec<(Level, Level)>,
@@ -400,6 +398,13 @@ impl Convert {
 
     fn new(problem: Problem, extent: Option<Extent>) -> Self {
         let mut run = Self::under(problem.binders.clone(), problem.pairs.clone(), extent);
+        run.posed.insert(Posed {
+            type_: problem.type_.clone(),
+            this: problem.this.clone(),
+            that: problem.that.clone(),
+            relation: problem.relation,
+            pairs: problem.pairs.clone(),
+        });
         run.pending.push_back(problem);
 
         run
@@ -408,28 +413,21 @@ impl Convert {
     /// A run with nothing posed yet: what it is handed to compare is posed under `binders` and inside `pairs`.
     fn under(binders: Binders, pairs: Pairs, extent: Option<Extent>) -> Self {
         Self {
-            history: HashSet::new(),
+            posed: HashSet::new(),
             binders,
             pairs,
             pending: VecDeque::new(),
             blocked: Vec::new(),
             progress: false,
             declined: None,
-            minted: HashMap::new(),
-            placeholders: Vec::new(),
             apart: Vec::new(),
             extent,
         }
     }
 
-    fn in_history(&mut self, key: &Recurrence) -> bool {
-        !self.history.insert(key.clone())
-    }
-
-    /// Mint a fresh label for opening scopes under structural comparison, recording it for `history_key`, and the type its position gives it, where it gives one, for the lookups that meet the label under it ([`Binders`]). The label itself is ordinary entropy freshness — recording changes nothing about the terms conversion builds.
+    /// Mint a fresh label for opening scopes under structural comparison, recording the type its position gives it, where it gives one, for the lookups that meet the label under it ([`Binders`]). The label itself is ordinary entropy freshness — recording changes nothing about the terms conversion builds.
     fn opening(&mut self, context: &mut Context, hint: Option<&str>, type_: Option<Term>) -> Free {
         let binder = context.fresh(hint);
-        self.minted.insert(binder, self.minted.len());
         if let Some(type_) = type_ {
             self.binders = self.binders.opening(binder, type_);
         }
@@ -519,55 +517,23 @@ impl Convert {
         opened
     }
 
-    /// The history fingerprint of a problem: every opening label this conversion minted (see [`Convert::opening`]) is renamed to a per-run placeholder, in mint order. A comparison recurring under later openings — the same match arm re-opened at a fresh binder on each round of an unfolding cycle — differs from its previous visit only in that entropy, so the rename collapses the rounds onto one `history` entry and the recurrence rule in `drain` fires: a cycle with no finite disagreement is definitional equality, as for equirecursive types. Genuinely growing comparisons never recur and still spend the budget.
-    ///
-    /// A pure key transform: the problem conversion processes keeps its globally-unique labels, so no freshness contract (`capture` inversion, `abstract_occurrences`) is involved — the placeholders are themselves entropy-fresh and never enter a real term.
-    fn history_key(&mut self, context: &mut Context, problem: &Problem) -> Recurrence {
-        let as_written = || Recurrence {
-            type_: problem.type_.clone(),
-            this: problem.this.clone(),
-            that: problem.that.clone(),
-            relation: problem.relation,
-        };
-        if self.minted.is_empty() {
-            return as_written();
-        }
-
-        let mut free = problem.type_.free_vars();
-        free.extend(problem.this.free_vars());
-        free.extend(problem.that.free_vars());
-
-        let mut present = free
-            .iter()
-            .filter_map(|name| self.minted.get(name).map(|&seq| (seq, name)))
-            .collect::<Vec<_>>();
-        if present.is_empty() {
-            return as_written();
-        }
-
-        // Mint order, so a recurrence — whose structural steps minted their openings in the same relative order — maps positionally onto the same placeholders.
-        present.sort_unstable_by_key(|&(seq, _)| seq);
-        let labels = present.iter().map(|&(_, l)| l).collect::<Vec<_>>();
-
-        while self.placeholders.len() < labels.len() {
-            self.placeholders.push(Term::free_var(&context.fresh(None)));
-        }
-        let refs = self.placeholders[..labels.len()].iter().collect::<Vec<_>>();
-
-        Recurrence {
-            type_: problem.type_.capture(&labels).release(&refs),
-            this: problem.this.capture(&labels).release(&refs),
-            that: problem.that.capture(&labels).release(&refs),
-            relation: problem.relation,
-        }
-    }
-
     pub(crate) fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
         self.enqueue_at(Relation::Equal, type_, this, that);
     }
 
     /// [`Self::enqueue`] at `relation`.
     fn enqueue_at(&mut self, relation: Relation, type_: Term, this: Term, that: Term) {
+        let posed = Posed {
+            type_: type_.clone(),
+            this: this.clone(),
+            that: that.clone(),
+            relation,
+            pairs: self.pairs.clone(),
+        };
+        if !self.posed.insert(posed) {
+            return;
+        }
+
         self.pending.push_back(Problem {
             type_,
             this,
@@ -576,6 +542,15 @@ impl Convert {
             pairs: self.pairs.clone(),
             relation,
         });
+    }
+
+    /// Stand what this step poses from here on inside one more unfolding: of `this` against `that` where both were opened, and of the one that was where the other has nothing to open. Every step that opens a recursive definition poses what it opened through here, so a problem posed inside an unfolding is never the problem posed outside it ([`Posed`]).
+    fn unfolded(&mut self, this: Option<&Term>, that: Option<&Term>) {
+        self.pairs = match (this, that) {
+            (Some(this), Some(that)) => self.pairs.unfolding(this.clone(), that.clone()),
+            (Some(head), None) | (None, Some(head)) => self.pairs.opening(head.clone()),
+            (None, None) => return,
+        };
     }
 
     /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`List`) for comparison, opened under shared fresh binders for `(head, tail, ih)` at the carrier's domains and the hypothesis ([`Convert::cons_binders`]).
@@ -631,7 +606,7 @@ impl Convert {
         }
     }
 
-    /// η-frame at a lambda: open its telescope at fresh argument variables (recorded openings — see [`Convert::history_key`]), each at the domain the lambda annotates it with, and recover the codomain from `type_` after instantiating them, falling back to `Type` when `type_` does not reduce to a function type. Hands back the variables, the lambda's body at them, and that codomain.
+    /// η-frame at a lambda: open its telescope at fresh argument variables (recorded openings — see [`Convert::opening`]), each at the domain the lambda annotates it with, and recover the codomain from `type_` after instantiating them, falling back to `Type` when `type_` does not reduce to a function type. Hands back the variables, the lambda's body at them, and that codomain.
     fn func_eta_args(
         &mut self,
         context: &mut Context,
@@ -942,12 +917,12 @@ impl Convert {
                     if self.pairs.hold(&this.head, &that.head) {
                         return Ok(false);
                     }
-                    let pairs = self.pairs.unfolding(this.head.clone(), that.head.clone());
+                    let (this_head, that_head) = (this.head.clone(), that.head.clone());
                     let this = unfold_rec_apply(context, this)?;
                     let that = unfold_rec_apply(context, that)?;
                     return match (this, that) {
                         (Some(this), Some(that)) => {
-                            self.pairs = pairs;
+                            self.unfolded(Some(&this_head), Some(&that_head));
                             self.enqueue(type_, this, that);
                             Ok(true)
                         }
@@ -1948,9 +1923,8 @@ impl Convert {
         Ok(solved)
     }
 
-    /// Park a problem from inside a structural arm: remove its key from `history` (so a retry after fresh progress is compared, not read as a recurrence) and push it to `blocked`. `key` is the one the drain recorded, under the reduced spelling, where the problem is parked as written. Returns `Ok(true)` — a blocked problem is undecided, never a mismatch.
-    fn block(&mut self, key: &Recurrence, problem: Problem) -> Result<bool, ReduceError> {
-        self.history.remove(key);
+    /// Park a problem from inside a structural arm, as it is written. Returns `Ok(true)` — a blocked problem is undecided, never a mismatch.
+    fn block(&mut self, problem: Problem) -> Result<bool, ReduceError> {
         self.blocked.push(problem);
         Ok(true)
     }
@@ -2082,7 +2056,6 @@ impl Convert {
         flex: Apply,
         rigid: Term,
         rigid_raw: &Term,
-        key: &Recurrence,
         problem: Problem,
     ) -> Result<bool, ReduceError> {
         let Some(metavar) = as_metavar(&flex.head).cloned() else {
@@ -2155,12 +2128,12 @@ impl Convert {
 
         // Right-biased: a spine shorter than the rigid argument list abstracts the *suffix*, with the prefix baked in from the rigid side; a longer spine has no imitation.
         if spine > arity {
-            return self.block(key, problem);
+            return self.block(problem);
         }
 
         // The candidate's binders come from `?m`'s frozen birth type, which must itself reduce to a function type of the spine's arity.
         let Some(domains) = Self::birth_binders(context, &metavar, spine)? else {
-            return self.block(key, problem);
+            return self.block(problem);
         };
 
         // The candidate body mirrors the rigid node's shape (for an inductive, its params/indices split — `elaborate_induct_type` re-checks the node against the full telescope during re-validation and rejects a wrong split).
@@ -2172,7 +2145,7 @@ impl Convert {
 
         // The invariant `solve_at_birth` protects, upheld here by hand ([`Self::spelled_at_birth`]): where the spelling at `?m`'s birth differs, the nominal shape may be the other refinements' doing — postpone rather than commit. Asked before the candidate's instance is minted, so every return past it has one transaction to close.
         if !Self::spelled_at_birth(context, &metavar, &rigid, rigid_raw)? {
-            return self.block(key, problem);
+            return self.block(problem);
         }
 
         // The instance is minted, paired with the rigid side's and offered to `solve` in one transaction: `solve` brackets its own re-validation alone, so a candidate it postpones or refuses before that would leave the occurrence and its equations standing with no term to hold them.
@@ -2199,7 +2172,7 @@ impl Convert {
         context.end_solutions(mark);
         match solved? {
             Solved::Done => {}
-            Solved::Postponed | Solved::Failed => return self.block(key, problem),
+            Solved::Postponed | Solved::Failed => return self.block(problem),
         }
 
         // Equal the spine against the rigid *suffix* pairwise, at the candidate telescope's domains (mirroring `compare_apply`'s recovered argument types). The baked-in prefix needs no equations: after substitution both sides carry it verbatim.
@@ -2620,7 +2593,7 @@ impl Convert {
                 relation,
             };
 
-            // Flexible heads are dispatched before history and before the structural/η fallthrough — a flexible head must never be η-expanded into a spine.
+            // Flexible heads are dispatched before the structural/η fallthrough — a flexible head must never be η-expanded into a spine.
             match (as_metavar(&this).cloned(), as_metavar(&that).cloned()) {
                 (Some(this_m), Some(that_m)) => {
                     // Same head, different spines (node duplication under different openings): entrywise spine agreement is a *sufficient* congruence condition. Probed only when both spines are meta-free — a probe that could solve metavariables would overcommit, since agreement is not necessary for the problem to hold.
@@ -2713,23 +2686,6 @@ impl Convert {
                 relation,
             };
 
-            let key = self.history_key(context, &problem);
-            if self.in_history(&key) {
-                match level_question(context, &problem.this, &problem.that)? {
-                    // Identified, or a genuine cycle: assumed, as the coinductive rule reads it. A pair under a universe binder falls back to the cycle rule, since the ambient solver cannot constrain a bound parameter; no instantiated group carries one.
-                    LevelQuestion::Identified
-                    | LevelQuestion::UnderBinder
-                    | LevelQuestion::Distinct => continue,
-                    LevelQuestion::GroundUnequal | LevelQuestion::Withheld => return Ok(false),
-                    // Parked under the raw spelling, which is what names the metavariables a wake must watch; the reduced key leaves the history so the retry is compared rather than assumed.
-                    LevelQuestion::Blocked => {
-                        self.history.remove(&key);
-                        self.blocked.push(raw_problem(&problem.type_));
-                        continue;
-                    }
-                }
-            }
-
             // Eta by the goal's type, ahead of every structural rule, as the kernel fires it: at a function type both sides are applied to fresh binders and at a record type with a field both are projected, whatever their shapes. A lambda or a tuple literal is left to its own arm below, which is the same expansion with the literal opened in place. Left to the dispatch's last arm, two sides of one stuck shape would be compared structurally first — two stuck eliminations arm against arm, at `Type` — and held apart where each converts with the literal and the kernel, which projects them, accepts.
             let literal = |term: &Term| matches!(&**term, Subterm::Func(_) | Subterm::Tuple(_));
             // The record type with no field has no eta, so a pair at it goes on to the dispatch.
@@ -2783,7 +2739,6 @@ impl Convert {
             match abstracted {
                 Some(Solved::Done) => continue,
                 Some(Solved::Postponed) => {
-                    self.history.remove(&key);
                     self.blocked.push(raw_problem(&problem.type_));
                     continue;
                 }
@@ -2826,12 +2781,12 @@ impl Convert {
                 (other, Subterm::Func(func)) => {
                     self.eta_expand_func(context, func, other.into(), type_.clone())?
                 }
-                // Both sides already reached `reduce`'s weak-head normal form before this dispatch (see `drain`), so a surviving `Apply` is genuinely stuck — same head or not, there is nothing further unfolding could reveal; `compare_apply` handles both uniformly (enqueuing the heads themselves when they differ, which recurs to a hard mismatch or resolves through whatever solves the head). The canonicalized `history` (see `history_key`) still recognizes a coinductive recurrence across repeated rounds of an unfolding cycle; a genuinely growing comparison spends the budget instead.
+                // Both sides already reached `reduce`'s weak-head normal form before this dispatch (see `drain`), so a surviving `Apply` is genuinely stuck — same head or not, there is nothing further unfolding could reveal; `compare_apply` handles both uniformly (enqueuing the heads themselves when they differ, which recurs to a hard mismatch or resolves through whatever solves the head). Two folded calls are what the arm opens with, and unfolding does reveal more of them: a pair is unfolded against itself once ([`Pairs`]), and a comparison that grows past that spends the budget.
                 (Subterm::Apply(this_a), Subterm::Apply(that_a)) => {
                     let this_head = this_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
                     let that_head = that_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
 
-                    // Two projections of one group at two universe instances are one head exactly when their levels are identified: the kernel decides the same pair by its levels under the item's hypotheses, and an elaborator that assumed it would hand the kernel a pair it refuses. Identified, the spines decide by congruence; two unequal ground levels, or levels under a universe binder, are refused as the kernel refuses them; a pair that only an unsolved metavariable keeps from being a level question takes the delta step below, which is what solves the metavariable, *and* puts the two heads to the walk as a problem of their own, so the level question is decided once the metavariable is — the delta step alone could decide the pair structurally (a literal count reduces both matches to their zero arms) and accept it with the levels untouched, which is the pair the kernel refuses once the metavariable is zonked away; a pair the skeletons keep apart is two groups and takes the delta step alone.
+                    // Two projections of one group at two universe instances are one head exactly when their levels are identified: the kernel decides the same pair by its levels under the item's hypotheses, and an elaborator that assumed it would hand the kernel a pair it refuses. Identified, the spines decide by congruence; two unequal ground levels, or levels under a universe binder, are refused as the kernel refuses them; a pair that only an unsolved metavariable keeps from being a level question takes the delta step below, which is what solves the metavariable, *and* puts the two heads to the walk as a problem of their own, so the level question is decided once the metavariable is. They are posed at `Type`, where no eta opens them into the two calls again, so the problem parks where it is posed — the delta step alone could decide the pair structurally (a literal count reduces both matches to their zero arms) and accept it with the levels untouched, which is the pair the kernel refuses once the metavariable is zonked away; a pair the skeletons keep apart is two groups and takes the delta step alone.
                     let instances = match (&this_head, &that_head) {
                         (Some((this_group, index)), Some((that_group, that_index)))
                             if index == that_index && this_group != that_group =>
@@ -2845,12 +2800,8 @@ impl Convert {
                         _ => None,
                     };
                     if instances == Some(LevelQuestion::Blocked) {
-                        let (this_group, index) = this_a
-                            .head
-                            .as_rec_proj()
-                            .expect("a level question names two projections");
                         self.enqueue(
-                            this_group.member_type(index),
+                            Term::type_ground(),
                             this_a.head.clone(),
                             that_a.head.clone(),
                         );
@@ -2909,16 +2860,14 @@ impl Convert {
                                     let nested =
                                         pair && self.pairs.hold(&this_a.head, &that_a.head);
                                     if nested && undecided {
-                                        self.history.remove(&key);
                                         self.blocked.push(raw_problem(&type_));
                                         continue;
                                     }
-                                    if pair && !nested {
-                                        self.pairs = self
-                                            .pairs
-                                            .unfolding(this_a.head.clone(), that_a.head.clone());
-                                    }
                                     if !nested {
+                                        self.unfolded(
+                                            this_unfolded.as_ref().map(|_| &this_a.head),
+                                            that_unfolded.as_ref().map(|_| &that_a.head),
+                                        );
                                         let this = this_unfolded
                                             .unwrap_or_else(|| Subterm::Apply(this_a).into());
                                         let that = that_unfolded
@@ -2934,8 +2883,10 @@ impl Convert {
                 }
                 // A folded recursive call against anything that is not one is *forced* before it is compared, exactly as the kernel's conversion forces both sides: a closed scan then runs as one machine run rather than as one unfolding per round. Unfolding it a step at a time would make a `Str` literal's validity check quadratic in retention and superlinear in wall clock — every round re-reducing the next folded spelling, whose argument carries the scan's state unreduced, one `step` deeper per character, and storing it. Forcing that makes no progress — a call restuck on a variable — takes the one-step unfold, so a comparison against an unfolded body still meets it.
                 (Subterm::Apply(apply), other) if apply.head.spine_rec_proj().is_some() => {
+                    let head = applied_head(&apply.head).clone();
                     match Self::force_folded_call(context, apply)? {
                         Some(forced) => {
+                            self.unfolded(Some(&head), None);
                             self.enqueue(type_, forced, other.into());
                             true
                         }
@@ -2943,8 +2894,10 @@ impl Convert {
                     }
                 }
                 (other, Subterm::Apply(apply)) if apply.head.spine_rec_proj().is_some() => {
+                    let head = applied_head(&apply.head).clone();
                     match Self::force_folded_call(context, apply)? {
                         Some(forced) => {
+                            self.unfolded(None, Some(&head));
                             self.enqueue(type_, other.into(), forced);
                             true
                         }
@@ -2997,7 +2950,6 @@ impl Convert {
                                     | LevelQuestion::UnderBinder
                                     | LevelQuestion::Withheld => Some(false),
                                     LevelQuestion::Blocked => {
-                                        self.history.remove(&key);
                                         self.blocked.push(raw_problem(&type_));
                                         continue;
                                     }
@@ -3022,7 +2974,6 @@ impl Convert {
                             let nested =
                                 decided.is_none() && self.pairs.hold(&this_term, &that_term);
                             if nested && undecided {
-                                self.history.remove(&key);
                                 self.blocked.push(raw_problem(&type_));
                                 continue;
                             }
@@ -3030,7 +2981,7 @@ impl Convert {
                                 Some(decided) => decided,
                                 None if nested => false,
                                 None => {
-                                    self.pairs = self.pairs.unfolding(this_term, that_term);
+                                    self.unfolded(Some(&this_term), Some(&that_term));
                                     self.enqueue(
                                         type_,
                                         this.group.member_body(this_index),
@@ -3045,18 +2996,22 @@ impl Convert {
                 }
                 (Subterm::Rec(rec), other) => {
                     // Opening a projection's tail is the identity on it, so the step available here is the delta one: on to the member's body.
+                    let head: Term = Subterm::Rec(rec.clone()).into();
                     let stepped = match rec.as_proj() {
                         Some(index) => rec.group.member_body(index),
                         None => unfold_rec(context, rec)?,
                     };
+                    self.unfolded(Some(&head), None);
                     self.enqueue(type_, stepped, other.into());
                     true
                 }
                 (other, Subterm::Rec(rec)) => {
+                    let head: Term = Subterm::Rec(rec.clone()).into();
                     let stepped = match rec.as_proj() {
                         Some(index) => rec.group.member_body(index),
                         None => unfold_rec(context, rec)?,
                     };
+                    self.unfolded(None, Some(&head));
                     self.enqueue(type_, other.into(), stepped);
                     true
                 }
@@ -3068,7 +3023,6 @@ impl Convert {
                         apply,
                         rigid,
                         &that_raw,
-                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -3079,7 +3033,6 @@ impl Convert {
                         apply,
                         rigid,
                         &this_raw,
-                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -3090,7 +3043,6 @@ impl Convert {
                         apply,
                         rigid,
                         &that_raw,
-                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -3101,7 +3053,6 @@ impl Convert {
                         apply,
                         rigid,
                         &this_raw,
-                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -3120,7 +3071,6 @@ impl Convert {
                         apply,
                         rigid,
                         &that_raw,
-                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -3139,7 +3089,6 @@ impl Convert {
                         apply,
                         rigid,
                         &this_raw,
-                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -3149,12 +3098,10 @@ impl Convert {
             };
 
             if !ok {
-                // A structural mismatch where a side is stuck on an unsolved metavariable is undecided, not provably unequal: solving the metavariable may fold an intrinsic (`?m - 1` against `0` folds once `?m := 1` lands) or a match (`Below(?c, …)` reduces to `True` once `?c` is pinned and the arm refinement applies), which no structural rule anticipates. Park the problem instead of failing — rigid-head disagreements with no metavariable in a blocking position, which no solution can repair, still mismatch here. The problem leaves `history` so a retry after fresh progress is not skipped as already-handled.
+                // A structural mismatch where a side is stuck on an unsolved metavariable is undecided, not provably unequal: solving the metavariable may fold an intrinsic (`?m - 1` against `0` folds once `?m := 1` lands) or a match (`Below(?c, …)` reduces to `True` once `?c` is pinned and the arm refinement applies), which no structural rule anticipates. Park the problem instead of failing — rigid-head disagreements with no metavariable in a blocking position, which no solution can repair, still mismatch here.
                 if blocked_on_unsolved_metavar(context, &problem.this)
                     || blocked_on_unsolved_metavar(context, &problem.that)
                 {
-                    let key = self.history_key(context, &problem);
-                    self.history.remove(&key);
                     self.blocked.push(raw_problem(&problem.type_));
                     continue;
                 }
@@ -3209,7 +3156,7 @@ fn holds_data<B: Bound>(
     Ok(false)
 }
 
-/// What a type directs between two terms, asked of the type a lookup reads where the problem carries none: two terms a lookup types at one proposition are equal. The two looked-up types are compared, so it is the typed rule with its type looked up; `curios-cert`'s rule of the same name says why neither side is expanded — eta between two neutrals decides nothing irrelevance does not, and the goal it would pose at a looked-up type is one the recurrence rule would assume.
+/// What a type directs between two terms, asked of the type a lookup reads where the problem carries none: two terms a lookup types at one proposition are equal. The two looked-up types are compared, so it is the typed rule with its type looked up; `curios-cert`'s rule of the same name says why neither side is expanded — eta between two neutrals decides nothing irrelevance does not, and the goal it would pose at a looked-up type poses its two heads again, which the same lookup types.
 ///
 /// Each side and each looked-up type is read through the solutions already committed, so the verdict does not follow whether an implicit was written or solved. Nothing here solves: one that still mentions an unsolved metavariable is left to the rules that do. A side is typed by [`looked_up`], under the binders the problem is posed under.
 fn by_their_own_type(
@@ -3326,7 +3273,7 @@ enum LevelQuestion {
     Distinct,
 }
 
-/// Classify a pair whose levels no sibling problem will surface — two projections of one `rec` group at an applied head, or a problem the history already holds. The levels inside the two groups are decided here rather than by the walk: identified when the sides differ in nothing else, refused when two of them are unequal ground levels or are withheld, a group's member reproducing its levels under every unfolding so that no value decides the pair past them, parked when an unsolved metavariable is all that keeps the skeletons apart, and left to the caller only when the sides genuinely differ in structure — the cycle the coinductive rule is for, or two groups the delta step may still relate. No type directs the pair from here, so a curried head keeps every level ([`Curried::Compared`]).
+/// Classify a pair whose levels no sibling problem will surface — two projections of one `rec` group, bare or at an applied head. The levels inside the two groups are decided here rather than by the walk: identified when the sides differ in nothing else, refused when two of them are unequal ground levels or are withheld, a group's member reproducing its levels under every unfolding so that no value decides the pair past them, parked when an unsolved metavariable is all that keeps the skeletons apart, and left to the caller only when the sides genuinely differ in structure — two groups, which their comparison as binders or the delta step may still relate. No type directs the pair from here, so a curried head keeps every level ([`Curried::Compared`]).
 fn level_question(
     context: &mut Context,
     this: &Term,

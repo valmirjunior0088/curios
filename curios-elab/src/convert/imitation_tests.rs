@@ -335,7 +335,7 @@ fn a_family_read_off_a_rigid_side_takes_an_instance_of_its_own() {
     }
 }
 
-// A goal imitation blocks is compared again once the run makes progress, not assumed. `(x: ?1) -> ?0(Nat)` against `(x: Nat) -> V`, with `V` defined as `Vec(Nat, 3)`: the domain solves `?1`, the codomain's imitation is refused by `?0`'s kind, and the retry the solution prompts meets the same goal. Its key is recorded as reduced and the goal blocked as written, so a key removed under the written spelling stays, and the retry reads the goal as a recurrence.
+// A goal imitation blocks is compared again once the run makes progress. `(x: ?1) -> ?0(Nat)` against `(x: Nat) -> V`, with `V` defined as `Vec(Nat, 3)`: the domain solves `?1`, the codomain's imitation is refused by `?0`'s kind, and the retry the solution prompts meets the same goal and blocks it again, so the run ends undecided with `?0` unsolved.
 #[test]
 fn a_goal_imitation_blocks_is_compared_again_on_its_retry() {
     let mut context = context();

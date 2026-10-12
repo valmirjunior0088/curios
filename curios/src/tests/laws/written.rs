@@ -1280,6 +1280,35 @@ fn two_calls_of_a_recursive_function_that_differ_are_refused() {
     assert!(typecheck(&solved).is_err());
 }
 
+#[test]
+fn a_goal_under_binders_of_another_type_is_compared() {
+    // Each side is a tuple of two functions whose bodies are `h(x)` on one side and `h(y)` on the other: under binders at a proposition the two calls are one unread, and under binders at `Nat` they are two. The body under `Nat` is compared whichever component comes first, so each order is refused, by each checker asked alone: assumed as the goal the other component had posed, it would be held where the proposition comes first.
+    let name = "a goal under binders of another type";
+    let proofs =
+        |body: &str| format!("(h: (Holds(true)) -> Nat, x: Holds(true), y: Holds(true)) => {body}");
+    let numbers = |body: &str| format!("(h: (Nat) -> Nat, x: Nat, y: Nat) => {body}");
+    let rows = [
+        format!(
+            "Eq()(({}, {}), ({}, {}))",
+            proofs("h(x)"),
+            numbers("h(x)"),
+            proofs("h(y)"),
+            numbers("h(y)")
+        ),
+        format!(
+            "Eq()(({}, {}), ({}, {}))",
+            numbers("h(x)"),
+            proofs("h(x)"),
+            numbers("h(y)"),
+            proofs("h(y)")
+        ),
+    ]
+    .map(|claim| (String::new(), claim));
+    let mut found = misplaced(IMPORTS, name, &rows, 0);
+    found.extend(misplaced_by_the_kernel(IMPORTS, name, &rows, 0));
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
 /// What the rows over two recursions are stated under: one recursion written with its step's sum both ways; the second spelling again from another base case, by another step, and in a group with a member more; one recursion over two orders of its arguments; and one whose first argument every call hands on.
 const TWO_RECURSIONS: &str = "use /std/{Nat, Eq, Io};\nlet f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(k) + 2 end;\nlet h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + h(k) end;\nlet based(n: Nat) -> Nat = match n | 0 => 1 | k + 1 => 2 + based(k) end;\nlet stepped(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 3 + stepped(k) end;\nlet paired(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + paired(k) end\nand _spare(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => _spare(k) end;\nlet over(n: Nat, x: Nat) -> Nat = match n | 0 => x | k + 1 => over(k, x) + 1 end;\nlet flipped(x: Nat, n: Nat) -> Nat = match n | 0 => x | k + 1 => 1 + flipped(x, k) end;\nlet halving(c: Nat, n: Nat) -> Nat = match n == 0 | true => 0 | false => halving(c, n / 2) end;";
 

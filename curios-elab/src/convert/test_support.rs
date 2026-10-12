@@ -5,7 +5,7 @@
 use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, FuncType, Global, Intrinsic, Nat, ReduceError, Subterm, Term},
+    curios_core::{Free, Global, Intrinsic, Nat, ReduceError, Term},
     curios_utilities::Qualifier,
 };
 
@@ -43,14 +43,4 @@ pub(super) fn qed() -> Term {
 
 pub(super) fn nat_type() -> Term {
     Term::intrinsic(Intrinsic::NatType)
-}
-
-// === The history key (cross-branch collisions) ==============================
-
-/// Extract the `FuncType` payload of a term a fixture built through `Term::func_type`.
-pub(super) fn as_func_type(term: Term) -> FuncType {
-    let Subterm::FuncType(func_type) = Term::unwrap_or_clone(term) else {
-        unreachable!()
-    };
-    func_type
 }

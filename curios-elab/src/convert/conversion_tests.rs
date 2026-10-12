@@ -1,4 +1,4 @@
-//! Structural conversion: alpha equivalence, plicity, matches, and the recursive heads that converge coinductively or spend the budget.
+//! Structural conversion: alpha equivalence, plicity, matches, and the recursive heads: two groups compared as binders, a pair unfolded once, and the unfolding that spends the budget.
 
 use {
     super::test_support::*,
@@ -458,23 +458,6 @@ fn same_structural_recursive_head_does_not_assume_injective_spines() {
 }
 
 #[test]
-fn distinct_recursive_heads_with_identical_bodies_converge_coinductively() {
-    let mut context = context();
-    let f = context.fresh(Some("f"));
-    let g = context.fresh(Some("g"));
-    let a = context.fresh(Some("a"));
-    // Identical bodies, distinct names: each round unfolds both sides to the same stuck match and re-opens its `some` arm at a fresh binder — the recurrence differs from the previous round only in that opening entropy, so the canonicalized history recognizes the cycle and assumes it. No finite disagreement exists: the functions are bisimilar.
-    let body = recursive_matcher(&mut context, &f, 0);
-    context.define(&f, &body, None);
-    let body = recursive_matcher(&mut context, &g, 0);
-    context.define(&g, &body, None);
-
-    let this = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
-    let that = Term::apply(Term::free_var(&g), [Term::free_var(&a)]);
-    assert_eq!(conv(&mut context, &this, &that), Ok(true));
-}
-
-#[test]
 fn distinct_recursive_heads_with_differing_bodies_is_false() {
     let mut context = context();
     let f = context.fresh(Some("f"));
@@ -644,10 +627,10 @@ fn shifting(context: &mut Context) -> Term {
 
 /// A pair of calls is unfolded against itself once, and met again inside that unfolding it is apart. The first two are one recursion over two orders of its arguments, which no comparison as binders holds; unfolded, they pose their two heads again one binder further in. The second two are two calls of one member that a second unfolding would reconcile, and the first poses the member against itself at two spines, which is where it stops. The calls one unfolding reconciles are still one. The kernel's twin shares the name.
 ///
-/// Mutation-checked: with a pair unfolded however often it is met, the first two are held, a goal met again being assumed.
+/// Mutation-checked: with a pair unfolded however often it is met, the budget, small here, runs out on the first two and the second two convert.
 #[test]
 fn a_pair_met_again_inside_its_own_unfolding_is_apart() {
-    let mut context = context();
+    let mut context = Context::new(10_000, SYNTAX);
     let [a, b, c, d, n] =
         ["a", "b", "c", "d", "n"].map(|hint| Term::free_var(&context.fresh(Some(hint))));
 
@@ -705,27 +688,82 @@ fn growing_recursive_unfolding_spends_the_budget() {
     assert!(conv(&mut context, &this, &that).is_err_and(|spent| spent.is_exhausted()));
 }
 
-#[test]
-fn recursive_values_are_bisimilar() {
-    let mut context = context();
+/// `rec xs : E = cons(head, xs); xs`: a recursive value whose tail is itself.
+fn stream(context: &mut Context, head: Term) -> Term {
     let xs = context.fresh(Some("xs"));
-    let ys = context.fresh(Some("ys"));
-    // Two distinct recursive value definitions unfolding to the same constructor shape: the payload goal recurs exactly (no openings involved), history cuts it, and the streams are equal coinductively.
-    let stream = |name: &Free| {
-        Term::variant(
-            nominal("E"),
-            Vec::<Term>::new(),
-            "cons",
-            [nat(1), Term::free_var(name)],
-        )
-    };
-    context.define(&xs, &stream(&xs), None);
-    context.define(&ys, &stream(&ys), None);
 
-    assert_eq!(
-        conv(&mut context, &Term::free_var(&xs), &Term::free_var(&ys)),
-        Ok(true)
+    Term::rec(
+        [(
+            xs,
+            Term::induct_type(nominal("E"), Vec::<Term>::new(), Vec::<Term>::new()),
+            Term::variant(
+                nominal("E"),
+                Vec::<Term>::new(),
+                "cons",
+                [head, Term::free_var(&xs)],
+            ),
+        )],
+        Term::free_var(&xs),
+    )
+}
+
+/// Two recursive values whose bodies convert are one value: the two groups are compared as the binders they are, one label standing for the tail of both, and neither is unfolded. Their heads are one sum written both ways, so no rename relates the two spellings. Two whose heads part are two values, refused by the same comparison and again by the one unfolding it leaves them to.
+#[test]
+fn two_recursive_values_whose_bodies_convert_are_one() {
+    let mut context = context();
+    let a = Term::free_var(&context.fresh(Some("a")));
+    let sum =
+        |this: &Term, that: &Term| Term::intrinsic(Intrinsic::nat_add(this.clone(), that.clone()));
+    let this = stream(&mut context, sum(&a, &nat(1)));
+    let that = stream(&mut context, sum(&nat(1), &a));
+    let other = stream(&mut context, sum(&nat(2), &a));
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+    assert_eq!(conv(&mut context, &this, &other), Ok(false));
+}
+
+/// A problem a run poses twice is decided once. Two towers of pairs built apart, each line naming the line before it twice, are two graphs of forty nodes whose trees have 2⁴⁰ leaves, and the run that compares them remembers what it has posed, so it takes them in their size. `curios`'s `tests::towers` holds the program at sixty lines.
+///
+/// Mutation-checked: with a problem posed however often it is met, the budget, small here, runs out.
+#[test]
+fn a_problem_a_run_poses_twice_is_decided_once() {
+    let mut context = Context::new(10_000, SYNTAX);
+    let tower = |context: &mut Context, hint: &str| {
+        let mut line = context.fresh(Some(hint));
+        context.define(&line, &Term::tuple([nat(1), nat(2)]), None);
+        for _ in 0..40 {
+            let next = context.fresh(Some(hint));
+            let before = Term::free_var(&line);
+            context.define(&next, &Term::tuple([before.clone(), before]), None);
+            line = next;
+        }
+
+        Term::free_var(&line)
+    };
+    let this = tower(&mut context, "x");
+    let that = tower(&mut context, "y");
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+/// A recursive value that is its own body is not held by meeting itself. `rec xs : E = xs; xs`, opened alone against a term with nothing to open, poses the problem it was opened from, and a run that took that for posed already would hold the value equal to anything. It is posed inside the unfolding it came out of, which is another problem, so the walk goes on until its budget ends. Totality refuses the definition.
+///
+/// Mutation-checked: with a head unfolded alone left out of what a problem stands inside, the two convert.
+#[test]
+fn a_recursive_value_that_is_its_own_body_is_not_held_by_meeting_itself() {
+    let mut context = Context::new(10_000, SYNTAX);
+    let xs = context.fresh(Some("xs"));
+    let own = Term::rec(
+        [(
+            xs,
+            Term::induct_type(nominal("E"), Vec::<Term>::new(), Vec::<Term>::new()),
+            Term::free_var(&xs),
+        )],
+        Term::free_var(&xs),
     );
+    let other = Term::free_var(&context.fresh(Some("t")));
+
+    assert!(conv(&mut context, &own, &other).is_err_and(|spent| spent.is_exhausted()));
 }
 
 #[test]
@@ -842,9 +880,9 @@ fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_unde
     );
 }
 
-/// The same pair where a term metavariable keeps the two groups apart until the walk has solved it: the head cannot be decided, the symmetric unfolding runs, the inner recursive call recurs — and the recurrence, whose sides then differ in nothing but levels once the solved metavariable is materialized, is identified rather than assumed. Assuming it would leave two universe parameters where the program has one level.
+/// The same pair where a term metavariable keeps the two groups apart until the walk has solved it: the head cannot be decided, the symmetric unfolding runs and solves the metavariable, and the inner recursive call poses the two heads again, which then differ in nothing but levels and are identified where they are met. Decided by the unfolding alone, the pair would leave two universe parameters where the program has one level.
 #[test]
-fn a_recurrence_whose_sides_differ_only_in_levels_is_identified_rather_than_assumed() {
+fn two_instances_a_metavariable_kept_apart_are_identified_where_the_unfolding_meets_them_again() {
     let mut context = context();
     context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
     let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
@@ -865,11 +903,11 @@ fn a_recurrence_whose_sides_differ_only_in_levels_is_identified_rather_than_assu
     assert_eq!(
         zonked(&context, u0),
         zonked(&context, u1),
-        "the recurrence was assumed without the identification that licenses it",
+        "the pair was held without the identification that licenses it",
     );
 }
 
-/// Two instances of one recursive group at two unequal ground levels are refused — at the head, and again where the pair recurs — because no commitment can join `Type 0` to `Type 1`; assuming the recurrence coinductively would hand the kernel a pair it refuses. The kernel's twin shares the name.
+/// Two instances of one recursive group at two unequal ground levels are refused — at the head, and again where the unfolding meets the pair once a metavariable that kept its skeletons apart is solved — because no commitment can join `Type 0` to `Type 1`; held there, it would be a pair the kernel refuses. The kernel's twin shares the name.
 #[test]
 fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_unfolding() {
     {
@@ -903,7 +941,7 @@ fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_un
                 &fold_call(at_one, &a, &n)
             ),
             Ok(false),
-            "two ground-unequal instances were assumed where they recurred",
+            "two ground-unequal instances were held where the unfolding met them again",
         );
     }
 }
@@ -965,9 +1003,11 @@ fn two_instances_kept_apart_only_by_a_metavariable_identify_their_levels_once_it
     }
 }
 
-/// A recurrence that only an unsolved metavariable keeps from being a level question parks rather than assumes, and commits the identification once the metavariable is solved: the two zero arms are distinct unsolved holes, so nothing in the walk solves them, and the outcome is undecided; solved by hand, the same comparison converts with the levels identified.
+/// A pair met again inside its own unfolding that only an unsolved metavariable keeps from being a level question waits, parked, where one a rule had decided would be apart, and commits the identification once the metavariable is solved: the two zero arms are distinct unsolved holes, so nothing in the walk solves them, and the outcome is undecided; solved by hand, the same comparison converts with the levels identified.
+///
+/// Mutation-checked: with the pair left apart where it is met again, the outcome is a mismatch.
 #[test]
-fn a_recurrence_blocked_on_a_metavariable_parks_and_commits_once_it_is_solved() {
+fn a_pair_met_again_that_a_metavariable_keeps_open_parks_and_commits_once_it_is_solved() {
     let mut context = context();
     context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
     context.birth_metavar(MetavarId(1), Vec::new(), nat_type());
@@ -985,7 +1025,7 @@ fn a_recurrence_blocked_on_a_metavariable_parks_and_commits_once_it_is_solved() 
             convert_outcome(&mut context, &nat_type(), &this, &that),
             Ok(Outcome::Blocked(_))
         ),
-        "a recurrence kept from a level question by unsolved metavariables was decided",
+        "a pair kept from a level question by unsolved metavariables was decided",
     );
     assert_ne!(
         zonked(&context, u0),
@@ -1001,7 +1041,7 @@ fn a_recurrence_blocked_on_a_metavariable_parks_and_commits_once_it_is_solved() 
             convert_outcome(&mut context, &nat_type(), &this, &that),
             Ok(Outcome::Converts)
         ),
-        "the parked recurrence did not convert once its metavariables were solved",
+        "the parked pair did not convert once its metavariables were solved",
     );
     assert_eq!(zonked(&context, u0), zonked(&context, u1));
 }
