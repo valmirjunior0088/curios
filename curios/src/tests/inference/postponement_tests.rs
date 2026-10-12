@@ -338,6 +338,7 @@ fn reflexivity_at_a_lambda_waits_for_the_type_the_drain_settles() {
     assert_eq!(run(source), b"1");
 }
 
+// The two lambdas have their type where `Eq()`'s call completes, so the declared type is whole before the body is read, and reflexivity is refused between two whole types: the fault keeps a mismatch's words, with both sides spelled.
 #[test]
 fn reflexivity_at_two_lambdas_that_differ_is_a_mismatch() {
     let report = error(
@@ -347,7 +348,10 @@ fn reflexivity_at_two_lambdas_that_differ_is_a_mismatch() {
         /std/print("unreachable")
         "#,
     );
-    assert!(report.contains("terms differ"), "{report}");
+    assert!(
+        report.contains("type mismatch") && report.contains("g(0)") && report.contains("g(1)"),
+        "{report}"
+    );
 }
 
 // A parked problem that fails where its item is drained is the item's refusal as much as one raised while the item is elaborated: the report leads with the declaration. And what failed is a comparison of two terms the declared type states at one position, neither a type and neither inferred, so the report says that two terms differ and names the one the program wrote as written; with the position's type written out the same fault is one between two whole types, and keeps a mismatch's words.

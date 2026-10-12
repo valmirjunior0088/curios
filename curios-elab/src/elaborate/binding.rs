@@ -1090,7 +1090,7 @@ pub(super) fn elaborate_func_check(
     Ok((Term::func_marked(domains, body), expected))
 }
 
-/// Synthesize a function type from a lambda's own domain annotations — the mirror of `elaborate_func_type`. Without an expected type no binders can be inserted, so the lambda's written plicity sequence is already canonical: the walk keeps each written mark, entering a `use` binder into the witness scope for later domains and the body, and the synthesized `FuncType`/rebuilt `Func` both carry exactly that sequence. A domain that stays an unconstrained hole (the bare `(x) => …` sugar, or `(x : _)`) offers nothing to synthesize from, so inference fails — unless `settle` carries the lambda term: the item's drain has established that no structure is coming from the expectation, so the hole is replaced by a metavariable named after its binder ([`MetavarOrigin::Domain`](curios_core::MetavarOrigin)), pinned by the body or by whatever the settled type later unifies with, and reported by zonk as the parameter whose type was never determined when nothing ever pins it. The rebuilt lambda and its type share the same closed domains, so both stay de-Bruijn-correct.
+/// Synthesize a function type from a lambda's own domain annotations — the mirror of `elaborate_func_type`. Without an expected type no binders can be inserted, so the lambda's written plicity sequence is already canonical: the walk keeps each written mark, entering a `use` binder into the witness scope for later domains and the body, and the synthesized `FuncType`/rebuilt `Func` both carry exactly that sequence. A domain that stays an unconstrained hole (the bare `(x) => …` sugar, or `(x : _)`) offers nothing to synthesize from, so inference fails — unless `settle` carries the lambda term: the term that awaits its type has read its parts, so no structure is coming from the expectation, so the hole is replaced by a metavariable named after its binder ([`MetavarOrigin::Domain`](curios_core::MetavarOrigin)), pinned by the body or by whatever the settled type later unifies with, and reported by zonk as the parameter whose type was never determined when nothing ever pins it. The rebuilt lambda and its type share the same closed domains, so both stay de-Bruijn-correct.
 pub(super) fn elaborate_func_infer(
     context: &mut Context,
     telescope: &Telescope<Term>,
@@ -1113,10 +1113,10 @@ pub(super) fn elaborate_func_infer(
         while let Some((hint, domain)) = cursor.entry() {
             let domain = check_is_sort(context, &domain)?.0;
 
-            // A domain nothing pins is refused here rather than left to fail obscurely downstream — but only a silent hole is: a written `?` domain is the author asking what the domain is, and it rides on to zonk's report (`MetavarOrigin` states the rule). The drain's settle instead admits the hole as a named domain metavariable, per the function's contract above.
+            // A domain nothing pins is refused here rather than left to fail obscurely downstream — but only a silent hole is: a written `?` domain is the author asking what the domain is, and it rides on to zonk's report (`MetavarOrigin` states the rule). A lambda being settled instead admits the hole as a named domain metavariable, per the function's contract above.
             let reduced = reduce_with(context, &domain)?;
             let domain = match &*reduced {
-                // A `use` member states no type of its own, so one no annotation states has none here: the drain's settle cannot admit it either, a domain left to unification being no concept application, which is all resolution answers.
+                // A `use` member states no type of its own, so one no annotation states has none here: a lambda being settled cannot admit it either, a domain left to unification being no concept application, which is all resolution answers.
                 Subterm::Metavar(metavar)
                     if metavar.is_hole() && plicities[domains.len()] == Plicity::Witness =>
                 {

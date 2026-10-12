@@ -502,30 +502,6 @@ pub(crate) fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
     }
 }
 
-/// Synthesize a lambda whose expectation never gained structure, and pin the expectation to what it inferred: the type its annotations and body state ([`elaborate_func_settle`]), an unannotated domain standing as a named metavariable for the body — or whatever the settled type later unifies with — to pin. `None` for any other form, and where the expectation *does* have structure, in which case ordinary checking owns it.
-///
-/// Parking a lambda against a bare metavariable is right while structure could still arrive from that expectation, since only an expectation can supply a hidden binder. The item's drain is where nothing is left to send one.
-pub(crate) fn settle_against(
-    context: &mut Context,
-    term: &Term,
-    expected: &Term,
-) -> Result<Option<Term>, Error> {
-    let Subterm::Func(func) = &**term else {
-        return Ok(None);
-    };
-    let structured = match &*reduce_with(context, expected)? {
-        Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_some(),
-        _ => true,
-    };
-    if structured {
-        return Ok(None);
-    }
-
-    let (rebuilt, inferred) = elaborate_func_settle(context, func, term)?;
-    expect(context, term, &inferred, expected)?;
-    Ok(Some(rebuilt))
-}
-
 /// Whether every domain of `func` is written: a lambda whose type its annotations and body state, with nothing left for a term beside it to give.
 fn annotated(context: &mut Context, func: &Func) -> bool {
     let mut cursor = func.telescope.cursor();
@@ -637,7 +613,7 @@ impl Context<'_> {
         }
     }
 
-    /// Take one choice among the checks `term` awaits, the lowest-ranked there is ([`Choice`]): a literal's shape, then the numerals' default, then a lambda at the function type its expectation has come to. `taken` holds what was taken already — a metavariable shaped or defaulted, a lambda's placeholder — so a choice conversion could not commit is not offered again. Answers whether one was taken.
+    /// Take one choice among the checks `term` awaits, the lowest-ranked there is ([`Choice`]): a literal's shape, then the numerals' default, then a lambda, at the function type its expectation has come to or, where it has come to none, at the type its annotations state. `taken` holds what was taken already — a metavariable shaped or defaulted, a lambda's placeholder — so a choice conversion could not commit is not offered again. Answers whether one was taken.
     fn take_choice(
         &mut self,
         term: Option<AwaitId>,
@@ -729,7 +705,44 @@ impl Context<'_> {
             return Ok(true);
         }
 
+        // A lambda on a bare metavariable: nothing its term reads gives it a function type any more, so it is checked at the one its annotations state. One whose every domain is annotated is taken ahead of one with a domain left open, which the first may give.
+        let mut bare = Vec::new();
+        for (at, (open, _, waiting)) in waiting.iter().enumerate() {
+            if let Subterm::Func(func) = &*waiting.written
+                && waiting.choice == Choice::Lambda
+                && open.is_some()
+                && !taken.contains(&waiting.placeholder)
+            {
+                bare.push((!annotated(self, func), at));
+            }
+        }
+        if let Some(&(_, at)) = bare.iter().min() {
+            let choice = &waiting[at].2;
+            taken.insert(choice.placeholder);
+            self.settle(choice)?;
+            return Ok(true);
+        }
+
         Ok(false)
+    }
+
+    /// Check the lambda of `choice`, parked on a bare metavariable, at the type its annotations state, and hold that type to the metavariable: a domain left open stands as a metavariable named after its binder, and the body states the codomain ([`elaborate_func_settle`]). Only an expectation can supply a hidden binder, and this is where none is coming: a function type with hidden binders handed to the lambda afterwards is refused, as it is for a lambda bound with no call around it.
+    fn settle(&mut self, choice: &ParkedChoice) -> Result<(), Error> {
+        let Subterm::Func(func) = &*choice.written else {
+            unreachable!("a lambda's choice is a lambda's");
+        };
+        // Out of the store while it is checked, as a literal is while it is shaped.
+        if self.take_checking(choice.placeholder).is_none() {
+            return Ok(());
+        }
+        let (rebuilt, stated) = self.with_retry_frame(&choice.frame, |context| {
+            elaborate_func_settle(context, func, &choice.written)
+        })?;
+        self.fill_placeholder(choice.placeholder, rebuilt);
+
+        self.with_retry_frame(&choice.frame, |context| {
+            expect(context, &choice.written, &stated, &choice.expected)
+        })
     }
 
     /// Give the bare metavariable `id` the shape of the tuple literal that waits on it: a non-dependent product of one open type a field, labelled as the literal is.
@@ -799,21 +812,7 @@ impl Context<'_> {
 
         match (&*inner.written, inner.choice) {
             (_, Choice::Shape) => self.shape(id, &inner),
-            (Subterm::Func(func), Choice::Lambda) if annotated(self, func) => {
-                if self.take_checking(inner.placeholder).is_none() {
-                    return Ok(());
-                }
-                let checked =
-                    self.with_retry_frame(&inner.frame, |context| {
-                        match settle_against(context, &inner.written, &inner.expected)? {
-                            Some(settled) => Ok(settled),
-                            None => check(context, &inner.written, inner.expected.clone()),
-                        }
-                    })?;
-                self.fill_placeholder(inner.placeholder, checked);
-
-                Ok(())
-            }
+            (Subterm::Func(func), Choice::Lambda) if annotated(self, func) => self.settle(&inner),
             _ => Ok(()),
         }
     }
@@ -870,49 +869,6 @@ impl Context<'_> {
         self.retry_parked()
     }
 
-    /// Give every parked lambda whose expectation never gained structure its last chance, once the drain has established that no further solution is coming: its annotations and body state its type, and an unannotated domain — the one part synthesis cannot state — stands as a metavariable named after its binder, pinned by the body, by whatever the settled type unifies with as parked work wakes, or reported by zonk as the parameter whose type was never determined ([`settle_against`]).
-    ///
-    /// Answers whether anything settled, so the drain can loop once more: an obligation watching the metavariable this just solved must get its retry before anything is reported.
-    fn settle_synthesizable(&mut self) -> Result<bool, Error> {
-        let mut settled = false;
-        for parked in self.take_parked() {
-            let ParkedProblem {
-                work,
-                origin,
-                frame,
-                ..
-            } = parked;
-
-            let ParkedWork::Checking {
-                term,
-                expected,
-                placeholder,
-            } = &work
-            else {
-                self.repark(work, origin, frame);
-                continue;
-            };
-
-            let (term, expected, placeholder) = (term.clone(), expected.clone(), *placeholder);
-            let settled_term =
-                self.with_retry_frame(&frame, |context| settle_against(context, &term, &expected));
-            let rebuilt = match settled_term {
-                Ok(None) => {
-                    self.repark(work, origin, frame);
-                    continue;
-                }
-                Ok(Some(rebuilt)) => Ok(rebuilt),
-                Err(error) => Err(error),
-            };
-
-            // A failure here is not the literal's. Solving the expectation wakes whatever was parked on it, and a woken obligation reports for itself — `Show/show((true, false))` settles the tuple to `{Bool, Bool}` and *then* discovers no witness of `Show({Bool, Bool})`, which is the answer the program deserves. Swallowing that would report the tuple's own check as the survivor and bury the real one.
-            self.fill_placeholder(placeholder, rebuilt?);
-            settled = true;
-        }
-
-        Ok(settled)
-    }
-
     /// Drain the parked store ([`Context::drain_store`]), then hold each product a literal shaped to the sort its metavariable was declared at ([`Context::hold_shapes`]). Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and frozen frames do not pile up.
     pub(crate) fn drain_parked(&mut self) -> Result<(), Error> {
         self.drain_store()?;
@@ -941,10 +897,6 @@ impl Context<'_> {
             if self.parked_len() >= before && !self.has_newly_solved() {
                 // What no term awaits is the item's to answer, by the ranks a term completes by ([`Context::complete`]), before anything is reported.
                 if self.take_choice(None, &mut taken)? {
-                    continue;
-                }
-                // A lambda no expectation ever reached is settled last: parking was right while one could still arrive, and this is where that stops being true.
-                if self.settle_synthesizable()? {
                     continue;
                 }
 
