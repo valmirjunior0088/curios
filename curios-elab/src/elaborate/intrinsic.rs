@@ -1,10 +1,10 @@
 use {
-    super::{Context, Error, Mode, elaborate, expect},
+    super::{Context, Error, Mode, elaborate, expect, park_checking},
     crate::{
-        ErasedSite, SettleTier, check_is_sort, exhausted_bound, reduce_with, settle_against,
-        sort_term,
+        ErasedSite, blocked_on_metavar, check_is_sort, exhausted_bound, reduce_with, sort_term,
     },
     curios_core::{Intrinsic, Operand, Produced, Subterm, Term, Var, Visit},
+    std::collections::BTreeSet,
 };
 
 fn list_type(elem: Term) -> Term {
@@ -94,22 +94,19 @@ pub(super) fn elaborate_demand(
     operation: impl FnOnce() -> Term,
 ) -> Result<Term, Error> {
     Ok(match demand {
-        // A directly written bound: the same re-report the implicit fill in `apply.rs` makes, since a subject that does not terminate is refused by name either way. A written tuple or list literal whose demand has no structure yet — `List/map`'s list at `List(?T)` before anything pins `?T` — settles to its own product here rather than parking: an intrinsic has no turnaround an outer expectation can send element structure through, its later operands (the lambda that projects the element) need that structure, and this is the one place they would otherwise never get it.
-        Operand::At(type_) => match settle_against(context, operand, type_, SettleTier::Force)? {
-            Some(settled) => settled,
-            None => {
-                elaborate(context, operand, Mode::Check(type_.clone()))
-                    .map_err(|error| {
-                        exhausted_bound(
-                            context,
-                            error,
-                            type_,
-                            ErasedSite::OperandBound(Box::new(operation())),
-                        )
-                    })?
-                    .0
-            }
-        },
+        // A directly written bound: the same re-report the implicit fill in `apply.rs` makes, since a subject that does not terminate is refused by name either way.
+        Operand::At(type_) => {
+            elaborate(context, operand, Mode::Check(type_.clone()))
+                .map_err(|error| {
+                    exhausted_bound(
+                        context,
+                        error,
+                        type_,
+                        ErasedSite::OperandBound(Box::new(operation())),
+                    )
+                })?
+                .0
+        }
         Operand::IsType => check_is_sort(context, operand)?.0,
         Operand::Function { domains, codomain } => {
             let params = domains
@@ -118,7 +115,13 @@ pub(super) fn elaborate_demand(
                 .collect::<Vec<_>>();
             let expected = Term::func_type(params, codomain.clone());
 
-            elaborate(context, operand, Mode::Check(expected))?.0
+            // A lambda one of whose domains is still open waits as a call's argument does: `List/map`'s function reads an element whose shape the list's own literals have yet to give, and the operation's completion gives it before the body is read.
+            let blocked = !context.parking_suppressed()
+                && blocked_on_metavar(context, operand, &expected, &BTreeSet::new(), false)?;
+            match blocked {
+                true => park_checking(context, operand, &expected)?.0,
+                false => elaborate(context, operand, Mode::Check(expected))?.0,
+            }
         }
     })
 }

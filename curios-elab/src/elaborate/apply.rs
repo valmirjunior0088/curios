@@ -1,14 +1,13 @@
 use {
-    super::{Misaligned, align, flexible, trivially_inhabited},
+    super::{Misaligned, align, flexible, park_checking, trivially_inhabited},
     crate::{
-        ArgumentSite, Context, Entailed, ErasedSite, Error, FrozenFrame, Mode, ParkedWork,
-        SettleTier, Sort, attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort,
-        elaborate, entail, exhausted_bound, expect, is_prop, reduce_with, settle_against,
-        transitively_ground, zonk_solved_term_metas,
+        ArgumentSite, Context, Entailed, ErasedSite, Error, FrozenFrame, Mode, ParkedWork, Sort,
+        attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, elaborate, entail,
+        exhausted_bound, expect, is_prop, reduce_with, transitively_ground, zonk_solved_term_metas,
     },
     curios_core::{
-        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Intrinsic,
-        Level, MetavarId, One, Probe, Scope, Subterm, Telescope, Term, WitnessOrigin,
+        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Level,
+        MetavarId, One, Probe, Scope, Subterm, Telescope, Term, WitnessOrigin,
     },
     curios_utilities::Plicity,
     std::collections::BTreeSet,
@@ -395,11 +394,9 @@ pub(super) fn elaborate_apply(
         Mode::Infer => false,
     };
 
-    // The single walk. Every slot settles in telescope order, and the dependent substitution only ever receives elaborated terms or compiler-born metavariables — the invariant is the code path, not a guard. A written argument is checked at its domain, opened through the elaborated prefix; a checked-only intro form whose structure is still blocked (see `blocked_on_metavar`) becomes a parked checking problem whose placeholder stands in the telescope, retried by the wake machinery the moment a solution lands, so a sibling's turnaround retries the parked check before any later slot opens through it. The park is minted in both modes: an inferred apply has no turnaround, but the force tier below settles what the walk leaves blocked, and a park `check` made on its own would sit in the store beyond that tier's reach. A missing hidden slot is inserted at that same true domain. Under suppressed parking the blocked case checks eagerly instead: re-validation re-elaborates rebuilt nodes whose types are already solved, so the branch is dead over the corpus and merely safe.
+    // The single walk. Every slot is read in telescope order, and the dependent substitution only ever receives elaborated terms or compiler-born metavariables — the invariant is the code path, not a guard. A written argument is checked at its domain, opened through the elaborated prefix. A form that cannot be checked yet parks as a checking problem whose placeholder stands in the telescope, retried by the wake machinery the moment a solution lands, so a sibling's turnaround retries the parked check before any later slot opens through it: a tuple or a numeral parks itself where its type is stuck, and a lambda is parked here, where a domain of its expected type is stuck or the turnaround will pin its codomain (see `blocked_on_metavar`). What never wakes is answered where this call completes ([`Context::complete`]). A missing hidden slot is inserted at that same true domain. Under suppressed parking the blocked case checks eagerly instead: re-validation re-elaborates rebuilt nodes whose types are already solved, so the branch is dead over the corpus and merely safe.
     let original = ft.telescope.clone();
     let mut elaborated: Vec<Term> = Vec::with_capacity(marks.len());
-    // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
-    let mut pendings: Vec<(usize, MetavarId, Term)> = Vec::new();
     let mut cursor = original.cursor();
     for (index, plicity) in marks.iter().enumerate() {
         let (hint, ty) = cursor.entry().expect("a mark stands at an entry");
@@ -410,14 +407,8 @@ pub(super) fn elaborate_apply(
             .filter(|written| *plicity == Plicity::Explicit || !is_placeholder(context, written));
         let arg = match written {
             Some(written) => {
-                let blocked = !context.parking_suppressed()
-                    && matches!(
-                        &*written,
-                        Subterm::Func(_)
-                            | Subterm::Tuple(_)
-                            | Subterm::Intrinsic(Intrinsic::List { .. })
-                    )
-                    && {
+                let blocked =
+                    !context.parking_suppressed() && matches!(&*written, Subterm::Func(_)) && {
                         let result_metavars = result_metavars_from(context, &opened_link(&cursor));
                         blocked_on_metavar(
                             context,
@@ -428,18 +419,7 @@ pub(super) fn elaborate_apply(
                         )?
                     };
                 if blocked {
-                    let (placeholder, stand_in) =
-                        context.fresh_placeholder(ty.clone(), written.extent());
-                    context.park(
-                        ParkedWork::Checking {
-                            term: written.clone(),
-                            expected: ty.clone(),
-                            placeholder,
-                        },
-                        written.clone(),
-                    );
-                    pendings.push((elaborated.len(), placeholder, written));
-                    stand_in
+                    park_checking(context, &written, &ty)?.0
                 } else {
                     check(context, &written, ty.clone()).map_err(|error| {
                         error.at_argument(argument_site(
@@ -462,35 +442,8 @@ pub(super) fn elaborate_apply(
     let output = cursor.body().expect("a cursor past every entry");
 
     if let Mode::Check(expected) = &mode {
-        // The output carries any pending's placeholder, which *blocks* rather than manufacturing a raw substitution's false mismatches — conversion waits on a placeholder, never solving one to what the expectation states in its argument's place — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
+        // The output carries any parked argument's placeholder, which *blocks* rather than manufacturing a raw substitution's false mismatches — conversion waits on a placeholder, never solving one to what the expectation states in its argument's place — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
         expect(context, term, &output, expected)?;
-    }
-
-    if !pendings.is_empty() {
-        // The force tier: a pending still undischarged after the turnaround above is checked now, under whatever it pinned. A lambda whose domain only its own body can ground is grounded by that body here; the placeholder takes the checked term, so no pending outlives its apply undischarged. The tier takes each pending out of the store before it checks it, so a wake its own check sets off cannot run the written term a second time; one the turnaround's wakes already ran is gone from the store, its placeholder filled. A bracketed best-effort expect over the *raw* spellings before this tier would add nothing: measured across the corpus, it discharges no pending the wake machinery and this tier do not.
-        //
-        // The tier runs in both modes. In checking mode the turnaround above has consulted the expectation; in inference mode there is no expectation to consult, and without the tier a `let z = id((1, true))` would leave its tuple parked until the item's drain, where `z.0` would already have met a bare metavariable. Either way no later slot opens through this one, so the tier's premise holds: nothing is left to give the expectation structure, and an inferred call commits to its argument's product exactly as a bare literal does.
-        for (slot, placeholder, written) in &pendings {
-            if context.take_checking(*placeholder).is_none() {
-                continue;
-            }
-            let slot_ty = original
-                .clone()
-                .nth(*slot, |k| elaborated[k].clone())
-                .expect("pending slot is within the telescope");
-            // A form that can be synthesized takes its product *here* rather than at the item's drain, so the rest of the item sees a real type — a projection off the result would otherwise check against a metavariable that only settles after every expression around it.
-            let checked = match settle_against(context, written, &slot_ty, SettleTier::Force)? {
-                Some(settled) => settled,
-                None => check(context, written, slot_ty)?,
-            };
-            context.fill_placeholder(*placeholder, checked.clone());
-            elaborated[*slot] = checked;
-        }
-
-        // The authoritative turnaround, through fully settled arguments.
-        if let Mode::Check(expected) = &mode {
-            expect(context, term, &output, expected)?;
-        }
     }
 
     // The rebuilt application is fully saturated; each argument's mark is its binder's plicity (inserted metavariables recorded like any other argument), so re-elaborating the rebuilt node is stable: every slot is then written, in telescope order, and nothing is minted twice.

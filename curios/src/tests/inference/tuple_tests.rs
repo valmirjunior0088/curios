@@ -1,10 +1,10 @@
 //! The tuple literal, which is checked-only and therefore lives or dies by its expectation.
 //!
-//! Two rules meet here. A literal whose expectation never gains structure synthesizes the non-dependent product, because by then nothing is left to send a dependent telescope. A literal whose expectation is merely *stuck* — a `rec` waiting on an index it has not been given — waits instead, since a solution is still coming. The refusals matter as much as the acceptances: a rigid non-tuple expectation and a rigidly stuck one both refuse at the literal.
+//! Three rules meet here. A literal whose expectation never gains structure takes the non-dependent product where the term that awaits its type has read its parts, because by then nothing is left to send a dependent telescope. Two literals that wait on one type are one shape there, each filling what the other left open, whichever is read first. A literal whose expectation is merely *stuck* — a `rec` waiting on an index it has not been given — waits instead, since a solution is still coming. The refusals matter as much as the acceptances: a rigid non-tuple expectation and a rigidly stuck one both refuse at the literal.
 
 use crate::tests::{error, run};
 
-// A tuple argument that is the *only* thing determining a call's type variable, where the result type does not mention it — so the apply's turnaround pins nothing and the literal is left holding its own expectation. The force tier settles it there, inside the call, rather than leaving it for the item's drain.
+// A tuple argument that is the *only* thing determining a call's type variable, where the result type does not mention it — so the apply's turnaround pins nothing and the literal is left holding its own expectation. The call gives it its shape where it completes, rather than leaving it for the item's drain.
 #[test]
 fn a_tuple_argument_no_caller_pins_settles_to_its_product() {
     let source = r#"
@@ -175,7 +175,7 @@ fn a_synthesized_labeled_product_reports_its_labels() {
     );
 }
 
-// An inferred call has no expectation to turn around, so its force tier is the only thing that can settle a tuple argument before the drain. Settled there, `z.0` reads the product at once instead of waiting for the drain to settle it, which is also what commits the call to the product (below).
+// An inferred call has no expectation to turn around, so its completion is what gives a tuple argument its shape. Shaped there, `z.0` reads the product at once instead of waiting for the item's end, which is also what commits the call to the product (below).
 #[test]
 fn a_tuple_argument_settles_inside_an_inferred_call() {
     let source = r#"
@@ -188,7 +188,7 @@ fn a_tuple_argument_settles_inside_an_inferred_call() {
     assert_eq!(run(source), b"1");
 }
 
-// Settling inside the call commits to the argument's own product, so a later labeled annotation can no longer relabel it — the same commitment a bare `let z = (1, true)` makes. Pinned so the trade is visible: a program relying on a drain-time pin is refused by the same report as the bare literal.
+// Shaping inside the call commits to the argument's own product, so a later labeled annotation can no longer relabel it — the same commitment a bare `let z = (1, true)` makes. Pinned so the trade is visible: a program relying on a pin from a later line is refused by the same report as the bare literal.
 #[test]
 fn an_inferred_call_commits_to_the_product_as_a_bare_literal_does() {
     let source = r#"
@@ -203,5 +203,192 @@ fn an_inferred_call_commits_to_the_product_as_a_bare_literal_does() {
     assert!(
         report.contains("inferred: {Nat, Bool}") && report.contains("expected: {a: Nat, b: Bool}"),
         "expected the bare literal's mismatch:\n{report}"
+    );
+}
+
+/// `body` over the declarations the programs below share, its last line the text printed. Each is written in both orders and run, so the kernel has judged what the elaborator admitted.
+fn program(body: &str) -> String {
+    format!(
+        r#"
+        use /std/{{Nat, Int, Byte, Bool, List, Str, Show, print}};
+        use /std/Bool/{{True, Holds}};
+        let id(@A: Type, a: A) -> A = a;
+        let g(@A: Type, x: A, pin: A) -> Nat = 0;
+        let first(@A: Type, x: A, pin: A) -> A = x;
+        let second(@A: Type, pin: A, x: A) -> A = x;
+        struct Pair(T: Type): pub Type {{ a: T, z: T }}
+        let b: Byte = 7;
+        let c: Bool = true;
+        let p: Holds(true) = True/qed();
+        let and(s: Str, t: Str) -> Str = Str/concat(s, Str/concat(" ", t));
+        let pair(q: {{Byte, Byte}}) -> Str = and(Show/show(q.0), Show/show(q.1));
+        {body}
+        "#
+    )
+}
+
+// Two literals at one type are one shape: the numerals of one wait for the fields of the other, through a call of the literal's own as well, and where both hold numerals the two take one default a field.
+#[test]
+fn two_literals_at_one_type_fill_each_other_whichever_is_read_first() {
+    let source = program(
+        r#"
+        let call = and(pair(first((5, 1), (b, b))), pair(second((b, b), (5, 1))));
+        let through = and(pair(first(id((5, 1)), (b, b))), pair(second((b, b), id((5, 1)))));
+        let mixed(q: {Int, Byte}) -> Str = and(Int/to_str(q.0), Show/show(q.1));
+        let signed = and(mixed(first((5, 1), (-3, b))), mixed(second((-3, b), (5, 1))));
+        print(and(call, and(through, signed)))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"5 1 5 1 5 1 5 1 +5 1 +5 1");
+}
+
+// A list's elements, a structure's fields and a match's arms each wait on one type as a call's arguments do.
+#[test]
+fn literals_in_a_list_a_structure_and_a_match_share_one_shape() {
+    let source = program(
+        r#"
+        let head(ys: List({Byte, Byte})) -> Str = match ys | [] => "none" | [h, ..t] => pair(h) end;
+        let literal_first = [(5, 1), (b, b)];
+        let literal_last = [(b, b), (5, 1)];
+        let leading = Pair { a = (5, 1), z = (b, b) };
+        let trailing = Pair { a = (b, b), z = (5, 1) };
+        let arm_first = match c | true => (5, 1) | false => (b, b) end;
+        let arm_last = match c | true => (b, b) | false => (5, 1) end;
+        let listed = and(head(literal_first), head(literal_last));
+        let built = and(pair(leading.a), pair(trailing.z));
+        let matched = and(pair(arm_first), pair(arm_last));
+        print(and(listed, and(built, matched)))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"5 1 7 7 5 1 5 1 5 1 7 7");
+}
+
+// A literal among a literal's fields takes its shape with it, and a list is a list whatever it holds: its numeral waits for the other list's element.
+#[test]
+fn a_literal_inside_a_literal_is_shaped_with_it() {
+    let source = program(
+        r#"
+        let lone(ys: List(Byte)) -> Str = match ys | [] => "none" | [h, ..t] => Show/show(h) end;
+        let nested = and(pair(first(((5, 1), c), ((b, b), c)).0), pair(second(((b, b), c), ((5, 1), c)).0));
+        let lists = and(lone(first([5], [b])), lone(second([b], [5])));
+        print(and(nested, lists))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"5 1 5 1 5 5");
+}
+
+// A sort among a literal's fields is met by an open type, and takes a level of its own as one that is an argument does: `Nat` and `Type` stand in one field whichever literal is read first.
+#[test]
+fn a_sort_inside_a_literal_takes_a_level_of_its_own() {
+    let source = program(
+        r#"
+        let sorts = g((Nat, c), (Type, c)) + g((Type, c), (Nat, c));
+        print(Nat/to_str(sorts))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"0");
+}
+
+// A lambda among a literal's fields waits on its field's type, which the annotated one beside it gives.
+#[test]
+fn a_lambda_inside_a_literal_is_typed_by_the_literal_beside_it() {
+    let source = program(
+        r#"
+        let lambdas = g((c, (y) => y), (c, (x: Nat) => x)) + g((c, (x: Nat) => x), (c, (y) => y));
+        print(Nat/to_str(lambdas))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"0");
+}
+
+// A product is a proposition where every field is one, which the fields alone say: the literal's fields are read before the product is held to the type it shapes, a literal among them first.
+#[test]
+fn a_tuple_of_proofs_is_a_proposition_where_it_takes_its_shape() {
+    let source = program(
+        r#"
+        let idp(@P: Prop, q: P) -> P = q;
+        let gp(@P: Prop, x: P, pin: P) -> Nat = 0;
+        let alone = idp((p, p));
+        let nested = idp(((p, p), (p, p)));
+        let listed = [(p, p)];
+        let chosen = match c | true => (p, p) | false => (p, p) end;
+        let beside = id((5, p));
+        print(Nat/to_str(gp((p, p), (p, p)) + List/len(listed) + beside.0))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"6");
+}
+
+// And where a type is declared, a tuple of proofs is refused as a proof is, by the elaborator and with the implicit named.
+#[test]
+fn a_tuple_of_proofs_is_refused_where_a_type_is_declared() {
+    let report = error(&program(
+        r#"
+        let r = id((p, p));
+        print("unreachable")
+        "#,
+    ));
+
+    assert!(
+        report.contains(
+            "a proposition was given where the implicit argument 'A' of 'id' takes a type"
+        ) && report.contains("{True, True} is a proposition"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// A lambda whose every domain is annotated says its type of itself, so among a literal's fields it is typed before the product is held, as a literal there is shaped: a pair of functions into propositions is a proposition where it stands, and is refused by the same report.
+#[test]
+fn a_tuple_of_functions_into_propositions_is_refused_where_a_type_is_declared() {
+    let report = error(&program(
+        r#"
+        let r = id(((x: Nat) => p, (x: Nat) => p));
+        print("unreachable")
+        "#,
+    ));
+
+    assert!(
+        report.contains(
+            "a proposition was given where the implicit argument 'A' of 'id' takes a type"
+        ) && report
+            .contains("is a proposition, and no proposition stands where a Type is declared"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// And at a sort left to inference, a list's element, the pair is a proposition as soon as it is read: the line after meets a list of propositions and takes its length, `List/len` standing over an element at any sort. Read as a type's there, the element would be held to a type by that call and the kernel would refuse it.
+#[test]
+fn a_pair_of_functions_into_propositions_is_a_proposition_on_the_next_line() {
+    let source = program(
+        r#"
+        let functions = [((x: Nat) => p, (x: Nat) => p)];
+        print(Nat/to_str(List/len(functions)))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"1");
+}
+
+// A lambda with a domain left open is typed after the product is held, since a literal beside it may give the domain, so a product of such is read again once the item has settled it.
+#[test]
+fn a_tuple_of_open_functions_into_propositions_is_refused_where_a_type_is_declared() {
+    let report = error(&program(
+        r#"
+        let r = g(((x) => p, (x) => p), ((x: Nat) => p, (x: Nat) => p));
+        print("unreachable")
+        "#,
+    ));
+
+    assert!(
+        report.contains(
+            "a proposition was given where the implicit argument 'A' of 'g' takes a type"
+        ),
+        "unexpected report:\n{report}"
     );
 }

@@ -3,9 +3,9 @@ mod tests;
 
 use {
     super::{
-        AwaitId, Binders, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedProblem,
-        ParkedWork, Problem, Sort, Watched, callee, convert, diagnose_embedding, diagnose_shape,
-        elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize,
+        AwaitId, Binders, Choice, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedChoice,
+        ParkedProblem, ParkedWork, Problem, Sort, Watched, callee, convert, diagnose_embedding,
+        diagnose_shape, elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize,
         numeral_default, probe_open_sort, problem_outcome, reduce_forced, refold_recs,
         refused_scrutinee, retry_discharge, retry_match, retry_projection, retry_witness,
         settle_qualities, shallow_scrutinee, subsume_outcome, synth_neutral,
@@ -17,8 +17,8 @@ use {
     },
     curios_core::{
         Advance, Apply, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
-        Intrinsic, Many, Metavar, MetavarId, MetavarOrigin, Proj, Quality, ReduceError, Scope,
-        Subterm, Telescope, Term, Transient, Universes, Visit,
+        Intrinsic, Many, Metavar, MetavarId, MetavarOrigin, Produced, Proj, Quality, ReduceError,
+        Scope, Subterm, Telescope, Term, Transient, Universes, Visit,
     },
     std::{
         cell::RefCell,
@@ -502,55 +502,44 @@ pub(crate) fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
     }
 }
 
-/// Which settle tier is asking [`settle_against`]. The force tier runs per-apply, directly after the turnaround; the drain's no-progress sweep runs once nothing in the whole item can move. A tuple settles at both: its non-dependent product is the only thing it could be once its own apply is done. A lambda settles only at the drain — the apply's result still flows onward, so an outer pin arriving later can deliver the full expected function type, whose hidden binders and canonical marks the check walk inserts and a committed written shape would forfeit; the drain is where that stops being possible.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SettleTier {
-    Force,
-    Drain,
-}
-
-/// Synthesize a checked-only form whose expectation never gained structure, and pin the expectation to what it inferred.
+/// Synthesize a lambda whose expectation never gained structure, and pin the expectation to what it inferred: the type its annotations and body state ([`elaborate_func_settle`]), an unannotated domain standing as a named metavariable for the body — or whatever the settled type later unifies with — to pin. `None` for any other form, and where the expectation *does* have structure, in which case ordinary checking owns it.
 ///
-/// `None` when the form cannot be synthesized at `tier` ([`SettleTier`] states which form settles where), or when the expectation *does* have structure, in which case ordinary checking owns it.
-///
-/// Parking a non-empty tuple literal or a lambda against a bare metavariable is right while structure could still arrive from that expectation, since only an expectation can supply a dependent telescope or a hidden binder. This serves the two places where nothing is left to send one. `()` and a list literal reach the same conclusion at their own arms and `elaborate_num_lit` reaches it for a numeral. A tuple settles to its non-dependent product; a lambda settles to the type its annotations and body state ([`elaborate_func_settle`]), an unannotated domain standing as a named metavariable for the body — or whatever the settled type later unifies with — to pin.
+/// Parking a lambda against a bare metavariable is right while structure could still arrive from that expectation, since only an expectation can supply a hidden binder. The item's drain is where nothing is left to send one.
 pub(crate) fn settle_against(
     context: &mut Context,
     term: &Term,
     expected: &Term,
-    tier: SettleTier,
 ) -> Result<Option<Term>, Error> {
-    let settleable = matches!(&**term, Subterm::Tuple(tuple) if !tuple.fields.is_empty())
-        || matches!(&**term, Subterm::Intrinsic(Intrinsic::List { items, .. }) if !items.is_empty())
-        || (tier == SettleTier::Drain && matches!(&**term, Subterm::Func(_)));
-    if !settleable {
+    let Subterm::Func(func) = &**term else {
         return Ok(None);
-    }
-
-    // A list literal's expectation is structured only once its *element* type is: `List(?T)` has decided nothing about the tuples inside the brackets, which parked against `?T` and have nothing to wake them before a sibling lambda projects the element.
+    };
     let structured = match &*reduce_with(context, expected)? {
         Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_some(),
-        Subterm::Intrinsic(Intrinsic::ListType(element))
-            if matches!(&**term, Subterm::Intrinsic(Intrinsic::List { .. })) =>
-        {
-            let element = reduce_with(context, element)?;
-            !stuck_on_metavar(context, &element)
-        }
         _ => true,
     };
     if structured {
         return Ok(None);
     }
 
-    let (rebuilt, inferred) = match &**term {
-        Subterm::Func(func) => elaborate_func_settle(context, func, term)?,
-        _ => elaborate(context, term, Mode::Infer)?,
-    };
+    let (rebuilt, inferred) = elaborate_func_settle(context, func, term)?;
     expect(context, term, &inferred, expected)?;
     Ok(Some(rebuilt))
 }
 
-/// Whether `arg` is a checked-only introduction form (tuple, lambda, list literal) that cannot be elaborated yet because the type structure it needs is an unsolved metavar — a tuple or list literal whose whole expected type, a lambda one of whose expected *domains*, or a list literal of such forms whose expected *element* type, reduces to one. (A lambda only needs its domains known: the body, which may project any parameter, can't be checked against an unknown domain; its codomain may stay a metavar. A list literal borrows its element type from `expected`, so it needs the expected head — `List _` — to be known, and an element that is itself such a form needs the element type known too, since it would park with nothing to wake it before a sibling lambda projects the element.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification.
+/// Whether every domain of `func` is written: a lambda whose type its annotations and body state, with nothing left for a term beside it to give.
+fn annotated(context: &mut Context, func: &Func) -> bool {
+    let mut cursor = func.telescope.cursor();
+    while let Some((_, domain)) = cursor.entry() {
+        if matches!(&*domain, Subterm::Metavar(metavar) if metavar.is_hole()) {
+            return false;
+        }
+        cursor.advance_fresh(|hint| context.fresh(hint));
+    }
+
+    true
+}
+
+/// Whether `arg` is a form that cannot be elaborated yet because the type structure it needs is an unsolved metavariable: a tuple literal or a numeral whose whole expected type, or a lambda one of whose expected *domains*, reduces to one. (A lambda only needs its domains known: the body, which may project any parameter, can't be checked against an unknown domain; its codomain may stay a metavariable.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification. A list literal is one of them: it is a list whatever it holds, and each element waits by itself.
 pub(crate) fn blocked_on_metavar(
     context: &mut Context,
     arg: &Term,
@@ -559,16 +548,15 @@ pub(crate) fn blocked_on_metavar(
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
-    let is_list = matches!(&**arg, Subterm::Intrinsic(Intrinsic::List { .. }));
     let is_tuple = matches!(&**arg, Subterm::Tuple(_));
     // A numeral waits as they do, on its whole type and nothing else: it is realized at whatever that comes to.
     let is_numeral = matches!(&**arg, Subterm::Transient(Transient::NumLit(_)));
-    if !is_lambda && !is_list && !is_tuple && !is_numeral {
+    if !is_lambda && !is_tuple && !is_numeral {
         return Ok(false);
     }
     let reduced = reduce_with(context, ty)?;
     if stuck_on_metavar(context, &reduced) {
-        // A tuple/list/lambda whose whole expected type is stuck on an unsolved metavar — a bare one, or a reduction waiting on one.
+        // A tuple, a numeral or a lambda whose whole expected type is stuck on an unsolved metavar — a bare one, or a reduction waiting on one.
         return Ok(true);
     }
     Ok(match &*reduced {
@@ -597,22 +585,6 @@ pub(crate) fn blocked_on_metavar(
                     && reduced.metavars().iter().any(|id| {
                         result_metavars.contains(id) && context.metavar_solution(*id).is_none()
                     }))
-        }
-        Subterm::Intrinsic(Intrinsic::ListType(element)) if is_list => {
-            // A list of tuples, lambdas or lists against `List(?T)`: the elements would park against `?T`, and only this apply's force tier can settle them, so the literal waits for it.
-            let Subterm::Intrinsic(Intrinsic::List { items, .. }) = &**arg else {
-                unreachable!("is_list");
-            };
-            let needs_structure = items.iter().any(|item| {
-                matches!(
-                    &**item,
-                    Subterm::Tuple(_)
-                        | Subterm::Func(_)
-                        | Subterm::Intrinsic(Intrinsic::List { .. })
-                )
-            });
-            let element = reduce_with(context, element)?;
-            needs_structure && stuck_on_metavar(context, &element)
         }
         _ => false,
     })
@@ -651,7 +623,7 @@ impl Context<'_> {
     }
 
     /// Complete the awaiting term `term`, which has read its parts and met its expectation: retry what a solution woke, take one choice among the problems it awaits, and start again, until none is left to take. Each choice is taken only here, where nothing the term reads can inform it any more, so what the term is admitted at does not follow the order of its parts. Inside an oracle nothing parks, so nothing waits to be taken.
-    pub(crate) fn complete(&mut self, term: AwaitId) -> Result<(), Error> {
+    pub(crate) fn complete(&mut self, term: Option<AwaitId>) -> Result<(), Error> {
         if self.parked_len() == 0 || self.parking_suppressed() {
             return Ok(());
         }
@@ -659,71 +631,234 @@ impl Context<'_> {
         let mut taken = BTreeSet::new();
         loop {
             self.retry_parked()?;
-            if !self.default_numerals(term, &mut taken)? {
+            if !self.take_choice(term, &mut taken)? {
                 return Ok(());
             }
         }
     }
 
-    /// Give the numerals `term` awaits on one bare metavariable their default, the one all of them realize at ([`numeral_default`]), by solving the metavariable to it; the wake realizes each. Numerals wait on one type where it is one metavariable, or two a parked conversion holds together. `taken` holds the metavariables already given one, so a default conversion could not commit is not offered again. Answers whether one was given.
-    fn default_numerals(
+    /// Take one choice among the checks `term` awaits, the lowest-ranked there is ([`Choice`]): a literal's shape, then the numerals' default, then a lambda at the function type its expectation has come to. `taken` holds what was taken already — a metavariable shaped or defaulted, a lambda's placeholder — so a choice conversion could not commit is not offered again. Answers whether one was taken.
+    fn take_choice(
         &mut self,
-        term: AwaitId,
+        term: Option<AwaitId>,
         taken: &mut BTreeSet<MetavarId>,
     ) -> Result<bool, Error> {
-        let (numerals, links) = self.numerals_awaited_by(term);
-
-        // Each numeral with the bare metavariable its type has come to, where it has come to one.
-        let mut waiting = Vec::with_capacity(numerals.len());
-        for numeral in numerals {
-            let reduced = self.with_retry_frame(&numeral.frame, |context| {
-                reduce_with(context, &numeral.expected)
-            })?;
-            if let Subterm::Metavar(Metavar { id, .. }) = &*reduced
-                && self.metavar_solution(*id).is_none()
-            {
-                waiting.push((*id, numeral));
-            }
-        }
-        let Some(first) = waiting
-            .iter()
-            .map(|(id, _)| *id)
-            .find(|id| !taken.contains(id))
-        else {
+        let (choices, links) = self.choices_awaited_by(term);
+        if choices.is_empty() {
             return Ok(false);
-        };
-        taken.insert(first);
+        }
 
-        // The metavariables held to the first by the conversions parked between them.
-        let mut held = BTreeSet::from([first]);
-        loop {
-            let before = held.len();
-            for link in &links {
-                if link.iter().any(|id| held.contains(id)) {
-                    held.extend(link.iter().copied());
+        // Each check with what its type has come to, and the bare metavariable where that is one.
+        let mut waiting = Vec::with_capacity(choices.len());
+        for choice in choices {
+            let reduced = self.with_retry_frame(&choice.frame, |context| {
+                reduce_with(context, &choice.expected)
+            })?;
+            let bare = match &*reduced {
+                Subterm::Metavar(Metavar { id, .. }) if self.metavar_solution(*id).is_none() => {
+                    Some(*id)
+                }
+                _ => None,
+            };
+            waiting.push((bare, reduced, choice));
+        }
+        let open = |choice: Choice, taken: &BTreeSet<MetavarId>| {
+            waiting.iter().position(|(bare, _, waiting)| {
+                waiting.choice == choice && bare.is_some_and(|id| !taken.contains(&id))
+            })
+        };
+
+        if let Some(at) = open(Choice::Shape, taken) {
+            let (bare, _, choice) = &waiting[at];
+            let id = bare.expect("an open choice waits on a bare metavariable");
+            taken.insert(id);
+            self.shape(id, choice)?;
+            return Ok(true);
+        }
+
+        if let Some(at) = open(Choice::Numeral, taken) {
+            let first = waiting[at]
+                .0
+                .expect("an open choice waits on a bare metavariable");
+            taken.insert(first);
+
+            // The metavariables held to the first by the conversions parked between them: numerals wait on one type where it is one metavariable, or two a parked conversion holds together.
+            let mut held = BTreeSet::from([first]);
+            loop {
+                let before = held.len();
+                for link in &links {
+                    if link.iter().any(|id| held.contains(id)) {
+                        held.extend(link.iter().copied());
+                    }
+                }
+                if held.len() == before {
+                    break;
                 }
             }
-            if held.len() == before {
-                break;
+            let literals = waiting
+                .iter()
+                .filter(|(bare, _, waiting)| {
+                    waiting.choice == Choice::Numeral && bare.is_some_and(|id| held.contains(&id))
+                })
+                .filter_map(|(_, _, waiting)| match &*waiting.written {
+                    Subterm::Transient(Transient::NumLit(literal)) => Some(literal),
+                    _ => None,
+                });
+            let default = numeral_default(self, literals);
+            let choice = &waiting[at].2;
+            self.with_retry_frame(&choice.frame, |context| {
+                expect(context, &choice.written, &default, &choice.expected)
+            })?;
+            return Ok(true);
+        }
+
+        // A lambda whose expectation has become a function type and that still waits, a domain of it being open: nothing its term reads can give that domain any more, so the body is what grounds it.
+        let lambda = waiting.iter().find(|(_, reduced, waiting)| {
+            waiting.choice == Choice::Lambda
+                && matches!(&**reduced, Subterm::FuncType(_))
+                && !taken.contains(&waiting.placeholder)
+        });
+        if let Some((_, _, choice)) = lambda {
+            taken.insert(choice.placeholder);
+            if self.take_checking(choice.placeholder).is_some() {
+                let checked = self.with_retry_frame(&choice.frame, |context| {
+                    check(context, &choice.written, choice.expected.clone())
+                })?;
+                self.fill_placeholder(choice.placeholder, checked);
+            }
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    /// Give the bare metavariable `id` the shape of the tuple literal that waits on it: a non-dependent product of one open type a field, labelled as the literal is.
+    ///
+    /// The literal is checked at the product first, and each field that says what it is of itself is read in its turn ([`Context::structure`]), and only then is the product held to `id`: a product is a proposition where every field is one, which the fields alone say, so held to `id` unread it would be sized as a type's whatever it came to hold. Every other literal that waits on `id` is checked at the product by the wake, each filling what the other left open.
+    ///
+    /// A part is a type left to inference, at a sort of its own: a proposition's where `id`'s own sort is one, every field of a record of propositions being one, and its quality open otherwise. Its level is bounded by the field it is given and by the product it stands in, as a field's is where a product is synthesized from its fields.
+    fn shape(&mut self, id: MetavarId, choice: &ParkedChoice) -> Result<(), Error> {
+        let Subterm::Tuple(tuple) = &*choice.written else {
+            unreachable!("a shape is a tuple literal's");
+        };
+        // Out of the store while it is checked, so a wake its own fields set off cannot run it a second time.
+        if self.take_checking(choice.placeholder).is_none() {
+            return Ok(());
+        }
+        let sort = self
+            .metavar_entry(id)
+            .map(|entry| entry.result.clone())
+            .expect("a metavariable waited on has a birth record");
+
+        let (product, parts, checked, declared) =
+            self.with_retry_frame(&choice.frame, |context| {
+                let declared = match &*reduce_with(context, &sort)? {
+                    Subterm::Sort(quality, _) => Some(context.universes().quality(*quality)),
+                    _ => None,
+                };
+                let mut fields = Vec::with_capacity(tuple.fields.len());
+                let mut parts = Vec::with_capacity(tuple.fields.len());
+                for position in 0..tuple.fields.len() {
+                    let part = match declared {
+                        Some(Quality::Prop) => context.fresh_prop_sort("literal field"),
+                        _ => context.fresh_sort("literal field"),
+                    };
+                    let (part, hole) = context.fresh_hole(part, choice.written.extent());
+                    parts.push(part);
+                    // `names` is empty for a positional literal, not a row of `None`s, so the label is read by position.
+                    let name = tuple.names.get(position).and_then(|name| name.as_deref());
+                    fields.push((context.fresh(name), hole));
+                }
+                let product = Term::tuple_type(fields);
+                let checked = check(context, &choice.written, product.clone())?;
+
+                Ok::<_, Error>((product, parts, checked, declared))
+            })?;
+        self.fill_placeholder(choice.placeholder, checked);
+
+        for part in parts {
+            self.structure(part)?;
+        }
+
+        self.with_retry_frame(&choice.frame, |context| {
+            expect(context, &choice.written, &product, &choice.expected)
+        })?;
+        // Where the metavariable was declared a type, the product is read again once the item has settled its fields ([`Context::hold_shapes`]). Where its sort was left to inference there is nothing declared to hold it to.
+        if declared == Some(Quality::Type) {
+            self.note_shaped(choice.clone());
+        }
+
+        Ok(())
+    }
+
+    /// Read the form parked on the bare metavariable `id`, a part of a shape, where it says what it is of itself, with nothing beside it to wait for: a literal takes its shape, and a lambda whose every domain is annotated the type its annotations and body state. Any other form is left parked, a lambda with a domain left open among them, which a literal beside it may give.
+    fn structure(&mut self, id: MetavarId) -> Result<(), Error> {
+        let Some(inner) = self.choice_waiting_on(id) else {
+            return Ok(());
+        };
+
+        match (&*inner.written, inner.choice) {
+            (_, Choice::Shape) => self.shape(id, &inner),
+            (Subterm::Func(func), Choice::Lambda) if annotated(self, func) => {
+                if self.take_checking(inner.placeholder).is_none() {
+                    return Ok(());
+                }
+                let checked =
+                    self.with_retry_frame(&inner.frame, |context| {
+                        match settle_against(context, &inner.written, &inner.expected)? {
+                            Some(settled) => Ok(settled),
+                            None => check(context, &inner.written, inner.expected.clone()),
+                        }
+                    })?;
+                self.fill_placeholder(inner.placeholder, checked);
+
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Hold each product a literal shaped, at a metavariable declared a `Type`, to that sort, now that the item has settled what the product's fields are. A product is sized where it is held to its metavariable, and a field still open there — a lambda, typed after it — is read as a type's whatever it comes to hold, so a record of propositions where a `Type` is declared would be the kernel's to refuse. It is refused here, as it is where every field is read before the product is held.
+    fn hold_shapes(&mut self) -> Result<(), Error> {
+        for shaped in self.take_shaped() {
+            let Subterm::Metavar(metavar) = &*shaped.expected else {
+                continue;
+            };
+            let Some(declared) = self
+                .metavar_entry(metavar.id)
+                .filter(|entry| entry.solution.is_some())
+                .map(|entry| entry.result.clone())
+            else {
+                continue;
+            };
+            let refused = self.with_retry_frame(&shaped.frame, |context| {
+                let product = zonk_solved_term_metas(context, &shaped.expected);
+                if quality_of(context, &product)? != Quality::Prop {
+                    return Ok(None);
+                }
+
+                Ok::<_, Error>(Some(match &metavar.origin {
+                    MetavarOrigin::Implicit(ImplicitOrigin { func, binder }) => {
+                        let given = resolved_for_display(context, &product);
+                        Error::implicit_at_other_sort(
+                            callee(context, func),
+                            binder.clone(),
+                            given,
+                            true,
+                        )
+                    }
+                    _ => {
+                        let sort = sort_term(context, &product)?;
+                        display_mismatch(context, &shaped.written, &sort, &declared)
+                    }
+                }))
+            })?;
+            if let Some(error) = refused {
+                return Err(error.at_opt(shaped.written.extent()));
             }
         }
 
-        let default = numeral_default(
-            self,
-            waiting
-                .iter()
-                .filter(|(id, _)| held.contains(id))
-                .map(|(_, numeral)| &numeral.literal),
-        );
-        let (_, numeral) = waiting
-            .into_iter()
-            .find(|(id, _)| *id == first)
-            .expect("the first is one of the waiting");
-        self.with_retry_frame(&numeral.frame, |context| {
-            expect(context, &numeral.written, &default, &numeral.expected)
-        })?;
-
-        Ok(true)
+        Ok(())
     }
 
     /// Retry every currently parked problem once without requiring the store to become empty. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked.
@@ -735,13 +870,9 @@ impl Context<'_> {
         self.retry_parked()
     }
 
-    /// Give every parked checking problem whose form can be *synthesized* one last chance, once the drain has established that no further solution is coming.
+    /// Give every parked lambda whose expectation never gained structure its last chance, once the drain has established that no further solution is coming: its annotations and body state its type, and an unannotated domain — the one part synthesis cannot state — stands as a metavariable named after its binder, pinned by the body, by whatever the settled type unifies with as parked work wakes, or reported by zonk as the parameter whose type was never determined ([`settle_against`]).
     ///
-    /// A non-empty tuple literal parks against a bare expected metavariable, and rightly: a dependent telescope can only ever arrive from the expectation, so committing to the non-dependent product while one could still arrive would be a guess. When nothing is left to send one the guess is no longer a guess — the non-dependent product is the only thing the literal could be — and this is the point where "nothing newly solved, nothing left to retry" is decidable. `()` and a list literal reach the same conclusion eagerly at their own arms, `elaborate_num_lit` reaches it for a numeral; this is where the non-empty tuple reaches it.
-    ///
-    /// A lambda settles by the same reasoning: its annotations and body state its type, and an unannotated domain — the one part synthesis cannot state — stands as a metavariable named after its binder, pinned by the body, by whatever the settled type unifies with as parked work wakes, or reported by zonk as the parameter whose type was never determined ([`elaborate_func_settle`]).
-    ///
-    /// Answers whether anything settled, so the drain can loop once more: an obligation watching the metavariable this just solved — a witness goal on the tuple's own type — must get its retry before anything is reported.
+    /// Answers whether anything settled, so the drain can loop once more: an obligation watching the metavariable this just solved must get its retry before anything is reported.
     fn settle_synthesizable(&mut self) -> Result<bool, Error> {
         let mut settled = false;
         for parked in self.take_parked() {
@@ -763,9 +894,8 @@ impl Context<'_> {
             };
 
             let (term, expected, placeholder) = (term.clone(), expected.clone(), *placeholder);
-            let settled_term = self.with_retry_frame(&frame, |context| {
-                settle_against(context, &term, &expected, SettleTier::Drain)
-            });
+            let settled_term =
+                self.with_retry_frame(&frame, |context| settle_against(context, &term, &expected));
             let rebuilt = match settled_term {
                 Ok(None) => {
                     self.repark(work, origin, frame);
@@ -783,9 +913,16 @@ impl Context<'_> {
         Ok(settled)
     }
 
-    /// Drain the parked store: retry everything to a fixpoint, then report any survivor as a mismatch at its origin. Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and frozen frames do not pile up.
+    /// Drain the parked store ([`Context::drain_store`]), then hold each product a literal shaped to the sort its metavariable was declared at ([`Context::hold_shapes`]). Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and frozen frames do not pile up.
     pub(crate) fn drain_parked(&mut self) -> Result<(), Error> {
+        self.drain_store()?;
+        self.hold_shapes()
+    }
+
+    /// Retry everything parked to a fixpoint, taking what no term awaited as a term's completion takes its own, then report any survivor as a mismatch at its origin.
+    fn drain_store(&mut self) -> Result<(), Error> {
         curios_profile::profile!("typing::drain_parked");
+        let mut taken = BTreeSet::new();
         loop {
             self.retry_parked()?;
 
@@ -802,7 +939,11 @@ impl Context<'_> {
 
             // No progress in a full sweep: the rest can never resolve. A conversion held up by written goals alone is not an error but the goals' own report — the batch at module end names each `?`, and this obligation goes with it as what the hole must make true; the program never compiles with a goal in it, so the dropped constraint is never unchecked. Anything else reports the first survivor at its origin.
             if self.parked_len() >= before && !self.has_newly_solved() {
-                // A form that can be synthesized is settled before anything is reported: parking was right while its expectation could still gain structure, and this is where that stops being true.
+                // What no term awaits is the item's to answer, by the ranks a term completes by ([`Context::complete`]), before anything is reported.
+                if self.take_choice(None, &mut taken)? {
+                    continue;
+                }
+                // A lambda no expectation ever reached is settled last: parking was right while one could still arrive, and this is where that stops being true.
                 if self.settle_synthesizable()? {
                     continue;
                 }
@@ -1072,10 +1213,13 @@ fn retry_work(
             match problem_outcome(context, goal.clone(), origin.extent())? {
                 Outcome::Converts => Retry::Converts,
                 // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
-                // What was compared is read off the type the problem is posed at: at a sort the two are types, one inferred and one expected, and anywhere else they are terms a type states at one position.
+                // What was compared is read off the type the problem is posed at: at a sort the two are types, one inferred and one expected, and anywhere else they are terms a type states at one position. A residual of the carriers' algebra is posed at `Type` for want of the type it stands at, and is told from two types by what it is: a value an intrinsic builds is no type.
                 Outcome::Mismatch(declined) => Retry::Mismatch(
                     match &*goal.type_ {
-                        Subterm::Sort(..) => {
+                        Subterm::Sort(..)
+                            if !(intrinsic_value(context, &goal.this)
+                                || intrinsic_value(context, &goal.that)) =>
+                        {
                             display_mismatch(context, &origin, &goal.this, &goal.that)
                         }
                         _ => Error::terms_differ(
@@ -1107,6 +1251,15 @@ fn retry_work(
             Ok(())
         }
     }
+}
+
+/// Whether `term` is a value an intrinsic builds, a literal or an operation's result, and so no type.
+fn intrinsic_value(context: &Context, term: &Term) -> bool {
+    matches!(
+        &**term,
+        Subterm::Intrinsic(intrinsic)
+            if !matches!(intrinsic.signature(&context.syntax()).produced, Produced::Sort)
+    )
 }
 
 /// Retry a parked *checking problem*: under the frozen frame, the expected type either still reduces to a bare metavariable (re-park) or has gained structure — run the check for real and fill the placeholder with the rebuilt term. Errors propagate carrying the term's own extents.

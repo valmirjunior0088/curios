@@ -28,7 +28,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
 
 #[test]
 fn a_tuple_pattern_in_a_later_parameter_waits_for_the_accumulator() {
-    // `fold`'s initial accumulator is a tuple literal parked against `?A`, and the step lambda projects its *second* parameter, whose domain is that same `?A`: the lambda is postponed like one whose first domain is stuck, the force tier settles the tuple first, and the projection meets a product.
+    // `fold`'s initial accumulator is a tuple literal parked against `?A`, and the step lambda projects its *second* parameter, whose domain is that same `?A`: the lambda is postponed like one whose first domain is stuck, the call gives the tuple its shape where it completes, ahead of the lambda, and the projection meets a product.
     let source = r#"
         use /std/{Nat, List, Str};
         let counted: {Nat, Nat} =
@@ -42,7 +42,7 @@ fn a_tuple_pattern_in_a_later_parameter_waits_for_the_accumulator() {
 
 #[test]
 fn a_list_of_tuples_settles_before_the_lambda_that_projects_them() {
-    // The literal's tuples park against the element metavariable and nothing would wake them before the lambda's body projects the element, so the literal itself is postponed and settled at the force tier, ahead of the lambda in slot order.
+    // The literal's tuples park against the element metavariable and nothing would wake them before the lambda's body projects the element, so the lambda waits on its domain as they do, and the call shapes them where it completes, a shape being taken ahead of a lambda's check.
     let source = r#"
         use /std/{Nat, List, Str};
         let sums: List(Nat) = List/map([(1, 2), (3, 4)], ((a, b)) => a + b);
@@ -403,7 +403,7 @@ fn a_refusal_at_the_entrys_drain_is_reported_once() {
     assert!(!report.contains("was not inferred"), "{report}");
 }
 
-// A written argument is checked as written, and then held to its call's type. A list or a tuple at a slot whose type is still a metavariable waits behind a placeholder, and the call's expected type states the slot's value before the argument is checked. Conversion waits on the placeholder as it waits on a recursive group's slot, so nothing but the argument's own check fills it, and the value the type states meets the argument that was written. Mutation-checked: letting conversion solve a placeholder accepts both, with the type's list standing where the argument was written.
+// A written argument is checked as written, and then held to its call's type. A tuple at a slot whose type is still a metavariable waits behind a placeholder, as a numeral does in a list read where it stands, and the call's expected type states the slot's value before the argument is checked. Conversion waits on the placeholder as it waits on a recursive group's slot, so nothing but the argument's own check fills it, and the value the type states meets the argument that was written. Mutation-checked: letting conversion solve a placeholder accepts both, with the type's value standing where the argument was written.
 #[test]
 fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
     let tagged = error(
@@ -412,7 +412,7 @@ fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
         induct Tagged(@A : Type) : (A) -> Type
         | tag(@z : A) : (z)
         end
-        let relevant : Tagged()([7, 8, 9]) = Tagged/tag(@_, @[1]);
+        let relevant : Tagged()([7]) = Tagged/tag(@_, @[1]);
         /std/print("unreachable")
         "#,
     );
@@ -421,7 +421,7 @@ fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
     let reflexive = error(
         r#"
         use /std/{Eq, List, Nat};
-        let also(x : Nat, y : Nat) -> Eq()([x], [x]) = Eq/refl(@_, @[y]);
+        let also(x : Nat, y : Nat) -> Eq()((x, x), (x, x)) = Eq/refl(@_, @(y, y));
         /std/print("unreachable")
         "#,
     );
@@ -437,7 +437,7 @@ fn a_plain_argument_is_held_to_the_value_its_calls_type_states() {
         induct Boxed(@A : Type) : (A) -> Type
         | box(z : A) : (z)
         end
-        let boxed : Boxed()([7, 8, 9]) = Boxed/box([1]);
+        let boxed : Boxed()([7]) = Boxed/box([1]);
         /std/print("unreachable")
         "#,
     );
@@ -456,7 +456,7 @@ fn a_plain_argument_is_held_to_the_value_its_calls_type_states() {
     assert!(tuple.contains("terms differ"), "{tuple}");
 }
 
-// A literal that parks inside an argument — a match arm's tuple, a `let` body's — is no pending of the call's own, so no force tier runs it and only its retry does. It is held to the type as the argument itself is. Mutation-checked, as above.
+// A literal that parks inside an argument — a match arm's tuple, a `let` body's — is run by its retry or by the completion of the term that awaits its type, and is held to the call's type as the argument itself is. Mutation-checked, as above.
 #[test]
 fn a_literal_inside_an_argument_is_held_to_the_value_its_calls_type_states() {
     let arm = error(

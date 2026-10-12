@@ -2548,6 +2548,15 @@ impl<'s> Context<'s> {
         Term::sort_at(quality, Level::meta(level))
     }
 
+    /// The sort of a proposition left to inference: [`Context::fresh_sort`] with its quality stated, for a part of what is known a proposition — every field of a record of propositions is one.
+    pub(crate) fn fresh_prop_sort(&mut self, kind: &str) -> Term {
+        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Other(kind.into()));
+        let level = self
+            .universes_mut()
+            .fresh(UniverseRole::Flexible, Some(origin));
+        Term::sort_at(Quality::Prop, Level::meta(level))
+    }
+
     /// Close the qualities nothing decided, each as a type's ([`UniverseSolver::default_qualities`]). An item closes them once it has drained what it parked: a problem that waited on a metavariable may be the one that puts a proposition under a sort left to inference, and it is retried after the item's levels have closed.
     pub(crate) fn close_qualities(&mut self) {
         self.universes_mut().default_qualities();
@@ -2748,7 +2757,7 @@ impl<'s> Context<'s> {
         body: impl FnOnce(&mut Self) -> Result<R, Error>,
     ) -> Result<R, Error> {
         let (term, enclosing) = self.underway.attempt.solutions.enter_awaiting();
-        let result = body(self).and_then(|read| self.complete(term).map(|()| read));
+        let result = body(self).and_then(|read| self.complete(Some(term)).map(|()| read));
         self.underway
             .attempt
             .solutions
@@ -2794,12 +2803,27 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.waiting_numerals()
     }
 
-    /// [`Solutions::numerals_awaited_by`].
-    pub(crate) fn numerals_awaited_by(
+    /// [`Solutions::choices_awaited_by`].
+    pub(crate) fn choices_awaited_by(
         &self,
-        term: AwaitId,
-    ) -> (Vec<ParkedNumeral>, Vec<BTreeSet<MetavarId>>) {
-        self.underway.attempt.solutions.numerals_awaited_by(term)
+        term: Option<AwaitId>,
+    ) -> (Vec<ParkedChoice>, Vec<BTreeSet<MetavarId>>) {
+        self.underway.attempt.solutions.choices_awaited_by(term)
+    }
+
+    /// [`Solutions::choice_waiting_on`].
+    pub(crate) fn choice_waiting_on(&self, id: MetavarId) -> Option<ParkedChoice> {
+        self.underway.attempt.solutions.choice_waiting_on(id)
+    }
+
+    /// [`Solutions::note_shaped`].
+    pub(crate) fn note_shaped(&mut self, choice: ParkedChoice) {
+        self.underway.attempt.solutions.note_shaped(choice);
+    }
+
+    /// [`Solutions::take_shaped`].
+    pub(crate) fn take_shaped(&mut self) -> Vec<ParkedChoice> {
+        self.underway.attempt.solutions.take_shaped()
     }
 
     /// Park blocked work: freeze the live local frame around it and record which unsolved metavariables could unblock it.

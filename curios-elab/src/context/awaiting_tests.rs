@@ -193,3 +193,37 @@ fn a_problem_waits_on_what_its_metavariables_were_solved_to() {
 
     assert_eq!(context.wake_parked().len(), 1);
 }
+
+// A parked check states the choice a completing term may take for it, and the choices are taken in the order they are declared: a shape commits less than a default, and a default less than a lambda's check.
+#[test]
+fn a_parked_check_states_the_choice_its_term_may_take() {
+    let parked = |term: Term| ParkedWork::Checking {
+        term,
+        expected: Term::hole(0),
+        placeholder: MetavarId(1),
+    };
+    let number = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+    let binder = Free::local(0, None);
+    let lambda = Term::func([(binder, Term::type_ground())], Term::free_var(&binder));
+
+    assert_eq!(
+        parked(Term::tuple(vec![number.clone()])).choice(),
+        Some(Choice::Shape)
+    );
+    assert_eq!(
+        parked(Term::num_lit_char('a')).choice(),
+        Some(Choice::Numeral)
+    );
+    assert_eq!(parked(lambda).choice(), Some(Choice::Lambda));
+    assert_eq!(
+        parked(Term::tuple(Vec::<Term>::new())).choice(),
+        None,
+        "an empty tuple is its own type's"
+    );
+    assert_eq!(
+        parked(number).choice(),
+        None,
+        "a realized number is no literal"
+    );
+    assert!(Choice::Shape < Choice::Numeral && Choice::Numeral < Choice::Lambda);
+}

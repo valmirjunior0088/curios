@@ -72,7 +72,7 @@ pub(crate) enum MetaKind {
 pub(crate) enum ParkedWork {
     /// A conversion constraint that quiesced blocked on unsolved metavariables.
     Conversion(Problem),
-    /// A whole checking problem: a checked-only introduction form met an expected type whose structure is still an unsolved metavariable. The `placeholder` metavariable stands in for the rebuilt term in the tree and is solved with it once the check can run — the spine machinery then splices it everywhere the occurrence travelled. The term is elaborated once: whatever runs the check — a wake's retry, its apply's force tier, the drain's settle — holds the problem out of the store while it does.
+    /// A whole checking problem: a form met an expected type whose structure is still an unsolved metavariable. The `placeholder` metavariable stands in for the rebuilt term in the tree and is solved with it once the check can run — the spine machinery then splices it everywhere the occurrence travelled. The term is elaborated once: whatever runs the check — a wake's retry, a term's completion, the drain — holds the problem out of the store while it does.
     Checking {
         term: Term,
         expected: Term,
@@ -128,13 +128,63 @@ pub(crate) struct ParkedProblem {
     pub watching: BTreeSet<MetavarId>,
 }
 
-/// A numeral parked as a check ([`ParkedWork::Checking`]): the literal, the term it is written as, the type it waits at and the frame it froze.
-#[derive(Debug)]
-pub(crate) struct ParkedNumeral {
-    pub literal: NumLit,
+/// What a completing term may do for a parked problem nothing else answers: the problem's own answer, one among those it admits ([`ParkedWork::choice`]). Their order is the order they are taken in, each committing less than the next and able to decide it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Choice {
+    /// A tuple literal gives the metavariable it waits on its shape: a non-dependent product of one open type a field.
+    Shape,
+    /// The numerals that wait on one metavariable take their default together.
+    Numeral,
+    /// A lambda is checked at the function type its expectation has come to, whatever of its domains is still open.
+    Lambda,
+}
+
+impl ParkedWork {
+    /// The choice a completing term may take for this problem, or `None` where only a solution answers it. Stated here once, so no consumer of the store recognizes a problem by its shape.
+    pub(crate) fn choice(&self) -> Option<Choice> {
+        match self {
+            ParkedWork::Checking { term, .. } => match &**term {
+                Subterm::Tuple(tuple) if !tuple.fields.is_empty() => Some(Choice::Shape),
+                Subterm::Transient(Transient::NumLit(_)) => Some(Choice::Numeral),
+                Subterm::Func(_) => Some(Choice::Lambda),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
+/// A parked check with a choice a completing term may take for it ([`ParkedWork::choice`]): the term as written, the type it waits at, the placeholder that stands for it and the frame it froze.
+#[derive(Debug, Clone)]
+pub(crate) struct ParkedChoice {
+    pub choice: Choice,
     pub written: Term,
     pub expected: Term,
+    pub placeholder: MetavarId,
     pub frame: FrozenFrame,
+}
+
+impl ParkedProblem {
+    /// This problem as a check with a choice of its own, where it is one ([`ParkedWork::choice`]).
+    fn as_choice(&self) -> Option<ParkedChoice> {
+        match (&self.work, self.work.choice()) {
+            (
+                ParkedWork::Checking {
+                    term,
+                    expected,
+                    placeholder,
+                },
+                Some(choice),
+            ) => Some(ParkedChoice {
+                choice,
+                written: term.clone(),
+                expected: expected.clone(),
+                placeholder: *placeholder,
+                frame: self.frame.clone(),
+            }),
+            _ => None,
+        }
+    }
 }
 
 /// The flat, frame-independent unification stores. `Context` holds exactly one of these; see the module documentation for the frame-independence contract.
@@ -158,6 +208,8 @@ pub(crate) struct Solutions {
     reading: Option<AwaitId>,
     /// Journal of every metavariable handed from one awaiting term to another: how many solutions were committed when it moved, and what awaited it before. [`Solutions::unwind_to`] restores what moved since its watermark.
     moved: Vec<(usize, MetavarId, Option<AwaitId>)>,
+    /// The literals that gave a metavariable its shape since the last drain. A product is sized where it is held to its metavariable, and the drain reads it again once every field is settled.
+    shaped: Vec<ParkedChoice>,
 }
 
 impl Solutions {
@@ -172,6 +224,7 @@ impl Solutions {
             awaiting: Vec::new(),
             reading: None,
             moved: Vec::new(),
+            shaped: Vec::new(),
         }
     }
 
@@ -240,39 +293,24 @@ impl Solutions {
         self.hand(orphans, reading);
     }
 
-    /// The numerals parked as checks that `term` awaits, and beside them what each conversion `term` awaits watches: the links by which two of those numerals wait on one type.
-    pub(crate) fn numerals_awaited_by(
+    /// The parked checks `term` awaits that have a choice of their own, in the order they were parked, and beside them what each conversion `term` awaits watches: the links by which two of those checks wait on one type. `None` asks for what no standing term awaits, which is the item's.
+    pub(crate) fn choices_awaited_by(
         &self,
-        term: AwaitId,
-    ) -> (Vec<ParkedNumeral>, Vec<BTreeSet<MetavarId>>) {
+        term: Option<AwaitId>,
+    ) -> (Vec<ParkedChoice>, Vec<BTreeSet<MetavarId>>) {
         let awaited = |parked: &&ParkedProblem| {
             let unsolved = parked
                 .watching
                 .iter()
                 .copied()
                 .filter(|id| self.solution(*id).is_none());
-            self.outermost(unsolved) == Some(term)
+            self.outermost(unsolved) == term
         };
-        let numerals = self
+        let choices = self
             .parked
             .iter()
             .filter(awaited)
-            .filter_map(|parked| match &parked.work {
-                ParkedWork::Checking {
-                    term: written,
-                    expected,
-                    ..
-                } => match &**written {
-                    Subterm::Transient(Transient::NumLit(literal)) => Some(ParkedNumeral {
-                        literal: literal.clone(),
-                        written: written.clone(),
-                        expected: expected.clone(),
-                        frame: parked.frame.clone(),
-                    }),
-                    _ => None,
-                },
-                _ => None,
-            })
+            .filter_map(ParkedProblem::as_choice)
             .collect();
         let links = self
             .parked
@@ -282,7 +320,27 @@ impl Solutions {
             .map(|parked| parked.watching.clone())
             .collect();
 
-        (numerals, links)
+        (choices, links)
+    }
+
+    /// The check with a choice of its own parked on the bare metavariable `id`, where one is: the field a part of a shape holds while the shape is being given.
+    pub(crate) fn choice_waiting_on(&self, id: MetavarId) -> Option<ParkedChoice> {
+        self.parked
+            .iter()
+            .filter_map(ParkedProblem::as_choice)
+            .find(
+                |parked| matches!(&*parked.expected, Subterm::Metavar(metavar) if metavar.id == id),
+            )
+    }
+
+    /// Record that the literal of `choice` shaped the metavariable it waited on: what the item's drain holds to the sort that metavariable was declared at ([`Solutions::take_shaped`]).
+    pub(crate) fn note_shaped(&mut self, choice: ParkedChoice) {
+        self.shaped.push(choice);
+    }
+
+    /// Take the literals that shaped a metavariable since the last drain.
+    pub(crate) fn take_shaped(&mut self) -> Vec<ParkedChoice> {
+        mem::take(&mut self.shaped)
     }
 
     /// Mint the next metavariable id.
@@ -604,7 +662,7 @@ impl Solutions {
         mem::take(&mut self.parked)
     }
 
-    /// Take the checking problem parked behind `placeholder`, where it still waits: what an apply's force tier runs itself, out of reach of the wakes its own check sets off.
+    /// Take the checking problem parked behind `placeholder`, where it still waits: what a completing term runs itself, out of reach of the wakes its own check sets off.
     pub(crate) fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
         let index = self.parked.iter().position(|parked| {
             matches!(&parked.work, ParkedWork::Checking { placeholder: held, .. } if *held == placeholder)

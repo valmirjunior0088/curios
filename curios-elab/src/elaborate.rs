@@ -109,7 +109,7 @@ fn elaborate_ascribed(
     Ok((checked, type_))
 }
 
-/// Synthesize a lambda for the settle tiers ([`settle_against`](super::settle_against)): the infer walk with each unannotated domain admitted as a metavariable named after its binder, pinned by the body or by whatever the settled type later unifies with, rather than refused. Only a settle tier may call this — while the expectation could still gain structure, committing the lambda's written shape would guess. Deliberately outside the elaboration cache: admitting the holes is a side effect, and a cached settle result under an `Infer` key would let a plain inference of the same lambda succeed where it must refuse. The extent restamp and checked-record mirror [`elaborate`]'s tail, so the settled node reaches the module exactly as an ordinarily elaborated one does.
+/// Synthesize a lambda no expectation reached ([`settle_against`](super::settle_against)): the infer walk with each unannotated domain admitted as a metavariable named after its binder, pinned by the body or by whatever the settled type later unifies with, rather than refused. Only the item's drain may ask for it — while the expectation could still gain structure, committing the lambda's written shape would guess. Deliberately outside the elaboration cache: admitting the holes is a side effect, and a cached settle result under an `Infer` key would let a plain inference of the same lambda succeed where it must refuse. The extent restamp and checked-record mirror [`elaborate`]'s tail, so the settled node reaches the module exactly as an ordinarily elaborated one does.
 pub(crate) fn elaborate_func_settle(
     context: &mut Context,
     func: &Func,
