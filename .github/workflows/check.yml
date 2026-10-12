@@ -86,6 +86,8 @@ jobs:
             curios-binaryen/.artifacts
       - name: Lint
         run: cargo xtask instrumented lint
+      - name: Test
+        run: cargo xtask instrumented test
 
   compiler:
     name: Compiler

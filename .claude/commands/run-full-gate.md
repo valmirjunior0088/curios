@@ -13,7 +13,7 @@ Every subject, each by its bare command. A bare subject runs its steps one after
 | :--- | :--- |
 | `cargo xtask launcher` | |
 | `cargo xtask workspace` | `cargo-nextest`; `npm`, which fetches Biome |
-| `cargo xtask instrumented` | |
+| `cargo xtask instrumented` | `cargo-nextest` |
 | `cargo xtask docs` | |
 | `cargo xtask compiler` | |
 | `cargo xtask bundle` | the `wasm32-unknown-unknown` target; Node |

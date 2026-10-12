@@ -141,11 +141,6 @@ impl Step {
                 None => biome_linting(Tree::Workspace),
             },
             Step::WorkspaceTest => cargo(&testing(package, request.filter.as_deref())),
-            // The recorder is one package's, so a run narrowed to another has nothing of it to ask.
-            Step::WorkspaceRecorderTest => match package {
-                None | Some(RECORDER) => cargo(&recorder_testing(request.filter.as_deref())),
-                Some(_) => Ok(()),
-            },
             Step::InstrumentedLint => cargo(&[
                 "clippy",
                 "--workspace",
@@ -153,6 +148,7 @@ impl Step {
                 "--all-features",
                 KEEP_GOING,
             ]),
+            Step::InstrumentedTest => cargo(&RECORDER_TESTING),
             Step::DocsBuild => docs_build(),
             Step::CompilerBuild => {
                 cargo(&["build", "--release", "--package", "curios", KEEP_GOING])
@@ -317,21 +313,15 @@ const RECORDER: &str = "curios-profile";
 const RECORDING: &str = "enabled";
 
 /// The `cargo nextest run` command line for the recorder's tests: [`RECORDER`] alone under [`RECORDING`], the one configuration that compiles them and one no shipped build of the workspace is.
-fn recorder_testing(filter: Option<&str>) -> Vec<&str> {
-    [
-        "nextest",
-        "run",
-        "--package",
-        RECORDER,
-        "--features",
-        RECORDING,
-        "--no-fail-fast",
-        "--no-tests=warn",
-    ]
-    .into_iter()
-    .chain(filter)
-    .collect()
-}
+const RECORDER_TESTING: [&str; 7] = [
+    "nextest",
+    "run",
+    "--package",
+    RECORDER,
+    "--features",
+    RECORDING,
+    "--no-fail-fast",
+];
 
 /// The browser bundle: `curios-js` built for the bare Wasm target, and its bindings generated beside it.
 fn bundle_build() -> Result<(), String> {

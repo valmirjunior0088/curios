@@ -57,12 +57,14 @@ impl Asks for WorkspaceAction {
 #[derive(Debug, Subcommand)]
 pub(crate) enum InstrumentedAction {
     Lint,
+    Test,
 }
 
 impl Asks for InstrumentedAction {
     fn asked(self) -> (Action, Request) {
         match self {
             Self::Lint => (Action::Lint, Request::whole()),
+            Self::Test => (Action::Test, Request::whole()),
         }
     }
 }

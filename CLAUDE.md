@@ -28,7 +28,7 @@ Every other fact is on disk: `documentation/syntax.md` for the surface language,
 - `cargo xtask <subject> [action]` runs every build step, each stated once in `xtask/src/steps.rs`: a bare subject runs everything about it, and `--help` lists the subjects and each one's actions. `cargo xtask launcher build` builds the launcher the compiler embeds, once per checkout.
 - Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask workspace lint` and `cargo xtask workspace format`, plus the change's own tests by name. The lint already elaborates, erases and certifies all of `/std`, so a Text, Core, Ersd or certifier change needs nothing more; a change to `curios-cont`, `curios-emit` or `curios-wasm` adds the corpus tests that reach it, `curios-std`'s. No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.
 - Run a long command as a tracked background task writing `cmd > log 2>&1; echo "EXIT=$?" >> log`, and read the exit code from the log. Never detach one with `&` or add a shell that waits on it.
-- Keep the feature set constant within a session: every feature builds a second prelude archive, and the two evict each other. `cargo xtask instrumented` and `docs build` are the steps that build with every feature.
+- Keep the feature set constant within a session: every feature builds a second prelude archive, and the two evict each other. `cargo xtask instrumented lint` and `docs build` are the steps that build with every feature.
 
 ## Where the rest is
 

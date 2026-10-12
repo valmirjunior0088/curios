@@ -78,10 +78,8 @@ fn a_workspace_step_names_no_feature() {
 /// The recorder's tests are one package's under one feature, so their run compiles nothing of the compiler's suite.
 #[test]
 fn the_recorder_s_tests_build_one_package() {
-    let arguments = recorder_testing(Some("fold"));
-
     assert_eq!(
-        arguments[..6],
+        RECORDER_TESTING[..6],
         [
             "nextest",
             "run",
@@ -91,8 +89,7 @@ fn the_recorder_s_tests_build_one_package() {
             "enabled"
         ]
     );
-    assert!(!arguments.contains(&"--workspace"), "{arguments:?}");
-    assert_eq!(arguments.last(), Some(&"fold"));
+    assert!(!RECORDER_TESTING.contains(&"--workspace"));
 }
 
 #[test]

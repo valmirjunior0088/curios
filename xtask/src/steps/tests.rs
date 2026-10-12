@@ -129,4 +129,8 @@ fn a_bare_subject_is_its_steps_in_the_table_s_order() {
             Step::VscodeBuild
         ]
     );
+    assert_eq!(
+        Step::about(Subject::Instrumented),
+        [Step::InstrumentedLint, Step::InstrumentedTest]
+    );
 }
