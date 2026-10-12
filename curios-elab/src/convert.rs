@@ -37,7 +37,7 @@ use {
         unfold_rec_apply,
     },
     crate::{
-        Declined, metavar_origins, metavar_spines, named_members, read_outside_spines,
+        Declined, Error, metavar_origins, metavar_spines, named_members, read_outside_spines,
         zonk_solved_term_metas,
     },
     curios_analysis::Classes,
@@ -72,8 +72,35 @@ enum Revalidated {
     Fits(Term),
     /// The check failed where it wanted to park: a type it met still waits on a metavariable, and nothing has been judged.
     Undecided,
-    /// It does not check.
-    Refused,
+    /// It does not check, and this is the check's refusal.
+    Refused(Error),
+}
+
+/// A candidate conversion found for a metavariable, which the check where the metavariable was born refused: the occurrence it was offered at, the candidate in that occurrence's names, and the check's refusal. The problem that offered it is then no pair found apart, and its report is this candidate's ([`Beside::Rejected`]).
+#[derive(Debug)]
+pub(crate) struct Rejected {
+    pub(crate) metavar: Metavar,
+    pub(crate) candidate: Term,
+    pub(crate) error: Error,
+}
+
+/// What a conversion run says beside a mismatch, of the problem the run ended on.
+#[derive(Debug)]
+pub(crate) enum Beside {
+    /// What it left uncompared: the two sides the mismatch shows are two it did not decide between.
+    Declined(Declined),
+    /// The candidate it found and the metavariable's birth refused: the two sides it was comparing were not found apart, and what is refused is a solution.
+    Rejected(Box<Rejected>),
+}
+
+impl Beside {
+    /// What was left uncompared, where that is what was said.
+    pub(crate) fn declined(self) -> Option<Declined> {
+        match self {
+            Self::Declined(declined) => Some(declined),
+            Self::Rejected(_) => None,
+        }
+    }
 }
 
 /// The binders a candidate lambda abstracts: each one's mark, its label and its domain.
@@ -378,8 +405,8 @@ enum Spun {
 pub(crate) enum Outcome {
     /// Definitionally equal.
     Converts,
-    /// A hard structural mismatch — provably unequal, no solution can help — beside what the problem that ended the run declined to compare, where it declined anything: the report then says the two sides were not compared rather than found different.
-    Mismatch(Option<Declined>),
+    /// A hard structural mismatch — provably unequal, no solution can help — beside what the problem that ended the run declined to compare, where it declined anything, or the candidate it found and saw refused: the report then says the two sides were not compared rather than found different, or is that candidate's.
+    Mismatch(Option<Beside>),
     /// Quiesced with constraints still blocked on unsolved metavariables: undecided either way. The blocked problems are surrendered to the caller — the elaboration turnaround parks them on the `Context` to be retried when a watched metavariable is solved.
     Blocked(Vec<Problem>),
 }
@@ -437,6 +464,8 @@ pub(crate) struct Convert {
     progress: bool,
     // What the problem in hand declined to compare. Cleared as each problem is taken up, so one that is parked leaves nothing behind and only the problem a mismatch ends on speaks in its report.
     declined: Option<Declined>,
+    // The candidate the problem in hand found for a metavariable and saw refused where the metavariable was born. Cleared as each problem is taken up, as what it declined is.
+    rejected: Option<Box<Rejected>>,
     // The binders the problem in hand is posed under, and those this step has opened since: what a problem enqueued now is posed under.
     binders: Binders,
     // The unfoldings the problem in hand stands inside, and the one this step has opened since: what a problem enqueued now stands inside.
@@ -554,6 +583,7 @@ impl Convert {
             blocked: Vec::new(),
             progress: false,
             declined: None,
+            rejected: None,
             apart: Vec::new(),
             extent,
         }
@@ -2045,24 +2075,24 @@ impl Convert {
 
             // The check has three answers. A candidate that checks fits. One that fails where the check wanted to park has not been judged: a type it met — the frozen type itself, while the metavariable's own type is unsolved, or one inside it — still waits on a metavariable, and outside the oracle the same check would have waited for it. Read as a rejection, that would make the verdict follow the order parked work is retried in, a candidate refused one retry short of the solution that types it. Any other failure is a meta-free, well-scoped candidate that is not validly typed here. The check is a [`Probe`]: a candidate it could not afford is no rejected candidate, and the budget's refusal propagates instead.
             context.with_oracle(&refinements, |context| {
-                let checked = check(context, &inverted, result.clone())
-                    .inspect_err(|error| {
-                        // The error is otherwise discarded — and it is exactly what explains a rejected candidate that looks correct at the use site.
-                        if !error.is_exhausted() {
-                            curios_profile::note!(
-                                target: "curios_elab::solve",
-                                meta = id.0,
-                                error = %error,
-                                "re-validation rejected the candidate",
-                            );
-                        }
-                    })
-                    .probed_refusal()?;
+                let error = match check(context, &inverted, result.clone()) {
+                    Ok(rebuilt) => return Ok(Revalidated::Fits(rebuilt)),
+                    Err(error) => error,
+                };
+                if let Some(refusal) = error.refusal() {
+                    return Err(refusal.clone());
+                }
+                curios_profile::note!(
+                    target: "curios_elab::solve",
+                    meta = id.0,
+                    error = %error,
+                    "re-validation rejected the candidate",
+                );
 
-                Ok(match checked {
-                    Some(rebuilt) => Revalidated::Fits(rebuilt),
-                    None if context.declined_to_park() => Revalidated::Undecided,
-                    None => Revalidated::Refused,
+                // The refusal is what explains a rejected candidate that looks correct where it was offered, and the report of the problem that offered it ([`Rejected`]).
+                Ok(match context.declined_to_park() {
+                    true => Revalidated::Undecided,
+                    false => Revalidated::Refused(error),
                 })
             })
         });
@@ -2091,13 +2121,18 @@ impl Convert {
                 );
                 Solved::Postponed
             }
-            Revalidated::Refused => {
+            Revalidated::Refused(error) => {
                 curios_profile::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
                     against = %result,
                     "failed: re-validation",
                 );
+                self.rejected = Some(Box::new(Rejected {
+                    metavar: metavar.clone(),
+                    candidate: t.clone(),
+                    error,
+                }));
                 Solved::Failed
             }
         };
@@ -2688,7 +2723,10 @@ impl Convert {
     fn outcome(&mut self, context: &mut Context) -> Result<Outcome, ReduceError> {
         loop {
             if !self.drain(context)? {
-                return Ok(Outcome::Mismatch(self.declined.take()));
+                // A candidate refused is what the problem came to, whatever it left uncompared on the way.
+                let rejected = self.rejected.take().map(Beside::Rejected);
+                let declined = self.declined.take().map(Beside::Declined);
+                return Ok(Outcome::Mismatch(rejected.or(declined)));
             }
 
             // Fixpoint: retry postponed constraints only when a fresh solution since the last sweep could have unblocked them.
@@ -2725,6 +2763,7 @@ impl Convert {
         }) = self.dequeue(context)?
         {
             self.declined = None;
+            self.rejected = None;
             self.binders = posed.clone();
             self.pairs = posed_pairs.clone();
             // Reflexivity needs no evaluation. In particular, do not force an identical folded recursive computation merely because it sits under a strict intrinsic operation.
@@ -2842,8 +2881,12 @@ impl Convert {
                         self.blocked.push(raw_problem(&type_));
                         continue;
                     }
-                    Outcome::Mismatch(declined) => {
-                        self.declined = declined;
+                    Outcome::Mismatch(beside) => {
+                        match beside {
+                            Some(Beside::Declined(declined)) => self.declined = Some(declined),
+                            Some(Beside::Rejected(rejected)) => self.rejected = Some(rejected),
+                            None => {}
+                        }
                         return Ok(false);
                     }
                     Outcome::Blocked(_) => unreachable!("a blocked pair waits"),

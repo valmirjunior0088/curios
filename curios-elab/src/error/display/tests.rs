@@ -102,3 +102,23 @@ fn a_mismatch_says_what_was_not_compared() {
         "not compared: two Boolean terms over more than {BOOL_ATOM_CAP} atoms"
     )));
 }
+
+/// A rejected candidate is reported as one: the metavariable by what it is, the candidate, and the report of the check that refused it beneath, indented under the sentence that introduces it.
+#[test]
+fn a_rejected_candidate_is_reported_with_the_check_that_refused_it() {
+    let error = Error::rejected_candidate(
+        Watched::Described("an inferred hole".to_string()),
+        family("Candidate", vec![]),
+        Error::type_mismatch(family("Left", vec![]), family("Right", vec![])),
+    );
+    let spelling = Rc::new(
+        Spelling::default()
+            .with_erased_universes()
+            .with_anonymous_metavars(),
+    );
+
+    assert_eq!(
+        Displayed(&error, spelling, &[]).to_string(),
+        "an inferred hole cannot be /Candidate\n  it does not check where it stands:\n    type mismatch\n      inferred: /Left\n      expected: /Right"
+    );
+}

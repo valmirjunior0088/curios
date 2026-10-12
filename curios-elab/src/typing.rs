@@ -3,13 +3,13 @@ mod tests;
 
 use {
     super::{
-        AwaitId, Binders, Choice, Context, Error, FrozenFrame, HeldConversion, Mode, Opened,
-        Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem, Sort, Spines,
-        Watched, answer_witness, answers_differ, callee, convert, diagnose_embedding,
-        diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines, is_monad,
-        monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome, reduce_forced,
-        refold_recs, retry_discharge, retry_witness, settle_qualities, shallow_scrutinee,
-        subsume_outcome, synth_neutral, zonk_solved_term_metas,
+        AwaitId, Beside, Binders, Choice, Context, Error, FrozenFrame, HeldConversion, Mode,
+        Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
+        Rejected, Sort, Spines, Watched, answer_witness, answers_differ, callee, convert,
+        diagnose_embedding, diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines,
+        is_monad, monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome,
+        reduce_forced, refold_recs, retry_discharge, retry_witness, settle_qualities,
+        shallow_scrutinee, subsume_outcome, synth_neutral, zonk_solved_term_metas,
     },
     curios_analysis::{
         RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
@@ -467,8 +467,9 @@ pub(crate) fn expect(
 
     match outcome {
         Outcome::Converts => context.retry_parked(),
-        Outcome::Mismatch(declined) => {
-            Err(display_mismatch(context, term, inferred, expected).declined(declined))
+        Outcome::Mismatch(beside) => {
+            let report = display_mismatch(context, term, inferred, expected);
+            Err(said_beside(context, report, beside))
         }
         // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved and succeed provisionally — unless this is inside an oracle, where provisional success may not leak into the answer: the turnaround fails there, and the oracle records that it would have parked.
         Outcome::Blocked(goals) => {
@@ -1222,27 +1223,54 @@ fn watched_blockers(
         .filter(|id| context.metavar_solution(**id).is_none())
         .collect::<BTreeSet<_>>()
         .into_iter()
-        .map(|id| match origins.get(id) {
-            Some((MetavarOrigin::Implicit(origin), _)) => Watched::Slot {
-                callee: callee(context, &origin.func),
-                noun: "implicit argument",
-                binder: origin.binder.clone(),
-            },
-            Some((MetavarOrigin::Witness(origin), _)) => Watched::Slot {
-                callee: callee(context, &origin.func),
-                noun: "witness argument",
-                binder: origin.binder.clone(),
-            },
-            // Named by the extent the goal was born with, never by an occurrence's: substituted into a declaration's type, the goal rides the extent of the binder it replaced, which would name the declaration rather than the `?`. Where that is in a file is the report's to say.
-            Some((MetavarOrigin::Goal, _)) => Watched::Goal(context.goal_extent(*id).copied()),
-            Some((MetavarOrigin::Domain(binder), _)) => {
-                Watched::Described(format!("the type of parameter '{binder}'"))
-            }
-            Some((MetavarOrigin::Hole, _)) | None => {
-                Watched::Described("an inferred hole".to_string())
-            }
-        })
+        .map(|id| watched(context, *id, origins.get(id).map(|(origin, _)| origin)))
         .collect()
+}
+
+/// A metavariable by what it is, read off the provenance an occurrence of it carries: what a report names it by. One no occurrence names is an inferred hole.
+fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarOrigin>) -> Watched {
+    match origin {
+        Some(MetavarOrigin::Implicit(origin)) => Watched::Slot {
+            callee: callee(context, &origin.func),
+            noun: "implicit argument",
+            binder: origin.binder.clone(),
+        },
+        Some(MetavarOrigin::Witness(origin)) => Watched::Slot {
+            callee: callee(context, &origin.func),
+            noun: "witness argument",
+            binder: origin.binder.clone(),
+        },
+        // Named by the extent the goal was born with, never by an occurrence's: substituted into a declaration's type, the goal rides the extent of the binder it replaced, which would name the declaration rather than the `?`. Where that is in a file is the report's to say.
+        Some(MetavarOrigin::Goal) => Watched::Goal(context.goal_extent(id).copied()),
+        Some(MetavarOrigin::Domain(binder)) => {
+            Watched::Described(format!("the type of parameter '{binder}'"))
+        }
+        Some(MetavarOrigin::Hole) | None => Watched::Described("an inferred hole".to_string()),
+    }
+}
+
+/// `report`, a mismatch's, with what conversion said beside the mismatch. The plain report of two sides notes what was left uncompared, and gives way to a rejected candidate's, its two sides not having been found apart. Any other report says what it says already: one that names the cause, an implicit handed a term of another sort among them, is not replaced by the check that refused the same thing.
+fn said_beside(context: &mut Context, report: Error, beside: Option<Beside>) -> Error {
+    match (report, beside) {
+        (Error::TypeMismatch { .. }, Some(Beside::Rejected(rejected))) => {
+            rejected_candidate(context, *rejected)
+        }
+        (report, beside) => report.declined(beside.and_then(Beside::declined)),
+    }
+}
+
+/// The report of a candidate conversion found for a metavariable and saw refused where the metavariable was born ([`Rejected`]): the metavariable by what it is, the candidate as a report shows a term, and the check's refusal. It stands in place of the mismatch of the pair conversion was comparing, which was not found apart.
+fn rejected_candidate(context: &mut Context, rejected: Rejected) -> Error {
+    let Rejected {
+        metavar,
+        candidate,
+        error,
+    } = rejected;
+    Error::rejected_candidate(
+        watched(context, metavar.id, Some(&metavar.origin)),
+        resolved_for_display(context, &candidate),
+        error,
+    )
 }
 
 /// A metavariable's insertion provenance and the extent of the occurrence it was read off — what a report names a blocker by.
@@ -1394,8 +1422,8 @@ fn retry_work(
                 Outcome::Converts => Retry::Converts,
                 // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
                 // What was compared is read off the type the problem is posed at: at a sort the two are types, one inferred and one expected, and anywhere else they are terms a type states at one position. A residual of the carriers' algebra is posed at `Type` for want of the type it stands at, and is told from two types by what it is: a value an intrinsic builds is no type.
-                Outcome::Mismatch(declined) => Retry::Mismatch(
-                    match &*goal.type_ {
+                Outcome::Mismatch(beside) => {
+                    let report = match &*goal.type_ {
                         Subterm::Sort(..)
                             if !(intrinsic_value(context, &goal.this)
                                 || intrinsic_value(context, &goal.that)) =>
@@ -1406,9 +1434,9 @@ fn retry_work(
                             resolved_for_display(context, &goal.this),
                             resolved_for_display(context, &goal.that),
                         ),
-                    }
-                    .declined(declined),
-                ),
+                    };
+                    Retry::Mismatch(said_beside(context, report, beside))
+                }
                 Outcome::Blocked(goals) => Retry::Blocked(goals),
             },
         )

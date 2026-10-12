@@ -432,6 +432,28 @@ impl fmt::Display for Displayed<'_> {
                 }
                 Ok(())
             }
+            Error::RejectedCandidate {
+                watched,
+                candidate,
+                error,
+            } => {
+                let candidate = candidate.spelled(spelling);
+                let born = match watched {
+                    Watched::Slot { .. } => "where the argument was left out",
+                    Watched::Described(_) | Watched::Goal(_) => "where it stands",
+                };
+                write!(
+                    f,
+                    "{} cannot be {candidate}\n  it does not check {born}:",
+                    named(watched)
+                )?;
+                // The check's own report, under whatever located or scoped it: the candidate is no term of the program, and where it failed is this report's place.
+                let reason = Displayed(error.unwrapped(), Rc::clone(spelling), anchors).to_string();
+                for line in reason.lines() {
+                    write!(f, "\n    {line}")?;
+                }
+                Ok(())
+            }
             // "this sequencing", not "this '!'": a hand-written '/std/Monad/bind' call reaches the same report, and nothing on the term records which spelling produced it.
             Error::StrandedSequencing { sequenced, region } => {
                 let region = region.spelled(spelling);

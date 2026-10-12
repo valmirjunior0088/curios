@@ -246,6 +246,14 @@ pub enum Error {
         /// Whether the two are terms a type states at one position, where neither is a type and neither was inferred: the argument a call was written with against what its declared type holds in that argument's place. A report then says that two terms differ, and names the one the program wrote as that.
         terms: bool,
     },
+    /// A candidate conversion found for a metavariable that does not check where the metavariable was born: what a failed conversion reports in place of the pair it was comparing, which it did not find apart. What is refused is a solution, so the report names the metavariable, shows the candidate, and gives the check's own refusal beneath.
+    RejectedCandidate {
+        /// The metavariable, by what it is.
+        watched: Watched,
+        candidate: Box<Term>,
+        /// Why the candidate does not check at the metavariable's type, where it was born.
+        error: Box<Error>,
+    },
     /// The `/std/Monad/bind` application a postfix `!` desugars to, checked against a region that has nothing to sequence in: `bind` produces `M(B)` and the region's type stands over no result at all.
     ///
     /// `sequenced` is that `M(B)` with its unsolved holes blanked, so the message names the monad the region would have to be without naming the result a region that cannot sequence never reaches. It is `None` when `M` is itself one of those holes: nothing pinned the monad, and a spelling made only of placeholders would name nothing.
@@ -792,6 +800,18 @@ impl Error {
                 terms,
             },
             other => other,
+        }
+    }
+
+    pub(crate) fn rejected_candidate<T: Into<Term>>(
+        watched: Watched,
+        candidate: T,
+        error: Error,
+    ) -> Self {
+        Self::RejectedCandidate {
+            watched,
+            candidate: Box::new(candidate.into()),
+            error: Box::new(error),
         }
     }
 
@@ -1857,6 +1877,12 @@ impl Error {
             Self::AmbiguousSpines { one, another, .. } => {
                 out.push(one);
                 out.push(another);
+            }
+            Self::RejectedCandidate {
+                candidate, error, ..
+            } => {
+                out.push(candidate);
+                error.collect_terms(out);
             }
             Self::NoWitness {
                 goal, embedding, ..

@@ -690,3 +690,59 @@ fn a_list_shorter_than_its_constructors_index_is_refused() {
 
     assert!(refusal.contains("Swapped/swap"), "{refusal}");
 }
+
+/// A candidate rejected where its implicit was born is reported as one. The value `g`'s `Eq/refl()` leaves implicit is born outside the arm, and its candidate holds a proof of `y <= z` that checks under the arm's guard alone: the report names the implicit, shows the candidate and gives the bound that did not hold. The pair conversion was comparing, a `?` the reader did not write and the candidate, was not found apart, and read as two terms that differ. The verdict stands, and the declaration compiles with the binding inside the arm.
+#[test]
+fn a_candidate_rejected_where_its_implicit_was_born_is_reported_as_one() {
+    let refusal = error(
+        r#"
+        use /std/{Eq, Nat, print};
+        use /std/Bool/{Holds};
+
+        struct Le(z: Nat): Type {
+            low: Nat,
+            @ok: Holds(low <= z),
+        }
+
+        let both(@A: Type, @v: A, a: Eq(@A)(v, v), b: Eq(@A)(v, v)) -> Nat = 0;
+
+        let f(y: Nat, z: Nat) -> Nat =
+            let g = Eq/refl();
+            match y <= z
+            | true => (let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); both(g, r))
+            | false => 0
+            end;
+
+        print(Nat/to_str(f(1, 2)))
+        "#,
+    );
+
+    assert!(
+        refusal.contains(
+            "the implicit argument 'z' of 'Eq/refl' cannot be Le { y, @ok = /std/Bool/True/qed() }\n  it does not check where the argument was left out:\n    type mismatch\n      inferred: /std/Bool/True\n      expected: Holds(y <= z)"
+        ),
+        "{refusal}"
+    );
+
+    let output = run(r#"
+        use /std/{Eq, Nat, print};
+        use /std/Bool/{Holds};
+
+        struct Le(z: Nat): Type {
+            low: Nat,
+            @ok: Holds(low <= z),
+        }
+
+        let both(@A: Type, @v: A, a: Eq(@A)(v, v), b: Eq(@A)(v, v)) -> Nat = 0;
+
+        let f(y: Nat, z: Nat) -> Nat =
+            match y <= z
+            | true => (let g = Eq/refl(); let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); both(g, r))
+            | false => 0
+            end;
+
+        print(Nat/to_str(f(1, 2)))
+        "#);
+
+    assert_eq!(output, b"0");
+}
