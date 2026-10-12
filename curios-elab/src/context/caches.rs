@@ -418,7 +418,7 @@ impl Caches {
         }
     }
 
-    /// A settlement is withholding, or has stopped withholding, the refinements from the entry it settles inwards: the suppression boundary's reason, facing the other way — what was reduced on one side of that line must not answer on the other — so the reduction tables clear on both sides as they do there.
+    /// A settlement is withholding, or has stopped withholding, the refinements from the entry it settles inwards: the reason a judgment standing on held frames has ([`Caches::invalidate_stand_boundary`]), facing the other way — what was reduced on one side of that line must not answer on the other — so the reduction tables clear on both sides as they do there.
     ///
     /// **Inside a span of plain reduction only what plain reduction remembered goes.** Nothing but plain reduction runs between the two sides of a settlement made there, so what a judgment's reduction remembered is as true when the refinements are restored as it was before they were withheld.
     pub(crate) fn invalidate_settlement_boundary(&mut self, plain: bool) {
@@ -437,11 +437,11 @@ impl Caches {
         }
     }
 
-    /// A refinement-suppression boundary is being crossed with refinements registered: refinement-applied and refinement-suppressed reducts must never contaminate each other's cache, so both clear — on both sides of the bracket, unstamped (the flag flip itself writes nothing).
-    pub(crate) fn invalidate_suppression_boundary(&mut self) {
+    /// A judgment is standing on held frames, or leaving them, and the frames it sets aside register a refinement: a reduct taken with one in view must not answer where it is not, nor the other way round, so both caches clear — on both sides of the stand, unstamped (setting frames aside writes nothing).
+    pub(crate) fn invalidate_stand_boundary(&mut self) {
         // How many reducts the clear throws away.
         curios_profile::sample!(
-            "caches::suppression_dropped",
+            "caches::stand_dropped",
             (self.reduction[0].len() + self.reduction[1].len()) as u64
         );
         self.clear_reductions();

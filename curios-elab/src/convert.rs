@@ -334,17 +334,17 @@ pub(crate) fn answers_differ(
         return Ok(false);
     };
     let telescope = entry.telescope.clone();
-    let refinements = entry.refinements.clone();
+    let born = entry.frames.clone();
     let result = entry.result.clone();
 
     let mark = context.solution_mark();
-    let outcome = context.with_frame(|context| {
-        for (name, ty) in telescope.iter() {
-            context.assume(name, ty);
-        }
+    let outcome = context.at_birth(&born, |context| {
+        context.with_frame(|context| {
+            for (name, ty) in telescope.iter() {
+                context.assume(name, ty);
+            }
 
-        context.with_oracle(&refinements, |context| {
-            convert_outcome(context, &result, one, another)
+            context.with_oracle(|context| convert_outcome(context, &result, one, another))
         })
     });
     context.rollback_solutions(mark);
@@ -1929,7 +1929,7 @@ impl Convert {
             return Ok(Solved::Failed);
         };
         let telescope = entry.telescope.clone();
-        let refinements = entry.refinements.clone();
+        let born = entry.frames.clone();
         let result = entry.result.clone();
 
         // Every birthed occurrence carries its full spine: `elaborate_apply` opens telescopes with rebuilt arguments, so no lowered bare copy of a birthed hole survives into compared types. (An empty telescope's identity spine is legitimately empty.)
@@ -2068,31 +2068,33 @@ impl Convert {
 
         // Re-validation: the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ and the refinements it was born under — nothing of an arm it is solved in, all of the arm it was born in — as an *oracle*, constraint parking suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. What is committed is the term the check rebuilt, as everywhere elaboration checks a term: the check compares a lambda's annotation with the domain it is checked at by subsumption and rebuilds the lambda at that domain, while the kernel compares the two by conversion, so a candidate committed as it came keeps an annotation the kernel refuses — `(T: Type 0) => Io(T)`, the reduct of `Io` at one instance, standing where `(Type 1) -> Type 1` is wanted — and which side of a problem solved the metavariable would decide whether the program certifies. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
         let mark = context.solution_mark();
-        let revalidated = context.with_frame(|context| {
-            for (name, ty) in telescope.iter() {
-                context.assume(name, ty);
-            }
-
-            // The check has three answers. A candidate that checks fits. One that fails where the check wanted to park has not been judged: a type it met — the frozen type itself, while the metavariable's own type is unsolved, or one inside it — still waits on a metavariable, and outside the oracle the same check would have waited for it. Read as a rejection, that would make the verdict follow the order parked work is retried in, a candidate refused one retry short of the solution that types it. Any other failure is a meta-free, well-scoped candidate that is not validly typed here. The check is a [`Probe`]: a candidate it could not afford is no rejected candidate, and the budget's refusal propagates instead.
-            context.with_oracle(&refinements, |context| {
-                let error = match check(context, &inverted, result.clone()) {
-                    Ok(rebuilt) => return Ok(Revalidated::Fits(rebuilt)),
-                    Err(error) => error,
-                };
-                if let Some(refusal) = error.refusal() {
-                    return Err(refusal.clone());
+        let revalidated = context.at_birth(&born, |context| {
+            context.with_frame(|context| {
+                for (name, ty) in telescope.iter() {
+                    context.assume(name, ty);
                 }
-                curios_profile::note!(
-                    target: "curios_elab::solve",
-                    meta = id.0,
-                    error = %error,
-                    "re-validation rejected the candidate",
-                );
 
-                // The refusal is what explains a rejected candidate that looks correct where it was offered, and the report of the problem that offered it ([`Rejected`]).
-                Ok(match context.declined_to_park() {
-                    true => Revalidated::Undecided,
-                    false => Revalidated::Refused(error),
+                // The check has three answers. A candidate that checks fits. One that fails where the check wanted to park has not been judged: a type it met — the frozen type itself, while the metavariable's own type is unsolved, or one inside it — still waits on a metavariable, and outside the oracle the same check would have waited for it. Read as a rejection, that would make the verdict follow the order parked work is retried in, a candidate refused one retry short of the solution that types it. Any other failure is a meta-free, well-scoped candidate that is not validly typed here. The check is a [`Probe`]: a candidate it could not afford is no rejected candidate, and the budget's refusal propagates instead.
+                context.with_oracle(|context| {
+                    let error = match check(context, &inverted, result.clone()) {
+                        Ok(rebuilt) => return Ok(Revalidated::Fits(rebuilt)),
+                        Err(error) => error,
+                    };
+                    if let Some(refusal) = error.refusal() {
+                        return Err(refusal.clone());
+                    }
+                    curios_profile::note!(
+                        target: "curios_elab::solve",
+                        meta = id.0,
+                        error = %error,
+                        "re-validation rejected the candidate",
+                    );
+
+                    // The refusal is what explains a rejected candidate that looks correct where it was offered, and the report of the problem that offered it ([`Rejected`]).
+                    Ok(match context.declined_to_park() {
+                        true => Revalidated::Undecided,
+                        false => Revalidated::Refused(error),
+                    })
                 })
             })
         });
@@ -2186,15 +2188,14 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         let Some(birth) = context
             .metavar_entry(metavar.id)
-            .map(|entry| entry.refinements.clone())
+            .map(|entry| entry.frames.clone())
         else {
             return Ok(true);
         };
-        if context.refinements_are(&birth) {
+        if context.reads_the_refinements_of(&birth) {
             return Ok(true);
         }
-        let at_birth =
-            context.with_refinements(&birth, |context| reduce(context, rigid_raw.clone()))?;
+        let at_birth = context.at_birth(&birth, |context| reduce(context, rigid_raw.clone()))?;
 
         Ok(at_birth == *rigid)
     }
@@ -2500,10 +2501,10 @@ impl Convert {
     ) -> Result<Option<Term>, ReduceError> {
         let birth = context
             .metavar_entry(metavar.id)
-            .map(|entry| entry.refinements.clone());
+            .map(|entry| entry.frames.clone());
         let forced = match &birth {
             Some(birth) => {
-                context.with_refinements(birth, |context| reduce_forced(context, term.clone()))?
+                context.at_birth(birth, |context| reduce_forced(context, term.clone()))?
             }
             None => reduce_forced(context, term.clone())?,
         };
@@ -2661,12 +2662,12 @@ impl Convert {
         standing: Option<Standing>,
     ) -> Result<Solved, ReduceError> {
         let birth = match context.metavar_entry(metavar.id) {
-            Some(entry) => entry.refinements.clone(),
+            Some(entry) => entry.frames.clone(),
             // No birth record: `solve` refuses it, as it refuses any.
             None => return self.solve_rigid(context, metavar, rigid, standing),
         };
 
-        if context.refinements_are(&birth) {
+        if context.reads_the_refinements_of(&birth) {
             // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation the reduced spelling decides is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
             //
             // A `use` slot is committed as written for the same reason, whatever its dictionary unfolds to: a witness is a name for a structure of methods, and committed reduced the slot would spell the structure out at every use, for the kernel to receive and for erasure to build again where the program calls a global.
@@ -2698,8 +2699,7 @@ impl Convert {
             });
         }
 
-        let at_birth =
-            context.with_refinements(&birth, |context| reduce(context, rigid_raw.clone()))?;
+        let at_birth = context.at_birth(&birth, |context| reduce(context, rigid_raw.clone()))?;
 
         // The refinements beyond the birth's made no difference for this term: the unguarded path, hard verdicts included.
         if at_birth == *rigid {

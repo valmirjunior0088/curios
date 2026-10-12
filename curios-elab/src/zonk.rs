@@ -967,7 +967,7 @@ pub(crate) fn report_goals(
                 .expect("a collected goal has a birth entry");
             (
                 Rc::clone(&entry.telescope),
-                Rc::clone(&entry.refinements),
+                entry.frames.clone(),
                 entry.result.clone(),
             )
         };
@@ -1004,7 +1004,7 @@ pub(crate) fn report_goals(
             GoalReport {
                 extent: *extent,
                 owner: *owner,
-                witnesses: entry.witnesses.clone().unwrap_or_default(),
+                witnesses: entry.frames.witnesses().cloned().collect(),
                 scope: entry
                     .telescope
                     .iter()
@@ -1044,7 +1044,7 @@ fn goal_report(context: &Zonk, id: MetavarId) -> Error {
             display(&entry.result),
             context.metavar_solution(id).map(display),
         )
-        .in_scope(entry.witnesses.as_deref().unwrap_or_default()),
+        .in_scope(&entry.frames.witnesses().cloned().collect::<Vec<_>>()),
         // A goal elaboration never reached was never birthed, so there is no scope or type to report — unreachable in practice, since every kept item elaborates.
         None => Error::CannotInfer,
     }
@@ -1122,13 +1122,13 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                             entry.and_then(|entry| entry.refusal.as_deref().cloned()),
                         );
                         // Minted in an arm its scrutinee's indices rule out, the hole is one no value reaches, which the report says beside it: the arm closed before this walk.
-                        let unsolved = match entry.and_then(|entry| entry.dead_arm.as_deref()) {
+                        let unsolved = match entry.and_then(|entry| entry.frames.dead_arm()) {
                             Some(dead) => unsolved.in_dead_arm(dead),
                             None => unsolved,
                         };
                         unsolved.in_scope(
-                            entry
-                                .and_then(|entry| entry.witnesses.as_deref())
+                            &entry
+                                .map(|entry| entry.frames.witnesses().cloned().collect::<Vec<_>>())
                                 .unwrap_or_default(),
                         )
                     }

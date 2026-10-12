@@ -724,7 +724,7 @@ fn an_oracle_elaborates_a_term_that_writes_once() {
     let mut outside = 0;
     elaborate_writing(&mut context, &mut outside);
     elaborate_writing(&mut context, &mut outside);
-    let inside = context.with_oracle(&Refinements::default(), |context| {
+    let inside = context.with_oracle(|context| {
         let mut inside = 0;
         elaborate_writing(context, &mut inside);
         elaborate_writing(context, &mut inside);
@@ -742,11 +742,9 @@ fn a_declined_park_is_recorded_by_the_oracle_it_was_declined_in() {
     assert!(context.may_park());
     assert!(!context.declined_to_park());
 
-    let recorded = context.with_oracle(&Refinements::default(), |context| {
+    let recorded = context.with_oracle(|context| {
         let before = context.declined_to_park();
-        let inner = context.with_oracle(&Refinements::default(), |context| {
-            (context.may_park(), context.declined_to_park())
-        });
+        let inner = context.with_oracle(|context| (context.may_park(), context.declined_to_park()));
         let after = context.declined_to_park();
         let may = context.may_park();
 
@@ -925,9 +923,9 @@ fn an_equation_a_refinement_closes_is_withheld_for_the_arm() {
     });
 }
 
-/// A withheld equation stays withheld where the refinements it was withheld under are installed again, as a metavariable's solution and a parked problem's retry install the ones they were born under: the entry that withholds it travels with them and shadows the equation as it did in the arm.
+/// A withheld equation stays withheld for a judgment standing on the frames it was withheld in, as what is judged of a metavariable born there and a parked problem's retry do: the entry that withholds it is its arm's frame's, and shadows the equation there as it did in the arm.
 #[test]
-fn a_withheld_equation_stays_withheld_where_its_refinements_are_installed_again() {
+fn a_withheld_equation_stays_withheld_where_its_frames_are_stood_on() {
     let mut context = context();
     let n = context.fresh(Some("n"));
     let literal = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
@@ -937,23 +935,23 @@ fn a_withheld_equation_stays_withheld_where_its_refinements_are_installed_again(
     let (outside, inside) = context.with_frame(|context| {
         context.assume(&n, &nat());
         context.refine_scrutinee_spellings(vec![(guard.clone(), guard.clone(), false)], &truth);
-        let outside = context.refinement_snapshot();
+        let outside = context.hold_frames();
 
         let inside = context.with_frame(|context| {
             context.refine(&n, &literal(5));
-            context.refinement_snapshot()
+            context.hold_frames()
         });
 
         (outside, inside)
     });
 
     assert_eq!(
-        context.with_refinements(&outside, |context| context.scrutinee_reduct(&guard, &guard)),
+        context.at_birth(&outside, |context| context.scrutinee_reduct(&guard, &guard)),
         Some(truth),
         "the guard's own arm answers"
     );
     assert_eq!(
-        context.with_refinements(&inside, |context| context.scrutinee_reduct(&guard, &guard)),
+        context.at_birth(&inside, |context| context.scrutinee_reduct(&guard, &guard)),
         None,
         "the arm that closed it does not"
     );
@@ -999,9 +997,7 @@ fn an_elaboration_is_remembered_by_the_reduction_it_ran_under() {
     };
 
     assert_eq!(across(&mut context, &elaborate_pure), (1, 1));
-    let inside = context.with_oracle(&Refinements::default(), |context| {
-        across(context, &elaborate_writing)
-    });
+    let inside = context.with_oracle(|context| across(context, &elaborate_writing));
     assert_eq!(inside, (1, 1));
 }
 

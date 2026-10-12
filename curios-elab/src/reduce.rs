@@ -1287,10 +1287,10 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 let shallow = shallow_scrutinee(context, &term);
 
                 if let Some(value) = context.scrutinee_reduct(&shallow, &term) {
-                    // A key a suppressed frame withholds answers `None` here, so this serves only what is live — the caller's own arm outside a re-validation, and the validated term's own arms within one.
+                    // A key a frame set aside registers answers `None` here, so this serves only what stands — the caller's own arm, and within a judgment made where a metavariable was born that birth's arms and the judged term's own.
                     break 'step Reduce::Continue(value);
-                } else if context.refinements_suppressed() && context.is_scrutinee_key(&shallow) {
-                    // Withhold the value, but keep an application key neutral — as a `Var` key already is — so `solve_at_birth`'s committed spelling stays a term the live refinement can fire on (the registered form, never the unfolded body). What stays neutral is the probe as spelled, never the key: the key erases universe instances, and a solution committed from it would hold a bare occurrence of a universe scheme, which the kernel refuses.
+                } else if context.is_key_set_aside(&shallow) {
+                    // The value is not in view, but keep an application key neutral — as a `Var` key already is — so a spelling committed where the guard is set aside (`solve_at_birth`'s) stays a term the guard can fire on where it stands (the registered form, never the unfolded body). What stays neutral is the probe as spelled, never the key: the key erases universe instances, and a solution committed from it would hold a bare occurrence of a universe scheme, which the kernel refuses.
                     break 'step Reduce::Break(term.clone());
                 }
                 // A candidate spelled otherwise than its key is decided where the kernel decides it: at the stuck form reduction leaves it as, against the entries' reduced spellings ([`refined_reduct`]).
@@ -1374,7 +1374,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             Reduce::Continue(next) => term = next,
             // A stuck form standing under an arm's equation *is* that case's value, and the written spellings have all been asked by now: the one probe left is the entries' reduced spellings, the kernel's second point.
             //
-            // **An answer is final.** What it hands back is a case value — a constructor or a literal, a normal form — so there is nothing left for an equation to say about it, and it is not asked again. That is a rule rather than an observation: a reduced spelling can itself be a case value, where equations outside an entry decide its key, and a birth's refinements installed again for a judgment made away from it (`Context::with_refinements`) register an arm's equation in a frame inside its own, whose spelling then settles to the very value it assumes. Asked again, such a value would answer itself, which the loop would take for progress until the budget ran out, and two entries spelled as each other's values would trade it back and forth the same way.
+            // **An answer is final.** What it hands back is a case value — a constructor or a literal, a normal form — so there is nothing left for an equation to say about it, and it is not asked again. That is a rule rather than an observation: a reduced spelling can itself be a case value, where equations outside an entry decide its key, whose spelling then settles to that value. Asked again, such a value would answer itself, which the loop would take for progress until the budget ran out, and two entries spelled as each other's values would trade it back and forth the same way.
             Reduce::Break(result) => match answered {
                 true => {
                     remember(context, declined, entry, &result);

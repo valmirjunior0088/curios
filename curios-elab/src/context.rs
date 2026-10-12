@@ -118,14 +118,15 @@ type SharedSpine = Rc<Vec<Term>>;
 pub(crate) struct DomainScope {
     telescope: SharedTelescope,
     spine: SharedSpine,
+    frames: HeldFrames,
 }
 
-/// How a metavariable is re-expressed in a context narrower than its own, that of the metavariable whose candidate embeds it ([`Context::metavar_restriction`]) or the one a block leaves standing where it ends ([`Context::block_restriction`]): the stand-in's telescope, drawn from the narrower context's, the arguments it is applied to in the restricted one's birth names, its type over its own binders, and the refinements it is born under. Opaque outside this module — what plans one can only pass it to [`Context::restrict_metavar`].
+/// How a metavariable is re-expressed in a context narrower than its own, that of the metavariable whose candidate embeds it ([`Context::metavar_restriction`]) or the one a block leaves standing where it ends ([`Context::block_restriction`]): the stand-in's telescope, drawn from the narrower context's, the arguments it is applied to in the restricted one's birth names, its type over its own binders, and the frames it holds. Opaque outside this module — what plans one can only pass it to [`Context::restrict_metavar`].
 pub(crate) struct Restriction {
     telescope: SharedTelescope,
     arguments: Vec<Term>,
     result: Term,
-    refinements: SharedRefinements,
+    frames: HeldFrames,
 }
 
 pub(crate) struct UniverseMutation<'a> {
@@ -1569,72 +1570,25 @@ impl<'s> Context<'s> {
         self.typing.frames.visible_scrutinee_entries()
     }
 
-    pub(crate) fn is_scrutinee_key(&self, canonical: &Term) -> bool {
-        self.typing.frames.is_scrutinee_key(canonical)
+    /// [`Frames::is_key_set_aside`].
+    pub(crate) fn is_key_set_aside(&self, canonical: &Term) -> bool {
+        self.typing.frames.is_key_set_aside(canonical)
     }
 
-    pub(crate) fn refinements_suppressed(&self) -> bool {
-        self.typing.frames.refinements_suppressed()
+    /// [`Frames::reads_the_refinements_of`]: whether the refinements a lookup reads now are the ones the frames `born` register, so that a spelling reduced where the solver stands rests on nothing the metavariable's birth lacks.
+    pub(crate) fn reads_the_refinements_of(&self, born: &HeldFrames) -> bool {
+        self.typing.frames.reads_the_refinements_of(born)
     }
 
-    /// The refinements a lookup may read now, of every kind — what a metavariable born here is born under.
-    pub(crate) fn refinement_snapshot(&mut self) -> SharedRefinements {
-        self.typing.frames.refinement_snapshot()
-    }
-
-    /// Whether `refinements` are exactly the ones a lookup may read now, so that judging under them needs no bracket.
-    pub(crate) fn refinements_are(&mut self, refinements: &Refinements) -> bool {
-        let current = self.typing.frames.refinement_snapshot();
-        std::ptr::eq(&*current, refinements) || current.same_as(refinements)
-    }
-
-    /// Record `refinements` in the current frame, each with the refinement cache protocol, in order, so an inner one shadows an outer as it did where they were taken.
-    pub(crate) fn install_refinements(&mut self, refinements: &Refinements) {
-        for (name, value) in &refinements.variables {
-            self.refine(name, value);
-        }
-
-        for ((_, index), entry) in &refinements.projections {
-            // Re-registered from the *unerased* base, never the key: the key is what erasing that base produced, and re-erasing it would lose the spelling the read compares against.
-            self.refine_projection(entry.original.clone(), *index, entry.value.clone());
-        }
-
-        // In order, so an entry that withholds an equation lands after the equation it withholds and shadows it here as it did where they were taken.
-        for (canonical, entry) in &refinements.scrutinees {
-            match entry.withheld {
-                true => {
-                    self.typing.caches.invalidate_for_refinement();
-                    self.typing
-                        .frames
-                        .withhold_scrutinee(canonical.clone(), entry.clone());
-                }
-                false => self.refine_scrutinee_spellings(
-                    vec![(canonical.clone(), entry.original.clone(), entry.alias)],
-                    &entry.value,
-                ),
-            }
+    /// Run `f`, a judgment of a metavariable, where the metavariable was born: `born` are the frames its birth holds. At once where they are the ones a lookup reads already ([`Frames::stands_on`]), the common case of a term judged in the arm it was born in: the live context is then the birth's with binders and definitions added, and what is judged names none of them. Standing on the frames otherwise ([`Context::standing_on`]), so a solution's check, two answers' comparison, a bound's discharge, the solver's reading of a candidate and a goal's candidates each read the birth's guards in the frames they stood in, its definitions and its witness binders, and nothing of the arm the judgment happens to be made in.
+    pub(crate) fn at_birth<R>(&mut self, born: &HeldFrames, f: impl FnOnce(&mut Self) -> R) -> R {
+        match self.typing.frames.stands_on(born) {
+            true => f(self),
+            false => self.standing_on(born, f),
         }
     }
 
-    /// Run `f` under exactly the refinements `birth` holds — what a metavariable's solution, or a candidate for a written goal, is judged under. At once where they are the ones a lookup reads already, the common case of a term judged in the arm it was born in; otherwise with every refinement registered so far withheld and `birth`'s reinstalled in a frame above them, since a frame a suppression enters keeps its own refinements live.
-    pub(crate) fn with_refinements<R>(
-        &mut self,
-        birth: &Refinements,
-        f: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        if self.refinements_are(birth) {
-            return f(self);
-        }
-
-        self.with_suppressed_refinements(|context| {
-            context.with_frame(|context| {
-                context.install_refinements(birth);
-                f(context)
-            })
-        })
-    }
-
-    /// Whether any refinement of any kind is registered, suppressed or not — the closed machine's gate. Suppression must not open it: a suppressed scrutinee key is *withheld* by the strategy, and the machine evaluating it would hand out the value the suppression exists to withhold.
+    /// Whether any refinement of any kind is registered, in a frame that stands or in one a judgment set aside — the closed machine's gate. Standing on held frames must not open it: a key of a frame set aside is kept neutral by the strategy ([`Context::is_key_set_aside`]), and the machine evaluating it would unfold it.
     pub(crate) fn any_refinements_registered(&self) -> bool {
         self.typing.frames.any_refinements_registered()
     }
@@ -1654,25 +1608,6 @@ impl<'s> Context<'s> {
         self.typing
             .caches
             .invalidate_settlement_boundary(self.typing.asking.plain());
-
-        result
-    }
-
-    /// Run `f` with every refinement registered *so far* suppressed — the slow half of [`Context::with_refinements`], which reinstalls a birth's refinements above it. A frame `f` enters keeps its own refinements live: those belong to the term being judged rather than to the arm the caller sits in, and `Frames::suppress_refinements_below` records why the two are not the same kind.
-    ///
-    /// Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the depth is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
-    pub(crate) fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        if self.typing.frames.any_refinements_registered() {
-            self.typing.caches.invalidate_suppression_boundary();
-        }
-
-        let previous = self.typing.frames.suppress_refinements_here();
-        let result = f(self);
-        self.typing.frames.restore_refinement_suppression(previous);
-
-        if self.typing.frames.any_refinements_registered() {
-            self.typing.caches.invalidate_suppression_boundary();
-        }
 
         result
     }
@@ -2024,18 +1959,24 @@ impl<'s> Context<'s> {
         result: Term,
         kind: MetaKind,
     ) {
+        let frames = self.hold_frames();
+        self.birth_under(id, telescope, frames, result, kind);
+    }
+
+    /// [`Solutions::birth`] under the frames `frames`, stamping the write: a metavariable born where the context stands holds the frames that stand, and one born for another context, a lambda's domain or a restriction's stand-in, the frames of that one.
+    fn birth_under(
+        &mut self,
+        id: MetavarId,
+        telescope: SharedTelescope,
+        frames: HeldFrames,
+        result: Term,
+        kind: MetaKind,
+    ) {
         self.typing.caches.note_write();
-        let refinements = self.typing.frames.refinement_snapshot();
-        let witnesses = self.witness_scope().cloned().collect::<Vec<_>>();
-        let witnesses = (!witnesses.is_empty()).then(|| Rc::from(witnesses));
-        self.underway.attempt.solutions.birth_with_kind(
-            id,
-            telescope,
-            refinements,
-            witnesses,
-            result,
-            kind,
-        );
+        self.underway
+            .attempt
+            .solutions
+            .birth(id, telescope, frames, result, kind);
     }
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
@@ -2045,11 +1986,11 @@ impl<'s> Context<'s> {
         self.typing.caches.note_write();
         let id = self.underway.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
-        let refinements = self.typing.frames.refinement_snapshot();
+        let frames = self.hold_frames();
         self.underway
             .attempt
             .solutions
-            .birth_rec_slot(id, telescope, refinements, result);
+            .birth_rec_slot(id, telescope, frames, result);
         self.underway.attempt.name_rec_slot(id, *name);
         (id, Term::metavar_birthed(id, MetavarOrigin::Hole, spine))
     }
@@ -2124,9 +2065,6 @@ impl<'s> Context<'s> {
         if let Some(reduct) = reduct {
             self.underway.attempt.solutions.note_reduct(id, reduct);
         }
-        if let Some(dead) = self.typing.frames.dead_arm().cloned() {
-            self.underway.attempt.solutions.note_dead_arm(id, dead);
-        }
         (id, metavar)
     }
 
@@ -2168,7 +2106,12 @@ impl<'s> Context<'s> {
     /// The frozen ambient scope a settle-synthesized lambda's domain metavariables are born under — captured before the settle walk assumes a single lambda binder, so a domain's birth context is never wider than the expectation it will inhabit, which the embedded-metavariable exemption in `solve` relies on ([`Context::metavar_context_contained`]).
     pub(crate) fn domain_scope(&mut self) -> DomainScope {
         let (telescope, spine) = self.identity_snapshot();
-        DomainScope { telescope, spine }
+        let frames = self.hold_frames();
+        DomainScope {
+            telescope,
+            spine,
+            frames,
+        }
     }
 
     /// Mint the metavariable standing for a settle-synthesized lambda's unannotated domain — like [`Context::fresh_hole_metavar`] but carrying the binder's name, so zonk's unsolved report can point at the parameter whose type was never determined instead of raising a bare "cannot infer", and born at the settle site's ambient `scope` rather than under the lambda's own binders.
@@ -2180,7 +2123,13 @@ impl<'s> Context<'s> {
         binder: String,
     ) -> Term {
         let id = self.underway.attempt.solutions.mint();
-        self.birth_metavar(id, scope.telescope.clone(), result);
+        self.birth_under(
+            id,
+            scope.telescope.clone(),
+            scope.frames.clone(),
+            result,
+            MetaKind::Inference,
+        );
         let metavar = Term::metavar_birthed(id, MetavarOrigin::Domain(binder), scope.spine.clone());
         match extent {
             Some(extent) => metavar.with_extent(extent),
@@ -2197,7 +2146,7 @@ impl<'s> Context<'s> {
         };
         // Refinements as well as names: a `Bool` arm opens no binder, so a metavariable born inside `match k < n | true =>` has the telescope of one born just outside it, and a solution resting on the arm's guard would escape through a containment that read names alone.
         self.metavar_names_contained(inner, outer)
-            && inner_entry.refinements.within(&outer_entry.refinements)
+            && inner_entry.frames.refinements_within(&outer_entry.frames)
     }
 
     /// Whether a candidate for `outer` binds what `inner`'s birth context holds beyond `outer`'s: `inner` was born under no refinement `outer` was not, and each binder of its telescope that is none of `outer`'s stands, at every one of `occurrences`, as a variable the candidate binds itself. The occurrence then sits where `inner` was born, a binder of the candidate's own in the binder's place, and whatever `inner` comes to arrives through that spine and names nothing the candidate does not bind. It is what a settled lambda's codomain is in the function type the lambda states: born under the lambda's binders, so that the body's type may name them.
@@ -2212,7 +2161,7 @@ impl<'s> Context<'s> {
         else {
             return false;
         };
-        if occurrences.is_empty() || !inner_entry.refinements.within(&outer_entry.refinements) {
+        if occurrences.is_empty() || !inner_entry.frames.refinements_within(&outer_entry.frames) {
             return false;
         }
         let outer_names: BTreeSet<&Free> =
@@ -2262,13 +2211,10 @@ impl<'s> Context<'s> {
         if !inner_entry.unification_fills(origin) {
             return None;
         }
-        // Born under the refinements `inner` shares with `outer`'s birth: whatever reaches `outer` through `inner` must hold where `outer` is, so `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm.
-        let refinements = || {
-            Rc::new(
-                inner_entry
-                    .refinements
-                    .shared_with(&outer_entry.refinements),
-            )
+        // It holds the frames both births hold, outermost first for as far as they are the same frames, each as the earlier of the two held it: whatever reaches `outer` through `inner` must hold where `outer` is, so `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm.
+        let frames = || match inner < outer.id {
+            true => inner_entry.frames.shared_with(&outer_entry.frames),
+            false => outer_entry.frames.shared_with(&inner_entry.frames),
         };
 
         if self.metavar_names_contained(inner, outer.id) {
@@ -2280,7 +2226,7 @@ impl<'s> Context<'s> {
                     .collect(),
                 telescope: Rc::clone(&inner_entry.telescope),
                 result: inner_entry.result.clone(),
-                refinements: refinements(),
+                frames: frames(),
             });
         }
 
@@ -2375,7 +2321,7 @@ impl<'s> Context<'s> {
             telescope: Rc::new(telescope),
             arguments,
             result,
-            refinements: refinements(),
+            frames: frames(),
         })
     }
 
@@ -2427,7 +2373,9 @@ impl<'s> Context<'s> {
                 .map(|(name, _)| Term::free_var(name))
                 .collect(),
             result: read_by_value(result, values),
-            refinements: Rc::clone(&inner_entry.refinements),
+            frames: inner_entry
+                .frames
+                .beneath(self.typing.frames.innermost_frame()),
         })
     }
 
@@ -2443,30 +2391,25 @@ impl<'s> Context<'s> {
         })
     }
 
-    /// Solve the unsolved `inner` to a fresh stand-in as `restriction` plans it ([`Context::metavar_restriction`], [`Context::block_restriction`]), born under the refinements the plan states. The stand-in keeps `inner`'s origin and `extent`, so an unsolved one reports as `inner` would have. Birth records stay frozen; the restriction is a solution, rolled back and reported like any other.
+    /// Solve the unsolved `inner` to a fresh stand-in as `restriction` plans it ([`Context::metavar_restriction`], [`Context::block_restriction`]), holding the frames the plan states. The stand-in keeps `inner`'s origin and `extent`, so an unsolved one reports as `inner` would have. Birth records stay frozen; the restriction is a solution, rolled back and reported like any other.
     pub(crate) fn restrict_metavar(
         &mut self,
         inner: MetavarId,
         (origin, extent): Provenance,
         restriction: Restriction,
     ) {
-        let Some(inner_entry) = self.metavar_entry(inner) else {
+        if self.metavar_entry(inner).is_none() {
             return;
-        };
-        let witnesses = inner_entry.witnesses.clone();
+        }
         let Restriction {
             telescope,
             arguments,
             result,
-            refinements,
+            frames,
         } = restriction;
 
-        self.typing.caches.note_write();
         let narrowed = self.underway.attempt.solutions.mint();
-        self.underway
-            .attempt
-            .solutions
-            .birth(narrowed, telescope, refinements, witnesses, result);
+        self.birth_under(narrowed, telescope, frames, result, MetaKind::Inference);
         let stand_in = Term::metavar_birthed(narrowed, origin, arguments);
         let stand_in = match extent {
             Some(extent) => stand_in.with_extent(extent),
@@ -2792,8 +2735,8 @@ impl<'s> Context<'s> {
 
     // === Parked constraints ============================================
 
-    /// [`Frames::hold`]: the frames above the base as they stand, which a parked problem takes where it parks.
-    pub(crate) fn hold_frames(&self) -> HeldFrames {
+    /// [`Frames::hold`]: the frames above the base as they stand, which a parked problem takes where it parks and a metavariable where it is born.
+    pub(crate) fn hold_frames(&mut self) -> HeldFrames {
         self.typing.frames.hold()
     }
 
@@ -2824,7 +2767,7 @@ impl<'s> Context<'s> {
         }
 
         if set_aside_refined {
-            self.typing.caches.invalidate_suppression_boundary();
+            self.typing.caches.invalidate_stand_boundary();
         }
         if held.binds() {
             self.typing.caches.note_write();
@@ -2846,7 +2789,7 @@ impl<'s> Context<'s> {
         self.typing.frames.stand_back(aside);
 
         if set_aside_refined {
-            self.typing.caches.invalidate_suppression_boundary();
+            self.typing.caches.invalidate_stand_boundary();
         }
         self.typing
             .caches
@@ -3046,16 +2989,10 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.declined_to_park()
     }
 
-    /// Run `f` as a yes/no *oracle* around full elaboration — a solution's re-validation, a goal candidate's fit — under the refinements `birth` holds and no others: the ones the checked term's metavariable was born under ([`Context::with_refinements`]). Parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. What the parking half suppressed is recorded for the oracle's own reader ([`Context::may_park`]): a goal candidate's fit and an entailment read a failure as no, and re-validation, which has a third answer, reads a failure where a park was declined as not judged yet. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`].
-    pub(crate) fn with_oracle<R>(
-        &mut self,
-        birth: &Refinements,
-        f: impl FnOnce(&mut Self) -> R,
-    ) -> R {
+    /// Run `f` as a yes/no *oracle* around full elaboration — a solution's re-validation, a goal candidate's fit. Parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. What the parking half suppressed is recorded for the oracle's own reader ([`Context::may_park`]): a goal candidate's fit and an entailment read a failure as no, and re-validation, which has a third answer, reads a failure where a park was declined as not judged yet. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`]. Where the verdict is one of a metavariable, the oracle is asked where the metavariable was born ([`Context::at_birth`]).
+    pub(crate) fn with_oracle<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         self.typing.caches.begin_oracle();
-        let result = self.with_suppressed_parking(|context| {
-            context.with_refinements(birth, |context| context.with_suppressed_privacy(f))
-        });
+        let result = self.with_suppressed_parking(|context| context.with_suppressed_privacy(f));
         self.typing.caches.end_oracle();
 
         result

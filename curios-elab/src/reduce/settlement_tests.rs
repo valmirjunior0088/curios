@@ -107,8 +107,9 @@ fn a_settled_spelling_outlives_what_cannot_change_it() {
         });
         assert!(settled(context, &at), "an inner frame's exit");
 
-        context.with_suppressed_refinements(|_| ());
-        assert!(settled(context, &at), "a suppression bracket");
+        let held = context.hold_frames();
+        context.standing_on(&held, |_| ());
+        assert!(settled(context, &at), "a judgment standing on its frame");
     });
 }
 

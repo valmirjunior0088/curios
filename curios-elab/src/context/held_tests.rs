@@ -1,6 +1,6 @@
-//! Frames held: what a parked problem holds of the context, and what a judgment standing on it reads.
+//! Frames held: what a parked problem and a metavariable hold of the context, and what a judgment standing on it reads.
 //!
-//! What parks takes the frames above the base as they stand, shared with the context. A frame written to since is copied for its writer, and a retry stands on the frames held with nothing assumed, defined or registered again: each guard stands in the frame it was registered in, and what a frame settled of its guards is read wherever the frame is held.
+//! What parks takes the frames above the base as they stand, shared with the context, and so does a metavariable where it is born: what is judged of it runs where it stands while those frames do, and stands on them otherwise. A frame written to since is copied for its writer, and a retry stands on the frames held with nothing assumed, defined or registered again: each guard stands in the frame it was registered in, and what a frame settled of its guards is read wherever the frame is held.
 
 use {
     crate::*,
@@ -119,4 +119,60 @@ fn a_settled_spelling_is_read_wherever_its_frame_is_held() {
         !read,
         "a frame only a parked problem holds forgets with the rest"
     );
+}
+
+/// A judgment of a metavariable runs where it stands while the frames the metavariable was born under still stand and nothing refines what they do not: the live context is then the birth's with binders added, which the judgment reads as it reads anything in view.
+#[test]
+fn a_judgment_runs_in_place_where_the_births_frames_stand() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+
+    context.with_frame(|context| {
+        context.assume(&x, &nat_type());
+        let born = context.hold_frames();
+
+        context.with_frame(|context| {
+            context.assume(&y, &nat_type());
+            let sees_y = context.at_birth(&born, |context| context.assumption(&y).is_some());
+            assert!(sees_y, "the judgment ran where it stood");
+        });
+    });
+}
+
+/// A judgment of a metavariable stands on the frames it was born under where the live context refines what they do not: the arm's equation is none of the birth's, and the judgment reads nothing of it.
+#[test]
+fn a_judgment_stands_on_the_births_frames_where_an_arm_refines_since() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0_usize)));
+
+    context.with_frame(|context| {
+        context.assume(&x, &nat_type());
+        let born = context.hold_frames();
+
+        context.with_frame(|context| {
+            context.refine(&x, &zero);
+            let refined = context.at_birth(&born, |context| context.var_reduct(&x).cloned());
+            assert_eq!(refined, None);
+            assert_eq!(context.var_reduct(&x), Some(&zero));
+        });
+    });
+}
+
+/// A birth holds its definitions with its frames: a local defined where a metavariable was born is defined for what is judged of the metavariable once its frame has left the context, where a copy of the birth's telescope alone left it a name nothing binds.
+#[test]
+fn a_judgment_reads_the_definitions_of_the_frames_its_metavariable_was_born_under() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let two = Term::intrinsic(Intrinsic::Nat(Nat::new(2_usize)));
+
+    let born = context.with_frame(|context| {
+        context.define_assuming(&n, &nat_type(), &two, None);
+        context.hold_frames()
+    });
+
+    assert_eq!(context.definition_body(&n), None);
+    let defined = context.at_birth(&born, |context| context.definition_body(&n).cloned());
+    assert_eq!(defined, Some(two));
 }

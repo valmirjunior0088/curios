@@ -391,10 +391,10 @@ fn a_metavariable_born_in_an_arm_is_restricted_to_the_candidate_that_embeds_it()
         panic!("the embedded metavariable is solved to its restriction");
     };
     assert!(
-        context.metavar_entry(narrowed.id).is_some_and(|entry| {
-            entry.refinements.same_as(&Refinements::default()) && entry.solution.is_none()
-        }),
-        "the restriction is born under the refinements the two share — none — and left open"
+        context
+            .metavar_entry(narrowed.id)
+            .is_some_and(|entry| !entry.frames.refined() && entry.solution.is_none()),
+        "the restriction holds the frames the two share, which register no refinement, and is left open"
     );
 
     let (context, converted) = embedding(MetavarOrigin::Goal);
@@ -588,13 +588,16 @@ fn revalidation_withholds_an_arm_a_metavariable_was_not_born_in() {
         vec![(t_binder, Term::type_ground())],
         Term::free_var(&t_binder),
     );
-    context.refine(&t_binder, &Term::intrinsic(Intrinsic::NatType));
 
-    // `?0 ≟ 5` at type `t`. In the arm `t ⇝ Nat` and `5 : t` holds, but re-validation stands under the refinements `?0` was born under — none — leaving `t` abstract, so `5 : t` fails and the solution is rejected: `?0` also stands outside the arm, where `5 : t` is false.
-    let t = Term::free_var(&t_binder);
-    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![t.clone()]);
-    let five = Term::intrinsic(Intrinsic::Nat(Nat::new(5usize)));
-    assert_eq!(convert(&mut context, &t, &occurrence, &five), Ok(false));
+    // `?0 ≟ 5` at type `t`, asked in the arm. There `t ⇝ Nat` and `5 : t` holds, but re-validation stands on the frames `?0` was born under, which hold nothing of the arm, leaving `t` abstract, so `5 : t` fails and the solution is rejected: `?0` also stands outside the arm, where `5 : t` is false.
+    context.with_frame(|context| {
+        context.refine(&t_binder, &Term::intrinsic(Intrinsic::NatType));
+
+        let t = Term::free_var(&t_binder);
+        let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![t.clone()]);
+        let five = Term::intrinsic(Intrinsic::Nat(Nat::new(5usize)));
+        assert_eq!(convert(context, &t, &occurrence, &five), Ok(false));
+    });
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
@@ -646,12 +649,15 @@ fn revalidation_accepts_a_refinement_independent_solution() {
         vec![(t, Term::type_ground())],
         Term::intrinsic(Intrinsic::NatType),
     );
-    context.refine(&t, &Term::intrinsic(Intrinsic::NatType));
 
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&t)]);
     let five = Term::intrinsic(Intrinsic::Nat(Nat::new(5usize)));
-    assert_eq!(convert(&mut context, &nat, &occurrence, &five), Ok(true));
+    context.with_frame(|context| {
+        context.refine(&t, &Term::intrinsic(Intrinsic::NatType));
+
+        let nat = Term::intrinsic(Intrinsic::NatType);
+        let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&t)]);
+        assert_eq!(convert(context, &nat, &occurrence, &five), Ok(true));
+    });
     assert_eq!(context.metavar_solution(MetavarId(0)), Some(&five));
 }
 

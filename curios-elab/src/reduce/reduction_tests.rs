@@ -1111,20 +1111,23 @@ fn solved_metavar_yields_solution() {
 }
 
 #[test]
-fn refinement_is_suppressible() {
+fn a_refinement_is_not_read_where_its_frame_is_set_aside() {
     let mut context = context();
     let b_binder = context.fresh(Some("b"));
     let b = Term::free_var(&b_binder);
     let truth = Term::intrinsic(Intrinsic::Bool(true));
+    let outside = context.hold_frames();
 
-    context.refine(&b_binder, &truth);
+    context.with_frame(|context| {
+        context.refine(&b_binder, &truth);
 
-    // With the refinement active, `b` reduces to its counterfactual value.
-    assert_eq!(reduce(&mut context, b.clone()), Ok(truth));
+        // With the refinement in view, `b` reduces to its counterfactual value.
+        assert_eq!(reduce(context, b.clone()), Ok(truth));
 
-    // Suppressed (as in re-validation), `b` is abstract again.
-    let reduced = context.with_suppressed_refinements(|context| reduce(context, b.clone()));
-    assert_eq!(reduced, Ok(b));
+        // Judged where a metavariable born outside the arm was born (as in re-validation), `b` is abstract again.
+        let reduced = context.at_birth(&outside, |context| reduce(context, b.clone()));
+        assert_eq!(reduced, Ok(b));
+    });
 }
 
 // A solution that reaches its own metavariable sends the display walk round forever: reducing `?0` unfolds it to `f(?0)`, whose argument is `?0` again. The walk is display-only, and on the native stack with no bound a diagnostic about such a term would abort the process instead of rendering. Charged per level, the declaration's budget refuses it, and the caller falls back to the un-normalized spelling as its contract says.

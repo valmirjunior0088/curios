@@ -14,7 +14,7 @@
 
 use {
     super::{
-        Context, Entailed, Outcome, Refinements, Refusal, check, convert_outcome, entail,
+        Context, Entailed, HeldFrames, Outcome, Refusal, check, convert_outcome, entail,
         reduce_with, subsume_outcome, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
@@ -51,17 +51,16 @@ struct Candidate {
 pub(crate) fn suggest_candidates(
     context: &mut Context,
     telescope: &[(Free, Term)],
-    refinements: &Refinements,
+    born: &HeldFrames,
     goal_type: &Term,
     written: &[Item],
     entry: Option<&Entrypoint>,
     owner: Option<&Global>,
 ) -> Suggestions {
-    context.with_frame(|context| {
+    context.standing_on(born, |context| {
         for (name, type_) in telescope {
             context.assume(name, type_);
         }
-        context.install_refinements(refinements);
         suggest_in_scope(context, telescope, goal_type, written, entry, owner)
     })
 }
@@ -535,10 +534,8 @@ fn constructor_fits(
 /// Whether the fully-spelled `candidate` checks against `goal_type` in the goal's own scope — already the current frame, its telescope and refinements installed — the definitive fit gate for a hole-free constructor candidate, and what turns the paste-and-recheck promise into a machine guarantee. Runs as an oracle under the goal's refinements (parking and privacy suppressed — `Blocked` is a mismatch) inside a transaction: every solution the attempt lands is rolled back.
 fn verifies(context: &mut Context, candidate: &Term, goal_type: &Term) -> bool {
     let mark = context.solution_mark();
-    let birth = context.refinement_snapshot();
-    let verdict = context.with_oracle(&birth, |context| {
-        check(context, candidate, goal_type.clone()).is_ok()
-    });
+    let verdict =
+        context.with_oracle(|context| check(context, candidate, goal_type.clone()).is_ok());
     context.rollback_solutions(mark);
     context.end_solutions(mark);
     verdict

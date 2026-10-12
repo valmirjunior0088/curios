@@ -407,3 +407,37 @@ fn a_candidate_of_the_other_sort_is_not_suggested() {
     );
     assert!(!error.contains("? \u{2248} p"), "unexpected error: {error}");
 }
+
+/// A goal written under two guards is offered the proof its inner guard gives under the outer. `q(p(x), y) <= z` is `y <= z` once the outer guard has made `p(x)` true, and the goal's candidates are sought standing on the frames it was born under, the inner guard's inside the outer's. With the two registered side by side in one frame the inner one said nothing, and the report read `a proof was found and did not check, which is the compiler's fault`, where `True/qed()` written in the goal's place compiled.
+#[test]
+fn a_goal_under_two_guards_is_offered_the_proof_the_inner_one_gives() {
+    let source = r#"
+        use /std/{Bool, Nat};
+        use /std/Bool/{Holds, True};
+
+        let p(x: Nat) -> Bool = x % 2 == 0;
+        let q(c: Bool, y: Nat) -> Nat = match c | true => y | false => 0 end;
+
+        let f(x: Nat, y: Nat, z: Nat) -> Nat =
+            match p(x)
+            | true =>
+                match q(p(x), y) <= z
+                | true => (let h: Holds(y <= z) = ?; y)
+                | false => 0
+                end
+            | false => 0
+            end;
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(source).unwrap_err();
+
+    assert!(
+        error.contains("? \u{2248} True/qed()"),
+        "unexpected error: {error}"
+    );
+    assert!(
+        !error.contains("did not check"),
+        "unexpected error: {error}"
+    );
+}

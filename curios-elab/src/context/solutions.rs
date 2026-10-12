@@ -1,15 +1,15 @@
 //! The unification state: metavariable birth records and solutions, the solve journal, and the parked-work store.
 //!
-//! Everything here is frame-independent — a metavariable's record freezes the Γ it was born under, and parked work holds the frames it blocked under ([`HeldFrames`]), shared with the context and copied for whatever writes to one, so neither is touched by `enter_frame`/`leave_frame`. Writes that must reach the cache stamps are stamped by the `Context` façade; the transactional watermark (`SolutionMark`) also stays there, because it spans this store and the universe solver together.
+//! Everything here is frame-independent — a metavariable's record freezes the Γ it was born under and holds the frames it was born under, and parked work holds the frames it blocked under ([`HeldFrames`]), shared with the context and copied for whatever writes to one, so neither is touched by `enter_frame`/`leave_frame`. Writes that must reach the cache stamps are stamped by the `Context` façade; the transactional watermark (`SolutionMark`) also stays there, because it spans this store and the universe solver together.
 //!
-//! **Which term awaits a metavariable is kept here, and written at three doors.** A term that reads its parts against types holding metavariables awaits them until it has read them all ([`Solutions::enter_awaiting`]): a metavariable is awaited from its birth by the term being read, and the relation moves only where a link is made — a committed solution holds what it mentions to what it solves, a parked problem holds together what it watches ([`Solutions::birth_with_kind`], [`Solutions::solve`], [`Solutions::park`]). What links hold together is a class ([`Held`]), joined where the link is made and awaited whole by the outermost standing term that awaited any of it, so a chain of links holds its ends: a numeral under two calls waits for the outer one, which no one link says of it. A term that has completed awaits nothing, which a reader sees without a pass: the record stays and the term no longer stands. So whether a choice may still be informed by what encloses it is read off the metavariable's class, and no pass over the store answers it.
+//! **Which term awaits a metavariable is kept here, and written at three doors.** A term that reads its parts against types holding metavariables awaits them until it has read them all ([`Solutions::enter_awaiting`]): a metavariable is awaited from its birth by the term being read, and the relation moves only where a link is made — a committed solution holds what it mentions to what it solves, a parked problem holds together what it watches ([`Solutions::birth`], [`Solutions::solve`], [`Solutions::park`]). What links hold together is a class ([`Held`]), joined where the link is made and awaited whole by the outermost standing term that awaited any of it, so a chain of links holds its ends: a numeral under two calls waits for the outer one, which no one link says of it. A term that has completed awaits nothing, which a reader sees without a pass: the record stays and the term no longer stands. So whether a choice may still be informed by what encloses it is read off the metavariable's class, and no pass over the store answers it.
 
 use {
-    super::{HeldFrames, SharedRefinements, SharedTelescope},
-    crate::{DeadArm, Problem, Refusal},
+    super::{HeldFrames, SharedTelescope},
+    crate::{Problem, Refusal},
     curios_core::{
-        Bound, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm, Term,
-        Transient, WitnessOrigin,
+        Bound, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm, Term, Transient,
+        WitnessOrigin,
     },
     curios_utilities::Entropy,
     std::{
@@ -25,10 +25,8 @@ use {
 pub(crate) struct MetaEntry {
     /// Γ frozen at birth: the local assumption context in binding order, with birth-time types. Drives the scope check and re-validation.
     pub telescope: SharedTelescope,
-    /// The match-arm refinements in force at birth: what a solution may rest on beyond Γ, and all it may — re-validation runs under exactly these, and containment compares them as it compares Γ.
-    pub refinements: SharedRefinements,
-    /// The witness binders in scope at birth, outermost first, or `None` where there were none: the reader position a report about this metavariable is spelled for, since which of `telescope`'s entries resolution would search is not recorded there.
-    pub witnesses: Option<Rc<[(Free, Term)]>>,
+    /// The frames the metavariable was born under, as they stood: what is judged of it is judged standing on them where they are not the live ones ([`Context::at_birth`](super::Context::at_birth)). Their match-arm refinements are what a solution may rest on beyond Γ, and all it may, each in the frame it was registered in, and containment compares them as it compares Γ; their definitions are the birth's; their witness binders are the reader position a report about the metavariable is spelled for; and their innermost dead arm is why an implicit minted there and never solved has no value to take.
+    pub frames: HeldFrames,
     /// The metavariable's type — the `expected` it was checked against at birth.
     pub result: Term,
     /// `None` while unsolved; `Some(t)` once solved. `t`'s free `Var`s are a subset of `telescope`'s names.
@@ -41,8 +39,6 @@ pub(crate) struct MetaEntry {
     pub reduct: Option<Term>,
     /// Why the procedure that proves a bound from the facts in scope proved nothing, the last time it was asked: the facts it considered and what its search concluded, which the unsolved report states beside the bound and cannot ask for itself.
     pub refusal: Option<Rc<Refusal>>,
-    /// Why the arm an omitted implicit was minted in is never taken, where its scrutinee's indices rule it out: the report an unsolved one becomes is made once the arm has closed, and says so by this.
-    pub dead_arm: Option<Rc<DeadArm>>,
     /// Its place among the metavariables links hold together.
     held: Held,
 }
@@ -471,43 +467,23 @@ impl Solutions {
         self.next_metavar.seed(floor);
     }
 
-    /// Materialize a metavariable's birth record. The store grows to cover `id`; births happen exactly once per id (each `_` is distinct and occurs once). The façade stamps the write.
-    pub(crate) fn birth(
-        &mut self,
-        id: MetavarId,
-        telescope: SharedTelescope,
-        refinements: SharedRefinements,
-        witnesses: Option<Rc<[(Free, Term)]>>,
-        result: Term,
-    ) {
-        self.birth_with_kind(
-            id,
-            telescope,
-            refinements,
-            witnesses,
-            result,
-            MetaKind::Inference,
-        );
-    }
-
     /// [`Solutions::birth`] for a recursive-elaboration slot, which only `fill_rec_slot` may solve.
     pub(crate) fn birth_rec_slot(
         &mut self,
         id: MetavarId,
         telescope: SharedTelescope,
-        refinements: SharedRefinements,
+        frames: HeldFrames,
         result: Term,
     ) {
-        self.birth_with_kind(id, telescope, refinements, None, result, MetaKind::RecSlot);
+        self.birth(id, telescope, frames, result, MetaKind::RecSlot);
     }
 
-    /// [`Solutions::birth`] for a metavariable of another kind than an inference hole's.
-    pub(crate) fn birth_with_kind(
+    /// Materialize a metavariable's birth record, of the kind `kind`. The store grows to cover `id`; births happen exactly once per id (each `_` is distinct and occurs once). The façade stamps the write.
+    pub(crate) fn birth(
         &mut self,
         id: MetavarId,
         telescope: SharedTelescope,
-        refinements: SharedRefinements,
-        witnesses: Option<Rc<[(Free, Term)]>>,
+        frames: HeldFrames,
         result: Term,
         kind: MetaKind,
     ) {
@@ -518,15 +494,13 @@ impl Solutions {
         self.next_metavar.seed(id.0 + 1);
         self.entries[id.0] = Some(MetaEntry {
             telescope,
-            refinements,
-            witnesses,
+            frames,
             result,
             solution: None,
             kind,
             proposition: false,
             reduct: None,
             refusal: None,
-            dead_arm: None,
             held: Held::Head {
                 awaited: self.reading,
                 members: 1,
@@ -552,13 +526,6 @@ impl Solutions {
     pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.refusal = Some(Rc::new(refusal));
-        }
-    }
-
-    /// Record why the arm `id` was minted in is never taken, for the report the hole becomes.
-    pub(crate) fn note_dead_arm(&mut self, id: MetavarId, dead: Rc<DeadArm>) {
-        if let Some(Some(entry)) = self.entries.get_mut(id.0) {
-            entry.dead_arm = Some(dead);
         }
     }
 

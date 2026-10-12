@@ -292,11 +292,9 @@ fn tautology(context: &Context, decision: &Term) -> Option<Term> {
 /// Inside the oracle package: parking is suppressed, so a candidate that would wait on a metavariable is a mismatch rather than a leak, and representation privacy is not re-adjudicated for the operands a candidate carries over from the bound and the facts, which elaboration already judged. The fields a fact projects are read only where the item may open them ([`Reader`]).
 fn check(context: &mut Context, candidate: &Term, bound: &Term) -> Result<Option<Term>, Error> {
     curios_profile::profile!("entailment::check");
-    let refinements = context.refinement_snapshot();
     let mark = context.solution_mark();
-    let result = context.with_oracle(&refinements, |context| {
-        elaborate(context, candidate, Mode::Check(bound.clone()))
-    });
+    let result =
+        context.with_oracle(|context| elaborate(context, candidate, Mode::Check(bound.clone())));
     let verdict = result
         .probed()
         .map(|checked| checked.map(|(proof, _)| proof));
