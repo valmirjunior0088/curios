@@ -515,47 +515,6 @@ fn a_reopened_document_is_published_again() {
     );
 }
 
-/// A burst settles before it is compiled, so the first thing the editor is told is about the text the burst ended on. Without the wait the analyst would start on the first keystroke's text — it is idle when that one arrives — and publish an answer about a buffer two keystrokes out of date.
-#[test]
-fn a_burst_of_edits_is_answered_from_the_text_it_ended_on() {
-    let root = temporary("burst");
-    fs::create_dir_all(&root).unwrap();
-    let path = root.join("scratch.crs");
-    write(&root, "scratch.crs", "/std/print(\"\")\n");
-    let uri = format!("file://{}", path.display());
-
-    let mut editor = Editor::launch(&root);
-    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
-    editor.receive();
-    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
-
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"/std/print(\"\")\n"}}}}}}"#
-    ));
-    assert!(editor.receive().contains(r#""diagnostics":[]"#));
-
-    // One keystroke per name, each moving the goal one column right, sent as fast as the wire carries them.
-    for (version, name) in ["m", "mm", "mmm"].iter().enumerate() {
-        editor.send(&format!(
-            r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":{}}},"contentChanges":[{{"text":"let {name} : /std/Nat = ?;\n/std/print(\"\")\n"}}]}}}}"#,
-            version + 2
-        ));
-    }
-
-    let published = editor.receive();
-    assert!(
-        published.contains(r#""start":{"character":21,"line":0}"#),
-        "{published}"
-    );
-
-    let output = editor.finish();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
 /// The warming check is run for what it leaves on the analyst's thread and never for what it says. The workspace's library has a goal in it and the editor is never told: the first thing it hears about is the document it opened.
 ///
 /// The wait before the document is what makes this a test of warming at all. A document sent straight after `initialize` is a document waiting, and the analyst drops the warming check rather than making it queue — so without the wait this would pass on a server that never warms.

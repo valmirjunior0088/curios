@@ -309,14 +309,9 @@ impl Analyst {
         let session = Session::default();
 
         while let Ok(first) = inbox.recv() {
-            // Coalesce and settle: everything queued behind the first job is newer, so the last overlay wins and every document any of them named is checked once against it, and the wait is what makes a burst arriving at an idle analyst one check rather than two. A closed channel ends this loop exactly as a timeout does, and the outer `recv` is what reports it.
-            let mut documents = first.documents;
-            let mut dirty = BTreeMap::new();
-            raise(&mut dirty, first.document, first.raised);
-            while let Ok(job) = inbox.recv_timeout(self.settle(&dirty)) {
-                documents = job.documents;
-                raise(&mut dirty, job.document, job.raised);
-            }
+            // A closed channel ends the batch exactly as a timeout does, and the outer `recv` is what reports it.
+            let (documents, mut dirty) =
+                batch(self.spent, first, |wait| inbox.recv_timeout(wait).ok());
 
             // Warming is worth running on an idle analyst and never in front of a document, so it is dropped rather than reordered — the module documentation says why.
             if dirty.values().any(|raised| *raised != Raised::Warming) {
@@ -353,20 +348,6 @@ impl Analyst {
         }
 
         Ok(())
-    }
-
-    /// How long to wait for another job before compiling what is in hand.
-    ///
-    /// A fraction of what the last check cost, capped — so the wait is worth having where a check is expensive and vanishes where it is not, and the first check of a session, with nothing to weigh against, is never delayed at all. The exception is a batch holding nothing but a warming check: that one is worth the whole cap, because it exists to use an idle analyst and a document arriving is precisely the reason to drop it.
-    ///
-    /// Recomputed as the batch grows rather than taken once, since a warming batch stops being one the moment a document joins it.
-    fn settle(&self, dirty: &BTreeMap<PathBuf, Raised>) -> Duration {
-        if dirty.values().all(|raised| *raised == Raised::Warming) {
-            return SETTLE;
-        }
-
-        self.spent
-            .map_or(Duration::ZERO, |spent| (spent / SETTLE_SHARE).min(SETTLE))
     }
 
     /// Whether the last check already answered about `document` from the overlay now in hand — which is only ever true when that overlay is the one this check was handed, since a move replaces the set.
@@ -464,6 +445,40 @@ impl Analyst {
             },
         )))
     }
+}
+
+/// The batch `first` opens: the last overlay among it and every job `next` hands over within the wait it is asked for, and each document they named with why.
+///
+/// Coalesce and settle: everything behind the first job is newer, so the last overlay wins and every document any of them named is checked once against it, and the wait is what makes a burst arriving at an idle analyst one check rather than two.
+///
+/// `next` is the one place a clock enters, and an argument so that what a batch asks of it is a value: a burst sent from outside the process is one only where the scheduler delivers it inside the wait, which no test can hold it to.
+fn batch(
+    spent: Option<Duration>,
+    first: Job,
+    mut next: impl FnMut(Duration) -> Option<Job>,
+) -> (BTreeMap<PathBuf, String>, BTreeMap<PathBuf, Raised>) {
+    let mut documents = first.documents;
+    let mut dirty = BTreeMap::new();
+    raise(&mut dirty, first.document, first.raised);
+    while let Some(job) = next(settle(spent, &dirty)) {
+        documents = job.documents;
+        raise(&mut dirty, job.document, job.raised);
+    }
+
+    (documents, dirty)
+}
+
+/// How long to wait for another job before compiling what is in hand, `spent` being what the last batch of checks cost.
+///
+/// A fraction of what the last check cost, capped — so the wait is worth having where a check is expensive and vanishes where it is not, and the first check of a session, with nothing to weigh against, is never delayed at all. The exception is a batch holding nothing but a warming check: that one is worth the whole cap, because it exists to use an idle analyst and a document arriving is precisely the reason to drop it.
+///
+/// Recomputed as the batch grows rather than taken once, since a warming batch stops being one the moment a document joins it.
+fn settle(spent: Option<Duration>, dirty: &BTreeMap<PathBuf, Raised>) -> Duration {
+    if dirty.values().all(|raised| *raised == Raised::Warming) {
+        return SETTLE;
+    }
+
+    spent.map_or(Duration::ZERO, |spent| (spent / SETTLE_SHARE).min(SETTLE))
 }
 
 /// Record why `document` is dirty, keeping the reason that cannot be skipped: a document opened and then edited within one burst is checked as an open, since the editor is holding nothing for it.
@@ -649,3 +664,6 @@ fn uri_of(path: &Path) -> Option<Uri> {
 
     Uri::from_str(&encoded).ok()
 }
+
+#[cfg(test)]
+mod tests;
