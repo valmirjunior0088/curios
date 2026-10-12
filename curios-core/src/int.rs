@@ -23,8 +23,16 @@ use {
 /// One monomial with its coefficient: the factors are already in canonical order, which is what lets two monomials be compared as vectors.
 type Monomial = (Integer, Vec<Term>);
 
-/// A signed combination as this module reads one: each summand's origin is its factors, in canonical order, which a rebuild restores.
-type Signed = Combination<Integer, Vec<Term>>;
+/// A summand's monomial as it was read: its factors, in canonical order, and the spine that already spells their product where the summand was written over one.
+#[derive(Debug, Clone)]
+pub(crate) struct IntOrigin {
+    factors: Vec<Term>,
+    /// The left-nested product of `factors` as the summand held it. A rebuild hands it back in place of writing the product again, so a sum that keeps a monomial writes a node for it and none for its factors, as `Nat`'s keeps the factor it read.
+    spine: Option<Term>,
+}
+
+/// A signed combination as this module reads one: each summand's origin is its monomial as it was read, which a rebuild restores.
+type Signed = Combination<Integer, IntOrigin>;
 
 fn zero() -> Integer {
     Integer::from(0)
@@ -99,7 +107,7 @@ pub(crate) fn int_linear(summands: impl IntoIterator<Item = Term>) -> Vec<Monomi
 /// A reduced summand as `curios-algebra` reads it: its coefficient, its factors as atoms, and those factors as the origin a rebuild restores. `None` for a summand whose coefficient is zero, which is no summand.
 ///
 /// The atoms are put in their own order, as `Nat`'s are: [`int_monomial`] orders factors by the structural hash of each as written, levels included, so two instances of one polymorphic factor can sort apart, while an atom's rank is its projected term's hash, which no level moves.
-fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, Vec<Term>>> {
+fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, IntOrigin>> {
     let (coefficient, factors) = int_monomial(summand);
     (!coefficient.is_zero()).then(|| Summand {
         coefficient,
@@ -109,8 +117,32 @@ fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, Vec
                 .map(|factor| atoms.handle(Carrier::Integer, factor))
                 .collect(),
         ),
-        origin: factors,
+        origin: IntOrigin {
+            spine: int_written(summand, &factors),
+            factors,
+        },
     })
+}
+
+/// The spine `summand` holds where it is written as the fold writes a monomial: `factors` multiplied left to right in their order, under a literal coefficient on its left or under none. `None` for any other spelling — factors in another order, a literal inside the product — which a rebuild writes again in the canonical one.
+fn int_written(summand: &Term, factors: &[Term]) -> Option<Term> {
+    let spine = match &**summand {
+        Subterm::Intrinsic(Intrinsic::IntMul(left, right)) if left.as_int().is_some() => right,
+        _ => summand,
+    };
+    let (first, rest) = factors.split_first()?;
+    let mut node = spine;
+    for factor in rest.iter().rev() {
+        let Subterm::Intrinsic(Intrinsic::IntMul(left, right)) = &**node else {
+            return None;
+        };
+        if right.identity() != factor.identity() {
+            return None;
+        }
+        node = left;
+    }
+
+    (node.identity() == first.identity()).then(|| spine.clone())
 }
 
 /// `constant` beside the combination of `summands`, like monomials merged and zeros dropped.
@@ -127,14 +159,21 @@ fn int_monomials_of(combination: Signed) -> Vec<Monomial> {
     combination
         .summands
         .into_iter()
-        .map(|summand| (summand.coefficient, summand.origin))
+        .map(|summand| (summand.coefficient, summand.origin.factors))
         .collect()
 }
 
-/// A combination written back into the normal form.
+/// A combination written back into the normal form, each monomial the spine it was read over where it was read over one.
 fn int_from_combination(combination: Signed) -> Term {
-    let constant = combination.constant.clone();
-    int_from_linear(constant, int_monomials_of(combination))
+    let summands = combination
+        .summands
+        .into_iter()
+        .map(|summand| match summand.origin.spine {
+            Some(spine) => int_scaled_spine(summand.coefficient, spine),
+            None => int_scaled(summand.coefficient, &summand.origin.factors),
+        });
+
+    int_summed(combination.constant, summands)
 }
 
 /// The bare monomial over `factors`, nested to the left in the order given.
@@ -149,17 +188,31 @@ fn int_spine(factors: &[Term]) -> Option<Term> {
 fn int_scaled(coefficient: Integer, factors: &[Term]) -> Term {
     match int_spine(factors) {
         None => literal(coefficient),
-        Some(spine) if coefficient == one() => spine,
-        Some(spine) => Term::intrinsic(Intrinsic::IntMul(literal(coefficient), spine)),
+        Some(spine) => int_scaled_spine(coefficient, spine),
+    }
+}
+
+/// `coefficient · spine` in normal form, over a monomial already written: a unit coefficient is the spine itself, anything else the product with the literal on the left.
+fn int_scaled_spine(coefficient: Integer, spine: Term) -> Term {
+    match coefficient == one() {
+        true => spine,
+        false => Term::intrinsic(Intrinsic::IntMul(literal(coefficient), spine)),
     }
 }
 
 /// A combination and a constant written back into the normal form every reader here reads: summands folded left to right, the constant last and absent when zero, a combination with nothing in it the constant alone.
 pub(crate) fn int_from_linear(constant: Integer, combination: Vec<Monomial>) -> Term {
-    let inner = combination
-        .into_iter()
-        .map(|(coefficient, factors)| int_scaled(coefficient, &factors))
-        .reduce(|left, right| Term::intrinsic(Intrinsic::IntAdd(left, right)));
+    int_summed(
+        constant,
+        combination
+            .into_iter()
+            .map(|(coefficient, factors)| int_scaled(coefficient, &factors)),
+    )
+}
+
+/// `summands`, each a monomial under its coefficient, folded left to right over `constant`.
+fn int_summed(constant: Integer, summands: impl Iterator<Item = Term>) -> Term {
+    let inner = summands.reduce(|left, right| Term::intrinsic(Intrinsic::IntAdd(left, right)));
     match (inner, constant.is_zero()) {
         (None, _) => literal(constant),
         (Some(inner), true) => inner,
@@ -200,7 +253,7 @@ fn int_euclid_pair(
         .iter()
         .enumerate()
         .find_map(|(index, summand)| {
-            let [factor] = summand.origin.as_slice() else {
+            let [factor] = summand.origin.factors.as_slice() else {
                 return None;
             };
             let Subterm::Intrinsic(Intrinsic::IntRem {
@@ -225,7 +278,9 @@ fn int_euclid_pair(
                         .summands
                         .iter()
                         .enumerate()
-                        .find(|(_, candidate)| int_same_factors(&candidate.origin, &monomial));
+                        .find(|(_, candidate)| {
+                            int_same_factors(&candidate.origin.factors, &monomial)
+                        });
                     let holding =
                         holding.map(|(at, candidate)| (at, candidate.coefficient.clone()));
                     (per_copy, holding)
@@ -341,6 +396,7 @@ pub fn int_preimage(term: &Term) -> Option<Term> {
         for summand in natural.summands {
             let naturals = summand
                 .origin
+                .factors
                 .iter()
                 .map(|factor| match &**factor {
                     Subterm::Intrinsic(Intrinsic::NatToInt(nat)) => Some(nat.clone()),
@@ -534,7 +590,7 @@ pub fn int_same(left: &Term, right: &Term) -> bool {
 }
 
 /// `left` against `right` read over one table of atoms, with what they share split off by sign.
-pub(crate) fn int_cancellation(left: &Term, right: &Term) -> Cancelled<Integer, Vec<Term>> {
+pub(crate) fn int_cancellation(left: &Term, right: &Term) -> Cancelled<Integer, IntOrigin> {
     let mut atoms = Atoms::default();
     let (constant_left, summands_left) = int_terms(left);
     let (constant_right, summands_right) = int_terms(right);
@@ -545,7 +601,7 @@ pub(crate) fn int_cancellation(left: &Term, right: &Term) -> Cancelled<Integer, 
 
 /// The terms a cancellation of `left` against `right` leaves: the two operands themselves where it took nothing off.
 pub(crate) fn int_rebuild_cancelled(
-    cancelled: Cancelled<Integer, Vec<Term>>,
+    cancelled: Cancelled<Integer, IntOrigin>,
     left: &Term,
     right: &Term,
 ) -> (Term, Term) {
@@ -559,7 +615,7 @@ pub(crate) fn int_rebuild_cancelled(
 }
 
 /// How many summands [`int_rebuild_cancelled`] writes back for `cancelled`: both residuals where anything was taken off, and none where the operands stand.
-pub(crate) fn int_residuals(cancelled: &Cancelled<Integer, Vec<Term>>) -> usize {
+pub(crate) fn int_residuals(cancelled: &Cancelled<Integer, IntOrigin>) -> usize {
     match cancelled.progress {
         Progress::Nothing => 0,
         Progress::Constant | Progress::Summands => {

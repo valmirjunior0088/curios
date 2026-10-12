@@ -158,3 +158,30 @@ fn a_sum_in_normal_form_reads_back_as_itself() {
 
     assert_eq!(int_sum(&merged, &int(0)), merged);
 }
+
+// A sum that keeps a monomial hands back the spine it read, the node it was, under whatever coefficient the sum leaves it: a merge writes a node for the monomial and none for its factors, as `Nat`'s keeps the factor it read.
+//
+// Mutation-checked: with no spine kept, the monomial of each sum is another node.
+#[test]
+fn a_sum_hands_back_the_monomial_it_read() {
+    let (i, j, k) = (sym(0, "i"), sym(1, "j"), sym(2, "k"));
+    let monomial = int_product(&int_product(&i, &j), &k);
+
+    let (_, summands) = int_terms(&int_sum(&monomial, &int(3)));
+    assert_eq!(summands.len(), 1);
+    assert_eq!(
+        summands[0].identity(),
+        monomial.identity(),
+        "a sum beside a constant holds the monomial it was handed"
+    );
+
+    let doubled = int_sum(&monomial, &monomial);
+    let Subterm::Intrinsic(Intrinsic::IntMul(_, spine)) = &*doubled else {
+        panic!("a monomial under a coefficient");
+    };
+    assert_eq!(
+        spine.identity(),
+        monomial.identity(),
+        "a merge writes a coefficient over the spine it read"
+    );
+}
