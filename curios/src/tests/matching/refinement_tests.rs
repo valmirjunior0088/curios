@@ -1,7 +1,7 @@
 //! What an arm learns from its scrutinee, and the equations it may not assume.
 
 use {
-    crate::tests::{error, run, run_text},
+    crate::tests::{core_elab, error, run, run_text},
     curios_runtime::MockHost,
 };
 
@@ -632,5 +632,29 @@ fn an_error_in_an_arm_the_indices_rule_out_says_the_arm_may_be_left_out() {
             "this arm is never taken: its case has type Two(0, 1) and its scrutinee has type Two(n, n)"
         ) && variable.contains("the arm may be left out"),
         "{variable}"
+    );
+}
+
+// An arm's goal takes the case wherever the scrutinee occurs in it, an occurrence an operator spells through a witness of its own among them. `f`'s result matches on `a <= b` and so does `f`, so in each arm the result's match is on that arm's case, which the goal of the match inside the arm shows: a match on a literal.
+#[test]
+fn an_arms_goal_takes_the_case_where_an_operator_spells_the_scrutinee() {
+    let elaborated = core_elab(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+        let g(a: Nat, b: Nat, @ok: Holds(a <= b)) -> Nat = 1;
+        let f(a: Nat, b: Nat, k: Nat) -> Holds((match a <= b | true => g(a, b, @True/qed()) | false => 0 end) <= 1) =
+            match a <= b
+            | true => match k | 0 => True/qed() | _ + 1 => True/qed() end
+            | false => match k | 0 => True/qed() | _ + 1 => True/qed() end
+            end;
+        /std/print("held")
+        "#,
+    );
+
+    assert!(
+        elaborated.contains("Bool.match false ~ Nat")
+            && elaborated.contains("Bool.match true ~ Nat"),
+        "{elaborated}"
     );
 }

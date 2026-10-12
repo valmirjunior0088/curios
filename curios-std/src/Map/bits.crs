@@ -386,7 +386,7 @@ let within(
                                 at_place(b, 0, n))
                         | 0 => (_) => Eq/refl()
                         | i + 1 =>
-                            (under) =>
+                            (_) =>
                                 Eq/cong(
                                     (v: Nat) => v != 0,
                                     lows(
@@ -447,7 +447,6 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                         | same() => (inner) => Eq/cong((z: Bytes) => x[h, ..z], inner)
                         | at(c) =>
                             (inner) =>
-                                let over: Holds(9 * (g + 1) <= c) = inner.over;
                                 Shifted {
                                     over = True/proved(),
                                     apart =

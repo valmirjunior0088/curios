@@ -4,7 +4,7 @@ use {
         BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_motive,
         contradicted_guard, decided_sort_of, hold_prop, is_prop, probe_open_sort, quality_of,
         reduce_with, refine_head, resolved_for_display, same_uncommitted, stuck_on_metavar,
-        unreachable_arm,
+        unreachable_arm, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
     curios_core::{
@@ -458,7 +458,9 @@ fn resolve_intrinsic_result(
     if let Mode::Check(expected) = mode
         && is_elided_motive(motive)
     {
-        return Ok(MatchResult::Ambient(expected.clone()));
+        return Ok(MatchResult::Ambient(zonk_solved_term_metas(
+            context, expected,
+        )));
     }
     resolve_intrinsic_motive(context, head_type, head, motive, mode).map(MatchResult::Family)
 }
@@ -547,8 +549,9 @@ pub(crate) fn elaborate_match(
     };
 
     let (head, head_type) = elaborate(context, &m.head, Mode::Infer)?;
+    // The scrutinee is read with its solved metavariables substituted, and so is the goal an arm is checked at: an arm's goal takes the case where the scrutinee occurs in it (`MatchResult::at`), found by identity, and an operator reaches its concept through a witness metavariable of its own, solved and not yet spliced, so two spellings of one comparison are two terms until both are substituted.
     let scrutinee = Scrutinee {
-        term: head,
+        term: zonk_solved_term_metas(context, &head),
         type_: reduce_with(context, &head_type)?,
     };
 
@@ -887,7 +890,9 @@ fn elaborate_induct_match(
 
     // An elided motive checked against an expected type takes that type as its *ambient* result: each arm is checked against the expected type with the scrutinee and its variable indices standing for the arm's case, and the match's result is the expected type itself. That is what a hand-written convoy arranges, with no convoy: the ambient form needs no family to close, so a hypothesis whose type mentions the scrutinee rides along unchanged — see `MatchResult::Ambient`. An expression scrutinee takes it too, its syntactic occurrences standing for the case and the arm's refinement reducing the rest, for the reason `resolve_intrinsic_result` gives. A written motive, and inference mode, are a family, checked or solved.
     let result = match &mode {
-        Mode::Check(expected) if is_elided_motive(motive) => MatchResult::Ambient(expected.clone()),
+        Mode::Check(expected) if is_elided_motive(motive) => {
+            MatchResult::Ambient(zonk_solved_term_metas(context, expected))
+        }
         _ => MatchResult::Family(check_motive(context, &shape, motive)?),
     };
 
