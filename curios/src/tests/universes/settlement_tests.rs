@@ -560,3 +560,22 @@ fn a_sort_left_to_an_implicit_closes_as_the_type_written_there() {
         "{parameters:?}"
     );
 }
+
+// An empty list literal is typed before anything says what it holds, so its type is a list of an open element, and each implicit that type is handed to, `id`'s and then `first`'s, is sized from it there. The open element is read at the level its own sort states, a bound the solver keeps once the element is known. Read at zero, each implicit closed at zero under an element at the declaration's own level, and the kernel refused a call the elaborator had admitted.
+#[test]
+fn a_type_over_an_open_element_is_sized_by_the_level_the_element_is_born_at() {
+    let source = r#"
+        use /std/{Nat, List, Str};
+        let id(@A: Type, a: A) -> A = a;
+        let first(@A: Type, x: A, pin: A) -> A = x;
+        let second(@A: Type, pin: A, x: A) -> A = x;
+        let before(@T: Type, x: T) -> List(T) = first(id([]), [x]);
+        let after(@T: Type, x: T) -> List(T) = second([x], id([]));
+        let bound(@T: Type, x: T) -> List(T) =
+            let empty = id([]);
+            first(empty, [x]);
+        /std/print(Nat/to_str(List/len(before(1)) + List/len(after("a")) + List/len(bound(Type))))
+        "#;
+
+    assert_eq!(run(source), b"0");
+}

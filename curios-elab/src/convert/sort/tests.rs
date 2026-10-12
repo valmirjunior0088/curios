@@ -3,7 +3,7 @@
 use {
     crate::{Context, Sort},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Global, Intrinsic, Level, Nat, Term},
+    curios_core::{Free, Global, Intrinsic, Level, Nat, Quality, Term},
     curios_utilities::Qualifier,
 };
 
@@ -198,5 +198,22 @@ fn an_application_of_an_unsolved_metavariable_is_classified_by_its_birth_type() 
     assert_eq!(
         Sort::of(&mut context, &Term::apply(family, [three])).expect("classifies"),
         Sort::type_at(Level::zero()),
+    );
+}
+
+/// An unsolved metavariable born at a sort is a type at that sort's level, and a former over it is sized by that level: what a list of an open element is handed to is bounded by the element's level through it. Read as zero, the list is small whatever its element comes to.
+#[test]
+fn an_unsolved_metavariable_is_classified_at_the_level_its_sort_states() {
+    let mut context = Context::with_default_budget(SYNTAX);
+    let one = Level::zero().succ().expect("one is a level");
+    let element = context.fresh_hole_metavar(Term::sort_at(Quality::Type, one.clone()), None);
+
+    assert_eq!(
+        Sort::of(&mut context, &element).expect("classifies"),
+        Sort::type_at(one.clone()),
+    );
+    assert_eq!(
+        Sort::of(&mut context, &Term::intrinsic(Intrinsic::ListType(element))).expect("classifies"),
+        Sort::type_at(one),
     );
 }

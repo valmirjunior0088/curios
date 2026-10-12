@@ -57,7 +57,7 @@ impl Sort {
         self.is_prop()
     }
 
-    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting would read it as an ordinary implicit nothing retries. A quality still open is handed back as it stands, a metavariable or a declaration's parameter, and is no proposition's to [`Sort::is_prop`].
+    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, at the quality and the level that type states, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting would read it as an ordinary implicit nothing retries. A quality still open is handed back as it stands, a metavariable or a declaration's parameter, and is no proposition's to [`Sort::is_prop`].
     pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
         Sort::of_in(context, &mut Vec::new(), type_)
     }
@@ -350,7 +350,7 @@ impl Sort {
             Subterm::Instance(instance) => {
                 Sort::of_under(context, binders, opened, &instance.head.to_term())?
             }
-            // An unsolved metavariable is classified by the sort its own type states, which no solution changes: one whose type is `Prop` is a proposition before it is solved, so `@P: Prop, @p: P` makes `p` a bound before `P` is known, and one whose type's quality is open has that quality, for a reader that decides it or takes its own safe answer. A solved one never reaches here, since reduction substitutes its solution, and a sort is closed, so the spine an occurrence carries changes nothing. At a type its level is what the solution will say, so it keeps the fallback below.
+            // An unsolved metavariable is classified by the sort its own type states, which no solution changes: one whose type is `Prop` is a proposition before it is solved, so `@P: Prop, @p: P` makes `p` a bound before `P` is known, and one whose type's quality is open has that quality, for a reader that decides it or takes its own safe answer. A solved one never reaches here, since reduction substitutes its solution, and a sort is closed, so the spine an occurrence carries changes nothing. Its level is the one that sort states: the solution is held under it where it is committed, so a former over the metavariable is sized by a level that follows what the metavariable comes to. Read as zero, a list of an open element is small whatever the element is, and a level the list is handed to never learns the element's.
             Subterm::Metavar(metavar) => {
                 let result = context
                     .metavar_entry(metavar.id)
@@ -365,15 +365,8 @@ impl Sort {
                     None => None,
                 };
                 match stated {
-                    Some((Quality::Prop, level)) => Sort::prop_at(level),
-                    Some((quality @ (Quality::Meta(_) | Quality::Param(_)), _)) => {
-                        probe_level_fallback("unsolved metavariable", &reduced);
-                        Sort {
-                            quality,
-                            level: Level::zero(),
-                        }
-                    }
-                    Some((Quality::Type, _)) | None => {
+                    Some((quality, level)) => Sort { quality, level },
+                    None => {
                         probe_level_fallback("unsolved metavariable", &reduced);
                         Sort::type_at(Level::zero())
                     }
