@@ -48,8 +48,8 @@ mod tuples_tests;
 use {
     super::{Doc, Label, Name, Term},
     curios_parse::{
-        Parser, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, mark, not_ahead, pure,
-        shown, spanned, tagging, take_eof, take_exact, take_while,
+        Parser, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, mark, not_ahead,
+        obtained, pure, spanned, tagging, take_eof, take_exact, take_while,
     },
     curios_utilities::{Qualifier, Span, is_identifier_char, is_keyword},
     std::{cell::RefCell, collections::BTreeMap, iter},
@@ -333,21 +333,18 @@ fn parse_qualified_name<'a>() -> Parser<'a, Name> {
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
     mark()
         .and(take_while(is_identifier_char))
-        .and(look_ahead(take_while(|char| !is_blank(char))))
+        .and(look_ahead(take_while(|_| true)))
         .flat_map(
-            move |((start, obtained), rest)| match (obtained, expected == obtained) {
+            move |((start, word), rest)| match (word, expected == word) {
                 (_, true) => pure(()),
-                ("", false) => fail(match rest.chars().next() {
-                    Some(next) => format!(
-                        "Expected keyword '{expected}', obtained '{}'",
-                        shown(next.encode_utf8(&mut [0; 4]))
-                    ),
-                    None => format!("Expected keyword '{expected}', obtained 'end-of-file'"),
-                }),
+                ("", false) => fail(format!(
+                    "Expected keyword '{expected}', obtained {}",
+                    obtained(rest, 1)
+                )),
                 // The report spans the word, so the caret underlines it rather than standing after it.
-                (obtained, false) => fail_from(
+                (word, false) => fail_from(
                     &start,
-                    format!("Expected keyword '{expected}', obtained '{obtained}'"),
+                    format!("Expected keyword '{expected}', obtained '{word}'"),
                 ),
             },
         )

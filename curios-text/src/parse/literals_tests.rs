@@ -114,6 +114,49 @@ fn the_non_finite_values_are_signed_literals() {
     assert!("+nan.0x".parse::<Term>().is_err());
 }
 
+/// A sign is read once, by the number it leads, so one that touches no magnitude is told what a sign leads. Read by each magnitude for itself, it failed three alternatives at one offset and the report was the first one's word, `Expected 'inf.0'`.
+#[test]
+fn a_sign_that_touches_no_magnitude_is_told_what_a_sign_leads() {
+    for source in [
+        "let x : Int = - ;\nx",
+        "let x : Int = -y;\nx",
+        "let x : Int = +;\nx",
+    ] {
+        let error = source.parse::<Entrypoint>().unwrap_err();
+        let report = error.format();
+        assert!(
+            report.contains("expected a numeral, `inf.0` or `nan.0` after the sign"),
+            "{source:?} reported {report}"
+        );
+        assert_eq!(
+            error.report().span.map(|span| span.start),
+            source.find(['-', '+']).map(|sign| sign + 1),
+            "{source:?} reported {report}"
+        );
+    }
+    // A magnitude that begins and goes wrong is its own to report.
+    let overflow = "1.0e999".parse::<Term>().unwrap_err().format();
+    assert!(overflow.contains("overflows Flt"), "{overflow}");
+    let signed = "-1.0e999".parse::<Term>().unwrap_err().format();
+    assert!(signed.contains("overflows Flt"), "{signed}");
+}
+
+/// Where a literal is expected and a blank stands, the report says a blank: the end of the file is named at it alone, since a caret before a blank has text after it.
+#[test]
+fn a_literal_expected_at_a_blank_obtains_a_blank() {
+    let blank = "let c = 'a ;\nc"
+        .parse::<Entrypoint>()
+        .unwrap_err()
+        .format();
+    assert!(blank.contains("Expected ''', obtained a blank"), "{blank}");
+
+    let end = "let c = 'a".parse::<Entrypoint>().unwrap_err().format();
+    assert!(
+        end.contains("Expected ''', obtained 'end-of-file'"),
+        "{end}"
+    );
+}
+
 #[test]
 fn char_literal_ascii() {
     assert_eq!(

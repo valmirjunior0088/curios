@@ -1,10 +1,9 @@
 use {
     super::{
         TUPLE_FIELD_TAKES_NO_MARK, members, parse_apply_argument, parse_bin_literal,
-        parse_block_string_literal, parse_bool_intrinsic, parse_char_lit, parse_flt_value,
-        parse_func_param, parse_func_type_param, parse_identifier, parse_label, parse_list_literal,
-        parse_literal, parse_mark, parse_name, parse_num_lit, parse_string_literal,
-        refuse_dangling_dot,
+        parse_block_string_literal, parse_bool_intrinsic, parse_char_lit, parse_func_param,
+        parse_func_type_param, parse_identifier, parse_label, parse_list_literal, parse_literal,
+        parse_mark, parse_name, parse_number, parse_string_literal, refuse_dangling_dot,
     },
     crate::{
         FuncTypeParam, Label, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField,
@@ -21,11 +20,10 @@ use {
 
 pub(super) fn parse_intrinsic<'a>() -> Parser<'a, Term> {
     parse_bool_intrinsic()
-        // A numeral's dangling dot is refused ahead of both numeral forms, then decimal floats: `5.0` is a `Flt`, not the integer `5` projected.
+        // A numeral's dangling dot is refused ahead of both numeral forms, and a number reads its decimal form first: `5.0` is a `Flt`, not the integer `5` projected.
         .or(refuse_dangling_dot)
-        .or(parse_flt_value)
+        .or(parse_number)
         .or(parse_char_lit)
-        .or(parse_num_lit)
         // The block form is tried first, since its opener begins with the one-line form's.
         .or(parse_block_string_literal)
         .or(parse_string_literal)

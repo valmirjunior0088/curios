@@ -116,6 +116,21 @@ pub fn shown(text: &str) -> String {
     shown
 }
 
+/// What stands at the head of `rest`, as a failure says it after `obtained`: its first `limit` characters short of the next blank, quoted; a blank, where one stands first; and the end of the file at it alone, since a caret before a blank has text after it.
+pub fn obtained(rest: &str, limit: usize) -> String {
+    let found: String = rest
+        .chars()
+        .take(limit)
+        .take_while(|char| !is_blank(*char))
+        .collect();
+
+    match (found.is_empty(), rest.is_empty()) {
+        (false, _) => format!("'{}'", shown(&found)),
+        (true, true) => "'end-of-file'".to_string(),
+        (true, false) => "a blank".to_string(),
+    }
+}
+
 /// Succeeds (consuming nothing) only when the byte immediately before the current offset is whitespace, or we are at the start of input. The infix operator parser uses it to require a space on the *left* of an operator — the right space is required by consuming whitespace after the symbol — so `a - 42` is subtraction while the glued `-42` stays a literal.
 pub fn preceded_by_space<'a>() -> Parser<'a, ()> {
     Parser::new(|state| {

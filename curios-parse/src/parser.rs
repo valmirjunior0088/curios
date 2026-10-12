@@ -163,6 +163,23 @@ where
     })
 }
 
+/// `parser`, its failure said as `message` where it read nothing: what a production of several alternatives takes. Each alternative that declines at the production's first character fails there, and [`Parser::or`] reports the first of them, which names one alternative's word and not the production's. A failure past the first character, or a committed one, is an alternative's own diagnosis and stands.
+pub fn expecting<'a, T>(message: &'static str, parser: impl IntoParser<'a, T> + 'a) -> Parser<'a, T>
+where
+    T: 'a,
+{
+    Parser::new(move |state| {
+        let start = state.offset;
+
+        parser.into_parser().parse(state).map_err(|error| {
+            match error.is_committed() || error.offset != start {
+                true => error,
+                false => error.with_message(message),
+            }
+        })
+    })
+}
+
 /// Takes back a [`commit`] made inside `parser`, so an enclosing [`Parser::or`] or repetition may still try its next alternative. The dual of `commit`, and the only way past one: commitment does not decay with distance, so a refusal a nested grammar commits to travels out of every caller that does not stop it here.
 ///
 /// Written where one grammar deliberately refuses what another may legitimately re-read — `parse_func_type` over its parameter telescope, whose refusal of `(a, b)` as a list of annotated binders must not prevent the same text being read as a tuple or a parenthesized term.

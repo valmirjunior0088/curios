@@ -1,5 +1,5 @@
 use {
-    super::{ParserState, is_blank, shown, unseen},
+    super::{ParserState, obtained, shown, unseen},
     curios_utilities::{Report, Source, Span},
     std::{borrow::Cow, sync::Arc},
 };
@@ -38,7 +38,7 @@ impl ParserError {
         Self::saying(state, Message::Said(message.into()))
     }
 
-    /// The failure of a literal that was not at `state`: `Expected '…', obtained '…'`, naming what stands there up to the literal's length or the next blank.
+    /// The failure of a literal that was not at `state`: `Expected '…', obtained …`, naming what stands there as [`obtained`] says it, up to the literal's length.
     pub(crate) fn expected(state: ParserState, expected: &'static str) -> Self {
         Self::saying(state, Message::Expected(expected))
     }
@@ -66,18 +66,10 @@ impl ParserError {
         let said = match &self.message {
             Message::Said(message) => message.to_string(),
             Message::Unexpected(unexpected) => format!("unexpected '{unexpected}'"),
-            Message::Expected(expected) => {
-                let obtained: String = self.source.text[self.offset..]
-                    .chars()
-                    .take(expected.chars().count())
-                    .take_while(|char| !is_blank(*char))
-                    .collect();
-
-                match obtained.is_empty() {
-                    true => format!("Expected '{expected}', obtained 'end-of-file'"),
-                    false => format!("Expected '{expected}', obtained '{}'", shown(&obtained)),
-                }
-            }
+            Message::Expected(expected) => format!(
+                "Expected '{expected}', obtained {}",
+                obtained(&self.source.text[self.offset..], expected.chars().count())
+            ),
         };
 
         let at = self.from.unwrap_or(self.offset);

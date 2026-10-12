@@ -6,8 +6,8 @@ use {
     },
     curios_num::{Floating, Grain, Natural},
     curios_parse::{
-        Parser, commit, fail, fail_from, lazy, look_ahead, many0, mark, not_ahead, pure,
-        sep_by0_trailing, take_exact, take_n, take_while,
+        Mark, Parser, commit, expecting, fail, fail_from, lazy, look_ahead, many0, mark, not_ahead,
+        pure, sep_by0_trailing, take_exact, take_n, take_while,
     },
     curios_utilities::Sign,
 };
@@ -30,14 +30,43 @@ pub(super) fn parse_caller_sort<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// A polymorphic integer literal: an optional sign glued to a magnitude (decimal, `0x`, or `0b`). Its concrete type (`Nat`/`Int`/`Flt`) is chosen by elaboration — a written sign rules out `Nat`. The sign must touch the digits; `- 42` (spaced) is the subtraction operator, not a negative literal.
-pub(super) fn parse_num_lit<'a>() -> Parser<'a, Term> {
-    take_exact("-")
-        .map(|()| Sign::Negative)
-        .or(take_exact("+").map(|()| Sign::Positive))
-        .or(pure(Sign::Unmarked))
-        .and(parse_nat_digits)
-        .map(|(sign, lit)| {
+/// What a sign with no magnitude behind it is told.
+const SIGN_LEADS_A_LITERAL: &str = "expected a numeral, `inf.0` or `nan.0` after the sign";
+
+// A numeric literal: an optional sign glued to its magnitude. The sign must touch the magnitude; `- 42` (spaced) is the subtraction operator, not a negative literal.
+//
+// The sign is read once, here, so what stands behind one is this production's to say. Read by each magnitude for itself, a sign that touched none failed three alternatives at one offset, and the report was the first one's word: `Expected 'inf.0'`.
+pub(super) fn parse_number<'a>() -> Parser<'a, Term> {
+    let flt = |value| Term::from(Subterm::Literal(Literal::Flt(value)));
+
+    mark()
+        .and(
+            take_exact("-")
+                .map(|()| Sign::Negative)
+                .or(take_exact("+").map(|()| Sign::Positive))
+                .or(pure(Sign::Unmarked)),
+        )
+        .flat_map(move |(start, sign)| {
+            let finite = parse_decimal_flt(start, sign)
+                .map(flt)
+                .or(parse_num_lit(sign));
+
+            match sign {
+                Sign::Unmarked => finite,
+                Sign::Negative | Sign::Positive => expecting(
+                    SIGN_LEADS_A_LITERAL,
+                    parse_non_finite_flt(sign == Sign::Negative)
+                        .map(flt)
+                        .or(finite),
+                ),
+            }
+        })
+}
+
+// A polymorphic integer literal's magnitude (decimal, `0x`, or `0b`) under the sign it was written with. Its concrete type (`Nat`/`Int`/`Flt`) is chosen by elaboration — a written sign rules out `Nat`.
+fn parse_num_lit<'a>(sign: Sign) -> Parser<'a, Term> {
+    parse_nat_digits()
+        .map(move |lit| {
             let NatLiteral(magnitude, radix) = lit;
             Subterm::NumLit(NumLit {
                 magnitude,
@@ -123,26 +152,14 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
         .and_drop(parse_whitespace)
 }
 
-pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
-    parse_non_finite_flt()
-        .or(parse_decimal_flt)
-        .map(|value| Subterm::Literal(Literal::Flt(value)))
-        .map(Into::into)
-}
-
-/// `+inf.0`, `-inf.0`, `+nan.0` and `-nan.0`: the values of `Flt` no decimal spells, in R7RS Scheme's spelling. The sign is required, since `inf.0` bare is field `0` of a binder named `inf`, and nothing may be glued after the `.0`. `+nan.0` is the default quiet NaN and `-nan.0` the same with its sign set; any other NaN has no literal and is built from its bytes with `Flt/of_le_bytes`, which is how a report spells one.
-fn parse_non_finite_flt<'a>() -> Parser<'a, Floating> {
-    take_exact("+")
-        .map(|()| false)
-        .or(take_exact("-").map(|()| true))
-        .and(
-            take_exact("inf.0")
-                .map(|()| Floating::infinite(false))
-                .or(take_exact("nan.0").map(|()| Floating::nan())),
-        )
+/// `+inf.0`, `-inf.0`, `+nan.0` and `-nan.0`, past their sign: the values of `Flt` no decimal spells, in R7RS Scheme's spelling. The sign is required, since `inf.0` bare is field `0` of a binder named `inf`, and nothing may be glued after the `.0`. `+nan.0` is the default quiet NaN and `-nan.0` the same with its sign set; any other NaN has no literal and is built from its bytes with `Flt/of_le_bytes`, which is how a report spells one.
+fn parse_non_finite_flt<'a>(negative: bool) -> Parser<'a, Floating> {
+    take_exact("inf.0")
+        .map(|()| Floating::infinite(false))
+        .or(take_exact("nan.0").map(|()| Floating::nan()))
         .and_drop(not_ahead_word)
         .and_drop(parse_whitespace)
-        .map(|(negative, value)| match negative {
+        .map(move |value| match negative {
             true => value.copysign(Floating::infinite(true)),
             false => value,
         })
@@ -159,19 +176,10 @@ fn not_ahead_word<'a>() -> Parser<'a, ()> {
     })
 }
 
-/// A finite `Flt` literal: a decimal with a dot and at least one digit after it, optionally signed and scaled by an exponent.
-fn parse_decimal_flt<'a>() -> Parser<'a, Floating> {
-    mark()
-        .and(
-            take_exact("-")
-                .map(|()| "-".to_string())
-                .or(take_exact("+").map(|()| "+".to_string()))
-                .or(pure(String::new())),
-        )
-        .and(take_while(|char| {
-            ".-+eE".contains(char) || char.is_ascii_digit()
-        }))
-        .flat_map::<Floating, _>(|((start, sign), digits)| {
+/// A finite `Flt` literal past its sign: a decimal with a dot and at least one digit after it, optionally scaled by an exponent. `start` is where the literal began, its sign included.
+fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> Parser<'a, Floating> {
+    take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
+        .flat_map::<Floating, _>(move |digits| {
             let has_dot = digits.contains('.');
 
             let has_decimal = digits
@@ -190,7 +198,7 @@ fn parse_decimal_flt<'a>() -> Parser<'a, Floating> {
 
             // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f64>` is correctly rounded and gives the same bits on every input, so the two agree; what the model adds is that the answer does not depend on the machine the compiler runs on.
             let value = match decimal_parts(digits) {
-                Some((value, scale)) => Floating::of_decimal(sign == "-", &value, scale),
+                Some((value, scale)) => Floating::of_decimal(sign == Sign::Negative, &value, scale),
                 None => return fail("Expected float literal"),
             };
 
