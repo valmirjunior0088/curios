@@ -147,6 +147,11 @@ impl Calls {
             })
     }
 
+    /// Forget which terms' typing closed a group that does not descend. A hit on a typing table is all that recalls one ([`Calls::recall_partial`]), and the tables are discarded where a declaration begins, so what was remembered beside them goes with them: kept, a term of an earlier declaration would answer for one of this declaration's that is spelled as it was, binder identities included, which start over there too.
+    pub(super) fn begin_declaration(&mut self) {
+        self.partial_terms.clear();
+    }
+
     /// `term`'s typing closed a group that does not descend.
     pub(super) fn remember_partial(&mut self, term: &Term) {
         self.partial_terms.insert(term.clone());

@@ -1403,11 +1403,19 @@ impl<'s> Kernel<'s> {
         self.positions.drain()
     }
 
-    /// Begin a new declaration: the full budget back, and the term-keyed memos discarded.
+    /// Begin a new declaration: the full budget back, the identities started over, and the term-keyed memos discarded with what was remembered beside them.
     ///
-    /// The two go together and neither is optional. A restored budget is what keeps one declaration's verdict off what the declarations before it spent; discarding the tables a hit is *free* on is what keeps it off what they warmed.
+    /// The three go together and none is optional. A restored budget is what keeps one declaration's verdict off what the declarations before it spent; identities started over are what keep it off how many binders they opened; and discarding the tables a hit is *free* on is what keeps it off what they warmed. A binder still open keeps its identity, so the counter starts over past each.
+    ///
+    /// **Identities repeat from one declaration to the next, so nothing keyed by a term that names one may answer across the boundary.** The memos are discarded here, and the terms whose typing closed a group that does not descend with them. A group's verdict is filed under the group as it stands with its enclosing binders opened, and is read only by the check that filed it and by the item's own classification, each before the next declaration begins, so an entry of an earlier declaration is written over before anything reads it.
     pub fn restore_budget(&mut self) {
         self.spend.restore_budget();
+        for name in self.scope.local_names() {
+            if let Some(index) = name.local_index() {
+                self.spend.reserve(index);
+            }
+        }
         self.memos.begin_declaration();
+        self.calls.begin_declaration();
     }
 }

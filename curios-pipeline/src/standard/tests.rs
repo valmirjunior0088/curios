@@ -1077,12 +1077,14 @@ const UNPROVED: [&str; 1] = [
     "/std/Command/spawn",
 ];
 
-/// The `let`s of the library whose proof elaboration accepts and the kernel refuses, each a finding of `documentation/roadmap/soundness/000-findings.md`.
-const UNCERTIFIED: [&str; 13] = [
+/// The `let`s of the library whose printed form or whose proof elaboration accepts and the kernel refuses, each a finding of `documentation/roadmap/soundness/000-findings.md`.
+const UNCERTIFIED: [&str; 14] = [
     // Each runs an effect: the kernel holds no two such definitions to be one, whatever they unfold to.
     "/std/Async/poll_ready",
     "/std/Command/Pipe/close",
     "/std/File/close",
+    // Its printed body holds a bound's proof the kernel refuses: a comparison it decides under one order of its atoms and not under another.
+    "/std/Flt/of_decimal_in",
     // The kernel's conversion stops short of elaboration's between the body and its printed form.
     "/std/Flt/signals/scaled_prod_diff",
     "/std/Flt/signals/scaled_prod_sum",

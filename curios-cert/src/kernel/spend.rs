@@ -35,7 +35,7 @@ pub(super) struct Spend {
     peak_depth: usize,
     /// The heaviest declaration walked so far, for a measurement to read. See [`Consumption`]; nothing in the kernel consults it.
     heaviest: Consumption,
-    /// Identities for binders the kernel opens itself, when comparing under a telescope and when eta-contracting. Seeded above every index the earlier stages minted, so a kernel-minted binder can never alias one in a term.
+    /// Identities for binders the kernel opens itself, when comparing under a telescope and when eta-contracting. Seeded above every index the earlier stages minted, so a kernel-minted binder can never alias one in a term, and started over at each declaration boundary by [`Spend::restore_budget`].
     minted: Entropy,
 }
 
@@ -101,6 +101,8 @@ impl Spend {
     ///
     /// **The live count is reset here too, and it has to be.** [`Spend::enter_level`] increments before it charges and propagates the refusal with `?`, so the level whose frame could not be paid is never left; and the module walk continues past a refused item to judge the next one. Without this line a module that refuses once charges every later declaration [`Cost::FRAME`] for a level nothing is holding, and the leak accumulates per refusal — a cost that is a fact about what failed earlier rather than about the declaration under judgment, which is the one thing the per-declaration budget exists to prevent.
     ///
+    /// **The identities start over with it.** The carriers' algebra ranks an atom by the structural hash of its term, an identity a local carries included, so the order a normal form's atoms stand in follows the identities a declaration's binders are opened at. A counter that ran on across the walk opened them wherever the declarations before had left it, and what the kernel answered of one term followed which others it had judged. Started over here, they are the declaration's. Freshness asks only that no two binders open together share one, and the caller raises the counter past whatever is still open ([`Kernel::restore_budget`](super::Kernel::restore_budget)).
+    ///
     /// **What the judgment it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], which a fold reports as that sample's `max` beside the elaborator's under the same name — with the nodes its walks looked at beside it, as `term::looks`: the two are sampled at one point, so a declaration whose looks outgrow its units is one a walk paid per path for.
     pub(super) fn restore_budget(&mut self) {
         curios_profile::sample!("budget::consumed", self.consumed().units());
@@ -110,6 +112,7 @@ impl Spend {
         self.remaining = self.budget;
         self.depth = 0;
         self.peak_depth = 0;
+        self.minted.reset();
     }
 
     /// What the declaration under judgment has consumed so far.

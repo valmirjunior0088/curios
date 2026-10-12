@@ -12,6 +12,41 @@ fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 
+/// A declaration's binders are opened at identities of its own: the counter the kernel mints them from starts over where the budget is restored, so how many binders the walk opened before a declaration decides nothing of it. The carriers' algebra ranks an atom by a hash that takes a local's identity in, and under a counter that ran on the kernel answered one term two ways by what it had judged before. A binder still open keeps its identity, and the counter starts over past it.
+#[test]
+fn a_restored_budget_starts_the_identities_over() {
+    let mut kernel = kernel();
+    kernel.restore_budget();
+    let first = kernel.fresh(None);
+
+    // What an earlier declaration opened.
+    kernel.fresh(None);
+    kernel.fresh(None);
+    kernel.restore_budget();
+    assert_eq!(kernel.fresh(None), first);
+
+    let held = Free::local(
+        first.local_index().expect("a binder is a local") + 7,
+        Some("held"),
+    );
+    kernel.assume(&held, &Term::intrinsic(Intrinsic::NatType));
+    kernel.restore_budget();
+    assert!(kernel.fresh(None).local_index() > held.local_index());
+}
+
+/// What a hit on a typing table recalls goes with the tables: a term whose typing closed a group that does not descend is remembered so that a hit counts the group again, and a declaration begins with the tables empty, so it begins with nothing to recall. Kept across the boundary, the term would answer for one of the next declaration's spelled as it was, binder identities included, since those start over there too.
+#[test]
+fn what_a_hit_recalls_goes_with_the_tables() {
+    let mut kernel = kernel();
+    let term = Term::intrinsic(Intrinsic::NatType);
+    kernel.calls.remember_partial(&term);
+
+    kernel.restore_budget();
+    let before = kernel.partial_groups();
+    kernel.calls.recall_partial(&term);
+    assert_eq!(kernel.partial_groups(), before);
+}
+
 /// The name [`family`] registers its declaration under.
 fn fam() -> Global {
     Global::Authored(Qualifier::from(["Fam"]))
