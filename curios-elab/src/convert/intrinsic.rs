@@ -9,10 +9,10 @@ use {
     crate::{Context, Declined, zonk_solved_term_metas},
     curios_algebra::{Cut, split},
     curios_analysis::{
-        Agreement, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
+        Agreement, Classes, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
         connectives_agree_classed, convert_classed, convert_intrinsics,
     },
-    curios_core::{Classes, Cost, Free, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    curios_core::{Cost, Free, Intrinsic, ReduceError, Reducer, Subterm, Term},
     curios_num::{Binary, Grain},
     curios_utilities::SyntaxRegistry,
 };

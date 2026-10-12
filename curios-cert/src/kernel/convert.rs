@@ -37,8 +37,9 @@ mod variance_tests;
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
     crate::{case_target_indices, instantiate_universes_scoped, pinned_instance},
+    curios_analysis::Classes,
     curios_core::{
-        Apply, Atom, Bound, Carrier, Cases, Classes, Cost, Cursor, Field, Func, FuncType, Global,
+        Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Field, Func, FuncType, Global,
         InductType, Instance, InstanceHead, Lockstep, Many, Match, MatchResult, Probe, Proj,
         Quality, ReduceError, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
         Tuple, TupleType, Universes, Variant,
@@ -1659,7 +1660,7 @@ pub(crate) fn stated_payload(
     Ok(stated(kernel, instance, tag)?.map(|stated| stated.payload))
 }
 
-/// Which of `atoms` are one by `same`, as a classing asks of them (`curios-core`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about.
+/// Which of `atoms` are one by `same`, as a classing asks of them (`curios-analysis`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about.
 pub(super) fn classing<E>(
     kernel: &mut Kernel,
     atoms: &[Term],

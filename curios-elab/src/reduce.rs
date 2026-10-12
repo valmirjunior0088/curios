@@ -17,17 +17,17 @@ use {
     },
     crate::{Error, classing, convert_at, is_prop, reduce_with, same_uncommitted},
     curios_analysis::{
-        Answered, Driver, answers, answers_classed, case_target_indices, could_reduce_to,
-        pinned_instance,
+        Answered, Classes, Driver, answers, answers_classed, atoms_within, case_target_indices,
+        classable, could_reduce_to, pinned_instance, refold,
     },
     curios_core::{
-        Advance, Apply, Argument, Atom, Bound, Carrier, Cases, Classes, ClosedHost, ClosedMemo,
-        Cost, Demand, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType,
-        Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity,
-        Probe, Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
+        Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
+        Demand, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
+        InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe,
+        Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, Universes, Var, Variant, Visit, accelerable,
-        atoms_within, classable, instantiate_universes_scoped, probe_spellings,
-        project_erased_universes, reduce_closed, reduce_intrinsic, refold,
+        instantiate_universes_scoped, probe_spellings, project_erased_universes, reduce_closed,
+        reduce_intrinsic,
     },
     curios_utilities::{SyntaxRegistry, recurse},
     std::collections::{BTreeSet, HashMap},
@@ -927,7 +927,7 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     }
 }
 
-/// A stuck operation folded once more with its atoms classed by the elaborator's own conversion, where that decides more than the fold did (`curios_core::refold`) — the kernel's `refolded`, at the kernel's point, once every equation in force has been asked of the stuck form, and under the kernel's two conditions: only of a term that names a local, and never by plain reduction ([`Context::plainly`]).
+/// A stuck operation folded once more with its atoms classed by the elaborator's own conversion, where that decides more than the fold did (`curios_analysis::refold`) — the kernel's `refolded`, at the kernel's point, once every equation in force has been asked of the stuck form, and under the kernel's two conditions: only of a term that names a local, and never by plain reduction ([`Context::plainly`]).
 ///
 /// Two atoms are one here only where they convert with nothing committed, so a fold over an atom still waiting on a metavariable stays stuck and is taken again once it is solved.
 fn refolded(context: &mut Context, folded: &Term) -> Result<Option<Term>, ReduceError> {

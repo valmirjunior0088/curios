@@ -12,6 +12,9 @@ pub use judge::*;
 mod case_equation;
 pub use case_equation::*;
 
+mod classify;
+pub use classify::*;
+
 mod conversion;
 pub use conversion::*;
 

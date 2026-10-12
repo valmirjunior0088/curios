@@ -37,11 +37,12 @@ use {
         unfold_rec_apply,
     },
     crate::{Declined, metavar_origins, metavar_spines, named_members, zonk_solved_term_metas},
+    curios_analysis::Classes,
     curios_core::{
-        Advance, Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Exhaustion, Extent, Families,
-        Free, Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic,
-        Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarOrigin, Probe, Proj, Quality,
-        Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
+        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
+        Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level,
+        Lockstep, Many, Match, MatchResult, Metavar, MetavarOrigin, Probe, Proj, Quality, Rec,
+        ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
         TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Universes,
         Variance, Variant, past_bool_cap,
     },
@@ -146,7 +147,7 @@ pub(crate) fn same_uncommitted_inside(
     Ok(converts? && !committed)
 }
 
-/// Which of `atoms` are one by `same`, as a classing asks of them (`curios-core`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about. The comparison is one conversion inside another, so it buys its depth with stack.
+/// Which of `atoms` are one by `same`, as a classing asks of them (`curios-analysis`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about. The comparison is one conversion inside another, so it buys its depth with stack.
 pub(crate) fn classing(
     context: &mut Context,
     atoms: &[Term],
@@ -157,7 +158,7 @@ pub(crate) fn classing(
     Ok(classes)
 }
 
-/// [`classing`] among the classes `classes` already holds (`curios-core`'s `Classes::join`): what a reader asks that meets its atoms a term at a time, as the reader of the facts a bound follows from does.
+/// [`classing`] among the classes `classes` already holds (`curios-analysis`'s `Classes::join`): what a reader asks that meets its atoms a term at a time, as the reader of the facts a bound follows from does.
 pub(crate) fn classing_among(
     context: &mut Context,
     classes: &mut Classes,

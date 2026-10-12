@@ -982,7 +982,7 @@ impl<'s> Kernel<'s> {
         self.reading
     }
 
-    /// The two atoms a classing is having compared, which a classing made meanwhile is held inside (`curios_core::Classes::of`).
+    /// The two atoms a classing is having compared, which a classing made meanwhile is held inside (`curios_analysis::Classes::of`).
     pub(crate) fn asked(&self) -> Option<&(Term, Term)> {
         self.asked.as_ref()
     }

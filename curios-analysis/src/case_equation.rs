@@ -4,12 +4,12 @@
 mod tests;
 
 use {
-    crate::{Driver, Invert, Judge, intrinsics_agree, invert_indices},
-    curios_algebra::{Carrier, Operation},
-    curios_core::{
-        Classes, Cost, Declaration, Free, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term,
-        atoms_of, classable, classed,
+    crate::{
+        Classes, Driver, Invert, Judge, atoms_of, classable, classed, intrinsics_agree,
+        invert_indices,
     },
+    curios_algebra::{Carrier, Operation},
+    curios_core::{Cost, Declaration, Free, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
     curios_utilities::SyntaxRegistry,
     std::{mem, slice},
 };

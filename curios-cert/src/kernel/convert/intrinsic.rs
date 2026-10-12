@@ -10,8 +10,8 @@ use {
         Error, Kernel, connectives_agree, connectives_agree_classed, convert_classed,
         convert_intrinsics,
     },
-    curios_analysis::{Agreement, Congruence, Driver, Obligation, Outcome, Pass},
-    curios_core::{Classes, Intrinsic, Term},
+    curios_analysis::{Agreement, Classes, Congruence, Driver, Obligation, Outcome, Pass},
+    curios_core::{Intrinsic, Term},
     curios_utilities::SyntaxRegistry,
 };
 

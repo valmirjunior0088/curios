@@ -9,17 +9,17 @@
 use {
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_analysis::{
-        Answered, Declarations, Invert, Judge, PositivityRefusal, another_case, answers,
+        Answered, Classes, Declarations, Invert, Judge, PositivityRefusal, another_case, answers,
         answers_classed, group_totality, invert_indices, positivity_vectors, solve_indices,
         test_support::SYNTAX,
     },
     curios_cert::Kernel,
     curios_core::{
-        Apply, Argument, Atom, Bang, Carrier, Cases, Classes, Exhaustion, Field, Free, Global,
-        InductArm, InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic,
-        Level, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj,
-        Rec, Scope, Struct, StructEntry, StructType, Subterm, Telescope, Term, Three, Totality,
-        Transient, Tuple, Two, UniverseContext, Universes, Var, Variant,
+        Apply, Argument, Atom, Bang, Carrier, Cases, Exhaustion, Field, Free, Global, InductArm,
+        InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic, Level, Many,
+        Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj, Rec, Scope,
+        Struct, StructEntry, StructType, Subterm, Telescope, Term, Three, Totality, Transient,
+        Tuple, Two, UniverseContext, Universes, Var, Variant,
     },
     curios_num::{Grain, Natural, Rounding},
     curios_utilities::{InfixOp, Plicity, Qualifier},

@@ -27,10 +27,10 @@ use {
         same_uncommitted, zonk_solved_term_metas,
     },
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
-    curios_analysis::RESOLVED_SPELLING_LAYERS,
+    curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in},
     curios_core::{
-        Apply, Cases, Classes, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match,
-        Nat, Probe, StructType, Subterm, Term, TupleType, atoms_in, classed_in,
+        Apply, Cases, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match, Nat,
+        Probe, StructType, Subterm, Term, TupleType,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{OrderSyntax, Plicity, SyntaxName},

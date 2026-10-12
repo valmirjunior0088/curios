@@ -1,6 +1,6 @@
 //! The atoms the carriers' readers read in a pair, handed out to be classed and read back one spelling to a class.
 //!
-//! **The readers key atoms on spelling.** Cancellation, a monomial's factors, a connective's leaves, the truth table, the linear views and the symmetric peel each identify two atoms by identity ([`Atoms`](crate::Atoms), the truth table's own table), so two atoms that convert without being identical — two calls differing in a proof of one bound, in a function argument whose body commutes a sum, in a stuck `match`'s arm — are two atoms to every one of them. With one such atom on each side a reader hands the pair on as a residual; with two it pairs nothing.
+//! **The readers key atoms on spelling.** Cancellation, a monomial's factors, a connective's leaves, the truth table, the linear views and the symmetric peel each identify two atoms by identity (`curios-core`'s `atoms` module, the truth table's own table), so two atoms that convert without being identical — two calls differing in a proof of one bound, in a function argument whose body commutes a sum, in a stuck `match`'s arm — are two atoms to every one of them. With one such atom on each side a reader hands the pair on as a residual; with two it pairs nothing.
 //!
 //! **Which atoms are one is not decided here.** [`atoms_of`] hands out the atoms of a pair, a checker says of two of them whether they convert ([`Classes::of`]), and [`classed`] hands the pair back with each atom spelled as its class's representative, so every reader pairs them by the identity it already reads. Nothing here asks a judgment: the question is the caller's closure, asked by the checker that holds the answer. A reader that reads its terms one at a time and compares none of them with another asks the same of each ([`atoms_in`], [`Classes::join`], [`classed_in`]).
 //!
@@ -8,12 +8,18 @@
 //!
 //! **Probe-side only.** A term replaced by its reduct, or by one it converts with, denotes what it did, so a verdict on the classed pair is one on the pair as written. Nothing is written back: a reading that still decides nothing leaves its congruence the spelling it was handed.
 
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod test_support;
+
 use {
-    crate::{
+    curios_algebra::{Carrier, Family, Operation, declares},
+    curios_core::{
         Cost, Declaration, Free, Intrinsic, Nat, Probe, ReduceError, Reducer, Subterm, Term, Var,
         Visit, reduce_intrinsic,
     },
-    curios_algebra::{Carrier, Family, Operation, declares},
     curios_utilities::recurse,
     std::{collections::HashMap, mem},
 };

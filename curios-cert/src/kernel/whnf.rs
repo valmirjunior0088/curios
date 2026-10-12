@@ -344,7 +344,7 @@ fn answered(
     })
 }
 
-/// A stuck operation folded once more with its atoms classed by the kernel's own conversion, where that decides more than the fold did (`curios_core::refold`): `None` where its fold pairs no atoms, where no two of them may be one, or where the fold over the classed atoms still stands at the operation.
+/// A stuck operation folded once more with its atoms classed by the kernel's own conversion, where that decides more than the fold did (`curios_analysis::refold`): `None` where its fold pairs no atoms, where no two of them may be one, or where the fold over the classed atoms still stands at the operation.
 ///
 /// **Reduction asks conversion here, and at a missed equation, and nowhere else.** A fold pairs atoms by identity, so two atoms that convert without being identical — a call under two proofs of its bound, two calls whose arguments commute a sum — left `f(a + b) == f(b + a)` stuck where conversion holds its sides one term, and conversion was no congruence under the fold. Each checker asks its own conversion, the elaborator's reducer at the same point.
 ///

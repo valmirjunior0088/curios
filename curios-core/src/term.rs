@@ -128,7 +128,7 @@ impl Term {
     }
 
     /// This term's node identity, for a per-walk memo keyed on it. Two `Term`s answer the same identity exactly when they are one allocation — which is what makes it a memo key and never a comparison of values.
-    pub(crate) fn identity(&self) -> usize {
+    pub fn identity(&self) -> usize {
         Rc::as_ptr(&self.inner) as usize
     }
 

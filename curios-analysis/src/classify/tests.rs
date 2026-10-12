@@ -2,10 +2,10 @@
 
 use {
     super::{
-        Classes, atoms_in, atoms_of, atoms_within, classable, classed, classed_in,
-        reduce_intrinsic, refold, test_support::*,
+        Classes, atoms_in, atoms_of, atoms_within, classable, classed, classed_in, refold,
+        test_support::*,
     },
-    crate::{Free, Intrinsic, Nat, Subterm, Term, int_same},
+    curios_core::{Free, Intrinsic, Nat, Subterm, Term, int_same, reduce_intrinsic},
     std::convert::Infallible,
 };
 
@@ -34,14 +34,27 @@ fn commuted(this: &Term, that: &Term) -> Result<bool, Infallible> {
     };
     Ok(match (argument(this), argument(that)) {
         (Some(this), Some(that)) => {
-            let mut this = Nat::summands(&this);
-            let mut that = Nat::summands(&that);
-            this.sort_by_key(Term::structural_hash);
-            that.sort_by_key(Term::structural_hash);
-            this == that
+            let (this, mut that) = (summands(&this), summands(&that));
+            this.len() == that.len()
+                && this.iter().all(|summand| {
+                    that.iter()
+                        .position(|other| other == summand)
+                        .map(|at| that.swap_remove(at))
+                        .is_some()
+                })
         }
         _ => false,
     })
+}
+
+/// The summands of a sum, in the order they are written.
+fn summands(term: &Term) -> Vec<Term> {
+    match &**term {
+        Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) => {
+            [summands(left), summands(right)].concat()
+        }
+        _ => vec![term.clone()],
+    }
 }
 
 fn classes(atoms: &[Term]) -> Classes {

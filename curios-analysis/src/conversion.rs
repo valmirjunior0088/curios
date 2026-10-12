@@ -20,12 +20,13 @@
 //! **Two applications of one operation are one value up to universe instances** (step 9), wherever what they produce is a carrier whose values hold no type. Such a value never depends on a level — Core offers no elimination from a type or a level into one — so `len(xs)` at two instances is one number whether it stands alone or inside a sum, as the cancellation already reads it inside one, and a float's square root of one call at two instances is one float. Left to the congruence, a bare pair would have its operands' levels compared and be refused where they differ.
 
 use {
+    crate::{Classes, atoms_of, classable, classed},
     curios_algebra::{Carrier, Conclusion},
     curios_core::{
-        Aligned, Classes, Intrinsic, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm,
-        Term, Universes, Var, Visit, align_comparisons, atoms_of, classable, classed, decide_bool,
-        int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
-        peel_commutative, peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine, same_atom,
+        Aligned, Intrinsic, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm, Term,
+        Universes, Var, Visit, align_comparisons, decide_bool, int_has_stuck_product,
+        int_normalize, int_same, is_bool_connective, normalize_bool, peel_commutative,
+        peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine, same_atom,
     },
     curios_utilities::SyntaxRegistry,
 };

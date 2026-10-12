@@ -67,7 +67,7 @@ impl Asking {
         }
     }
 
-    /// The two atoms a classing is asking conversion about, which a classing made meanwhile is held inside (`curios_core::Classes::of`).
+    /// The two atoms a classing is asking conversion about, which a classing made meanwhile is held inside (`curios_analysis::Classes::of`).
     pub(crate) fn asked(&self) -> Option<&(Term, Term)> {
         self.asked.as_ref()
     }

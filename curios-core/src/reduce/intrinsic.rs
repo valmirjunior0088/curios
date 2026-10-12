@@ -31,9 +31,6 @@ use sign::*;
 mod truth;
 pub use truth::*;
 
-mod classed;
-pub use classed::*;
-
 use {
     super::{ReduceError, Reducer},
     crate::{
@@ -2209,8 +2206,6 @@ pub fn reduce_intrinsic(
     }
 }
 
-#[cfg(test)]
-mod classed_tests;
 #[cfg(test)]
 mod compare_tests;
 #[cfg(test)]

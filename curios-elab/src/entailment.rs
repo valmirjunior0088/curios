@@ -37,7 +37,8 @@ use {
         Context, Error, Mode, elaborate, named_members, reduce_with, same_uncommitted,
         zonk_solved_term_metas,
     },
-    curios_core::{Cases, Classes, Free, Global, LinearViews, Match, Probe, Subterm, Term, Var},
+    curios_analysis::Classes,
+    curios_core::{Cases, Free, Global, LinearViews, Match, Probe, Subterm, Term, Var},
     curios_utilities::SyntaxName,
 };
 
