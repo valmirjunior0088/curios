@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::{Error, check, infer},
     curios_core::{
-        Global, InductDecl, Intrinsic, MetavarId, StructType, Subterm, Telescope, Term, Transient,
-        UniverseContext, Universes,
+        Global, InductDecl, Intrinsic, MetavarId, Struct, StructType, Subterm, Telescope, Term,
+        Transient, UniverseContext, Universes,
     },
     curios_utilities::Qualifier,
 };
@@ -98,7 +98,7 @@ fn elaboration_only_syntax_is_refused() {
 ///
 /// `Telescope::open` asserts on a count mismatch, so an unguarded rule does not refuse the item — it **aborts the walk**, losing every other verdict, which is what makes `recheck_module_verdicts`' count a count. `check_instance` decides the *universe* width and says nothing about the parameters, so `infer`'s projection rule and `check`'s record rule reach `open` only through the checked handle, as `Sort::of` and `synth_neutral` do.
 ///
-/// Neither is reachable from a surface program — the elaborator does not emit an occurrence at the wrong count — so this is the shape that needs a term built by hand, and it is a fail-open-to-abort rather than an unsoundness. Both rules are reached here at a one-parameter family occurring with none: the projection through a variable assumed at that type, and the record through a literal checked against it.
+/// Neither is reachable from a surface program — the elaborator does not emit an occurrence at the wrong count — so this is the shape that needs a term built by hand, and it is a fail-open-to-abort rather than an unsoundness. Both rules are reached here at a one-parameter family occurring with none: the projection through a variable assumed at that type, and the record through its literal, which states the parameters it is built at.
 #[test]
 fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
     let mut kernel = kernel();
@@ -127,7 +127,7 @@ fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
 
     assert!(
         matches!(
-            check(&mut kernel, &Term::tuple([nat(0)]), &short),
+            infer(&mut kernel, &boxed(name, Vec::new(), nat(0))),
             Err(Error::Arity { .. }),
         ),
         "a record literal opened the arity at a parameter count the declaration does not have",
@@ -159,7 +159,40 @@ fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
         ),
         Ok(nat_type()),
     );
-    assert_eq!(check(&mut kernel, &Term::tuple([nat(7)]), &exact), Ok(()));
+    assert_eq!(
+        check(&mut kernel, &boxed(name, vec![nat_type()], nat(7)), &exact),
+        Ok(())
+    );
+}
+
+/// A structure's type has one literal, the structure's own: a tuple literal of the same fields is no value of it.
+///
+/// Elaboration refuses the literal there, so only a term built by hand holds one, and a rule that took it field by field as a Σ's is taken admitted a value nothing reads: a projection out of a structure names it and reads a literal of that structure alone, so `.0` of a binder bound to `(7)` at `Boxed(Nat)` was typed at `Nat` and reduced to no literal. The control above is the literal that is one.
+#[test]
+fn a_tuple_literal_is_no_value_of_a_structure() {
+    let mut kernel = kernel();
+    let name = parameterized_struct(&mut kernel);
+
+    assert!(matches!(
+        check(
+            &mut kernel,
+            &Term::tuple([nat(7)]),
+            &Term::struct_type(name, [nat_type()])
+        ),
+        Err(Error::Mismatch { .. }),
+    ));
+}
+
+/// The literal of the one-field structure [`parameterized_struct`] declares, at `params`, holding `value`: entry-free, as elaboration leaves one.
+fn boxed(name: Global, params: Vec<Term>, value: Term) -> Term {
+    Subterm::Struct(Struct {
+        name,
+        universes: Universes::default(),
+        params,
+        fields: vec![value],
+        entries: Vec::new(),
+    })
+    .into()
 }
 
 /// A projection says what its slot is a slot of, and the kernel holds that to its head's type.
