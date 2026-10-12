@@ -201,6 +201,33 @@ fn a_witness_spelled_through_a_name_for_its_type_is_keyed_at_the_type() {
     assert_eq!(run(source), b"boxed");
 }
 
+// A goal's key is read off its parameter's weak-head form, and beneath a function's binders where the function's body names no former: one closed constructor is keyed alike whichever reduction spelled it, as a declaration's body and in an arm, and a body that reaches its former through a definition is keyed by the former. The witness below is the one each goal converts with.
+#[test]
+fn a_constructor_a_goal_computes_is_keyed_by_the_former_it_computes() {
+    let source = r#"
+        use /std/{Nat};
+        induct Box(S : Type, A : Type) : Type | box(s : S, a : A) end
+        concept Tag(F : (Type) -> Type) : Type {
+            tag : Nat
+        }
+        let partial(F : (Type, Type) -> Type, S : Type) -> (Type) -> Type = (A) => F(S, A);
+        let through(S : Type, A : Type) -> Type = Box(S, A);
+        satisfy (@S : Type) => Tag((A : Type) => Box(S, A)) {
+            tag = 1
+        }
+        let outside : Nat = Tag/tag(@partial(Box, Nat));
+        let inside(n : Nat) -> Nat =
+            match n
+            | 0 => Tag/tag(@partial(Box, Nat))
+            | k + 1 => k
+            end;
+        let defined : Nat = Tag/tag(@((A : Type) => through(Nat, A)));
+        /std/print(Nat/to_str(outside + inside(0) + defined))
+        "#;
+
+    assert_eq!(run(source), b"3");
+}
+
 // A witness is known by its key before anything elaborates, so its signature spells it: a head that only computation reaches is refused where the witness is declared, with the key it would have registered under and what to write.
 #[test]
 fn a_witness_whose_head_is_computed_is_refused_at_its_declaration() {

@@ -485,10 +485,26 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
     }
 
     // Step 3: the global table — pure lookup by (concept, tuple of every parameter head).
-    let mut heads = Vec::with_capacity(params.len());
+    let mut reduced = Vec::with_capacity(params.len());
     for param in &params {
-        let head = reduce_with(context, param)?;
-        match HeadKey::of_whnf(&head) {
+        reduced.push(reduce_with(context, param)?);
+    }
+    // The key as the goal spells it: where a witness stands at it, nothing more is read.
+    let spelled = reduced
+        .iter()
+        .map(HeadKey::of_whnf)
+        .collect::<Option<Vec<_>>>()
+        .filter(|heads| !heads.is_empty())
+        .map(WitnessKey::from);
+    if let Some(key) = &spelled
+        && let Some(witness) = context.witness(&concept_name, key)
+    {
+        return instantiate(context, &witness, &goal_whnf, origin);
+    }
+    // None stands there, or the goal spells no key: a parameter that is a function is read beneath its binders, where its body may compute a former it does not name.
+    let mut heads = Vec::with_capacity(reduced.len());
+    for head in &reduced {
+        match key_beneath(context, head)? {
             Some(head) => heads.push(head),
             None => {
                 heads.clear();
@@ -505,7 +521,12 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
     }
     let key = WitnessKey::from(heads);
 
-    let Some(witness) = context.witness(&concept_name, &key) else {
+    // The key the goal spells was asked above, and is asked once.
+    let found = match spelled.as_ref() == Some(&key) {
+        true => None,
+        false => context.witness(&concept_name, &key),
+    };
+    let Some(witness) = found else {
         if context.is_poisoned_witness(&concept_name, &key) {
             return Ok(Resolution::Poisoned);
         }
@@ -517,6 +538,28 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
     };
 
     instantiate(context, &witness, &goal_whnf, origin)
+}
+
+/// The key of a goal's parameter at its weak-head form `head`, a function read beneath its binders.
+///
+/// [`HeadKey::of_whnf`] reads a function's body as it stands, since weak-head reduction stops at a binder, and the body spells its former only where it was written as one. One that reaches the former through a definition, `(A) => f(Nat, A)`, names the definition; and one a closed run built, which evaluates what it substitutes, applies the former's value and names nothing, where the same function built by substitution names the former. Read at its own weak-head form beneath the binders, the body gives the key conversion holds the goal to, whichever reduction spelled the function.
+///
+/// Asked only where no witness stands at the key the goal spells, so a goal that names its former reads the table and nothing more.
+fn key_beneath(context: &mut Context, head: &Term) -> Result<Option<HeadKey>, Error> {
+    let Subterm::Func(func) = &**head else {
+        return Ok(HeadKey::of_whnf(head));
+    };
+
+    context.with_frame(|context| {
+        let mut cursor = func.telescope.cursor();
+        while let Some((_, domain)) = cursor.entry() {
+            context.advance_assumed(&mut cursor, &domain);
+        }
+        let body = cursor.body().expect("a cursor past every entry");
+        let reduced = reduce_with(context, &body)?;
+
+        key_beneath(context, &reduced)
+    })
 }
 
 /// The immediate superclass projections of a node whose type reduces to a concept application: `(projection term, projected field type)` per `use`-marked field.
