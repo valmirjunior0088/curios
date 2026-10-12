@@ -256,3 +256,27 @@ fn a_refused_form_names_its_rule() {
         );
     }
 }
+
+/// A declaration's parameter list is its own past the `(`, so a plain or `@` member written without its type is reported where its `:` is missing. Left recoverable, the list was dropped and the head read on as one with no parameters, which reported the `:` it wanted at the parenthesis.
+#[test]
+fn a_declarations_member_written_alone_is_reported_where_it_stands() {
+    for source in [
+        "induct Box(@A) : Type | box(x : A) end u",
+        "struct Box(A) : Type { x : A } u",
+        "concept Box(A) : Type { x : A } u",
+    ] {
+        let error = source
+            .parse::<Entrypoint>()
+            .expect_err("the member is no parameter");
+        let report = error.format();
+        assert!(
+            report.contains("Expected ':', obtained ')'"),
+            "{source:?} reported {report}"
+        );
+        assert_eq!(
+            error.report().span.map(|span| span.start),
+            source.find(')'),
+            "{source:?} reported {report}"
+        );
+    }
+}

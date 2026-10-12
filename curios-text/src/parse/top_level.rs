@@ -514,6 +514,16 @@ pub(super) fn parse_induct_param<'a>() -> Parser<'a, FuncTypeParam> {
         })
 }
 
+// A declaration's parameter list, or none. After a declaration's name a `(` opens its parameters and nothing else, so the list commits there: a member that is not one is reported where it stands, rather than as the `:` the head would read next had no list been written.
+fn parse_declaration_params<'a>() -> Parser<'a, Vec<FuncTypeParam>> {
+    parse_literal("(")
+        .and_keep(commit(
+            sep_by1_trailing(parse_induct_param, || parse_literal(","))
+                .and_drop(parse_literal(")")),
+        ))
+        .or(pure(vec![]))
+}
+
 // A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional, and an index is always written, so a mark is refused where it stands.
 pub(super) fn parse_induct_index<'a>() -> Parser<'a, (Option<String>, Term)> {
     mark()
@@ -548,10 +558,7 @@ pub(super) fn parse_induct_arity<'a>() -> Parser<'a, InductArity> {
 
 pub(super) fn parse_top_induct_body<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopInduct> {
     declared(
-        parse_literal("(")
-            .and_keep(sep_by1_trailing(parse_induct_param, || parse_literal(",")))
-            .and_drop(parse_literal(")"))
-            .or(pure(vec![]))
+        parse_declaration_params()
             // The head's arity: `: (n : Nat) -> Prop` or `: Prop`. The sort is required — there is no implicit `Type`.
             .and(parse_literal(":").and_keep(parse_induct_arity))
             .and(many0(parse_top_induct_case)),
@@ -646,10 +653,7 @@ fn parse_struct_field<'a>() -> Parser<'a, StructField> {
 // One structure of a `struct` item, after its `pub` and keyword: the name, the parameters, the result sort with its own `pub`, and the fields.
 fn parse_struct_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopStruct> {
     declared(
-        parse_literal("(")
-            .and_keep(sep_by1_trailing(parse_induct_param, || parse_literal(",")))
-            .and_drop(parse_literal(")"))
-            .or(pure(vec![]))
+        parse_declaration_params()
             // The result sort: `: Type` or `: Prop` after the parameters. Required.
             .and(parse_literal(":").and_keep(parse_representation_sort))
             .and_drop(parse_literal("{"))
@@ -737,10 +741,7 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
 // One concept of a `concept` item, after its `pub` and keyword — the struct member's shape with concept fields.
 fn parse_concept_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopConcept> {
     declared(
-        parse_literal("(")
-            .and_keep(sep_by1_trailing(parse_induct_param, || parse_literal(",")))
-            .and_drop(parse_literal(")"))
-            .or(pure(vec![]))
+        parse_declaration_params()
             // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
             .and(parse_literal(":").and_keep(parse_representation_sort))
             .and_drop(parse_literal("{"))
