@@ -1311,7 +1311,8 @@ const INSTANCES: &str = "use /std/Bool/{True};
 induct Tree(K: Type): Type | tip(K) | join(Tree(K), Tree(K)) end
 let even(@K: Type, t: Tree(K)) -> Bool = match t | tip(_) => true | join(l, r) => even(l) && even(r) end;
 let size(@K: Type, t: Tree(K)) -> Nat = match t | tip(_) => 1 | join(l, r) => size(l) + size(r) end;
-let heft(@K: Type, t: Tree(K)) -> Flt = match t | tip(_) => 1.0 | join(l, r) => heft(l) + heft(r) end;";
+let heft(@K: Type, t: Tree(K)) -> Flt = match t | tip(_) => 1.0 | join(l, r) => heft(l) + heft(r) end;
+let span(@K: Type, t: Tree(K)) -> Nat = match t | tip(_) => 2 | join(l, r) => span(l) + span(r) end;";
 
 /// The binders every instance row is stated under.
 const INSTANCE_BINDERS: &str = "@K: Type, l: Tree(K), r: Tree(K), t: Tree(K)";
@@ -1355,24 +1356,80 @@ const INSTANCES_REFUSED: &[&str] = &[
     "Eq()(heft(l) + heft(r), heft(l) + heft(t))",
 ];
 
-#[test]
-fn every_law_over_calls_apart_in_a_universe_instance_is_on_the_side_stated() {
-    // Through both checkers, then each side read back off the compiler's own refl-fit line.
+/// What the rows over calls apart in an instance and in an argument are stated under: two functions into the family, so a call's argument is itself a call over a sum.
+const ARGUMENT_BINDERS: &str =
+    "@K: Type, f: (Nat) -> Tree(K), g: (Nat) -> Tree(K), x: Nat, y: Nat, z: Nat, w: Nat";
+
+/// Equations over calls apart in a universe instance and in an argument that converts, each closed by `Eq/refl()`. A classing asks about two calls of one name by their arguments, the instance being no part of what either is, and holds the two one where every pair converts: under a sum, a symmetric comparison, a connective, a lattice operation and a float's sum, and in a fold.
+const ARGUMENTS_HELD: &[&str] = &[
+    "Eq()(size(f(x + y)) + size(f(z + w)), size(f(w + z)) + size(f(y + x)))",
+    "Eq()(size(f(x + y)) == size(f(z + w)), size(f(w + z)) == size(f(y + x)))",
+    "Eq()(even(f(x + y)) && even(f(z + w)), even(f(w + z)) && even(f(y + x)))",
+    "Eq()(Nat/and(size(f(x + y)), size(f(z + w))), Nat/and(size(f(w + z)), size(f(y + x))))",
+    "Eq()(heft(f(x + y)) + heft(f(z + w)), heft(f(w + z)) + heft(f(y + x)))",
+    "Eq()(size(f(x + y)) - size(f(y + x)), 0)",
+    "Eq()(match size(f(x + y)) == size(f(y + x)) | true => 0 | false => 1 end, 0)",
+];
+
+/// The controls beside them: an argument that does not convert, an argument under another function, and two names over one argument.
+const ARGUMENTS_REFUSED: &[&str] = &[
+    "Eq()(size(f(x + y)) + size(f(z + w)), size(f(w + z)) + size(f(y + y)))",
+    "Eq()(size(f(x + y)) + size(f(z + w)), size(f(w + z)) + size(g(y + x)))",
+    "Eq()(even(f(x + y)) && even(f(z + w)), even(f(w + z)) && even(g(y + x)))",
+    "Eq()(size(f(x + y)) + 1, span(f(y + x)) + 1)",
+    "Eq()(size(f(x + y)) - span(f(y + x)), 0)",
+];
+
+/// The rows of `held` and then `refused` under `binders` and [`INSTANCES`]: through both checkers, then each side read back off the compiler's own refl-fit line.
+fn instances_on_their_side(name: &str, binders: &str, held: &[&str], refused: &[&str]) {
     let header = format!("{IMPORTS}\n{INSTANCES}");
-    let rows = INSTANCES_HELD
+    let rows = held
         .iter()
-        .chain(INSTANCES_REFUSED)
-        .map(|claim| (INSTANCE_BINDERS.to_owned(), (*claim).to_owned()))
+        .chain(refused)
+        .map(|claim| (binders.to_owned(), (*claim).to_owned()))
         .collect::<Vec<_>>();
-    let held = INSTANCES_HELD.len();
-    if let Err(failures) = closes(&header, &rows[..held]) {
+    if let Err(failures) = closes(&header, &rows[..held.len()]) {
         panic!(
-            "a law over calls apart in a universe instance no longer closes:\n{}",
+            "a law over {name} no longer closes:\n{}",
             failures.join("\n")
         );
     }
-    let found = misplaced(&header, "calls apart in an instance", &rows, held);
+    let found = misplaced(&header, name, &rows, held.len());
     assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[test]
+fn every_law_over_calls_apart_in_a_universe_instance_is_on_the_side_stated() {
+    instances_on_their_side(
+        "calls apart in an instance",
+        INSTANCE_BINDERS,
+        INSTANCES_HELD,
+        INSTANCES_REFUSED,
+    );
+}
+
+#[test]
+fn every_law_over_calls_apart_in_an_instance_and_an_argument_is_on_the_side_stated() {
+    instances_on_their_side(
+        "calls apart in an instance and an argument",
+        ARGUMENT_BINDERS,
+        ARGUMENTS_HELD,
+        ARGUMENTS_REFUSED,
+    );
+}
+
+/// A hypothesis over two calls is handed on where each call is written again over an argument that converts, each written call at a level of its own: the classing asks about the calls by their arguments, in both checkers, where a checker handed two calls whole would compare their levels first.
+#[test]
+fn a_hypothesis_over_two_calls_is_handed_on_at_arguments_that_convert() {
+    let held = "held: Eq()(size(f(x + y)) + size(f(z + w)), n)";
+    let source = |stepped: &str| {
+        format!(
+            "{IMPORTS}\n{INSTANCES}\nlet stepped({ARGUMENT_BINDERS}, n: Nat, {held}) -> {stepped} = held;\nIo/pure(())"
+        )
+    };
+    let handed = source("Eq()(size(f(w + z)) + size(f(y + x)), n)");
+    typecheck(&handed).unwrap_or_else(|error| panic!("{error}"));
+    assert!(typecheck(&source("Eq()(size(f(w + z)) + size(f(y + y)), n)")).is_err());
 }
 
 #[test]

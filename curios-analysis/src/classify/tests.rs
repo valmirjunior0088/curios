@@ -6,7 +6,9 @@ use {
         test_support::*,
     },
     curios_algebra::Operation,
-    curios_core::{Free, Intrinsic, Nat, Reducer, Subterm, Term, int_same, reduce_intrinsic},
+    curios_core::{
+        Free, Intrinsic, Level, Nat, Reducer, Subterm, Term, int_same, reduce_intrinsic,
+    },
     std::convert::Infallible,
 };
 
@@ -482,4 +484,57 @@ fn an_operation_under_its_own_is_held_where_its_reader_does_not_flatten_it() {
         1
     );
     assert_eq!(held(&nat_and(nat_and(a, b), c), Operation::And), 2);
+}
+
+/// A call of one universe-polymorphic name at a level of its own, over one argument.
+fn applied_at(level: u32, argument: Term) -> Term {
+    Term::apply(
+        Term::instance_of(&Free::local(10, Some("f")), vec![Level::constant(level)]),
+        [argument],
+    )
+}
+
+/// Two applications apart in their heads' universe instances are asked about by their arguments, and are one where every pair is: `f.{0}(a + b)` and `f.{1}(b + a)` are put to the judge as `a + b` beside `b + a`, and never whole, where the judge would be handed two heads to compare first. The same call at an argument the judge holds apart stays an atom of its own.
+///
+/// Mutation-checked: with two applications asked about only where their heads are one term, the judge is asked nothing and the three are three atoms.
+#[test]
+fn two_calls_apart_in_a_universe_instance_are_asked_about_by_their_arguments() {
+    let (a, b) = (sym(1, "a"), sym(2, "b"));
+    let this = applied_at(0, add(a.clone(), b.clone()));
+    let that = applied_at(1, add(b.clone(), a.clone()));
+    let other = applied_at(2, a.clone());
+    assert!(classable(&[this.clone(), that.clone()]));
+
+    let mut asked = Vec::new();
+    let Ok(mut classes) = Classes::of(
+        &[this.clone(), that.clone(), other.clone()],
+        None,
+        |left, right| {
+            asked.push((left.clone(), right.clone()));
+            let (left, mut right) = (summands(left), summands(right));
+            Ok::<_, Infallible>(
+                left.len() == right.len()
+                    && left.iter().all(|summand| {
+                        right
+                            .iter()
+                            .position(|other| other == summand)
+                            .map(|at| right.swap_remove(at))
+                            .is_some()
+                    }),
+            )
+        },
+    );
+    assert_eq!(
+        asked,
+        vec![
+            (add(a.clone(), b.clone()), add(b.clone(), a.clone())),
+            (add(a.clone(), b), a)
+        ]
+    );
+    let read = |term: &Term, classes: &mut Classes| {
+        classed_in(&mut Inert, term, classes).expect("the inert reducer spends nothing")
+    };
+    assert_eq!(read(&this, &mut classes), this);
+    assert_eq!(read(&that, &mut classes), this);
+    assert_eq!(read(&other, &mut classes), other);
 }
