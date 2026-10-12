@@ -462,3 +462,19 @@ fn a_lists_unknown_tail_is_solved_past_a_longer_prefix_and_a_concatenation() {
     // What was solved makes the two spellings one, by reduction alone.
     assert_eq!(conv(&mut context, &cons, &written), Ok(true));
 }
+
+// A product of an unsolved metavariable and a number, against a number it divides, is linear in the metavariable: it is solved to the quotient, and the pair then holds. The two sides in hand when the solution lands were reduced ahead of it, so the pair is read again; compared as they stood, the product still spells the metavariable and the pair was refused, with the metavariable solved.
+#[test]
+fn a_product_over_a_metavariable_holds_once_it_is_solved_to_the_quotient() {
+    for product in [
+        |unknown: Term| Intrinsic::nat_mul(unknown, nat(18)),
+        |unknown: Term| Intrinsic::nat_mul(nat(18), unknown),
+    ] {
+        let mut context = context();
+        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+        let product = Term::intrinsic(product(Term::hole(0)));
+
+        assert_eq!(conv(&mut context, &product, &nat(504)), Ok(true));
+        assert_eq!(context.metavar_solution(MetavarId(0)), Some(&nat(28)));
+    }
+}

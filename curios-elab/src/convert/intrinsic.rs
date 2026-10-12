@@ -12,7 +12,7 @@ use {
         Agreement, Classes, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
         connectives_agree_classed, convert_classed, convert_intrinsics,
     },
-    curios_core::{Cost, Free, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    curios_core::{Cost, Free, Intrinsic, Produced, ReduceError, Reducer, Subterm, Term},
     curios_num::{Binary, Grain},
     curios_utilities::SyntaxRegistry,
 };
@@ -82,13 +82,22 @@ fn unsettled(
     this: Intrinsic,
     that: Intrinsic,
 ) -> Result<bool, ReduceError> {
-    match solved_linearly(context, &this, &that)? {
-        true => {
-            cmp.progress = true;
-            convert_intrinsic(cmp, context, this, that)
-        }
-        false => Ok(false),
+    if !solved_linearly(context, &this, &that)? {
+        return Ok(false);
     }
+    cmp.progress = true;
+
+    // Compared again as any pair is, and so read again: the two sides in hand were reduced ahead of the solution and still spell the metavariable, which the chain reads as an atom, of a product it cannot divide back out. `?n * 18` against `504` is solved at `28` and would be refused as `?n * 18` against `504`.
+    let type_ = match this.signature(&context.syntax()).produced {
+        Produced::Fixed(type_) => type_,
+        _ => Term::type_ground(),
+    };
+    cmp.converts(
+        context,
+        &type_,
+        &Term::intrinsic(this),
+        &Term::intrinsic(that),
+    )
 }
 
 /// Whether a `Bool` connective on either side of a pair that is not two intrinsics agrees with the other side: `curios-analysis`'s `connectives_agree`, its atoms classed here where it hands them back.

@@ -522,6 +522,19 @@ impl Convert {
         self.enqueue_at(Relation::Equal, type_, this, that);
     }
 
+    /// Whether `this ≡ that` at `type_`, asked as a problem of its own under this run's binders and inside its unfoldings, in the strict reading: a pair not yet decidable is not equal.
+    pub(super) fn converts(
+        &self,
+        context: &mut Context,
+        type_: &Term,
+        this: &Term,
+        that: &Term,
+    ) -> Result<bool, ReduceError> {
+        let outcome = convert_under(context, &self.binders, &self.pairs, type_, this, that)?;
+
+        Ok(matches!(outcome, Outcome::Converts))
+    }
+
     /// [`Self::enqueue`] at `relation`.
     fn enqueue_at(&mut self, relation: Relation, type_: Term, this: Term, that: Term) {
         let posed = Keyed::new(Posed {
