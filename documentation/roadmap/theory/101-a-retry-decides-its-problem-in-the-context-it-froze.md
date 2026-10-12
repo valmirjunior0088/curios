@@ -36,7 +36,7 @@ The programs are read at `022931b7f`, over `let p(x: Nat) -> Bool = x % 2 == 0;`
 
 **A bracket is its stack's.** Suppression and a settlement's withholding are depths in the frames that stood where they began. A retry that sets those frames aside sets the two depths aside with them and gives them back when it ends.
 
-**The caches are told what a retry tells them today.** A retry whose frames, set aside or stood on, hold a refinement clears the reducts and the elaborations at its two ends and stamps the write, whether or not the frames it stands on are the live ones. What a reduct rests on beyond its term is not stated (a finding of [`000-findings.md`](000-findings.md)), and until it is no table keeps one longer than it does now.
+**The caches are told what a retry tells them today.** A retry whose frames, set aside or stood on, hold a refinement clears the reducts and the elaborations at its two ends and stamps the write, whether or not the frames it stands on are the live ones. What a reduct rests on beyond its term is not stated ([A reduct states what it rests on](203-a-reduct-states-what-it-rests-on.md)), and until it is no table keeps one longer than it does now.
 
 **The floor goes.** `retry_floor`, `hide_frames_below_here` and what reads them, `restore_frame`, and the five lists of a frozen frame have no reader left. `install_refinements` keeps the one that judges under a birth.
 
@@ -77,7 +77,7 @@ Each lands alone, on its own check.
 
 ## Non-goals
 
-What a reduct rests on, a table that keeps one across a boundary, and what closing a universe instance forgets: each is a finding of [`000-findings.md`](000-findings.md). Whether a guard is an equation or a hypothesis ([A guard is a hypothesis its arm binds](../soundness/201-a-guard-is-a-hypothesis-its-arm-binds.md)).
+What a reduct rests on, a table that keeps one across a boundary, and what closing a universe instance forgets: [A reduct states what it rests on](203-a-reduct-states-what-it-rests-on.md) holds each. Whether a guard is an equation or a hypothesis ([A guard is a hypothesis its arm binds](../soundness/201-a-guard-is-a-hypothesis-its-arm-binds.md)).
 
 ## Completion and retirement
 
