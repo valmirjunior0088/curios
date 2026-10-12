@@ -8,9 +8,8 @@ use {
         Watched, answer_witness, answers_differ, callee, convert, diagnose_embedding,
         diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines, is_monad,
         monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome, reduce_forced,
-        refold_recs, refused_scrutinee, retry_discharge, retry_match, retry_projection,
-        retry_witness, settle_qualities, shallow_scrutinee, subsume_outcome, synth_neutral,
-        zonk_solved_term_metas,
+        refold_recs, retry_discharge, retry_witness, settle_qualities, shallow_scrutinee,
+        subsume_outcome, synth_neutral, zonk_solved_term_metas,
     },
     curios_analysis::{
         RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
@@ -1122,17 +1121,6 @@ impl Context<'_> {
                             )
                             .at_opt(parked_origin.extent())
                         }
-                        // A head whose type never reached a tuple or a struct is what the projection refused before it could wait.
-                        ParkedWork::Projection(projection) => {
-                            Error::not_a_tuple(resolved_for_display(self, &projection.head_type))
-                                .at_opt(parked_origin.extent())
-                        }
-                        // A scrutinee whose type never reached a carrier is what the match refused before it could wait.
-                        ParkedWork::Match(parked) => refused_scrutinee(
-                            &parked.term,
-                            resolved_for_display(self, &parked.scrutinee_type),
-                        )
-                        .at_opt(parked_origin.extent()),
                         // A bound that never came to truth is its hole's to report: zonk names the binder and the bound, which is the report such a hole gets whether or not it was ever parked.
                         ParkedWork::Discharge { .. } => continue,
                     });
@@ -1351,10 +1339,6 @@ fn retry_work(
             bound,
             provenance,
         } => return retry_discharge(context, slot, bound, provenance, origin, frame),
-        ParkedWork::Projection(projection) => {
-            return retry_projection(context, projection, origin, frame);
-        }
-        ParkedWork::Match(parked) => return retry_match(context, parked, origin, frame),
     };
 
     enum Retry {

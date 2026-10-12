@@ -1,10 +1,9 @@
 use {
     super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
     crate::{
-        BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_motive,
-        contradicted_guard, decided_sort_of, hold_prop, is_prop, probe_open_sort, quality_of,
-        reduce_with, refine_head, resolved_for_display, same_uncommitted, stuck_on_metavar,
-        unreachable_arm, zonk_solved_term_metas,
+        BinderSite, MotiveShape, check_motive, contradicted_guard, decided_sort_of, hold_prop,
+        is_prop, probe_open_sort, quality_of, reduce_with, refine_head, resolved_for_display,
+        same_uncommitted, unreachable_arm, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
     curios_core::{
@@ -555,85 +554,12 @@ pub(crate) fn elaborate_match(
         type_: reduce_with(context, &head_type)?,
     };
 
-    // No carrier *yet*: a scrutinee type stuck on an unsolved metavariable has decided nothing, and what decides it — tuple arms of an unannotated match the drain settles, a projection waiting on them — may still be coming. The match waits for it rather than refusing its scrutinee one step early.
-    if stuck_on_metavar(context, &scrutinee.type_) && context.may_park() {
-        return Ok(park_match(context, term, mode, scrutinee));
-    }
-
+    // A scrutinee whose type is still open is refused by its eliminator as one of any other type is: the term the scrutinee is has completed what it awaits, so nothing read later gives it a carrier.
     context.awaiting(|context| eliminate(context, m, term, mode, scrutinee))
 }
 
-/// Park a match whose scrutinee's type is stuck ([`ParkedMatch`]): a placeholder stands for it at the expected type, or at a fresh one when it infers its own, until its scrutinee's type is known.
-fn park_match(
-    context: &mut Context,
-    term: &Term,
-    mode: Mode,
-    scrutinee: Scrutinee,
-) -> (Term, Term) {
-    let result = match &mode {
-        Mode::Check(expected) => expected.clone(),
-        Mode::Infer => {
-            let sort = context.fresh_sort("parked match type");
-            context.fresh_hole_metavar(sort, term.extent())
-        }
-    };
-    let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.extent());
-    let Scrutinee {
-        term: scrutinee,
-        type_: scrutinee_type,
-    } = scrutinee;
-    context.park(
-        ParkedWork::Match(ParkedMatch {
-            term: term.clone(),
-            scrutinee,
-            scrutinee_type,
-            mode,
-            result: result.clone(),
-            placeholder,
-        }),
-        term.clone(),
-    );
-    (stand_in, result)
-}
-
-/// Retry a parked match: under the frozen frame, its scrutinee's type is either still stuck (re-park) or has reached a carrier, and then the match is elaborated over its elaborated scrutinee in the mode it was parked in — an inferred type met with the stand-in type — and the placeholder solved to it.
-pub(crate) fn retry_match(
-    context: &mut Context,
-    parked: ParkedMatch,
-    origin: Term,
-    frame: FrozenFrame,
-) -> Result<(), Error> {
-    let rebuilt = context.with_retry_frame(&frame, |context| -> Result<Option<Term>, Error> {
-        let type_ = reduce_with(context, &parked.scrutinee_type)?;
-        if stuck_on_metavar(context, &type_) {
-            return Ok(None);
-        }
-        let Subterm::Match(m) = &*parked.term else {
-            unreachable!("a parked match is a match");
-        };
-        let scrutinee = Scrutinee {
-            term: parked.scrutinee.clone(),
-            type_,
-        };
-        let (rebuilt, type_) = context
-            .awaiting(|context| eliminate(context, m, &parked.term, parked.mode.clone(), scrutinee))
-            .map_err(|error| error.at_opt(origin.extent()))?;
-        if matches!(parked.mode, Mode::Infer) {
-            expect(context, &parked.term, &type_, &parked.result)?;
-        }
-        Ok(Some(rebuilt))
-    })?;
-
-    match rebuilt {
-        Some(rebuilt) => context.fill_placeholder(parked.placeholder, rebuilt),
-        None => context.repark(ParkedWork::Match(parked), origin, frame),
-    }
-
-    Ok(())
-}
-
 /// The refusal a match's eliminator gives a scrutinee of `type_`, which is the type in its display form: an eliminator holds the reduct, which spells a recursive name as its group.
-pub(crate) fn refused_scrutinee(term: &Term, type_: Term) -> Error {
+fn refused_scrutinee(term: &Term, type_: Term) -> Error {
     let Subterm::Match(Match { cases, .. }) = &**term else {
         unreachable!("an eliminator's term is a match");
     };

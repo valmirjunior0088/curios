@@ -1,8 +1,8 @@
 use {
     super::{FieldSource, check_dependent_fields, park_checking},
     crate::{
-        Context, Error, FrozenFrame, Mode, ParkedProjection, ParkedWork, Sort, check,
-        check_is_sort, elaborate, expect, reduce_with, resolved_for_display, stuck_on_metavar,
+        Context, Error, Mode, Sort, check, check_is_sort, elaborate, expect, reduce_with,
+        resolved_for_display, stuck_on_metavar,
     },
     curios_core::{
         Bound, Extent, Field, InductType, Level, Proj, Quality, SelfReference, StructType, Subterm,
@@ -145,79 +145,14 @@ pub(super) fn elaborate_tuple(
     Ok((Term::tuple(elaborated), expected))
 }
 
-pub(super) fn elaborate_proj(
-    context: &mut Context,
-    proj: &Proj,
-    term: &Term,
-) -> Result<(Term, Term), Error> {
+pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Error> {
     let Proj { head, field } = proj;
 
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    // Not a tuple or a struct *yet*: a head type stuck on an unsolved metavariable has decided nothing, and what decides it — tuple arms parked against an unannotated match's type, which the drain settles — may still be coming. The projection waits for it rather than refusing one step early.
-    if stuck_on_metavar(context, &head_type) && context.may_park() {
-        return Ok(park_projection(
-            context,
-            head,
-            head_type,
-            field.clone(),
-            term,
-        ));
-    }
-
+    // A head whose type is still open is refused as one of any type that is no tuple and no struct is: the term the head is has completed what it awaits, so nothing read later gives it a type.
     project(context, head, &head_type, field)
-}
-
-/// Park a projection whose head's type is stuck ([`ParkedProjection`]): a fresh type stands for the field's, and a placeholder at it for the projection, until the head's type is known.
-fn park_projection(
-    context: &mut Context,
-    head: Term,
-    head_type: Term,
-    field: Field,
-    term: &Term,
-) -> (Term, Term) {
-    let sort = context.fresh_sort("parked projection type");
-    let result = context.fresh_hole_metavar(sort, term.extent());
-    let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.extent());
-    context.park(
-        ParkedWork::Projection(ParkedProjection {
-            head,
-            head_type,
-            field,
-            result: result.clone(),
-            placeholder,
-        }),
-        term.clone(),
-    );
-    (stand_in, result)
-}
-
-/// Retry a parked projection: under the frozen frame, its head's type is either still stuck (re-park) or has reached a tuple or a struct, and then the field is read off it, its type met with the stand-in type, and the placeholder filled with the projection, which nothing else fills ([`Context::fill_placeholder`]).
-pub(crate) fn retry_projection(
-    context: &mut Context,
-    parked: ParkedProjection,
-    origin: Term,
-    frame: FrozenFrame,
-) -> Result<(), Error> {
-    let projected = context.with_retry_frame(&frame, |context| -> Result<Option<Term>, Error> {
-        let head_type = reduce_with(context, &parked.head_type)?;
-        if stuck_on_metavar(context, &head_type) {
-            return Ok(None);
-        }
-        let (projection, field_type) =
-            project(context, parked.head.clone(), &head_type, &parked.field)
-                .map_err(|error| error.at_opt(origin.extent()))?;
-        expect(context, &origin, &field_type, &parked.result)?;
-        Ok(Some(projection))
-    })?;
-
-    match projected {
-        Some(projection) => context.fill_placeholder(parked.placeholder, projection),
-        None => context.repark(ParkedWork::Projection(parked), origin, frame),
-    }
-
-    Ok(())
 }
 
 /// Read `field` off `head`, whose type has reduced to `head_type`: a tuple's field or a struct's, the struct's privacy enforced here.

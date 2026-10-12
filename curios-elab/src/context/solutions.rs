@@ -6,10 +6,10 @@
 
 use {
     super::{FrozenFrame, SharedRefinements, SharedTelescope},
-    crate::{DeadArm, Mode, Problem, Refusal},
+    crate::{DeadArm, Problem, Refusal},
     curios_core::{
-        Bound, Field, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm,
-        Term, Transient, WitnessOrigin,
+        Bound, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm, Term,
+        Transient, WitnessOrigin,
     },
     curios_utilities::Entropy,
     std::{
@@ -76,7 +76,7 @@ struct Awaiting {
 pub(crate) enum MetaKind {
     Inference,
     RecSlot,
-    /// A parked problem's stand-in for the term it will rebuild: a check's ([`ParkedWork::Checking`]), a projection's or a match's. Only that problem fills it, with the term it rebuilt, so what stands in the tree is what the program wrote: conversion waits on a placeholder, and nothing re-expresses one in another context.
+    /// A parked problem's stand-in for the term it will rebuild: a check's ([`ParkedWork::Checking`]). Only that problem fills it, with the term it rebuilt, so what stands in the tree is what the program wrote: conversion waits on a placeholder, and nothing re-expresses one in another context.
     Placeholder,
 }
 
@@ -97,37 +97,12 @@ pub(crate) enum ParkedWork {
         goal: Term,
         provenance: WitnessOrigin,
     },
-    /// A projection from a head whose type had not yet reached a tuple or a struct ([`ParkedProjection`]).
-    Projection(ParkedProjection),
-    /// A match whose scrutinee's type had not yet reached a carrier ([`ParkedMatch`]).
-    Match(ParkedMatch),
     /// A decided bound nothing discharged when it was inserted, because its subject still waited on a metavariable — one a later argument or the expectation pins. `slot` is the hole standing in the bound's place, `bound` its type. Woken when a watched metavariable solves; the bound is reduced again and the hole filled if it came to truth.
     Discharge {
         slot: MetavarId,
         bound: Term,
         provenance: ImplicitOrigin,
     },
-}
-
-/// A projection parked because its head's type was stuck on an unsolved metavariable, so no field could be read off it yet: an unannotated `let p = match … | … => (a, b) end` whose tuple arms wait for the drain, destructured by `let (x, y) = p`. Refusing it would refuse one step before the settle that gives the head its type; the projection waits instead, as a checked-only form does for its expectation. `head` is elaborated already, since elaborating the written head again would mint its implicits a second time, and `placeholder` stands in the tree for the projection at the fresh type `result`. Woken when the head type's metavariables solve.
-#[derive(Debug)]
-pub(crate) struct ParkedProjection {
-    pub head: Term,
-    pub head_type: Term,
-    pub field: Field,
-    pub result: Term,
-    pub placeholder: MetavarId,
-}
-
-/// A match parked because its scrutinee's type was stuck on an unsolved metavariable, so no eliminator could read its carrier off it: `match xs | [] => … end` over an `xs` whose type waits on tuple arms the drain settles. It waits as a [`ParkedProjection`] does. `scrutinee` is elaborated already, for the reason a projection's head is; `term` is the match as written, its arms elaborated only once the carrier is known; `mode` is the one it was met in, so an unannotated match still infers its own type; and `placeholder` stands for it at `result`, the expected type or a fresh one. Woken when the scrutinee type's metavariables solve.
-#[derive(Debug)]
-pub(crate) struct ParkedMatch {
-    pub term: Term,
-    pub scrutinee: Term,
-    pub scrutinee_type: Term,
-    pub mode: Mode,
-    pub result: Term,
-    pub placeholder: MetavarId,
 }
 
 /// A problem parked by `expect` (or a blocked intro-form check) to outlive its call. Like a [`MetaEntry`], it freezes the local frame it was born under.
@@ -722,8 +697,6 @@ impl Solutions {
                 }
                 watching
             }
-            ParkedWork::Projection(projection) => self.unsolved_in([&projection.head_type]),
-            ParkedWork::Match(parked) => self.unsolved_in([&parked.scrutinee_type]),
             ParkedWork::Discharge { bound, .. } => self.unsolved_in([bound]),
         };
 

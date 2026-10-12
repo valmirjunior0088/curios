@@ -257,9 +257,9 @@ fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
     );
 }
 
-// A projection waits for its head's type as a checked-only form waits for its expectation. `p`'s type is the unannotated match's, which only its tuple arms decide, and those park against it until the drain settles them to their product; destructuring `p` reads its fields before then, and refusing the projection there as one from a non-tuple would refuse one step before the settle that types its head. Mutation-checked: refusing a projection whose head's type is stuck refuses the program.
+// A projection reads a type its head already has. `p`'s type is the unannotated match's, which only its tuple arms decide, and the match completes them where it has read them all: they give its type their product before the next line destructures `p`, so no projection waits for it.
 #[test]
-fn a_projection_waits_for_the_tuple_arms_that_type_its_head() {
+fn a_destructuring_reads_the_product_its_heads_tuple_arms_gave() {
     let source = r#"
         use /std/{Str, List, Nat};
         let joined(raw: List(Str)) -> Str =
@@ -272,7 +272,7 @@ fn a_projection_waits_for_the_tuple_arms_that_type_its_head() {
     assert_eq!(run(source), b"1|");
 }
 
-// A projection whose head's type nothing ever decides is refused at the drain, at the field it reads: a destructuring lowers each field to a projection located at the field's pattern rather than at the `let` of the value it destructures. Mutation-checked: lowering the projections unlocated reports the line of `let p`.
+// A projection whose head's type nothing decided is refused where it is read, at the field: a destructuring lowers each field to a projection located at the field's pattern rather than at the `let` of the value it destructures. Mutation-checked: lowering the projections unlocated reports the line of `let p`.
 #[test]
 fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
     let report = error(
@@ -291,9 +291,9 @@ fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
     );
 }
 
-// A match waits for its scrutinee's type as a projection waits for its head's. `xs` is read off `p` by a projection that waits for the drain to settle `p`'s tuple arms, so its type is still a metavariable when the match on it is met, and refusing the match there as `expected List but got ?` would refuse one step before the settle that types its scrutinee. Mutation-checked: refusing a match whose scrutinee's type is stuck refuses the program.
+// A match reads a carrier its scrutinee already has. `xs` is read off `p`, whose type the match that binds it gave where it completed its tuple arms, so the match on `xs` meets a list and nothing waits for one.
 #[test]
-fn a_match_waits_for_the_type_of_its_scrutinee() {
+fn a_match_reads_the_carrier_a_destructured_field_has() {
     let source = r#"
         use /std/{Str, List, Nat};
         let first(raw: List(Str)) -> Str =
@@ -306,7 +306,7 @@ fn a_match_waits_for_the_type_of_its_scrutinee() {
     assert_eq!(run(source), b"x0");
 }
 
-// A match whose scrutinee's type nothing ever decides is refused at the drain as its eliminator refuses a scrutinee of another type, not as a check that merely waited. Mutation-checked: reporting it as a postponed check loses the carrier it expected.
+// A match whose scrutinee's type nothing decided is refused where it is read, as its eliminator refuses a scrutinee of any other type: the report names the carrier the match expected.
 #[test]
 fn a_match_nothing_types_is_refused_as_its_eliminator_refuses() {
     let report = error(

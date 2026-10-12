@@ -1,6 +1,6 @@
 # A term is admitted whichever of its parts is read first
 
-Working specification for who takes a choice the elaborator has to make where nothing forces an answer: the solution a flex application suggests. It is held to [Subsumption is a relation, not a traversal order](../../design/theory/subsumption-is-a-relation-not-a-traversal-order.md), which has a metavariable met at a sort take a level of its own, so that the order of a call's arguments, of a list's elements, or of an argument and the expectation decides nothing, and to [A literal is realized by its expected type](../../design/surface/a-literal-is-realized-by-its-expected-type.md). The code keeps that rule for a sort's level, for a `use` slot's witness, for a numeral's default, for a tuple literal's shape, for a lambda's written type and for what two spines would solve, and for no other choice: every other one is taken where the walk first reads it.
+Working specification for who takes a choice the elaborator has to make where nothing forces an answer. It is held to [Subsumption is a relation, not a traversal order](../../design/theory/subsumption-is-a-relation-not-a-traversal-order.md), which has a metavariable met at a sort take a level of its own, so that the order of a call's arguments, of a list's elements, or of an argument and the expectation decides nothing, and to [A literal is realized by its expected type](../../design/surface/a-literal-is-realized-by-its-expected-type.md). The code keeps that rule for a sort's level, for a `use` slot's witness, for a numeral's default, for a tuple literal's shape, for a lambda's written type, for what two spines would solve and for the function an application of a metavariable is imitated by.
 
 ## What this builds on
 
@@ -12,7 +12,7 @@ Working specification for who takes a choice the elaborator has to make where no
 
 ## The gap
 
-Every program this section held compiles in either order of its parts, each a fixture. What is left is the code the missing owner made necessary, which the first stage removes.
+Every program this section held compiles in either order of its parts, each a fixture, and the code the missing owner made necessary is gone: a projection and a match no longer wait for the type of what they read.
 
 ## Decisions
 
@@ -45,20 +45,18 @@ The item is the outermost such term: it completes where its definition is finali
 
 ## Open questions
 
-**Whether a parked projection and a parked match are still reached** once a match completes its own arms. Over `/std` neither is reached (counted at `ca95d7595`); two fixtures of `curios/src/tests/inference/postponement_tests.rs` reach them by design.
+None.
 
 ## Stages
 
 Each lands alone, on its own check.
 
-1. **What the missing owner made necessary goes.** The parked projection and the parked match where nothing reaches them, each counted at zero over `/std` and the test suite before it is removed, and the result-directed arms of `blocked_on_metavar`.
-2. **Retirement**, as *Completion and retirement* states.
+1. **Retirement**, as *Completion and retirement* states.
 
 ## Verification
 
 - Every program under *The gap* is a fixture in both orders, run and not only elaborated, so that the kernel has judged what the elaborator accepted.
 - **The image compared.** `curios-prelude-archive`'s build writes `/std`'s image as `std.rkyv` under its `OUT_DIR`, and `curios-prelude`'s writes `certification.rkyv` and `reads.rkyv` under its own. The image is read with `curios-unit`'s `segments`, `halves` and `apart_parts`, which give the unit and the eight parts it stores apart from itself: its lowered items, its erased forms, its elaborated module, where its declarations lie, its import scopes, and what the lowering, the elaborator and erasure each asked. A release build of the commit before a stage and one of the stage are compared part by part, and the certifier's two files whole. A stage that changes only the order work is retried in moves what the elaborator asked; it may also move which of two convertible spellings an implicit is solved to, a commutative operation's operands being written in the order they were met, as `/std/Nat/Scale/of`'s are, and a definition by its name or by what it unfolds to, as `keys` is in `/std/Map/Node/collected`, whose erased form follows; and a level in the elaborated module, since of two level identifications that cannot both hold the one met first is kept (`of_two_weak_equations_that_cannot_both_hold_the_first_met_is_kept`, `curios-elab/src/universe_solver/weak_tests.rs`), and a level two spines would have identified is identified by nothing where one of them holds a slot still open and the pair is decided by reduction: it closes at zero where it took the declaration's parameter, as a level in `/std/Html/parse/content` does, and it takes the parameter again where the pair is left parked and its term holds its spines, as the level `/std/Json/decode/parse_str_body` hands `Parse/many0` does; and how a function an imitation gave is spelled, the imitation being taken once its term's other parts are read: a binder's hint, as in `/std/tcp/Listener/accept`, a family by its name where it stood abstracted, as the monad `/std/tcp/Socket/call` lifts into does, and a type former unfolded where its name stood, as in a witness of `/std/File`. Any other part that moves is named with the declaration it first differs at, and is the stage's to explain. Counted.
-- **What fires, counted.** In a copy of the commit, a `curios_profile::note!` under the target `curios_elab::probe` stands at each site with its fields: `park_projection` and `park_match`, each use. `cargo xtask profile-prelude elaboration <PATH>` files the stream; its `V` rows are counted by their fields, each attributed to the `group` of the last `declaration` span of `curios_elab::elaborate::module` started before it. At `ca95d7595`, over 35,002 calls in 3,009 declarations: neither use. Counted.
 - `cargo xtask workspace lint` at every stage, with the stage's fixtures by name, and `cargo xtask workspace test` once the last has landed.
 - Each stage names the figures it may have moved: the budget every declaration of `/std` consumes, which a problem that parks and wakes spends otherwise.
 
@@ -81,6 +79,7 @@ Each lands alone, on its own check.
 - **A held conversion that counts only where it converts.** An imitation's argument pair between two open types leaves it undecided, and the imitation discarded with it is the key the lift's witness is found by: `State/get()!` under a region its `State` lifts into is refused.
 - **The item's choices taken by its drain, once its levels have closed.** An imitation mints an instance of its family, which nothing closes then: a generic value named bare at a declared type, `let z: Option(Nat) = mk;`, is refused on a level.
 - **An application imitated at once where no term awaits its metavariable**, as a numeral defaults at once there. Two parts of one expected type are met in the order they are written, so a function the second states arrives after the imitation the first took.
+- **A lambda postponed for a domain of its expected type alone**, the result-directed arm of `blocked_on_metavar` removed with the parked projection and the parked match. `/std` reaches it: a continuation whose codomain the call's expected type gives is read after that type has arrived, and read before it a `!` in its body meets a region `Io(?)`, which the region's imitation reads no monad from.
 - **The first written of two last-resort candidates that differ.** It is the order of the parameters again; and lifting the spine rule's restriction on an instance head where the rule stands has `/std/List/sort_by/push_layered` refused, an implicit solved where two spines agreed that the declaration's other argument gives otherwise.
 
 ## Non-goals
