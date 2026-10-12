@@ -561,7 +561,7 @@ fn register_marked(context: &mut Context) -> Term {
     }))
 }
 
-// A written position counts the plain fields, so `v.0` is the first of them and the hidden field ahead of it is reached by its label. The projection is rebuilt as the slot, which is what it reads as when elaborated again.
+// A written position counts the plain fields, so `v.0` is the first of them and the hidden field ahead of it is reached by its label. The projection is rebuilt as the slot of the structure its head is a value of, which is what it reads as when elaborated again.
 #[test]
 fn a_written_position_counts_the_plain_fields() {
     let mut context = context();
@@ -569,7 +569,7 @@ fn a_written_position_counts_the_plain_fields() {
     let value = context.fresh(Some("v"));
     context.assume(&value, &marked);
     let written = |position| Term::proj_position(Term::free_var(&value), position);
-    let slot = |index| Term::proj(Term::free_var(&value), index);
+    let slot = |index| Term::proj_struct(Term::free_var(&value), nominal("Marked"), index);
 
     let (elaborated, type_) = elaborate(&mut context, &written(0), Mode::Infer).unwrap();
     assert_eq!((&elaborated, &type_), (&slot(1), &nat()));
@@ -579,6 +579,11 @@ fn a_written_position_counts_the_plain_fields() {
     let labelled = Term::proj_label(Term::free_var(&value), "n");
     let (elaborated, _) = elaborate(&mut context, &labelled, Mode::Infer).unwrap();
     assert_eq!(elaborated, slot(0));
+
+    // A slot arrives as whatever built it called it, and leaves as one of the head's structure.
+    let bare = Term::proj(Term::free_var(&value), 1);
+    let (elaborated, _) = elaborate(&mut context, &bare, Mode::Infer).unwrap();
+    assert_eq!(elaborated, slot(1));
 
     // Past the plain fields, counted as a reader counts them.
     assert!(matches!(

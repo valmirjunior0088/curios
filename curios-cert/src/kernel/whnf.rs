@@ -485,31 +485,35 @@ pub(crate) fn resolved_spelling(
 
 /// Projection: select a component out of a tuple, a struct, or a constructor's payload.
 ///
-/// A `Variant` is projected through the flat runtime view `(tag, payload...)`, so field `i + 1` is payload component `i`; a `Struct` has no tag and is projected positionally. A label that survived to here has no positional meaning yet and stays stuck.
+/// A slot reads the literal of what it is a slot of: a tuple's slot a tuple literal's field or, through the flat runtime view `(tag, payload...)`, a constructor's payload, where slot `i + 1` is payload component `i`; and a structure's slot a field of that structure's literal, which has no tag to skip. A label that survived to here has no positional meaning yet and stays stuck, as a slot over anything else does: a slot past the literal, or a slot of one thing over a literal of another.
+///
+/// The rule is stated here for the kernel and in `curios_core::project_literal` for the closed machine and the elaborator, so the two checkers read a slot by two statements of it, held together where both reduce one term (`curios-elab`'s `kernel_agreement_tests`).
 fn step_proj(kernel: &mut Kernel, proj: Proj) -> Result<Step, ReduceError> {
     let Proj { head, field } = proj;
 
-    let Field::Index(index) = field else {
+    if field.slot().is_none() {
         return Ok(Step::Stop(Term::from(Subterm::Proj(Proj { head, field }))));
-    };
+    }
 
     let head = whnf(kernel, head)?;
     let head = force(kernel, head)?;
 
-    Ok(match Term::unwrap_or_clone(head) {
-        Subterm::Tuple(Tuple { fields, .. }) if index < fields.len() => {
-            Step::Continue(fields.into_iter().nth(index).expect("index bounded above"))
+    let component = match (&*head, &field) {
+        (Subterm::Tuple(Tuple { fields, .. }), Field::Tuple(index)) => fields.get(*index),
+        (Subterm::Variant(Variant { payload, .. }), Field::Tuple(index)) => index
+            .checked_sub(1)
+            .and_then(|component| payload.get(component)),
+        (Subterm::Struct(Struct { name, fields, .. }), Field::Struct(structure, index))
+            if name == structure =>
+        {
+            fields.get(*index)
         }
-        Subterm::Variant(ctor) if (1..=ctor.payload.len()).contains(&index) => Step::Continue(
-            ctor.payload
-                .into_iter()
-                .nth(index - 1)
-                .expect("index bounded above"),
-        ),
-        Subterm::Struct(Struct { fields, .. }) if index < fields.len() => {
-            Step::Continue(fields.into_iter().nth(index).expect("index bounded above"))
-        }
-        head => Step::Stop(Term::proj(Term::from(head), index)),
+        _ => None,
+    };
+
+    Ok(match component.cloned() {
+        Some(component) => Step::Continue(component),
+        None => Step::Stop(Term::from(Subterm::Proj(Proj { head, field }))),
     })
 }
 

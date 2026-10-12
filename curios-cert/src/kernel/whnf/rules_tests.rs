@@ -232,7 +232,7 @@ fn projection_skips_a_variants_tag_but_not_a_structs() {
     );
     assert_eq!(whnf(&mut kernel, variant), Ok(nat(42)));
 
-    let struct_ = Term::proj(Term::struct_(name, Vec::<Term>::new(), [nat(42)]), 0);
+    let struct_ = Term::proj_struct(Term::struct_(name, Vec::<Term>::new(), [nat(42)]), name, 0);
     assert_eq!(whnf(&mut kernel, struct_), Ok(nat(42)));
 }
 

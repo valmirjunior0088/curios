@@ -39,10 +39,10 @@ use {
     crate::{case_target_indices, instantiate_universes_scoped, pinned_instance},
     curios_analysis::Classes,
     curios_core::{
-        Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Field, Func, FuncType, Global,
-        InductType, Instance, InstanceHead, Lockstep, Many, Match, MatchResult, Probe, Proj,
-        Quality, ReduceError, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, Universes, Variant,
+        Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Func, FuncType, Global, InductType,
+        Instance, InstanceHead, Lockstep, Many, Match, MatchResult, Probe, Proj, Quality,
+        ReduceError, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, Universes, Variant,
     },
     curios_utilities::recurse,
 };
@@ -975,10 +975,7 @@ fn struct_eta(
         }
         data = true;
 
-        let projection = Term::from(Subterm::Proj(Proj {
-            head: other.clone(),
-            field: Field::Index(index),
-        }));
+        let projection = Term::proj_struct(other.clone(), literal.name, index);
         // At the field's own declared type, which this walk is already holding: the declaration says what the field is, so comparing there is what lets eta fire on a *function*-typed field — a literal's lambda against the neutral's projection, which at `Type` never meet. `/std/State`'s monad laws are the shape that needs it, `State/bind` building a literal whose one field is a lambda and the law's other side being a neutral `State`.
         if !compare(kernel, pairs, &type_, field, &projection)? {
             return Ok(false);

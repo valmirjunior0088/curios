@@ -152,6 +152,11 @@ pub enum Error {
     NotAFunction(Term),
     /// A term projected from that has no components.
     NotATuple(Term),
+    /// A projection whose slot is of something its head is no value of: a structure's slot read off a tuple or off a value of another structure, or a tuple's read off a structure's value. `named` is the structure the slot names, `None` for a tuple's.
+    NotASlotOf {
+        named: Option<Global>,
+        head_type: Term,
+    },
     /// A count that did not match — what was counted is [`Counted`], so the refusal names it.
     Arity {
         counted: Counted,
@@ -373,6 +378,20 @@ impl fmt::Display for Displayed<'_> {
             Error::NotATuple(type_) => {
                 let type_ = type_.spelled(spelling);
                 write!(formatter, "`{type_}` has no components")
+            }
+            Error::NotASlotOf { named, head_type } => {
+                let head_type = head_type.spelled(spelling);
+                match named {
+                    Some(structure) => write!(
+                        formatter,
+                        "a slot of `{}` is read off a value of `{head_type}`",
+                        structure.faithful()
+                    ),
+                    None => write!(
+                        formatter,
+                        "a tuple's slot is read off a value of `{head_type}`"
+                    ),
+                }
             }
             Error::Arity {
                 counted,

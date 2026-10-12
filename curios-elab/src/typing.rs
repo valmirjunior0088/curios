@@ -1056,7 +1056,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
         }
         Subterm::Proj(Proj {
             head,
-            field: Field::Index(index),
+            field: Field::Tuple(index) | Field::Struct(_, index),
         }) => {
             context.refine_projection(head.clone(), *index, value.clone());
         }

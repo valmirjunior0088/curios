@@ -116,7 +116,10 @@ fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
 
     assert!(
         matches!(
-            infer(&mut kernel, &Term::proj(Term::free_var(&value), 0)),
+            infer(
+                &mut kernel,
+                &Term::proj_struct(Term::free_var(&value), name, 0)
+            ),
             Err(Error::Arity { .. }),
         ),
         "a projection opened the arity at a parameter count the declaration does not have",
@@ -150,8 +153,52 @@ fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
     kernel.assume(&value, &exact);
 
     assert_eq!(
-        infer(&mut kernel, &Term::proj(Term::free_var(&value), 0)),
+        infer(
+            &mut kernel,
+            &Term::proj_struct(Term::free_var(&value), name, 0)
+        ),
         Ok(nat_type()),
     );
     assert_eq!(check(&mut kernel, &Term::tuple([nat(7)]), &exact), Ok(()));
+}
+
+/// A projection says what its slot is a slot of, and the kernel holds that to its head's type.
+///
+/// The name is what a reader of the term reads the field by with no type in hand: a report writes a structure's field by its label or its place among the plain ones, which it looks up under the name the projection carries. A name nothing held to the head's type would be read as a field of a structure the value is none of, so each way the two can part is refused: a tuple's slot off a structure's value, a structure's off a tuple, and a slot of one structure off a value of another. The control above is the pair that meets.
+#[test]
+fn a_slot_of_one_thing_read_off_a_value_of_another_is_refused() {
+    let mut kernel = kernel();
+    let name = parameterized_struct(&mut kernel);
+    let other = Global::Authored(Qualifier::from(["Other"]));
+
+    let exact: Term = Subterm::StructType(StructType {
+        name,
+        universes: Universes::default(),
+        params: vec![nat_type()],
+    })
+    .into();
+
+    let value = binder(2, "v");
+    kernel.assume(&value, &exact);
+    let pair = binder(3, "p");
+    kernel.assume(&pair, &Term::tuple_type([(binder(4, "a"), nat_type())]));
+
+    assert!(matches!(
+        infer(&mut kernel, &Term::proj(Term::free_var(&value), 0)),
+        Err(Error::NotASlotOf { named: None, .. }),
+    ));
+    assert!(matches!(
+        infer(&mut kernel, &Term::proj_struct(Term::free_var(&pair), name, 0)),
+        Err(Error::NotASlotOf { named: Some(named), .. }) if named == name,
+    ));
+    assert!(matches!(
+        infer(&mut kernel, &Term::proj_struct(Term::free_var(&value), other, 0)),
+        Err(Error::NotASlotOf { named: Some(named), .. }) if named == other,
+    ));
+
+    // The tuple's own slot still reads.
+    assert_eq!(
+        infer(&mut kernel, &Term::proj(Term::free_var(&pair), 0)),
+        Ok(nat_type()),
+    );
 }

@@ -6,9 +6,9 @@ use {
         display_mismatch, elaborate, expect, reduce_with, written_monad, zonk_solved_term_metas,
     },
     curios_core::{
-        Advance, Bang, Bound, CalleeId, Extent, Free, Func, Global, HeadKey, Infix, Intrinsic, Let,
-        Metavar, MetavarId, Nat, NumLit, Probe, Rec, Subterm, Telescope, Term, Transient,
-        WitnessKey, WitnessOrigin,
+        Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
+        Intrinsic, Let, Metavar, MetavarId, Nat, NumLit, Probe, Proj, Rec, Subterm, Telescope,
+        Term, Transient, WitnessKey, WitnessOrigin,
     },
     curios_num::{Floating, Integer, Rounding},
     curios_utilities::{InfixOp, Plicity},
@@ -382,8 +382,8 @@ struct InfixMethod {
     goal: Term,
     witness: Term,
     provenance: WitnessOrigin,
-    /// The method's position among the concept's fields — the projection index.
-    index: usize,
+    /// The method's slot among the concept's fields: what the witness is projected by.
+    field: Field,
     /// The method's type at `?T`, as a telescope: the two operand domains, any binder the declaration carries past them, each under its mark — so an inserted argument is filled by the convention its slot declares — and the codomain that is the operator's result type.
     signature: Telescope<Term>,
 }
@@ -485,9 +485,10 @@ fn infix_method(
         &struct_decl.arity,
         &universes,
     )?;
+    let field = Field::Struct(*concept_name, index);
     let method_type = arity
         .open(&[operand_type])
-        .field_type_from(&witness, index)
+        .field_type_from(&witness, &field)
         .expect("a concept's own field index is in range");
     let Subterm::FuncType(method_func_type) = &*method_type else {
         panic!("an operator concept declares its method as an arrow");
@@ -497,7 +498,7 @@ fn infix_method(
         goal,
         witness,
         provenance,
-        index,
+        field,
         signature: method_func_type.telescope.clone(),
     }))
 }
@@ -981,7 +982,11 @@ pub(super) fn elaborate_infix(
     )?;
 
     let (arguments, result_type) = method.arguments(context, infix.op, &left, &right, term)?;
-    let rebuilt = Term::apply_marked(Term::proj(method.witness.clone(), method.index), arguments);
+    let read = Subterm::Proj(Proj {
+        head: method.witness.clone(),
+        field: method.field.clone(),
+    });
+    let rebuilt = Term::apply_marked(Term::from(read), arguments);
 
     if let Mode::Check(expected) = &mode {
         expect(context, term, &result_type, expected)?;

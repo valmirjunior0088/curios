@@ -1,7 +1,9 @@
 //! [`Telescope`], the dependent context function types, function literals and tuple types share, and the [`Cursor`] every walk that opens one entry by entry reads it through.
 
 use {
-    crate::{Bound, Free, Global, Label, MetavarId, One, Scope, Subterm, Term, Var, Visit},
+    crate::{
+        Bound, Field, Free, Global, Label, MetavarId, One, Proj, Scope, Subterm, Term, Var, Visit,
+    },
     curios_utilities::Plicity,
     std::{collections::BTreeSet, fmt, hash::Hash},
 };
@@ -366,11 +368,20 @@ impl<B: Bound> Telescope<B> {
         cursor.entry().map(|(_, ty)| ty)
     }
 
-    /// The type of field `index` as seen from `value`: every preceding field is opened at its own projection off `value`, so a field type that names an earlier field names *that value's* earlier field rather than a loose binder.
+    /// The type of the slot `field` reads off `value`: every field before it is opened at its own projection off `value`, read as `field` reads its own — a tuple's slot, or the same structure's — so a field type that names an earlier field names *that value's* earlier field rather than a loose binder, and names it as a projection written there is elaborated. `None` for a slot past the telescope, and for a written form, which reads none yet.
     ///
-    /// This is the one answer to "what type does `value.index` have", and every site that asks — inference, sorting, conversion, witness resolution, operator dispatch, and the method wrappers `into_core` generates — reaches it through here. Re-deriving it anywhere else is how two readings drift: a wrapper restating a field's written type in a scope binding no sibling is well-formed only while no concept has a dependent field telescope.
-    pub fn field_type_from(self, value: &Term, index: usize) -> Option<Term> {
-        self.nth(index, |j| Term::proj(value.clone(), j))
+    /// This is the one answer to "what type does this projection of `value` have", and every site that asks — inference, sorting, conversion, witness resolution, operator dispatch, and the method wrappers `into_core` generates — reaches it through here. Re-deriving it anywhere else is how two readings drift: a wrapper restating a field's written type in a scope binding no sibling is well-formed only while no concept has a dependent field telescope.
+    pub fn field_type_from(self, value: &Term, field: &Field) -> Option<Term> {
+        let index = field.slot()?;
+
+        self.nth(index, |earlier| {
+            let field = field.beside(earlier).expect("a slot stands beside a slot");
+
+            Term::from(Subterm::Proj(Proj {
+                head: value.clone(),
+                field,
+            }))
+        })
     }
 }
 

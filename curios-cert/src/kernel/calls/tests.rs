@@ -180,8 +180,9 @@ fn a_call_in_a_nominal_values_parameter_is_recorded() {
     let body = Term::let_(
         &binder(22, "k"),
         nat_type(),
-        Term::proj(
+        Term::proj_struct(
             Term::struct_(boxed, [call(&f, Term::free_var(&n))], [nat(3)]),
+            boxed,
             0,
         ),
         nat_type(),

@@ -1838,9 +1838,9 @@ fn process_items(
 
                         let field_type = arity
                             .open(&param_refs)
-                            .field_type_from(&witness, index)
+                            .field_type_from(&witness, &curios_core::Field::Struct(name, index))
                             .expect("a concept's own field index is within its record telescope");
-                        let method = curios_core::Term::proj(witness, index);
+                        let method = curios_core::Term::proj_struct(witness, name, index);
 
                         let (type_, body) = match &*field_type {
                             curios_core::Subterm::FuncType(function) => {

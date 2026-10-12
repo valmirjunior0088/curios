@@ -905,7 +905,7 @@ fn witness_form<'a>(term: &Term, frame: Frame<'a>) -> Option<WitnessForm<'a>> {
         }
         Subterm::Proj(Proj {
             head,
-            field: Field::Index(index),
+            field: Field::Struct(_, index),
         }) => match witness_form(head, frame)? {
             WitnessForm::Local {
                 node,
@@ -1616,7 +1616,7 @@ fn print_operand(term: Term, frame: Frame) -> Printer {
         Subterm::Transient(Transient::Infix(_)) => true,
         Subterm::Apply(Apply { head, arguments }) => matches!(
             &**head,
-            Subterm::Proj(Proj { head: witness, field: Field::Index(index) })
+            Subterm::Proj(Proj { head: witness, field: Field::Struct(_, index) })
                 if method_operator(witness, *index, arguments, frame).is_some()
         ),
         _ => false,
@@ -2123,7 +2123,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         Subterm::Apply(Apply { head, arguments }) => {
             if let Subterm::Proj(Proj {
                 head: witness,
-                field: Field::Index(index),
+                field: Field::Struct(_, index),
             }) = &*head
                 && let Some(method) = method_doc(witness, *index, Some(arguments.as_slice()), frame)
             {
@@ -2184,13 +2184,15 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             )
         }
         Subterm::Proj(Proj { head, field }) => {
-            if let Field::Index(index) = field
+            if let Field::Struct(_, index) = field
                 && let Some(method) = method_doc(&head, index, None, frame)
             {
                 return method;
             }
             let field = match field {
-                Field::Index(index) | Field::Position(index) => format!(").{index}"),
+                Field::Tuple(index) | Field::Struct(_, index) | Field::Position(index) => {
+                    format!(").{index}")
+                }
                 Field::Label(label) => format!(").{label}"),
             };
             flat([pure("("), sub(head, frame), pure(field)])

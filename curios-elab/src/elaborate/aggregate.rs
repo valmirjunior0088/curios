@@ -228,8 +228,8 @@ fn project(
     field: &Field,
 ) -> Result<(Term, Term), Error> {
     // Both tuples and structs project; the field telescope is the tuple type's own, or the struct's (instantiated at the head type's parameters). A struct additionally enforces representation privacy here.
-    let telescope = match &**head_type {
-        Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
+    let (telescope, structure) = match &**head_type {
+        Subterm::TupleType(TupleType { telescope }) => (telescope.clone(), None),
         Subterm::StructType(StructType {
             name,
             universes,
@@ -251,20 +251,22 @@ fn project(
                     .is_some_and(|island| !island.is_within(&struct_decl.module))
             {
                 let field = match field {
-                    Field::Index(index) | Field::Position(index) => index.to_string(),
+                    Field::Tuple(index) | Field::Struct(_, index) | Field::Position(index) => {
+                        index.to_string()
+                    }
                     Field::Label(label) => label.clone(),
                 };
                 return Err(Error::private_field(*name, field));
             }
 
-            arity.open(&params.iter().collect::<Vec<_>>())
+            (arity.open(&params.iter().collect::<Vec<_>>()), Some(*name))
         }
         _ => return Err(Error::not_a_tuple(resolved_for_display(context, head_type))),
     };
 
     // A label and a written position each resolve to their slot here, and the projection is rebuilt as the slot — nothing below elaboration ever sees either, and an elaborated projection elaborated again reads its slot as one. A label's lookup is unambiguous because duplicate labels are rejected when the tuple type itself elaborates. A position counts the plain fields: a hidden one takes none, and is reached by its label or not at all.
     let index = match field {
-        Field::Index(index) => *index,
+        Field::Tuple(index) | Field::Struct(_, index) => *index,
         Field::Position(position) => {
             let marks = telescope.marks();
             let mut plain = marks
@@ -307,11 +309,16 @@ fn project(
         return Err(Error::tuple_index_out_of_bounds(index, telescope.len()));
     }
 
+    // The slot of what the head's type is: a tuple's, or the structure's by name, whatever form the field arrived in.
+    let field = match structure {
+        Some(structure) => Field::Struct(structure, index),
+        None => Field::Tuple(index),
+    };
     let field_type = telescope
-        .field_type_from(&head, index)
+        .field_type_from(&head, &field)
         .expect("index in range");
 
-    Ok((Term::proj(head, index), field_type))
+    Ok((Term::from(Subterm::Proj(Proj { head, field })), field_type))
 }
 
 /// Check `args` pointwise against the dependent telescope `signature` — each arg under the earlier ones — collecting the rebuilt args and returning the telescope's terminal, opened at those args. The caller checks arity first; the arity error differs by site. The given-args counterpart to `check_telescope_entries`.

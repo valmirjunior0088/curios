@@ -51,7 +51,7 @@ pub(super) fn own_methods_read(context: &mut Context, name: &Free, body: &Term) 
             if fields[index].mentions_free(name) {
                 continue;
             }
-            let read = Term::proj(itself.clone(), index);
+            let read = Term::proj_struct(itself.clone(), node.name, index);
             let method = fields[index].clone();
             for field in fields.iter_mut().filter(|field| field.mentions_free(name)) {
                 let rewritten = field.replace_term(&read, &method);

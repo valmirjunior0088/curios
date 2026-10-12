@@ -450,7 +450,11 @@ fn eta_by_a_literal_is_refused_at_a_type_former_that_is_not_its_own() {
     let literal = Term::struct_(
         Global::Authored(Qualifier::from(["S"])),
         Vec::<Term>::new(),
-        [Term::proj(neutral.clone(), 0)],
+        [Term::proj_struct(
+            neutral.clone(),
+            Global::Authored(Qualifier::from(["S"])),
+            0,
+        )],
     );
     let (ground, number) = (Term::type_ground(), nat_type());
     let mut at = |type_: &Term, this: &Term, that: &Term| convert(&mut kernel, type_, this, that);
@@ -510,8 +514,16 @@ fn eta_by_a_literal_is_taken_against_a_neutral_alone() {
             Global::Authored(Qualifier::from(["S"])),
             Vec::<Term>::new(),
             [
-                Term::proj(structure.clone(), first),
-                Term::proj(structure.clone(), second),
+                Term::proj_struct(
+                    structure.clone(),
+                    Global::Authored(Qualifier::from(["S"])),
+                    first,
+                ),
+                Term::proj_struct(
+                    structure.clone(),
+                    Global::Authored(Qualifier::from(["S"])),
+                    second,
+                ),
             ],
         )
     };

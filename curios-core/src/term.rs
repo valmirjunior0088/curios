@@ -895,15 +895,23 @@ impl Term {
         }))
     }
 
-    /// A projection of the slot `index` — the normal form every post-elaboration projection takes, and the form the compiler's own projections are built in (cf. [`Field`]).
+    /// A projection of a tuple's slot `index` — the normal form an elaborated projection out of a tuple takes, and the form the compiler's own are built in (cf. [`Field`]). One out of a structure's value is [`Term::proj_struct`].
     pub fn proj<H: Into<Term>>(head: H, index: usize) -> Self {
         Self::from(Subterm::Proj(Proj {
             head: head.into(),
-            field: Field::Index(index),
+            field: Field::Tuple(index),
         }))
     }
 
-    /// A written projection `head.position` — a pre-elaboration form, counted over the plain fields of the head's type; elaboration resolves it to that field's slot and rebuilds it as [`Term::proj`].
+    /// A projection of the slot `index` of `structure`'s fields, out of a value of it — the normal form an elaborated projection out of a structure takes.
+    pub fn proj_struct<H: Into<Term>>(head: H, structure: Global, index: usize) -> Self {
+        Self::from(Subterm::Proj(Proj {
+            head: head.into(),
+            field: Field::Struct(structure, index),
+        }))
+    }
+
+    /// A written projection `head.position` — a pre-elaboration form, counted over the plain fields of the head's type; elaboration resolves it to that field's slot and rebuilds it as [`Term::proj`] or [`Term::proj_struct`].
     pub fn proj_position<H: Into<Term>>(head: H, position: usize) -> Self {
         Self::from(Subterm::Proj(Proj {
             head: head.into(),
@@ -911,7 +919,7 @@ impl Term {
         }))
     }
 
-    /// A labelled projection `head.label` — the pre-elaboration form; elaboration resolves the label against the head's tuple type and rebuilds it as [`Term::proj`].
+    /// A labelled projection `head.label` — the pre-elaboration form; elaboration resolves the label against the head's type and rebuilds it as [`Term::proj`] or [`Term::proj_struct`].
     pub fn proj_label<H: Into<Term>, L: Into<String>>(head: H, label: L) -> Self {
         Self::from(Subterm::Proj(Proj {
             head: head.into(),

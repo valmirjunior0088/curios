@@ -553,9 +553,9 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
         }
         let field_type = telescope
             .clone()
-            .field_type_from(node, index)
+            .field_type_from(node, &Field::Struct(*name, index))
             .expect("a field's position is within its telescope");
-        out.push((Term::proj(node.clone(), index), field_type));
+        out.push((Term::proj_struct(node.clone(), *name, index), field_type));
     }
 
     Ok(out)
@@ -569,9 +569,6 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
             .map(|(type_, _)| type_)
             .ok_or_else(|| context.unbound_variable(node.clone())),
         Subterm::Proj(proj) => {
-            let Field::Index(index) = proj.field else {
-                unreachable!("step-2 projections are built positionally");
-            };
             let head_type = node_type(context, &proj.head)?;
             let reduced = reduce_with(context, &head_type)?;
             let Subterm::StructType(StructType {
@@ -595,8 +592,8 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
             )?;
             Ok(arity
                 .open(&params.iter().collect::<Vec<_>>())
-                .field_type_from(&proj.head, index)
-                .expect("projection index within telescope"))
+                .field_type_from(&proj.head, &proj.field)
+                .expect("a step-2 projection is a slot of its head's concept"))
         }
         _ => unreachable!("step-2 nodes are variables or their projections"),
     }

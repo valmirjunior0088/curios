@@ -1327,8 +1327,8 @@ pub(super) fn statements(
     type_: &Term,
 ) -> Result<Vec<(Term, Term, Origin)>, Error> {
     let reduced = reduce_with(context, type_)?;
-    let telescope = match &*reduced {
-        Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
+    let (telescope, structure) = match &*reduced {
+        Subterm::TupleType(TupleType { telescope }) => (telescope.clone(), None),
         Subterm::StructType(StructType {
             name: family,
             universes,
@@ -1350,7 +1350,10 @@ pub(super) fn statements(
                 &decl.arity,
                 universes,
             )?;
-            arity.open(&params.iter().collect::<Vec<_>>())
+            (
+                arity.open(&params.iter().collect::<Vec<_>>()),
+                Some(*family),
+            )
         }
         _ => {
             return Ok(vec![(
@@ -1360,6 +1363,11 @@ pub(super) fn statements(
             )]);
         }
     };
+    // A field is read as a projection written there is elaborated: a tuple's slot, or the structure's.
+    let read = |value: Term, index: usize| match structure {
+        Some(structure) => Term::proj_struct(value, structure, index),
+        None => Term::proj(value, index),
+    };
     let subject = subject_of(context, name);
     let mut stated = Vec::with_capacity(telescope.len());
     let mut cursor = telescope.cursor();
@@ -1368,10 +1376,10 @@ pub(super) fn statements(
         let label = label.map_or_else(|| index.to_string(), str::to_string);
         stated.push((
             domain,
-            Term::proj(Term::free_var(name), index),
+            read(Term::free_var(name), index),
             Origin::Field(subject.clone(), label),
         ));
-        cursor.advance(Term::proj(subject.clone(), index));
+        cursor.advance(read(subject.clone(), index));
         index += 1;
     }
     Ok(stated)

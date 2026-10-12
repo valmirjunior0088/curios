@@ -1572,7 +1572,7 @@ impl Convert {
         }
 
         let projections = (0..n)
-            .map(|i| Term::proj(other.clone(), i))
+            .map(|i| Term::proj_struct(other.clone(), struct_.name, i))
             .collect::<Vec<_>>();
         self.enqueue_fields(struct_.fields, projections, cur);
 

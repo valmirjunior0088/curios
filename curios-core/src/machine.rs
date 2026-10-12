@@ -37,7 +37,7 @@ use {
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
         Func, Global, Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match,
         MatchResult, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope,
-        Term, instantiate_universes_scoped, reduce_intrinsic,
+        Term, instantiate_universes_scoped, project_literal, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -199,9 +199,9 @@ enum Frame {
         cases: Cases,
         demand: Demand,
     },
-    /// A projection waiting for its head.
+    /// A projection waiting for its head: the slot it reads.
     ProjK {
-        index: usize,
+        field: Field,
         demand: Demand,
     },
     /// Record the value about to be produced under `key` in the memo, in the table of the `demand` it is produced at — pushed under an application, a member selection or a match, so the second occurrence of the same closed call — or the second projection of the same induction hypothesis — is one probe. This is the machine's spelling of the amortization the hosts get from their own memos, which the machine's internal steps bypass.
@@ -432,13 +432,13 @@ impl Machine {
                 Ok(Step::Eval(head, Demand::Forced))
             }
 
-            Subterm::Proj(Proj { head, field }) => match field {
-                Field::Index(index) => {
-                    self.push(host, Frame::ProjK { index, demand })?;
+            Subterm::Proj(Proj { head, field }) => match field.slot() {
+                Some(_) => {
+                    self.push(host, Frame::ProjK { field, demand })?;
                     Ok(Step::Eval(head, Demand::Forced))
                 }
                 // A label or a written position that survived to reduction names no slot yet and stays stuck, exactly as it does in both hosts.
-                field => Ok(Step::Value(Term::from(Subterm::Proj(Proj { head, field })))),
+                None => Ok(Step::Value(Term::from(Subterm::Proj(Proj { head, field })))),
             },
 
             Subterm::Let(Let { bindings, tail }) => {
@@ -717,34 +717,9 @@ impl Machine {
                 demand,
             } => self.dispatch(host, result, cases, value, demand),
 
-            Frame::ProjK { index, demand } => match Term::unwrap_or_clone(value) {
-                Subterm::Tuple(tuple) if index < tuple.fields.len() => Ok(Step::Eval(
-                    tuple
-                        .fields
-                        .into_iter()
-                        .nth(index)
-                        .expect("index bounded above"),
-                    demand,
-                )),
-                // The flat runtime view of a constructor value: field `i + 1` is payload component `i`.
-                Subterm::Variant(ctor) if (1..=ctor.payload.len()).contains(&index) => {
-                    Ok(Step::Eval(
-                        ctor.payload
-                            .into_iter()
-                            .nth(index - 1)
-                            .expect("index bounded above"),
-                        demand,
-                    ))
-                }
-                Subterm::Struct(struct_) if index < struct_.fields.len() => Ok(Step::Eval(
-                    struct_
-                        .fields
-                        .into_iter()
-                        .nth(index)
-                        .expect("index bounded above"),
-                    demand,
-                )),
-                head => Ok(Step::Value(Term::proj(Term::from(head), index))),
+            Frame::ProjK { field, demand } => match project_literal(&field, value) {
+                Ok(component) => Ok(Step::Eval(component, demand)),
+                Err(head) => Ok(Step::Value(Term::from(Subterm::Proj(Proj { head, field })))),
             },
 
             Frame::LetK {

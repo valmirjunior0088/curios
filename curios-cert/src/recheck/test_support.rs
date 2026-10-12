@@ -2153,16 +2153,27 @@ pub(super) fn computed_field_forgery() -> Module {
                 Term::func_type(
                     [(
                         carried,
-                        held_at(Term::proj(Term::free_var(&motive_left), 0)),
+                        held_at(Term::proj_struct(
+                            Term::free_var(&motive_left),
+                            wrap_name,
+                            0,
+                        )),
                     )],
-                    held_at(Term::proj(Term::free_var(&motive_right), 0)),
+                    held_at(Term::proj_struct(
+                        Term::free_var(&motive_right),
+                        wrap_name,
+                        0,
+                    )),
                 ),
             ),
             [(
                 "refl",
                 vec![(Plicity::Explicit, arm_value)],
                 Term::func(
-                    [(identity, held_at(Term::proj(Term::free_var(&arm_value), 0)))],
+                    [(
+                        identity,
+                        held_at(Term::proj_struct(Term::free_var(&arm_value), wrap_name, 0)),
+                    )],
                     Term::free_var(&identity),
                 ),
             )],
@@ -2727,7 +2738,7 @@ pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
     let open = Term::func(
         [(subject, bad_type)],
         Term::apply(
-            Term::proj(Term::free_var(&subject), 0),
+            Term::proj_struct(Term::free_var(&subject), bad, 0),
             [Term::free_var(&subject)],
         ),
     );

@@ -768,7 +768,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             Subterm::Proj(Proj {
                 head: markers.visited(),
-                field: Field::Index(0),
+                field: Field::Tuple(0),
             })
             .into()
         }),

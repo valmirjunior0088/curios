@@ -468,7 +468,10 @@ fn a_method_projected_off_a_witness_prints_as_its_call() {
     let a = Free::local(0, Some("A"));
     let w = Free::local(1, Some("w"));
     let x = Free::local(2, Some("x"));
-    let call = Term::apply(Term::proj(Term::free_var(&w), 0), [Term::free_var(&x)]);
+    let call = Term::apply(
+        Term::proj_struct(Term::free_var(&w), witnesses.show, 0),
+        [Term::free_var(&x)],
+    );
     let type_ = Term::func_type_marked(
         [
             (Plicity::Implicit, a, Term::type_ground()),
@@ -496,7 +499,7 @@ fn a_method_off_a_shadowed_witness_keeps_the_witness() {
     let inner = Free::local(2, Some("inner"));
     let x = Free::local(3, Some("x"));
     let concept = Term::struct_type(witnesses.show, [Term::free_var(&a)]);
-    let method = Term::proj(Term::free_var(&outer), 0);
+    let method = Term::proj_struct(Term::free_var(&outer), witnesses.show, 0);
     let type_ = Term::func_type_marked(
         [
             (Plicity::Implicit, a, Term::type_ground()),
@@ -524,7 +527,7 @@ fn an_operators_method_projected_off_a_witness_prints_as_the_operator() {
         let w = Free::local(1, Some("w"));
         let x = Free::local(2, Some("x"));
         let compared = Term::apply(
-            Term::proj(Term::free_var(&w), 0),
+            Term::proj_struct(Term::free_var(&w), witnesses.show, 0),
             [Term::free_var(&x), Term::free_var(&x)],
         );
         let type_ = Term::func_type_marked(

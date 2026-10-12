@@ -380,24 +380,25 @@ pub(crate) fn synth_neutral(
                 _ => Ok(None),
             }
         }
-        Subterm::Proj(Proj {
-            head,
-            field: Field::Index(index),
-        }) => {
+        // A slot read off what it is a slot of, as the kernel's lookup reads it: a written form and a slot of anything else have no type here.
+        Subterm::Proj(Proj { head, field }) => {
             let Some(head_type) = synth_neutral(context, binders, opened, head)? else {
                 return Ok(None);
             };
 
-            match Term::unwrap_or_clone(reduce(context, head_type)?) {
-                Subterm::TupleType(TupleType { telescope, .. }) => {
-                    Ok(telescope.field_type_from(head, *index))
+            match (Term::unwrap_or_clone(reduce(context, head_type)?), field) {
+                (Subterm::TupleType(TupleType { telescope, .. }), Field::Tuple(_)) => {
+                    Ok(telescope.field_type_from(head, field))
                 }
                 // A nominal structure's field types live on its declaration, instantiated at the head's universes and then at its parameters — the same two steps `elaborate_proj` takes. Concept dispatch is a projection out of a witness dictionary, so this arm is what types a method call.
-                Subterm::StructType(StructType {
-                    name,
-                    universes,
-                    params,
-                }) => {
+                (
+                    Subterm::StructType(StructType {
+                        name,
+                        universes,
+                        params,
+                    }),
+                    Field::Struct(structure, _),
+                ) if name == *structure => {
                     let Some(declaration) = context.struct_decl(&name).cloned() else {
                         return Ok(None);
                     };
@@ -412,7 +413,7 @@ pub(crate) fn synth_neutral(
                     )?;
                     Ok(arity
                         .open(&params.iter().collect::<Vec<_>>())
-                        .field_type_from(head, *index))
+                        .field_type_from(head, field))
                 }
                 _ => Ok(None),
             }

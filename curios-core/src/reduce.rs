@@ -2,7 +2,7 @@ mod intrinsic;
 pub use intrinsic::*;
 
 use {
-    super::{Category, Cost, Extent, Free, Term, UniverseError},
+    super::{Category, Cost, Extent, Field, Free, Subterm, Term, UniverseError},
     curios_num::{Integer, Natural},
 };
 
@@ -150,6 +150,29 @@ pub trait Reducer {
 
     /// A fresh binder identity, for a fold that must look under a binder to decide — `List/map`'s identity test opens the mapped function's body on one, and the closed machine's eta probe does the same. The identity space is the strategy's, since a binder minted here must alias none the lowerer, the elaborator or the archived prelude minted; it is assumed at no type, because what is asked of it is a weak-head reduct and never a judgment.
     fn fresh_binder(&mut self, hint: Option<&str>) -> Free;
+}
+
+/// The component `field` reads off `value`, a term in weak-head normal form: a tuple literal's by a tuple's slot, a literal of the structure a structure's slot names by that slot, and a constructor value's payload by a tuple's slot through the flat runtime view `(tag, payload...)`, where slot `i + 1` is payload component `i` and a structure has no tag to skip.
+///
+/// `value` is handed back where the two do not meet, and the projection stays stuck: a neutral, a written form, a slot past the literal, or a slot of one thing over a literal of another, which elaboration never builds. The closed machine and the elaborator answer a projection through here. The kernel states the rule for itself where it reduces an open term, so a mistake in either statement shows where the two checkers reduce one term.
+pub fn project_literal(field: &Field, value: Term) -> Result<Term, Term> {
+    let component = match (&*value, field) {
+        (Subterm::Tuple(tuple), Field::Tuple(index)) => tuple.fields.get(*index),
+        (Subterm::Variant(variant), Field::Tuple(index)) => index
+            .checked_sub(1)
+            .and_then(|component| variant.payload.get(component)),
+        (Subterm::Struct(literal), Field::Struct(structure, index))
+            if literal.name == *structure =>
+        {
+            literal.fields.get(*index)
+        }
+        _ => None,
+    };
+
+    match component.cloned() {
+        Some(component) => Ok(component),
+        None => Err(value),
+    }
 }
 
 #[cfg(test)]

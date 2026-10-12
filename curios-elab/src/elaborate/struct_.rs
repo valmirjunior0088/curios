@@ -649,7 +649,7 @@ pub(super) fn elaborate_struct_spread(
 
         // One source per declared position: the override where written; elsewhere a plain field and an edge are the bound base's, by positional projection, and an `@` field is inferred anew.
         let copies: Vec<Term> = (0..overrides.len())
-            .map(|position| Term::proj(Term::free_var(&label), position))
+            .map(|position| Term::proj_struct(Term::free_var(&label), *name, position))
             .collect();
         let sources: Vec<FieldSource> = overrides
             .iter()

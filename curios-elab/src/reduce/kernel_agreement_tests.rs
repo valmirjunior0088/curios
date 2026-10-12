@@ -151,6 +151,26 @@ fn projection_agrees() {
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
         1,
     ));
+    agree(Term::proj_struct(
+        Term::struct_(nominal("S"), Vec::<Term>::new(), [nat(42)]),
+        nominal("S"),
+        0,
+    ));
+}
+
+// A slot reads the literal of what it is a slot of and no other: a tuple's over a structure's literal, and a structure's over a tuple or over another structure's literal, stays where it stands in both reducers.
+#[test]
+fn a_slot_of_one_thing_over_a_literal_of_another_stays_stuck_in_both() {
+    let literal = || Term::struct_(nominal("S"), Vec::<Term>::new(), [nat(42)]);
+
+    for stuck in [
+        Term::proj(literal(), 0),
+        Term::proj_struct(literal(), nominal("T"), 0),
+        Term::proj_struct(Term::tuple([nat(42)]), nominal("S"), 0),
+    ] {
+        assert_eq!(kernel().reduce_forced(stuck.clone()), Ok(stuck.clone()));
+        agree(stuck);
+    }
 }
 
 #[test]

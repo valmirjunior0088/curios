@@ -56,15 +56,12 @@ impl Lowering<'_> {
 
                 Ok(telescope.open(&arguments))
             }
+            // Erasure runs on an elaborated term, whose every projection is a slot: the field says how the fields before it are read.
             Subterm::Proj(Proj { head, field }) => {
-                // Core's selector, qualified for the reason `erase_proj` gives.
-                let curios_core::Field::Index(index) = field else {
-                    unreachable!("unresolved label projection reached erasure");
-                };
                 let head_type = self.type_of(context, head)?;
                 let field_type = match Term::unwrap_or_clone(context.reduce_with(&head_type)?) {
                     Subterm::TupleType(TupleType { telescope }) => {
-                        telescope.field_type_from(head, *index)
+                        telescope.field_type_from(head, field)
                     }
                     Subterm::StructType(StructType {
                         name,
@@ -78,7 +75,7 @@ impl Lowering<'_> {
                         context
                             .instantiate_struct_decl_at(&declaration, &universes)?
                             .fields_at(&params)
-                            .field_type_from(head, *index)
+                            .field_type_from(head, field)
                     }
                     _ => unreachable!("erase: projected a non-tuple/struct"),
                 };

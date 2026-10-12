@@ -22,12 +22,12 @@ use {
     },
     curios_core::{
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
-        Demand, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
+        Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
         InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe,
         Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, Universes, Var, Variant, Visit, accelerable,
-        instantiate_universes_scoped, probe_spellings, project_erased_universes, reduce_closed,
-        reduce_intrinsic,
+        instantiate_universes_scoped, probe_spellings, project_erased_universes, project_literal,
+        reduce_closed, reduce_intrinsic,
     },
     curios_utilities::{SyntaxRegistry, recurse},
     std::collections::{BTreeSet, HashMap},
@@ -450,7 +450,7 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
 fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError> {
     let Proj { head, field } = proj;
     // Label projections are normally resolved (and rebuilt positionally) by elaborate. One path reaches here with a label still attached: `elaborate_apply` substitutes a *postponed* argument's raw surface term into the remaining telescope and the result type (that raw spelling is load-bearing — beta-reducing it through the result is what lets `expect` pin the metavariables the postponed slot is waiting on). If such an argument is a lambda whose body projects by label, beta-reduction here manufactures a label projection on a not-yet-solved head, which no earlier pass could have resolved. Leave it stuck rather than panicking: the conversion it sits under then fails as an ordinary mismatch at its origin extent, or succeeds once the slot is settled and re-opened.
-    let Field::Index(index) = field else {
+    let Some(index) = field.slot() else {
         return Ok(Reduce::Break(Term::from(Subterm::Proj(Proj {
             head,
             field,
@@ -461,33 +461,16 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         return Ok(Reduce::Continue(value));
     }
 
-    match Term::unwrap_or_clone(reduce_forced(context, head)?) {
-        Subterm::Tuple(Tuple { fields, .. }) => Ok(Reduce::Continue(
-            fields
-                .into_iter()
-                .nth(index)
-                .expect("Proj: index out of bounds"),
-        )),
-        // The untyped reducer's flat view of a constructor value, mirroring the runtime layout `(tag, payload...)`: field i + 1 is the i-th payload component. Field 0 (the tag) is never projected at the term level — dispatch inspects the `Variant` directly. Nothing in this module builds such a projection (see [`reduce_match`]'s rejected alternative); the view stays because a `Proj` over a constructor value can still arrive from elsewhere, and answering it is strictly better than leaving it stuck.
-        Subterm::Variant(ctor) if (1..=ctor.payload.len()).contains(&index) => {
-            Ok(Reduce::Continue(
-                ctor.payload
-                    .into_iter()
-                    .nth(index - 1)
-                    .expect("index bounded above"),
-            ))
-        }
-        // A struct value is projected positionally with *no* tag offset (unlike `Variant`, whose field 0 is the tag): `Proj(Struct, i)` is field `i`.
-        Subterm::Struct(Struct { fields, .. }) if index < fields.len() => Ok(Reduce::Continue(
-            fields.into_iter().nth(index).expect("index bounded above"),
-        )),
-        head => {
-            let head: Term = head.into();
-            match context.proj_reduct(&head, index) {
-                Some(value) => Ok(Reduce::Continue(value)),
-                None => Ok(Reduce::Break(Term::proj(head, index))),
-            }
-        }
+    // Which literal a slot reads is `project_literal`'s to say, as it is for the closed machine. Its flat view of a constructor value, slot `i + 1` being payload component `i`, is one nothing in this module builds (see [`reduce_match`]'s rejected alternative): it stays because a `Proj` over a constructor value can still arrive from elsewhere, and answering it is strictly better than leaving it stuck.
+    match project_literal(&field, reduce_forced(context, head)?) {
+        Ok(component) => Ok(Reduce::Continue(component)),
+        Err(head) => match context.proj_reduct(&head, index) {
+            Some(value) => Ok(Reduce::Continue(value)),
+            None => Ok(Reduce::Break(Term::from(Subterm::Proj(Proj {
+                head,
+                field,
+            })))),
+        },
     }
 }
 

@@ -338,8 +338,7 @@ impl Lowering<'_> {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let Proj { head, field } = proj;
-        // `Field` arrives from two crates in this file — core's projection selector here, `curios_ersd::Field` in the schema rows — so both stay qualified.
-        let curios_core::Field::Index(index) = field else {
+        let Some(index) = field.slot() else {
             unreachable!("unresolved label projection reached erasure");
         };
 
@@ -363,9 +362,9 @@ impl Lowering<'_> {
             }
             _ => unreachable!("erase: projected a non-tuple/struct"),
         };
-        assert!(*index < width, "erase: projection out of range");
+        assert!(index < width, "erase: projection out of range");
 
-        if erased_field(&row.mask, *index) {
+        if erased_field(&row.mask, index) {
             return Ok(Outcome::Emitted(self.unit()));
         }
 
@@ -379,7 +378,7 @@ impl Lowering<'_> {
                     curios_ersd::Rhs::Project {
                         schema,
                         product,
-                        field: row.relevant_before(*index),
+                        field: row.relevant_before(index),
                     },
                 ))
             }

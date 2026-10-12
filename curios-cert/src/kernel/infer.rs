@@ -237,35 +237,51 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         }
 
         // Projection: the component's type, with earlier components named by projections of this same head — which is what makes a Σ dependent.
+        //
+        // A slot says what it is a slot of, and the head's type has to be that: a tuple's off a tuple, a structure's off a value of the structure it names. The name is what a reader of the term reads the field by, with no type in hand, so a slot naming one structure over a value of another would be read as a field the value does not have.
         Subterm::Proj(Proj { head, field }) => {
-            let Field::Index(index) = field else {
+            let Some(index) = field.slot() else {
                 return Err(Error::Unclassified(term.clone()));
+            };
+            let out_of_range = |len| Error::Arity {
+                counted: Counted::Components,
+                expected: index + 1,
+                actual: len,
             };
 
             let head_type = infer(kernel, head)?;
 
-            match Term::unwrap_or_clone(kernel.reduce_forced(head_type.clone())?) {
-                Subterm::TupleType(TupleType { telescope }) => {
+            match (
+                Term::unwrap_or_clone(kernel.reduce_forced(head_type.clone())?),
+                field,
+            ) {
+                (Subterm::TupleType(TupleType { telescope }), Field::Tuple(_)) => {
                     let len = telescope.len();
-                    telescope.field_type_from(head, *index).ok_or(Error::Arity {
-                        counted: Counted::Components,
-                        expected: *index + 1,
-                        actual: len,
-                    })
+                    telescope
+                        .field_type_from(head, field)
+                        .ok_or_else(|| out_of_range(len))
                 }
-                Subterm::StructType(StructType {
-                    name,
-                    universes,
-                    params,
-                }) => {
+                (
+                    Subterm::StructType(StructType {
+                        name,
+                        universes,
+                        params,
+                    }),
+                    Field::Struct(structure, _),
+                ) if name == *structure => {
                     let fields = kernel.struct_at(&name, &universes, &params)?.fields();
                     let len = fields.len();
-                    fields.field_type_from(head, *index).ok_or(Error::Arity {
-                        counted: Counted::Components,
-                        expected: *index + 1,
-                        actual: len,
-                    })
+                    fields
+                        .field_type_from(head, field)
+                        .ok_or_else(|| out_of_range(len))
                 }
+                (Subterm::TupleType(_) | Subterm::StructType(_), _) => Err(Error::NotASlotOf {
+                    named: match field {
+                        Field::Struct(structure, _) => Some(*structure),
+                        _ => None,
+                    },
+                    head_type,
+                }),
                 _ => Err(Error::NotATuple(head_type)),
             }
         }

@@ -421,29 +421,30 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
             }
         }
 
-        Subterm::Proj(Proj {
-            head,
-            field: Field::Index(index),
-        }) => {
+        // A slot read off what it is a slot of, as typing holds it (`infer`): a written form and a slot of anything else have no type here.
+        Subterm::Proj(Proj { head, field }) => {
             let Some(head_type) = synth_neutral(kernel, head)? else {
                 return Ok(None);
             };
 
-            match Term::unwrap_or_clone(whnf(kernel, head_type)?) {
-                Subterm::TupleType(TupleType { telescope }) => {
-                    Ok(telescope.field_type_from(head, *index))
+            match (Term::unwrap_or_clone(whnf(kernel, head_type)?), field) {
+                (Subterm::TupleType(TupleType { telescope }), Field::Tuple(_)) => {
+                    Ok(telescope.field_type_from(head, field))
                 }
                 // A nominal record's field types live on its declaration, instantiated first at the head's universes and then at its parameters. Concept dispatch is a projection out of a witness record, so this arm is what types a method call.
-                Subterm::StructType(StructType {
-                    name,
-                    universes,
-                    params,
-                }) => {
+                (
+                    Subterm::StructType(StructType {
+                        name,
+                        universes,
+                        params,
+                    }),
+                    Field::Struct(structure, _),
+                ) if name == *structure => {
                     let Ok(at) = kernel.struct_at(&name, &universes, &params) else {
                         return Ok(None);
                     };
 
-                    Ok(at.fields().field_type_from(head, *index))
+                    Ok(at.fields().field_type_from(head, field))
                 }
                 _ => Ok(None),
             }

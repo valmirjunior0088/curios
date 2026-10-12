@@ -115,7 +115,7 @@ fn a_parameter_named_through_an_instance() -> (Module, Term) {
     let open = Term::func(
         [(subject, bad_type)],
         Term::apply(
-            Term::proj(Term::proj(Term::free_var(&subject), 0), 0),
+            Term::proj_struct(Term::proj_struct(Term::free_var(&subject), bad, 0), sink, 0),
             [Term::free_var(&subject)],
         ),
     );

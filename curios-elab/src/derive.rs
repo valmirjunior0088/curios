@@ -419,7 +419,7 @@ fn struct_parts(
         .map(str::to_string)
         .collect::<Vec<_>>();
     let projections = (0..labels.len())
-        .map(|index| Term::proj(Term::free_var(value), index))
+        .map(|index| Term::proj_struct(Term::free_var(value), *name, index))
         .collect::<Vec<_>>();
 
     let marks = fields.marks();
@@ -513,7 +513,8 @@ fn spell_body(
             let entries = parts
                 .iter()
                 .map(|classified| {
-                    let read = Term::proj(Term::free_var(&value), classified.position);
+                    let read =
+                        Term::proj_struct(Term::free_var(&value), *name, classified.position);
                     Term::tuple([
                         str_literal(string, classified.payload.label.as_bytes()),
                         spell(context, classified, read),
@@ -606,7 +607,8 @@ fn hash_body(
             let pieces = parts
                 .iter()
                 .filter_map(|classified| {
-                    let read = Term::proj(Term::free_var(&value), classified.position);
+                    let read =
+                        Term::proj_struct(Term::free_var(&value), *name, classified.position);
                     encode(context, classified, read)
                 })
                 .collect::<Vec<_>>();
@@ -732,8 +734,8 @@ fn compare(
             let parts = struct_parts(context, site, name, decl, params, left)?;
             Ok(conjunction(context, &parts, &|index| {
                 (
-                    Term::proj(Term::free_var(left), index),
-                    Term::proj(Term::free_var(right), index),
+                    Term::proj_struct(Term::free_var(left), *name, index),
+                    Term::proj_struct(Term::free_var(right), *name, index),
                 )
             }))
         }
@@ -850,8 +852,8 @@ fn order(
             let parts = struct_parts(context, site, name, decl, params, left)?;
             Ok(lexicographic(context, &parts, &|index| {
                 (
-                    Term::proj(Term::free_var(left), index),
-                    Term::proj(Term::free_var(right), index),
+                    Term::proj_struct(Term::free_var(left), *name, index),
+                    Term::proj_struct(Term::free_var(right), *name, index),
                 )
             }))
         }
