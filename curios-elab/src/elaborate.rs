@@ -14,7 +14,7 @@ use struct_::*;
 
 mod binding;
 use binding::*;
-pub(crate) use binding::{embeds, is_monad, monad_shape};
+pub(crate) use binding::{embeds, is_monad, monad_shape, numeral_default};
 
 mod metavar;
 use metavar::*;
@@ -160,10 +160,13 @@ fn elaborate_subterm(
                 function.name()
             );
 
-            let mut elaborated = Vec::with_capacity(args.len());
-            for (arg, demand) in args.iter().zip(&demands) {
-                elaborated.push(elaborate_demand(context, arg, demand, || term.clone())?);
-            }
+            let elaborated = context.awaiting(|context| {
+                let mut elaborated = Vec::with_capacity(args.len());
+                for (arg, demand) in args.iter().zip(&demands) {
+                    elaborated.push(elaborate_demand(context, arg, demand, || term.clone())?);
+                }
+                Ok(elaborated)
+            })?;
 
             // Read off the elaborated operands, so a diverging call yields the type its own operand was elaborated to.
             let type_ = foreign_produced(function, &elaborated, |label| context.fresh(Some(label)));
@@ -191,11 +194,13 @@ fn elaborate_subterm(
             (term.clone(), type_)
         }
         Subterm::Intrinsic(intrinsic) => {
-            return elaborate_intrinsic(context, term, intrinsic, mode);
+            return context.awaiting(|context| elaborate_intrinsic(context, term, intrinsic, mode));
         }
         Subterm::Match(m) => return elaborate_match(context, m, term, mode),
         Subterm::FuncType(ft) => elaborate_func_type(context, ft)?,
-        Subterm::Apply(apply) => return elaborate_apply(context, apply, term, mode),
+        Subterm::Apply(apply) => {
+            return context.awaiting(|context| elaborate_apply(context, apply, term, mode));
+        }
         Subterm::TupleType(tt) => elaborate_tuple_type(context, tt, term.extent())?,
         Subterm::Proj(proj) => elaborate_proj(context, proj, term)?,
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
@@ -219,7 +224,7 @@ fn elaborate_subterm(
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),
         Subterm::Tuple(tuple) => return elaborate_tuple(context, tuple, term, mode),
         Subterm::Transient(Transient::Infix(infix)) => {
-            return elaborate_infix(context, infix, term, mode);
+            return context.awaiting(|context| elaborate_infix(context, infix, term, mode));
         }
         Subterm::Transient(Transient::NumLit(num_lit)) => {
             return elaborate_num_lit(context, num_lit, term, mode);
@@ -235,7 +240,9 @@ fn elaborate_subterm(
         Subterm::InductType(ut) => elaborate_induct_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc)?,
         Subterm::StructType(st) => elaborate_struct_type(context, st, term)?,
-        Subterm::Struct(s) => elaborate_struct(context, s, term, &mode)?,
+        Subterm::Struct(s) => {
+            context.awaiting(|context| elaborate_struct(context, s, term, &mode))?
+        }
     };
 
     if let Mode::Check(expected) = &mode {

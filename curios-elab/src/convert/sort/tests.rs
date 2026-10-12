@@ -179,3 +179,24 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
         "the argument was not run",
     );
 }
+
+/// A neutral headed by an unsolved metavariable is classified by the type the metavariable was born at, which no solution changes: a family into `Prop`, applied, is a proposition before anything solves it. It is what makes the bound of a method read off a witness resolution has not answered a bound where it is inserted.
+#[test]
+fn an_application_of_an_unsolved_metavariable_is_classified_by_its_birth_type() {
+    let mut context = Context::with_default_budget(SYNTAX);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+    let into = |sort: Term| Term::func_type([(Free::local(0, Some("n")), nat_type.clone())], sort);
+
+    let proposition = context.fresh_hole_metavar(into(Term::prop()), None);
+    let family = context.fresh_hole_metavar(into(Term::type_ground()), None);
+
+    assert_eq!(
+        Sort::of(&mut context, &Term::apply(proposition, [three.clone()])).expect("classifies"),
+        Sort::prop_at(Level::zero()),
+    );
+    assert_eq!(
+        Sort::of(&mut context, &Term::apply(family, [three])).expect("classifies"),
+        Sort::type_at(Level::zero()),
+    );
+}

@@ -307,7 +307,7 @@ impl Binders {
     }
 }
 
-/// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine, or a stuck elimination) *without* validating its subterms. Returns `None` when the head is out of scope or the spine is not a typeable neutral — callers fall back conservatively. Built only from the same intrinsics `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so there is no duplicated typing judgment to drift from `infer`.
+/// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine over a variable or a metavariable, or a stuck elimination) *without* validating its subterms. Returns `None` when the head is out of scope or the spine is not a typeable neutral — callers fall back conservatively. Built only from the same intrinsics `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so there is no duplicated typing judgment to drift from `infer`.
 ///
 /// A variable is read off the binders a walk opened (`opened`), then the context, then the binders the problem in hand is posed under (`binders`).
 pub(crate) fn synth_neutral(
@@ -440,6 +440,8 @@ pub(crate) fn synth_neutral(
 
             Ok(Some(result.of(head, &indices)))
         }
+        // A metavariable's type is the one it was born at, which no solution changes, so a neutral it heads is typed before it is solved: a method read off a witness resolution has not answered yet, whose bound is a proposition by the concept's word whichever witness arrives.
+        Subterm::Metavar(metavar) => Ok(context.metavar_type_at(metavar)),
         _ => Ok(None),
     }
 }

@@ -3,12 +3,13 @@ mod tests;
 
 use {
     super::{
-        Binders, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedProblem, ParkedWork,
-        Problem, Sort, Watched, callee, convert, diagnose_embedding, diagnose_shape, elaborate,
-        elaborate_func_settle, embeds, is_monad, monad_shape, normalize, probe_open_sort,
-        problem_outcome, reduce_forced, refold_recs, refused_scrutinee, retry_discharge,
-        retry_match, retry_projection, retry_witness, settle_qualities, shallow_scrutinee,
-        subsume_outcome, synth_neutral, zonk_solved_term_metas,
+        AwaitId, Binders, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedProblem,
+        ParkedWork, Problem, Sort, Watched, callee, convert, diagnose_embedding, diagnose_shape,
+        elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize,
+        numeral_default, probe_open_sort, problem_outcome, reduce_forced, refold_recs,
+        refused_scrutinee, retry_discharge, retry_match, retry_projection, retry_witness,
+        settle_qualities, shallow_scrutinee, subsume_outcome, synth_neutral,
+        zonk_solved_term_metas,
     },
     curios_analysis::{
         RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
@@ -243,6 +244,7 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
 ///
 /// Normalization is the whole story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator; the printer spells it, against the witness binders the report carries (axis (h)).
 pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
+    let term = &numerals_at_their_default(context, term);
     // Refolded on both sides of normalization. Before: a committed solution spells a stuck recursive call as its canonical neutral, the `Rec` node itself, and `normalize` keeps a name only where the *written* head is one (`stalled_unfolding`) — so the node is first given back its name, which the stall rule then holds. After: whatever normalization exposed elsewhere.
     let zonked = refold_recs(
         context,
@@ -250,6 +252,32 @@ pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     );
     let resolved = normalize(context, zonked.clone()).unwrap_or(zonked);
     refold_recs(context, &resolved)
+}
+
+/// `term` with each metavariable parked numerals wait on shown as the default they would take together. A report can be made before their term completes — a turnaround that fails while a numeral still waits — and would show `Option(?)` for `Option/some(1)`, whose type every reader knows. A side that is such a metavariable itself is left as it stands: the report is then about what that metavariable may be, which the default does not answer.
+fn numerals_at_their_default(context: &mut Context, term: &Term) -> Term {
+    if !term.has_metavar() || matches!(&**term, Subterm::Metavar(_)) {
+        return term.clone();
+    }
+    let waiting = context.waiting_numerals();
+    if waiting.is_empty() {
+        return term.clone();
+    }
+
+    let zonked = zonk_solved_term_metas(context, term);
+    let defaults = waiting
+        .iter()
+        .map(|(id, literals)| (*id, numeral_default(context, literals)))
+        .collect::<BTreeMap<_, _>>();
+    let mut visit = Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(move |_, term: &Term| match &**term {
+            Subterm::Metavar(metavar) => defaults.get(&metavar.id).cloned(),
+            _ => None,
+        }),
+    );
+
+    zonked.traverse(&mut visit)
 }
 
 /// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]) — unless `term`, the node the conversion was about, is the `/std/Monad/bind` application a postfix `!` desugars to and the region it hoisted to has nothing to sequence in.
@@ -533,7 +561,9 @@ pub(crate) fn blocked_on_metavar(
     let is_lambda = matches!(&**arg, Subterm::Func(_));
     let is_list = matches!(&**arg, Subterm::Intrinsic(Intrinsic::List { .. }));
     let is_tuple = matches!(&**arg, Subterm::Tuple(_));
-    if !is_lambda && !is_list && !is_tuple {
+    // A numeral waits as they do, on its whole type and nothing else: it is realized at whatever that comes to.
+    let is_numeral = matches!(&**arg, Subterm::Transient(Transient::NumLit(_)));
+    if !is_lambda && !is_list && !is_tuple && !is_numeral {
         return Ok(false);
     }
     let reduced = reduce_with(context, ty)?;
@@ -618,6 +648,82 @@ impl Context<'_> {
                 retry_one(self, parked)?;
             }
         }
+    }
+
+    /// Complete the awaiting term `term`, which has read its parts and met its expectation: retry what a solution woke, take one choice among the problems it awaits, and start again, until none is left to take. Each choice is taken only here, where nothing the term reads can inform it any more, so what the term is admitted at does not follow the order of its parts. Inside an oracle nothing parks, so nothing waits to be taken.
+    pub(crate) fn complete(&mut self, term: AwaitId) -> Result<(), Error> {
+        if self.parked_len() == 0 || self.parking_suppressed() {
+            return Ok(());
+        }
+
+        let mut taken = BTreeSet::new();
+        loop {
+            self.retry_parked()?;
+            if !self.default_numerals(term, &mut taken)? {
+                return Ok(());
+            }
+        }
+    }
+
+    /// Give the numerals `term` awaits on one bare metavariable their default, the one all of them realize at ([`numeral_default`]), by solving the metavariable to it; the wake realizes each. Numerals wait on one type where it is one metavariable, or two a parked conversion holds together. `taken` holds the metavariables already given one, so a default conversion could not commit is not offered again. Answers whether one was given.
+    fn default_numerals(
+        &mut self,
+        term: AwaitId,
+        taken: &mut BTreeSet<MetavarId>,
+    ) -> Result<bool, Error> {
+        let (numerals, links) = self.numerals_awaited_by(term);
+
+        // Each numeral with the bare metavariable its type has come to, where it has come to one.
+        let mut waiting = Vec::with_capacity(numerals.len());
+        for numeral in numerals {
+            let reduced = self.with_retry_frame(&numeral.frame, |context| {
+                reduce_with(context, &numeral.expected)
+            })?;
+            if let Subterm::Metavar(Metavar { id, .. }) = &*reduced
+                && self.metavar_solution(*id).is_none()
+            {
+                waiting.push((*id, numeral));
+            }
+        }
+        let Some(first) = waiting
+            .iter()
+            .map(|(id, _)| *id)
+            .find(|id| !taken.contains(id))
+        else {
+            return Ok(false);
+        };
+        taken.insert(first);
+
+        // The metavariables held to the first by the conversions parked between them.
+        let mut held = BTreeSet::from([first]);
+        loop {
+            let before = held.len();
+            for link in &links {
+                if link.iter().any(|id| held.contains(id)) {
+                    held.extend(link.iter().copied());
+                }
+            }
+            if held.len() == before {
+                break;
+            }
+        }
+
+        let default = numeral_default(
+            self,
+            waiting
+                .iter()
+                .filter(|(id, _)| held.contains(id))
+                .map(|(_, numeral)| &numeral.literal),
+        );
+        let (_, numeral) = waiting
+            .into_iter()
+            .find(|(id, _)| *id == first)
+            .expect("the first is one of the waiting");
+        self.with_retry_frame(&numeral.frame, |context| {
+            expect(context, &numeral.written, &default, &numeral.expected)
+        })?;
+
+        Ok(true)
     }
 
     /// Retry every currently parked problem once without requiring the store to become empty. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked.
@@ -917,9 +1023,21 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
         work,
         origin,
         frame,
-        ..
+        watching,
     } = parked;
 
+    context.retried_under(&watching, |context| {
+        retry_work(context, work, origin, frame)
+    })
+}
+
+/// Retry one problem's work under its frozen frame ([`retry_one`]).
+fn retry_work(
+    context: &mut Context,
+    work: ParkedWork,
+    origin: Term,
+    frame: FrozenFrame,
+) -> Result<(), Error> {
     let goal = match work {
         ParkedWork::Conversion(goal) => goal,
         ParkedWork::Checking {

@@ -4,7 +4,7 @@ use {
         ArgumentSite, Context, Entailed, ErasedSite, Error, FrozenFrame, Mode, ParkedWork,
         SettleTier, Sort, attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort,
         elaborate, entail, exhausted_bound, expect, is_prop, reduce_with, settle_against,
-        transitively_ground,
+        transitively_ground, zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Intrinsic,
@@ -91,7 +91,8 @@ pub(super) fn check_witness_domain(context: &mut Context, domain: &Term) -> Resu
 
     // Only a hint: a sort that cannot be computed must not hide the refusal it decorates.
     let proposition = is_prop(context, domain).unwrap_or(false);
-    Err(Error::use_parameter_not_a_concept(domain.clone(), proposition).at_opt(domain.extent()))
+    let found = zonk_solved_term_metas(context, domain);
+    Err(Error::use_parameter_not_a_concept(found, proposition).at_opt(domain.extent()))
 }
 
 /// A one-based position as an English ordinal, for naming which slot of a call a goal belongs to.
@@ -348,6 +349,8 @@ pub(super) fn elaborate_apply(
     let func_label = innermost_reference(head).map_or(CalleeId::Anonymous, CalleeId::Function);
 
     let (head, written_type) = elaborate(context, head, Mode::Infer)?;
+    // The holes the head's spine leaves open are this call's to await, as the implicits it inserts are: `Eq()(5, b)` reads its arguments against the type the head's own call left open.
+    context.adopt(&written_type);
     let head_type = reduce_with(context, &written_type)?;
 
     // One call fills exactly one parameter list: the head's own. A function returning a function is called once per list — `f(a)(b)` — and a list of hidden parameters alone is no exception, so `Eq()(x, y)` is how an all-implicit list is passed on to the one after it. See documentation/design/theory/a-call-fills-one-parameter-group.md.

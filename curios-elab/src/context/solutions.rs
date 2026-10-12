@@ -1,16 +1,22 @@
 //! The unification state: metavariable birth records and solutions, the solve journal, and the parked-work store.
 //!
 //! Everything here is frame-independent — a metavariable's record freezes the Γ it was born under, and parked work freezes the frame it blocked in, so neither is touched by `enter_frame`/`leave_frame`. Writes that must reach the cache stamps are stamped by the `Context` façade; the transactional watermark (`SolutionMark`) also stays there, because it spans this store and the universe solver together.
+//!
+//! **Which term awaits a metavariable is kept here, and written at three doors.** A term that reads its parts against types holding metavariables awaits them until it has read them all ([`Solutions::enter_awaiting`]): a metavariable is awaited from its birth by the term being read, and the relation moves only where a link is made — a committed solution holds what it mentions to what it solves, a parked problem holds together what it watches — to the outermost standing term among the linked ([`Solutions::birth_with_kind`], [`Solutions::solve`], [`Solutions::park`]). A term that has completed awaits nothing, which a reader sees without a pass: the record stays and the term no longer stands. So whether a choice may still be informed by what encloses it is a field read.
 
 use {
     super::{FrozenFrame, SharedRefinements, SharedTelescope},
     crate::{DeadArm, Mode, Problem, Refusal},
     curios_core::{
-        Bound, Field, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term,
-        WitnessOrigin,
+        Bound, Field, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm,
+        Term, Transient, WitnessOrigin,
     },
     curios_utilities::Entropy,
-    std::{collections::BTreeSet, mem, rc::Rc},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        mem,
+        rc::Rc,
+    },
 };
 
 /// One metavariable's record. Everything here is frozen at birth except `solution`, which transitions `None -> Some(_)` on solve — rolled back to `None` if re-validation rejects the candidate that solved it (`Context::rollback_solutions`).
@@ -36,6 +42,21 @@ pub(crate) struct MetaEntry {
     pub refusal: Option<Rc<Refusal>>,
     /// Why the arm an omitted implicit was minted in is never taken, where its scrutinee's indices rule it out: the report an unsolved one becomes is made once the arm has closed, and says so by this.
     pub dead_arm: Option<Rc<DeadArm>>,
+    /// The term that awaits it, as last written; it awaits only while it stands ([`Solutions::awaited`]).
+    awaited: Option<AwaitId>,
+}
+
+/// A term that awaits: one that reads its parts against types holding metavariables and takes the choices left among them once it has read them all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct AwaitId(usize);
+
+/// One awaiting term's record.
+#[derive(Debug)]
+struct Awaiting {
+    /// How many awaiting terms it is read inside: the outermost of two is the one read inside fewer.
+    depth: usize,
+    /// Whether it is still reading its parts or completing. A term that has completed awaits nothing.
+    standing: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +128,15 @@ pub(crate) struct ParkedProblem {
     pub watching: BTreeSet<MetavarId>,
 }
 
+/// A numeral parked as a check ([`ParkedWork::Checking`]): the literal, the term it is written as, the type it waits at and the frame it froze.
+#[derive(Debug)]
+pub(crate) struct ParkedNumeral {
+    pub literal: NumLit,
+    pub written: Term,
+    pub expected: Term,
+    pub frame: FrozenFrame,
+}
+
 /// The flat, frame-independent unification stores. `Context` holds exactly one of these; see the module documentation for the frame-independence contract.
 #[derive(Debug)]
 pub(crate) struct Solutions {
@@ -122,6 +152,12 @@ pub(crate) struct Solutions {
     solved_log: Vec<MetavarId>,
     /// `Some` inside an oracle, where work may not park: elaboration is being asked a question (re-validation, a candidate's fit) and provisional success would leak into the answer. The flag is whether a site inside it wanted to park and was refused, which makes that oracle's refusal no verdict on the term it was asked about.
     oracle: Option<bool>,
+    /// Every term that has awaited, by [`AwaitId`].
+    awaiting: Vec<Awaiting>,
+    /// The awaiting term being read, or `None` outside one: what a metavariable born now is awaited by.
+    reading: Option<AwaitId>,
+    /// Journal of every metavariable handed from one awaiting term to another: how many solutions were committed when it moved, and what awaited it before. [`Solutions::unwind_to`] restores what moved since its watermark.
+    moved: Vec<(usize, MetavarId, Option<AwaitId>)>,
 }
 
 impl Solutions {
@@ -133,7 +169,120 @@ impl Solutions {
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
             oracle: None,
+            awaiting: Vec::new(),
+            reading: None,
+            moved: Vec::new(),
         }
+    }
+
+    /// Begin reading a term that awaits, inside the one being read. Answers the term and the one to return to, for [`Solutions::leave_awaiting`].
+    pub(crate) fn enter_awaiting(&mut self) -> (AwaitId, Option<AwaitId>) {
+        let enclosing = self.reading;
+        let depth = enclosing.map_or(0, |term| self.awaiting[term.0].depth + 1);
+        let term = AwaitId(self.awaiting.len());
+        self.awaiting.push(Awaiting {
+            depth,
+            standing: true,
+        });
+        self.reading = Some(term);
+
+        (term, enclosing)
+    }
+
+    /// End a term that awaits, returning to the one it was read inside. What it still awaited is awaited by none from here on.
+    pub(crate) fn leave_awaiting(&mut self, term: AwaitId, enclosing: Option<AwaitId>) {
+        self.awaiting[term.0].standing = false;
+        self.reading = enclosing;
+    }
+
+    /// Read what follows as awaited by `term`, answering what was being read: how a retried problem runs under the term that awaits it, and how the retry returns.
+    pub(crate) fn read_under(&mut self, term: Option<AwaitId>) -> Option<AwaitId> {
+        mem::replace(&mut self.reading, term)
+    }
+
+    /// The standing term that awaits `id`, if one does.
+    pub(crate) fn awaited(&self, id: MetavarId) -> Option<AwaitId> {
+        self.entry(id)
+            .and_then(|entry| entry.awaited)
+            .filter(|term| self.awaiting[term.0].standing)
+    }
+
+    /// The outermost standing term among those that await `ids`.
+    pub(crate) fn outermost(&self, ids: impl IntoIterator<Item = MetavarId>) -> Option<AwaitId> {
+        ids.into_iter()
+            .filter_map(|id| self.awaited(id))
+            .min_by_key(|term| self.awaiting[term.0].depth)
+    }
+
+    /// Have `term` await each unsolved metavariable of `ids` it does not await already, journaling what awaited each before.
+    fn hand(&mut self, ids: impl IntoIterator<Item = MetavarId>, term: AwaitId) {
+        let at = self.solved_log.len();
+        for id in ids {
+            if let Some(Some(entry)) = self.entries.get_mut(id.0)
+                && entry.solution.is_none()
+                && entry.awaited != Some(term)
+            {
+                self.moved.push((at, id, entry.awaited));
+                entry.awaited = Some(term);
+            }
+        }
+    }
+
+    /// Have the term being read await each unsolved metavariable of `ids` that no standing term awaits: the holes a call's head leaves open are the call's, as the implicits it inserts are.
+    pub(crate) fn adopt(&mut self, ids: impl IntoIterator<Item = MetavarId>) {
+        let Some(reading) = self.reading else {
+            return;
+        };
+        let orphans = ids
+            .into_iter()
+            .filter(|id| self.awaited(*id).is_none())
+            .collect::<Vec<_>>();
+        self.hand(orphans, reading);
+    }
+
+    /// The numerals parked as checks that `term` awaits, and beside them what each conversion `term` awaits watches: the links by which two of those numerals wait on one type.
+    pub(crate) fn numerals_awaited_by(
+        &self,
+        term: AwaitId,
+    ) -> (Vec<ParkedNumeral>, Vec<BTreeSet<MetavarId>>) {
+        let awaited = |parked: &&ParkedProblem| {
+            let unsolved = parked
+                .watching
+                .iter()
+                .copied()
+                .filter(|id| self.solution(*id).is_none());
+            self.outermost(unsolved) == Some(term)
+        };
+        let numerals = self
+            .parked
+            .iter()
+            .filter(awaited)
+            .filter_map(|parked| match &parked.work {
+                ParkedWork::Checking {
+                    term: written,
+                    expected,
+                    ..
+                } => match &**written {
+                    Subterm::Transient(Transient::NumLit(literal)) => Some(ParkedNumeral {
+                        literal: literal.clone(),
+                        written: written.clone(),
+                        expected: expected.clone(),
+                        frame: parked.frame.clone(),
+                    }),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        let links = self
+            .parked
+            .iter()
+            .filter(awaited)
+            .filter(|parked| matches!(parked.work, ParkedWork::Conversion(_)))
+            .map(|parked| parked.watching.clone())
+            .collect();
+
+        (numerals, links)
     }
 
     /// Mint the next metavariable id.
@@ -202,6 +351,7 @@ impl Solutions {
             reduct: None,
             refusal: None,
             dead_arm: None,
+            awaited: self.reading,
         });
     }
 
@@ -261,7 +411,15 @@ impl Solutions {
             .get_mut(id.0)
             .and_then(Option::as_mut)
             .expect("a solved metavariable has a birth record");
+        // A solution holds what it mentions to what it solves: whatever could still inform one informs the other, so both are awaited by the outermost standing term that awaited either.
+        let mentioned = match term.has_metavar() {
+            true => term.metavars().into_iter().collect::<Vec<_>>(),
+            false => Vec::new(),
+        };
         entry.solution = Some(term);
+        if let Some(outermost) = self.outermost(mentioned.iter().copied().chain([id])) {
+            self.hand(mentioned, outermost);
+        }
         self.newly_solved.push(id);
         self.solved_log.push(id);
     }
@@ -283,8 +441,20 @@ impl Solutions {
         let entry = self.entry(metavar.id)?;
         let solution = entry.solution.as_ref()?;
 
+        Some(Self::at_occurrence(entry, metavar, solution))
+    }
+
+    /// The type of a metavariable *at its occurrence*: the type it was born at, read through the occurrence's spine as [`Solutions::resolve`] reads its solution. `None` for an id with no birth record.
+    pub(crate) fn type_at(&self, metavar: &Metavar) -> Option<Term> {
+        let entry = self.entry(metavar.id)?;
+
+        Some(Self::at_occurrence(entry, metavar, &entry.result))
+    }
+
+    /// `term`, spelled with the names of `entry`'s birth telescope, as it reads at the occurrence `metavar`.
+    fn at_occurrence(entry: &MetaEntry, metavar: &Metavar, term: &Term) -> Term {
         if metavar.spine.is_empty() {
-            return Some(solution.clone());
+            return term.clone();
         }
 
         let binders = entry
@@ -295,7 +465,7 @@ impl Solutions {
 
         let spine = metavar.spine.iter().collect::<Vec<_>>();
 
-        Some(solution.capture(&binders).release(&spine))
+        term.capture(&binders).release(&spine)
     }
 
     /// How many solutions have been committed so far — the term half of `Context::solution_mark`'s watermark.
@@ -334,48 +504,34 @@ impl Solutions {
         }
 
         self.newly_solved.retain(|id| !unwound.contains(id));
+
+        while let Some(&(at, id, before)) = self.moved.last() {
+            if at < solved_len {
+                break;
+            }
+            self.moved.pop();
+            if let Some(Some(entry)) = self.entries.get_mut(id.0) {
+                entry.awaited = before;
+            }
+        }
     }
 
     /// Park work under its frozen frame, recomputing the watch set from the work's currently unsolved metavariables.
     pub(crate) fn park(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
-        let watching: BTreeSet<MetavarId> = match &work {
+        let watching = match &work {
             // Its type as well as its sides: a goal postponed because the type it is compared at is unsolved wakes when that type is.
-            ParkedWork::Conversion(goal) => goal
-                .this
-                .metavars()
-                .into_iter()
-                .chain(goal.that.metavars())
-                .chain(goal.type_.metavars())
-                .filter(|id| self.solution(*id).is_none())
-                .collect(),
-            ParkedWork::Checking { expected, .. } => expected
-                .metavars()
-                .into_iter()
-                .filter(|id| self.solution(*id).is_none())
-                .collect(),
-            ParkedWork::Witness { goal, .. } => goal
-                .metavars()
-                .into_iter()
-                .filter(|id| self.solution(*id).is_none())
-                .collect(),
-            ParkedWork::Projection(projection) => projection
-                .head_type
-                .metavars()
-                .into_iter()
-                .filter(|id| self.solution(*id).is_none())
-                .collect(),
-            ParkedWork::Match(parked) => parked
-                .scrutinee_type
-                .metavars()
-                .into_iter()
-                .filter(|id| self.solution(*id).is_none())
-                .collect(),
-            ParkedWork::Discharge { bound, .. } => bound
-                .metavars()
-                .into_iter()
-                .filter(|id| self.solution(*id).is_none())
-                .collect(),
+            ParkedWork::Conversion(goal) => self.unsolved_in([&goal.this, &goal.that, &goal.type_]),
+            ParkedWork::Checking { expected, .. } => self.unsolved_in([expected]),
+            ParkedWork::Witness { goal, .. } => self.unsolved_in([goal]),
+            ParkedWork::Projection(projection) => self.unsolved_in([&projection.head_type]),
+            ParkedWork::Match(parked) => self.unsolved_in([&parked.scrutinee_type]),
+            ParkedWork::Discharge { bound, .. } => self.unsolved_in([bound]),
         };
+
+        // A parked problem holds together what it watches: a solution for one may come by another, so all are awaited by the outermost standing term that awaited any.
+        if let Some(outermost) = self.outermost(watching.iter().copied()) {
+            self.hand(watching.iter().copied(), outermost);
+        }
 
         self.parked.push(ParkedProblem {
             work,
@@ -383,6 +539,45 @@ impl Solutions {
             frame,
             watching,
         });
+    }
+
+    /// The unsolved metavariables `terms` wait on: the ones they mention, and the ones the solutions of the solved ones they mention come down to. A problem parked again keeps the spelling it was first parked under, and a metavariable of that spelling may since have been solved to another, re-expressed in a context that contains its solver's; read by mention alone, such a problem would watch nothing, and nothing would wake it or await it.
+    fn unsolved_in<'a>(&self, terms: impl IntoIterator<Item = &'a Term>) -> BTreeSet<MetavarId> {
+        let mut unsolved = BTreeSet::new();
+        let mut seen = BTreeSet::new();
+        let mut pending = terms
+            .into_iter()
+            .flat_map(|term| term.metavars())
+            .collect::<Vec<_>>();
+        while let Some(id) = pending.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            match self.solution(id) {
+                Some(solution) => pending.extend(solution.metavars()),
+                None => {
+                    unsolved.insert(id);
+                }
+            }
+        }
+
+        unsolved
+    }
+
+    /// The numerals parked on each bare metavariable, by the metavariable they wait on now: what a report made before their term completes shows that metavariable as ([`numeral_default`](crate::numeral_default)).
+    pub(crate) fn waiting_numerals(&self) -> BTreeMap<MetavarId, Vec<NumLit>> {
+        let mut waiting = BTreeMap::<MetavarId, Vec<NumLit>>::new();
+        for parked in &self.parked {
+            if let ParkedWork::Checking { term, expected, .. } = &parked.work
+                && let Subterm::Transient(Transient::NumLit(literal)) = &**term
+                && matches!(&**expected, Subterm::Metavar(_))
+                && let [id] = parked.watching.iter().copied().collect::<Vec<_>>()[..]
+            {
+                waiting.entry(id).or_default().push(literal.clone());
+            }
+        }
+
+        waiting
     }
 
     /// Take the parked goals woken by solutions landed since the last sweep. Consumes the wake signals; empty when nothing new has been solved.

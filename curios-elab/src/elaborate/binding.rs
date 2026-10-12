@@ -3,12 +3,13 @@ use {
     crate::{
         BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, ParkedWork,
         SlotPositions, attempt_witness_goal, check, check_is_sort, check_rec_totality, convert,
-        display_mismatch, elaborate, expect, reduce_with, written_monad, zonk_solved_term_metas,
+        display_mismatch, elaborate, expect, reduce_with, stuck_on_metavar, written_monad,
+        zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
-        Intrinsic, Let, Metavar, MetavarId, Nat, NumLit, Probe, Proj, Rec, Subterm, Telescope,
-        Term, Transient, WitnessKey, WitnessOrigin,
+        Intrinsic, Let, MetavarId, Nat, NumLit, Probe, Proj, Rec, Subterm, Telescope, Term,
+        WitnessKey, WitnessOrigin,
     },
     curios_num::{Floating, Integer, Rounding},
     curios_utilities::{InfixOp, Plicity},
@@ -214,7 +215,7 @@ pub(super) fn park_checking(
     Ok((stand_in, expected.clone()))
 }
 
-/// Resolve a polymorphic numeric literal ([`NumLit`]) to a concrete scalar intrinsic. In `Check` mode the expected type pins the choice; an expected type that is still a bare unsolved metavar — and `Infer` mode — fall back to the literal's shape default (`Int` when a sign was written, else `Nat`), and the closing `expect` then solves that metavar to the chosen type. The literal resolves *eagerly*: deferring it would strand downstream elaboration that needs the type immediately (a projection off the literal's type, say). The operator (`elaborate_infix`) pins its operand type from the non-literal side first, so a literal there sees a concrete type and `1 + flt` still works. Decimal literals never reach here; they parse straight to `Flt`.
+/// Resolve a polymorphic numeric literal ([`NumLit`]) to a concrete scalar intrinsic. In `Check` mode the expected type pins the choice. One still stuck on an unsolved metavariable that a term awaits parks the literal: what that term has yet to read may give the type, and where nothing does, the term's completion gives the numerals it awaits their shape default together ([`Context::complete`], [`numeral_default`]). Where no term awaits the type, and in `Infer` mode, the literal takes its shape default at once, so the next line reads a type. Decimal literals never reach here; they parse straight to `Flt`.
 pub(super) fn elaborate_num_lit(
     context: &mut Context,
     num_lit: &NumLit,
@@ -227,25 +228,22 @@ pub(super) fn elaborate_num_lit(
     let int_type: Term = Subterm::Intrinsic(Intrinsic::IntType).into();
     let flt_type: Term = Subterm::Intrinsic(Intrinsic::FltType).into();
 
-    // A written sign rules out `Nat`, so a marked numeral defaults to `Int`; a character-spelled literal defaults to the certified `/std/Char` value it denotes.
-    let default_type: Term = match num_lit {
-        NumLit::Number { sign, .. } if sign.is_marked() => int_type.clone(),
-        NumLit::Number { .. } => nat_type.clone(),
-        NumLit::Character(_) => Term::struct_type(
-            Global::Authored(context.syntax().character.character.qualifier()),
-            Vec::<Term>::new(),
-        ),
-    };
+    let default_type = numeral_default(context, [num_lit]);
 
     let target = match &mode {
         Mode::Check(expected) => {
             let reduced = reduce_with(context, expected)?;
-            match &*reduced {
-                // Nothing concrete to resolve against yet — commit to the shape default; the closing `expect` solves the metavar to it.
-                Subterm::Metavar(Metavar { id, .. }) if context.metavar_solution(*id).is_none() => {
+            match stuck_on_metavar(context, &reduced) {
+                true => {
+                    // A type some term awaits may still be given by what that term has yet to read, so the numeral waits for it and takes its default with the others that term awaits ([`Context::complete`]). Parked at the spelling the solutions so far give, so that what it watches is what the type is stuck on.
+                    let spelled = zonk_solved_term_metas(context, expected);
+                    if context.awaits_any(&spelled) && context.may_park() {
+                        return park_checking(context, term, &spelled);
+                    }
+                    // No term awaits the type, so nothing more is coming: the shape default, at once. The closing `expect` solves a bare metavariable to it, and parks the comparison with a type stuck on one.
                     Term::unwrap_or_clone(default_type.clone())
                 }
-                _ => Term::unwrap_or_clone(reduced),
+                false => Term::unwrap_or_clone(reduced),
             }
         }
         Mode::Infer => Term::unwrap_or_clone(default_type.clone()),
@@ -360,32 +358,27 @@ fn character_value(context: &Context, character: char) -> Term {
     )
 }
 
-/// The shape default for an infix operator whose operand type nothing pinned, read off its literal operands: `Int` where one is a signed numeral, `Nat` where one is an unsigned numeral, and the certified `/std/Char` where every literal operand is a character. `None` where no operand is a literal: a default is a literal's, and an operator with none has nothing to take one from.
-///
-/// A free function rather than an inherent method on [`Infix`]: the node is representation and lives in `curios-core`, while literal defaulting is an elaboration decision.
-pub(super) fn infix_default_type(context: &Context, infix: &Infix) -> Option<Term> {
-    let literals = [&infix.left, &infix.right]
-        .into_iter()
-        .filter_map(|operand| match &**operand {
-            Subterm::Transient(Transient::NumLit(literal)) => Some(literal),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let signed =
-        |literal: &&NumLit| matches!(literal, NumLit::Number { sign, .. } if sign.is_marked());
-    let number = |literal: &&NumLit| matches!(literal, NumLit::Number { .. });
+/// The shape default numerals that wait on one type take together, a type each of them realizes at: `Int` where one is signed, since a written sign rules out `Nat`; `Nat` where one is an unsigned number; and the certified `/std/Char` only where every one is a character, a character realizing at `Nat` and `Int` as its code point. A numeral alone is the case of one.
+pub(crate) fn numeral_default<'a>(
+    context: &Context,
+    literals: impl IntoIterator<Item = &'a NumLit>,
+) -> Term {
+    let (mut signed, mut number) = (false, false);
+    for literal in literals {
+        match literal {
+            NumLit::Number { sign, .. } if sign.is_marked() => signed = true,
+            NumLit::Number { .. } => number = true,
+            NumLit::Character(_) => {}
+        }
+    }
 
-    if literals.iter().any(signed) {
-        Some(Term::intrinsic(Intrinsic::IntType))
-    } else if literals.iter().any(number) {
-        Some(Term::intrinsic(Intrinsic::NatType))
-    } else if literals.is_empty() {
-        None
-    } else {
-        Some(Term::struct_type(
+    match (signed, number) {
+        (true, _) => Term::intrinsic(Intrinsic::IntType),
+        (false, true) => Term::intrinsic(Intrinsic::NatType),
+        (false, false) => Term::struct_type(
             Global::Authored(context.syntax().character.character.qualifier()),
             Vec::<Term>::new(),
-        ))
+        ),
     }
 }
 
@@ -915,7 +908,7 @@ fn binder_key(
     Ok(None)
 }
 
-/// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for an operator whose method returns its operand type, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.
+/// Elaborate an infix operator ([`Infix`]) as a concept method call. Both operands are checked at a fresh operand-type metavar `?T`, which the operator awaits as a call awaits its implicits: an expected result type pins it for an operator whose method returns its operand type, an operand that is no literal pins it from its own type, and a literal read while it is open waits for it. So `1 + flt` resolves to `Flt` whichever side the literal is on, and literals nothing pins take their default together where the operator completes.
 ///
 /// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/std/ops` concept ([`OperatorSyntax::concept_field`](curios_utilities::OperatorSyntax::concept_field)) — `a + b` ≙ `Add/add(a, b)`, intrinsics included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `neq` rather than negating a rebuilt `eql`, so this function synthesizes no term of its own and reads every result type from the declaration. The node never survives elaboration; witness projections over the statically-known intrinsic witnesses collapse back to bare `Intrinsic` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
 pub(super) fn elaborate_infix(
@@ -926,7 +919,7 @@ pub(super) fn elaborate_infix(
 ) -> Result<(Term, Term), Error> {
     // `?T`: the operand type shared by both sides.
     let sort = context.fresh_sort("infix operand sort");
-    let (operand_id, operand_type) = context.fresh_hole(sort, term.extent());
+    let operand_type = context.fresh_hole_metavar(sort, term.extent());
 
     let target = context.syntax().operator.concept_field(infix.op);
     let field_name = target.field;
@@ -949,36 +942,9 @@ pub(super) fn elaborate_infix(
         expect(context, term, &operand_type, expected)?;
     }
 
-    let left_is_literal = matches!(&*infix.left, Subterm::Transient(Transient::NumLit(_)));
-    let right_is_literal = matches!(&*infix.right, Subterm::Transient(Transient::NumLit(_)));
-
-    // Phase 1: the non-literal operands pin `?T` from their own types.
-    let mut left = match left_is_literal {
-        false => Some(elaborate(context, &infix.left, Mode::Check(operand_type.clone()))?.0),
-        true => None,
-    };
-    let mut right = match right_is_literal {
-        false => Some(elaborate(context, &infix.right, Mode::Check(operand_type.clone()))?.0),
-        true => None,
-    };
-
-    // Nothing pinned `?T` — every non-literal operand left it open. Default from the literal operands' shapes so they have a concrete type to take; with no literal operand nothing is defaulted, and `?T` waits for whatever pins it.
-    if context.metavar_solution(operand_id).is_none()
-        && let Some(default) = infix_default_type(context, infix)
-    {
-        context.solve_metavar(operand_id, default);
-    }
-
-    // Phase 2: the literal operands resolve against the now-concrete `?T`.
-    if left_is_literal {
-        left = Some(elaborate(context, &infix.left, Mode::Check(operand_type.clone()))?.0);
-    }
-    if right_is_literal {
-        right = Some(elaborate(context, &infix.right, Mode::Check(operand_type.clone()))?.0);
-    }
-
-    let left = left.unwrap();
-    let right = right.unwrap();
+    // The operands as written, each at `?T`. A literal read while `?T` is open waits for it, the operator being the term that awaits it: the other operand pins it, or the operator's completion gives the literals their default.
+    let left = elaborate(context, &infix.left, Mode::Check(operand_type.clone()))?.0;
+    let right = elaborate(context, &infix.right, Mode::Check(operand_type.clone()))?.0;
 
     // The registry entry was absent — report it now that the operand type has structure to name.
     let Some(method) = method else {

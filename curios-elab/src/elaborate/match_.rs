@@ -560,7 +560,7 @@ pub(crate) fn elaborate_match(
         return Ok(park_match(context, term, mode, scrutinee));
     }
 
-    eliminate(context, m, term, mode, scrutinee)
+    context.awaiting(|context| eliminate(context, m, term, mode, scrutinee))
 }
 
 /// Park a match whose scrutinee's type is stuck ([`ParkedMatch`]): a placeholder stands for it at the expected type, or at a fresh one when it infers its own, until its scrutinee's type is known.
@@ -615,7 +615,8 @@ pub(crate) fn retry_match(
             term: parked.scrutinee.clone(),
             type_,
         };
-        let (rebuilt, type_) = eliminate(context, m, &parked.term, parked.mode.clone(), scrutinee)
+        let (rebuilt, type_) = context
+            .awaiting(|context| eliminate(context, m, &parked.term, parked.mode.clone(), scrutinee))
             .map_err(|error| error.at_opt(origin.extent()))?;
         if matches!(parked.mode, Mode::Infer) {
             expect(context, &parked.term, &type_, &parked.result)?;

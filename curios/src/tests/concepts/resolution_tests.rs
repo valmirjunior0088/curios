@@ -126,7 +126,11 @@ fn open_parameter_does_not_infer_from_the_witness() {
         "#;
 
     let message = error(source).to_lowercase();
-    assert!(message.contains("witness") || message.contains("infer"));
+    assert!(
+        message.contains("never solved")
+            && message.contains("implicit argument 'b' of 'into/into'"),
+        "unexpected report:\n{message}"
+    );
 }
 
 // The operator concepts: `Add/add` resolves on an intrinsic type through the `/std` witness (also proving the cached-prelude replay path registers the operator concepts and their `/std` witnesses), on a user struct through a user witness, and in generic code through a local `use Add(A)` premise.

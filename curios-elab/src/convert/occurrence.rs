@@ -69,7 +69,7 @@ pub(super) fn pattern_variables(
     (!variables.is_empty() && !carried).then_some(variables)
 }
 
-/// `true` iff `term` — already in weak-head normal form, so anything foldable has folded — is stuck on an unsolved metavariable: an intrinsic operation still carrying one, a match whose node mentions one (a metavariable in the scrutinee may fold the match once solved; one in an arm may make the arm compare equal), or an elimination — application, projection — headed by such a shape or by an unsolved metavariable itself. A structural mismatch against such a term is undecided rather than definite, so the drain parks it watching the metavariables instead of failing; a stuck comparison with *no* unsolved metavariable anywhere in these positions keeps its hard mismatch, since nothing could ever wake it.
+/// `true` iff `term` — already in weak-head normal form, so anything foldable has folded — is stuck on an unsolved metavariable: an intrinsic operation still carrying one, a match whose node mentions one (a metavariable in the scrutinee may fold the match once solved; one in an arm may make the arm compare equal), a folded recursive call with an argument that is so stuck, or an elimination — application, projection — headed by such a shape or by an unsolved metavariable itself. A structural mismatch against such a term is undecided rather than definite, so the drain parks it watching the metavariables instead of failing; a stuck comparison with *no* unsolved metavariable anywhere in these positions keeps its hard mismatch, since nothing could ever wake it.
 ///
 /// The metavariable-headed application is the case [`Convert::imitate_flex_apply`](super::Convert::imitate_flex_apply) states the rule for and only covers against a nominal type: `?f(a) ≡ t` against a *value* `t` has no imitation to try, but refuting nothing proves nothing either — a constant solution could still exist, and pinning `a` later may expose an abstraction. A hard mismatch here would make `Eq/cong(?, h)` report "type mismatch" for a hole standing exactly where the function belongs.
 pub(super) fn blocked_on_unsolved_metavar(context: &Context, term: &Term) -> bool {
@@ -82,7 +82,14 @@ pub(super) fn blocked_on_unsolved_metavar(context: &Context, term: &Term) -> boo
     match &**term {
         Subterm::Metavar(metavar) => context.metavar_solution(metavar.id).is_none(),
         Subterm::Intrinsic(_) | Subterm::Match(_) => has_unsolved(term),
-        Subterm::Apply(apply) => blocked_on_unsolved_metavar(context, &apply.head),
+        // A folded recursive call does not wear its blocker on its head: unfolding hands the call itself back where it cannot choose an arm, so what reduction waits for sits in an argument, as [`stuck_on_metavar`](crate::stuck_on_metavar) reads it where a form is checked.
+        Subterm::Apply(apply) => {
+            blocked_on_unsolved_metavar(context, &apply.head)
+                || (apply.head.as_rec_proj().is_some()
+                    && apply
+                        .params()
+                        .any(|param| blocked_on_unsolved_metavar(context, param)))
+        }
         Subterm::Proj(proj) => blocked_on_unsolved_metavar(context, &proj.head),
         _ => false,
     }

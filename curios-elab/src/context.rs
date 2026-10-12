@@ -50,6 +50,8 @@ mod underway;
 pub(crate) use underway::*;
 
 #[cfg(test)]
+mod awaiting_tests;
+#[cfg(test)]
 mod tests;
 
 use {
@@ -65,8 +67,8 @@ use {
     curios_core::{
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Definition, DefinitionKind,
         Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl,
-        Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, Probe, Quality, RecGroup,
-        ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
+        Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, NumLit, Probe, Quality,
+        RecGroup, ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         Universes, Variance, WitnessKey, WitnessOrigin, instantiate_universes_scoped,
     },
@@ -2412,6 +2414,11 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.resolve(metavar)
     }
 
+    /// The type of `metavar` at its occurrence ([`Solutions::type_at`]).
+    pub(crate) fn metavar_type_at(&self, metavar: &Metavar) -> Option<Term> {
+        self.underway.attempt.solutions.type_at(metavar)
+    }
+
     /// Commit a metavariable's solution ([`Solutions::solve`]), stamping the write. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid. (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.)
     pub(crate) fn solve_metavar(&mut self, id: MetavarId, term: Term) {
         self.typing.caches.note_write();
@@ -2733,6 +2740,66 @@ impl<'s> Context<'s> {
         self.typing
             .frames
             .extend_witness_scope(&frame.witness_binders);
+    }
+
+    /// Read `body` as a term that awaits: a metavariable born while it runs is awaited by it, and once it has read its parts and met its expectation it takes the choices left among the problems it awaits ([`Context::complete`]). A refusal completes nothing.
+    pub(crate) fn awaiting<R>(
+        &mut self,
+        body: impl FnOnce(&mut Self) -> Result<R, Error>,
+    ) -> Result<R, Error> {
+        let (term, enclosing) = self.underway.attempt.solutions.enter_awaiting();
+        let result = body(self).and_then(|read| self.complete(term).map(|()| read));
+        self.underway
+            .attempt
+            .solutions
+            .leave_awaiting(term, enclosing);
+
+        result
+    }
+
+    /// Run `work`, a parked problem's retry, as awaited by the term that awaits what the problem watched, where one still stands, and by none where none does: the terms being read where the wake found it are not the problem's.
+    pub(crate) fn retried_under<R>(
+        &mut self,
+        watching: &BTreeSet<MetavarId>,
+        work: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let solutions = &mut self.underway.attempt.solutions;
+        let awaiting = solutions.outermost(watching.iter().copied());
+        let interrupted = solutions.read_under(awaiting);
+        let result = work(self);
+        self.underway.attempt.solutions.read_under(interrupted);
+
+        result
+    }
+
+    /// Whether a standing term awaits an unsolved metavariable `term` mentions.
+    pub(crate) fn awaits_any(&self, term: &Term) -> bool {
+        let solutions = &self.underway.attempt.solutions;
+        term.has_metavar()
+            && term
+                .metavars()
+                .into_iter()
+                .any(|id| solutions.solution(id).is_none() && solutions.awaited(id).is_some())
+    }
+
+    /// Have the term being read await the unsolved metavariables of `term` that no standing term awaits ([`Solutions::adopt`]).
+    pub(crate) fn adopt(&mut self, term: &Term) {
+        if term.has_metavar() {
+            self.underway.attempt.solutions.adopt(term.metavars());
+        }
+    }
+
+    /// [`Solutions::waiting_numerals`].
+    pub(crate) fn waiting_numerals(&self) -> BTreeMap<MetavarId, Vec<NumLit>> {
+        self.underway.attempt.solutions.waiting_numerals()
+    }
+
+    /// [`Solutions::numerals_awaited_by`].
+    pub(crate) fn numerals_awaited_by(
+        &self,
+        term: AwaitId,
+    ) -> (Vec<ParkedNumeral>, Vec<BTreeSet<MetavarId>>) {
+        self.underway.attempt.solutions.numerals_awaited_by(term)
     }
 
     /// Park blocked work: freeze the live local frame around it and record which unsolved metavariables could unblock it.

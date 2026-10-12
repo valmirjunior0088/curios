@@ -7,5 +7,6 @@ mod budget_tests;
 mod elimination_tests;
 mod goal_tests;
 mod implicit_tests;
+mod numeral_tests;
 mod postponement_tests;
 mod tuple_tests;
