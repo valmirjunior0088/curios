@@ -6,7 +6,7 @@
 
 use {
     crate::{could_reduce_to, records_case_equation},
-    curios_core::{Bound, Free, Term},
+    curios_core::{Free, Term},
     std::{collections::HashMap, mem},
 };
 
@@ -80,8 +80,6 @@ struct Local {
     value: Option<Value>,
     /// Where the binder of the same name this one shadows sits, for [`Scope::retract`] to put back.
     shadowed: Option<usize>,
-    /// `type_` as the conversion history keys it, with every binder opened before it renamed to its position — or `None` for a type with loose indices, whose renaming depends on how many binders stand beside it and is taken at each key instead. See [`Scope::history_context`].
-    keyed: Option<Term>,
     /// Which opening this is, counted over the whole walk — what a [`Prefix`] names.
     opening: u64,
     /// Whether the binder is itself a proof — opened at a proposition — once asked: `None` until a stuck form naming it is put to the equations in force ([`Kernel::proofs_named`](super::Kernel::proofs_named)).
@@ -129,17 +127,9 @@ impl Scope {
         self.open(name, type_, Some(value))
     }
 
-    /// The type is held by value, so everything that reads a local's type — a variable's typing, the arm rule's re-typing, the conversion history's key — reads the type it reads where a `let` is substituted.
+    /// The type is held by value, so everything that reads a local's type — a variable's typing, the arm rule's re-typing — reads the type it reads where a `let` is substituted.
     fn open(&mut self, name: &Free, type_: &Term, value: Option<Value>) -> bool {
         let type_ = self.by_value(type_);
-        let keyed = (type_.reach() == 0).then(|| {
-            let opened = self
-                .locals
-                .iter()
-                .map(|local| &local.name)
-                .collect::<Vec<_>>();
-            type_.capture(&opened)
-        });
         let shadowed = self.innermost.insert(*name, self.locals.len());
         self.openings += 1;
         self.bound += usize::from(value.is_some());
@@ -148,7 +138,6 @@ impl Scope {
             type_,
             value,
             shadowed,
-            keyed,
             opening: self.openings,
             proof: None,
         });
@@ -425,27 +414,9 @@ impl Scope {
             .collect()
     }
 
-    /// The identities of the binders currently in scope, outermost first — parallel to [`Scope::local_types`]. What the conversion history renames away, so that a goal reached again on a later round of an unfolding cycle is recognized as the goal it already is.
+    /// The identities of the binders currently in scope, outermost first — parallel to [`Scope::local_types`].
     pub(super) fn local_names(&self) -> Vec<Free> {
         self.locals.iter().map(|local| local.name).collect()
-    }
-
-    /// The types of the binders currently in scope, outermost first, each with every binder renamed to its position: the context the conversion history keys a goal on, since the same goal under a different context is a different goal.
-    ///
-    /// **Renamed once per binder, when it opens, rather than at every goal.** A local's type mentions only binders opened before it, and `capture` gives a binder the index of its position in the list — so renaming it against the binders in scope at a goal, all of them, gives what renaming it against those before it gave, and the history's keys are unchanged. What it saves is the cost: the history keys every comparison it enters, and renaming the whole context at each would spend a type-level text search — compared under binders whose types carry its positions, whose graphs are large — most of its time renaming the same context over again. A type with loose indices is the exception, because its renaming shifts them past however many binders stand beside it, so it is renamed at each key.
-    pub(super) fn history_context(&self) -> Vec<Term> {
-        let names = self
-            .locals
-            .iter()
-            .map(|local| &local.name)
-            .collect::<Vec<_>>();
-        self.locals
-            .iter()
-            .map(|local| match &local.keyed {
-                Some(keyed) => keyed.clone(),
-                None => local.type_.capture(&names),
-            })
-            .collect()
     }
 
     /// The type `name` was opened at, if it is a binder currently in scope.

@@ -2141,7 +2141,7 @@ impl Bound for Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        // **Guarded per level, so a descent can chain stack segments.** Every child re-enters here, which makes this the one place a check per level lives — the intent [`recurse`] states. Without it a walk that starts inside a segment runs to that segment's end with no chance to map another: a `NatAdd` chain of a few thousand links, five debug frames per link, would exhaust the 32 MiB `grown` reserve under the kernel's conversion history, which `capture`s a whole normal form to key a goal, and die as a bare `SIGBUS` with nothing on stderr. The iterative spine path below is no substitute — it is gated on the rewriting modes, and `capture` runs in `Plain`.
+        // **Guarded per level, so a descent can chain stack segments.** Every child re-enters here, which makes this the one place a check per level lives — the intent [`recurse`] states. Without it a walk that starts inside a segment runs to that segment's end with no chance to map another: a `NatAdd` chain of a few thousand links, five debug frames per link, would exhaust the 32 MiB `grown` reserve where a `capture` of a whole normal form begins inside it, and die as a bare `SIGBUS` with nothing on stderr. The iterative spine path below is no substitute — it is gated on the rewriting modes, and `capture` runs in `Plain`.
         // Answered before the level is guarded or a table asked: a term the visit leaves as it is costs one comparison.
         if visit.passes_over(self) {
             return self.clone();

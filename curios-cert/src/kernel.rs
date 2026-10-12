@@ -660,7 +660,7 @@ impl<'s> Kernel<'s> {
         }
     }
 
-    /// The remembered verdict of comparing `this` with `that` at `type_`, under the lives a typing has. Only a verdict reached with no goal in progress assumed is ever filed, so it is the verdict under whatever goals are in progress now.
+    /// The remembered verdict of comparing `this` with `that` at `type_`, under the lives a typing has. Only a verdict reached with no pair of heads left apart is ever filed, so it is the verdict whatever is being unfolded now.
     pub(crate) fn convert_hit(&self, type_: &Term, this: &Term, that: &Term) -> Option<bool> {
         self.standing(self.memos.converted(
             type_,
@@ -1020,7 +1020,7 @@ impl<'s> Kernel<'s> {
 
     /// Run `walk` with every binder it opened — and every case equation it assumed — closed again afterwards, on the failing path as well as the succeeding one.
     ///
-    /// **The only way to open a binder scope.** [`Scope`]'s `mark` and `retract` are `pub(super)` and this is their only caller anywhere, which is what makes that true. A judgment that opened a binder and returned early would leak it into the conversion history, where the local context is part of the goal key, and no amount of care spread over a dozen call sites makes that structural. Written as a bracket rather than a guard object because the walks it wraps take `&mut Kernel` throughout, and a guard holding the borrow would leave them nothing to be called with.
+    /// **The only way to open a binder scope.** [`Scope`]'s `mark` and `retract` are `pub(super)` and this is their only caller anywhere, which is what makes that true. A judgment that opened a binder and returned early would leave it in scope for every judgment after it, and no amount of care spread over a dozen call sites makes that structural. Written as a bracket rather than a guard object because the walks it wraps take `&mut Kernel` throughout, and a guard holding the borrow would leave them nothing to be called with.
     pub(crate) fn scoped<T>(&mut self, walk: impl FnOnce(&mut Self) -> T) -> T {
         let mark = self.scope.mark();
         // What the call recorder learned inside the bracket — an arm's refinements, a group opened for its bodies — is about the binders the bracket opened, so it retracts with them.
@@ -1186,7 +1186,7 @@ impl<'s> Kernel<'s> {
 
     /// Run `read` with reduction plain: it asks the kernel's conversion nothing, at a stuck fold or at a missed equation.
     ///
-    /// **Two readers need it.** A question reduction puts to conversion is answered by plain reduction: conversion reduces, and left to ask again, a term that reaches itself through an unfolding would be asked about without end, so a question is one conversion the budget bounds, over the reduction that stood before reduction asked anything. And a shared analysis reads a term by it (`Env::force`): conversion's proof irrelevance and its recurrence rule are sound because acceptance waits on totality, which must therefore read terms on no verdict of conversion's.
+    /// **Two readers need it.** A question reduction puts to conversion is answered by plain reduction: conversion reduces, and left to ask again, a term that reaches itself through an unfolding would be asked about without end, so a question is one conversion the budget bounds, over the reduction that stood before reduction asked anything. And a shared analysis reads a term by it (`Env::force`): conversion's proof irrelevance is sound because acceptance waits on totality, which must therefore read terms on no verdict of conversion's.
     ///
     /// **Each of the two reductions keeps its own answers.** A local-bearing reduct is remembered by the reduction that took it, and so are a sort and a comparison's verdict, which are read through reducts ([`Memos`]); an equation's reduced spelling is settled once for each ([`Scope::plain`]). So what plain reduction made of a term never answers for a judgment's, nor the other way, and no answer depends on which of the two asked first.
     ///
@@ -1230,12 +1230,7 @@ impl<'s> Kernel<'s> {
         self.scope.local_types()
     }
 
-    /// The context the conversion history keys a goal on: the binders' types with every binder renamed to its position, taken once per binder when it opens — see the scope's `history_context`.
-    pub(crate) fn history_context(&self) -> Vec<Term> {
-        self.scope.history_context()
-    }
-
-    /// The identities of the binders currently in scope, outermost first — parallel to [`Kernel::local_types`]. What the conversion history renames away, so that a goal reached again on a later round of an unfolding cycle is recognized as the goal it already is.
+    /// The identities of the binders currently in scope, outermost first — parallel to [`Kernel::local_types`].
     pub(crate) fn local_names(&self) -> Vec<Free> {
         self.scope.local_names()
     }

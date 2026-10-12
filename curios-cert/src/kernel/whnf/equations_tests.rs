@@ -1026,7 +1026,7 @@ fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
     });
 }
 
-/// A shared analysis reads a term by plain reduction, which asks the kernel's conversion nothing: under a guard, the respelling a judgment's reduction answers by asking stays stuck through `Env::force`. Totality and positivity read terms this way, and conversion's proof irrelevance and its recurrence rule are sound because acceptance waits on totality, so what totality reads may rest on no verdict of conversion's.
+/// A shared analysis reads a term by plain reduction, which asks the kernel's conversion nothing: under a guard, the respelling a judgment's reduction answers by asking stays stuck through `Env::force`. Totality and positivity read terms this way, and conversion's proof irrelevance is sound because acceptance waits on totality, so what totality reads may rest on no verdict of conversion's.
 ///
 /// Mutation-checked: with `Env::force` reducing as a judgment does, the respelling is `true` to the analysis.
 #[test]

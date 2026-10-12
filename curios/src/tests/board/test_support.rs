@@ -1903,7 +1903,7 @@ pub(super) const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
 
 /// Two distinct recursions are not the same function.
 ///
-/// Neither descends, so both are legal values, and both fold to themselves — which is the shape that puts conversion's recurrence rule to work: comparing them unfolds each once, arrives at the same goal, and a history that treated "already assumed" as "proved" would equate two definitions that differ. `f` is constantly zero and `g` constantly one, so equating them and transporting along the equality gives `Eq()(0, 1)`.
+/// Both fold to themselves, which is the shape two recursions meet in: unfolded once, each poses the same two calls again, and a conversion that took a pair it met again as held would equate two definitions that differ. `f` is constantly zero and `g` constantly one, so equating them and transporting along the equality gives `Eq()(0, 1)`.
 pub(super) const DISTINCT_RECURSIONS_ARE_NOT_EQUAL: &str = r#"
     use /std/{Nat, Eq};
     let f(n : Nat) -> Nat =

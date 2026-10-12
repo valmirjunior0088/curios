@@ -92,7 +92,7 @@ fn an_intrinsic_applied_to_two_proofs_converts_at_their_proposition() {
     );
 }
 
-// An ordinary program that forcing first cannot finish: a recursive function passing a proof along, unfolded under fresh binders at every round, so the conversion recurrence would never see its goal again and would spend the whole budget before refusing.
+// An ordinary program that forcing first refuses: a recursive function passing a proof along is unfolded once, and its unfolding poses the two calls again, where they are apart.
 #[test]
 fn a_recursive_function_carrying_a_proof_converts_without_unfolding() {
     assert_eq!(

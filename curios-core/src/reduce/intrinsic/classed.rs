@@ -81,7 +81,7 @@ impl Classes {
 
 /// The atoms the readers read in `this` and `that`, each once, in the order a walk of `this` and then `that` meets them: every operand of a node the readers read through that is not, once forced, itself such a node.
 ///
-/// **A pair neither side of which the readers read through has no atoms.** Two `get`s, two lengths, two calls are each the whole of their side, so the only pair to class would be the pair being decided, and a checker asked whether it converts is asked the question it is in the middle of answering: the kernel's recurrence rule would assume it, and the elaborator would ask without end. Such a pair is the congruence's, which compares its operands one by one.
+/// **A pair neither side of which the readers read through has no atoms.** Two `get`s, two lengths, two calls are each the whole of their side, so the only pair to class would be the pair being decided, and a checker asked whether it converts is asked the question it is in the middle of answering, without end. Such a pair is the congruence's, which compares its operands one by one.
 pub fn atoms_of(
     reducer: &mut impl Reducer,
     this: &Term,

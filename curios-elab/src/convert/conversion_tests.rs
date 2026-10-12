@@ -722,6 +722,38 @@ fn two_recursive_values_whose_bodies_convert_are_one() {
     assert_eq!(conv(&mut context, &this, &other), Ok(false));
 }
 
+/// `rec m : Type = (m) -> Nat; m`, optionally carrying a second unused member, so that two such groups are of two shapes.
+fn equirecursive(context: &mut Context, padded: bool) -> Term {
+    let member = context.fresh(Some("m"));
+    let param = context.fresh(Some("x"));
+    let mut items = vec![(
+        member,
+        Term::type_ground(),
+        Term::func_type([(param, Term::free_var(&member))], nat_type()),
+    )];
+    if padded {
+        items.push((
+            context.fresh(Some("unused")),
+            Term::type_ground(),
+            nat_type(),
+        ));
+    }
+
+    Term::rec(items, Term::free_var(&member))
+}
+
+/// Two recursive types of two shapes that unfold alike are apart: no goal is held for having been met before. Both sides are the type `X = (X) -> Nat`, spelled as groups of two lengths, so no position pairs them as binders, and their two bodies are function types whose domains pose the two again. Inside their own unfolding the pair is apart. The kernel's twin shares the name.
+///
+/// Mutation-checked: with a pair unfolded however often it is met, the budget, small here, runs out.
+#[test]
+fn two_groups_of_two_shapes_that_unfold_alike_are_apart() {
+    let mut context = Context::new(10_000, SYNTAX);
+    let this = equirecursive(&mut context, false);
+    let that = equirecursive(&mut context, true);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+}
+
 /// A problem a run poses twice is decided once. Two towers of pairs built apart, each line naming the line before it twice, are two graphs of forty nodes whose trees have 2⁴⁰ leaves, and the run that compares them remembers what it has posed, so it takes them in their size. `curios`'s `tests::towers` holds the program at sixty lines.
 ///
 /// Mutation-checked: with a problem posed however often it is met, the budget, small here, runs out.

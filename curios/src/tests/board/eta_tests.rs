@@ -209,7 +209,7 @@ fn two_neutrals_at_a_groups_member_with_a_relevant_field_stay_apart() {
     );
 }
 
-// **Where a child is compared with no type, two neutrals a lookup types at one proposition convert.** A tuple literal's component inside a stuck elimination's arm is such a child, and two proofs there were refused by both checkers, which each equate them wherever a type reaches them. Neither side is expanded: eta between two neutrals decides nothing irrelevance does not, and the goal it would pose at a looked-up type is one the recurrence rule assumes. The last program is two proofs of a proposition whose implicit the elaborator solved, which it refused where the same proposition written out converged.
+// **Where a child is compared with no type, two neutrals a lookup types at one proposition convert.** A tuple literal's component inside a stuck elimination's arm is such a child, and two proofs there were refused by both checkers, which each equate them wherever a type reaches them. Neither side is expanded: eta between two neutrals decides nothing irrelevance does not, and the goal it would pose at a looked-up type is the one in hand, posed again without end. The last program is two proofs of a proposition whose implicit the elaborator solved, which it refused where the same proposition written out converged.
 //
 // The refusals beside it are the same pair at a record of units, whose shape decides nothing, and at a record with a relevant field.
 #[test]
@@ -364,7 +364,7 @@ fn two_struct_literals_compare_their_function_fields() {
     assert_eq!(run(TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS), b"1");
 }
 
-// Conversion's recurrence rule. Two recursions that fold to themselves arrive at the same goal when compared, and a history that read "already assumed" as "proved" would equate two definitions that differ.
+// Two recursions of one shape that part in their base case. Unfolded once, each poses the same two calls again, and a conversion that took a pair it met again as held would equate two definitions that differ.
 #[test]
 fn two_distinct_recursions_do_not_convert() {
     rejected_by(DISTINCT_RECURSIONS_ARE_NOT_EQUAL, "type mismatch");

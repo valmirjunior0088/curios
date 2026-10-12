@@ -51,9 +51,9 @@ pub(super) fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Ter
     Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new())
 }
 
-/// `rec m : Type = (m) -> codomain; m`, optionally carrying a second unused member so that two such groups are not structurally equal and must take a delta step to be compared.
-pub(super) fn equirecursive(member: Free, param: Free, codomain: Term, padded: bool) -> Term {
-    let body = Term::func_type([(param, Term::free_var(&member))], codomain);
+/// `rec m : Type = (m) -> Nat; m`, optionally carrying a second unused member, so that two such groups are of two shapes: no position pairs them as binders, and they are compared by what each unfolds to.
+pub(super) fn equirecursive(member: Free, param: Free, padded: bool) -> Term {
+    let body = Term::func_type([(param, Term::free_var(&member))], nat_type());
     let mut items = vec![(member, Term::type_ground(), body)];
 
     if padded {

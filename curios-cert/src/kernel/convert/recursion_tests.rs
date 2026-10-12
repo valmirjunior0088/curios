@@ -1,7 +1,7 @@
-//! Recursive heads: alpha-variant groups, two groups compared as binders, a folded call compared against its unfolding, the pair unfolded against itself once, and the recurrence that is assumed rather than unfolded forever.
+//! Recursive heads: alpha-variant groups, two groups compared as binders, a folded call compared against its unfolding, and the pair unfolded against itself once.
 
 use {
-    super::{History, convert_intrinsic, test_support::*},
+    super::{Pairs, convert_intrinsic, test_support::*},
     crate::{Kernel, convert},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
@@ -330,7 +330,7 @@ fn a_pair_met_again_inside_its_own_unfolding_is_apart() {
 
 /// A verdict that rested on a pair left apart is not remembered. Two calls are apart inside their own unfolding and nowhere else, so a refusal that met one is true of the path it was reached on, and it is filed nowhere — where a comparison that met none is filed, and forgotten with the budget.
 ///
-/// Mutation-checked: with a verdict filed whatever was left apart while deciding it, the two calls are remembered apart.
+/// Mutation-checked: with a verdict filed whatever was left apart while deciding it, the two calls are remembered apart; and with the declaration's verdicts kept across a restore, the control still answers after it.
 #[test]
 fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
     let mut kernel = Kernel::new(10_000, SYNTAX);
@@ -355,6 +355,9 @@ fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
     );
     assert_eq!(convert(&mut kernel, &ground, &redex, &nat_type()), Ok(true));
     assert_eq!(kernel.convert_hit(&ground, &redex, &nat_type()), Some(true));
+
+    kernel.restore_budget();
+    assert_eq!(kernel.convert_hit(&ground, &redex, &nat_type()), None);
 }
 
 /// Conversion keeps the constant function apart from the identity whatever index the local it mentions was minted at.
@@ -381,28 +384,21 @@ fn conversion_separates_a_constant_from_the_identity_at_every_colliding_index() 
     }
 }
 
-/// The coinductive recurrence rule, which nothing in the corpus reaches.
+/// Two recursive types of two shapes that unfold alike are apart: no goal is held for having been met before. Both sides are the type `X = (X) -> Nat`, spelled as groups of two lengths — the right carries a second, unused member — so no position pairs them as binders, and forced against each other each is a function type whose domain poses the two again. Inside their own unfolding the pair is apart. What the two spellings share is a coinduction, which no rule of conversion checks. The elaborator's twin shares the name.
 ///
-/// Two folded recursive spellings can unfold forever without ever disagreeing — that is what an equirecursive type is — so `compare` keeps the goals it is already inside and *assumes* one that recurs. It is the only rule in this crate that discharges a goal without looking at either term, which is why `convert`'s module documentation calls it the place a conversion checker is most likely to be unsound.
-///
-/// The corpus — the fixed prelude through the kernel's own walk, plus every test program — enters goals by the tens of thousands and recurs on none. The two recursive-group fixtures above do not reach it either: `two_alpha_variant_recursive_groups_convert` converges because alpha-variant groups are structurally equal, and `a_folded_recursive_call_converts_without_unfolding_forever` terminates on `force` discarding an unfolding that restuck. So the rule is live code no program exercises, which is the condition under which a rule's mistakes stay invisible.
-///
-/// This reaches it. Both sides are the equirecursive type `X = (X) -> Nat`, spelled as *different* groups — the right carries a second, unused member — so the projection arm's syntactic comparison fails and both sides take a delta step. Unfolding poses `(left) -> Nat ≡ (right) -> Nat`, whose domain goal is the goal already in progress, and the recurrence discharges it. The two really are the same type, so accepting is correct; what is being pinned is that the rule fires here at all.
-///
-/// The control is [`a_recurrence_does_not_excuse_a_finite_disagreement`], the same construction with the codomains differing: the cycle closes on the domain exactly as here, and the comparison must still fail on the sibling goal. That is the whole argument the rule rests on — a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces elsewhere first — so a blanket accept would pass the witness and fail the control.
+/// Mutation-checked: with a pair unfolded however often it is met, the budget, small here, runs out.
 #[test]
-fn a_recurring_goal_is_assumed_rather_than_unfolded_forever() {
-    let mut kernel = kernel();
+fn two_groups_of_two_shapes_that_unfold_alike_are_apart() {
+    let mut kernel = Kernel::new(10_000, SYNTAX);
 
     assert_eq!(
         convert(
             &mut kernel,
             &Term::type_ground(),
-            &equirecursive(binder(20, "a"), binder(21, "x"), nat_type(), false),
-            &equirecursive(binder(30, "b"), binder(31, "y"), nat_type(), true),
+            &equirecursive(binder(20, "a"), binder(21, "x"), false),
+            &equirecursive(binder(30, "b"), binder(31, "y"), true),
         ),
-        Ok(true),
-        "two spellings of the equirecursive type `X = (X) -> Nat` did not converge",
+        Ok(false),
     );
 }
 
@@ -435,7 +431,7 @@ fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_unde
     );
 }
 
-/// Two instances of one recursive group whose levels the hypotheses do not force equal are refused at the head, without an unfolding: each unfolding reproduces the same two instances on the recursive call, so a retry could only recurse. With the guard removed from the `Apply` arm and from `unfolded_retry` this exhausts the small budget here, and at the compile budget the walk grows until the host dies. The elaborator's twin shares the name.
+/// Two instances of one recursive group whose levels the hypotheses do not force equal are refused at the head, without an unfolding: each unfolding reproduces the same two instances on the recursive call, so a retry could only pose them again. The elaborator's twin shares the name.
 #[test]
 fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_unfolding() {
     let mut kernel = Kernel::new(10_000, SYNTAX);
@@ -474,27 +470,9 @@ fn two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an
     );
 }
 
-/// The control for the fixture above: the cycle closes on the domain, and the codomains still have to agree.
-#[test]
-fn a_recurrence_does_not_excuse_a_finite_disagreement() {
-    let mut kernel = kernel();
-    let other = declare(&mut kernel, "Other", Term::type_ground());
-
-    assert_eq!(
-        convert(
-            &mut kernel,
-            &Term::type_ground(),
-            &equirecursive(binder(40, "a"), binder(41, "x"), nat_type(), false),
-            &equirecursive(binder(50, "b"), binder(51, "y"), other, true),
-        ),
-        Ok(false),
-        "the recurrence on the domain was read as settling the whole comparison",
-    );
-}
-
-/// **Two calls of one recursive group differing only in a proof convert by their spines, the proof compared at the member's own type.** A `rec` projection carries its member type, so `spine_telescope` reads the telescope there as it does off a variable's declaration. Were the projection to hand back none, the proof would be compared at `Type`, the spines would disagree, and the retry would unfold the group under fresh binders at every round — so the conversion recurrence, keyed on the binders in scope, would never meet its goal again and the budget, small here, would run out before any verdict. `tests::board`'s `a_recursive_function_carrying_a_proof_converts_without_unfolding` is the program, reaching the group through a global it is the value of; `two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an_unfolding`, whose spines differ in an argument the fold discards, is the control that a mismatch still unfolds.
+/// **Two calls of one recursive group differing only in a proof convert by their spines, the proof compared at the member's own type.** A `rec` projection carries its member type, so `spine_telescope` reads the telescope there as it does off a variable's declaration. `tests::board`'s `a_recursive_function_carrying_a_proof_converts_without_unfolding` is the program, reaching the group through a global it is the value of; `two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an_unfolding`, whose spines differ in an argument the fold discards, is the control that a mismatch still unfolds.
 ///
-/// Mutation-checked against the two halves of the rule: reading no telescope off a `rec` projection fails this with the budget exhausted, and removing the spine attempt before forcing leaves it passing — that half is `irrelevance_tests`'s `a_definition_applied_to_two_proofs_converts_before_unfolding`, which fails under it.
+/// Mutation-checked against the two halves of the rule, neither of which this goal holds alone: with no telescope read off a `rec` projection it still passes, the two proofs compared at `Type` and one by the proposition a lookup types both at (`by_their_own_type`), and removing the spine attempt before forcing leaves it passing — that half is `irrelevance_tests`'s `a_definition_applied_to_two_proofs_converts_before_unfolding`, which fails under it.
 #[test]
 fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
     let mut kernel = Kernel::new(10_000, SYNTAX);
@@ -544,54 +522,39 @@ fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
     );
 }
 
-/// A peel's residual is compared under the recursion history of the goal that produced it, not from a fresh one. With `a ≡ b` already in progress, `x + a` against `x + b` peels to that residual, which the recurrence rule then assumes — two distinct variables that no comparison would otherwise equate, which is what makes the history observable here. A residual handed to a fresh top-level comparison would meet the goal as new and refuse it; on a genuine cycle through a peel, it would unfold until the budget ran out.
+/// What the intrinsic rule hands on is compared inside the pairs of the goal that produced it, not from none. With `g` against itself already being unfolded, `x + g(a, c, n)` against `x + g(b, c, n)` comes down to the two calls, which one unfolding reconciles and which are apart inside the unfolding they stand in. Compared from no pair, the same two sums are one.
 #[test]
-fn a_peel_residual_is_compared_under_the_active_history() {
+fn what_the_intrinsic_rule_hands_on_is_compared_inside_the_pairs_of_its_goal() {
     let mut kernel = kernel();
-    let (x, a, b) = (
-        Term::free_var(&binder(40, "x")),
-        Term::free_var(&binder(41, "a")),
-        Term::free_var(&binder(42, "b")),
-    );
-    let mut history = History::default();
-    let _in_progress = history
-        .enter(&kernel, &Term::type_ground(), &a, &b)
-        .expect("the goal is new");
+    let [x, a, b, c, n] = [
+        binder(40, "x"),
+        binder(41, "a"),
+        binder(42, "b"),
+        binder(43, "c"),
+        binder(44, "n"),
+    ]
+    .map(|local| {
+        kernel.assume(&local, &nat_type());
+        Term::free_var(&local)
+    });
+    let call = |first: &Term| Term::apply(shifting(), [first.clone(), c.clone(), n.clone()]);
+    let sum = |summand: Term| Intrinsic::nat_add(x.clone(), summand);
 
-    let sum = |summand: &Term| Intrinsic::nat_add(x.clone(), summand.clone());
+    let mut pairs = Pairs::default();
+    assert!(pairs.unfold(&shifting(), &shifting()));
     assert_eq!(
-        convert_intrinsic(&mut kernel, &mut history, &sum(&a), &sum(&b)),
-        Ok(true),
-        "the residual `a ≡ b` was not compared under the goal in progress",
-    );
-    assert_eq!(
-        convert_intrinsic(&mut kernel, &mut History::default(), &sum(&a), &sum(&b)),
+        convert_intrinsic(&mut kernel, &mut pairs, &sum(call(&a)), &sum(call(&b))),
         Ok(false),
-        "the control: from an empty history, `x + a` and `x + b` differ",
+        "the two calls were unfolded inside their own unfolding",
     );
-}
-
-/// A verdict that rested on the recurrence rule is not remembered. The two equirecursive spellings converge because the domain goal is the goal in progress, assumed: that is true of the path it was reached on, and it is filed nowhere — where a comparison that meets no goal in progress is filed, and forgotten with the budget.
-///
-/// Mutation-checked: with a verdict filed whatever was assumed while deciding it, the equirecursive goal is remembered; and with the declaration's verdicts kept across a restore, the control still answers after it.
-#[test]
-fn a_verdict_that_assumed_a_goal_in_progress_is_not_remembered() {
-    let mut kernel = kernel();
-    let ground = Term::type_ground();
-    let left = equirecursive(binder(20, "a"), binder(21, "x"), nat_type(), false);
-    let right = equirecursive(binder(30, "b"), binder(31, "y"), nat_type(), true);
-
-    assert_eq!(convert(&mut kernel, &ground, &left, &right), Ok(true));
-    assert_eq!(kernel.convert_hit(&ground, &left, &right), None);
-
-    let x = binder(40, "x");
-    let redex = Term::apply(
-        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
-        [nat_type()],
+    assert_eq!(
+        convert_intrinsic(
+            &mut kernel,
+            &mut Pairs::default(),
+            &sum(call(&a)),
+            &sum(call(&b))
+        ),
+        Ok(true),
+        "the control: from no pair, the two calls are one after one unfolding",
     );
-    assert_eq!(convert(&mut kernel, &ground, &redex, &nat_type()), Ok(true));
-    assert_eq!(kernel.convert_hit(&ground, &redex, &nat_type()), Some(true));
-
-    kernel.restore_budget();
-    assert_eq!(kernel.convert_hit(&ground, &redex, &nat_type()), None);
 }

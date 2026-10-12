@@ -192,7 +192,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 
     /// The closing half of the locally-nameless discipline: turn free occurrences of `binders` into bound indices (position in `binders`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
     ///
-    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size: the kernel's conversion history captures every goal it enters, and would capture that web's tree at every one. And where every binder is a local, a subterm with no local free and no loose index to shift is handed back unwalked, since nothing in it is a binder's occurrence: a goal's closed operands are most of it.
+    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size and not its tree's. And where every binder is a local, a subterm with no local free and no loose index to shift is handed back unwalked, since nothing in it is a binder's occurrence.
     fn capture(&self, binders: &[&Free]) -> Self {
         let local = binders.iter().all(|binder| binder.is_local());
         self.traverse(&mut Visit::capturing(local, |depth, var| {

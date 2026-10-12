@@ -6,19 +6,13 @@
 //!
 //! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **One definition's spines.** Two applications of one definition are compared argument by argument before either is unfolded; agreeing spines decide the goal and disagreeing ones decide nothing. 3. **Two groups as binders.** The same member of two recursive groups is one where the groups are: member for member their types and their bodies convert under one shared set of binders, with no member unfolded. 4. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type with a field both are projected and compared componentwise. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. The Σ with no field has no eta, and a nominal struct has none by its type — its literal opens one, where it holds a field that is no proof — so no type but a proposition makes two neutrals one: that a type has one inhabitant by its shape is read nowhere, since a substitution can make it so of a type it was not so of. 5. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children. 6. **One unfolding.** Two folded calls structure leaves apart are opened one definitional step, both of them, and compared again, once for their two heads on a path.
 //!
-//! # Termination, and the recurrence rule
+//! # Termination, and the pair unfolded once
 //!
-//! Two folded recursive calls can unfold forever without ever disagreeing — that is what an equirecursive type is. Conversion therefore keeps a history of the goals it is already inside, and a goal that recurs is *assumed to hold*. This is the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling goal before the cycle closes.
-//!
-//! A chain of unfoldings that poses no goal twice is ended by another rule: a pair of heads is unfolded against itself once, and the same two met again inside that unfolding are apart (`History::unfold`). Each round of such a chain opens a binder no round has met, so its goals never recur; and a second unfolding decides nothing the first did not, so withholding it refuses only what an induction would hold.
-//!
-//! The recurrence rule is where a conversion checker is most likely to be unsound, and the danger is precise: a history hit on two goals that are *not* the same goal accepts terms that are not equal. The guard here is that an entry records the local context alongside the goal, and that every binder in scope is renamed to its position before the entry is made. Two entries collide only when the same comparison is being made under binders of the same types in the same order — which is the same comparison.
-//!
-//! `curios-elab`'s conversion checker assumes no goal and keeps no history: its walk is a worklist that parks goals, so the order it meets them in is no path, and a key it could assume one under would need the type of every binder in scope (`documentation/design/soundness/conversion-recurrence.md`). The two share the rules that come before this one: two instances of one recursive group are decided by their levels — `rec_instances` here, the level identification there — two groups are compared as binders, and a pair of calls is unfolded once.
+//! Two folded recursive calls can unfold forever without ever disagreeing. Conversion assumes nothing of them: no goal is taken as held for having been met before (`documentation/design/soundness/conversion-recurrence.md`). Three rules decide two recursive heads, and what they do not hold is apart. Two instances of one group are their levels (`rec_instances`). The same member of two groups is the two groups compared as binders, which unfolds nothing (`two_groups`). And a pair of heads is unfolded against itself once: the same two met again inside that unfolding are apart (`Pairs::unfold`). Each round of such a chain opens a binder no round has met, and a second unfolding decides nothing the first did not, so withholding it refuses only what an induction would hold. `curios-elab`'s conversion decides two recursive heads by the same three rules in the same order.
 //!
 //! # What is remembered
 //!
-//! A goal decided with no goal in progress assumed is a fact, and its verdict is kept for as long as what it read of the scope stands (`Memos`): two terms that are equal graphs built apart reach each pair of their nodes along every path, and remembered by pair each is compared once. A goal whose deciding met one in progress is not kept, whichever way it went: accepted, it may hold only by the assumption; refused, it may have been refused by a classing that left two atoms apart because their comparison was in progress. A refusal that left a pair of heads apart inside its own unfolding is not kept either, the pair being one, perhaps, where it is met outside it. `History::assumed` counts all three, and a verdict is filed only where the count stood still across it. The sets are plain, with no closure taken over accepted pairs, for the reason Lean's kernel gives for its own: a closure's result would depend on the order goals were met in.
+//! A goal decided with no pair of heads left apart is a fact, and its verdict is kept for as long as what it read of the scope stands (`Memos`): two terms that are equal graphs built apart reach each pair of their nodes along every path, and remembered by pair each is compared once. A refusal that left a pair of heads apart inside its own unfolding is not kept, the pair being one, perhaps, where it is met outside it. `Pairs::apart` counts them, and a verdict is filed only where the count stood still across it. The sets are plain, with no closure taken over accepted pairs, for the reason Lean's kernel gives for its own: a closure's result would depend on the order goals were met in.
 //!
 //! # Where a child has no type of its own, and why refusing is the safe direction
 //!
@@ -50,86 +44,43 @@ use {
         Tuple, TupleType, Universes, Variant,
     },
     curios_utilities::recurse,
-    std::collections::HashSet,
 };
 
 /// Whether `this` and `that` are definitionally equal at `type_`.
 pub fn convert(kernel: &mut Kernel, type_: &Term, this: &Term, that: &Term) -> Result<bool, Error> {
     curios_profile::profile!("convert");
-    let mut history = History::default();
+    let mut pairs = Pairs::default();
 
-    // Conversion reads by value, as reduction does and for its reason: it compares spellings, keys its history and its verdicts on them, and opens no `let`.
+    // Conversion reads by value, as reduction does and for its reason: it compares spellings, keys its verdicts on them, and opens no `let`.
     let (type_, this, that) = (
         kernel.by_value(type_),
         kernel.by_value(this),
         kernel.by_value(that),
     );
-    kernel.reading(|kernel| compare(kernel, &mut history, &type_, &this, &that))
+    kernel.reading(|kernel| compare(kernel, &mut pairs, &type_, &this, &that))
 }
 
-/// The goals conversion is currently inside.
-///
-/// A goal is stored with the types of the binders in scope at it, and with every one of those binders renamed to its position. Without the rename, the same comparison reached on two rounds of an unfolding cycle differs in nothing but the identities of the binders opened on the way, and the cycle is never recognized; without the context, two different comparisons that happen to be spelled alike would be conflated, which is the unsound direction.
+/// The pairs of heads conversion is unfolding against each other on the way to the goal in hand.
 #[derive(Default)]
-struct History {
-    /// The pairs of heads being unfolded against each other on the current path, innermost last ([`History::unfold`]).
+struct Pairs {
+    /// The pairs being unfolded on the current path, innermost last ([`Pairs::unfold`]).
     unfolding: Vec<(Term, Term)>,
-    seen: HashSet<Goal>,
-    /// How many times a goal was met while already in progress — and so assumed, or in a classing left apart — or a pair of heads was met inside its own unfolding and left apart. A verdict reached while this moved rests on the goals that were in progress then, and is a fact about that path alone; one reached while it stood still rests on none of them, and is what [`compare`] remembers.
-    assumed: u64,
+    /// How many times a pair of heads was met inside its own unfolding and left apart. A verdict reached while this moved rests on what was being unfolded then, and is a fact about that path alone; one reached while it stood still is what [`compare`] remembers.
+    apart: u64,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct Goal {
-    context: Vec<Term>,
-    type_: Term,
-    this: Term,
-    that: Term,
-}
-
-impl History {
-    /// Enter a goal: `None` when it is already in progress — the coinductive assumption — otherwise the recorded key, to be handed back to [`History::leave`] when the goal completes.
-    ///
-    /// The rename is by position in the local context, so a goal reached again under an identically-typed prefix maps onto the same entry. `capture` turns each binder into a bound index; the results are keys and are never opened, so the loose indices they leave behind are inert.
-    fn enter(&mut self, kernel: &Kernel, type_: &Term, this: &Term, that: &Term) -> Option<Goal> {
-        curios_profile::profile!("convert::enter");
-        let binders = kernel.local_names();
-        let refs = binders.iter().collect::<Vec<_>>();
-        let rename = |term: &Term| term.capture(&refs);
-
-        let goal = Goal {
-            context: kernel.history_context(),
-            type_: rename(type_),
-            this: rename(this),
-            that: rename(that),
-        };
-
-        match self.seen.insert(goal.clone()) {
-            true => Some(goal),
-            false => {
-                self.assumed += 1;
-
-                None
-            }
-        }
-    }
-
-    /// Leave a completed goal, whatever its outcome. The set must hold exactly the goals on the current path: a goal *refuted* in one subtree that lingered here would be assumed to hold when a later subtree re-derives it — the accepting direction — and a goal proven under in-progress assumptions is not a fact once they are gone, so neither outcome may stay.
-    fn leave(&mut self, goal: &Goal) {
-        self.seen.remove(goal);
-    }
-
-    /// Record that the heads `this` and `that` are being unfolded against each other, until [`History::refold`]: `false` where the pair is being unfolded already on this path, whichever side each was on.
+impl Pairs {
+    /// Record that the heads `this` and `that` are being unfolded against each other, until [`Pairs::refold`]: `false` where the pair is being unfolded already on this path, whichever side each was on.
     ///
     /// **A pair of calls is unfolded against itself once.** Two folded calls their heads and spines do not decide are opened one definitional step and compared again, and where that comparison poses the same two heads, a second unfolding reproduces the first without end. The pair is apart there: what it would take to hold it is an induction, which a lemma states. It only withholds an unfolding, so it accepts nothing.
     ///
-    /// **Apart there is a verdict of the path**, the pair being one, perhaps, where it is met outside its own unfolding. So it is counted with the goals met again, and [`compare`] files no verdict reached across it.
+    /// **Apart there is a verdict of the path**, the pair being one, perhaps, where it is met outside its own unfolding. So it is counted, and [`compare`] files no verdict reached across it.
     fn unfold(&mut self, this: &Term, that: &Term) -> bool {
         let unfolding = self.unfolding.iter().any(|(held_this, held_that)| {
             (held_this == this && held_that == that) || (held_this == that && held_that == this)
         });
         if unfolding {
-            self.assumed += 1;
+            self.apart += 1;
 
             return false;
         }
@@ -138,7 +89,7 @@ impl History {
         true
     }
 
-    /// Release the pair the last [`History::unfold`] recorded, its comparison having returned.
+    /// Release the pair the last [`Pairs::unfold`] recorded, its comparison having returned.
     fn refold(&mut self) {
         self.unfolding.pop();
     }
@@ -146,12 +97,12 @@ impl History {
 
 /// Compare `this` and `that` at `type_`, under the binders currently in scope.
 ///
-/// Every goal entered stays in `seen` until this call returns, because retry *N+1* is reached from inside retry *N* and both are in progress at once. The call stack is what records that, and unwinding it retires the innermost goal first.
+/// A pair being unfolded stays recorded until the comparison of its two unfoldings returns ([`Pairs::refold`]), because retry *N+1* is reached from inside retry *N* and both are in progress at once. The call stack is what a path is, and unwinding it releases the innermost pair first.
 ///
-/// An unfolding retry recurses back into here, and what bounds that chain is that a pair of heads is unfolded against itself once ([`History::unfold`]), the budget spent on entry standing behind it — a constant standing in for the call stack is what [`recurse`] makes unnecessary. One chain is closed at its head instead: two instances of one recursive group at two universe instances reproduce themselves under every unfolding, and [`rec_instances`] makes such a pair a verdict before any retry is granted. A family's former is the member that reproduces nothing, and a refusal of one is left to the nodes it builds ([`projects_a_former`]).
+/// An unfolding retry recurses back into here, and what bounds that chain is that a pair of heads is unfolded against itself once ([`Pairs::unfold`]), the budget spent on entry standing behind it — a constant standing in for the call stack is what [`recurse`] makes unnecessary. One chain is closed at its head instead: two instances of one recursive group at two universe instances reproduce themselves under every unfolding, and [`rec_instances`] makes such a pair a verdict before any retry is granted. A family's former is the member that reproduces nothing, and a refusal of one is left to the nodes it builds ([`projects_a_former`]).
 fn compare(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     type_: &Term,
     this: &Term,
     that: &Term,
@@ -171,40 +122,36 @@ fn compare(
 
         // Where the goal's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand. What a type directs between two neutrals is then asked of the type a lookup gives both sides.
         let untyped = matches!(&**type_, Subterm::Sort(..));
-        if untyped && by_their_own_type(kernel, history, this, that)? {
+        if untyped && by_their_own_type(kernel, pairs, this, that)? {
             return Ok(true);
         }
 
-        // Two projections of one recursive group at two universe instances are a verdict, not a comparison: unfolding either reproduces the pair one level down, so their levels decide here — before `reduce_forced` opens a function member into its lambda, and before the goal is entered, so nothing has to be left. A family's former reproduces nothing, so its levels refuse nothing here: the pair goes on to the nodes it builds, whose arm compares them by the family's variance.
+        // Two projections of one recursive group at two universe instances are a verdict, not a comparison: unfolding either reproduces the pair one level down, so their levels decide here, before `reduce_forced` opens a function member into its lambda. A family's former reproduces nothing, so its levels refuse nothing here: the pair goes on to the nodes it builds, whose arm compares them by the family's variance.
         if let Some(verdict) = rec_instances(kernel, this, that)
             && (verdict || !projects_a_former(this))
         {
             return Ok(verdict);
         }
 
-        // A verdict reached before with nothing assumed is the verdict here, whatever goals are in progress now: it rested on none.
+        // A verdict reached before with no pair left apart is the verdict here, whatever is being unfolded now: it rested on none of it.
         if let Some(verdict) = kernel.convert_hit(type_, this, that) {
             return Ok(verdict);
         }
 
-        let Some(goal) = history.enter(kernel, type_, this, that) else {
-            return Ok(true);
-        };
-        let assumed = history.assumed;
+        let apart = pairs.apart;
 
         // Two calls of one definition by their spines, on the pair as posed and ahead of eta by the goal's type. Eta hands on each call applied to a binder or projected, which is no call of a definition at its head, so tried after it the spines would never be compared at a function or a record type.
         // Then the same member of two recursive groups by the groups as binders, before `by_the_type` forces either into what it unfolds to.
-        let outcome = match one_definition_by_its_spines(kernel, history, this, that)?
-            || two_groups(kernel, history, this, that)?
+        let outcome = match one_definition_by_its_spines(kernel, pairs, this, that)?
+            || two_groups(kernel, pairs, this, that)?
         {
             true => Ok(true),
-            false => by_the_type(kernel, history, type_, this, that),
+            false => by_the_type(kernel, pairs, type_, this, that),
         };
 
-        history.leave(&goal);
-        // Remembered where deciding it met no goal in progress and left no pair apart inside its own unfolding, and never where it ran the budget out, which is no verdict.
+        // Remembered where deciding it left no pair apart inside its own unfolding, and never where it ran the budget out, which is no verdict.
         if let Ok(verdict) = &outcome
-            && history.assumed == assumed
+            && pairs.apart == apart
         {
             kernel.convert_store(type_, this, that, *verdict);
         }
@@ -215,7 +162,7 @@ fn compare(
 /// A goal the spines of one definition did not decide: eta where its type directs one, and the two sides' heads otherwise.
 fn by_the_type(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     type_: &Term,
     this: &Term,
     that: &Term,
@@ -224,31 +171,31 @@ fn by_the_type(
 
     match &*at {
         Subterm::FuncType(FuncType { telescope, .. }) => {
-            eta_function(kernel, history, telescope.clone(), this, that)
+            eta_function(kernel, pairs, telescope.clone(), this, that)
         }
         // The Σ with no field has no eta: nothing is left to project, and that a neutral at `{}` is `()` is a claim about the type's shape, which no rule here makes.
         Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
-            eta_tuple(kernel, history, telescope.clone(), this, that)
+            eta_tuple(kernel, pairs, telescope.clone(), this, that)
         }
         // Two bare members are forced from here on, which unfolds them against each other: a pair, unfolded once as any other is.
         _ if this.as_rec_proj().is_some() && that.as_rec_proj().is_some() => {
-            match history.unfold(this, that) {
+            match pairs.unfold(this, that) {
                 true => {
-                    let outcome = forced(kernel, history, &at, this, that);
-                    history.refold();
+                    let outcome = forced(kernel, pairs, &at, this, that);
+                    pairs.refold();
                     outcome
                 }
                 false => Ok(false),
             }
         }
-        _ => forced(kernel, history, &at, this, that),
+        _ => forced(kernel, pairs, &at, this, that),
     }
 }
 
 /// A goal no eta directs, at `at`, its type in weak-head normal form: both sides forced, and their heads compared.
 fn forced(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     at: &Term,
     this: &Term,
     that: &Term,
@@ -259,24 +206,24 @@ fn forced(
     // A side that was a redex as posed is a neutral a lookup types only now.
     if matches!(&**at, Subterm::Sort(..))
         && (forced_this != *this || forced_that != *that)
-        && by_their_own_type(kernel, history, &forced_this, &forced_that)?
+        && by_their_own_type(kernel, pairs, &forced_this, &forced_that)?
     {
         return Ok(true);
     }
 
-    structural(kernel, history, at, &forced_this, &forced_that)
+    structural(kernel, pairs, at, &forced_this, &forced_that)
 }
 
 /// What a type directs between two terms, asked of the type a lookup reads where the position handed none: two terms a lookup types at one proposition are equal.
 ///
 /// **It is the typed rule, with the type looked up.** Conversion is asked about two terms of one type, and here that is checked rather than assumed: each side's type is read by [`looked_up`], a lookup, a substitution and a reduction, and the two are compared. Without it a stuck elimination's scrutinee is compared at `Type`, two eliminations of two proofs of one proposition stay apart, and two calls of one definition that differ in a proof part wherever reduction unfolds them before the pair is posed, their verdict following a spelling.
 ///
-/// **It is all a type directs between two neutrals.** Eta between two neutrals decides nothing irrelevance does not: where a field or the codomain is no proposition, the two sides' projections or applications are equal only where their heads are, which the structural rules decide. So nothing is forfeited by reading the type and expanding neither side, and expanding is what cannot be done here. Eta at a looked-up type would apply or project both sides; the projections' heads are compared with no type, this lookup would type them again, and the goal it posed would be one already in progress, which the recurrence rule assumes: any two variables at a record type would convert. Reading the type poses no goal about the two sides, so nothing can recur.
+/// **It is all a type directs between two neutrals.** Eta between two neutrals decides nothing irrelevance does not: where a field or the codomain is no proposition, the two sides' projections or applications are equal only where their heads are, which the structural rules decide. So nothing is forfeited by reading the type and expanding neither side, and expanding is what cannot be done here. Eta at a looked-up type would apply or project both sides; the projections' heads are compared with no type, this lookup would type them again, and the goal it posed would be the goal in hand, posed again without end. Reading the type poses no goal about the two sides, so nothing can recur.
 ///
 /// A lookup that fails for any reason but a spent budget is no answer, and the pair goes on untyped; so does a pair one side of which is a lambda or a tuple literal, which is decided by its parts.
 fn by_their_own_type(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
@@ -288,14 +235,7 @@ fn by_their_own_type(
         .probed()?
         .is_some_and(|sort| sort.is_prop());
 
-    Ok(proposition
-        && compare(
-            kernel,
-            history,
-            &Term::type_ground(),
-            &this_type,
-            &that_type,
-        )?)
+    Ok(proposition && compare(kernel, pairs, &Term::type_ground(), &this_type, &that_type)?)
 }
 
 /// The type a lookup reads for one side of a pair its position handed no type: a neutral's, off its head's binder or declaration ([`synth_neutral`]), and a constructor's value's off its declaration — the family at the value's parameters and at the index targets its constructor states for its payload. Each is a lookup and a substitution, and neither reaches conversion. `None` where the side is neither, or its declaration refuses the occurrence.
@@ -335,12 +275,12 @@ fn looked_up(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, Error> {
 ///
 /// It is tried on the pair as posed, at whatever type, which is where the elaborator tries it: congruence holds at every type, and eta by the goal's type would hand on a pair this rule no longer recognizes. A curried spine is one definition's too — `h(p)(x)` against `h(q)(x)`, two heads that are themselves two calls of one definition by this rule — as the elaborator's rule looks through one.
 ///
-/// Forcing first would open two calls whose spines already say they are equal, as the elaborator, which compares the spines of one global or one `rec` member before it unfolds, does not. Unfolded, a proof lands in a stuck match's scrutinee, where the type a lookup gives it is what equates it ([`by_their_own_type`]), and a recursive function carrying a proof would unfold under fresh binders until the budget ran out, each round lengthening the context the recurrence key records so the goal never recurs. The spine compares at the head's telescope through [`compare_arguments`], so the proof meets irrelevance at its own type. `tests::board`'s `a_definition_applied_to_two_proofs_converts_before_unfolding` and `a_recursive_function_carrying_a_proof_converts_without_unfolding` are the programs; this crate's `irrelevance_tests` and `recursion_tests` put the same two to this function directly.
+/// Forcing first would open two calls whose spines already say they are equal, as the elaborator, which compares the spines of one global or one `rec` member before it unfolds, does not. Unfolded, a proof lands in a stuck match's scrutinee, where the type a lookup gives it is what equates it ([`by_their_own_type`]), and two calls of a recursive function carrying two proofs would be unfolded once and left apart where the unfolding posed them again. The spine compares at the head's telescope through [`compare_arguments`], so the proof meets irrelevance at its own type. `tests::board`'s `a_definition_applied_to_two_proofs_converts_before_unfolding` and `a_recursive_function_carrying_a_proof_converts_without_unfolding` are the programs; this crate's `irrelevance_tests` and `recursion_tests` put the same two to this function directly.
 ///
 /// Only heads that would unfold qualify, because a head with nothing to unfold reaches the same spine comparison in [`structural`] anyway, and asking twice would double the cost of every mismatch.
 fn one_definition_by_its_spines(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
@@ -374,13 +314,13 @@ fn one_definition_by_its_spines(
                     && kernel.universes_eq(left_universes, right_universes)
             }
             (Subterm::Apply(_), Subterm::Apply(_)) => {
-                one_definition_by_its_spines(kernel, history, &left.head, &right.head)?
+                one_definition_by_its_spines(kernel, pairs, &left.head, &right.head)?
             }
             _ => false,
         },
     };
 
-    Ok(one_head && compare_arguments(kernel, history, left, right)?)
+    Ok(one_head && compare_arguments(kernel, pairs, left, right)?)
 }
 
 /// Whether `this` and `that` are the same member of two recursive groups that are one as binders: the groups have one shape, and member for member their types convert and then their bodies at those types, every member of both opened at one shared binder.
@@ -390,7 +330,7 @@ fn one_definition_by_its_spines(
 /// Groups are matched by position, which is what makes one index of two a pair, and only where neither binds a universe of its own: a level under a group's binder is no level of the declaration the comparison is judged in.
 fn two_groups(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
@@ -422,7 +362,7 @@ fn two_groups(
         for (left, right) in left.iter().zip(right.iter()) {
             if !ground(
                 kernel,
-                history,
+                pairs,
                 &left.type_.open(&members),
                 &right.type_.open(&members),
             )? {
@@ -432,7 +372,7 @@ fn two_groups(
         for (left, right) in left.iter().zip(right.iter()) {
             if !compare(
                 kernel,
-                history,
+                pairs,
                 &left.type_.open(&members),
                 &left.body.open(&members),
                 &right.body.open(&members),
@@ -450,7 +390,7 @@ fn two_groups(
 /// This is why `f` converts with `(x) => f(x)` without either being reduced into the other's shape — the rule is stated once, here, instead of as a special case in every structural arm.
 fn eta_function(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     telescope: Telescope<Term>,
     this: &Term,
     that: &Term,
@@ -465,7 +405,7 @@ fn eta_function(
 
         compare(
             kernel,
-            history,
+            pairs,
             &codomain,
             &Term::apply(this.clone(), arguments.clone()),
             &Term::apply(that.clone(), arguments),
@@ -480,7 +420,7 @@ fn eta_function(
 /// **Never at the empty Σ.** [`by_the_type`] fires this where the Σ has a field. With none there is no component to compare, and answering `true` would be unit eta: two neutrals at `{}`, at a record of units or at a function into one would convert by nothing but their type's shape.
 fn eta_tuple(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     telescope: Telescope<()>,
     this: &Term,
     that: &Term,
@@ -492,7 +432,7 @@ fn eta_tuple(
         let left = Term::proj(this.clone(), index);
         let right = Term::proj(that.clone(), index);
 
-        if !compare(kernel, history, &field, &left, &right)? {
+        if !compare(kernel, pairs, &field, &left, &right)? {
             return Ok(false);
         }
 
@@ -509,7 +449,7 @@ fn eta_tuple(
 /// The goal's type is read by one rule, a literal's eta, and only to refuse it ([`another_former`]).
 fn structural(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     at: &Term,
     this: &Term,
     that: &Term,
@@ -521,7 +461,7 @@ fn structural(
         }
 
         (Subterm::Intrinsic(left), Subterm::Intrinsic(right)) => {
-            convert_intrinsic(kernel, history, left, right)
+            convert_intrinsic(kernel, pairs, left, right)
         }
 
         (Subterm::Var(left), Subterm::Var(right)) => Ok(left.unwrap() == right.unwrap()),
@@ -534,7 +474,7 @@ fn structural(
             Ok(left.telescope.same_marks(&right.telescope)
                 && compare_telescope(
                     kernel,
-                    history,
+                    pairs,
                     left.telescope.clone(),
                     right.telescope.clone(),
                 )?)
@@ -545,7 +485,7 @@ fn structural(
             Ok(left.telescope.same_marks(&right.telescope)
                 && compare_telescope(
                     kernel,
-                    history,
+                    pairs,
                     left.telescope.clone(),
                     right.telescope.clone(),
                 )?)
@@ -553,14 +493,14 @@ fn structural(
 
         (Subterm::TupleType(left), Subterm::TupleType(right)) => compare_field_telescope(
             kernel,
-            history,
+            pairs,
             left.telescope.clone(),
             right.telescope.clone(),
         ),
         (
             Subterm::Tuple(Tuple { fields: left, .. }),
             Subterm::Tuple(Tuple { fields: right, .. }),
-        ) => compare_each(kernel, history, left.iter(), right.iter()),
+        ) => compare_each(kernel, pairs, left.iter(), right.iter()),
 
         // A lambda or a tuple literal against a neutral at a type former: `compare` fires eta by a function and a record type before it comes here, so the former is not the literal's, the two sides are not of one type, and the literal's eta is refused.
         (Subterm::Func(_) | Subterm::Tuple(_), _)
@@ -576,27 +516,27 @@ fn structural(
 
         // Eta at a function and at a record, by the literal against a neutral inhabitant, where the goal's type did not direct it — see `function_eta` and `tuple_eta` for the rule, and `neutral` for the set. A neutral may still have a folded spelling to open, so a refusal falls through to the unfolding retry, which refuses where neither side has one.
         (Subterm::Func(function), _) if neutral(kernel, that) => {
-            match function_eta(kernel, history, function, that)? {
+            match function_eta(kernel, pairs, function, that)? {
                 true => Ok(true),
-                false => unfolded_retry(kernel, history, this, that),
+                false => unfolded_retry(kernel, pairs, this, that),
             }
         }
         (_, Subterm::Func(function)) if neutral(kernel, this) => {
-            match function_eta(kernel, history, function, this)? {
+            match function_eta(kernel, pairs, function, this)? {
                 true => Ok(true),
-                false => unfolded_retry(kernel, history, this, that),
+                false => unfolded_retry(kernel, pairs, this, that),
             }
         }
         (Subterm::Tuple(literal), _) if neutral(kernel, that) => {
-            match tuple_eta(kernel, history, literal, that)? {
+            match tuple_eta(kernel, pairs, literal, that)? {
                 true => Ok(true),
-                false => unfolded_retry(kernel, history, this, that),
+                false => unfolded_retry(kernel, pairs, this, that),
             }
         }
         (_, Subterm::Tuple(literal)) if neutral(kernel, this) => {
-            match tuple_eta(kernel, history, literal, this)? {
+            match tuple_eta(kernel, pairs, literal, this)? {
                 true => Ok(true),
-                false => unfolded_retry(kernel, history, this, that),
+                false => unfolded_retry(kernel, pairs, this, that),
             }
         }
 
@@ -607,15 +547,15 @@ fn structural(
                 let heads = match rec_instances(kernel, &left.head, &right.head) {
                     Some(false) => return Ok(false),
                     Some(true) => true,
-                    None => ground(kernel, history, &left.head, &right.head)?,
+                    None => ground(kernel, pairs, &left.head, &right.head)?,
                 };
 
-                if heads && compare_arguments(kernel, history, left, right)? {
+                if heads && compare_arguments(kernel, pairs, left, right)? {
                     return Ok(true);
                 }
             }
 
-            unfolded_retry(kernel, history, this, that)
+            unfolded_retry(kernel, pairs, this, that)
         }
 
         (
@@ -627,7 +567,7 @@ fn structural(
                 head: right,
                 field: right_field,
             }),
-        ) => Ok(left_field == right_field && ground(kernel, history, left, right)?),
+        ) => Ok(left_field == right_field && ground(kernel, pairs, left, right)?),
 
         (
             Subterm::InductType(InductType {
@@ -646,7 +586,7 @@ fn structural(
             && kernel.instances_eq(left_name, left_universes, right_universes)
             && induct_type_args(
                 kernel,
-                history,
+                pairs,
                 left_name,
                 left_universes,
                 (left_params, left_indices),
@@ -671,7 +611,7 @@ fn structural(
                 return Ok(false);
             }
             let telescope = struct_params(kernel, left_name, left_universes);
-            params_at(kernel, history, telescope, left_params, right_params)
+            params_at(kernel, pairs, telescope, left_params, right_params)
         }
 
         // The payload compares at the constructor's own telescope, opened at the left side's parameters and then at each preceding payload, so a `Prop`-sorted payload discharges by irrelevance without being read — the discipline `eta_tuple` follows at a Σ, and what the elaborator's `compare_variant` does. A tag the declaration does not carry leaves the telescope absent, and the payload then compares at `Type`, the untyped concession, which can only refuse more.
@@ -683,14 +623,14 @@ fn structural(
                 return Ok(false);
             }
             let params = induct_params(kernel, &left.name, &left.universes);
-            if !params_at(kernel, history, params, &left.params, &right.params)? {
+            if !params_at(kernel, pairs, params, &left.params, &right.params)? {
                 return Ok(false);
             }
             let telescope = kernel
                 .induct_at_params(&left.name, &left.universes, &left.params)
                 .ok()
                 .and_then(|at| at.signature(&left.tag));
-            compare_fields_at(kernel, history, telescope, &left.payload, &right.payload)
+            compare_fields_at(kernel, pairs, telescope, &left.payload, &right.payload)
         }
 
         // A struct literal's fields compare at the declaration's field telescope, as the variant's payload does above — the typed half of what `struct_eta` reads the same telescope for.
@@ -716,14 +656,14 @@ fn structural(
                 return Ok(false);
             }
             let params = struct_params(kernel, left_name, left_universes);
-            if !params_at(kernel, history, params, left_params, right_params)? {
+            if !params_at(kernel, pairs, params, left_params, right_params)? {
                 return Ok(false);
             }
             let telescope = kernel
                 .struct_at(left_name, left_universes, left_params)
                 .ok()
                 .map(|at| at.fields());
-            compare_fields_at(kernel, history, telescope, left_fields, right_fields)
+            compare_fields_at(kernel, pairs, telescope, left_fields, right_fields)
         }
 
         // A struct literal against a neutral at a type former that is not the literal's own struct: refused, as a lambda's and a tuple's is above.
@@ -740,15 +680,15 @@ fn structural(
 
         // Eta at a nominal struct, against a neutral inhabitant — see `struct_eta` for the rule and `neutral` for the set. A stuck application is the shape a standard-library law meets: `State`'s left identity sets `State/bind`'s literal against the neutral `f(a)`. A neutral may still have a folded spelling to open, so a refusal falls through to the unfolding retry.
         (Subterm::Struct(literal), _) if neutral(kernel, that) => {
-            match struct_eta(kernel, history, literal, that)? {
+            match struct_eta(kernel, pairs, literal, that)? {
                 true => Ok(true),
-                false => unfolded_retry(kernel, history, this, that),
+                false => unfolded_retry(kernel, pairs, this, that),
             }
         }
         (_, Subterm::Struct(literal)) if neutral(kernel, this) => {
-            match struct_eta(kernel, history, literal, this)? {
+            match struct_eta(kernel, pairs, literal, this)? {
                 true => Ok(true),
-                false => unfolded_retry(kernel, history, this, that),
+                false => unfolded_retry(kernel, pairs, this, that),
             }
         }
 
@@ -762,15 +702,15 @@ fn structural(
                 universes: right_universes,
             }),
         ) => Ok(kernel.universes_eq(left_universes, right_universes)
-            && ground(kernel, history, &left.to_term(), &right.to_term())?),
+            && ground(kernel, pairs, &left.to_term(), &right.to_term())?),
 
         // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
         (Subterm::Match(left), Subterm::Match(right)) => {
             // The two scrutinees are one term past this, so one type is theirs: what the motive's and the arms' binders are opened at. Where the matches state the instance they eliminate, the two instances are compared, the scrutinees at the instance, a typed position where two proofs are one unread, and the instance is that type with no lookup. One that states an instance and one that states none are two terms.
             let scrutinee = match (left.cases.stated(), right.cases.stated()) {
                 (Some(this), Some(that)) => {
-                    if !ground(kernel, history, this, that)?
-                        || !compare(kernel, history, this, &left.head, &right.head)?
+                    if !ground(kernel, pairs, this, that)?
+                        || !compare(kernel, pairs, this, &left.head, &right.head)?
                     {
                         return Ok(false);
                     }
@@ -778,7 +718,7 @@ fn structural(
                     Some(kernel.reduce_forced(this.clone())?)
                 }
                 (None, None) => {
-                    if !ground(kernel, history, &left.head, &right.head)? {
+                    if !ground(kernel, pairs, &left.head, &right.head)? {
                         return Ok(false);
                     }
 
@@ -789,23 +729,23 @@ fn structural(
 
             let results = match (&left.result, &right.result) {
                 (MatchResult::Family(this), MatchResult::Family(that)) => {
-                    compare_motives(kernel, history, scrutinee.as_ref(), this, that)?
+                    compare_motives(kernel, pairs, scrutinee.as_ref(), this, that)?
                 }
                 (MatchResult::Ambient(this), MatchResult::Ambient(that)) => {
-                    ground(kernel, history, this, that)?
+                    ground(kernel, pairs, this, that)?
                 }
                 // One source match reaches both forms: written over a variable it is an ambient goal, and that goal substituted at an expression — a definition's `match o` unfolded at `o := f(x)` — meets the family the same match elaborates to where it was written over `f(x)`. A family at the scrutinee itself *is* the elimination's type, so the two results compare at that instance.
                 (MatchResult::Family(motive), MatchResult::Ambient(goal))
                 | (MatchResult::Ambient(goal), MatchResult::Family(motive)) => {
                     let at_head = family_at_head(kernel, motive, &left.head)?;
-                    ground(kernel, history, &at_head, goal)?
+                    ground(kernel, pairs, &at_head, goal)?
                 }
             };
 
-            Ok(results && ground_cases(kernel, history, left, scrutinee.as_ref(), &right.cases)?)
+            Ok(results && ground_cases(kernel, pairs, left, scrutinee.as_ref(), &right.cases)?)
         }
 
-        // A folded recursive call, and a `rec` that forcing declined to unfold. Two projections of one group are compared up to their universe instance, the levels decided by entailment; two different groups are refused here without a retry: whether they are one as binders was asked before either was forced ([`two_groups`]), and a cycle that unfolds without disagreeing is the recurrence rule's, not this arm's. A `rec` whose tail computes something is *not* this case, and falls through to the delta step below.
+        // A folded recursive call, and a `rec` that forcing declined to unfold. Two projections of one group are compared up to their universe instance, the levels decided by entailment; two different groups are refused here without a retry: whether they are one as binders was asked before either was forced ([`two_groups`]). A `rec` whose tail computes something is *not* this case, and falls through to the delta step below.
         (Subterm::Rec(_), Subterm::Rec(_))
             if this.as_rec_proj().is_some() && that.as_rec_proj().is_some() =>
         {
@@ -815,9 +755,9 @@ fn structural(
         // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence never sees: `curios-analysis`'s `connectives_agree` decides it equal or says nothing, and saying nothing leaves the pair where it was.
         //
         // Then two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
-        _ => match connectives_convert(kernel, history, this, that)? {
+        _ => match connectives_convert(kernel, pairs, this, that)? {
             true => Ok(true),
-            false => unfolded_retry(kernel, history, this, that),
+            false => unfolded_retry(kernel, pairs, this, that),
         },
     }
 }
@@ -827,7 +767,7 @@ fn structural(
 /// `None` for the telescope keeps the grounded comparison: a declaration the registry seeding refused has no types to compare at, and inventing some would be worse than the concession. Shared by the three nominal shapes that carry parameters — a struct type, a struct literal and a constructor value — which reach it from `StructDecl::arity`'s outer half and `InductDecl::arity`'s, the same halves `induct_type_args` walks for a family.
 fn params_at(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     telescope: Option<Telescope<Telescope<()>>>,
     this: &[Term],
     that: &[Term],
@@ -837,7 +777,7 @@ fn params_at(
     }
 
     let Some(telescope) = telescope else {
-        return compare_each(kernel, history, this.iter(), that.iter());
+        return compare_each(kernel, pairs, this.iter(), that.iter());
     };
 
     let mut cursor = telescope.cursor();
@@ -845,7 +785,7 @@ fn params_at(
         let Some((_, type_)) = cursor.entry() else {
             return Ok(false);
         };
-        if !compare(kernel, history, &type_, left, right)? {
+        if !compare(kernel, pairs, &type_, left, right)? {
             return Ok(false);
         }
         cursor.advance(left.clone());
@@ -879,7 +819,7 @@ fn induct_params(
 /// Argument-wise comparison of two instances of one inductive family, each pair at the type the declaration's full index telescope assigns, opened at the left instance's preceding actuals — the typed context the grounded comparison forfeits. Irrelevance at a `Prop`-typed index is the observable difference: `Same(@P)(p, q)`, a family indexed by two proofs of a `P : Prop`, converts with `Same(@P)(p, p)`, because no proof of a proposition is distinguishable from another. The struct and constructor analogs are [`params_at`]'s, which reads the same outer telescope this does.
 fn induct_type_args(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     name: &Global,
     universes: &Universes,
     (left_params, left_indices): (&[Term], &[Term]),
@@ -894,8 +834,8 @@ fn induct_type_args(
         // A declaration the registry seeding refused: keep the grounded comparison rather than inventing types.
         None => {
             return Ok(
-                compare_each(kernel, history, left_params.iter(), right_params.iter())?
-                    && compare_each(kernel, history, left_indices.iter(), right_indices.iter())?,
+                compare_each(kernel, pairs, left_params.iter(), right_params.iter())?
+                    && compare_each(kernel, pairs, left_indices.iter(), right_indices.iter())?,
             );
         }
     };
@@ -907,7 +847,7 @@ fn induct_type_args(
         let Some((_, type_)) = cursor.entry() else {
             return Ok(false);
         };
-        if !compare(kernel, history, &type_, left, right)? {
+        if !compare(kernel, pairs, &type_, left, right)? {
             return Ok(false);
         }
         cursor.advance(left.clone());
@@ -923,7 +863,7 @@ fn induct_type_args(
         let Some((_, type_)) = cursor.entry() else {
             return Ok(false);
         };
-        if !compare(kernel, history, &type_, left, right)? {
+        if !compare(kernel, pairs, &type_, left, right)? {
             return Ok(false);
         }
         cursor.advance(left.clone());
@@ -961,7 +901,7 @@ fn another_struct(kernel: &Kernel, at: &Term, literal: &Struct) -> bool {
 /// **The invariant and the restriction are [`struct_eta`]'s.** Conversion is asked about two terms of one type, so `other` is a function of the lambda's type and applying it is typed; and the walk is taken against a neutral alone, the proxy for that invariant where nothing checks it.
 fn function_eta(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     function: &Func,
     other: &Term,
 ) -> Result<bool, Error> {
@@ -976,7 +916,7 @@ fn function_eta(
             function.plicities().iter().copied().zip(cursor.into_args()),
         );
 
-        ground(kernel, history, &body, &applied)
+        ground(kernel, pairs, &body, &applied)
     })
 }
 
@@ -985,7 +925,7 @@ fn function_eta(
 /// A literal with no field has no eta, as a struct's with no field that is data has none at [`struct_eta`]: there is no projection to compare, and answering `true` would say that every neutral at `{}` is `()`, which makes two neutrals one through the literal where their heads keep them apart.
 fn tuple_eta(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     literal: &Tuple,
     other: &Term,
 ) -> Result<bool, Error> {
@@ -994,7 +934,7 @@ fn tuple_eta(
     }
 
     for (index, field) in literal.fields.iter().enumerate() {
-        if !ground(kernel, history, field, &Term::proj(other.clone(), index))? {
+        if !ground(kernel, pairs, field, &Term::proj(other.clone(), index))? {
             return Ok(false);
         }
     }
@@ -1011,7 +951,7 @@ fn tuple_eta(
 /// **A literal holding no field that is data has no eta.** Its walk would compare nothing, every field a proof or none there at all, and answer `true` of any neutral: two neutrals would then be one through the literal where their heads keep them apart, by nothing but the shape of their type. A struct meant to have one inhabitant is declared a proposition, where irrelevance decides the pair before it comes here.
 fn struct_eta(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     literal: &Struct,
     other: &Term,
 ) -> Result<bool, Error> {
@@ -1039,7 +979,7 @@ fn struct_eta(
             field: Field::Index(index),
         }));
         // At the field's own declared type, which this walk is already holding: the declaration says what the field is, so comparing there is what lets eta fire on a *function*-typed field — a literal's lambda against the neutral's projection, which at `Type` never meet. `/std/State`'s monad laws are the shape that needs it, `State/bind` building a literal whose one field is a lambda and the law's other side being a neutral `State`.
-        if !compare(kernel, history, &type_, field, &projection)? {
+        if !compare(kernel, pairs, &type_, field, &projection)? {
             return Ok(false);
         }
     }
@@ -1050,10 +990,10 @@ fn struct_eta(
 
 /// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld, and compare the results. A refusal when neither side has a folded recursive spelling to open.
 ///
-/// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*, so its goals never recur into `seen` and the coinductive rule cannot close the chain; what stops an unproductive pair is that a pair of heads is unfolded against itself once ([`History::unfold`]): where both sides are opened, the two heads are recorded for as long as the unfoldings are compared, and the same two met again there are apart. One pair is refused at the door: two instances of one group at unequal levels unfold to the same two instances, and [`rec_instances`] answers them before and after the unfolding, so a retry is granted only to heads it does not decide.
+/// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*; what stops an unproductive pair is that a pair of heads is unfolded against itself once ([`Pairs::unfold`]): where both sides are opened, the two heads are recorded for as long as the unfoldings are compared, and the same two met again there are apart. One pair is refused at the door: two instances of one group at unequal levels unfold to the same two instances, and [`rec_instances`] answers them before and after the unfolding, so a retry is granted only to heads it does not decide.
 fn unfolded_retry(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
@@ -1079,13 +1019,13 @@ fn unfolded_retry(
             }
 
             if !pair {
-                return ground(kernel, history, &left, &right);
+                return ground(kernel, pairs, &left, &right);
             }
-            if !history.unfold(applied_head(this), applied_head(that)) {
+            if !pairs.unfold(applied_head(this), applied_head(that)) {
                 return Ok(false);
             }
-            let outcome = ground(kernel, history, &left, &right);
-            history.refold();
+            let outcome = ground(kernel, pairs, &left, &right);
+            pairs.refold();
 
             outcome
         }
@@ -1191,7 +1131,7 @@ fn assumed(kernel: &mut Kernel, type_: &Term) -> Term {
 /// Two motives under one shared set of binders, each at the type its position gives it ([`motive_binders`]), their bodies compared at `Type`, which is what two types are compared at.
 fn compare_motives(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     scrutinee: Option<&Term>,
     this: &Scope<Many>,
     that: &Scope<Many>,
@@ -1204,7 +1144,7 @@ fn compare_motives(
         let binders = motive_binders(kernel, scrutinee, this.arity());
         let refs = binders.iter().collect::<Vec<_>>();
 
-        ground(kernel, history, &this.open(&refs), &that.open(&refs))
+        ground(kernel, pairs, &this.open(&refs), &that.open(&refs))
     })
 }
 
@@ -1261,7 +1201,7 @@ fn cons_binders(kernel: &mut Kernel, carrier: &Carrier, result: &MatchResult) ->
 /// Open both scopes at one shared set of opaque binders and compare the bodies at `Type`: what an arm keeps where no lookup typed its scrutinee, or its family states no constructor of its arity. The binders are assumed at the stand-in `Type`, which `Sort::of` reads like any recorded type: it is the least informative answer it can give a binder, so the stand-in can only lose an accepting rule, never gain one — `irrelevance_tests`' `a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does` holds that, and the one exception it records.
 fn ground_scope(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     this: &Scope<Many>,
     that: &Scope<Many>,
 ) -> Result<bool, Error> {
@@ -1272,7 +1212,7 @@ fn ground_scope(
     kernel.scoped(|kernel| {
         let occurrences = opaque_binders(kernel, this.arity());
         let refs = occurrences.iter().collect::<Vec<_>>();
-        ground(kernel, history, &this.open(&refs), &that.open(&refs))
+        ground(kernel, pairs, &this.open(&refs), &that.open(&refs))
     })
 }
 
@@ -1287,7 +1227,7 @@ fn opaque_binders(kernel: &mut Kernel, arity: usize) -> Vec<Term> {
 /// Each arm's binders are opened at the types its position gives them, read off the left elimination, whose scrutinee and result the right one's have just been compared with: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains and its hypothesis ([`cons_binders`]). So a proof an arm binds is one where the arm's body is compared, as it is where the arm was typed. Where no lookup typed the scrutinee, or its family states no constructor of the arm's arity, the arm keeps the stand-in ([`ground_scope`]). An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
 fn ground_cases(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     left: &Match,
     scrutinee: Option<&Term>,
     that: &Cases,
@@ -1302,8 +1242,8 @@ fn ground_cases(
                 false_case: that_false,
                 true_case: that_true,
             },
-        ) => Ok(ground(kernel, history, this_false, that_false)?
-            && ground(kernel, history, this_true, that_true)?),
+        ) => Ok(ground(kernel, pairs, this_false, that_false)?
+            && ground(kernel, pairs, this_true, that_true)?),
 
         (
             Cases::Switch {
@@ -1320,11 +1260,11 @@ fn ground_cases(
             }
             for ((this_key, this_body), (that_key, that_body)) in this_cases.iter().zip(that_cases)
             {
-                if this_key != that_key || !ground(kernel, history, this_body, that_body)? {
+                if this_key != that_key || !ground(kernel, pairs, this_body, that_body)? {
                     return Ok(false);
                 }
             }
-            ground(kernel, history, this_default, that_default)
+            ground(kernel, pairs, this_default, that_default)
         }
 
         (
@@ -1365,12 +1305,12 @@ fn ground_cases(
 
                         ground(
                             kernel,
-                            history,
+                            pairs,
                             &this_arm.body.open(&refs),
                             &that_arm.body.open(&refs),
                         )
                     })?,
-                    None => ground_scope(kernel, history, &this_arm.body, &that_arm.body)?,
+                    None => ground_scope(kernel, pairs, &this_arm.body, &that_arm.body)?,
                 };
                 if !converge {
                     return Ok(false);
@@ -1379,7 +1319,7 @@ fn ground_cases(
             match (this_default, that_default) {
                 (None, None) => Ok(true),
                 (Some(this_default), Some(that_default)) => {
-                    ground(kernel, history, this_default, that_default)
+                    ground(kernel, pairs, this_default, that_default)
                 }
                 _ => Ok(false),
             }
@@ -1396,12 +1336,12 @@ fn ground_cases(
                         empty_case: that_empty,
                         cons_case: that_cons,
                     },
-                ) => Ok(ground(kernel, history, this_empty, that_empty)?
+                ) => Ok(ground(kernel, pairs, this_empty, that_empty)?
                     && kernel.scoped(|kernel| {
                         let o = cons_binders(kernel, this, &left.result);
                         ground(
                             kernel,
-                            history,
+                            pairs,
                             &this_cons.open(&[&o[0], &o[1]]),
                             &that_cons.open(&[&o[0], &o[1]]),
                         )
@@ -1418,12 +1358,12 @@ fn ground_cases(
                         cons_case: that_cons,
                     },
                 ) => Ok(this_grain == that_grain
-                    && ground(kernel, history, this_empty, that_empty)?
+                    && ground(kernel, pairs, this_empty, that_empty)?
                     && kernel.scoped(|kernel| {
                         let o = cons_binders(kernel, this, &left.result);
                         ground(
                             kernel,
-                            history,
+                            pairs,
                             &this_cons.open(&[&o[0], &o[1], &o[2]]),
                             &that_cons.open(&[&o[0], &o[1], &o[2]]),
                         )
@@ -1439,13 +1379,13 @@ fn ground_cases(
                         empty_case: that_empty,
                         cons_case: that_cons,
                     },
-                ) => Ok(ground(kernel, history, this_elem, that_elem)?
-                    && ground(kernel, history, this_empty, that_empty)?
+                ) => Ok(ground(kernel, pairs, this_elem, that_elem)?
+                    && ground(kernel, pairs, this_empty, that_empty)?
                     && kernel.scoped(|kernel| {
                         let o = cons_binders(kernel, this, &left.result);
                         ground(
                             kernel,
-                            history,
+                            pairs,
                             &this_cons.open(&[&o[0], &o[1], &o[2]]),
                             &that_cons.open(&[&o[0], &o[1], &o[2]]),
                         )
@@ -1463,10 +1403,10 @@ fn ground_cases(
 /// Π and Σ differ *only* there — a function type's terminal is its codomain and must be compared, a record type's carries nothing — so the terminal clause is the only thing either caller states, and the shared-binder discipline every dependent comparison rests on is written once.
 fn compare_binders<B: Bound>(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     this: Telescope<B>,
     that: Telescope<B>,
-    terminal: impl FnOnce(&mut Kernel, &mut History, B, B) -> Result<bool, Error>,
+    terminal: impl FnOnce(&mut Kernel, &mut Pairs, B, B) -> Result<bool, Error>,
 ) -> Result<bool, Error> {
     kernel.scoped(|kernel| {
         let mut walk = Lockstep::new(&this, &that);
@@ -1474,12 +1414,12 @@ fn compare_binders<B: Bound>(
         loop {
             match walk.step() {
                 Step::Entries { left, right, .. } => {
-                    if !ground(kernel, history, &left, &right)? {
+                    if !ground(kernel, pairs, &left, &right)? {
                         return Ok(false);
                     }
                     kernel.advance_assumed(&mut walk, &left);
                 }
-                Step::Bodies(left, right) => return terminal(kernel, history, left, right),
+                Step::Bodies(left, right) => return terminal(kernel, pairs, left, right),
                 // Different arities. A function type is not curried in this representation, so this is a real mismatch rather than a shape to normalize.
                 Step::Mismatch => return Ok(false),
             }
@@ -1490,27 +1430,23 @@ fn compare_binders<B: Bound>(
 /// [`compare_binders`] for a Π or a λ, whose terminal is a codomain to be compared.
 fn compare_telescope(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     this: Telescope<Term>,
     that: Telescope<Term>,
 ) -> Result<bool, Error> {
-    compare_binders(
-        kernel,
-        history,
-        this,
-        that,
-        |kernel, history, left, right| ground(kernel, history, &left, &right),
-    )
+    compare_binders(kernel, pairs, this, that, |kernel, pairs, left, right| {
+        ground(kernel, pairs, &left, &right)
+    })
 }
 
 /// [`compare_binders`] for a Σ, whose terminal carries nothing.
 fn compare_field_telescope(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     this: Telescope<()>,
     that: Telescope<()>,
 ) -> Result<bool, Error> {
-    compare_binders(kernel, history, this, that, |_, _, (), ()| Ok(true))
+    compare_binders(kernel, pairs, this, that, |_, _, (), ()| Ok(true))
 }
 
 /// A spine's arguments at the types its head assigns them, and at `Type` where it assigns none.
@@ -1522,18 +1458,18 @@ fn compare_field_telescope(
 /// The justification is the callers': every pair compared here is the corresponding children of two parents already shown convertible, so the two heads have one type and one telescope to assign.
 fn compare_arguments(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     left: &Apply,
     right: &Apply,
 ) -> Result<bool, Error> {
     let Some(telescope) = spine_telescope(kernel, &left.head, left.arguments.len())? else {
-        return compare_each(kernel, history, left.params(), right.params());
+        return compare_each(kernel, pairs, left.params(), right.params());
     };
 
     let this = left.params().cloned().collect::<Vec<_>>();
     let that = right.params().cloned().collect::<Vec<_>>();
 
-    compare_fields_at(kernel, history, Some(telescope), &this, &that)
+    compare_fields_at(kernel, pairs, Some(telescope), &this, &that)
 }
 
 /// The function type a head was bound or declared at, opened for `arity` arguments — or `None` where the head names no type, or names one that is not a function of that arity.
@@ -1577,7 +1513,7 @@ fn names_a_type(head: &Term) -> bool {
 /// Compare two term sequences pairwise at `Type`. Length is part of the shape.
 fn compare_each<'a>(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     this: impl ExactSizeIterator<Item = &'a Term>,
     that: impl ExactSizeIterator<Item = &'a Term>,
 ) -> Result<bool, Error> {
@@ -1586,7 +1522,7 @@ fn compare_each<'a>(
     }
 
     for (left, right) in this.zip(that) {
-        if !ground(kernel, history, left, right)? {
+        if !ground(kernel, pairs, left, right)? {
             return Ok(false);
         }
     }
@@ -1597,7 +1533,7 @@ fn compare_each<'a>(
 /// Compare two field sequences at the types `telescope` assigns them, each `rest` opened at the left field's value — so a field at a proposition is discharged by irrelevance without being read, and a dependent field is compared at the type its predecessors determine. A telescope shorter than the fields, or none at all, leaves the remainder at `Type`, the untyped comparison, which can only refuse more. Length is part of the shape.
 fn compare_fields_at<B: Bound>(
     kernel: &mut Kernel,
-    history: &mut History,
+    pairs: &mut Pairs,
     telescope: Option<Telescope<B>>,
     this: &[Term],
     that: &[Term],
@@ -1616,7 +1552,7 @@ fn compare_fields_at<B: Bound>(
             }
             _ => Term::type_ground(),
         };
-        if !compare(kernel, history, &type_, left, right)? {
+        if !compare(kernel, pairs, &type_, left, right)? {
             return Ok(false);
         }
     }
@@ -1625,20 +1561,13 @@ fn compare_fields_at<B: Bound>(
 }
 
 /// [`compare`] at `Type`, for a child position whose type its head does not hand us: see the module documentation on a child with no type of its own.
-fn ground(
-    kernel: &mut Kernel,
-    history: &mut History,
-    this: &Term,
-    that: &Term,
-) -> Result<bool, Error> {
-    compare(kernel, history, &Term::type_ground(), this, that)
+fn ground(kernel: &mut Kernel, pairs: &mut Pairs, this: &Term, that: &Term) -> Result<bool, Error> {
+    compare(kernel, pairs, &Term::type_ground(), this, that)
 }
 
-/// Whether `this` and `that` convert at `Type`, as reduction asks of two terms it holds stuck, under a history of its own. A refusal that is no exhaustion of the budget — a term the kernel cannot compare — is that they are not known to: a question only widens what reduction sees.
-///
-/// **A history of its own is the same key.** A history lives for one conversion, and the equations in force, and whether reduction is plain, are what they were when it began for as long as it stands: a settlement and a span of plain reduction each put back what they change before they return. So the key still needs neither.
+/// Whether `this` and `that` convert at `Type`, as reduction asks of two terms it holds stuck: a comparison of its own, inside no unfolding of the goal reduction was serving. A refusal that is no exhaustion of the budget — a term the kernel cannot compare — is that they are not known to: a question only widens what reduction sees.
 pub(super) fn grounded(kernel: &mut Kernel, this: &Term, that: &Term) -> Result<bool, ReduceError> {
-    Ok(ground(kernel, &mut History::default(), this, that)
+    Ok(ground(kernel, &mut Pairs::default(), this, that)
         .probed_refusal()?
         .unwrap_or(false))
 }

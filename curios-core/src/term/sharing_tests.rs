@@ -113,7 +113,7 @@ fn deep_terms_are_released_without_native_recursion() {
 
 #[test]
 fn deep_terms_are_captured_without_native_recursion() {
-    // `capture` runs in `Plain` mode, which the iterative spine path is not gated for, so every link here is one native descent — the case the two fixtures above never reach, since equality walks a worklist and the drop is iterative. Under the kernel's conversion history, which captures a whole normal form to key a goal, a walk beginning inside the `grown` segment with no check per level would run it to the guard page and die as a bare `SIGBUS`; the traversal re-enters `recurse` at every level, so it maps another segment instead.
+    // `capture` runs in `Plain` mode, which the iterative spine path is not gated for, so every link here is one native descent — the case the two fixtures above never reach, since equality walks a worklist and the drop is iterative. A capture of a whole normal form that begins inside the `grown` segment with no check per level would run it to the guard page and die as a bare `SIGBUS`; the traversal re-enters `recurse` at every level, so it maps another segment instead.
     let name = Free::local(0, None);
     let argument = Term::free_var(&name);
     let mut term = Term::free_var(&name);

@@ -640,7 +640,7 @@ fn different_operations_do_not_convert() {
     assert_eq!(convert(&mut kernel, &nat_type(), &add, &mul), Ok(false));
 }
 
-/// Two stuck operations of one kind are each the whole of their side, so the pair has no atoms to class and is compared operand by operand. Were the pair handed back as its own two atoms, classing them would ask the comparison already in progress, which the recurrence rule assumes: mutation-checked against the guard in `curios-core`'s `atoms_of`.
+/// Two stuck operations of one kind are each the whole of their side, so the pair has no atoms to class and is compared operand by operand. Were the pair handed back as its own two atoms, classing them would ask the comparison already in progress: the guard in `curios-core`'s `atoms_of` is what hands back none.
 #[test]
 fn two_stuck_operations_on_different_operands_do_not_convert() {
     let mut kernel = kernel();

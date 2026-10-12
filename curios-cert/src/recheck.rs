@@ -141,7 +141,7 @@ pub fn recheck_module(
 ///
 /// `check_definition` and `check_rec_group` both return before their `Kernel::define` step, so a refused item has defined nothing. Running that same define anyway is what keeps this from degenerating into a cascade: every item enters the environment at its declared type with its real body whether or not it checked, so each later item is judged against exactly what it would have been judged against in a fully passing walk.
 ///
-/// Nothing else survives an item. [`Kernel`]'s memos are cleared at every declaration boundary, its conversion history is built fresh per comparison, and every binder it opens is retracted on the failing path as well as the succeeding one. So recovery here is exact rather than approximate, and a verdict late in the list is worth as much as the first.
+/// Nothing else survives an item. [`Kernel`]'s memos are cleared at every declaration boundary, the pairs its conversion is unfolding are built fresh per comparison, and every binder it opens is retracted on the failing path as well as the succeeding one. So recovery here is exact rather than approximate, and a verdict late in the list is worth as much as the first.
 ///
 /// # What it does not tell you
 ///

@@ -204,7 +204,7 @@ fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
 ///
 /// Neither side is expanded, and nothing is read but the sort: two variables stay apart at a type with one inhabitant by its shape — the empty record, a record of units, a function into a unit, a struct that declares no field and a struct of a unit — at a record with a relevant field, at two propositions and at `Nat`.
 ///
-/// Mutation-checked: without the lookup the six held goals are refused; with the two looked-up types left uncompared, two proofs of two propositions converge; and with eta taken at the looked-up type in place of reading it, two variables at a record with a relevant field converge, the projections' heads asking the pair again and the recurrence rule assuming it.
+/// Mutation-checked: without the lookup the six held goals are refused; and with the two looked-up types left uncompared, two proofs of two propositions converge. Eta taken at the looked-up type in place of reading it is no mutation that returns: the projections' heads ask the pair again, without end.
 #[test]
 fn two_neutrals_converge_where_a_lookup_gives_them_a_proposition() {
     let mut kernel = kernel();
