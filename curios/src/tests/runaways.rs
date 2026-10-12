@@ -29,6 +29,8 @@ pub(super) enum Runaway {
     Images(u32, u32),
     /// `nest(k, T)` at so many steps, over two types: two types nested alike and apart at their core.
     Nests(u32),
+    /// `g(tower(g, k))` against `stack(g, k, g(top))` at so many steps: one term built by two recursions, the second of which a checker opens alone a step at a time, a comparison nested in the last at each.
+    Stacks(u32),
 }
 
 const POWER: &str =
@@ -36,6 +38,8 @@ const POWER: &str =
 
 /// A runaway as a whole program: its definitions, its one claim closed by `Eq/refl()`, and an entrypoint that reads none of them.
 pub(super) fn runaway(shape: Runaway) -> String {
+    // What reads the claim after it, where a row measures what the kernel made of it: the kernel files what a judgment cost it where it begins the next.
+    let mut reader = String::new();
     let (imports, definitions, claim) = match shape {
         Runaway::Spin => (
             "Nat, Eq, Io",
@@ -97,9 +101,22 @@ pub(super) fn runaway(shape: Runaway) -> String {
                 .to_string(),
             format!("let claim: Eq()(nest({steps}, Nat), nest({steps}, Int))"),
         ),
+        Runaway::Stacks(steps) => {
+            reader.push_str(
+                "let read(g: (Nat) -> Nat) -> Nat = match claim(g) | refl => 0 end;\n\n",
+            );
+            (
+                "Nat, Eq, Io",
+                "let tower(g: (Nat) -> Nat, n: Nat) -> Nat = match n | 0 => 0 | k + 1 => g(tower(g, k)) end;\n\nlet stack(g: (Nat) -> Nat, n: Nat, top: Nat) -> Nat = match n | 0 => top | k + 1 => stack(g, k, g(top)) end;"
+                    .to_string(),
+                format!("let claim(g: (Nat) -> Nat) -> Eq()(tower(g, {steps}), stack(g, {steps}, 0))"),
+            )
+        }
     };
 
-    format!("use /std/{{{imports}}};\n\n{definitions}\n\n{claim} = Eq/refl();\n\nIo/pure(())\n")
+    format!(
+        "use /std/{{{imports}}};\n\n{definitions}\n\n{claim} = Eq/refl();\n\n{reader}Io/pure(())\n"
+    )
 }
 
 /// What `shape` is refused for under `budget`.
@@ -158,6 +175,15 @@ fn a_power_widened_at_every_step_is_reduced_inside_its_budget() {
     let report = refused(2_500_000, Runaway::Images(250, 50));
 
     assert!(report.contains("type mismatch"), "{report}");
+}
+
+/// One term built by two recursions, the second opened alone a step at a time, is held one by both checkers inside four hundred thousand units. The kernel nests a comparison at every step it opens, so what holds its depth is what each level costs it to reach, and no charge of its own.
+#[test]
+fn a_side_opened_alone_a_step_at_a_time_is_held_inside_its_budget() {
+    assert_eq!(
+        typecheck_within(400_000, &runaway(Runaway::Stacks(500))),
+        Ok(())
+    );
 }
 
 /// Two types nested alike five hundred deep and apart at their core are told apart inside a million units.
