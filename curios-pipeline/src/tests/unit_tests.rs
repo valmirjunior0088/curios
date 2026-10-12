@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     curios_core::{Global, Module},
     curios_prelude::with_prelude,
-    curios_text::{PreparedText, RootSource},
+    curios_text::{PreparedText, RootSource, spell},
     curios_unit::Unit,
     curios_utilities::Qualifier,
     std::rc::Rc,
@@ -225,26 +225,20 @@ fn a_name_a_later_unit_exports_is_spelled_by_either_units_path() {
     with_prelude(|prelude| {
         let inside = units[1].text().spellings(&scope_of(prelude, &units[..1]));
         assert_eq!(
-            inside
-                .spell(&Qualifier::from(["facade"]), None, &x)
-                .as_deref(),
+            spell(&inside, &Qualifier::from(["facade"]), None, &x).as_deref(),
             Some("x")
         );
 
         let after = units[2].text().spellings(&scope_of(prelude, &units[..2]));
         assert_eq!(
-            after
-                .spell(&Qualifier::from(["reader"]), None, &x)
-                .as_deref(),
+            spell(&after, &Qualifier::from(["reader"]), None, &x).as_deref(),
             Some("/facade/x")
         );
 
         let mut closed = after.clone();
         closed.closed.push(Qualifier::from(["facade"]));
         assert_eq!(
-            closed
-                .spell(&Qualifier::from(["reader"]), None, &x)
-                .as_deref(),
+            spell(&closed, &Qualifier::from(["reader"]), None, &x).as_deref(),
             Some("/lib/deep/x")
         );
     });

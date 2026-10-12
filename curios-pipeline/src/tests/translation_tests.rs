@@ -316,6 +316,21 @@ fn a_witness_binder_is_written_unnamed_and_restored_where_it_is_used() {
     );
 }
 
+// A witness a program names is one resolution would not put back: the table answers `Show(Nat)` with the library's, so the argument is written where the call was handed another.
+#[test]
+fn a_witness_resolution_would_not_restore_is_written() {
+    let source = r#"
+        use /std/{Nat, Str, Show};
+        pub let loud: Show(Nat) = Show { (n) => "n" };
+        pub let subject(n: Nat) -> Str = Show/show(@Nat, use loud, n);
+    "#;
+
+    assert_eq!(
+        body(source, "subject"),
+        "(n) => Show/show(@Nat, use loud, n)"
+    );
+}
+
 // A `use` argument resolution would put back is left to it, as the program left it.
 #[test]
 fn a_witness_resolution_restores_is_left_out() {

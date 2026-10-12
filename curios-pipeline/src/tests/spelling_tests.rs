@@ -1,12 +1,12 @@
 //! A name's spelling held to resolution: every spelling a report gives a declaration of the library is resolved, by the lowering, to that declaration from where the reader stands, and no shorter one built from its paths is.
 //!
-//! `Spellings::spell` is the reverse of resolution, written in another crate than resolution. This is what compares the two: the spellings are put back through the lowering's own doors, in one generated program per reader, and what each lowers to is read off the lowered module.
+//! `curios-text`'s `spell` is the reverse of resolution, written apart from the functions that resolve. This is what compares the two: the spellings are put back through the lowering's own doors, in one generated program per reader, and what each lowers to is read off the lowered module.
 
 use {
     super::test_support::*,
     curios_core::{Global, Item, Subterm, Term},
     curios_prelude::with_prelude,
-    curios_text::{RootSource, SYNTAX, into_core_with_prelude},
+    curios_text::{RootSource, SYNTAX, into_core_with_prelude, spell},
     curios_unit::Predecessors,
     curios_utilities::Qualifier,
     std::{
@@ -108,7 +108,7 @@ fn held(reader: &Reader, under: Option<&Qualifier>) -> Counted {
             .filter(|global| {
                 under.is_none_or(|module| paths(global).iter().any(|path| path.is_within(module)))
             })
-            .filter_map(|global| Some((global, spellings.spell(&island, Some(&owner), &global)?)))
+            .filter_map(|global| Some((global, spell(&spellings, &island, Some(&owner), &global)?)))
             .collect::<Vec<_>>();
 
         // One program: each spelling as the body of a declaration, and beside it every shorter name a suffix of one of its paths spells.

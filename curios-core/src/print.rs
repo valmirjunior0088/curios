@@ -1,10 +1,9 @@
 use {
     super::{
-        Apply, Argument, Arity, Ascribed, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor,
-        Field, Free, Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label, Let,
-        Match, MatchResult, Metavar, MetavarOrigin, Nat, NumLit, Proj, Quality, Rec, Scope,
-        Spellings, Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple,
-        TupleType, Two, Universes, Var, Variant,
+        Apply, Argument, Arity, Ascribed, Atom, Bang, Bound, Carrier, Cases, Cursor, Field, Free,
+        Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label, Let, Match,
+        MatchResult, Nat, NumLit, Proj, Quality, Rec, Scope, Spellings, Struct, StructType,
+        Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Universes, Var, Variant,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
@@ -71,7 +70,7 @@ fn universe_suffix(universes: &Universes, spelling: &Rc<Spelling>) -> String {
 //
 // axis (g) — grouping: a flag under which a nested concatenation spells as the operand it is, `[..[..a, ..b], ..c]`, rather than splicing its entries into the enclosing literal. The splice is right everywhere the reader wants the program quoted rather than its lowering, and it is what makes two terms that differ only in how a run is grouped render as one string — which a mismatch report cannot afford, since grouping is a difference conversion can refuse on. The report's escalation sets it, first, because it changes nothing unless a nesting is present; nothing else does.
 //
-// axis (h) — witnesses: the concepts and witnesses a report spells against, and the witness binders in scope where its reader stands, so a witness reads as resolution would restore it. A `use` argument resolution would put back is left out — a binder in scope that no inner binder of its concept shadows, the unique shortest superclass path off one, a global witness no binder in scope reaches ([`restorable`]) — a function type's witness binder prints unnamed, as the surface requires, and a method projected off a witness prints as the call or operator a program writes. What resolution would not restore keeps its faithful spelling, since a different program is worse than an unpasteable one. Reports set it; `wonder stage`'s dumps and the kernel's refusals do not, for axis (c)'s reason. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (h) — witnesses: the concepts and witnesses a reader's printer spells against ([`Spelling::witness_table`]), and the witness binders in scope where its reader stands ([`ReaderPosition`]), so that a witness reads there as resolution would restore it: a `use` argument resolution would put back left out, a method projected off a witness written as the call or operator a program writes. This printer reads neither and prints a witness as it stands, which is what a dump, a kernel's refusal and a term a reader's printer declines are read as. Reports set it. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
@@ -92,7 +91,7 @@ pub struct Spelling {
     string_literal: Option<Global>,
     /// axis (g) — whether a nested concatenation keeps its grouping instead of being spliced into the enclosing literal.
     grouped: bool,
-    /// axis (h) — the concepts and witnesses a witness is spelled against, so it reads as resolution would restore it.
+    /// axis (h) — the concepts and witnesses a reader's printer spells a witness against, so it reads as resolution would restore it.
     witnesses: Option<Rc<WitnessSpelling>>,
     /// axis (b) for a reader: how the unit's names can be written and where its definitions sit, so a global is spelled as resolution would find it from where the reader stands. Takes precedence over the shorten map, which stays what a render without a reader — a dump, a kernel refusal — spells by.
     names: Option<Rc<ReaderNames>>,
@@ -110,6 +109,15 @@ pub struct Spelling {
 pub trait ReaderPrinter {
     /// The document `term` prints as for the reader `spelling` stands at, its binders labelled through `mint` in the order they are opened, or `None` where the term cannot be written back: it holds a form no program spells, or it is past what a report prints ([`Minting::elides`]).
     fn print(&self, term: &Term, spelling: &Rc<Spelling>, mint: &Minting) -> Option<Printer>;
+
+    /// The shortest name a reader in module `island`, writing inside `owner`, reaches `global` by, read off `spellings`, or `None` where they reach it by none. The reverse of resolution, which is the surface crate's as resolution is, so this crate asks for it as it asks for a term's print.
+    fn spell(
+        &self,
+        spellings: &Spellings,
+        island: &Qualifier,
+        owner: Option<&Global>,
+        global: &Global,
+    ) -> Option<String>;
 }
 
 /// What a unit's structures and constructors are written by: each field's mark and label, each payload member's mark. Made once for a unit and kept with its [`Lexicon`].
@@ -147,7 +155,12 @@ impl ReaderNames {
         }
     }
 
-    fn spell(&self, reader: &ReaderPosition, global: &Global) -> Option<String> {
+    fn spell(
+        &self,
+        reader: &ReaderPosition,
+        global: &Global,
+        printer: &dyn ReaderPrinter,
+    ) -> Option<String> {
         let key = (reader.owner, *global);
         if let Some(spelled) = self.memo.borrow().get(&key) {
             return spelled.clone();
@@ -158,7 +171,7 @@ impl ReaderNames {
             .and_then(|owner| self.islands.get(owner))
             .cloned()
             .unwrap_or_else(Qualifier::empty);
-        let spelled = self.spellings.spell(&island, reader.owner.as_ref(), global);
+        let spelled = printer.spell(&self.spellings, &island, reader.owner.as_ref(), global);
         self.memo.borrow_mut().insert(key, spelled.clone());
         spelled
     }
@@ -316,7 +329,7 @@ impl Spelling {
         self
     }
 
-    /// Spell every witness as resolution would restore it (axis (h)), against `witnesses` — the table [`Module::lexicon`](crate::Module::lexicon) builds.
+    /// Hand a reader's printer the table it spells a witness against (axis (h)): the one [`Module::lexicon`](crate::Module::lexicon) builds.
     pub fn with_witness_spelling(mut self, witnesses: Rc<WitnessSpelling>) -> Self {
         self.witnesses = Some(witnesses);
         self
@@ -347,11 +360,16 @@ impl Spelling {
 
     /// A built-in type or operation, named by the path under `/sys` its printer spells it by — a carrier's type `X` at `X/X`, an operation at its own path — spelled for the reader where one is set and the declaration reaches them, and by that path otherwise, as a dump reads it.
     fn intrinsic_symbol(&self, path: &str) -> String {
-        let reader = self
-            .names
-            .as_ref()
-            .and_then(|names| names.spell(&self.reader, &intrinsic_global(path)));
-        reader.unwrap_or_else(|| path.to_string())
+        self.read(&intrinsic_global(path))
+            .flatten()
+            .unwrap_or_else(|| path.to_string())
+    }
+
+    /// The name the reader reaches `global` by, `None` inside where they reach it by none. `None` outside where no reader's names are set, or no printer to read them by: spelling a name for a reader is resolution in reverse, which is the surface crate's ([`ReaderPrinter::spell`]).
+    fn read(&self, global: &Global) -> Option<Option<String>> {
+        let (names, printer) = (self.names.as_ref()?, self.printer.as_ref()?);
+
+        Some(names.spell(&self.reader, global, &**printer))
     }
 
     /// Spell a certified string literal as its own text (axis (f)). `name` is the `Str` declaration a literal's head carries — [`SyntaxRegistry`](curios_utilities::SyntaxRegistry)'s, since this crate may not spell it.
@@ -381,7 +399,7 @@ impl Spelling {
         self
     }
 
-    /// Spell every witness as resolution would restore it (axis (h)), against the lexicons of a reader's scope — see [`Spelling::with_lexicons`].
+    /// Hand a reader's printer the witness tables of the lexicons of a reader's scope (axis (h)) — see [`Spelling::with_lexicons`].
     pub fn with_witnesses(self, own: &Lexicon, scope: &[&Lexicon]) -> Self {
         let units = std::iter::once(own)
             .chain(scope.iter().copied())
@@ -392,10 +410,8 @@ impl Spelling {
 
     /// The display spelling of a global (axis (b)) — for a reader, as resolution would find it from where they stand, and in full where it cannot, since a suffix nothing resolves is a different program; without one, shortened against the module's other symbols when that is unambiguous, and in full otherwise. Globals never take axis (a)'s rename: their spelling is a path a programmer wrote, not a minted hint.
     pub fn symbol(&self, name: &Global) -> String {
-        if let Some(names) = &self.names {
-            return names
-                .spell(&self.reader, name)
-                .unwrap_or_else(|| name.faithful().to_string());
+        if let Some(spelled) = self.read(name) {
+            return spelled.unwrap_or_else(|| name.faithful().to_string());
         }
         self.shorten
             .as_ref()
@@ -489,39 +505,15 @@ fn marked_argument(printer: Printer, plicity: Option<&Plicity>) -> Printer {
     }
 }
 
-/// A call's arguments as a reader writes them, each marked: a `use` argument resolution would restore is left out (axis (h)) where nothing hidden is written after it in its run, and holds its place as `use _` where something is, since hidden members are written in order from the first of their run and a later one written past a slot left out would be read at that slot.
+/// A call's arguments, each under its mark.
 fn call_arguments(arguments: Vec<Argument>, frame: Frame) -> Vec<Printer> {
-    let restored = arguments
-        .iter()
-        .map(|argument| argument.plicity == Plicity::Witness && restorable(&argument.term, frame))
-        .collect::<Vec<_>>();
-
-    // Read from the back: whether a hidden argument is written later in the run a position stands in.
-    let mut written_after = vec![false; arguments.len()];
-    let mut later = false;
-    for (index, argument) in arguments.iter().enumerate().rev() {
-        written_after[index] = later;
-        later = argument.plicity != Plicity::Explicit && (later || !restored[index]);
-    }
-
     arguments
         .into_iter()
-        .zip(restored)
-        .zip(written_after)
-        .filter_map(
-            |((argument, restored), written_after)| match (restored, written_after) {
-                (true, false) => None,
-                (true, true) => Some(pure("use _")),
-                (false, _) => Some(marked_argument(
-                    sub(argument.term, frame),
-                    Some(&argument.plicity),
-                )),
-            },
-        )
+        .map(|argument| marked_argument(sub(argument.term, frame), Some(&argument.plicity)))
         .collect()
 }
 
-/// A nominal type's arguments from position `offset` of its declaration on, each marked as the declaration marks it, and a witness resolution would restore left out (axis (h)).
+/// A nominal type's arguments from position `offset` of its declaration on, each marked as the declaration marks it.
 fn nominal_arguments(
     group: Vec<Term>,
     marks: Option<&[Plicity]>,
@@ -531,10 +523,10 @@ fn nominal_arguments(
     group
         .into_iter()
         .enumerate()
-        .filter_map(|(index, argument)| {
+        .map(|(index, argument)| {
             let mark = marks.and_then(|marks| marks.get(offset + index));
-            (mark != Some(&Plicity::Witness) || !restorable(&argument, frame))
-                .then(|| marked_argument(sub(argument, frame), mark))
+
+            marked_argument(sub(argument, frame), mark)
         })
         .collect()
 }
@@ -946,308 +938,14 @@ fn label_terms(binders: &[Free]) -> Vec<Term> {
     binders.iter().map(Term::free_var).collect()
 }
 
-/// The state a recursive print call threads: the render-constant [`Spelling`], the render's [`Minting`], and the witness binders in scope (axis (h)).
+/// The state a recursive print call threads: the render-constant [`Spelling`] and the render's [`Minting`].
 #[derive(Clone, Copy)]
 struct Frame<'a> {
     spelling: &'a Rc<Spelling>,
     mint: &'a Minting,
-    /// The innermost witness binder in scope, chained outward. Each node lives on the stack of the arm that opened its binder: the document is built eagerly, so no frame outlives the node it borrows.
-    witnesses: Option<&'a WitnessNode<'a>>,
-}
-
-/// One witness binder in scope: its label, the concept application its type names when the table knows the concept, whether a reference to it reached the rendering, and the binder outside it.
-struct WitnessNode<'a> {
-    label: Free,
-    concept: Option<(Global, Vec<Term>)>,
-    used: Cell<bool>,
-    parent: Option<&'a WitnessNode<'a>>,
-}
-
-impl<'a> WitnessNode<'a> {
-    fn new(label: Free, type_: &Term, frame: Frame<'a>) -> Self {
-        let concept = frame
-            .spelling
-            .witnesses
-            .as_deref()
-            .and_then(|table| table.application(type_));
-        Self {
-            label,
-            concept,
-            used: Cell::new(false),
-            parent: frame.witnesses,
-        }
-    }
-
-    fn concept(&self) -> Option<&Global> {
-        self.concept.as_ref().map(|(concept, _)| concept)
-    }
-}
-
-/// The witness binders in scope, innermost first.
-fn chain<'a>(first: Option<&'a WitnessNode<'a>>) -> impl Iterator<Item = &'a WitnessNode<'a>> {
-    std::iter::successors(first, |node| node.parent)
-}
-
-/// What a witness argument is, as resolution sees one.
-enum WitnessForm<'a> {
-    /// A binder in scope, or a superclass path off one `depth` edges long, reaching `concept`.
-    Local {
-        node: &'a WitnessNode<'a>,
-        concept: Global,
-        depth: usize,
-    },
-    /// A witness of the global table, answering `concept` at `arguments` (empty where its declared telescope could not be opened).
-    Global {
-        concept: Global,
-        arguments: Vec<Term>,
-    },
-    /// A witness goal still open, which resolution is what it waits on.
-    Pending,
-}
-
-/// Classify `term` as a witness, when it is one: a binder in scope, a superclass path off one, a global witness — bare, at a universe instance, or applied to its own hidden arguments — or an open witness goal.
-fn witness_form<'a>(term: &Term, frame: Frame<'a>) -> Option<WitnessForm<'a>> {
-    let table = frame.spelling.witnesses.as_deref()?;
-    match &**term {
-        Subterm::Metavar(Metavar {
-            origin: MetavarOrigin::Witness(_),
-            ..
-        }) => Some(WitnessForm::Pending),
-        Subterm::Var(var) if matches!(var.as_free(), Some(Free::Local(_))) => {
-            let label = var.as_free()?;
-            let node = chain(frame.witnesses).find(|node| &node.label == label)?;
-            Some(WitnessForm::Local {
-                node,
-                concept: *node.concept()?,
-                depth: 0,
-            })
-        }
-        Subterm::Proj(Proj {
-            head,
-            field: Field::Struct(_, index),
-        }) => match witness_form(head, frame)? {
-            WitnessForm::Local {
-                node,
-                concept,
-                depth,
-            } => {
-                let (_, reached) = table.supers(&concept).find(|(field, _)| field == index)?;
-                Some(WitnessForm::Local {
-                    node,
-                    concept: *reached,
-                    depth: depth + 1,
-                })
-            }
-            WitnessForm::Global { .. } | WitnessForm::Pending => None,
-        },
-        Subterm::Var(_) | Subterm::Instance(_) | Subterm::Apply(_) => {
-            let Free::Global(witness @ Global::Witness(_)) = term.head_name()? else {
-                return None;
-            };
-            let (concept, arguments) = table.answers(witness, &spine_arguments(term))?;
-            Some(WitnessForm::Global { concept, arguments })
-        }
-        _ => None,
-    }
-}
-
-/// Whether resolution, at the reader's position, would put `argument` back if it were left out — the only case a `use` argument may be, following `documentation/syntax.md`'s order: the local witnesses innermost first, then their superclass projections breadth-first, then the global table. A binder whose concept the table does not know restores nothing and shadows nothing.
-fn restorable(argument: &Term, frame: Frame) -> bool {
-    let Some(table) = frame.spelling.witnesses.as_deref() else {
-        return false;
-    };
-    match witness_form(argument, frame) {
-        None => false,
-        Some(WitnessForm::Pending) => true,
-        // A direct match: the first binder of its concept, innermost out, is the one resolution takes.
-        Some(WitnessForm::Local {
-            node,
-            concept,
-            depth: 0,
-        }) => chain(frame.witnesses)
-            .find(|candidate| candidate.concept() == Some(&concept))
-            .is_some_and(|first| std::ptr::eq(first, node)),
-        // A superclass path: no binder of the concept itself, and this the one route of the least length.
-        Some(WitnessForm::Local {
-            node,
-            concept,
-            depth,
-        }) => {
-            !chain(frame.witnesses).any(|candidate| candidate.concept() == Some(&concept))
-                && routes(table, frame, &concept).is_some_and(|(least, routes)| {
-                    least == depth && matches!(routes[..], [only] if std::ptr::eq(only, node))
-                })
-        }
-        // A global witness: coherence makes the table's answer this one, so long as nothing in scope answers first.
-        Some(WitnessForm::Global { concept, .. }) => {
-            routes(table, frame, &concept).is_none()
-                && !chain(frame.witnesses).any(|candidate| candidate.concept() == Some(&concept))
-        }
-    }
-}
-
-/// The least superclass depth at which any binder in scope reaches `concept`, beside every binder reaching it there — one entry per path, so a diamond counts twice. `None` when no binder reaches it through a superclass.
-fn routes<'a>(
-    table: &WitnessSpelling,
-    frame: Frame<'a>,
-    concept: &Global,
-) -> Option<(usize, Vec<&'a WitnessNode<'a>>)> {
-    let mut level = chain(frame.witnesses)
-        .filter_map(|node| node.concept().map(|reached| (node, *reached)))
-        .collect::<Vec<_>>();
-    let mut depth = 0;
-    // The superclass graph is acyclic (checked where the registries are seeded), so the walk ends once every path has run out.
-    while !level.is_empty() {
-        depth += 1;
-        level = level
-            .into_iter()
-            .flat_map(|(node, reached)| {
-                table
-                    .supers(&reached)
-                    .map(move |(_, super_)| (node, *super_))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        let found = level
-            .iter()
-            .filter(|(_, reached)| reached == concept)
-            .map(|(node, _)| *node)
-            .collect::<Vec<_>>();
-        if !found.is_empty() {
-            return Some((depth, found));
-        }
-    }
-    None
-}
-
-/// The operator a call of the method a projection off `witness` stands for prints as: the one dispatching to that method, when the call passes it exactly two explicit arguments — an open witness goal's the operator it was inserted for. What [`method_doc`] prints infix, and so what [`print_operand`] parenthesizes: a method call spelled `b - a` is as much an operand needing parentheses as the intrinsic subtraction is.
-fn method_operator(
-    witness: &Term,
-    index: usize,
-    arguments: &[Argument],
-    frame: Frame,
-) -> Option<InfixOp> {
-    let [_, _] = arguments else {
-        return None;
-    };
-    if arguments
-        .iter()
-        .any(|argument| argument.plicity != Plicity::Explicit)
-    {
-        return None;
-    }
-    let table = frame.spelling.witnesses.as_deref()?;
-    let concept = match witness_form(witness, frame)? {
-        WitnessForm::Pending => {
-            let Subterm::Metavar(Metavar {
-                origin: MetavarOrigin::Witness(origin),
-                ..
-            }) = &**witness
-            else {
-                return None;
-            };
-            let CalleeId::Operator(op) = origin.func else {
-                return None;
-            };
-            return Some(op);
-        }
-        WitnessForm::Local { concept, .. } | WitnessForm::Global { concept, .. } => concept,
-    };
-    match table.fields(&concept)?.get(index)? {
-        FieldSpelling::Method { operator, .. } => *operator,
-        _ => None,
-    }
-}
-
-/// The method a projection off a witness stands for, spelled as a program reaches it: the operator dispatching to it between exactly two operands, or its wrapper — called with the concept's parameters marked `@`, the witness only where resolution would not restore it, and, for a wrapper taking the method's own parameters in its group, those in the same call. `arguments` is the call the projection heads, when it heads one. `None` for anything else, which prints as it is.
-fn method_doc(
-    witness: &Term,
-    index: usize,
-    arguments: Option<&[Argument]>,
-    frame: Frame,
-) -> Option<Printer> {
-    let table = frame.spelling.witnesses.as_deref()?;
-    if let Some(arguments @ [left, right]) = arguments
-        && let Some(op) = method_operator(witness, index, arguments, frame)
-    {
-        return Some(print_infix(
-            op.symbol(),
-            left.term.clone(),
-            right.term.clone(),
-            frame,
-        ));
-    }
-
-    let (concept, parameters) = match witness_form(witness, frame)? {
-        // An open witness goal carries only the operator it was inserted for, which spells it or nothing does.
-        WitnessForm::Pending => return None,
-        WitnessForm::Local {
-            node,
-            concept,
-            depth,
-        } => {
-            let parameters = if depth == 0 {
-                node.concept
-                    .as_ref()
-                    .map(|(_, arguments)| arguments.clone())
-            } else {
-                None
-            };
-            (concept, parameters.unwrap_or_default())
-        }
-        WitnessForm::Global { concept, arguments } => (concept, arguments),
-    };
-
-    let FieldSpelling::Method {
-        wrapper, merged, ..
-    } = table.fields(&concept)?.get(index)?.clone()
-    else {
-        return None;
-    };
-
-    let restored = restorable(witness, frame);
-    let reference = Term::var(Var::free(Free::Global(wrapper)));
-    let leading = parameters
-        .into_iter()
-        .map(|parameter| (Plicity::Implicit, parameter))
-        .chain((!restored).then(|| (Plicity::Witness, witness.clone())))
-        .collect::<Vec<_>>();
-    let own = arguments.map(|arguments| {
-        arguments
-            .iter()
-            .map(|argument| (argument.plicity, argument.term.clone()))
-            .collect::<Vec<_>>()
-    });
-
-    let term = match (merged, own) {
-        (true, Some(own)) => Term::apply_marked(reference, leading.into_iter().chain(own)),
-        // The method as a value: its wrapper, which a checked position instantiates and eta-expands — where resolution restores the witness, since the one call that could name it would have to carry the method's own arguments too.
-        (true, None) if restored => reference,
-        (true, None) => return None,
-        (false, own) => {
-            let field = Term::apply_marked(reference, leading);
-            match own {
-                Some(own) => Term::apply_marked(field, own),
-                None => field,
-            }
-        }
-    };
-    Some(sub(term, frame))
 }
 
 impl<'a> Frame<'a> {
-    /// This frame with `node` innermost in its witness scope.
-    fn with_witness<'b>(self, node: &'b WitnessNode<'b>) -> Frame<'b>
-    where
-        'a: 'b,
-    {
-        Frame {
-            spelling: self.spelling,
-            mint: self.mint,
-            witnesses: Some(node),
-        }
-    }
-
     /// The label the next binder this render opens is printed under ([`Minting::label`]).
     fn label(&self, label: Option<&Label>) -> Free {
         self.mint.label(label)
@@ -1633,15 +1331,7 @@ fn parameter_types(
     printers.push(pure(""));
     cursor.advance(Term::free_var(&label));
 
-    let (output, named) =
-        if plicity == Some(&Plicity::Witness) && frame.spelling.witnesses.is_some() {
-            // A function type cannot name its witness, so the binder is spelled only where a reference resolution would not restore still names it.
-            let node = WitnessNode::new(label, &ty, frame);
-            let output = parameter_types(cursor, plicities, frame.with_witness(&node), printers);
-            (output, node.used.get())
-        } else {
-            (parameter_types(cursor, plicities, frame, printers), named)
-        };
+    let output = parameter_types(cursor, plicities, frame, printers);
 
     printers[slot] = if named {
         flat([
@@ -1663,7 +1353,7 @@ fn lambda_parameters(
     minting: Frame,
     marked: &mut Vec<String>,
 ) -> Printer {
-    let Some((_, ty)) = cursor.entry() else {
+    if cursor.entry().is_none() {
         let body = cursor.body().expect("a cursor past every entry");
         // The body sits on the arrow's line when it fits and indents on its own line when it does not. A body that is a multi-line form of its own takes the line unconditionally: those forms spell their breaks as literal newlines, which end the fits scan within budget rather than failing it, so a group would render the arrow's line flat and leave the form's first line trailing the arrow.
         let separator = match &*body {
@@ -1671,7 +1361,7 @@ fn lambda_parameters(
             _ => line(),
         };
         return indent(flat([separator, sub(body, minting)]));
-    };
+    }
     let label = minting.label(cursor.label());
     let plicity = plicities.get(cursor.args().len());
     let mark = plicity_mark(plicity);
@@ -1683,19 +1373,10 @@ fn lambda_parameters(
     marked.push(String::new());
     cursor.advance(Term::free_var(&label));
 
-    let (output, named) = if plicity == Some(&Plicity::Witness) {
-        match minting.spelling.witnesses.is_some() {
-            true => {
-                let node = WitnessNode::new(label, &ty, minting);
-                let output =
-                    lambda_parameters(cursor, plicities, minting.with_witness(&node), marked);
-                (output, node.used.get())
-            }
-            // With no witness spelling the body prints every reference as it stands, so the binder is named exactly where one is made.
-            false => (lambda_parameters(cursor, plicities, minting, marked), used),
-        }
-    } else {
-        (lambda_parameters(cursor, plicities, minting, marked), named)
+    let output = lambda_parameters(cursor, plicities, minting, marked);
+    let named = match plicity == Some(&Plicity::Witness) {
+        true => used,
+        false => named,
     };
 
     marked[slot] = match named {
@@ -1713,11 +1394,6 @@ fn print_operand(term: Term, frame: Frame) -> Printer {
         }
         Subterm::Intrinsic(intrinsic) => infix_symbol(intrinsic).is_some(),
         Subterm::Transient(Transient::Infix(_)) => true,
-        Subterm::Apply(Apply { head, arguments }) => matches!(
-            &**head,
-            Subterm::Proj(Proj { head: witness, field: Field::Struct(_, index) })
-                if method_operator(witness, *index, arguments, frame).is_some()
-        ),
         _ => false,
     };
 
@@ -2474,26 +2150,7 @@ fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer
     }
 
     mint.allow(&term);
-    let frame = Frame {
-        spelling,
-        mint,
-        witnesses: None,
-    };
-    if spelling.witnesses.is_none() {
-        return term_doc(term, frame);
-    }
-    within_reader(term, frame, &spelling.reader.witnesses)
-}
-
-/// [`term_doc`] under the reader's witness binders, outermost first, each node on this stack while the rest of the render borrows it.
-fn within_reader(term: Term, frame: Frame, binders: &[(Free, Term)]) -> Printer {
-    match binders.split_first() {
-        None => term_doc(term, frame),
-        Some(((label, type_), rest)) => {
-            let node = WitnessNode::new(*label, type_, frame);
-            within_reader(term, frame.with_witness(&node), rest)
-        }
-    }
+    term_doc(term, Frame { spelling, mint })
 }
 
 fn term_doc(term: Term, frame: Frame) -> Printer {
@@ -2550,14 +2207,6 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             group(flat([pure(param_str), pure(" =>"), body]))
         }
         Subterm::Apply(Apply { head, arguments }) => {
-            if let Subterm::Proj(Proj {
-                head: witness,
-                field: Field::Struct(_, index),
-            }) = &*head
-                && let Some(method) = method_doc(witness, *index, Some(arguments.as_slice()), frame)
-            {
-                return method;
-            }
             // A lambda applied where it stands is written in parentheses: bare, its body would take the arguments, and `(x) => f(x)(a)` reads back as a lambda. One printed as the type former it eta-expands is no lambda on the page.
             let lambda = matches!(
                 &*head,
@@ -2613,11 +2262,6 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             )
         }
         Subterm::Proj(Proj { head, field }) => {
-            if let Field::Struct(_, index) = field
-                && let Some(method) = method_doc(&head, index, None, frame)
-            {
-                return method;
-            }
             let field = match field {
                 Field::Tuple(index) | Field::Struct(_, index) | Field::Position(index) => {
                     format!(").{index}")
@@ -2980,15 +2624,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 sub(tail, frame),
             ])
         }
-        Subterm::Var(var) => {
-            // A reference reaching the rendering is what keeps a witness binder's name (axis (h)).
-            if let Some(label) = var.as_free()
-                && let Some(node) = chain(frame.witnesses).find(|node| &node.label == label)
-            {
-                node.used.set(true);
-            }
-            print_var(var, frame.spelling)
-        }
+        Subterm::Var(var) => print_var(var, frame.spelling),
         Subterm::Transient(Transient::NumLit(NumLit::Number { magnitude, sign })) => {
             pure(format!("{}{magnitude}", sign.symbol()))
         }

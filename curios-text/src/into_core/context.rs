@@ -1095,7 +1095,7 @@ impl<'a> Context<'a> {
         Ok(result)
     }
 
-    // Record that the binding `target` is in scope of this body under `spelling`, from here on, as it was written: which of two spellings of one binding a reader is shown is decided where one is spelled (`curios_core::Spellings::spell`).
+    // Record that the binding `target` is in scope of this body under `spelling`, from here on, as it was written: which of two spellings of one binding a reader is shown is decided where one is spelled (`spell`).
     fn record_import(&mut self, target: &Qualifier, spelling: String) {
         self.record(curios_core::Import::Binding {
             global: curios_core::Global::Authored(*target),
@@ -1103,7 +1103,7 @@ impl<'a> Context<'a> {
         });
     }
 
-    // Record that the module imported under `label` is in scope of this body, from here on: its public bindings are, each spelled through the label — `Eq/cong` for `use /std/{Eq}` — and which they are is the module's interface to say, read where the unit is assembled (`module_members`), never here. Its direct bindings are listed for what a goal may be offered; a member further down is spelled through the same label, from the paths the units give it (`curios_core::Spellings::spell`), so nothing is recorded of it here.
+    // Record that the module imported under `label` is in scope of this body, from here on: its public bindings are, each spelled through the label — `Eq/cong` for `use /std/{Eq}` — and which they are is the module's interface to say, read where the unit is assembled (`module_members`), never here. Its direct bindings are listed for what a goal may be offered; a member further down is spelled through the same label, from the paths the units give it (`spell`), so nothing is recorded of it here.
     fn record_module_import(&mut self, module: &Qualifier, label: &str) {
         self.record(curios_core::Import::Module {
             module: *module,

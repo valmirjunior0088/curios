@@ -12,7 +12,7 @@ use {
         Infix, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry, ListPattern, Literal,
         Match, MatchPattern, MatrixArm, Name, NatLiteral, NatPattern, NumLit, Pattern, Proj,
         ProofLiteral, Radix, StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField,
-        TupleType, TupleTypeParam, print_term,
+        TupleType, TupleTypeParam, print_term, spell,
     },
     curios_core::Bound,
     curios_num::{Floating, Grain, Integer, Natural},
@@ -32,6 +32,16 @@ impl curios_core::ReaderPrinter for Translation {
         mint: &curios_core::Minting,
     ) -> Option<Printer> {
         from_core(term, spelling, mint).map(print_term)
+    }
+
+    fn spell(
+        &self,
+        spellings: &curios_core::Spellings,
+        island: &Qualifier,
+        owner: Option<&curios_core::Global>,
+        global: &curios_core::Global,
+    ) -> Option<String> {
+        spell(spellings, island, owner, global)
     }
 }
 

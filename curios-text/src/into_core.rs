@@ -34,6 +34,9 @@ use lint::*;
 mod references;
 use references::*;
 
+mod spell;
+pub use spell::*;
+
 mod scoped;
 use scoped::*;
 
@@ -145,7 +148,7 @@ impl<'a> Reach<'a> {
     }
 }
 
-/// Every absolute path a unit gives a global — each declaration of its own at its own path, each export at the path its module gives it, whichever unit declares what it exports — with who may write it. A function of the unit's own tables and the audiences it decided, so it is made once for the unit ([`PreparedText::paths`]): which paths a reader's unit may name, and which it reaches relatively, are the reader's, read where a report spells a name ([`curios_core::Spellings::spell`]).
+/// Every absolute path a unit gives a global — each declaration of its own at its own path, each export at the path its module gives it, whichever unit declares what it exports — with who may write it. A function of the unit's own tables and the audiences it decided, so it is made once for the unit ([`PreparedText::paths`]): which paths a reader's unit may name, and which it reaches relatively, are the reader's, read where a report spells a name ([`spell()`]).
 fn writable_paths(
     table: &BTreeMap<Qualifier, ModuleInfo>,
     public: &BTreeMap<Qualifier, PublicInterface>,
@@ -2431,8 +2434,7 @@ fn into_core_unit_within(
         );
         let owner = curios_core::Global::Authored(*item);
         let spelled = |name: &curios_core::Global| {
-            spellings
-                .spell(&item.without_last(), Some(&owner), name)
+            spell(&spellings, &item.without_last(), Some(&owner), name)
                 .unwrap_or_else(|| name.faithful().to_string())
         };
         let behind = unseen.behind(&|module, label| table.get(module)?.get_child(label));
