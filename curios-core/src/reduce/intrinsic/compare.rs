@@ -7,6 +7,7 @@ use {
     crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{Carrier, Comparison, Side, apart_modulo},
     curios_num::Natural,
+    curios_utilities::Keyed,
     std::collections::HashMap,
 };
 
@@ -17,7 +18,8 @@ use {
 /// It lives as long as the comparison that made it: an arm's equations and a reducer's state are one thing for the whole of a comparison, and may be another for the next.
 #[derive(Default)]
 pub(super) struct Asked {
-    verdicts: HashMap<(Term, Term), Comparison>,
+    /// A pair is told apart from another by its hash, so a probe compares no term but the two it asks about.
+    verdicts: HashMap<Keyed<(Term, Term)>, Comparison>,
 }
 
 impl Asked {
@@ -29,11 +31,11 @@ impl Asked {
         left: Term,
         right: Term,
     ) -> Result<Comparison, ReduceError> {
-        let pair = (left, right);
+        let pair = Keyed::new((left, right));
         if let Some(verdict) = self.verdicts.get(&pair) {
             return Ok(*verdict);
         }
-        let (left, right) = pair.clone();
+        let (left, right) = pair.key().clone();
         let verdict = match carrier {
             Carrier::Natural => compare_nat_among(reducer, self, left, right)?.0,
             _ => compare_int_among(reducer, self, left, right)?.0,
