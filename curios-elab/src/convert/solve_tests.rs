@@ -81,6 +81,32 @@ fn scope_check_rejects_out_of_context_variable() {
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
+// A `let`'s local is no variable out of a metavariable's context: it stands for its value, so a candidate that names it is that value's. `?0` is born outside the frame that binds `n`, and `f(n)` commits as `f(2)`; refused for naming `n`, a call would be admitted by which of its arguments is read first.
+#[test]
+fn a_candidate_names_a_lets_local_by_its_value() {
+    let mut context = context();
+    let f = context.fresh(Some("f"));
+    let x = context.fresh(Some("x"));
+    let n = context.fresh(Some("n"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    context.assume(
+        &f,
+        &Term::func_type([(x, nat_type.clone())], nat_type.clone()),
+    );
+    context.birth_metavar(MetavarId(0), Vec::new(), nat_type.clone());
+
+    context.with_frame(|context| {
+        context.define_assuming(&n, &nat_type, &nat(2), None);
+        let candidate = Term::apply(Term::free_var(&f), [Term::free_var(&n)]);
+        assert_eq!(conv(context, &Term::hole(0), &candidate), Ok(true));
+    });
+
+    assert_eq!(
+        context.metavar_solution(MetavarId(0)),
+        Some(&Term::apply(Term::free_var(&f), [nat(2)]))
+    );
+}
+
 #[test]
 fn scope_check_allows_in_context_variable() {
     let mut context = context();

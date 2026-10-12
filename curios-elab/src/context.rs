@@ -52,6 +52,8 @@ pub(crate) use underway::*;
 #[cfg(test)]
 mod awaiting_tests;
 #[cfg(test)]
+mod restriction_tests;
+#[cfg(test)]
 mod tests;
 
 use {
@@ -60,8 +62,8 @@ use {
         zonk_universe_levels_scoped,
     },
     crate::{
-        Published, Refusal, Sort, hold_at_one_instance, key_spelling, shallow_scrutinee, zonk,
-        zonk_solved_term_metas,
+        Published, Refusal, Sort, hold_at_one_instance, key_spelling, metavar_spines,
+        read_by_value, shallow_scrutinee, zonk, zonk_solved_term_metas,
     },
     curios_analysis::{Unfolding, records_case_equation},
     curios_core::{
@@ -113,11 +115,12 @@ pub(crate) struct DomainScope {
     spine: SharedSpine,
 }
 
-/// How an embedded metavariable is re-expressed in the context of the one whose candidate embeds it ([`Context::metavar_restriction`]): the stand-in's telescope, drawn from the embedding metavariable's, the arguments it is applied to in the embedded one's birth names, and its type over its own binders. Opaque outside this module — the guard that plans one can only pass it to [`Context::restrict_metavar`].
+/// How a metavariable is re-expressed in a context narrower than its own, that of the metavariable whose candidate embeds it ([`Context::metavar_restriction`]) or the one a block leaves standing where it ends ([`Context::block_restriction`]): the stand-in's telescope, drawn from the narrower context's, the arguments it is applied to in the restricted one's birth names, its type over its own binders, and the refinements it is born under. Opaque outside this module — what plans one can only pass it to [`Context::restrict_metavar`].
 pub(crate) struct Restriction {
     telescope: SharedTelescope,
     arguments: Vec<Term>,
     result: Term,
+    refinements: SharedRefinements,
 }
 
 pub(crate) struct UniverseMutation<'a> {
@@ -2249,15 +2252,17 @@ impl<'s> Context<'s> {
     ) -> Option<Restriction> {
         let (inner_entry, outer_entry) =
             (self.metavar_entry(inner)?, self.metavar_entry(outer.id)?);
-        let unification_fills = inner_entry.kind == MetaKind::Inference
-            && !inner_entry.proposition
-            && matches!(
-                origin,
-                MetavarOrigin::Hole | MetavarOrigin::Implicit(_) | MetavarOrigin::Domain(_)
-            );
-        if !unification_fills {
+        if !inner_entry.unification_fills(origin) {
             return None;
         }
+        // Born under the refinements `inner` shares with `outer`'s birth: whatever reaches `outer` through `inner` must hold where `outer` is, so `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm.
+        let refinements = || {
+            Rc::new(
+                inner_entry
+                    .refinements
+                    .shared_with(&outer_entry.refinements),
+            )
+        };
 
         if self.metavar_names_contained(inner, outer.id) {
             return Some(Restriction {
@@ -2268,6 +2273,7 @@ impl<'s> Context<'s> {
                     .collect(),
                 telescope: Rc::clone(&inner_entry.telescope),
                 result: inner_entry.result.clone(),
+                refinements: refinements(),
             });
         }
 
@@ -2362,32 +2368,90 @@ impl<'s> Context<'s> {
             telescope: Rc::new(telescope),
             arguments,
             result,
+            refinements: refinements(),
         })
     }
 
-    /// Solve the unsolved `inner` to a fresh stand-in as `restriction` plans it ([`Context::metavar_restriction`]), born under the refinements `inner` shares with `outer`'s birth: whatever reaches `outer` through `inner` must hold where `outer` is, so `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm. The stand-in keeps `inner`'s origin and `extent`, so an unsolved one reports as `inner` would have. Birth records stay frozen; the restriction is a solution, rolled back and reported like any other.
+    /// How the unsolved `inner`, occurring at `occurrences` in the type a block answers where it ends, may be re-expressed without the block's labels rather than leave the block naming them ([`Context::restrict_metavar`]): a stand-in born where the block began, over the binders of `inner`'s telescope before the block's own, at `inner`'s type with each label read as the value `values` pairs it with, in binding order.
+    ///
+    /// A block's term is closed over its labels where the block ends, and its type is not: a label in the spine of a metavariable the type holds is bound by nothing there, and a solution that names its binder, which a problem parked in the block may still give, reads at that occurrence as a name the kernel refuses. A label is a definition, so no solution depends on it that does not depend on its value as well, and none is lost with its binder: the stand-in takes a candidate that names the label by its value (`Convert::solve`). It is the restriction a candidate's embedded metavariable takes ([`Context::metavar_restriction`]), at the other place a metavariable leaves the context it was born in, and what Lean makes of a metavariable where a `let` is closed (`elimMVarDeps`). The spine stays the renaming a solution is inverted through, where the label's value written into it would be an entry the inversion cannot read, and a second name for whatever variable the value is.
+    ///
+    /// What cannot be spelled that way is read by value where it stands, its spine with it: an occurrence that is not the metavariable read where it was born, one born under a binder inside the block's tail, whose refinements and binders the block's own may type, one whose type still holds an unsolved metavariable naming a label, and a hole something else fills.
+    pub(crate) fn block_restriction(
+        &self,
+        inner: MetavarId,
+        origin: &MetavarOrigin,
+        occurrences: &[Rc<Vec<Term>>],
+        values: &[(Free, Term)],
+    ) -> Option<Restriction> {
+        let inner_entry = self.metavar_entry(inner)?;
+        if !inner_entry.unification_fills(origin) {
+            return None;
+        }
+
+        // Read where it was born: every binder as itself, so a value is spelled in the birth's names as it stands.
+        let telescope = &inner_entry.telescope;
+        let born = |spine: &Rc<Vec<Term>>| {
+            spine.len() == telescope.len()
+                && spine.iter().zip(telescope.iter()).all(|(entry, (binder, _))| {
+                    matches!(&**entry, Subterm::Var(var) if var.as_free() == Some(binder))
+                })
+        };
+        if occurrences.is_empty() || !occurrences.iter().all(born) {
+            return None;
+        }
+
+        // Born in the block's own frame: its telescope ends with the block's labels, and what stands before them was bound before the block and names none.
+        let labelled = |binder: &Free| values.iter().any(|(label, _)| label == binder);
+        let kept = telescope.iter().position(|(binder, _)| labelled(binder))?;
+        if !telescope[kept..].iter().all(|(binder, _)| labelled(binder)) {
+            return None;
+        }
+
+        let result = zonk_solved_term_metas(self, &inner_entry.result);
+        if self.names_in_unsolved_spine(&result, values) {
+            return None;
+        }
+
+        Some(Restriction {
+            telescope: Rc::new(telescope[..kept].to_vec()),
+            arguments: telescope[..kept]
+                .iter()
+                .map(|(name, _)| Term::free_var(name))
+                .collect(),
+            result: read_by_value(result, values),
+            refinements: Rc::clone(&inner_entry.refinements),
+        })
+    }
+
+    /// Whether `term` holds an unsolved metavariable whose spine names one of the labels `values` pairs with a value: what a block's end restricts before it reads the rest by value ([`Context::block_restriction`]).
+    pub(crate) fn names_in_unsolved_spine(&self, term: &Term, values: &[(Free, Term)]) -> bool {
+        term.metavars().iter().any(|id| {
+            self.metavar_solution(*id).is_none()
+                && metavar_spines(term, *id).iter().any(|spine| {
+                    spine
+                        .iter()
+                        .any(|entry| values.iter().any(|(label, _)| entry.mentions_free(label)))
+                })
+        })
+    }
+
+    /// Solve the unsolved `inner` to a fresh stand-in as `restriction` plans it ([`Context::metavar_restriction`], [`Context::block_restriction`]), born under the refinements the plan states. The stand-in keeps `inner`'s origin and `extent`, so an unsolved one reports as `inner` would have. Birth records stay frozen; the restriction is a solution, rolled back and reported like any other.
     pub(crate) fn restrict_metavar(
         &mut self,
         inner: MetavarId,
-        outer: MetavarId,
         (origin, extent): Provenance,
         restriction: Restriction,
     ) {
-        let (Some(inner_entry), Some(outer_entry)) =
-            (self.metavar_entry(inner), self.metavar_entry(outer))
-        else {
+        let Some(inner_entry) = self.metavar_entry(inner) else {
             return;
         };
-        let refinements = Rc::new(
-            inner_entry
-                .refinements
-                .shared_with(&outer_entry.refinements),
-        );
         let witnesses = inner_entry.witnesses.clone();
         let Restriction {
             telescope,
             arguments,
             result,
+            refinements,
         } = restriction;
 
         self.typing.caches.note_write();
@@ -2404,9 +2468,8 @@ impl<'s> Context<'s> {
         curios_profile::note!(
             target: "curios_elab::solve",
             meta = inner.0,
-            outer = outer.0,
             %stand_in,
-            "restricted: embedded metavariable",
+            "restricted",
         );
         self.solve_metavar(inner, stand_in);
     }

@@ -36,7 +36,10 @@ use {
         Context, applied_head, check, infer, reduce, reduce_forced, stalled_unfolding, unfold_rec,
         unfold_rec_apply,
     },
-    crate::{Declined, metavar_origins, metavar_spines, named_members, zonk_solved_term_metas},
+    crate::{
+        Declined, metavar_origins, metavar_spines, named_members, read_outside_spines,
+        zonk_solved_term_metas,
+    },
     curios_analysis::Classes,
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
@@ -321,6 +324,41 @@ pub(crate) fn answers_differ(
     context.end_solutions(mark);
 
     Ok(matches!(outcome?, Outcome::Mismatch(_)))
+}
+
+/// `candidate` with every `let`'s local that the occurrence `metavar` does not name read as its value, the solutions a value holds materialized as the candidate's are.
+///
+/// A block offers its type for a metavariable born outside it, an implicit of the call the block is an argument of, and that type names the block's local, which the metavariable's context does not hold. The local stands for its value, so the candidate is that value's: read otherwise, the scope check fails it, and the call is admitted with the block read after the argument that gives the implicit and refused with it read before. So is the candidate a problem parked in a block offers the stand-in its metavariable was restricted to where the block ended ([`Context::block_restriction`]): the block's frame stands again for the retry, and the stand-in's spine names none of its labels. A recursive group's member stands for no value, its label being defined as the slot its body fills and then as its projection out of the group, and is left to the scope check.
+fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
+    if !candidate.has_local_free() {
+        return candidate;
+    }
+    let named = metavar
+        .spine
+        .iter()
+        .flat_map(|entry| entry.free_vars())
+        .collect::<HashSet<_>>();
+
+    // A value names only the bindings before its own, so each round reads the latest away, and the rounds end where one reads nothing: a local that only an embedded metavariable's spine names stands there ([`read_outside_spines`]), and that metavariable is restricted to the occurrence's context or holds the candidate back.
+    loop {
+        let values = candidate
+            .free_vars_shared()
+            .iter()
+            // A block's local is a binder, and the test asks nothing of a declaration: `Context::is_top_level` would note a question in the trace for every declaration a candidate names.
+            .filter(|name| matches!(name, Free::Local(_)) && !named.contains(*name))
+            .filter_map(|name| {
+                let value = context.definition_body(name)?;
+                let member = value.as_rec_proj().is_some()
+                    || matches!(&**value, Subterm::Metavar(slot) if context.is_rec_slot(slot.id));
+                (!member).then(|| (*name, value.clone()))
+            })
+            .collect::<Vec<_>>();
+        let read = zonk_solved_term_metas(context, &read_outside_spines(&candidate, &values));
+        if read == candidate {
+            return candidate;
+        }
+        candidate = read;
+    }
 }
 
 /// What a reading of two sides as two applications of one global definition came to.
@@ -1765,7 +1803,11 @@ impl Convert {
 
         // Materialize committed solutions in the candidate before any analysis. A solved metavariable's occurrence still spells the metavariable, and its spine names the frame it was born under — which may hold binders `id`'s frame lacks. Left unmaterialized, those spine names surface in `free_vars` and the scope check refuses a candidate whose *resolution* is perfectly scoped (a ground `Cell(Option(Nat))` refused for a continuation binder riding an already-solved metavariable's spine — `a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade` holds the case). Materializing also lets the occurs check see a cycle hidden behind a solved metavariable's solution, which the raw spelling conceals.
         // And spell the published recursive members it holds by their names: a candidate arrives reduced, a stuck call headed by its member's group, and committed so it would hold a copy of the callee for the re-validation below to elaborate again ([`named_members`]).
-        let t = &named_members(context, &zonk_solved_term_metas(context, t));
+        // And read by value the `let`'s locals the occurrence does not name ([`by_value`]), ahead of the scope check that would fail the candidate for them.
+        let t = &named_members(
+            context,
+            &by_value(context, metavar, zonk_solved_term_metas(context, t)),
+        );
         let metavars = t.metavars();
 
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
@@ -1803,7 +1845,7 @@ impl Convert {
             if let Some(restrictions) = restrictions {
                 let mark = context.solution_mark();
                 for (other, provenance, restriction) in restrictions {
-                    context.restrict_metavar(other, id, provenance, restriction);
+                    context.restrict_metavar(other, provenance, restriction);
                 }
                 let retried = self.solve(context, metavar, t);
                 let committed = matches!(retried, Ok(Solved::Done));

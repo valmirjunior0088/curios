@@ -2,9 +2,9 @@ use {
     super::{Misaligned, align, check_witness_domain, insert_auto_argument, stands_at},
     crate::{
         BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, ParkedWork,
-        SlotPositions, check, check_is_sort, check_rec_totality, convert, display_mismatch,
-        elaborate, expect, reduce_with, resolve_witness_goal, stuck_on_metavar, written_monad,
-        zonk_solved_term_metas,
+        Provenance, Restriction, SlotPositions, check, check_is_sort, check_rec_totality, convert,
+        display_mismatch, elaborate, expect, metavar_origins, metavar_spines, read_by_value,
+        reduce_with, resolve_witness_goal, stuck_on_metavar, written_monad, zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
@@ -13,6 +13,7 @@ use {
     },
     curios_num::{Floating, Integer, Rounding},
     curios_utilities::{InfixOp, Plicity},
+    std::collections::BTreeMap,
 };
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding is one `Term::let_block`, which closes the bindings back into a single flat `Let` in one pass. The whole block is one source term with one extent, stamped by `elaborate`'s wrapper — no per-binding extent bookkeeping.
@@ -61,6 +62,11 @@ pub(super) fn elaborate_let(
         let tail = let_.tail.open(&label_terms.iter().collect::<Vec<_>>());
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
+        let values = triples
+            .iter()
+            .map(|(label, _, value)| (*label, value.clone()))
+            .collect::<Vec<_>>();
+        let tail_type = leaving(context, tail_type, &values);
 
         // In one pass rather than merged a binding at a time: each binding's type carries metavariable spines as long as the binders before it, so re-closing every later binding at each earlier one would be cubic in the block's length.
         Ok((Term::let_block(triples, tail_elaborated), tail_type))
@@ -174,8 +180,72 @@ pub(super) fn elaborate_rec(
         let tail = rec.tail.open(&label_refs);
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
+        // A member is read as its projection out of the group, which is what its label is defined as.
+        let values = labels
+            .iter()
+            .enumerate()
+            .map(|(index, label)| (*label, Term::rec_proj(group.clone(), index)))
+            .collect::<Vec<_>>();
+        let tail_type = leaving(context, tail_type, &values);
 
         Ok((Term::rec(triples, tail_elaborated), tail_type))
+    })
+}
+
+/// The type a block answers where it ends, from `type_`, its tail's. The block's frame leaves with what each label stands for, so the type names none of them: `values` pairs each label with what it stands for, in binding order. It is how the kernel types a `let`, which reads a term by value (`curios-cert`'s `Scope::by_value`).
+///
+/// A label the type itself names is read as its value, and so is one in the solution of a metavariable the type holds, which is read as that solution first. One in the spine of an unsolved metavariable is the argument a later solution is read through, which a problem parked in the block may still give: the metavariable is restricted to the binders that remain ([`Context::block_restriction`]). Whatever still names a label, a hole something else fills among it, is read by value where it stands, its spine with it.
+fn leaving(context: &mut Context, type_: Term, values: &[(Free, Term)]) -> Term {
+    if !values.iter().any(|(label, _)| type_.mentions_free(label)) {
+        return type_;
+    }
+
+    let mut type_ = zonk_solved_term_metas(context, &type_);
+    while let Some((id, provenance, restriction)) = restriction_leaving(context, &type_, values) {
+        context.restrict_metavar(id, provenance, restriction);
+        type_ = zonk_solved_term_metas(context, &type_);
+    }
+
+    read_by_value(type_, values)
+}
+
+/// The oldest unsolved metavariable a block's end restricts ([`Context::block_restriction`]) among those `type_` holds with a label of `values` in their spine, and those the types of such hold, with the provenance its stand-in reports by and the plan. The oldest first, a metavariable's type holding only older ones; and through the types, where a label may stand that the block's type names nowhere else.
+fn restriction_leaving(
+    context: &Context,
+    type_: &Term,
+    values: &[(Free, Term)],
+) -> Option<(MetavarId, Provenance, Restriction)> {
+    if !context.names_in_unsolved_spine(type_, values) {
+        return None;
+    }
+
+    let mut found = BTreeMap::new();
+    let mut terms = vec![type_.clone()];
+    while let Some(term) = terms.pop() {
+        let origins = metavar_origins(&[&term]);
+        for id in term.metavars().iter().copied() {
+            if context.metavar_solution(id).is_some() || found.contains_key(&id) {
+                continue;
+            }
+            let spines = metavar_spines(&term, id);
+            let named = spines.iter().any(|spine| {
+                spine
+                    .iter()
+                    .any(|entry| values.iter().any(|(label, _)| entry.mentions_free(label)))
+            });
+            let (true, Some(provenance), Some(entry)) =
+                (named, origins.get(&id), context.metavar_entry(id))
+            else {
+                continue;
+            };
+            terms.push(zonk_solved_term_metas(context, &entry.result));
+            found.insert(id, (provenance.clone(), spines));
+        }
+    }
+
+    found.into_iter().find_map(|(id, (provenance, spines))| {
+        let restriction = context.block_restriction(id, &provenance.0, &spines, values)?;
+        Some((id, provenance, restriction))
     })
 }
 

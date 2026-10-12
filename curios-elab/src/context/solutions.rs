@@ -47,6 +47,18 @@ pub(crate) struct MetaEntry {
     held: Held,
 }
 
+impl MetaEntry {
+    /// Whether unification is what fills this metavariable, read at an occurrence of `origin`: an inference metavariable that is no proposition, minted for a hole, an implicit or a domain. A written goal reports by its identity, a witness hole is filled by resolution, a bound by its discharge, a parked check's placeholder by that check and a recursive group's slot by its group, and none of those is restricted to a narrower context ([`Context::metavar_restriction`](super::Context::metavar_restriction), [`Context::block_restriction`](super::Context::block_restriction)).
+    pub(crate) fn unification_fills(&self, origin: &MetavarOrigin) -> bool {
+        self.kind == MetaKind::Inference
+            && !self.proposition
+            && matches!(
+                origin,
+                MetavarOrigin::Hole | MetavarOrigin::Implicit(_) | MetavarOrigin::Domain(_)
+            )
+    }
+}
+
 /// A metavariable's place in its class: the metavariables a chain of links holds together, each link a committed solution, which holds what it mentions to what it solves, or a parked problem, which holds together what it watches. Whatever may still inform one of them may inform every other, so one term awaits the class whole.
 #[derive(Debug, Clone, Copy)]
 enum Held {

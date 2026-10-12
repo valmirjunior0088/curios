@@ -1299,6 +1299,47 @@ pub(crate) fn metavar_spines(term: &Term, id: MetavarId) -> Vec<Rc<Vec<Term>>> {
         .unwrap_or_else(|shared| shared.borrow().clone())
 }
 
+/// `term` with each label of a block read as the value `values` pairs it with, the last binding first since a value may name the bindings before its own. Captured and released, which reaches a metavariable's spine: what a block's end makes of whatever its type still names ([`Context::block_restriction`]).
+pub(crate) fn read_by_value(term: Term, values: &[(Free, Term)]) -> Term {
+    values.iter().rev().fold(term, |term, (label, value)| {
+        match term.mentions_free(label) {
+            true => term.capture(&[label]).release(&[value]),
+            false => term,
+        }
+    })
+}
+
+/// `term` with each name `values` pairs with a value read as that value wherever the term names it outside a metavariable's occurrence, which is kept as it stands: its spine is the renaming a restriction reads the occurrence through ([`Context::metavar_restriction`]), and a value written into it is no renaming. A value is inserted as it stands under whatever binders enclose the name, so it carries no loose index.
+pub(crate) fn read_outside_spines(term: &Term, values: &[(Free, Term)]) -> Term {
+    if values.is_empty() {
+        return term.clone();
+    }
+    for (_, value) in values {
+        assert!(
+            value.closed(),
+            "a value read for its name carries a loose index"
+        );
+    }
+
+    let values = values.to_vec();
+    let mut visit = Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(move |_, term: &Term| match &**term {
+            Subterm::Metavar(_) => Some(term.clone()),
+            Subterm::Var(var) => Some(
+                var.as_free()
+                    .and_then(|name| values.iter().find(|(read, _)| read == name))
+                    .map_or_else(|| term.clone(), |(_, value)| value.clone()),
+            ),
+            _ => match values.iter().any(|(read, _)| term.mentions_free(read)) {
+                true => None,
+                false => Some(term.clone()),
+            },
+        }),
+    );
+    term.traverse(&mut visit)
+}
+
 fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> {
     let ParkedProblem {
         work,
