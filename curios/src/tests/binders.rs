@@ -262,7 +262,7 @@ fn a_hidden_payload_left_out_is_a_fact_in_the_arm() {
         induct Positive: pub Type
         | at(n: Nat, @Holds(0 < n))
         end
-        let halve(n: Nat, @Holds(0 < n)) -> Nat = n / 2;
+        let halve(n: Nat, @_: Holds(0 < n)) -> Nat = n / 2;
         let below(p: Positive) -> Nat = match p | at(n) => halve(n) end;
         print(Nat/to_str(below(Positive/at(4))))
         "#;
@@ -398,14 +398,14 @@ fn bare_reference_keeps_its_type_at_a_hidden_expectation() {
     assert_eq!(run(source), b"9");
 }
 
-// An `@` member of a definition telescope may be its type alone. The unnamed bound is the implicit argument a named one would be: the call discharges it, and the body has it as a fact in scope, so the bound the body's own call needs follows from it.
+// A bound a definition's body never names is written `@_: T`. It is the implicit argument a named one would be: the call discharges it, and the body has it as a fact in scope, so the bound the body's own call needs follows from it.
 #[test]
-fn a_definition_takes_an_unnamed_member() {
+fn a_definition_takes_a_bound_it_never_names() {
     let source = r#"
         use /std/{Nat, Str, print};
         use /std/Bool/{Holds};
-        let positive(n: Nat, @Holds(0 < n)) -> Nat = n;
-        let twice(n: Nat, @Holds(0 < n)) -> Nat = positive(n) + positive(n);
+        let positive(n: Nat, @_: Holds(0 < n)) -> Nat = n;
+        let twice(n: Nat, @_: Holds(0 < n)) -> Nat = positive(n) + positive(n);
         let second(_: Nat, n: Nat) -> Nat = n;
         print(Nat/to_str(twice(second(7, 3))))
         "#;

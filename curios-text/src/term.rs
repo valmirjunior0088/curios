@@ -203,7 +203,7 @@ pub struct Tuple {
 /// A binder pattern at `let`, lambda-parameter, or function-definition-sugar parameter position: a plain name, or a tuple/struct destructuring that desugars — at lowering, in `into_core` — into a fresh synthetic binder plus a chain of ordinary projection `let`s, exactly what a person would hand-write. Always irrefutable: unlike a match-arm pattern, there is no constructor-tag case, since these binder sites never dispatch on shape — a tuple/struct value always has exactly one shape.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
-    /// A name, or `_`, which holds the position and binds nothing. A member with no binder at all — a `use` premise, an unnamed `@T` — is not a pattern: the site that admits one holds an `Option<Pattern>` ([`FuncSugarParam`]).
+    /// A name, or `_`, which holds the position and binds nothing. A member with no binder at all — a `use` premise — is not a pattern: the site that admits one holds it apart ([`FuncSugarParam::Premise`]).
     Binder(Label),
     Tuple(Vec<PatternField>),
     Struct {
@@ -391,12 +391,38 @@ pub struct MatchPatternField {
 }
 
 /// One parameter of the function-definition sugar `let f(x : T, …) -> R = body`. A plain-name (`Pattern::Binder`) binder flows into both the Π-type binder and the lambda parameter. A compound (tuple/struct) pattern has no single name to give the Π-type binder, so it lowers to an *anonymous* Π-binder (see `LetSignature::type_`) — its destructured leaves are visible only in the function's value body, never in a later parameter's type or the output type.
+///
+/// A member is one of two things, and the tree holds no third: a premise has no binder, and a plain or `@` member always has one, `_` where the body never names it — `let f(n: Nat, @_: Holds(0 < n))`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct FuncSugarParam {
-    pub plicity: Plicity,
-    /// `None` where the member is its type alone: every `use` premise, and a plain or `@` member written without a name — `let f(n: Nat, @Holds(0 < n))`.
-    pub binder: Option<Pattern>,
-    pub type_: Term,
+pub enum FuncSugarParam {
+    /// `use Concept(args)`: a witness the body reaches by resolution.
+    Premise(Term),
+    /// `binder: type`, plain or under `@`.
+    Bound {
+        implicit: bool,
+        binder: Pattern,
+        type_: Term,
+    },
+}
+
+impl FuncSugarParam {
+    /// The mark the member is written under.
+    pub fn plicity(&self) -> Plicity {
+        match self {
+            FuncSugarParam::Premise(_) => Plicity::Witness,
+            FuncSugarParam::Bound { implicit: true, .. } => Plicity::Implicit,
+            FuncSugarParam::Bound {
+                implicit: false, ..
+            } => Plicity::Explicit,
+        }
+    }
+
+    /// The type the member states.
+    pub fn type_(&self) -> &Term {
+        match self {
+            FuncSugarParam::Premise(type_) | FuncSugarParam::Bound { type_, .. } => type_,
+        }
+    }
 }
 
 /// The right-hand side shared by every `let`-like binding site (local [`Let`], top-level [`TopLet`](crate::TopLet)): a plain annotated body, or the function-definition sugar `f(x : T, …) -> R = body`, kept verbatim so the printer round-trips it. Lowering undoes the sugar — the type becomes a Π-type, the body a lambda binding every parameter — over one set of binders, so a parameter is the same binder in both; the crate-internal `type_()`/`body()` accessors spell the two halves as surface terms for a site that lowers them apart.
@@ -414,17 +440,24 @@ pub enum LetSignature {
     },
 }
 
-/// The function-definition sugar's telescope as the parameters of the Π-type it declares. A plain-name parameter names its Π-binder, so a later domain or the output may depend on it. A compound pattern has no single name to give the binder and a member written as its type alone has none at all, so each lowers anonymously (`None`) — already a fully legal Π-binder shape (e.g. a `use` premise or an unlabeled `(T) -> R` parameter). Shared by a `let`'s signature and a `test`'s, which is the same sugar with its output fixed.
+/// The function-definition sugar's telescope as the parameters of the Π-type it declares. A plain-name parameter names its Π-binder, so a later domain or the output may depend on it. A compound pattern has no single name to give the binder and a premise has none at all, so each lowers anonymously (`None`) — already a fully legal Π-binder shape (e.g. an unlabeled `(T) -> R` parameter). Shared by a `let`'s signature and a `test`'s, which is the same sugar with its output fixed.
 pub(crate) fn func_sugar_type_params(params: &[FuncSugarParam]) -> Vec<FuncTypeParam> {
     params
         .iter()
         .map(|param| FuncTypeParam {
-            plicity: param.plicity,
-            label: match &param.binder {
-                Some(Pattern::Binder(name)) => Some(name.to_string()),
-                Some(Pattern::Tuple(_) | Pattern::Struct { .. }) | None => None,
+            plicity: param.plicity(),
+            label: match param {
+                FuncSugarParam::Bound {
+                    binder: Pattern::Binder(name),
+                    ..
+                } => Some(name.to_string()),
+                FuncSugarParam::Bound {
+                    binder: Pattern::Tuple(_) | Pattern::Struct { .. },
+                    ..
+                }
+                | FuncSugarParam::Premise(_) => None,
             },
-            type_: param.type_.clone(),
+            type_: param.type_().clone(),
         })
         .collect()
 }
@@ -438,17 +471,17 @@ pub(crate) fn func_sugar_lambda(params: &[FuncSugarParam], body: &Term) -> Term 
     .into()
 }
 
-/// The function-definition sugar's telescope as the parameters of the lambda its body is, each annotated with its written type. A member with no binder takes the wildcard, which holds its slot and binds nothing.
+/// The function-definition sugar's telescope as the parameters of the lambda its body is, each annotated with its written type. A premise takes the wildcard, which holds its slot and binds nothing.
 pub(crate) fn func_sugar_params(params: &[FuncSugarParam]) -> Vec<FuncParam> {
     params
         .iter()
         .map(|param| FuncParam {
-            plicity: param.plicity,
-            pattern: param
-                .binder
-                .clone()
-                .unwrap_or_else(|| Pattern::Binder(Label::from("_"))),
-            annotation: Some(param.type_.clone()),
+            plicity: param.plicity(),
+            pattern: match param {
+                FuncSugarParam::Bound { binder, .. } => binder.clone(),
+                FuncSugarParam::Premise(_) => Pattern::Binder(Label::from("_")),
+            },
+            annotation: Some(param.type_().clone()),
         })
         .collect()
 }

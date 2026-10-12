@@ -2,13 +2,13 @@
 
 use {crate::*, curios_utilities::Plicity};
 
-/// Every form a signature takes — a function type, a definition telescope, a payload, a type parameter — parses and prints back as written: a plain or `@` member named or as its type alone, and a `use` premise as its type.
+/// Every form a signature takes — a function type, a definition telescope, a payload, a type parameter — parses and prints back as written: a plain or `@` member named, or as its type alone where nothing after it reads the name, and a `use` premise as its type.
 #[test]
 fn a_signature_member_is_a_type_under_its_mark() {
     for source in [
         "(n : Nat, Nat, @m : Nat, @Holds(0 < n), @_ : Holds(0 < n), use Show(Nat)) -> Nat",
-        "let f(n : Nat, _ : Nat, @m : Nat, @Holds(0 < n), @_ : Holds(0 < n), use Show(Nat)) -> Nat = n; f",
-        "satisfy (@A : Type, @Holds(0 < 1), use Show(A)) => Show(List(A)) { show = f } u",
+        "let f(n : Nat, _ : Nat, @m : Nat, @_ : Holds(0 < n), use Show(Nat)) -> Nat = n; f",
+        "satisfy (@A : Type, @_ : Holds(0 < 1), use Show(A)) => Show(List(A)) { show = f } u",
         "induct Pos : Type | at(n : Nat, Nat, @m : Nat, @Holds(0 < n)) end u",
         "struct Slot(K : Type, @V : Type, use Key(K)) : Type { key : K } u",
         "struct At : Type { n : Nat, @ok : Holds(0 < n), @Holds(0 < n) } u",
@@ -23,15 +23,14 @@ fn a_signature_member_is_a_type_under_its_mark() {
     }
 }
 
-/// A member written as its type alone has no binder in the tree: the definition telescope holds `None`, where a `_` the author wrote is a binder that binds nothing.
+/// A definition's premise has no binder in the tree and its plain and `@` members each have one: a `_` the author wrote is a binder that binds nothing.
 #[test]
-fn a_member_written_as_its_type_has_no_binder() {
-    let TopItem::Let(item) =
-        &"let f(n : Nat, @Holds(0 < n), @_ : Holds(0 < n), use Show(Nat)) -> Nat = n; u"
-            .parse::<Entrypoint>()
-            .unwrap()
-            .module
-            .items[0]
+fn a_definitions_member_is_a_premise_or_has_a_binder() {
+    let TopItem::Let(item) = &"let f(n : Nat, @_ : Holds(0 < n), use Show(Nat)) -> Nat = n; u"
+        .parse::<Entrypoint>()
+        .unwrap()
+        .module
+        .items[0]
     else {
         panic!("expected a let");
     };
@@ -39,16 +38,13 @@ fn a_member_written_as_its_type_has_no_binder() {
         panic!("expected function sugar");
     };
 
-    assert!(matches!(&params[0].binder, Some(Pattern::Binder(name)) if name.as_str() == "n"));
-    assert_eq!(
-        (params[1].plicity, &params[1].binder),
-        (Plicity::Implicit, &None)
+    assert!(
+        matches!(&params[0], FuncSugarParam::Bound { implicit: false, binder: Pattern::Binder(name), .. } if name.as_str() == "n")
     );
-    assert!(matches!(&params[2].binder, Some(Pattern::Binder(name)) if name.as_str() == "_"));
-    assert_eq!(
-        (params[3].plicity, &params[3].binder),
-        (Plicity::Witness, &None)
+    assert!(
+        matches!(&params[1], FuncSugarParam::Bound { implicit: true, binder: Pattern::Binder(name), .. } if name.as_str() == "_")
     );
+    assert!(matches!(&params[2], FuncSugarParam::Premise(_)));
 }
 
 /// Every form a lambda and the definition sugar bind parses and prints back as written: a binder under `@` or no mark, annotated or not, and `use _`.
@@ -172,11 +168,27 @@ fn a_refused_form_names_its_rule() {
         ),
         (
             "let f(x) -> Nat = x; u",
-            "a definition names its plain parameters",
+            "a definition names its plain and `@` parameters",
         ),
         (
             "let f(n : Nat, Nat) -> Nat = n; u",
-            "a definition names its plain parameters",
+            "a definition names its plain and `@` parameters",
+        ),
+        (
+            "let f(@A, x : A) -> A = x; u",
+            "a definition names its plain and `@` parameters",
+        ),
+        (
+            "let f(n : Nat, @Holds(0 < n)) -> Nat = n; u",
+            "a definition names its plain and `@` parameters",
+        ),
+        (
+            "let f(@_, n : Nat) -> Nat = n; u",
+            "a definition names its plain and `@` parameters",
+        ),
+        (
+            "satisfy (@A, use Show(A)) => Show(List(A)) { show = f } u",
+            "a definition names its plain and `@` parameters",
         ),
         // Where the site binds.
         ("(@A, use d, x) => x", "the member is written `use _`"),

@@ -37,10 +37,13 @@ impl Decl {
         LetSignature::Func {
             params: params
                 .into_iter()
-                .map(|(plicity, label, type_)| FuncSugarParam {
-                    plicity,
-                    binder: Some(Pattern::Binder(label.into())),
-                    type_,
+                .map(|(plicity, label, type_)| match plicity {
+                    Plicity::Witness => FuncSugarParam::Premise(type_),
+                    Plicity::Explicit | Plicity::Implicit => FuncSugarParam::Bound {
+                        implicit: plicity == Plicity::Implicit,
+                        binder: Pattern::Binder(label.into()),
+                        type_,
+                    },
                 })
                 .collect(),
             output,

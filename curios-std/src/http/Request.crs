@@ -34,8 +34,8 @@ pub let with_header(
     r: Request,
     name: Str,
     value: Str,
-    @Holds(Name/is_token(name)),
-    @Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
+    @_: Holds(Name/is_token(name)),
+    @_: Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
 ) -> Request =
     Request { ..r, headers = [..r.headers, Field/of(name, value)] };
 

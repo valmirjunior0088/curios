@@ -54,5 +54,5 @@ pub let reason_of(code: Nat) -> Value =
     end;
 
 --- The status `code` with its usual reason.
-pub let of(code: Nat, @Holds(100 <= code && code <= 999)) -> Status =
+pub let of(code: Nat, @_: Holds(100 <= code && code <= 999)) -> Status =
     Status { code = code, reason = reason_of(code) };

@@ -124,8 +124,8 @@ fn parse_witness_item() {
 
     // The telescope: an implicit `@A` and an anonymous `use` premise.
     assert_eq!(witness.params.len(), 2);
-    assert_eq!(witness.params[0].plicity, Plicity::Implicit);
-    assert_eq!(witness.params[1].plicity, Plicity::Witness);
+    assert_eq!(witness.params[0].plicity(), Plicity::Implicit);
+    assert_eq!(witness.params[1].plicity(), Plicity::Witness);
 
     // The definition-sugar field keeps its written parameter list; the value slot holds the body, and only the struct-literal lowering builds the lambda (via `TupleField::desugared_value`). The concept's `use`-marked field has no entry: a witness leaves it to resolution.
     let fields = witness.body.as_ref().expect("a written body");
@@ -154,12 +154,11 @@ fn use_parameter_forms() {
         panic!("expected function sugar");
     };
     assert_eq!(params.len(), 4);
-    assert_eq!(params[0].plicity, Plicity::Implicit);
-    assert_eq!(params[1].plicity, Plicity::Witness);
-    assert_eq!(params[1].binder, None); // a premise: a type and no binder
-    assert_eq!(params[2].plicity, Plicity::Witness);
-    assert_eq!(params[2].binder, None);
-    assert_eq!(params[3].plicity, Plicity::Explicit);
+    assert_eq!(params[0].plicity(), Plicity::Implicit);
+    // A premise: a type and no binder.
+    assert!(matches!(params[1], FuncSugarParam::Premise(_)));
+    assert!(matches!(params[2], FuncSugarParam::Premise(_)));
+    assert_eq!(params[3].plicity(), Plicity::Explicit);
 }
 
 #[test]

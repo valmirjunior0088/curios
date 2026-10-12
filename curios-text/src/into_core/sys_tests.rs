@@ -222,7 +222,7 @@ fn the_sys_io_roster_offers_no_eliminator() {
             continue;
         };
 
-        let consumes_io = params.iter().any(|param| is_io(&param.type_));
+        let consumes_io = params.iter().any(|param| is_io(param.type_()));
         assert!(
             !consumes_io || is_io(output),
             "/sys/{label} takes an Io to a non-Io result, which is an eliminator for the effect type"

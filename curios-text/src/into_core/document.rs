@@ -952,9 +952,16 @@ fn lines(doc: &Option<Doc>) -> Option<Vec<String>> {
 fn sugar_binders(params: &[FuncSugarParam]) -> HashSet<String> {
     params
         .iter()
-        .filter_map(|param| match &param.binder {
-            Some(Pattern::Binder(label)) => Some(label.to_string()),
-            Some(Pattern::Tuple(_) | Pattern::Struct { .. }) | None => None,
+        .filter_map(|param| match param {
+            FuncSugarParam::Bound {
+                binder: Pattern::Binder(label),
+                ..
+            } => Some(label.to_string()),
+            FuncSugarParam::Bound {
+                binder: Pattern::Tuple(_) | Pattern::Struct { .. },
+                ..
+            }
+            | FuncSugarParam::Premise(_) => None,
         })
         .collect()
 }

@@ -23,8 +23,8 @@ pub(super) const USE_BINDS_NOTHING: &str = "a `use` member has no binder: a witn
 pub(super) const USE_PLACE_STATES_NO_TYPE: &str =
     "`use _` holds a place and states no type: a signature writes the premise — `use Show(A)`";
 
-/// What refuses a plain member written as its type alone in a definition's telescope.
-pub(super) const DEFINITION_NAMES_ITS_PLAIN_MEMBERS: &str = "a definition names its plain parameters: write `x: T`, or `_: T` for one the body does not use";
+/// What refuses a plain or `@` member written as its type alone in a definition's telescope.
+pub(super) const DEFINITION_NAMES_ITS_MEMBERS: &str = "a definition names its plain and `@` parameters: write `x: T` or `@x: T`, with `_` in the name's place where the body never names it";
 
 /// What refuses a type after `use` where the site binds.
 pub(super) const BINDER_STATES_NO_USE_TYPE: &str = "a `use` member is written `use _` here: its type is the expected function type's to state, and a function that must state one is a `let` with a telescope";

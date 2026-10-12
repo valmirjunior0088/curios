@@ -56,8 +56,8 @@ pub let with_header(
     r: Response,
     name: Str,
     value: Str,
-    @Holds(Name/is_token(name)),
-    @Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
+    @_: Holds(Name/is_token(name)),
+    @_: Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
 ) -> Response =
     Response { ..r, headers = [..r.headers, Field/of(name, value)], @bodied = r.bodied };
 
@@ -81,21 +81,21 @@ pub let of(
     code: Nat,
     kind: Str,
     body: Bytes,
-    @Holds(100 <= code && code <= 999),
-    @Holds(Bytes/all(Str/to_bytes(kind), Value/admits)),
-    @Holds(Status/carries_content(code) || Bytes/len(body) == 0),
+    @_: Holds(100 <= code && code <= 999),
+    @_: Holds(Bytes/all(Str/to_bytes(kind), Value/admits)),
+    @_: Holds(Status/carries_content(code) || Bytes/len(body) == 0),
 ) -> Response =
     Response { status = Status/of(code), headers = [Field/of("Content-Type", kind)], body = body };
 
 --- A reply with `code`, its usual reason, and neither headers nor content: what a 204 or a 304 is.
-pub let empty(code: Nat, @Holds(100 <= code && code <= 999)) -> Response =
+pub let empty(code: Nat, @_: Holds(100 <= code && code <= 999)) -> Response =
     Response { status = Status/of(code), headers = [], body = x[] };
 
 --- Plain text, under a status that carries content.
 pub let of_text(
     code: Nat,
     s: Str,
-    @Holds(100 <= code && code <= 999),
+    @_: Holds(100 <= code && code <= 999),
     @content: Holds(Status/carries_content(code)),
 ) -> Response =
     match Status/carries_content(code)
@@ -107,7 +107,7 @@ pub let of_text(
 pub let of_json(
     code: Nat,
     j: Json,
-    @Holds(100 <= code && code <= 999),
+    @_: Holds(100 <= code && code <= 999),
     @content: Holds(Status/carries_content(code)),
 ) -> Response =
     match Status/carries_content(code)
@@ -119,7 +119,7 @@ pub let of_json(
 pub let of_html(
     code: Nat,
     h: Html,
-    @Holds(100 <= code && code <= 999),
+    @_: Holds(100 <= code && code <= 999),
     @content: Holds(Status/carries_content(code)),
 ) -> Response =
     match Status/carries_content(code)

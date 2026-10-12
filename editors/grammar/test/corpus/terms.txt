@@ -424,7 +424,7 @@ A member written as its type alone, and a lambda holding a witness slot's place
 induct Positive: Type
 | at(n: Nat, @Holds(0 < n))
 end
-let f(n: Nat, @Holds(0 < n)) -> Nat = n;
+let f(n: Nat, @_: Holds(0 < n)) -> Nat = n;
 let g = (@A, use _, x) => x;
 f
 
@@ -460,6 +460,7 @@ f
           (path
             (identifier)))
         (parameter
+          (identifier)
           (call
             (path
               (identifier))

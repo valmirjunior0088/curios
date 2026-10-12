@@ -305,7 +305,7 @@ module.exports = grammar({
 
     // ---- Telescopes ----
 
-    // A `let`/`satisfy` telescope: a `use` premise is its type, a plain or `@` parameter a pattern with its type, and an `@` one may be its type alone.
+    // A `let`/`satisfy` telescope: a `use` premise is its type, and a plain or `@` parameter a pattern with its type.
     parameters: ($) => seq("(", commaList($.parameter), ")"),
 
     parameter: ($) =>
@@ -317,7 +317,6 @@ module.exports = grammar({
           ":",
           field("type", $._term),
         ),
-        seq("@", field("type", $._term)),
       ),
 
     function_type_parameters: ($) =>

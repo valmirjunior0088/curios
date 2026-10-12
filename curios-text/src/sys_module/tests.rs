@@ -4,7 +4,7 @@
 
 use {
     super::*,
-    crate::{LetSignature, Name, Pattern, SYNTAX, Subterm},
+    crate::{FuncSugarParam, LetSignature, Name, Pattern, SYNTAX, Subterm},
     curios_utilities::Plicity,
 };
 
@@ -35,9 +35,14 @@ fn a_telescope_lowers_to_the_function_sugar_carrying_every_plicity_mark() {
         panic!("a telescope lowered to a constant");
     };
 
-    let marks = params.iter().map(|param| param.plicity).collect::<Vec<_>>();
+    let marks = params
+        .iter()
+        .map(FuncSugarParam::plicity)
+        .collect::<Vec<_>>();
     assert_eq!(marks, [Plicity::Implicit, Plicity::Explicit]);
-    assert!(matches!(&params[0].binder, Some(Pattern::Binder(binder)) if binder.as_str() == "T"));
+    assert!(
+        matches!(&params[0], FuncSugarParam::Bound { binder: Pattern::Binder(binder), .. } if binder.as_str() == "T")
+    );
 }
 
 // What `documented` attaches, read back off the declaration it built.

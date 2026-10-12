@@ -30,7 +30,7 @@ pub let empty: Value =
     Value { bytes = x[] };
 
 --- The value the literal `s` spells.
-pub let lit(s: Str, @Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =
+pub let lit(s: Str, @_: Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =
     Value { bytes = Str/to_bytes(s) };
 
 --- The value `b` holds, or `none` where an octet of it may not stand in one.

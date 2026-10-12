@@ -9,7 +9,7 @@ fn a_hidden_field_is_filled_where_the_value_is_built_and_a_fact_where_it_is_read
         use /std/{Nat, Str, print};
         use /std/Bool/{Holds};
         struct Positive: pub Type { n: Nat, @Holds(0 < n) }
-        let halve(n: Nat, @Holds(0 < n)) -> Nat = n / 2;
+        let halve(n: Nat, @_: Holds(0 < n)) -> Nat = n / 2;
         let below(p: Positive) -> Nat = halve(p.n);
         print(Nat/to_str(below(Positive { n = 4 })))
         "#;

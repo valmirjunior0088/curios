@@ -339,13 +339,16 @@ fn print_func_type_param(param: FuncTypeParam) -> Printer {
     flat([print_plicity(param.plicity), body])
 }
 
-/// One member of a definition telescope (`let`, `satisfy`): its mark, then the binder with its type, or the type alone where the member has no binder — every `use` premise, and an unnamed `@T` or `T`.
+/// One member of a definition telescope (`let`, `satisfy`): its mark, then the binder with its type, or a premise's type alone.
 fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
-    let member = match param.binder {
-        Some(binder) => flat([print_pattern(binder), pure(": "), print_term(param.type_)]),
-        None => print_term(param.type_),
+    let plicity = param.plicity();
+    let member = match param {
+        FuncSugarParam::Bound { binder, type_, .. } => {
+            flat([print_pattern(binder), pure(": "), print_term(type_)])
+        }
+        FuncSugarParam::Premise(type_) => print_term(type_),
     };
-    flat([print_plicity(param.plicity), member])
+    flat([print_plicity(plicity), member])
 }
 
 /// One lambda parameter: the binder name with its optional domain annotation.

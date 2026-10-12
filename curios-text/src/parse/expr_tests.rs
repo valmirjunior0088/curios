@@ -236,8 +236,8 @@ fn implicit_marks_on_let_shorthand_and_inductive_params() {
             else {
                 panic!("expected one func let, got {items:?}");
             };
-            assert_eq!(params[0].plicity, Plicity::Implicit);
-            assert_eq!(params[1].plicity, Plicity::Explicit);
+            assert_eq!(params[0].plicity(), Plicity::Implicit);
+            assert_eq!(params[1].plicity(), Plicity::Explicit);
         }
         other => panic!("expected a func let, got {other:?}"),
     }
@@ -614,7 +614,11 @@ fn a_binder_spans_its_word_alone() {
     else {
         panic!("function sugar");
     };
-    let Some(Pattern::Binder(n)) = &params[0].binder else {
+    let FuncSugarParam::Bound {
+        binder: Pattern::Binder(n),
+        ..
+    } = &params[0]
+    else {
         panic!("a named parameter");
     };
     assert_eq!((spelled(f), spelled(n)), ("f".to_string(), "n".to_string()));

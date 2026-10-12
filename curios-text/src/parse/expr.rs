@@ -1,6 +1,6 @@
 use {
     super::{
-        DEFINITION_NAMES_ITS_PLAIN_MEMBERS, MEMO_ATOMIC_TERM, MEMO_TERM, Read, comment_ending_at,
+        DEFINITION_NAMES_ITS_MEMBERS, MEMO_ATOMIC_TERM, MEMO_TERM, Read, comment_ending_at,
         members, parse_caller_sort, parse_choose, parse_func, parse_func_type, parse_intrinsic,
         parse_keyword, parse_let_binder, parse_literal, parse_mark, parse_match, parse_name,
         parse_parens, parse_pattern, parse_premise, parse_prop, parse_qualified_name,
@@ -45,36 +45,24 @@ fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
         })
 }
 
-// One member of a definition telescope (`let`, `satisfy`): `use Concept(args)`, which has no binder and joins the witness scope, or under `@` or no mark a binder pattern with its type. An `@` member may be its type alone — a bound, which the body uses as a fact and never by name. A plain member may not: a parameter the body cannot name is an annotation forgotten far more often than a parameter meant, so it is read and reported.
+// One member of a definition telescope (`let`, `satisfy`): `use Concept(args)`, which has no binder and joins the witness scope, or under `@` or no mark a binder pattern with its type. A plain or `@` member written as its type alone is read and reported: a parameter the body cannot name is an annotation forgotten far more often than a parameter meant, and `_: T` says the second on purpose — a bound the body uses as a fact and never by name is `@_: T`.
 pub(super) fn parse_func_sugar_param<'a>() -> Parser<'a, Read<FuncSugarParam>> {
     mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
-            Plicity::Witness => parse_premise(start).map(|read| {
-                read.map(|type_| FuncSugarParam {
-                    plicity: Plicity::Witness,
-                    binder: None,
-                    type_,
-                })
-            }),
+            Plicity::Witness => parse_premise(start).map(|read| read.map(FuncSugarParam::Premise)),
             Plicity::Explicit | Plicity::Implicit => parse_pattern()
                 .and_drop(parse_literal(":"))
                 .and(lazy(parse_term))
                 .map(move |(binder, type_)| {
-                    Ok(FuncSugarParam {
-                        plicity,
-                        binder: Some(binder),
+                    Ok(FuncSugarParam::Bound {
+                        implicit: plicity == Plicity::Implicit,
+                        binder,
                         type_,
                     })
                 })
-                .or(lazy(parse_term).flat_map(move |type_| match plicity {
-                    Plicity::Explicit => refused(&start, DEFINITION_NAMES_ITS_PLAIN_MEMBERS),
-                    Plicity::Implicit | Plicity::Witness => pure(Ok(FuncSugarParam {
-                        plicity,
-                        binder: None,
-                        type_,
-                    })),
-                })),
+                .or(lazy(parse_term)
+                    .flat_map(move |_| refused(&start, DEFINITION_NAMES_ITS_MEMBERS))),
         })
 }
 

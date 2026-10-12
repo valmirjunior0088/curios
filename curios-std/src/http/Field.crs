@@ -29,8 +29,8 @@ satisfy Spell(Field) {
 pub let of(
     name: Str,
     value: Str,
-    @Holds(Name/is_token(name)),
-    @Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
+    @_: Holds(Name/is_token(name)),
+    @_: Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
 ) -> Field =
     Field { name = Name { text = name }, value = Value/lit(value) };
 

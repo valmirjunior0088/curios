@@ -253,7 +253,7 @@ A parameter is plain, implicit (`@`) or a witness (`use`), and after the mark co
 (@A: Type, use Show(A), value: A) -> Str
 ```
 
-Every site that declares a telescope writes its members this way — a function type, a `let` or `satisfy` telescope, a constructor's payload and a declaration's type parameters — and `use _`, which states no type, is refused in each. A definition and a declaration's parameters name their plain members, since what follows is what uses them.
+Every site that declares a telescope writes its members this way — a function type, a `let` or `satisfy` telescope, a constructor's payload and a declaration's type parameters — and `use _`, which states no type, is refused in each. A definition and a declaration's parameters name their plain and `@` members, since what follows is what uses them.
 
 Later parameter types and the result may refer to earlier named parameters.
 
@@ -393,7 +393,7 @@ let increment(n: Nat) -> Nat = n + 1;
 increment(4)
 ```
 
-A `let` or `satisfy` telescope is a signature, and its parameters are written as a [function type](#function-types)'s are, with one difference: a plain parameter is always named, `name: type`, since the body is what uses it. An `@` parameter may be its type alone — `let positive(n: Nat, @Holds(0 < n)) -> Nat = n;` takes the bound as an implicit argument, and the body has it as a fact in scope — and a witness parameter is `use Concept(args)`. The `label(params) = value` sugar inside tuple, struct, and witness bodies binds as a [lambda](#lambdas) does instead: a binder under `@` or no mark, its annotation optional since the field's declared type supplies it, and `use _`.
+A `let` or `satisfy` telescope is a signature, and its parameters are written as a [function type](#function-types)'s are, with one difference: a plain or `@` parameter is always named, `name: type`, since the body is what uses it. One the body never names is `_: type` — `let positive(n: Nat, @_: Holds(0 < n)) -> Nat = n;` takes the bound as an implicit argument, and the body has it as a fact in scope — and a witness parameter is `use Concept(args)`. The `label(params) = value` sugar inside tuple, struct, and witness bodies binds as a [lambda](#lambdas) does instead: a binder under `@` or no mark, its annotation optional since the field's declared type supplies it, and `use _`.
 
 The binder may be an irrefutable tuple or struct pattern:
 
