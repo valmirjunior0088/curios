@@ -344,6 +344,17 @@ impl fmt::Display for Displayed<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let spelling = &self.1;
         let anchors = self.2;
+        // A watched metavariable by what it is.
+        let named = |watched: &Watched| match watched {
+            Watched::Slot {
+                callee,
+                noun,
+                binder,
+            } => callee.slot(noun, binder, spelling),
+            Watched::Described(description) => description.clone(),
+            // Where it was written is the report's note.
+            Watched::Goal(_) => "a written goal `?`".to_string(),
+        };
         match self.0 {
             Error::ReduceExhausted { term, .. } => {
                 let term = term.spelled(spelling);
@@ -1007,19 +1018,7 @@ impl fmt::Display for Displayed<'_> {
                     )?,
                 }
                 if !watching.is_empty() {
-                    let watching = watching
-                        .iter()
-                        .map(|watched| match watched {
-                            Watched::Slot {
-                                callee,
-                                noun,
-                                binder,
-                            } => callee.slot(noun, binder, spelling),
-                            Watched::Described(description) => description.clone(),
-                            // Where it was written is the report's note.
-                            Watched::Goal(_) => "a written goal `?`".to_string(),
-                        })
-                        .collect::<Vec<_>>();
+                    let watching = watching.iter().map(named).collect::<Vec<_>>();
                     write!(f, "\n  never solved: {}", watching.join(", "))?;
                 }
                 if *under_refinements {
@@ -1029,6 +1028,19 @@ impl fmt::Display for Displayed<'_> {
                     )?;
                 }
                 Ok(())
+            }
+            Error::AmbiguousSpines {
+                watched,
+                one,
+                another,
+            } => {
+                let one = one.spelled(spelling);
+                let another = another.spelled(spelling);
+                write!(
+                    f,
+                    "two types each give {} a value, and the values differ\n      one: {one}\n  another: {another}\n  writing it says which is meant",
+                    named(watched)
+                )
             }
             Error::BangRegionUndetermined => {
                 write!(

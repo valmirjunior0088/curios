@@ -1351,3 +1351,50 @@ fn a_use_slot_is_solved_to_the_dictionary_as_it_is_named() {
     assert_eq!(solved(premise), Some(Term::free_var(&dictionary)));
     assert_eq!(solved(MetavarOrigin::Hole), Some(methods()));
 }
+
+/// `flat(?0)` against `flat(1)`, where `flat` forgets its argument: the two are equal whatever `?0` is, and their spines agree at `?0 := 1`.
+fn two_calls_of_a_definition_that_forgets_its_argument(context: &mut Context) -> Problem {
+    let flat = Free::from(&nominal("flat"));
+    let argument = context.fresh(Some("n"));
+    context.define_assuming(
+        &flat,
+        &Term::func_type([(argument, nat_type())], nat_type()),
+        &Term::func([(argument, nat_type())], nat(0)),
+        Some(&DefinitionKind::Authored),
+    );
+    context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+
+    Problem {
+        type_: nat_type(),
+        this: Term::apply(Term::free_var(&flat), [Term::hole(0)]),
+        that: Term::apply(Term::free_var(&flat), [nat(1)]),
+        binders: Binders::default(),
+        pairs: Pairs::default(),
+        relation: Relation::Equal,
+    }
+}
+
+// Two calls of one definition agree where their arguments do, and agreement that takes a solution is one answer among those a definition that is not injective has: a term's to take where it completes, and none of conversion's, which decides this pair by reduction and leaves the metavariable open. Asked what the spines would solve, the pair offers `?0 := 1` and commits nothing; held, it commits it.
+#[test]
+fn two_spines_offer_what_they_would_solve_and_hold_it_only_when_asked() {
+    let mut context = context();
+    let problem = two_calls_of_a_definition_that_forgets_its_argument(&mut context);
+
+    assert_eq!(
+        convert(&mut context, &problem.type_, &problem.this, &problem.that),
+        Ok(true)
+    );
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+
+    assert_eq!(
+        hold_spines(&mut context, &problem, Spines::Offered),
+        Ok(Some(vec![(MetavarId(0), nat(1))]))
+    );
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+
+    assert_eq!(
+        hold_spines(&mut context, &problem, Spines::Held),
+        Ok(Some(vec![(MetavarId(0), nat(1))]))
+    );
+    assert_eq!(context.metavar_solution(MetavarId(0)), Some(&nat(1)));
+}

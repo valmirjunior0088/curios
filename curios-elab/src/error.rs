@@ -501,6 +501,13 @@ pub enum Error {
         /// Whether the goal's frozen frame carried live match-arm refinements — a solution holding only under them is deliberately never committed, one way a goal stays undecided.
         under_refinements: bool,
     },
+    /// A metavariable two of a term's parked conversions each give an answer, where the answers differ. Each conversion is two applications of one definition, which holding their spines equal decides, and a definition that is not injective is equal at both answers: taking either would be taking the order the two were parked in, so the term is refused where it completes, at the second's origin.
+    AmbiguousSpines {
+        /// The metavariable, by what it is.
+        watched: Watched,
+        one: Box<Term>,
+        another: Box<Term>,
+    },
     /// A postfix `!` whose region's monad can never be determined: an inference-position region, or one whose expected type stayed an unsolved metavariable through every retry. Strict postponement reads the monad from the region's type and never infers it from the action, so a region that never names one cannot sequence.
     BangRegionUndetermined,
     /// A postfix `!` in a region whose type is *known* and is no monad — the rigid twin of [`Error::BangRegionUndetermined`], and the case `documentation/syntax.md` states as "a `(Str, Bool) -> Bool` has nowhere to sequence one".
@@ -819,6 +826,18 @@ impl Error {
             that: Box::new(that.into()),
             watching,
             under_refinements,
+        }
+    }
+
+    pub(crate) fn ambiguous_spines<T: Into<Term>, U: Into<Term>>(
+        watched: Watched,
+        one: T,
+        another: U,
+    ) -> Self {
+        Self::AmbiguousSpines {
+            watched,
+            one: Box::new(one.into()),
+            another: Box::new(another.into()),
         }
     }
 
@@ -1834,6 +1853,10 @@ impl Error {
             Self::PostponedConversion { this, that, .. } => {
                 out.push(this);
                 out.push(that);
+            }
+            Self::AmbiguousSpines { one, another, .. } => {
+                out.push(one);
+                out.push(another);
             }
             Self::NoWitness {
                 goal, embedding, ..

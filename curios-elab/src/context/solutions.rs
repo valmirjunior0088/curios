@@ -141,6 +141,15 @@ pub(crate) struct ParkedProblem {
     pub watching: BTreeSet<MetavarId>,
 }
 
+/// A parked conversion as a completing term reads it ([`Solutions::conversions_awaited_by`]): where it stands in the store, the problem, the term it was parked for and the frame it froze.
+#[derive(Debug)]
+pub(crate) struct ParkedConversion {
+    pub at: usize,
+    pub problem: Problem,
+    pub origin: Term,
+    pub frame: FrozenFrame,
+}
+
 /// What a completing term may do for a parked problem nothing else answers: the problem's own answer, one among those it admits ([`ParkedWork::choice`]). Their order is the order they are taken in, each committing less than the next and able to decide it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Choice {
@@ -152,6 +161,8 @@ pub(crate) enum Choice {
     Numeral,
     /// A lambda is checked at the function type its expectation has come to, whatever of its domains is still open.
     Lambda,
+    /// Two applications of one definition parked apart are held to spines that agree: one answer among those a definition that is not injective has, taken where every such pair its term awaits has offered its own and none differs.
+    Spines,
 }
 
 impl ParkedWork {
@@ -165,6 +176,8 @@ impl ParkedWork {
                 _ => None,
             },
             ParkedWork::Witness { .. } => Some(Choice::Witness),
+            // Whether its sides are two applications of one definition is read where the choice is taken, through what has been solved since it parked.
+            ParkedWork::Conversion(_) => Some(Choice::Spines),
             _ => None,
         }
     }
@@ -218,6 +231,8 @@ pub(crate) struct Solutions {
     solved_log: Vec<MetavarId>,
     /// `Some` inside an oracle, where work may not park: elaboration is being asked a question (re-validation, a candidate's fit) and provisional success would leak into the answer. The flag is whether a site inside it wanted to park and was refused, which makes that oracle's refusal no verdict on the term it was asked about.
     oracle: Option<bool>,
+    /// Whether a completing term is holding the spines of a conversion it awaits ([`Solutions::set_holding`]): conversion then takes what two spines of one definition would solve, which it otherwise leaves to that term.
+    holding: bool,
     /// Every term that has awaited, by [`AwaitId`].
     awaiting: Vec<Awaiting>,
     /// The awaiting term being read, or `None` outside one: what a metavariable born now is awaited by.
@@ -237,6 +252,7 @@ impl Solutions {
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
             oracle: None,
+            holding: false,
             awaiting: Vec::new(),
             reading: None,
             held_log: Vec::new(),
@@ -370,6 +386,42 @@ impl Solutions {
             .collect();
 
         (choices, links)
+    }
+
+    /// The conversions `term` awaits, in the order they were parked: what a completing term may hold to spines that agree ([`Choice::Spines`]). `None` asks for what no standing term awaits, which is the item's.
+    pub(crate) fn conversions_awaited_by(&self, term: Option<AwaitId>) -> Vec<ParkedConversion> {
+        self.parked
+            .iter()
+            .enumerate()
+            .filter(|(_, parked)| {
+                let unsolved = parked
+                    .watching
+                    .iter()
+                    .copied()
+                    .filter(|id| self.solution(*id).is_none());
+                self.outermost(unsolved) == term
+            })
+            .filter_map(|(at, parked)| match &parked.work {
+                ParkedWork::Conversion(problem) => Some(ParkedConversion {
+                    at,
+                    problem: problem.clone(),
+                    origin: parked.origin.clone(),
+                    frame: parked.frame.clone(),
+                }),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Drop the conversions that stand at `at`, each one a completing term has decided by holding its spines. The places are those [`Solutions::conversions_awaited_by`] answered, read with nothing parked or taken since.
+    pub(crate) fn drop_conversions(&mut self, at: &BTreeSet<usize>) {
+        let mut place = 0;
+        self.parked.retain(|parked| {
+            let held = at.contains(&place) && matches!(parked.work, ParkedWork::Conversion(_));
+            place += 1;
+
+            !held
+        });
     }
 
     /// The `use` slots nothing has solved whose goals `term` awaits, in the order the goals were parked. `None` asks for what no standing term awaits, which is the item's.
@@ -765,6 +817,16 @@ impl Solutions {
 
     pub(crate) fn parking_suppressed(&self) -> bool {
         self.oracle.is_some()
+    }
+
+    /// Whether conversion may take what two spines would solve: a completing term is holding them, and no oracle has been entered since, whose question is no part of that term's.
+    pub(crate) fn holds_spines(&self) -> bool {
+        self.holding && self.oracle.is_none()
+    }
+
+    /// Begin or end holding spines, answering what stood before: [`Context::holding_spines`]'s bracket.
+    pub(crate) fn set_holding(&mut self, holding: bool) -> bool {
+        mem::replace(&mut self.holding, holding)
     }
 
     /// A site wants to park. Answers whether it may, and inside an oracle, where it may not, records that it wanted to.

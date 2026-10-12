@@ -41,10 +41,10 @@ use {
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
         Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level,
-        Lockstep, Many, Match, MatchResult, Metavar, MetavarOrigin, Probe, Proj, Quality, Rec,
-        ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
-        TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Universes,
-        Variance, Variant, past_bool_cap,
+        Lockstep, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Probe, Proj,
+        Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
+        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        Universes, Variance, Variant, past_bool_cap,
     },
     curios_utilities::{Keyed, Plicity, recurse},
     std::{
@@ -238,6 +238,82 @@ pub(crate) fn problem_outcome(
 ) -> Result<Outcome, ReduceError> {
     curios_profile::profile!("convert::outcome");
     Convert::new(problem, extent).outcome(context)
+}
+
+/// Whether what holding spines equal solves stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Spines {
+    /// A completing term's question of a conversion it awaits: what holding the spines inside it equal would solve, withdrawn once read.
+    Offered,
+    /// The term's answer: the spines held equal, and what that solves committed.
+    Held,
+}
+
+/// Ask `problem` again with spines held: every pair of two applications of one global definition met in deciding it, at any depth, agrees where its spines can be made to, by whatever that solves ([`Context::holding_spines`]). It is the last resort of a conversion reduction left parked, which the term that awaits it takes once it has read its parts. Answers what that solved, each solution as it is spelled once all are in, or `None` where the problem is still not decided so. A head that carries an instance is read as a monomorphic one is: what a call infers does not follow a level the definition's body holds.
+pub(crate) fn hold_spines(
+    context: &mut Context,
+    problem: &Problem,
+    reading: Spines,
+) -> Result<Option<Vec<(MetavarId, Term)>>, ReduceError> {
+    let mark = context.solution_mark();
+    let committed = context.solutions_committed();
+    let outcome =
+        context.holding_spines(|context| Convert::new(problem.clone(), None).outcome(context));
+    let converts = matches!(outcome, Ok(Outcome::Converts));
+    let solved = context
+        .solutions_since(committed)
+        .into_iter()
+        .map(|(id, solution)| (id, zonk_solved_term_metas(context, &solution)))
+        .collect::<Vec<_>>();
+    if !converts || reading == Spines::Offered {
+        context.rollback_solutions(mark);
+    }
+    context.end_solutions(mark);
+    outcome?;
+
+    Ok(converts.then_some(solved))
+}
+
+/// Whether two answers offered for the metavariable `id` are apart: compared at the type it was born at, under the context and the refinements it was born under, as an oracle and with nothing committed. Two that cannot yet be told apart are not.
+pub(crate) fn answers_differ(
+    context: &mut Context,
+    id: MetavarId,
+    one: &Term,
+    another: &Term,
+) -> Result<bool, ReduceError> {
+    let Some(entry) = context.metavar_entry(id) else {
+        return Ok(false);
+    };
+    let telescope = entry.telescope.clone();
+    let refinements = entry.refinements.clone();
+    let result = entry.result.clone();
+
+    let mark = context.solution_mark();
+    let outcome = context.with_frame(|context| {
+        for (name, ty) in telescope.iter() {
+            context.assume(name, ty);
+        }
+
+        context.with_oracle(&refinements, |context| {
+            convert_outcome(context, &result, one, another)
+        })
+    });
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+
+    Ok(matches!(outcome?, Outcome::Mismatch(_)))
+}
+
+/// What a reading of two sides as two applications of one global definition came to.
+enum Spun {
+    /// The sides are no such pair, or their spines differ with no metavariable for a solution to change, or the name is a type former's, whose node keeps its arguments.
+    Apart,
+    /// Their spines do not agree under the reading, and one holds a metavariable nothing has solved, so they may yet; and the definition is one reduction unfolds, so what is left of the pair once reduced holds neither call.
+    Open,
+    /// As [`Spun::Open`], and their spines agree by what that would solve: the two calls are equal there, so whatever their reduction comes to they are not apart.
+    Solvable,
+    /// They agree.
+    Agreed,
 }
 
 /// The verdict of a conversion run, distinguishing "provably unequal" from "not yet decidable".
@@ -789,18 +865,22 @@ impl Convert {
         Ok(outcome)
     }
 
-    /// The first-order approximation for two applications of one global definition, taken on the raw spellings before either side is reduced. Reduction would unfold a `let`-defined head into its body on both sides — `trim(?t)` becomes a `match` stuck on `?t` — and lose the equation the spines state outright, `?t := X`. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds; this is the same rule for a head that does not survive, so what a program's unification does cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and the corpus fixture's `/big_nat/trim` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value. The attempt is bracketed: a solution it committed on the way to a verdict it did not reach is rolled back, so the fallthrough starts where the attempt did.
+    /// Two applications of one global definition decided by their spines, on the raw spellings before either side is reduced. Two calls whose arguments are equal are equal, and reduction, which unfolds a `let`-defined head into its body on both sides, may leave the two where no rule sees it: a proof the calls differ in lands in a stuck match's scrutinee. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds; this is the same rule for a head that does not survive, so what a program's conversion accepts cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and the corpus fixture's `/big_nat/trim` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value.
     ///
-    /// A `use` slot still open on either side is passed over, and the pair then goes on to reduction with what its other positions solved. A slot is resolution's to fill (`documentation/design/surface/concepts-resolve-with-global-coherence.md`): solved here it would take whatever dictionary the other spine names, and under a definition that drops its premise — `let Shelf(b: Bool, use Key(Pick(b))) -> Type = List(Pick(b));` — that is a dictionary the same call takes no notice of where its implicit is written, so one call would run under two dictionaries in two spellings. Left open, the slot is resolved as every other is; and where the definition keeps its dictionary the reduced types hold it, and comparing them solves the slot there.
+    /// **The spines decide a pair only where they agree with no metavariable solved, until its term holds them.** `trim(?t)` against `trim(X)` holds at `?t := X`, and wherever else `trim` takes that value: one answer among those a function that is not injective has, so a choice, and a choice is the pair's term's to take where it has read its parts. Taken where the pair is first met, of two pairs that give one implicit two answers the first would decide the call. So a pair whose spines hold a metavariable and do not agree as they stand answers [`Spun::Open`]: what it reduces to is decided as a run of its own, which solves what it forces — a definition that unfolds to a type former gives its arguments back — and where that is undecided the pair parks whole, under its raw spelling. The term that awaits it asks it again with spines held ([`hold_spines`], [`Context::holding_spines`]), and agreement may then rest on what it solves, under an instance head as under a monomorphic one.
     ///
-    /// Nor may accepting a pair depend on whether the definition is universe-polymorphic, which one mentioning `Eq` is: its occurrences are instances of one global at levels minted per occurrence. So an instance head qualifies too, on two conditions that keep it an acceptance rather than a new way to solve. Nothing in either spine may be flexible: the solving this rule exists for stays with monomorphic heads, where it was measured, because extending it to every polymorphic function and type former changes what `/std` elaborates to. And the heads are identified *after* the spines, because identifying two instances commits their levels equal — a commitment made only once the spines have earned it, never on the strength of an attempt that falls through, which is the reading `documentation/design/soundness/case-equations-and-their-key.md` gives a speculative match. The kernel compares the same pair the same way, before it unfolds either side.
+    /// A `use` slot still open is never the spines' to solve: it would take whatever dictionary the other spine names, and under a definition that drops its premise — `let Shelf(b: Bool, use Key(Pick(b))) -> Type = List(Pick(b));` — that is a dictionary the same call takes no notice of where its implicit is written (`documentation/design/surface/concepts-resolve-with-global-coherence.md`). Where spines are held it is passed over, and the pair then goes on to reduction with what its other positions solved. Left open, the slot is resolved as every other is; and where the definition keeps its dictionary the reduced types hold it, and comparing them solves the slot there.
+    ///
+    /// Nor may accepting a pair depend on whether the definition is universe-polymorphic, which one mentioning `Eq` is: its occurrences are instances of one global at levels minted per occurrence. So an instance head qualifies too, on two conditions that keep it an acceptance. Nothing in either spine may be flexible where spines are not held, because extending the rule to every polymorphic function and type former changes what `/std` elaborates to. And the heads are identified *after* the spines, because identifying two instances commits their levels equal — a commitment made only once the spines have earned it, never on the strength of an attempt that falls through, which is the reading `documentation/design/soundness/case-equations-and-their-key.md` gives a speculative match. The kernel compares the same pair the same way, before it unfolds either side.
     fn compare_same_global_apply(
         context: &mut Context,
         binders: &Binders,
         pairs: &Pairs,
         this_term: &Term,
         that_term: &Term,
-    ) -> Result<bool, ReduceError> {
+    ) -> Result<Spun, ReduceError> {
+        // What agreement may rest on: nothing solved, unless a completing term is holding the spines of a pair it awaits.
+        let holding = context.holds_spines();
         // Each side as the solutions already committed spell it. A side a solved metavariable stands for is the call it was solved to, and read as written this rule would not see it: the verdict would follow whether an implicit was stated or inferred. Only a side that is such a metavariable is read through; an argument one spells is resolved by the comparison it is handed to.
         let through = |term: &Term| match &**term {
             Subterm::Metavar(_) => Some(zonk_solved_term_metas(context, term)),
@@ -811,10 +891,10 @@ impl Convert {
         let that_term = that_solved.as_ref().unwrap_or(that_term);
 
         let (Subterm::Apply(this), Subterm::Apply(that)) = (&**this_term, &**that_term) else {
-            return Ok(false);
+            return Ok(Spun::Apart);
         };
         if this.arguments.len() != that.arguments.len() {
-            return Ok(false);
+            return Ok(Spun::Apart);
         }
         let global = |head: &Term| match &**applied_head(head) {
             Subterm::Var(var) => var
@@ -833,16 +913,32 @@ impl Convert {
         let (Some((this_global, polymorphic)), Some((that_global, _))) =
             (global(&this.head), global(&that.head))
         else {
-            return Ok(false);
+            return Ok(Spun::Apart);
         };
-        if this_global != that_global
-            || (polymorphic && (this_term.has_metavar() || that_term.has_metavar()))
-        {
-            return Ok(false);
+        if this_global != that_global {
+            return Ok(Spun::Apart);
+        }
+        // Spines that do not agree may yet, where one holds a metavariable nothing has solved. A type former's are not read so: its node keeps its arguments, so what reduction leaves of the pair is each argument against its own, and each waits as what it is.
+        let flexible = this_term.has_metavar() || that_term.has_metavar();
+        let former = context.induct_decl(&this_global).is_some()
+            || context.struct_decl(&this_global).is_some();
+        let apart = |context: &Context| {
+            let open = flexible
+                && !former
+                && (zonk_solved_term_metas(context, this_term).has_metavar()
+                    || zonk_solved_term_metas(context, that_term).has_metavar());
+            match open {
+                true => Spun::Open,
+                false => Spun::Apart,
+            }
+        };
+        if !holding && polymorphic && flexible {
+            return Ok(apart(context));
         }
 
         let param_types = apply_param_types(context, binders, &this.head, &this.arguments)?;
         let mark = context.solution_mark();
+        let committed = context.solutions_committed();
         let mut converts = polymorphic
             || matches!(
                 convert_under(
@@ -861,7 +957,9 @@ impl Convert {
             if !converts {
                 break;
             }
-            if a.plicity == Plicity::Witness
+            // A `use` slot still open is passed over where spines are held: it is resolution's to fill, or reduction's where the definition keeps its dictionary, and held to the other spine's it would take a dictionary the call takes no notice of where its implicit is written.
+            if holding
+                && a.plicity == Plicity::Witness
                 && (open_slot(context, &a.term) || open_slot(context, &b.term))
             {
                 passed_over = true;
@@ -876,6 +974,9 @@ impl Convert {
                 Outcome::Converts
             );
         }
+        // Agreement reached by solving a metavariable is one answer among those a function that is not injective has: no verdict of conversion's, until the pair's term asks for it. It does say the two calls are not apart.
+        let solvable = converts && !holding && context.solutions_committed() != committed;
+        converts &= !solvable;
         if polymorphic && converts {
             // A family's name applied in full by one spine is the node it builds, and a definition's is its value at those arguments: the two instances are identified by the name's vector. A curried head is identified as two heads are, and where that declines, the pair goes on to reduction and meets as what it reduces to.
             let instances = this_term
@@ -893,13 +994,17 @@ impl Convert {
                 }
             };
         }
-        match converts {
-            true => context.end_solutions(mark),
-            false => context.rollback_solutions(mark),
+        if !converts {
+            context.rollback_solutions(mark);
         }
+        context.end_solutions(mark);
 
         // Past an open slot the spines have decided nothing of the pair, and what they solved elsewhere stands for the reduced comparison.
-        Ok(converts && !passed_over)
+        Ok(match (converts && !passed_over, solvable && !former) {
+            (true, _) => Spun::Agreed,
+            (false, true) => Spun::Solvable,
+            (false, false) => apart(context),
+        })
     }
 
     /// Compare applications of the same structural recursive member without assuming that member is injective. Convertible spines establish the result by congruence. A genuinely different spine instead triggers one symmetric delta step: distinct arguments may still produce equal results for a recursive function.
@@ -2594,10 +2699,18 @@ impl Convert {
             let that_raw = that.clone();
 
             // Two applications of one global definition are decided by their spines first, on these raw spellings — see `compare_same_global_apply` for why this must precede the reduction below.
-            if Self::compare_same_global_apply(context, &posed, &posed_pairs, &this_raw, &that_raw)?
-            {
-                continue;
-            }
+            let open = match Self::compare_same_global_apply(
+                context,
+                &posed,
+                &posed_pairs,
+                &this_raw,
+                &that_raw,
+            )? {
+                Spun::Agreed => continue,
+                Spun::Solvable => Some(true),
+                Spun::Open => Some(false),
+                Spun::Apart => None,
+            };
 
             let this = reduce(context, this)?;
             let that = reduce(context, that)?;
@@ -2617,6 +2730,47 @@ impl Convert {
                 pairs: posed_pairs.clone(),
                 relation,
             };
+
+            // Two calls of one definition whose spines may yet agree are decided by what they reduce to as a run of its own. What that forces is solved; where it leaves the pair undecided the pair waits whole, under its raw spelling, and what the run left blocked goes with it: a residue alone — `Pick(?b)` against `Nat`, of `Shelf(?b)` against `Shelf(true)` — holds nothing of the two calls, and the term that awaits it would have no spines to hold where it completes.
+            //
+            // A pair whose spines agree by what that would solve waits the same way where its reduction finds the two apart: they are equal at that solution, so the refusal is reduction's, which reads a fold stuck on `?a % 28` as no `1`, and what the run solved on its way there is withdrawn with it.
+            if let Some(solvable) = open
+                && (this != this_raw || that != that_raw)
+            {
+                let mark = context.solution_mark();
+                let committed = context.solutions_committed();
+                let reduced = Problem {
+                    type_: type_.clone(),
+                    this,
+                    that,
+                    binders: posed.clone(),
+                    pairs: posed_pairs.clone(),
+                    relation,
+                };
+                let outcome = Convert::new(reduced, self.extent).outcome(context);
+                let waits = match &outcome {
+                    Ok(Outcome::Blocked(_)) => true,
+                    Ok(Outcome::Mismatch(_)) => solvable,
+                    Ok(Outcome::Converts) | Err(_) => false,
+                };
+                if waits && matches!(outcome, Ok(Outcome::Mismatch(_))) {
+                    context.rollback_solutions(mark);
+                }
+                context.end_solutions(mark);
+                self.progress |= context.solutions_committed() != committed;
+                match outcome? {
+                    Outcome::Converts => continue,
+                    _ if waits => {
+                        self.blocked.push(raw_problem(&type_));
+                        continue;
+                    }
+                    Outcome::Mismatch(declined) => {
+                        self.declined = declined;
+                        return Ok(false);
+                    }
+                    Outcome::Blocked(_) => unreachable!("a blocked pair waits"),
+                }
+            }
 
             // Flexible heads are dispatched before the structural/η fallthrough — a flexible head must never be η-expanded into a spine.
             match (as_metavar(&this).cloned(), as_metavar(&that).cloned()) {

@@ -4,11 +4,12 @@ mod tests;
 use {
     super::{
         AwaitId, Binders, Choice, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedChoice,
-        ParkedProblem, ParkedWork, Problem, Sort, Watched, answer_witness, callee, convert,
-        diagnose_embedding, diagnose_shape, elaborate, elaborate_func_settle, embeds, is_monad,
-        monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome, reduce_forced,
-        refold_recs, refused_scrutinee, retry_discharge, retry_match, retry_projection,
-        retry_witness, settle_qualities, shallow_scrutinee, subsume_outcome, synth_neutral,
+        ParkedConversion, ParkedProblem, ParkedWork, Problem, Sort, Spines, Watched,
+        answer_witness, answers_differ, callee, convert, diagnose_embedding, diagnose_shape,
+        elaborate, elaborate_func_settle, embeds, hold_spines, is_monad, monad_shape, normalize,
+        numeral_default, probe_open_sort, problem_outcome, reduce_forced, refold_recs,
+        refused_scrutinee, retry_discharge, retry_match, retry_projection, retry_witness,
+        settle_qualities, shallow_scrutinee, subsume_outcome, synth_neutral,
         zonk_solved_term_metas,
     },
     curios_analysis::{
@@ -613,7 +614,7 @@ impl Context<'_> {
         }
     }
 
-    /// Take one choice among the problems `term` awaits, the lowest-ranked there is ([`Choice`]): a `use` slot's witness, then a literal's shape, then the numerals' default, then a lambda, at the function type its expectation has come to or, where it has come to none, at the type its annotations state. `taken` holds what was taken already — a metavariable shaped or defaulted, a lambda's placeholder — so a choice conversion could not commit is not offered again. Answers whether one was taken.
+    /// Take one choice among the problems `term` awaits, the lowest-ranked there is ([`Choice`]): a `use` slot's witness, then a literal's shape, then the numerals' default, then a lambda, at the function type its expectation has come to or, where it has come to none, at the type its annotations state, and last the spines of two applications of one definition parked apart. `taken` holds what was taken already — a metavariable shaped or defaulted, a lambda's placeholder — so a choice conversion could not commit is not offered again. Answers whether one was taken.
     fn take_choice(
         &mut self,
         term: Option<AwaitId>,
@@ -626,7 +627,7 @@ impl Context<'_> {
 
         let (choices, links) = self.choices_awaited_by(term);
         if choices.is_empty() {
-            return Ok(false);
+            return self.hold_awaited_spines(term);
         }
 
         // Each check with what its type has come to, and the bare metavariable where that is one.
@@ -728,7 +729,78 @@ impl Context<'_> {
             return Ok(true);
         }
 
-        Ok(false)
+        self.hold_awaited_spines(term)
+    }
+
+    /// The last resort of the conversions `term` awaits: each asked again with spines held ([`hold_spines`]), so that two applications of one definition inside it agree by whatever that solves, one answer among those a definition that is not injective has. Every such conversion first offers what it would solve, nothing committed, and two that give one metavariable two answers refuse the term, naming the metavariable and both; then each is held, and what is decided so leaves the store. So of two that disagree neither settles the call by having been parked first. Answers whether one was held.
+    fn hold_awaited_spines(&mut self, term: Option<AwaitId>) -> Result<bool, Error> {
+        let conversions = self.conversions_awaited_by(term);
+        let mut offers = Vec::new();
+        for conversion in &conversions {
+            if let Some(solved) = self.spines_of(conversion, Spines::Offered)? {
+                offers.push((conversion, solved));
+            }
+        }
+
+        let mut answers = BTreeMap::<MetavarId, &Term>::new();
+        for (conversion, solved) in &offers {
+            for (id, another) in solved {
+                let Some(one) = answers.get(id).copied() else {
+                    answers.insert(*id, another);
+                    continue;
+                };
+                let differ = answers_differ(self, *id, one, another).map_err(|error| {
+                    Error::from_reduce(error, |refusal| {
+                        Error::convert_exhausted(one.clone(), another.clone(), refusal)
+                    })
+                })?;
+                if differ {
+                    let ParkedConversion {
+                        problem, origin, ..
+                    } = conversion;
+                    let watched = watched_blockers(
+                        self,
+                        &BTreeSet::from([*id]),
+                        &problem.this,
+                        &problem.that,
+                    )
+                    .into_iter()
+                    .next()
+                    .unwrap_or_else(|| Watched::Described("an inferred hole".to_string()));
+
+                    return Err(
+                        Error::ambiguous_spines(watched, one.clone(), another.clone())
+                            .at_opt(origin.extent()),
+                    );
+                }
+            }
+        }
+
+        let mut held = BTreeSet::new();
+        for (conversion, _) in &offers {
+            if self.spines_of(conversion, Spines::Held)?.is_some() {
+                held.insert(conversion.at);
+            }
+        }
+        self.drop_conversions(&held);
+
+        Ok(!held.is_empty())
+    }
+
+    /// [`hold_spines`] of a conversion a term awaits, under the frame it froze.
+    fn spines_of(
+        &mut self,
+        conversion: &ParkedConversion,
+        reading: Spines,
+    ) -> Result<Option<Vec<(MetavarId, Term)>>, Error> {
+        let ParkedConversion { problem, frame, .. } = conversion;
+        self.with_retry_frame(frame, |context| {
+            hold_spines(context, problem, reading).map_err(|error| {
+                Error::from_reduce(error, |refusal| {
+                    Error::convert_exhausted(problem.this.clone(), problem.that.clone(), refusal)
+                })
+            })
+        })
     }
 
     /// Check the lambda of `choice`, parked on a bare metavariable, at the type its annotations state, and hold that type to the metavariable: a domain left open stands as a metavariable named after its binder, and the body states the codomain ([`elaborate_func_settle`]). Only an expectation can supply a hidden binder, and this is where none is coming: a function type with hidden binders handed to the lambda afterwards is refused, as it is for a lambda bound with no call around it.

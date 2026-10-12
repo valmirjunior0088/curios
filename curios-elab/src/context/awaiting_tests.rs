@@ -202,7 +202,7 @@ fn a_problem_waits_on_what_its_metavariables_were_solved_to() {
     assert_eq!(context.wake_parked().len(), 1);
 }
 
-// A parked problem states the choice a completing term may take for it, and the choices are taken in the order they are declared: a dictionary decides what a type beside it reduces to, a shape commits less than a default, and a default less than a lambda's check.
+// A parked problem states the choice a completing term may take for it, and the choices are taken in the order they are declared: a dictionary decides what a type beside it reduces to, a shape commits less than a default, a default less than a lambda's check, and what two spines would solve is an answer among several, taken last.
 #[test]
 fn a_parked_problem_states_the_choice_its_term_may_take() {
     let parked = |term: Term| ParkedWork::Checking {
@@ -229,6 +229,15 @@ fn a_parked_problem_states_the_choice_its_term_may_take() {
     );
     assert_eq!(parked(lambda).choice(), Some(Choice::Lambda));
     assert_eq!(goal.choice(), Some(Choice::Witness));
+    let pair = ParkedWork::Conversion(Problem {
+        type_: Term::type_ground(),
+        this: Term::hole(0),
+        that: Term::hole(1),
+        binders: Binders::default(),
+        pairs: Pairs::default(),
+        relation: Relation::Equal,
+    });
+    assert_eq!(pair.choice(), Some(Choice::Spines));
     assert_eq!(
         parked(Term::tuple(Vec::<Term>::new())).choice(),
         None,
@@ -241,6 +250,7 @@ fn a_parked_problem_states_the_choice_its_term_may_take() {
     );
     assert!(Choice::Witness < Choice::Shape);
     assert!(Choice::Shape < Choice::Numeral && Choice::Numeral < Choice::Lambda);
+    assert!(Choice::Lambda < Choice::Spines);
 }
 
 // A goal watches its slot as well as what its key mentions: over a closed key it is awaited as its slot is, by the term being read where one is and by the item where none is, and the solution that names a dictionary for the slot wakes it.

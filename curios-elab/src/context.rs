@@ -2814,6 +2814,16 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.choices_awaited_by(term)
     }
 
+    /// [`Solutions::conversions_awaited_by`].
+    pub(crate) fn conversions_awaited_by(&self, term: Option<AwaitId>) -> Vec<ParkedConversion> {
+        self.underway.attempt.solutions.conversions_awaited_by(term)
+    }
+
+    /// [`Solutions::drop_conversions`].
+    pub(crate) fn drop_conversions(&mut self, at: &BTreeSet<usize>) {
+        self.underway.attempt.solutions.drop_conversions(at);
+    }
+
     /// [`Solutions::witnesses_awaited_by`].
     pub(crate) fn witnesses_awaited_by(&self, term: Option<AwaitId>) -> Vec<MetavarId> {
         self.underway.attempt.solutions.witnesses_awaited_by(term)
@@ -2895,6 +2905,20 @@ impl<'s> Context<'s> {
 
     pub(crate) fn parking_suppressed(&self) -> bool {
         self.underway.attempt.solutions.parking_suppressed()
+    }
+
+    /// [`Solutions::holds_spines`].
+    pub(crate) fn holds_spines(&self) -> bool {
+        self.underway.attempt.solutions.holds_spines()
+    }
+
+    /// Run `work`, a conversion a completing term awaits asked again, with spines held: two applications of one definition met in it agree where their spines can be made to, by whatever that solves.
+    pub(crate) fn holding_spines<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
+        let before = self.underway.attempt.solutions.set_holding(true);
+        let result = work(self);
+        self.underway.attempt.solutions.set_holding(before);
+
+        result
     }
 
     /// Whether work that cannot be judged yet may park. Inside an oracle it may not, and the oracle records that a site wanted to ([`Context::declined_to_park`]): the refusal that site goes on to raise says its term could not be judged, not that it is wrong. A site asks this last, once everything else says it would park, so the record is made only where a park was wanted.
