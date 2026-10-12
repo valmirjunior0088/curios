@@ -1,6 +1,33 @@
 //! A recursive value knot: what is forced before it is read, and what traps rather than reading a hole.
 
-use crate::tests::{error, run};
+use {
+    crate::{
+        optimize,
+        tests::{error, run},
+    },
+    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_text::{Entrypoint, RootSource},
+};
+
+/// Run `source` expecting failure, as [`error`] does, with the wasm name section kept through Binaryen: what a trap's report names its frames by, and what a shipped build drops.
+fn named_error(source: &str) -> String {
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+    let (module, foreigns) = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("the fixture compiles");
+    let code =
+        curios_cranelift::compile(&optimize(&module, true, |_| {})).expect("the module compiles");
+    let (system, _io) = MockHost::builder().build();
+
+    Compiled::of(code, foreigns)
+        .run(system, ForeignBindings::empty())
+        .expect_err("the fixture traps")
+}
 
 /// A knot mixing a function member with value members whose initializers build closures *through a call* — `wrap(…)` here, the `bind`/`peek` combinators in `/std/Toml/values` — where one value's closure captures, via the function member, a value initialized later. Every knot ties through cells, so `second`'s closure — a non-member born inside an initializer, calling `helper`, which reads `first` — reads a cell rather than capturing a value that does not exist yet. The random byte keeps both closures live as values, so neither is folded away before the knot is lowered.
 #[test]
@@ -108,11 +135,10 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
 
 /// An evaluation cycle hidden where the verifier cannot see it — `n`'s initializer runs `p`, whose step reads `n` — is met by forcing: `n` is read while its own initializer runs, and the empty result cell and consumed initializer channel are the cycle state. The initializer names the member in the report even when the force function is inlined.
 ///
-/// Gated on `profile` because that report names a frame only when the wasm name section survived Binaryen, and `to_cwasm` keeps it for a profiling build alone — the same shape as `fixpoint` and `churn`, each gated on the spans that supply what it reads. Ungated, a plain `cargo test -p curios` would render the frame `<wasm function 10>`, which reads like a codegen regression and is not one.
-#[cfg(feature = "profile")]
+/// The report names a frame only where the wasm name section survived Binaryen, which a shipped build drops and a profiling one keeps, so the fixture is compiled with it kept: without it the frame renders `<wasm function 10>`, which reads like a codegen regression and is not one.
 #[test]
 fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
-    let error = error(
+    let error = named_error(
         r#"
         use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
         let main: Io({}) =
