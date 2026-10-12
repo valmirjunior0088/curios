@@ -242,6 +242,9 @@ impl<K: Eq + Hash + Clone, V> Recorded<K, V> {
     }
 }
 
+/// The projection a refinement is registered under, its base's universe instances erased: told apart from another by its hash, so a probe compares no base but the one it asks for.
+type Projected = Keyed<(Term, usize)>;
+
 /// The frame-scoped lexical stores. `Context` holds exactly one of these; see the module documentation for the cache-coordination contract.
 #[derive(Debug)]
 pub(crate) struct Frames<'s> {
@@ -254,7 +257,7 @@ pub(crate) struct Frames<'s> {
     members: HashMap<Keyed<RecGroup>, Vec<Option<Global>>>,
     /// Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
     refinements: Vec<Recorded<Free, Term>>,
-    refinement_projections: Vec<Recorded<(Term, usize), ProjectionEntry>>,
+    refinement_projections: Vec<Recorded<Projected, ProjectionEntry>>,
     /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by the scrutinee as written, its metavariables and universes normalized (`reduce`'s `shallow_scrutinee`); an occurrence that surfaces spelled differently is met at the entry's reduced spelling (`Frames::scrutinee_spellings`). The term-keyed analogue of the two stores above, suppressed by the same flag.
     refinement_scrutinees: Vec<Recorded<Term, ScrutineeEntry>>,
     /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, beside the entry: in the frame the entry was registered in, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
@@ -728,11 +731,11 @@ impl<'s> Frames<'s> {
     ///
     /// The whole entry rather than its value, for the reason [`Frames::scrutinee_entry`] gives: the key cannot decide a universe instance, so the read above compares the unerased bases instead.
     pub(crate) fn projection_entry(&self, base: &Term, index: usize) -> Option<&ProjectionEntry> {
-        let base = project_erased_universes(base);
+        let projected = Keyed::new((project_erased_universes(base), index));
         self.refinement_projections[self.refinement_window()]
             .iter()
             .rev()
-            .find_map(|p| p.get(&(base.clone(), index)))
+            .find_map(|p| p.get(&projected))
     }
 
     /// Register a counterfactual match-arm refinement of a variable. Unlike a definition, this lives in a suppressible store so re-validation can ignore it. The façade clears the caches first.
@@ -748,7 +751,7 @@ impl<'s> Frames<'s> {
     pub(crate) fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
         self.refinement_stamp.fresh();
         self.refinement_projections.last_mut().unwrap().insert(
-            (project_erased_universes(&base), index),
+            Keyed::new((project_erased_universes(&base), index)),
             ProjectionEntry {
                 original: base,
                 value,
@@ -1019,7 +1022,7 @@ impl<'s> Frames<'s> {
         let window = self.refinement_window();
         let refinements = Rc::new(Refinements {
             variables: flatten_recorded(&self.refinements[window.clone()]),
-            projections: flatten_recorded(&self.refinement_projections[window.clone()]),
+            projections: flatten_projections(&self.refinement_projections[window.clone()]),
             scrutinees: flatten_recorded(&self.refinement_scrutinees[window]),
         });
         self.refinement_cache = Some((self.refinement_stamp.count(), Rc::clone(&refinements)));
@@ -1106,7 +1109,7 @@ impl<'s> Frames<'s> {
             definitions: flatten_recorded(&self.definitions[1..]),
             refinements: Refinements {
                 variables: flatten_recorded(&self.refinements[from..]),
-                projections: flatten_recorded(&self.refinement_projections[from..]),
+                projections: flatten_projections(&self.refinement_projections[from..]),
                 scrutinees: flatten_recorded(&self.refinement_scrutinees[from..]),
             },
             dead_arm: self.dead_arm().cloned(),
@@ -1120,5 +1123,19 @@ fn flatten_recorded<K: Eq + Hash + Clone, V: Clone>(frames: &[Recorded<K, V>]) -
     frames
         .iter()
         .flat_map(|frame| frame.iter().map(|(k, v)| (k.clone(), v.clone())))
+        .collect()
+}
+
+/// [`flatten_recorded`] over the projections, each under the base and the index it was registered for.
+fn flatten_projections(
+    frames: &[Recorded<Projected, ProjectionEntry>],
+) -> Vec<((Term, usize), ProjectionEntry)> {
+    frames
+        .iter()
+        .flat_map(|frame| {
+            frame
+                .iter()
+                .map(|(projected, entry)| (projected.key().clone(), entry.clone()))
+        })
         .collect()
 }
