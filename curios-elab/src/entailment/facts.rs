@@ -1228,7 +1228,7 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
-    /// The form of `left ⋈ right` at `carrier`, aligned to `<=`: its operands read reduced — in the fold's normal form, a local definition unfolded, a refined variable read as what its arm refined it to, an atom as the one conversion holds it one with, a product of two sums distributed ([`Reader::side`]) — so its view is the one conversion computes, and each reduct recorded beside the spelling it was read from ([`Reader::spell`]). `None` where the view does not read it.
+    /// The form of `left ⋈ right` at `carrier`, aligned to `<=`: its operands read reduced — in the fold's normal form, a local definition unfolded, a refined variable read as what its arm refined it to, an atom as the one conversion holds it one with, a product of two sums distributed ([`Reader::side`]) — so its view is the one conversion computes, and each reduct recorded beside the spelling it was read from ([`spell`]). `None` where the view does not read it.
     fn form(
         &mut self,
         context: &mut Context,
