@@ -45,6 +45,9 @@ mod strings;
 mod structs;
 mod toml;
 mod towers;
+// Only the tower measurement builds the shapes the fixtures compile.
+#[cfg(feature = "profile")]
+use towers::*;
 
 mod tui;
 // Only the two profile suites replay the listing.

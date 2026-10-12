@@ -2,10 +2,7 @@
 //!
 //! A tower is a chain of `let`s in which each line names the line before it twice: `n` lines are a graph of `n` nodes whose tree has `2ⁿ`. A stage that walks the graph pays a line for a line; one that walks it once per path doubles with every line, and at sixty lines does not answer. Every tower here is an ordinary program that reduces nothing, so what it costs is what the stages other than reduction cost — the half of `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`'s premise a budget cannot hold, and the subject of `documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`.
 //!
-//! A shape that compiles at sixty lines is a fixture here; `tower_measurements` counts what every shape costs each checker at two heights. What a tower's type costs to *show* is held here too: its print is its tree, and both a rung and a report end.
-
-#[cfg(feature = "profile")]
-mod measurement_tests;
+//! A shape that compiles at sixty lines is a fixture here; `tower_measurements`, among the instrumented tests, counts what every shape costs each checker at two heights. What a tower's type costs to *show* is held here too: its print is its tree, and both a rung and a report end.
 
 use {
     super::core_elab,
@@ -16,7 +13,7 @@ use {
 
 /// Where a tower of values stands.
 #[derive(Clone, Copy)]
-enum Stands {
+pub(super) enum Stands {
     /// In the body of a function that does not recurse.
     Function,
     /// In the successor arm of a function that calls itself, where each call is recorded where it is typed.
@@ -25,7 +22,7 @@ enum Stands {
 
 /// What each line of a tower is, in the line before it, `x`. A tower of values says where it stands; an alias and a claim stand at the top level.
 #[derive(Clone, Copy)]
-enum Shape {
+pub(super) enum Shape {
     /// `g(x)`, naming the line before it once: no tower, and what every tower is read against.
     Chain(Stands),
     /// `g(x, x)` over a function the tower is handed, so every line's type is `Nat` and the term alone is a graph.
@@ -69,7 +66,7 @@ struct Body {
 }
 
 /// A tower of `lines` lines over its first, as a whole program.
-fn tower(shape: Shape, lines: usize) -> String {
+pub(super) fn tower(shape: Shape, lines: usize) -> String {
     let mut source = String::new();
 
     match shape {

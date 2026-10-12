@@ -1,7 +1,7 @@
 //! What each tower costs each checker, counted.
 
 use {
-    super::{Shape, Stands, tower},
+    crate::tests::{Shape, Stands, tower},
     curios_core::{Zonked, take_looks},
     curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude_measured, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
