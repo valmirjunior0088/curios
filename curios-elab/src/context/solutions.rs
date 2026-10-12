@@ -150,7 +150,7 @@ pub(crate) struct ParkedConversion {
     pub frame: FrozenFrame,
 }
 
-/// What a completing term may do for a parked problem nothing else answers: the problem's own answer, one among those it admits ([`ParkedWork::choice`]). Their order is the order they are taken in, each committing less than the next and able to decide it.
+/// What a completing term may do for a parked problem nothing else answers: the problem's own answer, one among those it admits ([`ParkedWork::choice`]). Their order is the order they are taken in, each committing less than the next and able to decide it, with one exception the store cannot tell by a problem's shape: a lambda with a domain left open is read after the spines are held, which may be what gives the domain ([`Context::complete`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Choice {
     /// A `use` slot nothing solved takes the witness resolution finds for its goal, where the goal's key has come to a head resolution reads.
@@ -159,9 +159,9 @@ pub(crate) enum Choice {
     Shape,
     /// The numerals that wait on one metavariable take their default together.
     Numeral,
-    /// A lambda is checked at the function type its expectation has come to, whatever of its domains is still open.
+    /// A lambda is checked: at the type its annotations state where every domain is written, and otherwise, after the spines, at the function type its expectation has come to or at the one its annotations and body state.
     Lambda,
-    /// Two applications of one definition parked apart are held to spines that agree: one answer among those a definition that is not injective has, taken where every such pair its term awaits has offered its own and none differs.
+    /// A conversion parked apart is asked again with spines held: two applications of one definition agree by whatever that solves, one answer among those a definition that is not injective has, and an application of an unsolved metavariable is imitated against a type former's node, one function among those it may stand for. Taken where every conversion its term awaits has offered its own answers and none differs.
     Spines,
 }
 
@@ -233,6 +233,8 @@ pub(crate) struct Solutions {
     oracle: Option<bool>,
     /// Whether a completing term is holding the spines of a conversion it awaits ([`Solutions::set_holding`]): conversion then takes what two spines of one definition would solve, which it otherwise leaves to that term.
     holding: bool,
+    /// Whether a `!` is reading its region's monad ([`Solutions::set_imitating`]): conversion then imitates an application of an unsolved metavariable where it meets one.
+    imitating: bool,
     /// Every term that has awaited, by [`AwaitId`].
     awaiting: Vec<Awaiting>,
     /// The awaiting term being read, or `None` outside one: what a metavariable born now is awaited by.
@@ -253,6 +255,7 @@ impl Solutions {
             solved_log: Vec::new(),
             oracle: None,
             holding: false,
+            imitating: false,
             awaiting: Vec::new(),
             reading: None,
             held_log: Vec::new(),
@@ -822,6 +825,16 @@ impl Solutions {
     /// Whether conversion may take what two spines would solve: a completing term is holding them, and no oracle has been entered since, whose question is no part of that term's.
     pub(crate) fn holds_spines(&self) -> bool {
         self.holding && self.oracle.is_none()
+    }
+
+    /// Whether conversion may imitate an application of an unsolved metavariable against a type former's node: a completing term is holding spines, the imitation being one more answer they give, or a `!` is reading its region's monad, which is all the region has to say.
+    pub(crate) fn imitates(&self) -> bool {
+        self.imitating || self.holds_spines()
+    }
+
+    /// Begin or end reading a region's monad, answering what stood before: [`Context::imitating`]'s bracket.
+    pub(crate) fn set_imitating(&mut self, imitating: bool) -> bool {
+        mem::replace(&mut self.imitating, imitating)
     }
 
     /// Begin or end holding spines, answering what stood before: [`Context::holding_spines`]'s bracket.

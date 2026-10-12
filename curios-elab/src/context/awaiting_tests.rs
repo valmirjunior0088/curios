@@ -202,7 +202,7 @@ fn a_problem_waits_on_what_its_metavariables_were_solved_to() {
     assert_eq!(context.wake_parked().len(), 1);
 }
 
-// A parked problem states the choice a completing term may take for it, and the choices are taken in the order they are declared: a dictionary decides what a type beside it reduces to, a shape commits less than a default, a default less than a lambda's check, and what two spines would solve is an answer among several, taken last.
+// A parked problem states the choice a completing term may take for it, and the choices are taken in the order they are declared: a dictionary decides what a type beside it reduces to, a shape commits less than a default, a default less than a lambda's check at the type it states, and what holding spines would solve is an answer among several, taken after them.
 #[test]
 fn a_parked_problem_states_the_choice_its_term_may_take() {
     let parked = |term: Term| ParkedWork::Checking {

@@ -2937,12 +2937,26 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.parking_suppressed()
     }
 
+    /// [`Solutions::imitates`].
+    pub(crate) fn imitates(&self) -> bool {
+        self.underway.attempt.solutions.imitates()
+    }
+
+    /// Run `work`, a `!` reading its region's monad, with an application of an unsolved metavariable imitated where conversion meets one: the region is the `!`'s expectation, so nothing read later bears on what its monad is.
+    pub(crate) fn imitating<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
+        let before = self.underway.attempt.solutions.set_imitating(true);
+        let result = work(self);
+        self.underway.attempt.solutions.set_imitating(before);
+
+        result
+    }
+
     /// [`Solutions::holds_spines`].
     pub(crate) fn holds_spines(&self) -> bool {
         self.underway.attempt.solutions.holds_spines()
     }
 
-    /// Run `work`, a conversion a completing term awaits asked again, with spines held: two applications of one definition met in it agree where their spines can be made to, by whatever that solves.
+    /// Run `work`, a conversion a completing term awaits asked again, with spines held: two applications of one definition met in it agree where their spines can be made to, by whatever that solves, and an application of an unsolved metavariable is imitated ([`Context::imitates`]).
     pub(crate) fn holding_spines<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
         let before = self.underway.attempt.solutions.set_holding(true);
         let result = work(self);

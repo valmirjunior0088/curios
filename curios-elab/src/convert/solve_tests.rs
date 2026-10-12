@@ -1434,15 +1434,19 @@ fn two_spines_offer_what_they_would_solve_and_hold_it_only_when_asked() {
     );
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 
+    let agreed = HeldConversion {
+        solved: vec![(MetavarId(0), nat(1))],
+        left: Vec::new(),
+    };
     assert_eq!(
         hold_spines(&mut context, &problem, Spines::Offered),
-        Ok(Some(vec![(MetavarId(0), nat(1))]))
+        Ok(Some(agreed.clone()))
     );
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 
     assert_eq!(
         hold_spines(&mut context, &problem, Spines::Held),
-        Ok(Some(vec![(MetavarId(0), nat(1))]))
+        Ok(Some(agreed))
     );
     assert_eq!(context.metavar_solution(MetavarId(0)), Some(&nat(1)));
 }

@@ -3,13 +3,13 @@ mod tests;
 
 use {
     super::{
-        AwaitId, Binders, Choice, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedChoice,
-        ParkedConversion, ParkedProblem, ParkedWork, Problem, Sort, Spines, Watched,
-        answer_witness, answers_differ, callee, convert, diagnose_embedding, diagnose_shape,
-        elaborate, elaborate_func_settle, embeds, hold_spines, is_monad, monad_shape, normalize,
-        numeral_default, probe_open_sort, problem_outcome, reduce_forced, refold_recs,
-        refused_scrutinee, retry_discharge, retry_match, retry_projection, retry_witness,
-        settle_qualities, shallow_scrutinee, subsume_outcome, synth_neutral,
+        AwaitId, Binders, Choice, Context, Error, FrozenFrame, HeldConversion, Mode, Opened,
+        Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem, Sort, Spines,
+        Watched, answer_witness, answers_differ, callee, convert, diagnose_embedding,
+        diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines, is_monad,
+        monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome, reduce_forced,
+        refold_recs, refused_scrutinee, retry_discharge, retry_match, retry_projection,
+        retry_witness, settle_qualities, shallow_scrutinee, subsume_outcome, synth_neutral,
         zonk_solved_term_metas,
     },
     curios_analysis::{
@@ -614,7 +614,7 @@ impl Context<'_> {
         }
     }
 
-    /// Take one choice among the problems `term` awaits, the lowest-ranked there is ([`Choice`]): a `use` slot's witness, then a literal's shape, then the numerals' default, then a lambda, at the function type its expectation has come to or, where it has come to none, at the type its annotations state, and last the spines of two applications of one definition parked apart. `taken` holds what was taken already — a metavariable shaped or defaulted, a lambda's placeholder — so a choice conversion could not commit is not offered again. Answers whether one was taken.
+    /// Take one choice among the problems `term` awaits, the lowest-ranked there is ([`Choice`]): a `use` slot's witness, then a literal's shape, then the numerals' default, then a lambda whose annotations state its whole type, then what the conversions parked apart would solve with spines held, and last a lambda with a domain left open, at the function type its expectation has come to or, where it has come to none, at the type its annotations and body state. `taken` holds what was taken already — a metavariable shaped or defaulted, a lambda's placeholder — so a choice conversion could not commit is not offered again. Answers whether one was taken.
     fn take_choice(
         &mut self,
         term: Option<AwaitId>,
@@ -694,7 +694,32 @@ impl Context<'_> {
             return Ok(true);
         }
 
-        // A lambda whose expectation has become a function type and that still waits, a domain of it being open: nothing its term reads can give that domain any more, so the body is what grounds it.
+        // The lambdas that wait on a bare metavariable, each with whether a domain of it is left open.
+        let mut bare = Vec::new();
+        for (at, (open, _, waiting)) in waiting.iter().enumerate() {
+            if let Subterm::Func(func) = &*waiting.written
+                && waiting.choice == Choice::Lambda
+                && open.is_some()
+                && !taken.contains(&waiting.placeholder)
+            {
+                bare.push((!annotated(self, func), at));
+            }
+        }
+
+        // One whose every domain is annotated: nothing its term reads gives it a function type any more, and its annotations state one. That type is written and no guess, so it is taken ahead of the guesses it may decide.
+        if let Some(&(_, at)) = bare.iter().find(|(open, _)| !open) {
+            let choice = &waiting[at].2;
+            taken.insert(choice.placeholder);
+            self.settle(choice)?;
+            return Ok(true);
+        }
+
+        // What the parked conversions would solve with spines held comes ahead of a lambda with a domain left open: it may be what gives the domain, and a body read without it is read blind. An action's type lifted into its region's monad is held to the continuation's parameter so.
+        if self.hold_awaited_spines(term)? {
+            return Ok(true);
+        }
+
+        // A lambda whose expectation has become a function type and that still waits, a domain of it being open: nothing its term reads or holds can give that domain any more, so the body is what grounds it.
         let lambda = waiting.iter().find(|(_, reduced, waiting)| {
             waiting.choice == Choice::Lambda
                 && matches!(&**reduced, Subterm::FuncType(_))
@@ -711,33 +736,25 @@ impl Context<'_> {
             return Ok(true);
         }
 
-        // A lambda on a bare metavariable: nothing its term reads gives it a function type any more, so it is checked at the one its annotations state. One whose every domain is annotated is taken ahead of one with a domain left open, which the first may give.
-        let mut bare = Vec::new();
-        for (at, (open, _, waiting)) in waiting.iter().enumerate() {
-            if let Subterm::Func(func) = &*waiting.written
-                && waiting.choice == Choice::Lambda
-                && open.is_some()
-                && !taken.contains(&waiting.placeholder)
-            {
-                bare.push((!annotated(self, func), at));
-            }
-        }
-        if let Some(&(_, at)) = bare.iter().min() {
+        // A lambda on a bare metavariable with a domain left open, the annotated ones having been taken above: checked at the type its annotations and its body state.
+        if let Some(&(_, at)) = bare.first() {
             let choice = &waiting[at].2;
             taken.insert(choice.placeholder);
             self.settle(choice)?;
             return Ok(true);
         }
 
-        self.hold_awaited_spines(term)
+        Ok(false)
     }
 
-    /// The last resort of the conversions `term` awaits: each asked again with spines held ([`hold_spines`]), so that two applications of one definition inside it agree by whatever that solves, one answer among those a definition that is not injective has. Every such conversion first offers what it would solve, nothing committed, and two that give one metavariable two answers refuse the term, naming the metavariable and both; then each is held, and what is decided so leaves the store. So of two that disagree neither settles the call by having been parked first. Answers whether one was held.
+    /// The last resort of the conversions `term` awaits: each asked again with spines held ([`hold_spines`]), so that two applications of one definition inside it agree by whatever that solves, one answer among those a definition that is not injective has, and an application of an unsolved metavariable met against a type former's node is imitated, one function among those it may stand for. Every such conversion first offers what it would solve, nothing committed, and two that give one metavariable two answers refuse the term, naming the metavariable and both; then each is held, and what is decided so leaves the store, the pairs it left undecided waiting in its place. So of two that disagree neither settles the call by having been parked first. Answers whether one was held.
     fn hold_awaited_spines(&mut self, term: Option<AwaitId>) -> Result<bool, Error> {
         let conversions = self.conversions_awaited_by(term);
         let mut offers = Vec::new();
         for conversion in &conversions {
-            if let Some(solved) = self.spines_of(conversion, Spines::Offered)? {
+            if let Some(HeldConversion { solved, .. }) =
+                self.spines_of(conversion, Spines::Offered)?
+            {
                 offers.push((conversion, solved));
             }
         }
@@ -777,12 +794,24 @@ impl Context<'_> {
         }
 
         let mut held = BTreeSet::new();
+        let mut left = Vec::new();
         for (conversion, _) in &offers {
-            if self.spines_of(conversion, Spines::Held)?.is_some() {
+            if let Some(decided) = self.spines_of(conversion, Spines::Held)? {
                 held.insert(conversion.at);
+                left.push((*conversion, decided.left));
             }
         }
         self.drop_conversions(&held);
+        // What a held conversion left undecided waits in its place, under the frame it froze.
+        for (conversion, problems) in left {
+            for problem in problems {
+                self.repark(
+                    ParkedWork::Conversion(problem),
+                    conversion.origin.clone(),
+                    conversion.frame.clone(),
+                );
+            }
+        }
 
         Ok(!held.is_empty())
     }
@@ -792,7 +821,7 @@ impl Context<'_> {
         &mut self,
         conversion: &ParkedConversion,
         reading: Spines,
-    ) -> Result<Option<Vec<(MetavarId, Term)>>, Error> {
+    ) -> Result<Option<HeldConversion>, Error> {
         let ParkedConversion { problem, frame, .. } = conversion;
         self.with_retry_frame(frame, |context| {
             hold_spines(context, problem, reading).map_err(|error| {
@@ -937,18 +966,14 @@ impl Context<'_> {
         Ok(())
     }
 
-    /// Retry every currently parked problem once without requiring the store to become empty, and answer each `use` slot no term awaits any more. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked. The slots are answered here and not left to the drain: a witness resolved once its declaration's levels have closed closes the levels it mints by itself, apart from the declaration's own.
+    /// Retry every currently parked problem once without requiring the store to become empty, and take the choices no term awaits any more, as a term's completion takes its own ([`Context::complete`]): the item is the outermost term. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked. The choices are taken here and not left to the drain, since two of them mint levels, which are the declaration's only while its own are open: a witness resolved once those have closed closes the levels it mints by itself, apart from the declaration's, and an imitation's instance of its family would be closed by nothing.
     pub(crate) fn sweep_parked(&mut self) -> Result<(), Error> {
         let parked = self.take_parked();
         for goal in parked {
             retry_one(self, goal)?;
         }
-        self.retry_parked()?;
-        while self.answer_witnesses(None)? {
-            self.retry_parked()?;
-        }
 
-        Ok(())
+        self.complete(None)
     }
 
     /// Answer each `use` slot among those `term` awaits whose goal resolution can decide ([`answer_witness`]), in one pass and before anything they woke is retried: two slots a parked conversion holds together are each resolution's to name, at an instance of its own, where a retry between them would hand the second the first's answer, and which of the two resolution named would follow the order they were parked in. Every goal is asked again each time, since one whose key was flex may have come to a head with a choice taken since. Answers whether a slot was solved.

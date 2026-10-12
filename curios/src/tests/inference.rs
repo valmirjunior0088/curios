@@ -6,6 +6,7 @@ mod argument_tests;
 mod budget_tests;
 mod elimination_tests;
 mod goal_tests;
+mod imitation_tests;
 mod implicit_tests;
 mod lambda_tests;
 mod numeral_tests;

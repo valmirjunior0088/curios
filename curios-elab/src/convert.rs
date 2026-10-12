@@ -249,29 +249,48 @@ pub(crate) enum Spines {
     Held,
 }
 
-/// Ask `problem` again with spines held: every pair of two applications of one global definition met in deciding it, at any depth, agrees where its spines can be made to, by whatever that solves ([`Context::holding_spines`]). It is the last resort of a conversion reduction left parked, which the term that awaits it takes once it has read its parts. Answers what that solved, each solution as it is spelled once all are in, or `None` where the problem is still not decided so. A head that carries an instance is read as a monomorphic one is: what a call infers does not follow a level the definition's body holds.
+/// What a conversion asked again with spines held came to, where that decided anything of it ([`hold_spines`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HeldConversion {
+    /// What it solved, each solution as it is spelled once all are in.
+    pub solved: Vec<(MetavarId, Term)>,
+    /// What is left of it undecided, which stands for it from here on: nothing where it converts, and otherwise the pairs that still wait, as the arguments of an imitated application do where both sides of one are open.
+    pub left: Vec<Problem>,
+}
+
+/// Ask `problem` again with spines held: every pair of two applications of one global definition met in deciding it, at any depth, agrees where its spines can be made to, by whatever that solves, and an application of an unsolved metavariable met against a type former's node is imitated ([`Context::holding_spines`]). It is the last resort of a conversion left parked, which the term that awaits it takes once it has read its parts. Answers what that came to where it converts or solves anything, and `None` where the problem is no further decided so, or is refused: a refusal of a guess says nothing of the problem. A head that carries an instance is read as a monomorphic one is: what a call infers does not follow a level the definition's body holds.
 pub(crate) fn hold_spines(
     context: &mut Context,
     problem: &Problem,
     reading: Spines,
-) -> Result<Option<Vec<(MetavarId, Term)>>, ReduceError> {
+) -> Result<Option<HeldConversion>, ReduceError> {
     let mark = context.solution_mark();
     let committed = context.solutions_committed();
     let outcome =
         context.holding_spines(|context| Convert::new(problem.clone(), None).outcome(context));
-    let converts = matches!(outcome, Ok(Outcome::Converts));
     let solved = context
         .solutions_since(committed)
         .into_iter()
         .map(|(id, solution)| (id, zonk_solved_term_metas(context, &solution)))
         .collect::<Vec<_>>();
-    if !converts || reading == Spines::Offered {
+    let held = match &outcome {
+        Ok(Outcome::Converts) => Some(HeldConversion {
+            solved,
+            left: Vec::new(),
+        }),
+        Ok(Outcome::Blocked(left)) if !solved.is_empty() => Some(HeldConversion {
+            solved,
+            left: left.clone(),
+        }),
+        _ => None,
+    };
+    if held.is_none() || reading == Spines::Offered {
         context.rollback_solutions(mark);
     }
     context.end_solutions(mark);
     outcome?;
 
-    Ok(converts.then_some(solved))
+    Ok(held)
 }
 
 /// Whether two answers offered for the metavariable `id` are apart: compared at the type it was born at, under the context and the refinements it was born under, as an oracle and with nothing committed. Two that cannot yet be told apart are not.
@@ -2163,6 +2182,8 @@ impl Convert {
 
     /// Flex-apply imitation — the restricted higher-order rule: for `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct) type constructor or a unary intrinsic type former (`List`, `Cell`), commit the *imitation* solution `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the same commitment Lean's first-order approximation and Agda's constructor-headed unification make.
     ///
+    /// Taken only where it is asked for ([`Context::imitates`]): by a completing term over the conversions it awaits, each having offered its answer first, or by a `!` reading its region's monad. Anywhere else the pair blocks as it is written, since a later part of the term may state the function the imitation would guess at, and `?m(a)` against `T(b, a)` is as well answered by `(x) => T(x, a)`.
+    ///
     /// Deliberate restrictions (cf. the guards in `solve`):
     /// - **right-biased** partial application — for a spine of `k` arguments against `n` rigid arguments, `k < n` commits `?m := λx₁…xₖ. T(b₁, …, b_{n−k}, x₁, …, xₖ)`, the conventional choice kind-currying makes (it is why `Monad (Either e)` works in Haskell). The fixed prefix is taken from the rigid side, which a telescope's left-to-right dependency order keeps well-scoped, and `k` is never guessed: it is the spine's own length, checked against `?m`'s frozen birth arity. An equation whose intended solution abstracts a *prefix* is guessed wrong and blocked — incompleteness moves rather than disappearing — and a kind-wrong split (abstracting an index the birth type sorts differently) is refused by the re-validation below before it commits;
     /// - imitation only — the constant (`?m := λ_. T(b̄)`) and projection (`?m := λx. x`) solutions are never produced;
@@ -2183,6 +2204,10 @@ impl Convert {
         let Some(metavar) = as_metavar(&flex.head).cloned() else {
             return self.eta_expand_neutral(context, problem.this, problem.that, problem.type_);
         };
+        // An imitation is one function among those the application may stand for, so it is no rule of conversion's: the pair waits as it is written for the term that awaits it, which imitates where it completes, as a `!` does for its region.
+        if !context.imitates() {
+            return self.block(problem);
+        }
 
         // The rigid side's arguments, how its node is rebuilt over other arguments at an instance, and, for a nominal node, the family and the instance the rigid side stands at.
         type MkBody = Box<dyn Fn(Universes, &[Term]) -> Term>;

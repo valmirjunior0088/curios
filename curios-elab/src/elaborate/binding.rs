@@ -561,7 +561,7 @@ pub(super) fn elaborate_bang(
     elaborate(context, &app, mode)
 }
 
-/// The region's monad as a term — `λx. T(c̄, x)` for a region `T(c̄, v)` — read by unifying `?M(?B)` with the region: the flex-apply imitation commits the right-biased partial application, exactly the solution the wrapper's own instantiation reaches, and the pairwise equation solves `?B` to the region's value slot. `None` where the imitation does not apply — a region whose head is no nominal or intrinsic former — and the wrapper then infers the monad itself.
+/// The region's monad as a term — `λx. T(c̄, x)` for a region `T(c̄, v)` — read by unifying `?M(?B)` with the region: the flex-apply imitation commits the right-biased partial application, exactly the solution the wrapper's own instantiation reaches, and the pairwise equation solves `?B` to the region's value slot. The imitation is asked for ([`Context::imitating`]), where a call's waits for its term to complete: the region is the `!`'s expectation, and no part read later says what its monad is. `None` where the imitation does not apply — a region whose head is no nominal or intrinsic former — and the wrapper then infers the monad itself.
 fn region_monad(
     context: &mut Context,
     region: &Term,
@@ -574,7 +574,8 @@ fn region_monad(
     let value = context.fresh_hole_metavar(sort.clone(), extent);
     let applied = Term::apply(monad.clone(), [value]);
     // The imitation is a probe: a conversion that fails for any reason but the budget falls back to the abstraction.
-    let imitated = convert(context, &sort, &applied, region)
+    let imitated = context
+        .imitating(|context| convert(context, &sort, &applied, region))
         .probed()
         .map_err(|error| {
             Error::from_reduce(error, |refusal| {

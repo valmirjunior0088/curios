@@ -2,7 +2,7 @@
 
 use crate::tests::run;
 
-// The full higher-kinded chain: `Monad/bind(o, f)` parks its `Monad(?M)` goal on the flex parameter, checking `o : Option(Nat)` against `?M(?A)` fires the flex-apply imitation rule inside the conversion checker, and the committed `?M := Option` wakes the parked goal, which the table resolves to the prelude's `Monad(Option)` witness. Also covers the cached-prelude replay of a higher-kinded witness.
+// The full higher-kinded chain: `Monad/bind(o, f)` parks its `Monad(?M)` goal on the flex parameter, `o : Option(Nat)` against `?M(?A)` waits for the call, which imitates it where it completes, and the committed `?M := Option` gives the parked goal its key, which the table resolves to the prelude's `Monad(Option)` witness. Also covers the cached-prelude replay of a higher-kinded witness.
 #[test]
 fn prelude_monad_resolves_by_imitation() {
     let source = r#"
@@ -66,7 +66,7 @@ fn written_type_lambda_argument_resolves_the_witness() {
     assert_eq!(run(source), b"3");
 }
 
-// A bare reference to an all-hidden generic function, checked against a rigid concrete carrier: the check turnaround inserts the implicit carrier and the witness goal, imitation pins `M := Option` from the expectation, and the goal resolves through the table.
+// A bare reference to an all-hidden generic function, checked against a rigid concrete carrier: the check turnaround inserts the implicit carrier and the witness goal, the item imitates `M := Option` from the expectation where it completes, no call standing around the reference, and the goal resolves through the table.
 #[test]
 fn bare_generic_reference_resolves_toward_a_rigid_expectation() {
     let source = r#"

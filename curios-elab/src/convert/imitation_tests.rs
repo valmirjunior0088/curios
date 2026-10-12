@@ -1,11 +1,11 @@
-//! Imitation against an inductive, a struct and an intrinsic former, the arities that block it, and abstraction over the bound variables a metavariable is applied to.
+//! Imitation against an inductive, a struct and an intrinsic former where it is asked for, the arities that block it, the pair that waits where none asks, and abstraction over the bound variables a metavariable is applied to.
 
 use {
     super::test_support::*,
     crate::*,
     curios_core::{
-        InductDecl, Intrinsic, Level, MetavarId, MetavarOrigin, StructDecl, Telescope, Term,
-        UniverseContext, UniverseParam, Variance,
+        InductDecl, Intrinsic, Level, MetavarId, MetavarOrigin, ReduceError, StructDecl, Telescope,
+        Term, UniverseContext, UniverseParam, Variance,
     },
     curios_utilities::Qualifier,
 };
@@ -81,12 +81,52 @@ fn register_wrap(context: &mut Context, variance: Variance) {
         .unwrap();
 }
 
+/// Register a `Pair`-shaped struct: two parameters.
+fn register_pair(context: &mut Context) {
+    let first = context.fresh(Some("A"));
+    let second = context.fresh(Some("B"));
+    context
+        .register_struct(
+            &nominal("Pair"),
+            StructDecl {
+                universe_context: UniverseContext::empty(),
+                arity: Telescope::build(
+                    [(first, Term::type_ground()), (second, Term::type_ground())],
+                    Telescope::done(()),
+                ),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .unwrap();
+}
+
 /// The kind `(Type) -> Type`.
 fn type_to_type(context: &mut Context) -> Term {
     Term::func_type(
         [(context.fresh(Some("A")), Term::type_ground())],
         Term::type_ground(),
     )
+}
+
+/// [`conv`] asked as a `!` asks of its region, and a completing term of the conversions it awaits: with an application of an unsolved metavariable imitated.
+fn imitated(context: &mut Context, this: &Term, that: &Term) -> Result<bool, ReduceError> {
+    context.imitating(|context| conv(context, this, that))
+}
+
+/// `this ≟ that` at `Type`, as a completing term holds a conversion it awaits.
+fn awaited(this: &Term, that: &Term) -> Problem {
+    Problem {
+        type_: Term::type_ground(),
+        this: this.clone(),
+        that: that.clone(),
+        binders: Binders::default(),
+        pairs: Pairs::default(),
+        relation: Relation::Equal,
+    }
 }
 
 #[test]
@@ -99,7 +139,7 @@ fn solves_flex_apply_against_inductive() {
     // ?0(Nat) ≟ List(Nat)  — commits ?0 := λA. List(A).
     let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
-    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert_eq!(imitated(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
 
     // The committed solution is the imitation, not the constant: applied to a different argument it yields List of *that* argument.
@@ -122,7 +162,7 @@ fn imitation_is_symmetric() {
     // Rigid on the left, stuck application on the right.
     let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
-    assert_eq!(conv(&mut context, &rigid, &flex), Ok(true));
+    assert_eq!(imitated(&mut context, &rigid, &flex), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
 }
 
@@ -137,7 +177,7 @@ fn equates_arguments_pairwise() {
     // ?0(?1) ≟ List(Nat) — the imitation solves ?0, the pairwise equation ?1.
     let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
-    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert_eq!(imitated(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
     assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
 }
@@ -163,7 +203,7 @@ fn splits_params_and_indices() {
     // ?0(Nat, 3) ≟ Vec(Nat, 3) — arity 2 = 1 param + 1 index; the candidate's body must mirror the rigid node's split or re-validation rejects it.
     let flex = Term::apply(Term::hole(0), [nat_type(), nat(3)]);
     let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
-    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert_eq!(imitated(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
 
     let at_two = Term::apply(
@@ -181,25 +221,9 @@ fn splits_params_and_indices() {
 #[test]
 fn solves_against_struct_type() {
     let mut context = context();
+    register_pair(&mut context);
     let first = context.fresh(Some("A"));
     let second = context.fresh(Some("B"));
-    context
-        .register_struct(
-            &nominal("Pair"),
-            StructDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::build(
-                    [(first, Term::type_ground()), (second, Term::type_ground())],
-                    Telescope::done(()),
-                ),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
-        )
-        .unwrap();
     context.birth_metavar(
         MetavarId(0),
         Vec::new(),
@@ -211,7 +235,7 @@ fn solves_against_struct_type() {
 
     let flex = Term::apply(Term::hole(0), [nat_type(), nat_type()]);
     let rigid = Term::struct_type(nominal("Pair"), [nat_type(), nat_type()]);
-    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert_eq!(imitated(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
 }
 
@@ -225,7 +249,8 @@ fn arity_mismatch_blocks() {
     // ?0(Nat) ≟ Vec(Nat, 3) — apply arity 1 against constructor arity 2: the right-biased imitation abstracts the index, a split `?0`'s birth kind refuses, so the goal blocks (it is not provably unequal — a constant solution could exist).
     let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
-    let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
+    let outcome =
+        context.imitating(|context| convert_outcome(context, &Term::type_ground(), &flex, &rigid));
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
@@ -239,7 +264,8 @@ fn non_function_birth_type_blocks() {
 
     let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
-    let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
+    let outcome =
+        context.imitating(|context| convert_outcome(context, &Term::type_ground(), &flex, &rigid));
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
@@ -255,7 +281,7 @@ fn leaves_rigid_apply_pairs_alone() {
     // A *rigid* stuck application against a nominal type is not the imitation case: the guard falls back to the neutral path, which cannot equate them — a definite mismatch.
     let stuck = Term::apply(Term::free_var(&f), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
-    assert_eq!(conv(&mut context, &stuck, &rigid), Ok(false));
+    assert_eq!(imitated(&mut context, &stuck, &rigid), Ok(false));
 }
 
 #[test]
@@ -268,7 +294,7 @@ fn solves_flex_apply_against_intrinsic_former() {
     context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
     let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
     let rigid = Term::intrinsic(Intrinsic::ListType(nat_type()));
-    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert_eq!(imitated(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
     assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
 }
@@ -291,7 +317,11 @@ fn an_imitated_family_takes_an_instance_of_its_own() {
             [nat_type()],
             Vec::<Term>::new(),
         );
-        assert_eq!(conv(&mut context, &flex, &rigid), Ok(true), "{variance:?}");
+        assert_eq!(
+            imitated(&mut context, &flex, &rigid),
+            Ok(true),
+            "{variance:?}"
+        );
         assert!(context.metavar_solution(MetavarId(0)).is_some());
         assert_eq!(
             context.universes_mut().finalize([], [], []).is_err(),
@@ -358,9 +388,125 @@ fn a_goal_imitation_blocks_is_compared_again_on_its_retry() {
         [(context.fresh(Some("x")), nat_type())],
         Term::free_var(&alias),
     );
-    let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
+    let outcome =
+        context.imitating(|context| convert_outcome(context, &Term::type_ground(), &flex, &rigid));
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))), "{outcome:?}");
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
+}
+
+// `?0(?1) ≟ List(Nat)` asked by no completing term and no `!`: the imitation is one function among those `?0` may stand for, so the pair waits as it is written, on either side, and neither metavariable is solved.
+#[test]
+fn an_application_none_asks_about_waits_as_it_is_written() {
+    let mut context = context();
+    register_list(&mut context);
+    let kind = type_to_type(&mut context);
+    context.birth_metavar(MetavarId(0), Vec::new(), kind);
+    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
+
+    let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
+    let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
+    for (this, that) in [(&flex, &rigid), (&rigid, &flex)] {
+        let outcome = convert_outcome(&mut context, &Term::type_ground(), this, that);
+        let Ok(Outcome::Blocked(blocked)) = outcome else {
+            panic!("{outcome:?}");
+        };
+        assert_eq!(blocked, [awaited(this, that)]);
+    }
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+    assert_eq!(context.metavar_solution(MetavarId(1)), None);
+}
+
+// `first(x, h)`: `x: Pair(Nat, Bool)` is read against `?0(?1)`, and `h` states `?0 := (X) => Pair(X, Bool)`, which the imitation `(x) => Pair(Nat, x)` is not. The application waits, so the function stated beside it answers it whichever of the two is met first, and `?1` is `Nat`.
+#[test]
+fn a_function_stated_beside_an_application_answers_it_in_either_order() {
+    for stated_first in [false, true] {
+        let mut context = context();
+        register_pair(&mut context);
+        let kind = type_to_type(&mut context);
+        context.birth_metavar(MetavarId(0), Vec::new(), kind.clone());
+        context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
+        let bool_type = Term::intrinsic(Intrinsic::BoolType);
+
+        let applied = Term::apply(Term::hole(0), [Term::hole(1)]);
+        let pair = Term::struct_type(nominal("Pair"), [nat_type(), bool_type.clone()]);
+        let carrier = context.fresh(Some("X"));
+        let stated = Term::func(
+            [(carrier, Term::type_ground())],
+            Term::struct_type(nominal("Pair"), [Term::free_var(&carrier), bool_type]),
+        );
+
+        if !stated_first {
+            let outcome = convert_outcome(&mut context, &Term::type_ground(), &applied, &pair);
+            assert!(matches!(outcome, Ok(Outcome::Blocked(_))), "{outcome:?}");
+        }
+        assert_eq!(
+            convert(&mut context, &kind, &Term::hole(0), &stated),
+            Ok(true)
+        );
+        assert_eq!(conv(&mut context, &applied, &pair), Ok(true));
+        assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
+    }
+}
+
+// What a completing term asks of an application that waited: offered, the imitation's answers are read and withdrawn, and held they stand.
+#[test]
+fn a_held_application_offers_its_imitation_and_takes_it_only_when_asked() {
+    let mut context = context();
+    register_list(&mut context);
+    let kind = type_to_type(&mut context);
+    context.birth_metavar(MetavarId(0), Vec::new(), kind);
+    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
+
+    let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
+    let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
+    let problem = awaited(&flex, &rigid);
+
+    let offered = hold_spines(&mut context, &problem, Spines::Offered)
+        .unwrap()
+        .expect("an imitation");
+    assert_eq!(
+        offered.solved.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        [MetavarId(0), MetavarId(1)]
+    );
+    assert_eq!(offered.left, []);
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+    assert_eq!(context.metavar_solution(MetavarId(1)), None);
+
+    let held = hold_spines(&mut context, &problem, Spines::Held).unwrap();
+    assert_eq!(held, Some(offered));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
+}
+
+// `?0(?1) ≟ List(?2)` held: the imitation solves `?0`, and its argument pair `?1 ≟ ?2` stands between two metavariables, which conversion solves neither of. The imitation is kept and the pair is what is left of the conversion, so a solution of either decides the other.
+#[test]
+fn an_imitation_is_kept_where_its_arguments_still_wait() {
+    let mut context = context();
+    register_list(&mut context);
+    let kind = type_to_type(&mut context);
+    context.birth_metavar(MetavarId(0), Vec::new(), kind);
+    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetavarId(2), Vec::new(), Term::type_ground());
+
+    let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
+    let rigid = Term::induct_type(nominal("List"), [Term::hole(2)], Vec::<Term>::new());
+    let held = hold_spines(&mut context, &awaited(&flex, &rigid), Spines::Held)
+        .unwrap()
+        .expect("an imitation");
+
+    assert_eq!(
+        held.solved.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        [MetavarId(0)]
+    );
+    assert_eq!(held.left, [awaited(&Term::hole(1), &Term::hole(2))]);
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    assert_eq!(context.metavar_solution(MetavarId(1)), None);
+
+    // Held again, the pair that is left solves nothing, and so is no further decided.
+    assert_eq!(
+        hold_spines(&mut context, &held.left[0], Spines::Held),
+        Ok(None)
+    );
 }
 
 // === Flex-apply abstraction (a metavariable applied to bound variables) =====
@@ -434,7 +580,7 @@ fn a_family_that_ignores_its_binder_is_the_constant_one() {
     context.with_frame(|context| {
         context.assume(&n, &nat_type());
         let flex = Term::apply(Term::hole(0), [Term::free_var(&n)]);
-        assert_eq!(conv(context, &flex, &list_nat), Ok(true));
+        assert_eq!(imitated(context, &flex, &list_nat), Ok(true));
     });
 
     let at_three = Term::apply(Term::hole(0), [nat(3)]);
