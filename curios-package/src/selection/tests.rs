@@ -183,6 +183,23 @@ fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
     assert_eq!(unlinked.file, root.join("scratch.crs"));
     assert_eq!(unlinked.package, "app");
     assert_eq!(unlinked.remedy, "declare it with `mod scratch;` in lib.crs");
+
+    // What declares it follows the form it is written in, whatever the command did with it.
+    let file = root.join("scratch.crs");
+    assert_eq!(
+        unlinked.note("was checked", Form::Module),
+        format!(
+            "{} is in no unit of `/app`, so it was checked on its own against `/std`: declare it with `mod scratch;` in lib.crs",
+            file.display()
+        )
+    );
+    assert_eq!(
+        unlinked.note("is compiled", Form::Program),
+        format!(
+            "{} is in no unit of `/app`, so it is compiled on its own against `/std`: an `[[executables]]` row in its manifest declares it",
+            file.display()
+        )
+    );
 }
 
 /// A file no manifest governs is loose, and has nothing to be told.

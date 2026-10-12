@@ -152,6 +152,10 @@ pub fn wonder_tests(
     let mut refusal = None;
     let mut listed = Ok(());
     for asked in Asked::every(selection).map_err(CompileError::failure)? {
+        // The answer is the list on standard output, so what is said of how the file was taken goes beside it.
+        if let Some(said) = asked.subject.said_unlinked(&overlay, "was checked") {
+            eprintln!("note: {said}");
+        }
         let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref());
         refusal = refusal.or_else(|| refused(asked.store.as_ref()));
         match records {
@@ -224,6 +228,9 @@ pub fn wonder_stage(
 
     let refusal = written_as_a_module(program.entry());
     let asked = Asked::about_program(program).map_err(CompileError::failure)?;
+    if let Some(said) = asked.subject.said_unlinked(&overlay, "is compiled") {
+        eprintln!("note: {said}");
+    }
 
     // The rung is the answer and goes to stdout, where the driver emits it.
     let shown = |text: &str| println!("{text}");
@@ -268,6 +275,9 @@ pub fn wonder_cost(
 
     let refusal = written_as_a_module(program.entry());
     let asked = Asked::about_program(program).map_err(CompileError::failure)?;
+    if let Some(said) = asked.subject.said_unlinked(&overlay, "is compiled") {
+        eprintln!("note: {said}");
+    }
 
     let (fates, unstored) = asked.costed(budget, &overlay);
     let answered = match fates {

@@ -8,7 +8,7 @@ use {
     curios_unit::Unit,
     curios_utilities::{Qualifier, Report, Source, Span, is_identifier},
     curios_verdicts::Verdicts,
-    std::{collections::BTreeSet, fs, path::PathBuf},
+    std::{collections::BTreeSet, fs, path::PathBuf, sync::Arc},
 };
 
 /// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios lint` reads a package's unused dependencies off.
@@ -39,8 +39,8 @@ pub enum Subject {
 }
 
 impl Subject {
-    /// The note a program selected loose from inside a package opens with, located at its file's start so an editor places it on the document asked about — the text the overlay's where it holds one, as every read is.
-    fn note(&self, overlay: &Overlay) -> Option<Diagnosis> {
+    /// What is said of a program selected loose from inside a package before anything else ([`Unlinked::note`]), `taken` being what the question did with it, beside the text its form was read off: the overlay's where it holds one, as every read is.
+    fn unlinked(&self, overlay: &Overlay, taken: &str) -> Option<(String, Option<Arc<Source>>)> {
         let Subject::Entry {
             unlinked: Some(unlinked),
             ..
@@ -53,13 +53,22 @@ impl Subject {
             Some(text) => Some(Source::held(&unlinked.file, text)),
             None => Source::read(&unlinked.file).ok(),
         };
-        // A question's own words for it: the file was checked, and the `mod` line is what would have a unit check it.
-        let message = format!(
-            "{} is in no unit of `/{}`, so it was checked on its own against `/std`: {}",
-            unlinked.file.display(),
-            unlinked.package,
-            unlinked.remedy
-        );
+        // A file that cannot be read is a program's to report.
+        let form = source.as_ref().map_or(Form::Program, |source| {
+            Form::of(&unlinked.file, &source.text)
+        });
+
+        Some((unlinked.note(taken, form), source))
+    }
+
+    /// [`Self::unlinked`]'s words alone, for a question whose answer is no list of diagnostics and that says it on standard error.
+    pub(crate) fn said_unlinked(&self, overlay: &Overlay, taken: &str) -> Option<String> {
+        self.unlinked(overlay, taken).map(|(said, _)| said)
+    }
+
+    /// The note a program selected loose from inside a package opens with, located at its file's start so an editor places it on the document asked about.
+    fn note(&self, overlay: &Overlay) -> Option<Diagnosis> {
+        let (message, source) = self.unlinked(overlay, "was checked")?;
         let report = match source {
             Some(source) => Report::at(Span::new(source, 0, 0), message),
             None => Report::unlocated(message),

@@ -195,6 +195,36 @@ fn a_loose_file_compiles_only_where_output_says() {
     );
 }
 
+/// A build and a test run of a file no unit declares name what its form is declared by, as a question does: one written as a module is told its `mod` line, though a build goes on to refuse it for the term it lacks, and one written as a program its row.
+#[test]
+fn a_build_and_a_test_run_name_what_the_files_form_is_declared_by() {
+    let root = project("unlinked-forms");
+    write(&root, "items.crs", "pub let w : /std/Str = \"a\";\n");
+    write(&root, "scratch.crs", "/std/print(\"on its own\")\n");
+    let module = "declare it with `mod items;` in lib.crs";
+    let program = "an `[[executables]]` row in its manifest declares it";
+    let stderr =
+        |arguments: &[&str]| String::from_utf8_lossy(&curios(&root, arguments).stderr).into_owned();
+
+    let built = stderr(&["run", "items.crs"]);
+    assert!(
+        built.starts_with(&format!(
+            "note: items.crs is in no unit of `/app`, so it is compiled on its own against `/std`: {module}\n"
+        )),
+        "{built}"
+    );
+
+    for (file, remedy) in [("items.crs", module), ("scratch.crs", program)] {
+        let tested = stderr(&["test", file]);
+        assert!(
+            tested.starts_with(&format!(
+                "note: {file} is in no unit of `/app`, so it is tested on its own against `/std`: {remedy}\n"
+            )),
+            "{tested}"
+        );
+    }
+}
+
 /// A file its package's directory holds and no unit declares is built against `/std` alone, and a build says so ahead of its header, naming the row that would declare it as a program — where a file no package holds is built with nothing said.
 #[test]
 fn a_file_no_unit_declares_says_so_when_built() {

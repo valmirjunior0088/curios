@@ -17,6 +17,16 @@ use {
     std::{fmt::Display, fs, io, path::Path, sync::Arc},
 };
 
+/// Say, ahead of everything a command reports of `program`, that its file is one its package's directory holds and no unit declares, where it is one: the command takes it on its own, which `taken` words, and nothing after would say what it was not compiled against, so a name of the package refused in it reads as a typo. What would declare it follows the form it is written in ([`Unlinked::note`](curios_package::Unlinked::note)), read off the disk: a file that cannot be read is a program's to report.
+pub(crate) fn note_unlinked(program: &Program, taken: &str) {
+    if let Some(unlinked) = program.unlinked() {
+        let form = fs::read_to_string(&unlinked.file)
+            .map_or(Form::Program, |text| Form::of(&unlinked.file, &text));
+
+        note(unlinked.note(taken, form));
+    }
+}
+
 /// The precompiled payload for `program`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
 ///
 /// The scope is the program's own dependency graph and nothing else: a manifest is the only thing that says what a unit is compiled against. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
@@ -27,14 +37,7 @@ pub(crate) fn payload_of(
 ) -> Result<(Vec<u8>, ForeignStore), CompileError> {
     let subject = subject_of(&program);
 
-    // A file its package's directory holds and no unit declares is built loose, which nothing below would say: the build is silent about what it was not compiled against, and a name of the package refused in it reads as a typo. A program is declared by a row, so the remedy is a build's own and not the `mod` line a question names.
-    if let Some(unlinked) = program.unlinked() {
-        note(format!(
-            "{} is in no unit of `/{}`, so it is compiled on its own against `/std`: an `[[executables]]` row in its manifest declares it",
-            unlinked.file.display(),
-            unlinked.package
-        ));
-    }
+    note_unlinked(&program, "is compiled");
 
     // A loose program has no project, so it has no store to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
     let entry = match program.entry() {

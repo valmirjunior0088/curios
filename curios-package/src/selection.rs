@@ -16,7 +16,7 @@ use {
         EXECUTABLE, EXTENSION, Executable, Governing, LIBRARY, MANIFEST, Manifest, Package,
         module_of, nearest_manifest, order, reachable, stem_module_of,
     },
-    curios_text::{Entrypoint, Overlay, RootSource, identity},
+    curios_text::{Entrypoint, Form, Overlay, RootSource, identity},
     curios_utilities::Qualifier,
     std::path::{Path, PathBuf},
 };
@@ -217,7 +217,7 @@ pub struct Home {
     pub output: PathBuf,
 }
 
-/// Why a file a package's directory holds is in none of its units: the pieces a command words its own note from, since a question that checked the file and a build that compiled it say different things about it.
+/// Why a file a package's directory holds is in none of its units, and the note a command that takes it on its own opens with ([`Unlinked::note`]).
 #[derive(Debug, Clone)]
 pub struct Unlinked {
     /// The file, as it was asked about.
@@ -226,6 +226,24 @@ pub struct Unlinked {
     pub package: String,
     /// What would put it in a unit as a module: the `mod` line and the file it goes in, or why nothing can declare it.
     pub remedy: String,
+}
+
+impl Unlinked {
+    /// The note a command opens with where it takes the file on its own: that no unit of its package holds it, what the command does with it, which is `taken` — `was checked`, `is compiled` — and what would declare it.
+    ///
+    /// **What declares it follows the form it is written in**, a module by a `mod` line and a program by a row of its manifest, and never the command: a `mod` line over a file that ends in a term is refused, and so is a build of a file of items alone, so a remedy worded by the command names a declaration the file's form refuses. Said here, once, so every command that takes such a file says the same of it.
+    pub fn note(&self, taken: &str, form: Form) -> String {
+        let remedy = match form {
+            Form::Module => self.remedy.as_str(),
+            Form::Program => "an `[[executables]]` row in its manifest declares it",
+        };
+
+        format!(
+            "{} is in no unit of `/{}`, so it {taken} on its own against `/std`: {remedy}",
+            self.file.display(),
+            self.package
+        )
+    }
 }
 
 impl Program {

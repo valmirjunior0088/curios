@@ -7,8 +7,8 @@ mod tests;
 
 use {
     crate::{
-        Access, Heading, Line, Subject, bindings_of, drained, fact, open, processing, report, step,
-        supplied,
+        Access, Heading, Line, Subject, bindings_of, drained, fact, note_unlinked, open,
+        processing, report, step, supplied,
     },
     curios::{engine, to_cwasm},
     curios_abi::ForeignStore,
@@ -125,6 +125,7 @@ pub(crate) fn run_tests(
             // A loose program is tested in the form it is written in: a module as a unit of its own, and a program as its entry. Standard input is drained once, before its form is known, since either reading needs the whole text.
             None => match program.entry() {
                 Entry::File(path) => {
+                    note_unlinked(&program, "is tested");
                     let subject = Subject::File(path.clone());
                     match RootSource::loose_module(path, &Overlay::default()) {
                         Some(unit) => run.loose_module(unit, path, &subject)?,
