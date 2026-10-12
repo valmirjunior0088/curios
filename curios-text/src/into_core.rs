@@ -2411,8 +2411,8 @@ fn into_core_unit_within(
         in_scope.widens_nothing(public.own()),
         "an export of another unit's name shows it to nobody its own unit does not"
     );
-    // How a name is written by a reader standing at one of the unit's items: what a refusal of the audit spells the item and what it exposes by, as every report of the unit does once it is lowered ([`PreparedText::spellings`]). Made where the audit refuses, from the tables as they stand, and by no audit that passes.
-    let spelled = |item: &Qualifier, name: &curios_core::Global| {
+    // The audit's refusal of one of the unit's items. It spells the item and what it exposes as a reader standing at the item writes each, as every report of the unit does once it is lowered ([`PreparedText::spellings`]), and a module by its path, as a name that does not resolve is told of one. Made where the audit refuses, from the tables as they stand, and by no audit that passes.
+    let refused = |item: &Qualifier, unseen: &Unseen| {
         let own_table = table
             .own()
             .iter()
@@ -2430,10 +2430,18 @@ fn into_core_unit_within(
             predecessors,
         );
         let owner = curios_core::Global::Authored(*item);
+        let spelled = |name: &curios_core::Global| {
+            spellings
+                .spell(&item.without_last(), Some(&owner), name)
+                .unwrap_or_else(|| name.faithful().to_string())
+        };
+        let behind = unseen.behind(&|module, label| table.get(module)?.get_child(label));
 
-        spellings
-            .spell(&item.without_last(), Some(&owner), name)
-            .unwrap_or_else(|| name.faithful().to_string())
+        Error::PrivateItemInPublicInterface {
+            item: spelled(&owner),
+            referent: spelled(&unseen.referent),
+            behind: behind.map(|module| module.join()),
+        }
     };
     audit_public_exposures(
         &public,
@@ -2442,7 +2450,7 @@ fn into_core_unit_within(
         &facts,
         NominalScope::new(predecessors, &induct_decls, &struct_decls),
         &|extent| shared.anchoring.resolved(extent),
-        &spelled,
+        &refused,
     )?;
 
     let dead = unused_declarations(&Declarations {

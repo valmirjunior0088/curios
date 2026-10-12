@@ -63,7 +63,7 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
     );
 }
 
-// The other privately-resolvable path: an item inside the module's own private child (the head segment resolves lexically, so resolution never checked the child's visibility). `T` reaches only `M`'s subtree while `g` reaches the whole program, so the audit names `T` itself rather than the first private hop on the way to it.
+// The other privately-resolvable path: an item inside the module's own private child (the head segment resolves lexically, so resolution never checked the child's visibility). `T` reaches only `M`'s subtree while `g` reaches the whole program, so the audit names `T`, and the module that keeps it there: `T` is `pub` already, and writing `pub` on it again is no way out.
 #[test]
 fn pub_signature_exposing_private_child_module_is_rejected() {
     let source = r#"
@@ -81,7 +81,8 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("exposes private item 'T'"),
+        error.contains("exposes 'T' in its signature, and 'T' is in the private module '/M/Inner'")
+            && error.contains("mark '/M/Inner' pub, re-export 'T' beside 'g', or make 'g' private"),
         "unexpected error: {error}"
     );
 }

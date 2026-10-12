@@ -62,6 +62,8 @@ pub enum Error {
     PrivateItemInPublicInterface {
         item: String,
         referent: String,
+        /// The module that keeps the referent from the item's readers, where the referent is exposed to all of that module's and the module is the declaration written without `pub`.
+        behind: Option<String>,
     },
     /// A postfix `!` was reached through a *type* lowering (an annotation, a motive, a Π/Σ component): types have no region to hoist the action to.
     BangInTypePosition,
@@ -230,9 +232,22 @@ impl fmt::Display for Error {
                 f,
                 "{claim} collides with `{claimed}`, claimed by {claimant}; a prefix belongs to exactly one unit, and no claimed prefix may lie within another's subtree"
             ),
-            Error::PrivateItemInPublicInterface { item, referent } => write!(
+            Error::PrivateItemInPublicInterface {
+                item,
+                referent,
+                behind: None,
+            } => write!(
                 f,
                 "public item '{item}' exposes private item '{referent}' in its signature\n  mark '{referent}' pub, or make '{item}' private"
+            ),
+            // Beside the item is where a re-export always answers: the item's module names the referent already, and its audience is the item's.
+            Error::PrivateItemInPublicInterface {
+                item,
+                referent,
+                behind: Some(module),
+            } => write!(
+                f,
+                "public item '{item}' exposes '{referent}' in its signature, and '{referent}' is in the private module '{module}'\n  mark '{module}' pub, re-export '{referent}' beside '{item}', or make '{item}' private"
             ),
             Error::QualifierConflict { qualifier, .. } => {
                 write!(f, "`{qualifier}` already names a module in this scope")

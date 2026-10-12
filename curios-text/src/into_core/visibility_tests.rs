@@ -141,7 +141,7 @@ fn facade_may_name_what_it_re_exports_in_a_public_signature() {
     "#);
 }
 
-// Without the re-export the same signature is rejected: `Helper` reaches only `Facade`'s subtree, while `build` reaches the whole program.
+// Without the re-export the same signature is rejected: `Helper` reaches only `Facade`'s subtree, while `build` reaches the whole program. The refusal names the module that keeps it there, and offers the re-export above.
 #[test]
 fn public_signature_naming_an_unexported_subtree_item_is_rejected() {
     assert!(
@@ -157,6 +157,8 @@ fn public_signature_naming_an_unexported_subtree_item_is_rejected() {
         Type
     "#
         )
-        .contains("exposes private item"),
+        .contains(
+            "exposes 'Helper' in its signature, and 'Helper' is in the private module '/Facade/Impl'\n  mark '/Facade/Impl' pub, re-export 'Helper' beside 'build', or make 'build' private"
+        ),
     );
 }

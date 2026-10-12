@@ -144,17 +144,48 @@ fn referent_audience(
     audience
 }
 
+/// A name some reader of an item cannot see, with the subtrees whose modules can.
+pub(super) struct Unseen {
+    pub(super) referent: curios_core::Global,
+    reach: Vec<Qualifier>,
+}
+
+impl Unseen {
+    /// The module that keeps the name from the readers it does not reach: the one on the name's own path that stands directly under the widest subtree it reaches, where that module is written without `pub`. `child` answers whether a module declares a child of a label, and whether it wrote `pub` on it.
+    ///
+    /// `None` where what stands there is the name itself, a declaration written without `pub`, and where the reach stops for a reason its own path does not show, an export elsewhere.
+    ///
+    /// **The widest subtree, not the innermost private module.** A name declared in one private module and exported out of it into another reaches the second one's audience: writing `pub` on the first changes nothing, and it is the second that a reader is told of.
+    pub(super) fn behind(
+        &self,
+        child: &dyn Fn(&Qualifier, &str) -> Option<bool>,
+    ) -> Option<Qualifier> {
+        let path = self.referent.qualifier()?;
+        let widest = self
+            .reach
+            .iter()
+            .filter(|root| path.is_within(root) && path != *root)
+            .min_by_key(|root| root.segments().len())?;
+        let below = &path.segments()[widest.segments().len()..];
+        let [label, _, ..] = below else {
+            return None;
+        };
+
+        (child(widest, label) == Some(false)).then(|| widest.with(label))
+    }
+}
+
 /// Every consumer of an item exposed to `exposure` must be able to see everything the item's signature names, its `dependencies`: the first that one of them cannot see is handed back. Checked against audiences rather than the declaration path, so an item re-exported out of a private module counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
     audiences: AudienceScope<'_>,
     sources: &BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
     exposure: &[Qualifier],
     dependencies: impl IntoIterator<Item = curios_core::Global>,
-) -> Result<(), curios_core::Global> {
+) -> Result<(), Unseen> {
     for referent in dependencies {
         let reach = referent_audience(audiences, sources, &referent);
         if !Audiences::covers(exposure, &reach) {
-            return Err(referent);
+            return Err(Unseen { referent, reach });
         }
     }
 
@@ -165,7 +196,7 @@ fn audit_dependencies(
 ///
 /// The declared type of every definition is audited here rather than during lowering: only the converged interface graph knows where a name ends up visible, so a signature naming an item re-exported out of a private child is accepted, while one naming something its own consumers cannot reach is not.
 ///
-/// A refusal is placed at the name of the item that exposes: the declaration's own, or, for a binding a module re-exports, the declaration it stands for where this unit wrote it. `placed` gives the span an extent of one of the unit's declarations lies on. It names the item and what the item exposes as a reader standing at the item writes each: `spelled` gives a name's spelling for a reader at the item whose path it is handed.
+/// A refusal is placed at the name of the item that exposes: the declaration's own, or, for a binding a module re-exports, the declaration it stands for where this unit wrote it. `placed` gives the span an extent of one of the unit's declarations lies on. `refused` makes the refusal of the item whose path it is handed, for the name one of its readers cannot see: it holds the tables that say how a reader standing at the item writes each, and which declaration keeps the name from the rest.
 pub(super) fn audit_public_exposures(
     public: &Scoped<'_, PublicInterface>,
     audiences: AudienceScope<'_>,
@@ -173,7 +204,7 @@ pub(super) fn audit_public_exposures(
     facts: &[&LoweredItem],
     scope: NominalScope<'_>,
     placed: &dyn Fn(&curios_core::Extent) -> Option<Span>,
-    spelled: &dyn Fn(&Qualifier, &curios_core::Global) -> String,
+    refused: &dyn Fn(&Qualifier, &Unseen) -> Error,
 ) -> Result<(), Error> {
     curios_profile::profile!("audit_public_exposures");
     let aliases = aliases(items, facts);
@@ -196,11 +227,6 @@ pub(super) fn audit_public_exposures(
         Some(span) => error.at(span),
         None => error,
     };
-    let refused =
-        |item: &Qualifier, referent: curios_core::Global| Error::PrivateItemInPublicInterface {
-            item: spelled(item, &curios_core::Global::Authored(*item)),
-            referent: spelled(item, &referent),
-        };
 
     for ((name, _, island), declared) in definitions() {
         // Only definitions the source actually wrote. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and is audited through the declaration that produced it.
@@ -220,9 +246,9 @@ pub(super) fn audit_public_exposures(
             &exposure,
             declared.signature.iter().copied(),
         )
-        .map_err(|referent| {
+        .map_err(|unseen| {
             at(
-                refused(path, referent),
+                refused(path, &unseen),
                 declared.label.as_ref().and_then(placed),
             )
         })?;
@@ -240,9 +266,9 @@ pub(super) fn audit_public_exposures(
             };
             let item = module.with(label);
             let exposure = audiences.module(module);
-            let exposed = |referent| {
+            let exposed = |unseen: Unseen| {
                 at(
-                    refused(&item, referent),
+                    refused(&item, &unseen),
                     named(item).or_else(|| named(entry.target)),
                 )
             };
