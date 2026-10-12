@@ -18,7 +18,7 @@ use {
         Printer, ends, fill, flat, group, hard_line, if_break, indent, line, named, pure, reached,
         sep_flat, soft_line,
     },
-    curios_utilities::Plicity,
+    curios_utilities::{Plicity, recurse},
 };
 
 fn print_plicity(plicity: Plicity) -> Printer {
@@ -1138,10 +1138,11 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
 
 pub(crate) fn print_term(term: Term) -> Printer {
     // The whole of what the printer tells a formatter's renderer: where the term's own text begins and ends in the source. The renderer follows the source by itself and needs neither to place a comment; they are where it picks the text up again past a literal this printer spells another way than it was written — see `Printer::Mark`. Outside a format run both emit nothing.
-    match term.span().map(|span| (span.start, span.end)) {
+    // With room to recurse: a term a report prints is as deep as the reduction that built it, a type a recursion nested once a step among them.
+    recurse(|| match term.span().map(|span| (span.start, span.end)) {
         Some((start, end)) => flat([reached(start), print_term_inner(term), reached(end)]),
         None => print_term_inner(term),
-    }
+    })
 }
 
 /// The documentation comment above what `doc` documents: every line printed as written, each on a line of its own.
