@@ -13,7 +13,7 @@ use {
         Universes, rewrite_universe_levels_scoped_shared, rewrite_universe_qualities,
         universes_in_order,
     },
-    curios_utilities::Entropy,
+    curios_utilities::{Entropy, Keyed},
     std::{cell::RefCell, collections::HashMap, convert::Infallible},
 };
 
@@ -24,6 +24,18 @@ struct ElaborationKey {
     expected: Option<Term>,
     privacy_checked: bool,
     plain: bool,
+}
+
+impl ElaborationKey {
+    /// The key of one `elaborate` call as its table holds it, told apart from another by its hash before either term is compared.
+    fn of(term: &Term, expected: Option<&Term>, privacy_checked: bool, plain: bool) -> Keyed<Self> {
+        Keyed::new(Self {
+            term: term.clone(),
+            expected: expected.cloned(),
+            privacy_checked,
+            plain,
+        })
+    }
 }
 
 /// Outcome of `Context::probe_elaborated` — the read half of the elaboration cache, torn out of `Context::get_or_init_elaborated`'s bracket so the iterative `elaborate` driver can probe at a frame push and record at the matching pop (the reduction cache's `cached_reduced`/`reduce` split, one level up). `Hit` carries the memoized, unplaced `(rebuilt, type)`; `Miss` carries the state snapshot the caller threads back into `Context::record_elaborated` as its purity witness; `Uncacheable` marks a term the groundness gate excludes — the caller elaborates it but records nothing.
@@ -56,15 +68,15 @@ pub(crate) struct Caches {
     ///
     /// **Valid for a quiet stretch, and that is as long as it needs to be.** A sort is derived by reduction and reads more besides: the type a local is assumed at, what a metavariable is solved to and has for a type, a declaration's sort, the levels the universe solver holds. Each of those changes by a stamped write, by a frame's exit — which closes binders and stamps nothing — or where a reduct is cleared, so the table is emptied at the first probe after either stamp has moved, wherever a frame is left, and wherever the reducts are. One classification does none of the three: it opens its binders beside the context rather than in it, which is why `Sort::of_in` threads them, and it is the classification that is per path without the table.
     ///
-    /// **Filed by the reduction that read it**, as a reduct is: a sort is read through reducts, and a term's reduct under a judgment's reduction is not its reduct under plain reduction.
-    sorts: HashMap<(Term, bool), Sort>,
+    /// **Filed by the reduction that read it**, a table for each as the reducts have: a sort is read through reducts, and a term's reduct under a judgment's reduction is not its reduct under plain reduction.
+    sorts: [HashMap<Term, Sort>; 2],
     /// The stamps `sorts` was filled under.
     sorts_at: ElaborationStamp,
     /// Each instance of a universe-polymorphic `rec` group reduction has opened in the declaration in progress, beside the group it instantiates and the levels it was opened at. An instance holds its levels substituted through every member, so the pair is what says which instance of which group a copy is without reading the levels back off it. It lives one declaration, as the levels' metavariables do.
-    instances: HashMap<RecGroup, (RecGroup, Universes)>,
-    elaboration: HashMap<ElaborationKey, (Term, Term)>,
+    instances: HashMap<Keyed<RecGroup>, (RecGroup, Universes)>,
+    elaboration: HashMap<Keyed<ElaborationKey>, (Term, Term)>,
     /// Elaborations inside an oracle bracket (`Context::with_oracle`) that the table above must refuse, one table per live bracket, innermost last: see `Context::get_or_init_elaborated` for what they admit and why. Cleared wherever the table above is, and discarded with their bracket.
-    oracle: Vec<HashMap<ElaborationKey, (Term, Term)>>,
+    oracle: Vec<HashMap<Keyed<ElaborationKey>, (Term, Term)>>,
     /// Whether a binder is itself a proof — assumed at a proposition — for each binder a stuck form naming it has put to the entries in scope (`reduce`'s `proofs_named`). A binder's identity is minted once, so an entry is never another binder's, and the table goes with the declaration.
     proofs: HashMap<Free, bool>,
     /// One tick per *write* to any kernel store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `Context::get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
@@ -152,26 +164,33 @@ impl Caches {
         for closed in &mut self.closed {
             closed.clear();
         }
-        self.sorts.clear();
+        self.clear_sorts();
         self.kernel_spellings.get_mut().clear();
+    }
+
+    /// Every remembered sort, of both reductions.
+    fn clear_sorts(&mut self) {
+        for sorts in &mut self.sorts {
+            sorts.clear();
+        }
     }
 
     /// The remembered sort of `type_`, where nothing was written since it was filed: as plain reduction read it where `plain`, and as a judgment's did otherwise.
     pub(crate) fn sort_get(&mut self, type_: &Term, plain: bool) -> Option<Sort> {
         self.settle_sorts();
 
-        self.sorts.get(&(type_.clone(), plain)).cloned()
+        self.sorts[usize::from(plain)].get(type_).cloned()
     }
 
     pub(crate) fn sort_insert(&mut self, type_: Term, plain: bool, sort: Sort) {
         self.settle_sorts();
-        self.sorts.insert((type_, plain), sort);
+        self.sorts[usize::from(plain)].insert(type_, sort);
     }
 
     /// Empty the sorts where either stamp has moved since they were filed, and file what follows under the stamps as they stand.
     fn settle_sorts(&mut self) {
         if !self.stamps_unchanged(&self.sorts_at) {
-            self.sorts.clear();
+            self.clear_sorts();
             self.sorts_at = self.stamps();
         }
     }
@@ -209,12 +228,13 @@ impl Caches {
         group: RecGroup,
         universes: Universes,
     ) {
-        self.instances.insert(instance, (group, universes));
+        self.instances
+            .insert(Keyed::new(instance), (group, universes));
     }
 
     /// The group `instance` was opened from and the instance it was opened at, where reduction opened it in the declaration in progress.
     pub(crate) fn instance_get(&self, instance: &RecGroup) -> Option<&(RecGroup, Universes)> {
-        self.instances.get(instance)
+        self.instances.get(&Keyed::new(instance.clone()))
     }
 
     pub(crate) fn elaboration_get(
@@ -225,12 +245,7 @@ impl Caches {
         plain: bool,
     ) -> Option<(Term, Term)> {
         self.elaboration
-            .get(&ElaborationKey {
-                term: term.clone(),
-                expected: expected.cloned(),
-                privacy_checked,
-                plain,
-            })
+            .get(&ElaborationKey::of(term, expected, privacy_checked, plain))
             .cloned()
     }
 
@@ -243,12 +258,7 @@ impl Caches {
         result: &(Term, Term),
     ) {
         self.elaboration.insert(
-            ElaborationKey {
-                term: term.clone(),
-                expected: expected.cloned(),
-                privacy_checked,
-                plain,
-            },
+            ElaborationKey::of(term, expected, privacy_checked, plain),
             result.clone(),
         );
     }
@@ -277,12 +287,7 @@ impl Caches {
     ) -> Option<(Term, Term)> {
         self.oracle
             .last()?
-            .get(&ElaborationKey {
-                term: term.clone(),
-                expected: expected.cloned(),
-                privacy_checked,
-                plain,
-            })
+            .get(&ElaborationKey::of(term, expected, privacy_checked, plain))
             .cloned()
     }
 
@@ -296,12 +301,7 @@ impl Caches {
     ) {
         if let Some(table) = self.oracle.last_mut() {
             table.insert(
-                ElaborationKey {
-                    term: term.clone(),
-                    expected: expected.cloned(),
-                    privacy_checked,
-                    plain,
-                },
+                ElaborationKey::of(term, expected, privacy_checked, plain),
                 result.clone(),
             );
         }
@@ -340,7 +340,7 @@ impl Caches {
             closed.retain_without(name);
         }
         // A sort is read through reducts and names none, so it has nothing to be retained by.
-        self.sorts.clear();
+        self.clear_sorts();
     }
 
     /// An assumption's type was replaced in place (`reassume`): an entry elaborated between a `rec` group's lowered `assume` and this upgrade could embed the lowered signature, so the elaboration cache clears; reducts never read assumption types, so the reduction cache survives. Stamped.
@@ -356,7 +356,7 @@ impl Caches {
         dropped_definitions: bool,
     ) {
         // The frame's binders go with it, and a sort is read off a binder's type: the write that opened one was stamped, and nothing stamps its closing.
-        self.sorts.clear();
+        self.clear_sorts();
         if dropped_refinements {
             self.clear_reductions();
             self.clear_elaborations();
@@ -374,7 +374,7 @@ impl Caches {
                 self.reduction[1].clear();
                 self.reduction_erased[1].clear();
                 self.closed[1].clear();
-                self.sorts.retain(|(_, plain), _| !plain);
+                self.sorts[1].clear();
                 // A scrutinee's spelling reads the refinements in the window, which this boundary moves.
                 self.kernel_spellings.get_mut().clear();
             }

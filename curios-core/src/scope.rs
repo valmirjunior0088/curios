@@ -7,7 +7,7 @@ use {
         Extent, Free, Global, Level, LevelHead, Quality, Subterm, Term, UniverseError,
         UniverseMetaId, UniverseParam, Universes,
     },
-    curios_utilities::Symbol,
+    curios_utilities::{Keyed, Symbol},
     std::{
         cell::RefCell,
         collections::{BTreeSet, HashMap, HashSet},
@@ -904,12 +904,15 @@ struct Spelling {
 /// **One node for each structure as it is spelled, and no position on any.** A node is adopted unless the table holds one of its structure, under the same binder names, over the very same children; children are canonical before their parent is asked for, so the test is one node deep. Up to α it would hand `pow(base: Nat, exp: Nat)` the node of `min(a: Nat, b: Nat)`, and every report of `pow`'s type would name `a` and `b`. A canonical node sits under no extent and holds its children under none: a position is an occurrence's, a canonical node is every occurrence's, and what is consed says what it means and not where it was written.
 #[derive(Debug, Clone, Default)]
 pub struct Sharing {
-    table: Rc<RefCell<HashSet<(Spelling, Term)>>>,
+    table: Rc<RefCell<HashSet<Adopted>>>,
     /// The canonical node of every input node met through this table, by the node's identity, with the node itself.
     ///
     /// **A node two definitions hold is walked once, whichever call meets it.** A visit's own memo lives for one call, and a module is canonicalized a term at a time, so a node shared between definitions — every node of a module restored from a consed image is one — would be rebuilt for each definition that reaches it and found in the table each time. The node is held beside its answer because an identity is an address: one freed while the table lives could be handed to another node, whose lookup would answer with the first one's.
     met: Rc<RefCell<HashMap<usize, (Term, Term)>>>,
 }
+
+/// A node a [`Sharing`] adopted, under the spelling it was adopted for: told apart from another by its hash, so a probe compares no node but the one it asks for.
+type Adopted = Keyed<(Spelling, Term)>;
 
 impl Sharing {
     pub fn new() -> Self {
@@ -931,11 +934,11 @@ impl Sharing {
     /// The canonical node for `fresh`, a node just built over canonical children: the one adopted under its spelling, or itself.
     fn adopt(&self, spelling: Spelling, fresh: Term) -> Term {
         let mut table = self.table.borrow_mut();
-        let key = (spelling, fresh);
+        let key = Keyed::new((spelling, fresh));
         match table.get(&key) {
-            Some((_, canonical)) => canonical.clone(),
+            Some(adopted) => adopted.key().1.clone(),
             None => {
-                let canonical = key.1.clone();
+                let canonical = key.key().1.clone();
                 table.insert(key);
                 canonical
             }

@@ -46,7 +46,7 @@ use {
         TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Universes,
         Variance, Variant, past_bool_cap,
     },
-    curios_utilities::{Plicity, recurse},
+    curios_utilities::{Keyed, Plicity, recurse},
     std::{
         collections::{HashMap, HashSet, VecDeque},
         mem,
@@ -296,7 +296,7 @@ pub(crate) struct Posed {
 #[derive(Debug)]
 pub(crate) struct Convert {
     // Every problem this run has posed. A run holds where each of its problems does, so one posed again adds nothing it does not already owe, and is not posed: what lets the walk take two equal graphs built apart in their size. Nothing is assumed by it, a problem never being the one posed inside its own unfolding ([`Pairs`]).
-    posed: HashSet<Posed>,
+    posed: HashSet<Keyed<Posed>>,
     pending: VecDeque<Problem>,
     // Constraints postponed because a side is flexible but not yet solvable (flex–flex with distinct heads, or a candidate carrying an unsolved metavariable). Retried whenever a fresh solution lands.
     blocked: Vec<Problem>,
@@ -399,13 +399,13 @@ impl Convert {
 
     fn new(problem: Problem, extent: Option<Extent>) -> Self {
         let mut run = Self::under(problem.binders.clone(), problem.pairs.clone(), extent);
-        run.posed.insert(Posed {
+        run.posed.insert(Keyed::new(Posed {
             type_: problem.type_.clone(),
             this: problem.this.clone(),
             that: problem.that.clone(),
             relation: problem.relation,
             pairs: problem.pairs.clone(),
-        });
+        }));
         run.pending.push_back(problem);
 
         run
@@ -524,13 +524,13 @@ impl Convert {
 
     /// [`Self::enqueue`] at `relation`.
     fn enqueue_at(&mut self, relation: Relation, type_: Term, this: Term, that: Term) {
-        let posed = Posed {
+        let posed = Keyed::new(Posed {
             type_: type_.clone(),
             this: this.clone(),
             that: that.clone(),
             relation,
             pairs: self.pairs.clone(),
-        };
+        });
         if !self.posed.insert(posed) {
             return;
         }

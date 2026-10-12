@@ -14,6 +14,7 @@ use {
     crate::{decide, grade, member_arities, nonzero_by},
     curios_analysis::{Call, SizeContext},
     curios_core::{Free, Intrinsic, RecGroup, Subterm, Term, Totality},
+    curios_utilities::Keyed,
     std::collections::{HashMap, HashSet},
 };
 
@@ -24,13 +25,13 @@ pub(super) struct Calls {
     /// The groups whose bodies are being checked, innermost last.
     frames: Vec<Frame>,
     /// Each group this walk checked, with the verdict its calls closed to.
-    verdicts: HashMap<RecGroup, Totality>,
+    verdicts: HashMap<Keyed<RecGroup>, Totality>,
     /// How many groups that do not descend this walk has closed — or met again through a memo hit on a term whose typing closed one. A judgment compares it before and after to learn whether such a group was typed inside it, which is how a verdict reaches what encloses the group without anything looking the group up: the group is typed with its enclosing binders opened, and a term that holds it holds it closed.
     partial: usize,
     /// The terms whose typing closed a group that does not descend, so a memo hit on one counts it again.
     partial_terms: HashSet<Term>,
     /// For each group checked, whether each member's signature or body enclosed a group of its own that does not descend.
-    members_enclosing: HashMap<RecGroup, Vec<bool>>,
+    members_enclosing: HashMap<Keyed<RecGroup>, Vec<bool>>,
     /// The definitions whose check enclosed a group that does not descend.
     definitions_enclosing: HashSet<Free>,
     /// Whether the next judgment types the head of an application spine, which is part of the call the spine makes rather than a call of its own.
@@ -197,10 +198,9 @@ impl Kernel<'_> {
         };
         frame.caller = None;
         let totality = decide(std::mem::take(&mut frame.calls));
+        let group = Keyed::new(group.clone());
         self.calls.verdicts.insert(group.clone(), totality);
-        self.calls
-            .members_enclosing
-            .insert(group.clone(), enclosing);
+        self.calls.members_enclosing.insert(group, enclosing);
         // Not while a position is being classified: that types the position's *type*, and a group there is not one the position's term holds.
         if totality != Totality::Total && !self.positions.suppressed() {
             self.calls.partial += 1;
@@ -338,22 +338,21 @@ impl Kernel<'_> {
         totality: Totality,
         enclosing: Vec<bool>,
     ) {
+        let group = Keyed::new(group.clone());
         self.calls.verdicts.insert(group.clone(), totality);
-        self.calls
-            .members_enclosing
-            .insert(group.clone(), enclosing);
+        self.calls.members_enclosing.insert(group, enclosing);
     }
 
     /// The verdict `group`'s recorded calls closed to, when this walk checked it.
     pub(crate) fn group_verdict(&self, group: &RecGroup) -> Option<Totality> {
-        self.calls.verdicts.get(group).copied()
+        self.calls.verdicts.get(&Keyed::new(group.clone())).copied()
     }
 
     /// Whether member `index` of `group` enclosed a group of its own that does not descend — true for a group this walk never checked, which is the refusing direction.
     pub(crate) fn member_encloses_partial(&self, group: &RecGroup, index: usize) -> bool {
         self.calls
             .members_enclosing
-            .get(group)
+            .get(&Keyed::new(group.clone()))
             .and_then(|enclosing| enclosing.get(index).copied())
             .unwrap_or(true)
     }

@@ -11,7 +11,7 @@ use {
         DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
         project_erased_universes,
     },
-    curios_utilities::Entropy,
+    curios_utilities::{Entropy, Keyed},
     std::{
         collections::{BTreeMap, HashMap},
         hash::Hash,
@@ -251,7 +251,7 @@ pub(crate) struct Frames<'s> {
     assumption_universes: Vec<HashMap<Free, UniverseContext>>,
     definitions: Vec<Recorded<Free, DefEntry>>,
     /// Each top-level `rec` group the base frame defines a member of, beside the global each member is defined under, in member order: `definitions` read the other way, kept as each member is defined so that a reader holding a group asks for its names and scans nothing. A member not yet defined, or forgotten, is `None`. Asked by group and never read in order, which a hash map has none of.
-    members: HashMap<RecGroup, Vec<Option<Global>>>,
+    members: HashMap<Keyed<RecGroup>, Vec<Option<Global>>>,
     /// Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
     refinements: Vec<Recorded<Free, Term>>,
     refinement_projections: Vec<Recorded<(Term, usize), ProjectionEntry>>,
@@ -263,8 +263,8 @@ pub(crate) struct Frames<'s> {
     ///
     /// An entry is visible under one window floor only, the one in force where it was registered: a suppression bracket and a retry frame hide every frame that stood when they began, and leave after every frame entered inside them. So a spelling is never read under a floor other than the one it was settled under.
     ///
-    /// **Settled once for each of the two reductions**, the key saying which (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
-    scrutinee_spellings: Vec<HashMap<(Term, bool), Spelling>>,
+    /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
+    scrutinee_spellings: Vec<[HashMap<Term, Spelling>; 2]>,
     /// How much of the refinement stack is withheld, as the frame depth suppression began at — `None` for none of it.
     ///
     /// A depth rather than a flag, because the refinements a re-validation meets are not all of one kind. The *ambient* ones — the arm the solver is currently inside — are counterfactual with respect to a solution for a metavariable born elsewhere, and withholding them is the whole point (`Convert::solve_at_birth`). Above this depth sit the ones the metavariable was born under, reinstalled by `Context::with_refinements`, and the candidate's own: `check` descending into a match arm of the term being validated re-establishes exactly the equalities that made that arm's body well-typed where it was written. Withholding those rejects correct solutions — a proof discharged by reduction inside an arm, `True/qed()` against `Holds(0 < Bytes/len(b))` in `/std/Str`'s scan fold, fails to re-check and the solution is thrown away — so suppression stops at the depth it started from.
@@ -304,7 +304,7 @@ impl<'s> Frames<'s> {
             refinements: vec![Recorded::new()],
             refinement_projections: vec![Recorded::new()],
             refinement_scrutinees: vec![Recorded::new()],
-            scrutinee_spellings: vec![HashMap::new()],
+            scrutinee_spellings: vec![Default::default()],
             suppress_refinements_below: None,
             withhold_refinements_from: None,
             dead_arms: vec![None],
@@ -340,7 +340,7 @@ impl<'s> Frames<'s> {
         self.refinements.push(Recorded::new());
         self.refinement_projections.push(Recorded::new());
         self.refinement_scrutinees.push(Recorded::new());
-        self.scrutinee_spellings.push(HashMap::new());
+        self.scrutinee_spellings.push(Default::default());
         self.dead_arms.push(None);
         self.local_marks.push(self.local.len());
         self.witness_marks.push(self.witness_scope.len());
@@ -594,7 +594,7 @@ impl<'s> Frames<'s> {
             {
                 let names = self
                     .members
-                    .entry(group.clone())
+                    .entry(Keyed::new(group.clone()))
                     .or_insert_with(|| vec![None; group.length()]);
                 if let Some(slot) = names.get_mut(index) {
                     *slot = Some(*global);
@@ -612,20 +612,21 @@ impl<'s> Frames<'s> {
         else {
             return;
         };
-        let Some(names) = self.members.get_mut(group) else {
+        let group = Keyed::new(group.clone());
+        let Some(names) = self.members.get_mut(&group) else {
             return;
         };
         if let Some(slot) = names.get_mut(index) {
             *slot = None;
         }
         if names.iter().all(Option::is_none) {
-            self.members.remove(group);
+            self.members.remove(&group);
         }
     }
 
     /// The globals the base frame defines `group`'s members under, in member order, where it defines every one.
     pub(crate) fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
-        match self.members.get(group) {
+        match self.members.get(&Keyed::new(group.clone())) {
             Some(names) => names.iter().copied().collect(),
             None => self.scope?.member_names(group),
         }
@@ -759,9 +760,8 @@ impl<'s> Frames<'s> {
     pub(crate) fn refine_scrutinee(&mut self, canonical: Term, entry: ScrutineeEntry) {
         self.refinement_stamp.fresh();
         // A key registered again is another entry, and what the one before it settled to is not its spelling.
-        let spellings = self.scrutinee_spellings.last_mut().unwrap();
-        for plain in [false, true] {
-            spellings.remove(&(canonical.clone(), plain));
+        for spellings in self.scrutinee_spellings.last_mut().unwrap() {
+            spellings.remove(&canonical);
         }
         self.refinement_scrutinees
             .last_mut()
@@ -778,10 +778,7 @@ impl<'s> Frames<'s> {
         solved: usize,
         levels: &UniverseStateToken,
     ) -> Option<&Option<Settled>> {
-        let spelling = self
-            .scrutinee_spellings
-            .get(frame)?
-            .get(&(key.clone(), plain))?;
+        let spelling = self.scrutinee_spellings.get(frame)?[usize::from(plain)].get(key)?;
 
         (spelling
             .solved
@@ -804,8 +801,8 @@ impl<'s> Frames<'s> {
         levels: Option<UniverseStateToken>,
     ) {
         if let Some(spellings) = self.scrutinee_spellings.get_mut(frame) {
-            spellings.insert(
-                (key, plain),
+            spellings[usize::from(plain)].insert(
+                key,
                 Spelling {
                     settled,
                     solved,
@@ -817,14 +814,14 @@ impl<'s> Frames<'s> {
 
     /// Forget every settled spelling: what a key reduces to may have changed everywhere.
     pub(crate) fn forget_spellings(&mut self) {
-        for spellings in &mut self.scrutinee_spellings {
+        for spellings in self.scrutinee_spellings.iter_mut().flatten() {
             spellings.clear();
         }
     }
 
     /// Forget the settled spellings a fresh definition of `name` can change: the ones naming it, which were stuck on its absence, and the ones that refused.
     pub(crate) fn forget_spellings_naming(&mut self, name: &Free) {
-        for spellings in &mut self.scrutinee_spellings {
+        for spellings in self.scrutinee_spellings.iter_mut().flatten() {
             spellings.retain(|_, spelling| {
                 spelling
                     .settled

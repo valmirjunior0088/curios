@@ -22,6 +22,7 @@ use {
     super::{Prefix, Replay, Sort},
     curios_analysis::Erased,
     curios_core::{Bound, ClosedMemo, Term},
+    curios_utilities::Keyed,
     std::{collections::HashMap, hash::Hash, mem},
 };
 
@@ -83,6 +84,12 @@ impl<K: Eq + Hash, V: Clone> Lives<K, V> {
     }
 }
 
+/// A term beside the type it was checked at, as the table of checks is keyed: told apart from another by its hash, so a probe compares no pair but the one it asks for.
+type Checked = Keyed<(Term, Term)>;
+
+/// A comparison as the table of verdicts is keyed, its type and then its two sides, told apart as a [`Checked`] is.
+type Compared = Keyed<(Term, Term, Term)>;
+
 pub(super) struct Memos {
     /// Whether the memos are consulted at all. On by default; `Kernel::uncached` exists so a test can assert that switching them off changes no *semantic* verdict — the property that makes them an evaluation strategy rather than a store.
     enabled: bool,
@@ -101,9 +108,9 @@ pub(super) struct Memos {
     /// The type inferred for each term: `infer`'s own answer, remembered as the reducts are. A reduct is a graph whose tree can be exponential in its depth, and so is a body whose `let`s the kernel substituted — every line a term over the function's parameters; typing walks what it meets, and remembered by term a subterm shared across that tree is typed once. Free on a hit. A type alone is kept, not a [`Replay`], because a hit replays nothing — see [`Kernel::infer_hit`](super::Kernel::infer_hit) for why, and for the terms it is refused.
     types: Lives<Term, Term>,
     /// Each term checked, beside the type it was checked at. The rules that introduce a function and a record, and the one that descends a `let`, check a term without inferring it, so a tuple whose two fields are one node is checked against its record once per path unless the check itself is remembered. Only that a term checked is kept: a refusal ends its item's check.
-    checked: Lives<(Term, Term), ()>,
+    checked: Lives<Checked, ()>,
     /// The verdict of each comparison decided with no pair of heads left apart inside its own unfolding, at its type: `convert`'s own answer, both ways. Two terms that are equal graphs built apart are compared along every path that reaches a pair of their nodes, and remembered by pair each is compared once. A verdict that left a pair of heads apart is true of the path it was reached on, and is not kept — see `convert`'s `Pairs`. One for each of the two reductions, as the sorts have: a comparison reduces its sides, so a verdict plain reduction reached is not the verdict of a judgment's, which may have asked.
-    converted: [Lives<(Term, Term, Term), bool>; 2],
+    converted: [Lives<Compared, bool>; 2],
     /// What the closed machine's runs have answered ([`ClosedMemo`]): a closed term's value is a function of the definition store, as a local-free reduct is, and lives the declaration with them. With the memos off it lives one run ([`Memos::begin_closed_run`]), which the machine cannot do without: a fold over a neutral accumulator is linear by it.
     closed: ClosedMemo,
 }
@@ -221,7 +228,8 @@ impl Memos {
     ) -> Option<(Option<Prefix>, ())> {
         let life = self.judged(&[term, expected], in_arm)?;
 
-        self.checked.get(&(term.clone(), expected.clone()), life)
+        self.checked
+            .get(&Keyed::new((term.clone(), expected.clone())), life)
     }
 
     /// Remember that `term` checks at `expected`.
@@ -233,8 +241,12 @@ impl Memos {
         prefix: Prefix,
     ) {
         if let Some(life) = self.judged(&[term, expected], in_arm) {
-            self.checked
-                .insert((term.clone(), expected.clone()), life, prefix, ());
+            self.checked.insert(
+                Keyed::new((term.clone(), expected.clone())),
+                life,
+                prefix,
+                (),
+            );
         }
     }
 
@@ -249,7 +261,10 @@ impl Memos {
     ) -> Option<(Option<Prefix>, bool)> {
         let life = self.judged(&[type_, this, that], in_arm)?;
 
-        self.converted[usize::from(plain)].get(&(type_.clone(), this.clone(), that.clone()), life)
+        self.converted[usize::from(plain)].get(
+            &Keyed::new((type_.clone(), this.clone(), that.clone())),
+            life,
+        )
     }
 
     /// Remember the verdict of the comparison `goal` — its type, then its two sides — for the reduction it was reached under.
@@ -262,7 +277,7 @@ impl Memos {
         verdict: bool,
     ) {
         if let Some(life) = self.judged(&[&goal.0, &goal.1, &goal.2], in_arm) {
-            self.converted[usize::from(plain)].insert(goal, life, prefix, verdict);
+            self.converted[usize::from(plain)].insert(Keyed::new(goal), life, prefix, verdict);
         }
     }
 

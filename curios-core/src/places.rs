@@ -11,6 +11,7 @@ mod tests;
 
 use {
     super::{Global, Item, Module, RecGroup, RecItem, Term},
+    curios_utilities::Keyed,
     std::{cell::OnceCell, collections::HashMap},
 };
 
@@ -42,7 +43,7 @@ pub struct Places {
     /// A group's member is read by its type and by its projection out of the group, which are terms the group does not hold as such: each is made the first time its member is read.
     members: Vec<OnceCell<(Term, Term)>>,
     /// The item each of the module's groups is, made the first time a report asks which names a group's members go by.
-    groups: OnceCell<HashMap<RecGroup, u32>>,
+    groups: OnceCell<HashMap<Keyed<RecGroup>, u32>>,
 }
 
 impl Places {
@@ -114,7 +115,7 @@ impl Places {
                 .enumerate()
                 .filter_map(|(item, declared)| match declared {
                     Item::Rec(rec) => Some((
-                        rec.group.clone(),
+                        Keyed::new(rec.group.clone()),
                         u32::try_from(item).expect("a unit's items are counted in a u32"),
                     )),
                     Item::Let(_) => None,
@@ -122,6 +123,8 @@ impl Places {
                 .collect()
         });
 
-        groups.get(group).map(|item| *item as usize)
+        groups
+            .get(&Keyed::new(group.clone()))
+            .map(|item| *item as usize)
     }
 }
