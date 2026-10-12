@@ -79,6 +79,10 @@ let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =
     | false => Result/failure(Io/Error/other(/sys/errno/inval))
     end;
 
+--- The parent's end of a stream wired as `s`: the pipe the host answered where the stream was piped, and none where it was not, whose slot names nothing.
+let end_of(s: Stdio, handle: Handle) -> Option(Pipe) =
+    match s | piped() => Option/some(Pipe { handle }) | _ => Option/none() end;
+
 --- Start a program from its arguments, a working directory, environment entries and a `/sys/stdio_mode` code for each standard stream: `ok` beside the child's handle and a handle for each stream, or the status of the failure.
 foreign proc_spawn(List(Bytes), Bytes, List(Bytes), Nat, Nat, Nat) -> {
     status: Nat,
@@ -86,10 +90,6 @@ foreign proc_spawn(List(Bytes), Bytes, List(Bytes), Nat, Nat, Nat) -> {
     stdin: Handle,
     stdout: Handle,
     stderr: Handle};
-
---- The parent's end of a stream wired as `s`: the pipe the host answered where the stream was piped, and none where it was not, whose slot names nothing.
-let end_of(s: Stdio, handle: Handle) -> Option(Pipe) =
-    match s | piped() => Option/some(Pipe { handle }) | _ => Option/none() end;
 
 --- Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends. The child arrives with a pipe for each stream `cmd` piped, in the one call that starts it. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
 pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =

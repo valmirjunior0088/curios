@@ -35,21 +35,15 @@ let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
 --- Create a socket for the family of this address: `ok` beside its handle, or the status of the failure.
 foreign socket_open(Bytes) -> {status: Nat, handle: Handle};
 
---- Start connecting this socket to this address: `ok`, or the status of the failure.
-foreign socket_connect(Handle, Bytes) -> Nat;
-
---- How a connect under way ended: `ok`, or the status of the failure.
-foreign socket_finish_connect(Handle) -> Nat;
-
---- Upgrade this socket to a TLS client stream for this server name: `ok`, or the status of the failure.
-foreign tls_start(Handle, Bytes) -> Nat;
-
 let opened(addr: Bytes) -> Try(Io, Io/Error, Handle) =
     let reply = socket_open(addr)!;
     match reply.status == /sys/status/ok
     | true => Try/pure(reply.handle)
     | false => Try/raise(Io/Error/of(reply.status))
     end;
+
+--- Start connecting this socket to this address: `ok`, or the status of the failure.
+foreign socket_connect(Handle, Bytes) -> Nat;
 
 let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
     let h = opened(addr)!;
@@ -61,6 +55,9 @@ let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
         let _ = Handle/close(h)!;
         Try/raise(Io/Error/of(status))
     end;
+
+--- How a connect under way ended: `ok`, or the status of the failure.
+foreign socket_finish_connect(Handle) -> Nat;
 
 let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     match pending
@@ -74,6 +71,9 @@ let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
         | _ => Try/raise(Io/Error/of(status))
         end
     end;
+
+--- Upgrade this socket to a TLS client stream for this server name: `ok`, or the status of the failure.
+foreign tls_start(Handle, Bytes) -> Nat;
 
 let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
     match tls

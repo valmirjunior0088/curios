@@ -28,27 +28,6 @@ satisfy Show(Kind) {
         end,
 }
 
---- What is at this path: `ok` beside its kind, one of `/sys/file_kind`'s codes, its size in bytes and when its contents last changed, or the status of the failure.
-foreign file_stat(Bytes) -> {status: Nat, kind: Nat, size: Nat, mtime_secs: Nat, mtime_nanos: Nat};
-
---- Remove the file at this path: `ok`, or the status of the failure.
-foreign file_remove(Bytes) -> Nat;
-
---- Rename what is at the first path to the second: `ok`, or the status of the failure.
-foreign file_rename(Bytes, Bytes) -> Nat;
-
---- The names in the directory at this path: `ok` beside them, or the status of the failure.
-foreign dir_list(Bytes) -> {status: Nat, names: List(Bytes)};
-
---- Create the directory at this path: `ok`, or the status of the failure.
-foreign dir_create(Bytes) -> Nat;
-
---- Remove the directory at this path: `ok`, or the status of the failure.
-foreign dir_remove(Bytes) -> Nat;
-
---- The process's working directory: `ok` beside its path, or the status of the failure.
-foreign proc_cwd() -> {status: Nat, path: Bytes};
-
 --- The kind a code of `file_stat`'s names, where it names one.
 let kind_of(code: Nat) -> Option(Kind) =
     choose
@@ -67,6 +46,9 @@ pub struct Metadata: pub Type {
     --- When the contents last changed.
     mtime: Timestamp,
 }
+
+--- What is at this path: `ok` beside its kind, one of `/sys/file_kind`'s codes, its size in bytes and when its contents last changed, or the status of the failure.
+foreign file_stat(Bytes) -> {status: Nat, kind: Nat, size: Nat, mtime_secs: Nat, mtime_nanos: Nat};
 
 --- What is at `path`. A kind the host names by no code this library knows is a failure no errno names.
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
@@ -104,6 +86,9 @@ pub let is_file(path: Path) -> Try(Io, Io/Error, Bool) =
 pub let is_dir(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => k == Kind/directory());
 
+--- The names in the directory at this path: `ok` beside them, or the status of the failure.
+foreign dir_list(Bytes) -> {status: Nat, names: List(Bytes)};
+
 --- The entries' names, each a `Path` that `Path/join` puts back under `path`.
 pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     let reply = dir_list(Path/to_bytes(path))!;
@@ -111,6 +96,9 @@ pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     | true => Try/pure(List/map(reply.names, Path/of_bytes))
     | false => Try/raise(Io/Error/of(reply.status))
     end;
+
+--- Create the directory at this path: `ok`, or the status of the failure.
+foreign dir_create(Bytes) -> Nat;
 
 --- A directory at `path`, whose parent must exist.
 pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
@@ -120,6 +108,9 @@ pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
     | false => Try/raise(Io/Error/of(status))
     end;
 
+--- Remove the directory at this path: `ok`, or the status of the failure.
+foreign dir_remove(Bytes) -> Nat;
+
 --- Remove the empty directory at `path`.
 pub let remove_dir(path: Path) -> Try(Io, Io/Error, {}) =
     let status = dir_remove(Path/to_bytes(path))!;
@@ -127,6 +118,9 @@ pub let remove_dir(path: Path) -> Try(Io, Io/Error, {}) =
     | true => Try/pure(())
     | false => Try/raise(Io/Error/of(status))
     end;
+
+--- Remove the file at this path: `ok`, or the status of the failure.
+foreign file_remove(Bytes) -> Nat;
 
 --- Remove the file at `path`.
 pub let remove_file(path: Path) -> Try(Io, Io/Error, {}) =
@@ -136,6 +130,9 @@ pub let remove_file(path: Path) -> Try(Io, Io/Error, {}) =
     | false => Try/raise(Io/Error/of(status))
     end;
 
+--- Rename what is at the first path to the second: `ok`, or the status of the failure.
+foreign file_rename(Bytes, Bytes) -> Nat;
+
 --- Move what is at `from` to `to`.
 pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
     let status = file_rename(Path/to_bytes(from), Path/to_bytes(to))!;
@@ -143,6 +140,9 @@ pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
     | true => Try/pure(())
     | false => Try/raise(Io/Error/of(status))
     end;
+
+--- The process's working directory: `ok` beside its path, or the status of the failure.
+foreign proc_cwd() -> {status: Nat, path: Bytes};
 
 --- The working directory.
 pub let cwd() -> Try(Io, Io/Error, Path) =

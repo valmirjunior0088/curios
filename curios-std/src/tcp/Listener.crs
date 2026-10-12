@@ -10,15 +10,6 @@ pub struct Listener: Type {
 --- A listener at this address, the address reusable: `ok` beside its handle, or the status of the failure.
 foreign socket_listen(Bytes) -> {status: Nat, handle: Handle};
 
---- The next connection on this listener: `ok` beside its handle, or the status of the failure.
-foreign socket_accept(Handle) -> {status: Nat, handle: Handle};
-
---- A server's TLS configuration from this certificate chain and this key: `ok` beside its handle, or the status of the failure.
-foreign tls_server_config(Bytes, Bytes) -> {status: Nat, handle: Handle};
-
---- Upgrade this socket to a TLS server stream under this configuration: `ok`, or the status of the failure.
-foreign tls_start_server(Handle, Handle) -> Nat;
-
 let listening(addr: Bytes) -> Try(Io, Io/Error, Listener) =
     let reply = socket_listen(addr)!;
     match reply.status == /sys/status/ok
@@ -30,6 +21,9 @@ let listening(addr: Bytes) -> Try(Io, Io/Error, Listener) =
 pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
     let addr = resolve(host, port)!;
     listening(addr);
+
+--- The next connection on this listener: `ok` beside its handle, or the status of the failure.
+foreign socket_accept(Handle) -> {status: Nat, handle: Handle};
 
 --- The next connection on `l`, parking until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
 let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =
@@ -79,12 +73,18 @@ pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async
     let l = listen(host, port)!;
     Async/using(close(l), accept_loop(l, (h) => serve_conn(h, handler)));
 
+--- Upgrade this socket to a TLS server stream under this configuration: `ok`, or the status of the failure.
+foreign tls_start_server(Handle, Handle) -> Nat;
+
 let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     let status = tls_start_server(h, cfg)!;
     match status == /sys/status/ok
     | true => serve_conn(h, handler)
     | false => Async/lift(Handle/close(h))
     end;
+
+--- A server's TLS configuration from this certificate chain and this key: `ok` beside its handle, or the status of the failure.
+foreign tls_server_config(Bytes, Bytes) -> {status: Nat, handle: Handle};
 
 --- `serve` under TLS, every connection upgraded with `cert` and `key` before `handler` sees it.
 pub let serve_tls(

@@ -22,9 +22,6 @@ let close_pipes(c: Child) -> Io({}) =
     let _ = close_pipe(c.stdout)!;
     close_pipe(c.stderr);
 
---- How this child ended: `ok` beside its exit code and the signal that ended it, or the status of the failure.
-foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
-
 --- End this child: `ok`, or the status of the failure.
 foreign proc_kill(Handle) -> Nat;
 
@@ -37,6 +34,9 @@ let killed(c: Child) -> Io({}) =
 pub let kill(c: Child) -> Io({}) =
     let _ = killed(c)!;
     close_pipes(c);
+
+--- How this child ended: `ok` beside its exit code and the signal that ended it, or the status of the failure.
+foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
 
 --- How the child ended, parking until it does. The pipes are closed with it, so read what it wrote before waiting for it.
 pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =

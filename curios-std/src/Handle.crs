@@ -89,9 +89,6 @@ let reading(h: Handle, n: Nat) -> Io(Result(Nat, Option(Bytes))) =
         | _ => Result/failure(reply.status)
         end);
 
---- Write these bytes: `ok` beside how many were accepted, or the status of the failure.
-foreign handle_write(Handle, Bytes) -> {status: Nat, written: Nat};
-
 --- A write's reply as its outcome. One that accepted nothing of the `offered` bytes, where there were some, is the failure no errno names: a loop that resends what is left would resend it for ever.
 let accepted(offered: Nat, status: Nat, written: Nat) -> Result(Nat, Nat) =
     choose
@@ -99,6 +96,9 @@ let accepted(offered: Nat, status: Nat, written: Nat) -> Result(Nat, Nat) =
     | written == 0 && 0 < offered => Result/failure(/sys/status/other_base)
     | _ => Result/success(written)
     end;
+
+--- Write these bytes: `ok` beside how many were accepted, or the status of the failure.
+foreign handle_write(Handle, Bytes) -> {status: Nat, written: Nat};
 
 let writing(h: Handle, b: Bytes) -> Io(Result(Nat, Nat)) =
     let reply = handle_write(h, b)!;

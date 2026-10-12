@@ -1,9 +1,6 @@
 use /std/{Str, Nat, Bytes, Result, Try, Async, Io, Handle};
 use /std/Handle/{Interest};
 
---- Start looking this host and port up: `ok` beside a handle to the lookup, or the status of the failure.
-foreign dns_lookup(Bytes, Nat) -> {status: Nat, handle: Handle};
-
 --- The addresses a lookup found: `ok` beside them, or the status of the failure.
 foreign dns_resolve(Handle) -> {status: Nat, addresses: List(Bytes)};
 
@@ -19,6 +16,9 @@ let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
             end
         | false => Result/failure(Io/Error/of(reply.status))
         end);
+
+--- Start looking this host and port up: `ok` beside a handle to the lookup, or the status of the failure.
+foreign dns_lookup(Bytes, Nat) -> {status: Nat, handle: Handle};
 
 --- The first address `host` resolves to, with `port`, as the socket operations take it. The lookup parks the fiber. A name that resolves to no address names nothing a socket can reach, and is `not_found`, as a name that resolves to nothing at all is.
 pub let resolve(host: Str, port: Nat) -> Try(Async, Io/Error, Bytes) =
