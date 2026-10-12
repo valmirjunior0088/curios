@@ -152,6 +152,8 @@ impl Drop for UniverseMutation<'_> {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SolutionMark {
     term_solution_log_len: usize,
+    /// How many times a metavariable's place among those links hold together had been written ([`Solutions::held_len`]).
+    held_len: usize,
     universe: UniverseMark,
     credited_len: usize,
     /// How many settled terms the totality obligations had been handed ([`Context::record_checked`]).
@@ -2436,6 +2438,7 @@ impl<'s> Context<'s> {
     pub(crate) fn solution_mark(&mut self) -> SolutionMark {
         SolutionMark {
             term_solution_log_len: self.underway.attempt.solutions.solved_len(),
+            held_len: self.underway.attempt.solutions.held_len(),
             universe: self.underway.attempt.universe_solver.mark(),
             credited_len: self.underway.credits.mark(),
             checked_len: self.underway.checked.mark(),
@@ -2476,7 +2479,7 @@ impl<'s> Context<'s> {
         self.underway
             .attempt
             .solutions
-            .unwind_to(mark.term_solution_log_len);
+            .unwind_to(mark.term_solution_log_len, mark.held_len);
         self.underway
             .attempt
             .universe_solver

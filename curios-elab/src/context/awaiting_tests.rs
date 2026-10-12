@@ -227,3 +227,76 @@ fn a_parked_check_states_the_choice_its_term_may_take() {
     );
     assert!(Choice::Shape < Choice::Numeral && Choice::Numeral < Choice::Lambda);
 }
+
+// What links hold together is one class, so a chain of them holds its ends: what the innermost of three terms parked is held by one link to the middle term's metavariable, and by another that one is held to the outer term's, so the problem is retried as awaited by the outer term, which neither link says of it.
+#[test]
+fn a_chain_of_parked_problems_holds_its_ends_to_the_outer_term() {
+    let mut context = context();
+
+    context
+        .awaiting(|context| {
+            birth(context, 0);
+            context.awaiting(|context| {
+                birth(context, 1);
+                context.awaiting(|context| {
+                    birth(context, 2);
+                    park_on(context, &[2, 1]);
+                    Ok(())
+                })?;
+                park_on(context, &[1, 0]);
+                context.retried_under(&BTreeSet::from([MetavarId(2)]), |context| {
+                    birth(context, 3);
+                });
+                Ok(())
+            })?;
+            assert!(
+                awaited(context, 3),
+                "held to the outer term through two links"
+            );
+            Ok(())
+        })
+        .unwrap();
+
+    assert!(!awaited(&context, 3));
+}
+
+// A rollback unwinds the links made since its mark and no other: a problem parked ahead of the mark, with no solution committed between the two, still holds together what it watches.
+#[test]
+fn a_rollback_keeps_what_was_linked_before_its_mark() {
+    let mut context = context();
+
+    context
+        .awaiting(|context| {
+            birth(context, 0);
+            context.awaiting(|context| {
+                birth(context, 1);
+                park_on(context, &[0, 1]);
+                let mark = context.solution_mark();
+                context.rollback_solutions(mark);
+                context.end_solutions(mark);
+                Ok(())
+            })?;
+            assert!(awaited(context, 1), "the problem is parked still");
+            Ok(())
+        })
+        .unwrap();
+}
+
+// A class is awaited whole: a term that adopts a hole no term awaits takes what an earlier link held to it.
+#[test]
+fn a_term_that_adopts_a_hole_awaits_what_is_linked_to_it() {
+    let mut context = context();
+    birth(&mut context, 0);
+    birth(&mut context, 1);
+    park_on(&mut context, &[0, 1]);
+
+    context
+        .awaiting(|context| {
+            context.adopt(&Term::hole(0));
+            assert!(awaited(context, 1));
+            Ok(())
+        })
+        .unwrap();
+
+    assert!(!awaited(&context, 1));
+}

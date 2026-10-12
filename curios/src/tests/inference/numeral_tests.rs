@@ -155,6 +155,20 @@ fn an_operator_between_literals_decides_its_bound_once_they_take_their_type() {
     assert_eq!(run(&source), b"4 2 -4 +4 +4");
 }
 
+// A numeral under two calls waits on the inner call's implicit, which the middle call's holds and the outer call's holds in turn: the outer call is the term that awaits it, however deep the numeral stands.
+#[test]
+fn a_numeral_under_nested_calls_waits_for_the_outermost() {
+    let source = program(
+        r#"
+        let near = and(Show/show(first(id(id(5)), b)), Show/show(second(b, id(id(5)))));
+        let far = and(Show/show(first(id(id(id(5))), b)), Show/show(second(b, id(id(id(5))))));
+        print(and(near, far))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"5 5 5 5");
+}
+
 // Inference is local to a statement: once a `let` has no annotation and its value no expectation, nothing more is coming, and the line after reads a type.
 #[test]
 fn a_numeral_nothing_pins_is_its_default_where_the_next_line_reads_it() {

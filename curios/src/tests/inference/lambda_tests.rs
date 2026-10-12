@@ -63,6 +63,20 @@ fn a_numeral_in_a_lambdas_body_takes_the_type_a_lambda_beside_it_gives() {
     assert_eq!(run(&source), b"7 7");
 }
 
+// Under two calls of its own the lambda is still the outer call's to settle: the annotated one beside it is read first, however deep the other stands.
+#[test]
+fn a_lambda_under_nested_calls_is_typed_by_the_lambda_beside_the_outermost() {
+    let source = program(
+        r#"
+        let left = first(id(id((y) => first(y, 5))), (x: Byte) => x);
+        let right = second((x: Byte) => x, id(id((y) => first(y, 5))));
+        print(and(Show/show(left(b)), Show/show(right(b))))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"7 7");
+}
+
 // A list's elements and a match's arms wait on one type as a call's arguments do.
 #[test]
 fn lambdas_in_a_list_and_in_a_match_type_each_other() {

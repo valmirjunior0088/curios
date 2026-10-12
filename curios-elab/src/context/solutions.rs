@@ -2,7 +2,7 @@
 //!
 //! Everything here is frame-independent — a metavariable's record freezes the Γ it was born under, and parked work freezes the frame it blocked in, so neither is touched by `enter_frame`/`leave_frame`. Writes that must reach the cache stamps are stamped by the `Context` façade; the transactional watermark (`SolutionMark`) also stays there, because it spans this store and the universe solver together.
 //!
-//! **Which term awaits a metavariable is kept here, and written at three doors.** A term that reads its parts against types holding metavariables awaits them until it has read them all ([`Solutions::enter_awaiting`]): a metavariable is awaited from its birth by the term being read, and the relation moves only where a link is made — a committed solution holds what it mentions to what it solves, a parked problem holds together what it watches — to the outermost standing term among the linked ([`Solutions::birth_with_kind`], [`Solutions::solve`], [`Solutions::park`]). A term that has completed awaits nothing, which a reader sees without a pass: the record stays and the term no longer stands. So whether a choice may still be informed by what encloses it is a field read.
+//! **Which term awaits a metavariable is kept here, and written at three doors.** A term that reads its parts against types holding metavariables awaits them until it has read them all ([`Solutions::enter_awaiting`]): a metavariable is awaited from its birth by the term being read, and the relation moves only where a link is made — a committed solution holds what it mentions to what it solves, a parked problem holds together what it watches ([`Solutions::birth_with_kind`], [`Solutions::solve`], [`Solutions::park`]). What links hold together is a class ([`Held`]), joined where the link is made and awaited whole by the outermost standing term that awaited any of it, so a chain of links holds its ends: a numeral under two calls waits for the outer one, which no one link says of it. A term that has completed awaits nothing, which a reader sees without a pass: the record stays and the term no longer stands. So whether a choice may still be informed by what encloses it is read off the metavariable's class, and no pass over the store answers it.
 
 use {
     super::{FrozenFrame, SharedRefinements, SharedTelescope},
@@ -13,6 +13,7 @@ use {
     },
     curios_utilities::Entropy,
     std::{
+        cmp::Reverse,
         collections::{BTreeMap, BTreeSet},
         mem,
         rc::Rc,
@@ -42,8 +43,20 @@ pub(crate) struct MetaEntry {
     pub refusal: Option<Rc<Refusal>>,
     /// Why the arm an omitted implicit was minted in is never taken, where its scrutinee's indices rule it out: the report an unsolved one becomes is made once the arm has closed, and says so by this.
     pub dead_arm: Option<Rc<DeadArm>>,
-    /// The term that awaits it, as last written; it awaits only while it stands ([`Solutions::awaited`]).
-    awaited: Option<AwaitId>,
+    /// Its place among the metavariables links hold together.
+    held: Held,
+}
+
+/// A metavariable's place in its class: the metavariables a chain of links holds together, each link a committed solution, which holds what it mentions to what it solves, or a parked problem, which holds together what it watches. Whatever may still inform one of them may inform every other, so one term awaits the class whole.
+#[derive(Debug, Clone, Copy)]
+enum Held {
+    /// At the head of its class: the term that awaits the class, as last written — it awaits only while it stands ([`Solutions::awaited`]) — and how many metavariables the class holds.
+    Head {
+        awaited: Option<AwaitId>,
+        members: usize,
+    },
+    /// Under another metavariable of its class, on the way to the head.
+    Under(MetavarId),
 }
 
 /// A term that awaits: one that reads its parts against types holding metavariables and takes the choices left among them once it has read them all.
@@ -206,8 +219,8 @@ pub(crate) struct Solutions {
     awaiting: Vec<Awaiting>,
     /// The awaiting term being read, or `None` outside one: what a metavariable born now is awaited by.
     reading: Option<AwaitId>,
-    /// Journal of every metavariable handed from one awaiting term to another: how many solutions were committed when it moved, and what awaited it before. [`Solutions::unwind_to`] restores what moved since its watermark.
-    moved: Vec<(usize, MetavarId, Option<AwaitId>)>,
+    /// Journal of every change to a metavariable's place in its class, with the place it had: never consumed, only marked ([`Solutions::held_len`]) and rolled back ([`Solutions::unwind_to`]), as `solved_log` is.
+    held_log: Vec<(MetavarId, Held)>,
     /// The literals that gave a metavariable its shape since the last drain. A product is sized where it is held to its metavariable, and the drain reads it again once every field is settled.
     shaped: Vec<ParkedChoice>,
 }
@@ -223,7 +236,7 @@ impl Solutions {
             oracle: None,
             awaiting: Vec::new(),
             reading: None,
-            moved: Vec::new(),
+            held_log: Vec::new(),
             shaped: Vec::new(),
         }
     }
@@ -253,11 +266,22 @@ impl Solutions {
         mem::replace(&mut self.reading, term)
     }
 
-    /// The standing term that awaits `id`, if one does.
+    /// The head of the class `id` is held in, with the term recorded as awaiting the class and how many metavariables it holds. `None` for an id with no birth record.
+    fn class(&self, id: MetavarId) -> Option<(MetavarId, Option<AwaitId>, usize)> {
+        let mut id = id;
+        loop {
+            match self.entry(id)?.held {
+                Held::Head { awaited, members } => return Some((id, awaited, members)),
+                Held::Under(above) => id = above,
+            }
+        }
+    }
+
+    /// The standing term that awaits `id`, if one does: the one that awaits the class `id` is held in.
     pub(crate) fn awaited(&self, id: MetavarId) -> Option<AwaitId> {
-        self.entry(id)
-            .and_then(|entry| entry.awaited)
-            .filter(|term| self.awaiting[term.0].standing)
+        let (_, awaited, _) = self.class(id)?;
+
+        awaited.filter(|term| self.awaiting[term.0].standing)
     }
 
     /// The outermost standing term among those that await `ids`.
@@ -267,30 +291,52 @@ impl Solutions {
             .min_by_key(|term| self.awaiting[term.0].depth)
     }
 
-    /// Have `term` await each unsolved metavariable of `ids` it does not await already, journaling what awaited each before.
-    fn hand(&mut self, ids: impl IntoIterator<Item = MetavarId>, term: AwaitId) {
-        let at = self.solved_log.len();
-        for id in ids {
-            if let Some(Some(entry)) = self.entries.get_mut(id.0)
-                && entry.solution.is_none()
-                && entry.awaited != Some(term)
-            {
-                self.moved.push((at, id, entry.awaited));
-                entry.awaited = Some(term);
-            }
+    /// Write `id`'s place in its class, journaling the place it had.
+    fn hold(&mut self, id: MetavarId, held: Held) {
+        if let Some(Some(entry)) = self.entries.get_mut(id.0) {
+            self.held_log.push((id, entry.held));
+            entry.held = held;
         }
     }
 
-    /// Have the term being read await each unsolved metavariable of `ids` that no standing term awaits: the holes a call's head leaves open are the call's, as the implicits it inserts are.
+    /// Hold `ids` together: the classes they are held in become one, awaited by the outermost standing term that awaited any of them. The largest keeps its head, of two alike the one with the lower id, so a head is as many steps away as its class's size has binary digits, at most.
+    fn link(&mut self, ids: impl IntoIterator<Item = MetavarId>) {
+        let classes = ids
+            .into_iter()
+            .filter_map(|id| self.class(id))
+            .map(|(head, _, members)| (head, members))
+            .collect::<BTreeMap<_, _>>();
+        let Some((&kept, _)) = classes
+            .iter()
+            .max_by_key(|&(head, members)| (*members, Reverse(*head)))
+            .filter(|_| classes.len() > 1)
+        else {
+            return;
+        };
+        let awaited = self.outermost(classes.keys().copied());
+        let members = classes.values().sum::<usize>();
+        for head in classes.into_keys() {
+            let held = match head == kept {
+                true => Held::Head { awaited, members },
+                false => Held::Under(kept),
+            };
+            self.hold(head, held);
+        }
+    }
+
+    /// Have the term being read await each class of `ids` that no standing term awaits: the holes a call's head leaves open are the call's, as the implicits it inserts are.
     pub(crate) fn adopt(&mut self, ids: impl IntoIterator<Item = MetavarId>) {
         let Some(reading) = self.reading else {
             return;
         };
-        let orphans = ids
-            .into_iter()
-            .filter(|id| self.awaited(*id).is_none())
-            .collect::<Vec<_>>();
-        self.hand(orphans, reading);
+        for id in ids {
+            if let Some((head, awaited, members)) = self.class(id)
+                && !awaited.is_some_and(|term| self.awaiting[term.0].standing)
+            {
+                let awaited = Some(reading);
+                self.hold(head, Held::Head { awaited, members });
+            }
+        }
     }
 
     /// The parked checks `term` awaits that have a choice of their own, in the order they were parked, and beside them what each conversion `term` awaits watches: the links by which two of those checks wait on one type. `None` asks for what no standing term awaits, which is the item's.
@@ -409,7 +455,10 @@ impl Solutions {
             reduct: None,
             refusal: None,
             dead_arm: None,
-            awaited: self.reading,
+            held: Held::Head {
+                awaited: self.reading,
+                members: 1,
+            },
         });
     }
 
@@ -469,15 +518,13 @@ impl Solutions {
             .get_mut(id.0)
             .and_then(Option::as_mut)
             .expect("a solved metavariable has a birth record");
-        // A solution holds what it mentions to what it solves: whatever could still inform one informs the other, so both are awaited by the outermost standing term that awaited either.
+        // A solution holds what it mentions to what it solves: whatever could still inform one informs the other.
         let mentioned = match term.has_metavar() {
             true => term.metavars().into_iter().collect::<Vec<_>>(),
             false => Vec::new(),
         };
         entry.solution = Some(term);
-        if let Some(outermost) = self.outermost(mentioned.iter().copied().chain([id])) {
-            self.hand(mentioned, outermost);
-        }
+        self.link(mentioned.into_iter().chain([id]));
         self.newly_solved.push(id);
         self.solved_log.push(id);
     }
@@ -531,6 +578,11 @@ impl Solutions {
         self.solved_log.len()
     }
 
+    /// How many times a metavariable's place in its class has been written so far: the watermark [`Solutions::unwind_to`] restores the classes to. A count of solutions would not serve, a parked problem linking with none committed.
+    pub(crate) fn held_len(&self) -> usize {
+        self.held_log.len()
+    }
+
     /// The solutions committed since `solved_len` that still stand, each with its id.
     pub(crate) fn solved_since(&self, solved_len: usize) -> Vec<(MetavarId, Term)> {
         self.solved_log[solved_len.min(self.solved_log.len())..]
@@ -548,8 +600,8 @@ impl Solutions {
         }
     }
 
-    /// Unwind every solution committed since the watermark, removing the unwound ids from the wake signals. The façade clears the caches.
-    pub(crate) fn unwind_to(&mut self, solved_len: usize) {
+    /// Unwind every solution committed since the watermark and every link made since, removing the unwound ids from the wake signals. The façade clears the caches.
+    pub(crate) fn unwind_to(&mut self, solved_len: usize, held_len: usize) {
         let unwound = self
             .solved_log
             .split_off(solved_len.min(self.solved_log.len()));
@@ -563,13 +615,10 @@ impl Solutions {
 
         self.newly_solved.retain(|id| !unwound.contains(id));
 
-        while let Some(&(at, id, before)) = self.moved.last() {
-            if at < solved_len {
-                break;
-            }
-            self.moved.pop();
+        let relinked = self.held_log.split_off(held_len.min(self.held_log.len()));
+        for (id, before) in relinked.into_iter().rev() {
             if let Some(Some(entry)) = self.entries.get_mut(id.0) {
-                entry.awaited = before;
+                entry.held = before;
             }
         }
     }
@@ -586,10 +635,8 @@ impl Solutions {
             ParkedWork::Discharge { bound, .. } => self.unsolved_in([bound]),
         };
 
-        // A parked problem holds together what it watches: a solution for one may come by another, so all are awaited by the outermost standing term that awaited any.
-        if let Some(outermost) = self.outermost(watching.iter().copied()) {
-            self.hand(watching.iter().copied(), outermost);
-        }
+        // A parked problem holds together what it watches: a solution for one may come by another.
+        self.link(watching.iter().copied());
 
         self.parked.push(ParkedProblem {
             work,
