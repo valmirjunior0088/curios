@@ -93,7 +93,7 @@ fn spells_index_arithmetic_infix() {
 
     let error = error(source);
     assert!(
-        error.contains("inferred: Vec(Nat, (n + m) + 1)"),
+        error.contains("inferred: Vec(Nat, n + m + 1)"),
         "index arithmetic not spelled infix: {error}"
     );
 }

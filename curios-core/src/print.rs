@@ -460,6 +460,11 @@ impl Spelling {
         self.grouped
     }
 
+    /// Whether universe instances are left out (axis (c)): what a reader's printer asks before it writes a term, since no program writes one.
+    pub fn erases_universes(&self) -> bool {
+        self.erase_universes
+    }
+
     /// Print a term shown to a reader through `printer`, and through this crate's own where it declines.
     pub fn with_reader_printer(mut self, printer: Rc<dyn ReaderPrinter>) -> Self {
         self.printer = Some(printer);

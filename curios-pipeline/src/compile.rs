@@ -16,8 +16,8 @@ use {
     curios_emit::into_wasm,
     curios_ersd::lower_to_cont,
     curios_text::{
-        BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, UnitSource,
-        into_core_entry, into_core_unit, into_core_with_prelude,
+        BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, Translation,
+        UnitSource, into_core_entry, into_core_unit, into_core_with_prelude,
     },
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{Qualifier, Report, SyntaxRegistry},
@@ -230,6 +230,7 @@ pub(crate) fn elaborator_refusal(
         syntax,
         spellings: Some(&spellings),
         anchors: &anchors_of(text, predecessors),
+        printer: Some(Rc::new(Translation)),
     };
 
     CompileError::of(error, |member| member.reports(&reading))
@@ -595,6 +596,7 @@ where
         syntax,
         spellings: Some(&*spellings),
         anchors: &anchors,
+        printer: Some(Rc::new(Translation)),
     };
     // The error is kept as raised beside what it renders to: rendering is where its variant is lost.
     let (error, elaborated) = match elaborated {

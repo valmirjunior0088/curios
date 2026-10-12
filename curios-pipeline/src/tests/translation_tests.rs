@@ -27,6 +27,7 @@ fn shown(source: &str, name: &str) -> (String, String) {
             syntax: &SYNTAX,
             spellings: Some(&spellings),
             anchors: &[],
+            printer: Some(Rc::new(Translation)),
         };
         let owner = Global::Authored(Qualifier::from(["lib", name]));
         let definition = unit
@@ -38,13 +39,10 @@ fn shown(source: &str, name: &str) -> (String, String) {
             .unwrap_or_else(|| panic!("`{name}` is declared"));
 
         let print = |term: &curios_core::Term| {
-            let spelling = reading
-                .spelling()
-                .for_reader(ReaderPosition {
-                    owner: Some(owner),
-                    witnesses: Rc::default(),
-                })
-                .with_reader_printer(Rc::new(Translation));
+            let spelling = reading.spelling().for_reader(ReaderPosition {
+                owner: Some(owner),
+                witnesses: Rc::default(),
+            });
             let rename = build_rename(&display_names(term), &spelling);
             let spelling = Rc::new(spelling.with_pretty_names(Rc::new(rename)));
             let printed = term.spelled(&spelling).to_string();

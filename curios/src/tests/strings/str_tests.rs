@@ -67,4 +67,11 @@ fn a_long_literal_is_elided_in_a_report() {
     // The source excerpt under the message quotes the line as written; the message itself never spells the literal whole.
     let message = refused.split("\n\n").next().unwrap_or(&refused);
     assert!(!message.contains(&literal), "{refused}");
+    // A prefix and a count are no literal a program writes, so the report says the term is shown as the compiler holds it.
+    assert!(
+        message.ends_with(
+            "\n  a term above is shown as the compiler holds it, not as a program writes it"
+        ),
+        "{refused}"
+    );
 }

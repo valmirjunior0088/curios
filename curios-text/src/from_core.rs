@@ -41,6 +41,10 @@ pub fn from_core(
     spelling: &Rc<curios_core::Spelling>,
     mint: &curios_core::Minting,
 ) -> Option<Term> {
+    // A level is no part of what a program writes, so a render asked to show the instances is the compiler's own: the report that asks has found two terms no source tells apart.
+    if !spelling.erases_universes() {
+        return None;
+    }
     let frame = Frame {
         spelling,
         mint,
@@ -326,10 +330,8 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 .spelling
                 .payload_marks(&name, &tag)
                 .map(|marks| &marks[marks.len().saturating_sub(payload.len())..]);
+            // Called with no argument where it has no payload, as a program writes one: the bare name is the constructor, and `Option/none()` its value.
             let head = global(&constructor, frame)?;
-            if payload.is_empty() {
-                return Some(head);
-            }
             let arguments = payload
                 .into_iter()
                 .enumerate()
@@ -1040,13 +1042,58 @@ fn method(
 
 /// A structure's literal: its head, then every field under the mark its declaration gives it — a plain field in its place, an `@` field under its mark and its name, a `use` field as a call's witness argument is written — except a certified string, which is the literal it stands for.
 fn written_struct(literal: curios_core::Struct, frame: Frame) -> Option<Term> {
-    let curios_core::Struct { name, fields, .. } = literal;
+    let curios_core::Struct {
+        name,
+        params,
+        fields,
+        entries,
+        ..
+    } = literal;
     if let Some(text) = string_literal(&name, &fields, frame) {
         return text;
     }
     let Subterm::Name(head) = global(&name, frame)?.into_subterm() else {
         unreachable!("a declaration is written as a name");
     };
+
+    // A literal elaboration has not rebuilt holds the entries it was written with, one a field, and is written back by them: its fields are the written ones, a spread's base among them, and not the declaration's slots. One whose head was applied holds the arguments with no mark, which is no form to write back.
+    if !entries.is_empty() {
+        if !params.is_empty() {
+            return None;
+        }
+        let written = fields
+            .into_iter()
+            .zip(entries)
+            .map(|(field, entry)| {
+                let value = sub(field, frame)?;
+                let labelled = |label| TupleField {
+                    label,
+                    func_params: None,
+                    value: value.clone(),
+                };
+
+                Some(match entry {
+                    curios_core::StructEntry::Field(label) => {
+                        StructLitEntry::Field(labelled(label))
+                    }
+                    curios_core::StructEntry::Implicit(label) => {
+                        StructLitEntry::Implicit(labelled(label))
+                    }
+                    curios_core::StructEntry::Use => StructLitEntry::Use(value),
+                    curios_core::StructEntry::Spread => StructLitEntry::Spread(value),
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+
+        return Some(
+            Subterm::StructLit(StructLit {
+                head,
+                params: None,
+                entries: written,
+            })
+            .into(),
+        );
+    }
 
     let declared = frame.spelling.structure_fields(&name);
     let slot = |slot: usize| declared.and_then(|declared| declared.get(slot));

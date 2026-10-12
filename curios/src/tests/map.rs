@@ -78,7 +78,7 @@ fn a_key_witness_out_of_its_order_is_rejected() {
     let message = error(source);
     assert!(message.contains("type mismatch"), "{message}");
     assert!(
-        message.contains("expected: Eq(@Ord/Ordering)(Ord/Ordering/lt, Ord/Ordering/gt)"),
+        message.contains("expected: Eq(@Ord/Ordering)(Ord/Ordering/lt(), Ord/Ordering/gt())"),
         "{message}"
     );
 }

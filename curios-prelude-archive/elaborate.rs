@@ -11,7 +11,8 @@ use {
     },
     curios_std::std_source,
     curios_text::{
-        PreparedText, RootSource, SYNTAX, UnitSource, document_unit, prepare_prelude, sys_source,
+        PreparedText, RootSource, SYNTAX, Translation, UnitSource, document_unit, prepare_prelude,
+        sys_source,
     },
     curios_unit::{Record, Uncertified, framed},
     curios_utilities::{Qualifier, Report, Source, digest},
@@ -19,6 +20,7 @@ use {
         collections::BTreeSet,
         fs,
         path::{Path, PathBuf},
+        rc::Rc,
         sync::Arc,
     },
 };
@@ -110,6 +112,7 @@ fn reported(
         syntax: &SYNTAX,
         spellings: None,
         anchors: &[anchors],
+        printer: Some(Rc::new(Translation)),
     })
 }
 

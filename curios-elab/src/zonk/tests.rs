@@ -313,6 +313,7 @@ fn a_budget_spent_under_a_binder_is_reported_over_a_term_that_prints() {
                 syntax: &SYNTAX,
                 spellings: None,
                 anchors: &[],
+                printer: None,
             })
             .contains("ran out"),
     );

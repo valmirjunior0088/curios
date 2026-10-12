@@ -332,7 +332,7 @@ fn an_undischarged_bound_is_named_in_the_refusal() {
     .expect_err("nothing discharges the window bound");
 
     assert!(
-        error.contains("nothing discharged Bool/Holds((2 + k) <= Bytes/len(b))"),
+        error.contains("nothing discharged Bool/Holds(2 + k <= Bytes/len(b))"),
         "expected the refusal to name the bound, got: {error}"
     );
 }
@@ -434,7 +434,7 @@ fn a_fact_of_an_updates_base_is_spelled_through_the_base() {
     )
     .expect_err("zero is not above zero");
 
-    assert_eq!(error.matches("p.ok: 0 < (p).0").count(), 1, "{error}");
+    assert_eq!(error.matches("p.ok: 0 < p.n").count(), 1, "{error}");
     assert!(!error.contains("x.ok"), "{error}");
 }
 
@@ -513,7 +513,7 @@ fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
     .expect_err("a proposition that reduces to False is not filled");
 
     assert!(
-        error.contains("nothing discharged Holds((n + 1) <= n), which reduces to Bool/False"),
+        error.contains("nothing discharged Holds(n + 1 <= n), which reduces to Bool/False"),
         "expected the undischarged bound, got: {error}"
     );
 }

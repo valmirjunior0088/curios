@@ -9,9 +9,9 @@ use {
     curios_analysis::DeclaredPart,
     curios_core::{
         Anchors, Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Extent, Free, Global,
-        Item, Level, Lexicon, Module, Polarity, ReaderNames, ReaderPosition, ReduceError, Rename,
-        Spelling, Spellings, Term, UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey,
-        build_rename,
+        Item, Level, Lexicon, Module, Polarity, ReaderNames, ReaderPosition, ReaderPrinter,
+        ReduceError, Rename, Spelling, Spellings, Term, UniverseConstraintOrigin, UniverseError,
+        Unresolved, WitnessKey, build_rename,
     },
     curios_num::{Grain, Integer, Natural},
     curios_utilities::{InfixOp, Note, Plicity, Qualifier, Report, Span, SyntaxRegistry},
@@ -1614,9 +1614,10 @@ impl Error {
                 .iter()
                 .map(|goal| {
                     let spelling = for_reader(goal.owner, Rc::clone(&goal.witnesses));
+                    let message = format!("{prefix}{}", goal_text(goal, &spelling));
                     Report {
                         span: placed(goal.extent.as_ref(), goal.owner),
-                        message: format!("{prefix}{}", goal_text(goal, &spelling)),
+                        message: as_held(message, &spelling),
                         notes: Vec::new(),
                     }
                 })
@@ -1630,10 +1631,13 @@ impl Error {
                 .clone()
                 .with_pretty_names(self.rename_map(&spelling)),
         );
+        // Rendered before the report is made: what a term printed as is known once every term has been.
+        let message = self.render_body(spelling, anchors);
+        let notes = self.notes(spelling, anchors);
         vec![Report {
             span: placed(self.innermost_extent(), self.owner()),
-            message: self.render_body(spelling, anchors),
-            notes: self.notes(spelling, anchors),
+            message: as_held(message, spelling),
+            notes,
         }]
     }
 
@@ -1964,6 +1968,16 @@ impl From<UniverseError> for Error {
     }
 }
 
+/// `message`, saying so where a term in it is one its reader's printer declined ([`Spelling::declined`]): it holds a form no program writes, or it is past what a report prints, and what stands there is the term as the compiler holds it. A reader who takes that print for source is told it is none.
+fn as_held(message: String, spelling: &Spelling) -> String {
+    match spelling.declined() {
+        true => format!(
+            "{message}\n  a term above is shown as the compiler holds it, not as a program writes it"
+        ),
+        false => message,
+    }
+}
+
 /// The spelling every report of `module`'s shares before a reader stands anywhere: everything a reader could see — `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so every table has to be told the prelude exists — the shortening to know `Vec` is an unambiguous suffix, the plicity marks to know `Eq`'s first parameter is implicit, the witness table to know `Show`'s method.
 ///
 /// **Each unit in scope is read by the lexicon it keeps** ([`Lexicon`]), made once for the unit, and only `module`'s own is made here. So a report costs what its own unit holds and what it prints, however much is in scope, and it reads no declaration of a unit in scope it does not print.
@@ -1993,12 +2007,18 @@ pub struct Reading<'a> {
     pub spellings: Option<&'a Rc<Spellings>>,
     /// Where the declarations an error's positions lie in were written, the unit's own first and then its scope's: an error holds extents of declarations ([`curios_core::Extent`]), and this is where one becomes a line of a file.
     pub anchors: &'a [&'a Anchors],
+    /// What prints a term for the report's reader: the surface crate's translation, handed in by whoever holds that crate, which this one sits below. `None` where none is at hand, and a term then prints as the compiler holds it.
+    pub printer: Option<Rc<dyn ReaderPrinter>>,
 }
 
 impl Reading<'_> {
     /// How a term of the unit is spelled for a reader, before one is placed ([`Spelling::for_reader`]): every axis a report sets, and a global named as resolution finds it where the unit's tables are at hand. A report takes it and places its own reader; so does anything else that prints a term of the unit for one.
     pub fn spelling(&self) -> Spelling {
         let spelling = report_spelling(self.module, self.scope, self.syntax);
+        let spelling = match &self.printer {
+            Some(printer) => spelling.with_reader_printer(Rc::clone(printer)),
+            None => spelling,
+        };
         let Some(spellings) = self.spellings else {
             return spelling;
         };
