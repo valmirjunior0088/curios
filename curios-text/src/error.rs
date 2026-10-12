@@ -55,11 +55,15 @@ pub enum Error {
     PrivateBinding {
         binding: String,
     },
+    /// A scope is given one module under one label twice: by two `use` selectors, or by a `use` beside a declaration of the module's own. `first` is where the label was claimed by the claim that stood when this one was refused, where that claim was written.
     QualifierConflict {
         qualifier: String,
+        first: Option<Span>,
     },
+    /// [`Error::QualifierConflict`] for a binding.
     BindingConflict {
         label: String,
+        first: Option<Span>,
     },
     NotAModule {
         label: String,
@@ -175,13 +179,35 @@ impl Error {
 
     /// The error as data: the `Display` message, at the span `Located` wraps it in when one does — except a module that failed to parse, whose location is the parser's own rather than the `mod` line that asked for it, and whose message therefore carries the parser's message and no snippet of its own.
     pub fn report(&self) -> Report {
-        match self {
+        let report = match self {
             Self::Located { span, error } => error
                 .parse_failure()
                 .unwrap_or_else(|| Report::at(span.clone(), error.to_string())),
             error => error
                 .parse_failure()
                 .unwrap_or_else(|| Report::unlocated(error.to_string())),
+        };
+
+        // "Also" and not "first": a module's declarations are in scope before any of its `use` lines is read, so the claim that stood first may be written below the one refused.
+        match self.other_claim() {
+            Some((label, other)) => report.noting(
+                other.clone(),
+                format!("`{label}` is also brought into scope here"),
+            ),
+            None => report,
+        }
+    }
+
+    /// The label a conflict is about and where its other claim stands, where that claim was written: the second place its report is about.
+    fn other_claim(&self) -> Option<(&str, &Span)> {
+        match self {
+            Self::Located { error, .. } => error.other_claim(),
+            Self::QualifierConflict {
+                qualifier: label,
+                first,
+            }
+            | Self::BindingConflict { label, first } => Some((label, first.as_ref()?)),
+            _ => None,
         }
     }
 
@@ -198,6 +224,7 @@ impl Error {
         Some(Report {
             span: report.span,
             message: format!("failed to load module {label}:\n{}", report.message),
+            notes: report.notes,
         })
     }
 
@@ -258,14 +285,11 @@ impl fmt::Display for Error {
                 f,
                 "public item '{item}' exposes private item '{referent}' in its signature\n  mark '{referent}' pub, or make '{item}' private"
             ),
-            Error::QualifierConflict { qualifier } => {
-                write!(
-                    f,
-                    "qualifier conflicts with existing scope entry: {qualifier}"
-                )
+            Error::QualifierConflict { qualifier, .. } => {
+                write!(f, "`{qualifier}` already names a module in this scope")
             }
-            Error::BindingConflict { label } => {
-                write!(f, "binding conflicts with existing scope entry: {label}")
+            Error::BindingConflict { label, .. } => {
+                write!(f, "`{label}` is already in scope here")
             }
             Error::NotAModule { label, parent } => {
                 write!(f, "not a module: {label} in {parent}")

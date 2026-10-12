@@ -213,6 +213,7 @@ impl<'a> Baseline<'a> {
             report: Report {
                 span: context.resolved(&unused.at),
                 message: unused.message.clone(),
+                notes: Vec::new(),
             },
             binder: Some(LintedBinder {
                 declaration: Some(names[unused.definition as usize]),

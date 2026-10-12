@@ -470,6 +470,9 @@ pub(super) struct Context<'a> {
     current_site: Option<usize>,
     binding_sites: HashMap<String, usize>,
     qualifier_sites: HashMap<String, usize>,
+    // Where each qualifier and each binding of this scope was claimed, for the claims a place was written for: what a second claim of the label is shown.
+    qualifier_claims: HashMap<String, Span>,
+    binding_claims: HashMap<String, Span>,
     syntax: &'a SyntaxRegistry,
 }
 
@@ -493,6 +496,8 @@ impl<'a> Context<'a> {
             current_site: None,
             binding_sites: HashMap::new(),
             qualifier_sites: HashMap::new(),
+            qualifier_claims: HashMap::new(),
+            binding_claims: HashMap::new(),
             syntax,
         }
     }
@@ -510,6 +515,8 @@ impl<'a> Context<'a> {
             current_site: None,
             binding_sites: HashMap::new(),
             qualifier_sites: HashMap::new(),
+            qualifier_claims: HashMap::new(),
+            binding_claims: HashMap::new(),
             syntax: self.syntax,
         }
     }
@@ -852,22 +859,49 @@ impl<'a> Context<'a> {
         self.candidates(label, |interface| interface.children.contains_key(label))
     }
 
-    pub(super) fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {
+    /// Bring the module `name` into this scope as `qualifier`, claimed at `at` where the claim was written. A label claimed twice is refused with where it was claimed first.
+    pub(super) fn insert_scope(
+        &mut self,
+        qualifier: String,
+        at: Option<&Span>,
+        name: Qualifier,
+    ) -> Result<(), Error> {
         if self.qualifiers.contains_key(&qualifier) {
-            return Err(Error::QualifierConflict { qualifier });
+            let first = self.qualifier_claims.get(&qualifier).cloned();
+
+            return Err(Error::QualifierConflict { qualifier, first });
         }
 
+        if let Some(at) = at {
+            self.qualifier_claims.insert(qualifier.clone(), at.clone());
+        }
         self.qualifiers.insert(qualifier, name);
         Ok(())
     }
 
-    pub(super) fn insert_binding(&mut self, label: String, name: Qualifier) -> Result<(), Error> {
+    /// Bring the binding `name` into this scope as `label`, as [`Context::insert_scope`] brings a module.
+    pub(super) fn insert_binding(
+        &mut self,
+        label: String,
+        at: Option<&Span>,
+        name: Qualifier,
+    ) -> Result<(), Error> {
         if self.bindings.contains_key(&label) {
-            return Err(Error::BindingConflict { label });
+            let first = self.binding_claims.get(&label).cloned();
+
+            return Err(Error::BindingConflict { label, first });
         }
 
+        if let Some(at) = at {
+            self.binding_claims.insert(label.clone(), at.clone());
+        }
         self.bindings.insert(label, name);
         Ok(())
+    }
+
+    // Where the `use` being resolved wrote the selector or the glob it is resolving.
+    fn site_span(&self) -> Option<Span> {
+        self.shared.sites.borrow()[self.current_site?].span.clone()
     }
 
     // Walk from `start` through `segments` as child modules visible to this module, following each entry's re-export target. A failing segment is classified against the direct table: present-but-private vs. absent.
@@ -942,7 +976,7 @@ impl<'a> Context<'a> {
     fn import_module_label(&mut self, parent: &Qualifier, label: &str) -> Result<Qualifier, Error> {
         match visible_child(self.public, self.table, &self.prefix, parent, label) {
             Some(target) => {
-                self.insert_scope(label.to_string(), target)?;
+                self.insert_scope(label.to_string(), self.site_span().as_ref(), target)?;
                 if let Some(site) = self.current_site {
                     self.qualifier_sites.insert(label.to_string(), site);
                 }
@@ -972,7 +1006,7 @@ impl<'a> Context<'a> {
     ) -> Result<Qualifier, Error> {
         match visible_binding(self.public, self.table, &self.prefix, parent, label) {
             Some(target) => {
-                self.insert_binding(label.to_string(), target)?;
+                self.insert_binding(label.to_string(), self.site_span().as_ref(), target)?;
                 if let Some(site) = self.current_site {
                     self.binding_sites.insert(label.to_string(), site);
                 }
@@ -1006,7 +1040,7 @@ impl<'a> Context<'a> {
         };
 
         if let Some(target) = module {
-            self.insert_scope(label.to_string(), target)?;
+            self.insert_scope(label.to_string(), self.site_span().as_ref(), target)?;
             if let Some(site) = self.current_site {
                 self.qualifier_sites.insert(label.to_string(), site);
             }
@@ -1016,7 +1050,7 @@ impl<'a> Context<'a> {
         }
 
         if let Some(target) = binding {
-            self.insert_binding(label.to_string(), target)?;
+            self.insert_binding(label.to_string(), self.site_span().as_ref(), target)?;
             if let Some(site) = self.current_site {
                 self.binding_sites.insert(label.to_string(), site);
             }

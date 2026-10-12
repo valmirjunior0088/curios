@@ -24,10 +24,11 @@ use {
     curios_verdicts::Session,
     lsp_server::{Connection, Message, RequestId, Response},
     lsp_types::{
-        Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
-        DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentFormattingParams,
-        InitializeParams, LogMessageParams, MessageType, OneOf, Position, PublishDiagnosticsParams,
-        Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
+        Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeTextDocumentParams,
+        DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
+        DocumentFormattingParams, InitializeParams, Location, LogMessageParams, MessageType, OneOf,
+        Position, PublishDiagnosticsParams, Range, ServerCapabilities, TextDocumentSyncCapability,
+        TextDocumentSyncKind, TextEdit, Uri,
         notification::{
             DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument,
             LogMessage, Notification, PublishDiagnostics,
@@ -482,7 +483,7 @@ fn workspace_root(params: &InitializeParams) -> Option<PathBuf> {
     path_of(&folder.uri)
 }
 
-/// One record as the protocol's diagnostic, and the path it belongs to — the span's source when it has one, and the checked document itself, at its first position, when it has none.
+/// One record as the protocol's diagnostic, and the path it belongs to — the span's source when it has one, and the checked document itself, at its first position, when it has none. Each note of its report is a place related to it, which an editor shows beside the message and jumps to.
 fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
     let severity = match record.severity {
         Severity::Error => DiagnosticSeverity::ERROR,
@@ -491,17 +492,31 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
         Severity::Note => DiagnosticSeverity::HINT,
     };
 
+    let lies_in = |span: &Span| {
+        span.source
+            .path
+            .as_deref()
+            .map(curios_text::identity)
+            .unwrap_or_else(|| document.to_path_buf())
+    };
     let (path, range) = match &record.report.span {
-        Some(span) => (
-            span.source
-                .path
-                .as_deref()
-                .map(curios_text::identity)
-                .unwrap_or_else(|| document.to_path_buf()),
-            range_of(span),
-        ),
+        Some(span) => (lies_in(span), range_of(span)),
         None => (document.to_path_buf(), Range::default()),
     };
+    let related = record
+        .report
+        .notes
+        .iter()
+        .filter_map(|note| {
+            Some(DiagnosticRelatedInformation {
+                location: Location {
+                    uri: uri_of(&lies_in(&note.span))?,
+                    range: range_of(&note.span),
+                },
+                message: note.message.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
 
     (
         path,
@@ -510,6 +525,7 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
             severity: Some(severity),
             // No `source`: an editor appends it to the message's last line (Zed writes `expected: Str (curios)`, which reads as one clause), it trims a trailing newline that would have moved it, and with one server for the language it identifies nothing.
             message: record.report.message.clone(),
+            related_information: (!related.is_empty()).then_some(related),
             ..Diagnostic::default()
         },
     )

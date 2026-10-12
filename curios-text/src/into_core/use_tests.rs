@@ -92,7 +92,7 @@ fn rejects_use_followed_by_local_let_of_same_name() {
         x
     "#
         )
-        .contains("binding conflicts with existing scope entry: x")
+        .contains("`x` is already in scope here")
     );
 }
 
@@ -112,7 +112,7 @@ fn rejects_two_imports_of_same_name() {
         x
     "#
         )
-        .contains("binding conflicts with existing scope entry: x")
+        .contains("`x` is already in scope here")
     );
 }
 

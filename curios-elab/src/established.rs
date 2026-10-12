@@ -346,14 +346,14 @@ impl<'a> Established<'a> {
     ///
     /// Each unit was held to the orphan rule where it was compiled, which is what keeps two units from declaring one witness; a scope is still asked, since its units arrive from a store and a program resolved through either of two would mean two things. The names say it, so nothing is reduced.
     pub(crate) fn coherent(&self) -> Result<(), Error> {
-        let mut declared = HashMap::<(Global, WitnessKey), Qualifier>::new();
+        let mut declared = HashMap::<(Global, WitnessKey), (Global, Qualifier)>::new();
         for unit in &self.units {
             for name in unit.witnesses() {
                 let (Some((concept, key)), Global::Witness(id)) = (spelled_at(name), name) else {
                     continue;
                 };
-                if let Some(first) = declared.insert((concept, key), *id.module())
-                    && first != *id.module()
+                if let Some(first) = declared.insert((concept, key), (*name, *id.module()))
+                    && first.1 != *id.module()
                 {
                     return Err(Error::duplicate_witness(concept, key, first, *id.module()));
                 }

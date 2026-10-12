@@ -180,8 +180,10 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
         error.contains("Eq(@?)(?(k), ?(7))"),
         "unexpected error: {error}"
     );
+    // The goal is named in the sentence and shown as the report's second place.
     assert!(
-        error.contains("never solved: the written goal `?` at 4:"),
+        error.contains("never solved: a written goal `?`,")
+            && error.contains("\n\n  this goal `?` was never solved\n\n"),
         "unexpected error: {error}"
     );
     assert!(!mentions_metavar_id(&error), "id leaked: {error}");

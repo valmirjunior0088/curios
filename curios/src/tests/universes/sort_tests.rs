@@ -237,7 +237,7 @@ fn a_sort_two_terms_decide_apart_is_refused_as_decided_twice() {
         );
     }
 
-    // The first term is named by where it stands, wherever its check was recorded as the decision.
+    // The first term is shown as the report's second place, wherever its check was recorded as the decision: the `A` handed to `at_type`, under the one handed to `at_prop`.
     let report = error(
         r#"
         use /std/{Nat, Bool};
@@ -247,10 +247,17 @@ fn a_sort_two_terms_decide_apart_is_refused_as_decided_twice() {
         /std/print("")
         "#,
     );
-    assert!(
-        report.contains("and the term at 5:48 decides it as `Type`"),
-        "{report}"
-    );
+    let (refused, noted) = report
+        .split_once("\n\n  this term decides it as `Type`\n\n")
+        .unwrap_or_else(|| panic!("the first term is not noted: {report}"));
+    let column = |rendered: &str| {
+        rendered
+            .lines()
+            .last()
+            .and_then(|caret| caret.find('^'))
+            .unwrap_or_else(|| panic!("no caret: {rendered}"))
+    };
+    assert!(column(noted) < column(refused), "{report}");
 }
 
 // The word stands where a caller reads it: a body, a local definition, a concept and a witness each hold one sort, and a family's own sort is `Type` or `Prop`.

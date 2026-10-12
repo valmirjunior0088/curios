@@ -136,6 +136,16 @@ impl Span {
 pub struct Report {
     pub span: Option<Span>,
     pub message: String,
+    /// Each further place the report is about, in the order it says them — see [`Note`].
+    pub notes: Vec<Note>,
+}
+
+/// A further place a report is about, with the line that says what stands there: the first declaration of a name declared twice, each other member of a cycle. A report is one thing said, and some things are said about two places; a note is how the second is a span rather than a line number in the message, so a consumer placing a diagnostic can show it and a reader is shown its text.
+#[derive(Debug, Clone, PartialEq)]
+#[curios_archive::archived]
+pub struct Note {
+    pub span: Span,
+    pub message: String,
 }
 
 impl Report {
@@ -144,6 +154,7 @@ impl Report {
         Self {
             span: Some(span),
             message: message.into(),
+            notes: Vec::new(),
         }
     }
 
@@ -152,15 +163,35 @@ impl Report {
         Self {
             span: None,
             message: message.into(),
+            notes: Vec::new(),
         }
     }
 
-    /// The report as a reader sees it: the message, then a blank line and the snippet when there is a span.
+    /// This report, about `span` as well, where `message` says what stands.
+    pub fn noting(mut self, span: Span, message: impl Into<String>) -> Self {
+        self.notes.push(Note {
+            span,
+            message: message.into(),
+        });
+        self
+    }
+
+    /// The report as a reader sees it: the message, then a blank line and the snippet when there is a span, then each note as its line, indented as a detail of the message is, over its own snippet.
     pub fn render(&self) -> String {
-        match &self.span {
+        let said = match &self.span {
             Some(span) => format!("{}\n\n{}", self.message, span.render_snippet()),
             None => self.message.clone(),
-        }
+        };
+        let noted = self
+            .notes
+            .iter()
+            .map(|note| format!("  {}\n\n{}", note.message, note.span.render_snippet()));
+
+        [said]
+            .into_iter()
+            .chain(noted)
+            .collect::<Vec<_>>()
+            .join("\n\n")
     }
 
     /// Several reports rendered in order, a blank line between each — how a goal batch reads.

@@ -1839,7 +1839,7 @@ impl<'s> Context<'s> {
         concept: Global,
         key: WitnessKey,
         witness: Witness,
-    ) -> Option<Qualifier> {
+    ) -> Option<(Global, Qualifier)> {
         let existing = self.typing.program.insert_witness(concept, key, witness);
         if existing.is_none() {
             self.typing.caches.note_write();

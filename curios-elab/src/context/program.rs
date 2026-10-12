@@ -237,20 +237,20 @@ impl<'s> Program<'s> {
         keys
     }
 
-    /// Insert a witness under its key, returning the previous occupant's declaring module on a collision (the caller reports `DuplicateWitness`, which reports modules rather than the witnesses' names): the unit's own, or the one a unit in scope declares there. The façade stamps the write on an actual insert.
+    /// Insert a witness under its key, returning the previous occupant and its declaring module on a collision (the caller reports `DuplicateWitness`, which names the modules and is placed by the witnesses): the unit's own, or the one a unit in scope declares there. The façade stamps the write on an actual insert.
     pub(crate) fn insert_witness(
         &mut self,
         concept: Global,
         key: WitnessKey,
         witness: Witness,
-    ) -> Option<Qualifier> {
+    ) -> Option<(Global, Qualifier)> {
         if let Some(existing) = self.witness_table.get(&(concept, key)) {
-            return Some(existing.module);
+            return Some((existing.name, existing.module));
         }
-        if let Some(Global::Witness(id)) =
+        if let Some(standing @ Global::Witness(id)) =
             self.scope.and_then(|scope| scope.witness(&concept, &key))
         {
-            return Some(*id.module());
+            return Some((standing, *id.module()));
         }
         self.witness_table.insert((concept, key), witness);
 

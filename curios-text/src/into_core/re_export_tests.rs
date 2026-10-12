@@ -59,7 +59,7 @@ fn rejects_conflicting_use_qualifiers() {
         Type
     "#
         )
-        .contains("qualifier conflicts with existing scope entry")
+        .contains("`Baz` already names a module in this scope")
     );
 }
 
@@ -130,7 +130,7 @@ fn rejects_mod_that_overwrites_prior_use() {
         Type
     "#
         )
-        .contains("qualifier conflicts with existing scope entry: Bar")
+        .contains("`Bar` already names a module in this scope")
     );
 }
 

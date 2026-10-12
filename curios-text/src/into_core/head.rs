@@ -163,6 +163,9 @@ impl Headed {
                 if let Some(span) = &mut report.span {
                     span.source = Arc::clone(source);
                 }
+                for note in &mut report.notes {
+                    note.span.source = Arc::clone(source);
+                }
             }
         }
     }

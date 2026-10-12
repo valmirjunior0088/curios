@@ -14,7 +14,7 @@ use {
         build_rename,
     },
     curios_num::{Grain, Integer, Natural},
-    curios_utilities::{InfixOp, Plicity, Qualifier, Report, SyntaxRegistry},
+    curios_utilities::{InfixOp, Note, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
 
@@ -39,11 +39,11 @@ impl DeadArm {
     }
 }
 
-/// One member of an [`Error::DeclarationCycle`]: a declaration by its name, or a witness, which has none, by the type it is declared at.
+/// One member of an [`Error::DeclarationCycle`]: a declaration by its name, or a witness, which a reader knows by the type it is declared at and a report places by its identity.
 #[derive(Debug)]
 pub enum CycleMember {
     Named(Global),
-    Witness(Box<Term>),
+    Witness { name: Global, type_: Box<Term> },
 }
 
 /// One written goal's entry in an [`Error::Goals`] batch: its occurrence extent, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
@@ -121,7 +121,7 @@ pub enum Watched {
     },
     /// The type of a parameter, an inferred hole: described where it was found, since nothing about it needs a position or names a declaration.
     Described(String),
-    /// A written goal `?`, which a reader knows by where it was written: its extent, rendered as a line and a column where the report is made.
+    /// A written goal `?`, which a reader knows by where it was written: its extent, which the report notes as a second place.
     Goal(Option<Extent>),
 }
 
@@ -578,6 +578,8 @@ pub enum Error {
         /// The two declaring modules. Witnesses are anonymous, so the module is the coordinate that locates them for a reader — carried from each declaration's `island` rather than recovered by splitting the compiler-minted name.
         first: Qualifier,
         second: Qualifier,
+        /// The witness that stood at the key first: what the report notes beside the one it refuses.
+        standing: Global,
     },
     /// A witness registered by a root that owns neither the concept nor any key head's declaring root — the orphan rule: a coherence-relevant registration must happen where the concept or a type it mentions is already declared, so two unrelated roots cannot independently `satisfy` the same concept+type and collide unfixably downstream.
     OrphanWitness {
@@ -1223,7 +1225,10 @@ impl Error {
                 .iter()
                 .flat_map(|item| item.definitions())
                 .map(|definition| match definition.kind {
-                    DefinitionKind::Witness => CycleMember::Witness(Box::new(definition.type_)),
+                    DefinitionKind::Witness => CycleMember::Witness {
+                        name: definition.name,
+                        type_: Box::new(definition.type_),
+                    },
                     _ => CycleMember::Named(definition.name),
                 })
                 .collect(),
@@ -1280,17 +1285,21 @@ impl Error {
         }
     }
 
+    /// A second witness at `key` of `concept`, declared in `second`, where `first` stands: the witness and its declaring module.
     pub(crate) fn duplicate_witness(
         concept: Global,
         key: WitnessKey,
-        first: Qualifier,
+        first: (Global, Qualifier),
         second: Qualifier,
     ) -> Self {
+        let (standing, first) = first;
+
         Self::DuplicateWitness {
             concept,
             key,
             first,
             second,
+            standing,
         }
     }
 
@@ -1657,6 +1666,7 @@ impl Error {
                     Report {
                         span: placed(goal.extent.as_ref(), goal.owner),
                         message: format!("{prefix}{}", goal_text(goal, &spelling)),
+                        notes: Vec::new(),
                     }
                 })
                 .collect();
@@ -1677,7 +1687,62 @@ impl Error {
         vec![Report {
             span: placed(self.innermost_extent(), self.owner()),
             message: body,
+            notes: self.notes(spelling, anchors),
         }]
+    }
+
+    /// The further places this error is about, each with the line that says what stands there: a cycle's other members, the witness a duplicate collides with, the term or the goal a refusal of one term names beside it. A place that does not resolve is left out, the message standing without it.
+    fn notes(&self, spelling: &Rc<Spelling>, anchors: &[&Anchors]) -> Vec<Note> {
+        let note = |span: Option<Span>, message: String| span.map(|span| Note { span, message });
+        let written = |extent: &Option<Extent>| extent.and_then(|extent| extent.resolved(anchors));
+
+        match self.unwrapped() {
+            // Every member but the first, which is where the report itself stands.
+            Self::DeclarationCycle { members } => members
+                .iter()
+                .skip(1)
+                .filter_map(|member| {
+                    let (name, declared) = match member {
+                        CycleMember::Named(name) => (name, format!("'{}'", spelling.symbol(name))),
+                        CycleMember::Witness { name, type_ } => {
+                            (name, format!("the witness of {}", type_.spelled(spelling)))
+                        }
+                    };
+
+                    note(
+                        Anchors::label(anchors, name),
+                        format!("{declared} is declared here"),
+                    )
+                })
+                .collect(),
+            Self::DuplicateWitness { standing, .. } => note(
+                Anchors::label(anchors, standing),
+                "the other witness is declared here".to_string(),
+            )
+            .into_iter()
+            .collect(),
+            Self::SortDecidedTwice { prop, other } => {
+                let there = match prop {
+                    true => "Type",
+                    false => "Prop",
+                };
+
+                note(written(other), format!("this term decides it as `{there}`"))
+                    .into_iter()
+                    .collect()
+            }
+            Self::PostponedConversion { watching, .. } => watching
+                .iter()
+                .filter_map(|watched| match watched {
+                    Watched::Goal(extent) => note(
+                        written(extent),
+                        "this goal `?` was never solved".to_string(),
+                    ),
+                    Watched::Slot { .. } | Watched::Described(_) => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 
     /// The error under every wrapper.
@@ -1865,7 +1930,7 @@ impl Error {
             Self::InvalidWitnessHead { head, .. } => out.push(head),
             Self::DeclarationCycle { members } => {
                 out.extend(members.iter().filter_map(|member| match member {
-                    CycleMember::Witness(type_) => Some(&**type_),
+                    CycleMember::Witness { type_, .. } => Some(&**type_),
                     CycleMember::Named(_) => None,
                 }));
             }

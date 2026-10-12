@@ -972,7 +972,7 @@ pub(crate) fn register_witness(
         return Err(Error::orphan_witness(concept_name, key, *module));
     }
 
-    if let Some(first_module) = context.insert_witness(
+    if let Some(first) = context.insert_witness(
         concept_name,
         key,
         Witness {
@@ -982,12 +982,7 @@ pub(crate) fn register_witness(
             signature: signature.clone(),
         },
     ) {
-        return Err(Error::duplicate_witness(
-            concept_name,
-            key,
-            first_module,
-            *module,
-        ));
+        return Err(Error::duplicate_witness(concept_name, key, first, *module));
     }
 
     Ok(())

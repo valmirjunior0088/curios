@@ -714,21 +714,15 @@ impl fmt::Display for Displayed<'_> {
                     "\n  a sort left to a caller is one each use states, so one the declaration decides is written `{sort}`"
                 )
             }
-            Error::SortDecidedTwice { prop, other } => {
+            // The other term is the report's note, where its check was recorded.
+            Error::SortDecidedTwice { prop, .. } => {
                 let (here, there) = match prop {
                     true => ("Prop", "Type"),
                     false => ("Type", "Prop"),
                 };
-                let other = match other.and_then(|extent| extent.resolved(anchors)) {
-                    Some(span) => {
-                        let (line, column) = span.line_column();
-                        format!("the term at {line}:{column}")
-                    }
-                    None => "another of its terms".to_string(),
-                };
                 write!(
                     f,
-                    "this decides a `Sort` its declaration leaves to a caller as `{here}`, and {other} decides it as `{there}`\n  a sort is one of the two wherever it is stated, so no `Sort` serves both terms"
+                    "this decides a `Sort` its declaration leaves to a caller as `{here}`, and another of its terms decides it as `{there}`\n  a sort is one of the two wherever it is stated, so no `Sort` serves both terms"
                 )
             }
             Error::TooManySorts { stated } => {
@@ -1020,15 +1014,8 @@ impl fmt::Display for Displayed<'_> {
                                 binder,
                             } => callee.slot(noun, binder, spelling),
                             Watched::Described(description) => description.clone(),
-                            Watched::Goal(extent) => {
-                                match extent.and_then(|extent| extent.resolved(anchors)) {
-                                    Some(span) => {
-                                        let (line, column) = span.line_column();
-                                        format!("the written goal `?` at {line}:{column}")
-                                    }
-                                    None => "a written goal `?`".to_string(),
-                                }
-                            }
+                            // Where it was written is the report's note.
+                            Watched::Goal(_) => "a written goal `?`".to_string(),
                         })
                         .collect::<Vec<_>>();
                     write!(f, "\n  never solved: {}", watching.join(", "))?;
@@ -1213,7 +1200,7 @@ impl fmt::Display for Displayed<'_> {
                     .iter()
                     .map(|member| match member {
                         CycleMember::Named(name) => format!("'{}'", spelling.symbol(name)),
-                        CycleMember::Witness(type_) => {
+                        CycleMember::Witness { type_, .. } => {
                             format!("the witness of {}", type_.spelled(spelling))
                         }
                     })
@@ -1224,7 +1211,7 @@ impl fmt::Display for Displayed<'_> {
                     .any(|member| matches!(member, CycleMember::Named(_)))
                     && members
                         .iter()
-                        .any(|member| matches!(member, CycleMember::Witness(_)));
+                        .any(|member| matches!(member, CycleMember::Witness { .. }));
                 let way_out = match across {
                     true => {
                         "no group holds a definition beside a witness: let the definition call by its name the function it means, the witness delegating to it, or write its body in the witness, which may read its own methods"
@@ -1347,6 +1334,7 @@ impl fmt::Display for Displayed<'_> {
                 key,
                 first,
                 second,
+                ..
             } => {
                 let concept = spelling.symbol(concept);
                 let noun = key_noun(key);

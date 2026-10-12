@@ -1050,25 +1050,36 @@ fn process_items(
     for headed in heads {
         match &headed.head {
             Head::Mod { label, .. } => {
-                context.insert_scope(label.to_string(), context.prefixed(label))?
+                context.insert_scope(label.to_string(), label.span(), context.prefixed(label))?
             }
             Head::Broken { declares, .. } => {
                 if let Some(label) = declares {
-                    context.insert_binding(label.to_string(), context.prefixed(label))?;
+                    context.insert_binding(
+                        label.to_string(),
+                        label.span(),
+                        context.prefixed(label),
+                    )?;
                 }
             }
             Head::Let(group) => {
                 for let_ in group {
-                    context
-                        .insert_binding(let_.label.to_string(), context.prefixed(&let_.label))?;
+                    context.insert_binding(
+                        let_.label.to_string(),
+                        let_.label.span(),
+                        context.prefixed(&let_.label),
+                    )?;
                 }
             }
             Head::Induct(group) => {
                 for induct in group {
-                    context
-                        .insert_scope(induct.label.to_string(), context.prefixed(&induct.label))?;
+                    context.insert_scope(
+                        induct.label.to_string(),
+                        induct.label.span(),
+                        context.prefixed(&induct.label),
+                    )?;
                     context.insert_binding(
                         induct.label.to_string(),
+                        induct.label.span(),
                         context.prefixed(&induct.label),
                     )?;
                 }
@@ -1078,6 +1089,7 @@ fn process_items(
                 for struct_ in group {
                     context.insert_binding(
                         struct_.label.to_string(),
+                        struct_.label.span(),
                         context.prefixed(&struct_.label),
                     )?;
                 }
@@ -1087,20 +1099,25 @@ fn process_items(
                 for concept in group {
                     context.insert_scope(
                         concept.label.to_string(),
+                        concept.label.span(),
                         context.prefixed(&concept.label),
                     )?;
                     context.insert_binding(
                         concept.label.to_string(),
+                        concept.label.span(),
                         context.prefixed(&concept.label),
                     )?;
                 }
             }
             // A witness is anonymous — no binding, no scope entry.
             Head::Witness | Head::Use(_) => {}
-            Head::Foreign(foreign) => context
-                .insert_binding(foreign.label.to_string(), context.prefixed(&foreign.label))?,
+            Head::Foreign(foreign) => context.insert_binding(
+                foreign.label.to_string(),
+                foreign.label.span(),
+                context.prefixed(&foreign.label),
+            )?,
             Head::Test(label) => {
-                context.insert_binding(label.to_string(), context.prefixed(label))?
+                context.insert_binding(label.to_string(), label.span(), context.prefixed(label))?
             }
         }
     }
@@ -2292,7 +2309,7 @@ fn into_core_unit_within(
     // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what a predecessor already holds, and the predecessors' own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
     for mount in &mounts {
         if !mount.prefix.is_root() {
-            context.insert_scope(mount.prefix.head().to_string(), mount.prefix)?;
+            context.insert_scope(mount.prefix.head().to_string(), None, mount.prefix)?;
         }
     }
 

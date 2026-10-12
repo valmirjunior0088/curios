@@ -1,4 +1,4 @@
-//! Where a refusal lands: on the term it is about, and on the name of its declaration where it is about the declaration as a whole.
+//! Where a refusal lands: on the term it is about, and on the name of its declaration where it is about the declaration as a whole; and the second place it notes where it is about two.
 
 use {
     super::test_support::*,
@@ -36,6 +36,34 @@ fn placed(source: &str) -> Vec<Option<String>> {
 
 fn at(text: &str) -> Vec<Option<String>> {
     vec![Some(text.to_string())]
+}
+
+/// The second places of `source`'s refusal: the text each note of its first report is placed at, with the note's line.
+fn noted(source: &str) -> Vec<(String, String)> {
+    refusal(source)[0]
+        .notes
+        .iter()
+        .map(|note| {
+            let span = &note.span;
+
+            (
+                span.source.text[span.start..span.end].to_string(),
+                note.message.clone(),
+            )
+        })
+        .collect()
+}
+
+fn note(text: &str, message: &str) -> (String, String) {
+    (text.to_string(), message.to_string())
+}
+
+/// Whether the one note of `source`'s refusal is placed before the refusal itself, in the text.
+fn noted_above(source: &str) -> bool {
+    let reports = refusal(source);
+    let refused = reports[0].span.as_ref().expect("the refusal is placed");
+
+    reports[0].notes[0].span.start < refused.start
 }
 
 #[test]
@@ -300,4 +328,152 @@ fn a_re_export_through_a_private_module_is_placed_at_its_path() {
         /std/print("x")
     "#;
     assert_eq!(placed(source), at("/A/Sealed"));
+}
+
+// A refusal about two places stands at one and notes the other, so neither is a line number in its sentence.
+#[test]
+fn a_cycle_notes_every_member_but_the_one_it_stands_at() {
+    let source = r#"
+        use /std/{Nat};
+
+        let a(n: Nat) -> Nat = b(n);
+
+        let b(n: Nat) -> Nat = c(n);
+
+        let c(n: Nat) -> Nat = a(n);
+
+        /std/print("x")
+    "#;
+    assert_eq!(placed(source), at("a"));
+    assert_eq!(
+        noted(source),
+        [
+            note("b", "'b' is declared here"),
+            note("c", "'c' is declared here"),
+        ]
+    );
+}
+
+#[test]
+fn a_cycle_through_a_witness_notes_where_the_witness_is_declared() {
+    let source = r#"
+        use /std/{Nat, Str, Show};
+
+        let shown: Str = Show/show(mine());
+
+        struct Mine: pub Type {
+            n: Nat,
+        }
+
+        let mine() -> Mine = Mine { 1 };
+
+        satisfy Show(Mine) {
+            show(m) = shown,
+        }
+
+        /std/print("x")
+    "#;
+    assert_eq!(
+        noted(source),
+        [note(
+            "Show(Mine)",
+            "the witness of Show(Mine) is declared here"
+        )]
+    );
+}
+
+#[test]
+fn a_duplicate_witness_notes_the_one_that_stood_first() {
+    let source = r#"
+        use /std/{Nat, Str};
+
+        concept Tag(A: Type): pub Type {
+            tag(A) -> Str,
+        }
+
+        satisfy Tag(Nat) {
+            tag(n) = "a",
+        }
+
+        satisfy Tag(Nat) {
+            tag(n) = "b",
+        }
+
+        /std/print("x")
+    "#;
+    assert_eq!(placed(source), at("Tag(Nat)"));
+    assert_eq!(
+        noted(source),
+        [note("Tag(Nat)", "the other witness is declared here")]
+    );
+    assert!(noted_above(source));
+}
+
+#[test]
+fn a_sort_decided_twice_notes_the_term_that_decided_it_first() {
+    let source = r#"
+        use /std/{Nat};
+        let at_type(B: Type) -> Nat = 0;
+        let at_prop(P: Prop) -> Nat = 0;
+        pub let both(A: Sort) -> Nat = at_type(A) + at_prop(A);
+        /std/print("")
+    "#;
+    assert_eq!(placed(source), at("A"));
+    assert_eq!(noted(source), [note("A", "this term decides it as `Type`")]);
+    assert!(noted_above(source));
+}
+
+#[test]
+fn a_conversion_held_up_by_a_goal_notes_the_goal() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        let f(@A : Type, a : A) -> {} = ();
+        let stuck(k : Nat, h : Eq()(k, 7)) -> {} = f((n : Nat) => Eq/cong(?, h));
+        /std/Io/pure(())
+    "#;
+    assert_eq!(noted(source), [note("?", "this goal `?` was never solved")]);
+}
+
+#[test]
+fn a_label_imported_twice_notes_the_other_import() {
+    let source = r#"
+        use /std/{Nat, print, Nat};
+
+        print("x")
+    "#;
+    assert_eq!(placed(source), at("Nat"));
+    assert_eq!(
+        noted(source),
+        [note("Nat", "`Nat` is also brought into scope here")]
+    );
+    assert!(noted_above(source));
+}
+
+// A module's declarations are in scope before its `use` lines are read, so the import is the claim refused and the declaration the one noted, wherever each is written.
+#[test]
+fn an_import_of_a_declared_label_notes_the_declaration() {
+    let source = r#"
+        use /std/{Nat};
+
+        let Nat: Type = /std/Bool;
+
+        /std/print("x")
+    "#;
+    let reports = refusal(source);
+    let refused = reports[0].span.as_ref().expect("the conflict is placed");
+    assert!(
+        refused.source.text[..refused.start].ends_with("use /std/{"),
+        "placed after {:?}",
+        &refused.source.text[..refused.start]
+    );
+    let other = &reports[0].notes[0].span;
+    assert!(
+        other.source.text[..other.start].ends_with("let "),
+        "noted after {:?}",
+        &other.source.text[..other.start]
+    );
+    assert_eq!(
+        reports[0].notes[0].message,
+        "`Nat` is also brought into scope here"
+    );
 }

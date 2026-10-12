@@ -44,3 +44,18 @@ fn caret_padding_reproduces_the_tabs_the_printed_line_keeps() {
         "    1 | \t\tvalue\n      | \t\t^^^^^"
     );
 }
+
+#[test]
+fn a_note_is_rendered_under_the_report_as_its_line_over_its_own_snippet() {
+    let source = Source::inline("let a = 1;\nlet a = 2;\n");
+    let first = Span::new(Arc::clone(&source), 4, 5);
+    let second = Span::new(source, 15, 16);
+
+    let report = Report::at(second, "`a` is already declared").noting(first, "first declared here");
+
+    // The note's line is indented as a detail of the message is, so it reads as part of the report above it and not as a report of its own.
+    assert_eq!(
+        report.render(),
+        "`a` is already declared\n\n    2 | let a = 2;\n      |     ^\n\n  first declared here\n\n    1 | let a = 1;\n      |     ^"
+    );
+}
