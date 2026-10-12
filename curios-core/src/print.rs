@@ -7,7 +7,7 @@ use {
         Var, Variant,
     },
     curios_abi::stdio,
-    curios_num::{Binary, Floating, Grain, Rounding},
+    curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
     curios_utilities::{InfixOp, Plicity, Qualifier, Symbol, recurse},
     std::{
@@ -319,15 +319,10 @@ impl Spelling {
 
     /// A built-in type or operation, named by the path under `/sys` its printer spells it by — a carrier's type `X` at `X/X`, an operation at its own path — spelled for the reader where one is set and the declaration reaches them, and by that path otherwise, as a dump reads it.
     fn intrinsic_symbol(&self, path: &str) -> String {
-        let reader = self.names.as_ref().and_then(|names| {
-            let mut segments = std::iter::once("sys")
-                .chain(path.split('/'))
-                .collect::<Vec<_>>();
-            if segments.len() == 2 {
-                segments.push(segments[1]);
-            }
-            names.spell(&self.reader, &Global::Authored(Qualifier::from(segments)))
-        });
+        let reader = self
+            .names
+            .as_ref()
+            .and_then(|names| names.spell(&self.reader, &intrinsic_global(path)));
         reader.unwrap_or_else(|| path.to_string())
     }
 
@@ -1210,7 +1205,7 @@ fn print_flt(flt: Floating, frame: Frame) -> Printer {
     pure(string)
 }
 
-/// An intrinsic operation as the surface calls it — `Nat/shl(a, b)`, never `Nat.shl a b`. `path` is where `/sys` declares it, under its carrier's module; `/std` re-exports it under the same name, so for a reader the call is spelled as that declaration resolves from where they stand (`Spelling::intrinsic_symbol`) and a dump reads the path. It is also how the same term prints before reduction unfolds that `/sys` global, which is the agreement [`print_former`] states for type formers. A type argument is marked `@`, exactly as the application of the global marks it. The proof an operation carries — a bound on an index, a nonzero divisor — is not an argument here: the reader never wrote one, the operator or the elaborator inserted it, and it is erased.
+/// An intrinsic operation as the surface calls it — `Nat/shl(a, b)`, never `Nat.shl a b`. `path` is where `/sys` declares it, under its carrier's module; `/std` re-exports it under the same name, so for a reader the call is spelled as that declaration resolves from where they stand (`Spelling::intrinsic_symbol`) and a dump reads the path. It is also how the same term prints before reduction unfolds that `/sys` global, which is the agreement [`intrinsic_form`] states for type formers. A type argument is marked `@`, exactly as the application of the global marks it. The proof an operation carries — a bound on an index, a nonzero divisor — is not an argument here: the reader never wrote one, the operator or the elaborator inserted it, and it is erased.
 fn print_call(
     path: impl AsRef<str>,
     implicits: Vec<Term>,
@@ -1233,11 +1228,6 @@ fn marked_arguments(implicits: Vec<Term>, explicits: Vec<Term>, frame: Frame) ->
         .map(|term| marked_argument(sub(term, frame), Some(&Plicity::Implicit)))
         .chain(explicits.into_iter().map(|term| sub(term, frame)))
         .collect()
-}
-
-/// A parameterized intrinsic type former as the surface applies it — `List(Nat)`, never `List Nat`. The same type reaches a report two ways, as the intrinsic node and as its `/sys` global applied, and a reader shown `t : List Nat` beside `xs : List(Nat)` is being told two types where there is one.
-fn print_former(name: &'static str, argument: Term, frame: Frame) -> Printer {
-    print_call(name, vec![], vec![argument], frame)
 }
 
 /// A bracketed literal from its already-rendered entries: `[` and its packed cousins `b[`/`x[` opened by the caller, `]` closed here.
@@ -1299,23 +1289,34 @@ fn escaped(text: &str) -> String {
         .collect()
 }
 
-/// The constant atoms of a packed literal, spelled as the surface writes them — `0`/`1` for bits, hexadecimal numerals for bytes.
-fn bin_atoms(grain: Grain, packed: &Binary) -> Vec<Printer> {
+/// One entry of a list or a packed literal as it is written: an element, a constant atom of a packed one, or a `..` spread of a whole run.
+#[derive(Debug, Clone)]
+pub enum LiteralEntry {
+    /// A constant bit of a `Bits` literal.
+    Bit(bool),
+    /// A constant byte of a `Bytes` literal.
+    Byte(u8),
+    Item(Term),
+    Spread(Term),
+}
+
+/// The constant atoms of a packed literal: its bits, or its bytes.
+fn packed_atoms(grain: Grain, packed: &Binary) -> Vec<LiteralEntry> {
     match grain {
         Grain::B => (0..packed.bit_length())
-            .map(|index| pure(if packed.bit(index).unwrap() { "1" } else { "0" }))
+            .map(|index| LiteralEntry::Bit(packed.bit(index).unwrap()))
             .collect(),
         Grain::X => packed
             .as_bytes()
             .unwrap()
             .iter()
-            .map(|byte| pure(format!("0x{byte:X}")))
+            .map(|byte| LiteralEntry::Byte(*byte))
             .collect(),
     }
 }
 
 /// The entries of a list concatenation as the surface spells them: a literal operand contributes its items in place, a nested concatenation its own entries, and anything else a `..` spread. Lowering turns the `[h, ..t]` a reader wrote into a concatenation of the literal `[h]` with `t`, and substitution nests one concatenation inside another; splicing both back is what lets the report quote the program rather than its lowering. Concatenation is associative, so the splice changes no value — which is exactly why axis (g) exists: a report that has found two groupings rendering alike keeps the nesting instead.
-fn list_concat_entries(operands: Vec<Term>, frame: Frame, entries: &mut Vec<Printer>) {
+fn list_entries(operands: Vec<Term>, grouped: bool, entries: &mut Vec<LiteralEntry>) {
     for operand in operands {
         match &*operand {
             Subterm::Intrinsic(Intrinsic::List { .. }) => {
@@ -1324,59 +1325,64 @@ fn list_concat_entries(operands: Vec<Term>, frame: Frame, entries: &mut Vec<Prin
                 else {
                     unreachable!()
                 };
-                entries.extend(items.into_iter().map(|item| sub(item, frame)));
+                entries.extend(items.into_iter().map(LiteralEntry::Item));
             }
-            Subterm::Intrinsic(Intrinsic::ListConcat { .. }) if !frame.spelling.grouped => {
+            Subterm::Intrinsic(Intrinsic::ListConcat { .. }) if !grouped => {
                 let Subterm::Intrinsic(Intrinsic::ListConcat { operands, .. }) =
                     Term::unwrap_or_clone(operand)
                 else {
                     unreachable!()
                 };
-                list_concat_entries(operands, frame, entries);
+                list_entries(operands, grouped, entries);
             }
-            Subterm::Intrinsic(Intrinsic::ListAppend { .. }) if !frame.spelling.grouped => {
+            Subterm::Intrinsic(Intrinsic::ListAppend { .. }) if !grouped => {
                 let Subterm::Intrinsic(Intrinsic::ListAppend { list, item, .. }) =
                     Term::unwrap_or_clone(operand)
                 else {
                     unreachable!()
                 };
-                list_concat_entries(vec![list], frame, entries);
-                entries.push(sub(item, frame));
+                list_entries(vec![list], grouped, entries);
+                entries.push(LiteralEntry::Item(item));
             }
-            _ => entries.push(flat([pure(".."), sub(operand, frame)])),
+            _ => entries.push(LiteralEntry::Spread(operand)),
         }
     }
 }
 
-/// [`list_concat_entries`] for a packed concatenation: a constant operand of the same grain contributes its atoms in place.
-fn bin_concat_entries(grain: Grain, operands: Vec<Term>, frame: Frame, entries: &mut Vec<Printer>) {
+/// [`list_entries`] for a packed concatenation: a constant operand of the same grain contributes its atoms in place.
+fn packed_entries(
+    grain: Grain,
+    operands: Vec<Term>,
+    grouped: bool,
+    entries: &mut Vec<LiteralEntry>,
+) {
     for operand in operands {
         match &*operand {
             Subterm::Intrinsic(Intrinsic::Bin(g, packed)) if *g == grain => {
-                entries.extend(bin_atoms(grain, packed));
+                entries.extend(packed_atoms(grain, packed));
             }
             Subterm::Intrinsic(Intrinsic::BinConcat { grain: g, .. })
-                if *g == grain && !frame.spelling.grouped =>
+                if *g == grain && !grouped =>
             {
                 let Subterm::Intrinsic(Intrinsic::BinConcat { operands, .. }) =
                     Term::unwrap_or_clone(operand)
                 else {
                     unreachable!()
                 };
-                bin_concat_entries(grain, operands, frame, entries);
+                packed_entries(grain, operands, grouped, entries);
             }
             Subterm::Intrinsic(Intrinsic::BinAppend { grain: g, .. })
-                if *g == grain && !frame.spelling.grouped =>
+                if *g == grain && !grouped =>
             {
                 let Subterm::Intrinsic(Intrinsic::BinAppend { bin, element, .. }) =
                     Term::unwrap_or_clone(operand)
                 else {
                     unreachable!()
                 };
-                bin_concat_entries(grain, vec![bin], frame, entries);
-                entries.push(sub(element, frame));
+                packed_entries(grain, vec![bin], grouped, entries);
+                entries.push(LiteralEntry::Item(element));
             }
-            _ => entries.push(flat([pure(".."), sub(operand, frame)])),
+            _ => entries.push(LiteralEntry::Spread(operand)),
         }
     }
 }
@@ -1389,37 +1395,12 @@ fn flt_rounded(rounding: Rounding, operation: &str) -> String {
     }
 }
 
-/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, `xor`, conversions, `min`/`max`. Exactly the operators the surface language spells infix (`InfixOp::symbol`), each of which dispatches through its concept, `&&` and `||` included.
+/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, `xor`, conversions, `min`/`max`. Exactly the operators the surface language spells infix (`InfixOp::symbol`), each of which dispatches through its concept, `&&` and `||` included. Read off the one table of how an intrinsic is written ([`intrinsic_form`]).
 fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
-    Some(match intrinsic {
-        Intrinsic::NatAdd(..)
-        | Intrinsic::IntAdd(..)
-        | Intrinsic::FltAdd(Rounding::TiesToEven, ..) => "+",
-        Intrinsic::NatSub(..)
-        | Intrinsic::IntSub(..)
-        | Intrinsic::FltSub(Rounding::TiesToEven, ..) => "-",
-        Intrinsic::NatMul(..)
-        | Intrinsic::IntMul(..)
-        | Intrinsic::FltMul(Rounding::TiesToEven, ..) => "*",
-        Intrinsic::NatDiv { .. }
-        | Intrinsic::IntDiv { .. }
-        | Intrinsic::FltDiv(Rounding::TiesToEven, ..) => "/",
-        Intrinsic::NatRem { .. } | Intrinsic::IntRem { .. } | Intrinsic::FltRem(..) => "%",
-        Intrinsic::NatEql(..)
-        | Intrinsic::IntEql(..)
-        | Intrinsic::FltEql(..)
-        | Intrinsic::BoolEql(..)
-        | Intrinsic::BinEql(..) => "==",
-        Intrinsic::NatNeq(..)
-        | Intrinsic::IntNeq(..)
-        | Intrinsic::FltNeq(..)
-        | Intrinsic::BoolNeq(..) => "!=",
-        Intrinsic::NatLt(..) | Intrinsic::IntLt(..) | Intrinsic::FltLt(..) => "<",
-        Intrinsic::NatLe(..) | Intrinsic::IntLe(..) | Intrinsic::FltLe(..) => "<=",
-        Intrinsic::BoolAnd(..) => "&&",
-        Intrinsic::BoolOr(..) => "||",
-        _ => return None,
-    })
+    match intrinsic_form(intrinsic.clone(), false) {
+        IntrinsicForm::Infix(op, ..) => Some(op.symbol()),
+        _ => None,
+    }
 }
 
 /// Render an operator intrinsic as `left <symbol> right`, each operand parenthesized when it is itself an infix operator so nesting stays unambiguous — `(a + b) * c`, never `a + b * c`.
@@ -1629,179 +1610,401 @@ fn print_operand(term: Term, frame: Frame) -> Printer {
     }
 }
 
-fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
+/// How a reader writes an intrinsic. The one table of it ([`intrinsic_form`]): this printer prints from it, a dump under the paths `/sys` declares and a report under what its reader writes, and the translation a report's term is printed through builds the surface form it names.
+#[derive(Debug, Clone)]
+pub enum IntrinsicForm {
+    /// A type former or a constant, by the path under `/sys` its declaration stands at ([`intrinsic_global`]).
+    Named(&'static str),
+    /// An operation called by its path under `/sys`: the type arguments it takes under `@`, then the written ones. The proof an operation carries — a bound on an index, a nonzero divisor — is no argument here: the reader never wrote one, the operator or the elaborator inserted it, and it is erased.
+    Call {
+        path: String,
+        implicits: Vec<Term>,
+        explicits: Vec<Term>,
+    },
+    /// An operator between its two operands.
+    Infix(InfixOp, Term, Term),
+    Bool(bool),
+    /// A numeral of `Nat`.
+    Nat(Natural),
+    /// A successor over a symbolic tail: that tail plus its literal floor, `n + 1`.
+    NatAbove {
+        tail: Term,
+        floor: Natural,
+    },
+    Byte(u8),
+    Int(Integer),
+    Flt(Floating),
+    /// A packed literal, `b[…]` or `x[…]`: its entries in order.
+    Packed(Grain, Vec<LiteralEntry>),
+    /// A list literal: its entries in order.
+    List(Vec<LiteralEntry>),
+    /// A handle the host minted at run time, which no source spells.
+    Handle(u32),
+}
+
+/// The declaration under `/sys` an intrinsic's `path` names: a carrier's type `X` at `X/X`, an operation at its own path.
+pub fn intrinsic_global(path: &str) -> Global {
+    let mut segments = std::iter::once("sys")
+        .chain(path.split('/'))
+        .collect::<Vec<_>>();
+    if segments.len() == 2 {
+        segments.push(segments[1]);
+    }
+
+    Global::Authored(Qualifier::from(segments))
+}
+
+/// How `intrinsic` is written: see [`IntrinsicForm`]. Under `grouped` a nested concatenation stays the operand it is (axis (g)), where the splice would hide how a run is grouped.
+pub fn intrinsic_form(intrinsic: Intrinsic, grouped: bool) -> IntrinsicForm {
+    let operator = |symbol: &str| InfixOp::from_symbol(symbol).expect("an operator's symbol");
+
     match intrinsic {
-        Intrinsic::BoolType => pure(frame.spelling.intrinsic_symbol("Bool")),
-        Intrinsic::Bool(false) => pure("false"),
-        Intrinsic::Bool(true) => pure("true"),
-        Intrinsic::BoolAnd(l, r) => print_infix("&&", l, r, frame),
-        Intrinsic::BoolOr(l, r) => print_infix("||", l, r, frame),
-        Intrinsic::BoolXor(l, r) => print_call("Bool/xor", vec![], vec![l, r], frame),
-        Intrinsic::BoolEql(l, r) => print_infix("==", l, r, frame),
-        Intrinsic::BoolNeq(l, r) => print_infix("!=", l, r, frame),
-        Intrinsic::NatType => pure(frame.spelling.intrinsic_symbol("Nat")),
-        Intrinsic::Nat(Nat::Zero) => pure("0"),
-        // A successor over a symbolic tail is that tail plus its literal floor — spelled infix (`n + 1`, `(n + m) + 3`) to match the operator intrinsics, its tail parenthesized when it too is an operator. A successor over `0` is a plain numeral (`{spine}`).
-        Intrinsic::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
-            Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => pure(format!("{spine}")),
-            _ => flat([
-                print_operand(inner.clone(), frame),
-                pure(format!(" + {spine}")),
-            ]),
+        Intrinsic::BoolType => IntrinsicForm::Named("Bool"),
+        Intrinsic::Bool(value) => IntrinsicForm::Bool(value),
+        Intrinsic::BoolAnd(l, r) => IntrinsicForm::Infix(operator("&&"), l, r),
+        Intrinsic::BoolOr(l, r) => IntrinsicForm::Infix(operator("||"), l, r),
+        Intrinsic::BoolXor(l, r) => IntrinsicForm::Call {
+            path: "Bool/xor".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
         },
-        Intrinsic::NatEql(l, r) => print_infix("==", l, r, frame),
-        Intrinsic::NatNeq(l, r) => print_infix("!=", l, r, frame),
-        Intrinsic::NatAdd(l, r) => print_infix("+", l, r, frame),
-        Intrinsic::NatSub(l, r) => print_infix("-", l, r, frame),
-        Intrinsic::NatMul(l, r) => print_infix("*", l, r, frame),
-        Intrinsic::NatLt(l, r) => print_infix("<", l, r, frame),
+        Intrinsic::BoolEql(l, r) => IntrinsicForm::Infix(operator("=="), l, r),
+        Intrinsic::BoolNeq(l, r) => IntrinsicForm::Infix(operator("!="), l, r),
+        Intrinsic::NatType => IntrinsicForm::Named("Nat"),
+        Intrinsic::Nat(Nat::Zero) => IntrinsicForm::Nat(Natural::zero()),
+        // A successor over `0` is a plain numeral; over a symbolic tail it is that tail plus its literal floor.
+        Intrinsic::Nat(Nat::Succ(floor, tail)) => {
+            match matches!(&*tail, Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))) {
+                true => IntrinsicForm::Nat(floor),
+                false => IntrinsicForm::NatAbove { tail, floor },
+            }
+        }
+        Intrinsic::NatEql(l, r) => IntrinsicForm::Infix(operator("=="), l, r),
+        Intrinsic::NatNeq(l, r) => IntrinsicForm::Infix(operator("!="), l, r),
+        Intrinsic::NatAdd(l, r) => IntrinsicForm::Infix(operator("+"), l, r),
+        Intrinsic::NatSub(l, r) => IntrinsicForm::Infix(operator("-"), l, r),
+        Intrinsic::NatMul(l, r) => IntrinsicForm::Infix(operator("*"), l, r),
+        Intrinsic::NatLt(l, r) => IntrinsicForm::Infix(operator("<"), l, r),
         Intrinsic::NatDiv {
             dividend: l,
             divisor: r,
             ..
-        } => print_infix("/", l, r, frame),
+        } => IntrinsicForm::Infix(operator("/"), l, r),
         Intrinsic::NatRem {
             dividend: l,
             divisor: r,
             ..
-        } => print_infix("%", l, r, frame),
-        Intrinsic::NatLe(l, r) => print_infix("<=", l, r, frame),
-        Intrinsic::NatAnd(l, r) => print_call("Nat/and", vec![], vec![l, r], frame),
-        Intrinsic::NatOr(l, r) => print_call("Nat/or", vec![], vec![l, r], frame),
-        Intrinsic::NatXor(l, r) => print_call("Nat/xor", vec![], vec![l, r], frame),
-        Intrinsic::NatMin(l, r) => print_call("Nat/min", vec![], vec![l, r], frame),
-        Intrinsic::NatMax(l, r) => print_call("Nat/max", vec![], vec![l, r], frame),
-        Intrinsic::NatShl(l, r) => print_call("Nat/shl", vec![], vec![l, r], frame),
-        Intrinsic::NatPow(l, r) => print_call("Nat/pow", vec![], vec![l, r], frame),
-        Intrinsic::NatShr(l, r) => print_call("Nat/shr", vec![], vec![l, r], frame),
-        Intrinsic::ByteType => pure(frame.spelling.intrinsic_symbol("Byte")),
-        Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),
-        Intrinsic::ByteToNat(i) => print_call("Byte/to_nat", vec![], vec![i], frame),
-        Intrinsic::NatToByte { nat, .. } => print_call("Nat/to_byte", vec![], vec![nat], frame),
-        Intrinsic::IntType => pure(frame.spelling.intrinsic_symbol("Int")),
-        Intrinsic::Int(value) => pure(format!("{value:+}")),
-        Intrinsic::IntEql(l, r) => print_infix("==", l, r, frame),
-        Intrinsic::IntNeq(l, r) => print_infix("!=", l, r, frame),
-        Intrinsic::IntAdd(l, r) => print_infix("+", l, r, frame),
-        Intrinsic::IntSub(l, r) => print_infix("-", l, r, frame),
-        Intrinsic::IntMul(l, r) => print_infix("*", l, r, frame),
+        } => IntrinsicForm::Infix(operator("%"), l, r),
+        Intrinsic::NatLe(l, r) => IntrinsicForm::Infix(operator("<="), l, r),
+        Intrinsic::NatAnd(l, r) => IntrinsicForm::Call {
+            path: "Nat/and".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::NatOr(l, r) => IntrinsicForm::Call {
+            path: "Nat/or".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::NatXor(l, r) => IntrinsicForm::Call {
+            path: "Nat/xor".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::NatMin(l, r) => IntrinsicForm::Call {
+            path: "Nat/min".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::NatMax(l, r) => IntrinsicForm::Call {
+            path: "Nat/max".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::NatShl(l, r) => IntrinsicForm::Call {
+            path: "Nat/shl".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::NatPow(l, r) => IntrinsicForm::Call {
+            path: "Nat/pow".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::NatShr(l, r) => IntrinsicForm::Call {
+            path: "Nat/shr".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::ByteType => IntrinsicForm::Named("Byte"),
+        Intrinsic::Byte(value) => IntrinsicForm::Byte(value),
+        Intrinsic::ByteToNat(i) => IntrinsicForm::Call {
+            path: "Byte/to_nat".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::NatToByte { nat, .. } => IntrinsicForm::Call {
+            path: "Nat/to_byte".into(),
+            implicits: vec![],
+            explicits: vec![nat],
+        },
+        Intrinsic::IntType => IntrinsicForm::Named("Int"),
+        Intrinsic::Int(value) => IntrinsicForm::Int(value),
+        Intrinsic::IntEql(l, r) => IntrinsicForm::Infix(operator("=="), l, r),
+        Intrinsic::IntNeq(l, r) => IntrinsicForm::Infix(operator("!="), l, r),
+        Intrinsic::IntAdd(l, r) => IntrinsicForm::Infix(operator("+"), l, r),
+        Intrinsic::IntSub(l, r) => IntrinsicForm::Infix(operator("-"), l, r),
+        Intrinsic::IntMul(l, r) => IntrinsicForm::Infix(operator("*"), l, r),
         Intrinsic::IntDiv {
             dividend: l,
             divisor: r,
             ..
-        } => print_infix("/", l, r, frame),
+        } => IntrinsicForm::Infix(operator("/"), l, r),
         Intrinsic::IntRem {
             dividend: l,
             divisor: r,
             ..
-        } => print_infix("%", l, r, frame),
-        Intrinsic::IntLt(l, r) => print_infix("<", l, r, frame),
-        Intrinsic::IntLe(l, r) => print_infix("<=", l, r, frame),
-        Intrinsic::IntAnd(l, r) => print_call("Int/and", vec![], vec![l, r], frame),
-        Intrinsic::IntOr(l, r) => print_call("Int/or", vec![], vec![l, r], frame),
-        Intrinsic::IntXor(l, r) => print_call("Int/xor", vec![], vec![l, r], frame),
-        Intrinsic::IntMin(l, r) => print_call("Int/min", vec![], vec![l, r], frame),
-        Intrinsic::IntMax(l, r) => print_call("Int/max", vec![], vec![l, r], frame),
-        Intrinsic::IntShl(l, r) => print_call("Int/shl", vec![], vec![l, r], frame),
-        Intrinsic::IntShr(l, r) => print_call("Int/shr", vec![], vec![l, r], frame),
-        Intrinsic::FltType => pure(frame.spelling.intrinsic_symbol("Flt")),
-        Intrinsic::Flt(flt) => print_flt(flt, frame),
-        Intrinsic::FltAdd(Rounding::TiesToEven, l, r) => print_infix("+", l, r, frame),
-        Intrinsic::FltSub(Rounding::TiesToEven, l, r) => print_infix("-", l, r, frame),
-        Intrinsic::FltMul(Rounding::TiesToEven, l, r) => print_infix("*", l, r, frame),
-        Intrinsic::FltDiv(Rounding::TiesToEven, l, r) => print_infix("/", l, r, frame),
-        Intrinsic::FltAdd(rounding, l, r) => {
-            print_call(flt_rounded(rounding, "add"), vec![], vec![l, r], frame)
+        } => IntrinsicForm::Infix(operator("%"), l, r),
+        Intrinsic::IntLt(l, r) => IntrinsicForm::Infix(operator("<"), l, r),
+        Intrinsic::IntLe(l, r) => IntrinsicForm::Infix(operator("<="), l, r),
+        Intrinsic::IntAnd(l, r) => IntrinsicForm::Call {
+            path: "Int/and".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::IntOr(l, r) => IntrinsicForm::Call {
+            path: "Int/or".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::IntXor(l, r) => IntrinsicForm::Call {
+            path: "Int/xor".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::IntMin(l, r) => IntrinsicForm::Call {
+            path: "Int/min".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::IntMax(l, r) => IntrinsicForm::Call {
+            path: "Int/max".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::IntShl(l, r) => IntrinsicForm::Call {
+            path: "Int/shl".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::IntShr(l, r) => IntrinsicForm::Call {
+            path: "Int/shr".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltType => IntrinsicForm::Named("Flt"),
+        Intrinsic::Flt(flt) => IntrinsicForm::Flt(flt),
+        Intrinsic::FltAdd(Rounding::TiesToEven, l, r) => IntrinsicForm::Infix(operator("+"), l, r),
+        Intrinsic::FltSub(Rounding::TiesToEven, l, r) => IntrinsicForm::Infix(operator("-"), l, r),
+        Intrinsic::FltMul(Rounding::TiesToEven, l, r) => IntrinsicForm::Infix(operator("*"), l, r),
+        Intrinsic::FltDiv(Rounding::TiesToEven, l, r) => IntrinsicForm::Infix(operator("/"), l, r),
+        Intrinsic::FltAdd(rounding, l, r) => IntrinsicForm::Call {
+            path: flt_rounded(rounding, "add"),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltSub(rounding, l, r) => IntrinsicForm::Call {
+            path: flt_rounded(rounding, "sub"),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltMul(rounding, l, r) => IntrinsicForm::Call {
+            path: flt_rounded(rounding, "mul"),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltDiv(rounding, l, r) => IntrinsicForm::Call {
+            path: flt_rounded(rounding, "div"),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltFma(rounding, a, b, c) => IntrinsicForm::Call {
+            path: flt_rounded(rounding, "fma"),
+            implicits: vec![],
+            explicits: vec![a, b, c],
+        },
+        Intrinsic::FltRem(l, r) => IntrinsicForm::Infix(operator("%"), l, r),
+        Intrinsic::FltEql(l, r) => IntrinsicForm::Infix(operator("=="), l, r),
+        Intrinsic::FltNeq(l, r) => IntrinsicForm::Infix(operator("!="), l, r),
+        Intrinsic::FltLt(l, r) => IntrinsicForm::Infix(operator("<"), l, r),
+        Intrinsic::FltLe(l, r) => IntrinsicForm::Infix(operator("<="), l, r),
+        Intrinsic::FltMin(l, r) => IntrinsicForm::Call {
+            path: "Flt/min".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltMax(l, r) => IntrinsicForm::Call {
+            path: "Flt/max".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltCopysign(l, r) => IntrinsicForm::Call {
+            path: "Flt/copysign".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltNeg(i) => IntrinsicForm::Call {
+            path: "Flt/neg".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::FltAbs(i) => IntrinsicForm::Call {
+            path: "Flt/abs".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::FltSqrt(rounding, i) => IntrinsicForm::Call {
+            path: flt_rounded(rounding, "sqrt"),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::FltRoundIntegral(rounding, i) => IntrinsicForm::Call {
+            path: format!("Flt/{}", rounding.integral_label()),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::FltToLeBytes(i) => IntrinsicForm::Call {
+            path: "Flt/to_le_bytes".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::FltOfLeBytes { bin: i, .. } => IntrinsicForm::Call {
+            path: "Flt/of_le_bytes".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::NatToInt(i) => IntrinsicForm::Call {
+            path: "Nat/to_int".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::IntAbs(i) => IntrinsicForm::Call {
+            path: "Int/abs".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::IntSign(i) => IntrinsicForm::Call {
+            path: "Int/sign".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::NatToFlt(Rounding::TiesToEven, i) => IntrinsicForm::Call {
+            path: "Nat/to_flt".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::NatToFlt(rounding, i) => IntrinsicForm::Call {
+            path: flt_rounded(rounding, "of_nat"),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::IntToNat { int: i, .. } => IntrinsicForm::Call {
+            path: "Int/to_nat".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::IntToFlt(Rounding::TiesToEven, i) => IntrinsicForm::Call {
+            path: "Int/to_flt".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::IntToFlt(rounding, i) => IntrinsicForm::Call {
+            path: flt_rounded(rounding, "of_int"),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::FltToNat { flt: i, .. } => IntrinsicForm::Call {
+            path: "Flt/to_nat".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::FltToInt { flt: i, .. } => IntrinsicForm::Call {
+            path: "Flt/to_int".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::FltMantissa { flt: i, .. } => IntrinsicForm::Call {
+            path: "Flt/mantissa".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::FltExponent { flt: i, .. } => IntrinsicForm::Call {
+            path: "Flt/exponent".into(),
+            implicits: vec![],
+            explicits: vec![i],
+        },
+        Intrinsic::BinType(Grain::X) => IntrinsicForm::Named("Bytes"),
+        Intrinsic::Bin(Grain::X, bytes) => {
+            IntrinsicForm::Packed(Grain::X, packed_atoms(Grain::X, &bytes))
         }
-        Intrinsic::FltSub(rounding, l, r) => {
-            print_call(flt_rounded(rounding, "sub"), vec![], vec![l, r], frame)
-        }
-        Intrinsic::FltMul(rounding, l, r) => {
-            print_call(flt_rounded(rounding, "mul"), vec![], vec![l, r], frame)
-        }
-        Intrinsic::FltDiv(rounding, l, r) => {
-            print_call(flt_rounded(rounding, "div"), vec![], vec![l, r], frame)
-        }
-        Intrinsic::FltFma(rounding, a, b, c) => {
-            print_call(flt_rounded(rounding, "fma"), vec![], vec![a, b, c], frame)
-        }
-        Intrinsic::FltRem(l, r) => print_infix("%", l, r, frame),
-        Intrinsic::FltEql(l, r) => print_infix("==", l, r, frame),
-        Intrinsic::FltNeq(l, r) => print_infix("!=", l, r, frame),
-        Intrinsic::FltLt(l, r) => print_infix("<", l, r, frame),
-        Intrinsic::FltLe(l, r) => print_infix("<=", l, r, frame),
-        Intrinsic::FltMin(l, r) => print_call("Flt/min", vec![], vec![l, r], frame),
-        Intrinsic::FltMax(l, r) => print_call("Flt/max", vec![], vec![l, r], frame),
-        Intrinsic::FltCopysign(l, r) => print_call("Flt/copysign", vec![], vec![l, r], frame),
-        Intrinsic::FltNeg(i) => print_call("Flt/neg", vec![], vec![i], frame),
-        Intrinsic::FltAbs(i) => print_call("Flt/abs", vec![], vec![i], frame),
-        Intrinsic::FltSqrt(rounding, i) => {
-            print_call(flt_rounded(rounding, "sqrt"), vec![], vec![i], frame)
-        }
-        Intrinsic::FltRoundIntegral(rounding, i) => print_call(
-            format!("Flt/{}", rounding.integral_label()),
-            vec![],
-            vec![i],
-            frame,
-        ),
-        Intrinsic::FltToLeBytes(i) => print_call("Flt/to_le_bytes", vec![], vec![i], frame),
-        Intrinsic::FltOfLeBytes { bin: i, .. } => {
-            print_call("Flt/of_le_bytes", vec![], vec![i], frame)
-        }
-        Intrinsic::NatToInt(i) => print_call("Nat/to_int", vec![], vec![i], frame),
-        Intrinsic::IntAbs(i) => print_call("Int/abs", vec![], vec![i], frame),
-        Intrinsic::IntSign(i) => print_call("Int/sign", vec![], vec![i], frame),
-        Intrinsic::NatToFlt(Rounding::TiesToEven, i) => {
-            print_call("Nat/to_flt", vec![], vec![i], frame)
-        }
-        Intrinsic::NatToFlt(rounding, i) => {
-            print_call(flt_rounded(rounding, "of_nat"), vec![], vec![i], frame)
-        }
-        Intrinsic::IntToNat { int: i, .. } => print_call("Int/to_nat", vec![], vec![i], frame),
-        Intrinsic::IntToFlt(Rounding::TiesToEven, i) => {
-            print_call("Int/to_flt", vec![], vec![i], frame)
-        }
-        Intrinsic::IntToFlt(rounding, i) => {
-            print_call(flt_rounded(rounding, "of_int"), vec![], vec![i], frame)
-        }
-        Intrinsic::FltToNat { flt: i, .. } => print_call("Flt/to_nat", vec![], vec![i], frame),
-        Intrinsic::FltToInt { flt: i, .. } => print_call("Flt/to_int", vec![], vec![i], frame),
-        Intrinsic::FltMantissa { flt: i, .. } => print_call("Flt/mantissa", vec![], vec![i], frame),
-        Intrinsic::FltExponent { flt: i, .. } => print_call("Flt/exponent", vec![], vec![i], frame),
-        Intrinsic::BinType(Grain::X) => pure(frame.spelling.intrinsic_symbol("Bytes")),
-        Intrinsic::Bin(Grain::X, bytes) => print_packed(Grain::X, bin_atoms(Grain::X, &bytes)),
-        Intrinsic::BinLen(Grain::X, b) => print_call("Bytes/len", vec![], vec![b], frame),
-        Intrinsic::BinEql(Grain::X, l, r) => print_infix("==", l, r, frame),
+        Intrinsic::BinLen(Grain::X, b) => IntrinsicForm::Call {
+            path: "Bytes/len".into(),
+            implicits: vec![],
+            explicits: vec![b],
+        },
+        Intrinsic::BinEql(Grain::X, l, r) => IntrinsicForm::Infix(operator("=="), l, r),
         Intrinsic::BinGet {
             grain: Grain::X,
             bin: b,
             index: i,
             in_range: _,
-        } => print_call("Bytes/get", vec![], vec![b, i], frame),
+        } => IntrinsicForm::Call {
+            path: "Bytes/get".into(),
+            implicits: vec![],
+            explicits: vec![b, i],
+        },
         Intrinsic::BinSlice {
             grain: Grain::X,
             bin,
             start,
             length,
             within: _,
-        } => print_call("Bytes/slice", vec![], vec![bin, start, length], frame),
-        Intrinsic::BinType(Grain::B) => pure(frame.spelling.intrinsic_symbol("Bits")),
-        Intrinsic::Bin(Grain::B, bits) => print_packed(Grain::B, bin_atoms(Grain::B, &bits)),
-        Intrinsic::BinLen(Grain::B, b) => print_call("Bits/len", vec![], vec![b], frame),
-        Intrinsic::BinEql(Grain::B, l, r) => print_infix("==", l, r, frame),
+        } => IntrinsicForm::Call {
+            path: "Bytes/slice".into(),
+            implicits: vec![],
+            explicits: vec![bin, start, length],
+        },
+        Intrinsic::BinType(Grain::B) => IntrinsicForm::Named("Bits"),
+        Intrinsic::Bin(Grain::B, bits) => {
+            IntrinsicForm::Packed(Grain::B, packed_atoms(Grain::B, &bits))
+        }
+        Intrinsic::BinLen(Grain::B, b) => IntrinsicForm::Call {
+            path: "Bits/len".into(),
+            implicits: vec![],
+            explicits: vec![b],
+        },
+        Intrinsic::BinEql(Grain::B, l, r) => IntrinsicForm::Infix(operator("=="), l, r),
         Intrinsic::BinGet {
             grain: Grain::B,
             bin: b,
             index: i,
             in_range: _,
-        } => print_call("Bits/get", vec![], vec![b, i], frame),
+        } => IntrinsicForm::Call {
+            path: "Bits/get".into(),
+            implicits: vec![],
+            explicits: vec![b, i],
+        },
         Intrinsic::BinSlice {
             grain: Grain::B,
             bin,
             start,
             length,
             within: _,
-        } => print_call("Bits/slice", vec![], vec![bin, start, length], frame),
+        } => IntrinsicForm::Call {
+            path: "Bits/slice".into(),
+            implicits: vec![],
+            explicits: vec![bin, start, length],
+        },
         // An append has no named form in the surface: `x[..acc, b]` is how a program writes one, and so how a report does.
         Intrinsic::BinAppend {
             grain,
@@ -1809,14 +2012,14 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             element,
         } => {
             let mut entries = Vec::new();
-            bin_concat_entries(grain, vec![bin], frame, &mut entries);
-            entries.push(sub(element, frame));
-            print_packed(grain, entries)
+            packed_entries(grain, vec![bin], grouped, &mut entries);
+            entries.push(LiteralEntry::Item(element));
+            IntrinsicForm::Packed(grain, entries)
         }
         Intrinsic::BinConcat { grain, operands } => {
             let mut entries = Vec::new();
-            bin_concat_entries(grain, operands, frame, &mut entries);
-            print_packed(grain, entries)
+            packed_entries(grain, operands, grouped, &mut entries);
+            IntrinsicForm::Packed(grain, entries)
         }
         // One arm apiece rather than one per grain, as `BinConcat` above already is: these four are the same rule at two element types, and the grain decides nothing here but which carrier's name to spell. The bound is dropped like every other proof operand — it is not what the program wrote.
         // The grain names the operand, so the spelling is the direction it is read *out* of.
@@ -1824,185 +2027,283 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             grain,
             bin,
             aligned: _,
-        } => print_call(
-            match grain {
+        } => IntrinsicForm::Call {
+            path: (match grain {
                 Grain::X => "Bytes/to_bits",
                 Grain::B => "Bits/to_bytes",
-            },
-            vec![],
-            vec![bin],
-            frame,
-        ),
-        Intrinsic::BinReplicate { grain, count, atom } => print_call(
-            match grain {
+            })
+            .into(),
+            implicits: vec![],
+            explicits: vec![bin],
+        },
+        Intrinsic::BinReplicate { grain, count, atom } => IntrinsicForm::Call {
+            path: (match grain {
                 Grain::X => "Bytes/replicate",
                 Grain::B => "Bits/replicate",
-            },
-            vec![],
-            vec![count, atom],
-            frame,
-        ),
+            })
+            .into(),
+            implicits: vec![],
+            explicits: vec![count, atom],
+        },
         Intrinsic::BinAnd {
             grain,
             left,
             right,
             same_length: _,
-        } => print_call(
-            match grain {
+        } => IntrinsicForm::Call {
+            path: (match grain {
                 Grain::X => "Bytes/and",
                 Grain::B => "Bits/and",
-            },
-            vec![],
-            vec![left, right],
-            frame,
-        ),
+            })
+            .into(),
+            implicits: vec![],
+            explicits: vec![left, right],
+        },
         Intrinsic::BinOr {
             grain,
             left,
             right,
             same_length: _,
-        } => print_call(
-            match grain {
+        } => IntrinsicForm::Call {
+            path: (match grain {
                 Grain::X => "Bytes/or",
                 Grain::B => "Bits/or",
-            },
-            vec![],
-            vec![left, right],
-            frame,
-        ),
+            })
+            .into(),
+            implicits: vec![],
+            explicits: vec![left, right],
+        },
         Intrinsic::BinXor {
             grain,
             left,
             right,
             same_length: _,
-        } => print_call(
-            match grain {
+        } => IntrinsicForm::Call {
+            path: (match grain {
                 Grain::X => "Bytes/xor",
                 Grain::B => "Bits/xor",
-            },
-            vec![],
-            vec![left, right],
-            frame,
-        ),
-        Intrinsic::ListType(elem) => print_former("List", elem, frame),
+            })
+            .into(),
+            implicits: vec![],
+            explicits: vec![left, right],
+        },
+        // A parameterized type former is applied as its `/sys` global is, `List(Nat)` and never `List Nat`: the same type reaches a report as the intrinsic node and as that global applied, and a reader shown the two spelled apart is told two types where there is one.
+        Intrinsic::ListType(elem) => IntrinsicForm::Call {
+            path: "List".into(),
+            implicits: vec![],
+            explicits: vec![elem],
+        },
         Intrinsic::List {
             element: _,
             items: elems,
-        } => flat([
-            pure("["),
-            sep_flat(elems.into_iter().map(move |e| sub(e, frame)), || pure(", ")),
-            pure("]"),
-        ]),
-        Intrinsic::ListLen { element: ty, list } => {
-            print_call("List/len", vec![ty], vec![list], frame)
-        }
+        } => IntrinsicForm::List(elems.into_iter().map(LiteralEntry::Item).collect()),
+        Intrinsic::ListLen { element: ty, list } => IntrinsicForm::Call {
+            path: "List/len".into(),
+            implicits: vec![ty],
+            explicits: vec![list],
+        },
         Intrinsic::ListGet {
             element: ty,
             list,
             index,
             in_range: _,
-        } => print_call("List/get", vec![ty], vec![list, index], frame),
+        } => IntrinsicForm::Call {
+            path: "List/get".into(),
+            implicits: vec![ty],
+            explicits: vec![list, index],
+        },
         Intrinsic::ListSlice {
             element: ty,
             list,
             start,
             length,
             within: _,
-        } => print_call("List/slice", vec![ty], vec![list, start, length], frame),
+        } => IntrinsicForm::Call {
+            path: "List/slice".into(),
+            implicits: vec![ty],
+            explicits: vec![list, start, length],
+        },
         Intrinsic::ListAppend {
             element: _,
             list,
             item,
         } => {
             let mut entries = Vec::new();
-            list_concat_entries(vec![list], frame, &mut entries);
-            entries.push(sub(item, frame));
-            print_entries("[", entries)
+            list_entries(vec![list], grouped, &mut entries);
+            entries.push(LiteralEntry::Item(item));
+            IntrinsicForm::List(entries)
         }
         Intrinsic::ListConcat {
             element: _,
             operands,
         } => {
             let mut entries = Vec::new();
-            list_concat_entries(operands, frame, &mut entries);
-            print_entries("[", entries)
+            list_entries(operands, grouped, &mut entries);
+            IntrinsicForm::List(entries)
         }
         Intrinsic::ListMap {
             from: a,
             to: b,
             list,
             function: f,
-        } => print_call("List/map", vec![a, b], vec![list, f], frame),
+        } => IntrinsicForm::Call {
+            path: "List/map".into(),
+            implicits: vec![a, b],
+            explicits: vec![list, f],
+        },
         Intrinsic::ListFold {
             element,
             result,
             list,
             init,
             function,
-        } => print_call(
-            "List/fold",
-            vec![element, result],
-            vec![list, init, function],
-            frame,
-        ),
-        Intrinsic::HandleType => pure(frame.spelling.intrinsic_symbol("Handle")),
+        } => IntrinsicForm::Call {
+            path: "List/fold".into(),
+            implicits: vec![element, result],
+            explicits: vec![list, init, function],
+        },
+        Intrinsic::HandleType => IntrinsicForm::Named("Handle"),
         // The three `/sys/Handle` constants are the only handles a term ever holds: every other handle is minted by the host at run time, behind an `Io` no reduction enters. The last arm names a token no source can spell, and spells the token rather than abort the diagnostic it is inside.
-        Intrinsic::Handle(stdio::STDIN) => pure(frame.spelling.intrinsic_symbol("Handle/stdin")),
-        Intrinsic::Handle(stdio::STDOUT) => pure(frame.spelling.intrinsic_symbol("Handle/stdout")),
-        Intrinsic::Handle(stdio::STDERR) => pure(frame.spelling.intrinsic_symbol("Handle/stderr")),
-        Intrinsic::Handle(token) => pure(format!("Handle({token})")),
-        Intrinsic::CellType(elem) => print_former("Cell", elem, frame),
-        Intrinsic::ChannelType(elem) => print_former("Channel", elem, frame),
-        Intrinsic::Cell { element } => print_call("Cell/new", vec![element], vec![], frame),
+        Intrinsic::Handle(stdio::STDIN) => IntrinsicForm::Named("Handle/stdin"),
+        Intrinsic::Handle(stdio::STDOUT) => IntrinsicForm::Named("Handle/stdout"),
+        Intrinsic::Handle(stdio::STDERR) => IntrinsicForm::Named("Handle/stderr"),
+        Intrinsic::Handle(token) => IntrinsicForm::Handle(token),
+        Intrinsic::CellType(elem) => IntrinsicForm::Call {
+            path: "Cell".into(),
+            implicits: vec![],
+            explicits: vec![elem],
+        },
+        Intrinsic::ChannelType(elem) => IntrinsicForm::Call {
+            path: "Channel".into(),
+            implicits: vec![],
+            explicits: vec![elem],
+        },
+        Intrinsic::Cell { element } => IntrinsicForm::Call {
+            path: "Cell/new".into(),
+            implicits: vec![element],
+            explicits: vec![],
+        },
         Intrinsic::CellFill {
             element,
             cell,
             value,
-        } => print_call("Cell/fill", vec![element], vec![cell, value], frame),
-        Intrinsic::CellPoll { element, cell, .. } => {
-            print_call("Cell/poll", vec![element], vec![cell], frame)
-        }
+        } => IntrinsicForm::Call {
+            path: "Cell/fill".into(),
+            implicits: vec![element],
+            explicits: vec![cell, value],
+        },
+        Intrinsic::CellPoll { element, cell, .. } => IntrinsicForm::Call {
+            path: "Cell/poll".into(),
+            implicits: vec![element],
+            explicits: vec![cell],
+        },
         Intrinsic::Channel {
             element,
             capacity,
             positive,
-        } => print_call(
-            "Channel/new",
-            vec![element],
-            vec![capacity, positive],
-            frame,
-        ),
+        } => IntrinsicForm::Call {
+            path: "Channel/new".into(),
+            implicits: vec![element],
+            explicits: vec![capacity, positive],
+        },
         Intrinsic::ChannelPush {
             element,
             channel,
             value,
-        } => print_call("Channel/push", vec![element], vec![channel, value], frame),
+        } => IntrinsicForm::Call {
+            path: "Channel/push".into(),
+            implicits: vec![element],
+            explicits: vec![channel, value],
+        },
         Intrinsic::ChannelTake {
             element, channel, ..
-        } => print_call("Channel/take", vec![element], vec![channel], frame),
-        Intrinsic::ChannelClose { element, channel } => {
-            print_call("Channel/close", vec![element], vec![channel], frame)
-        }
-        Intrinsic::ChannelClosed { element, channel } => {
-            print_call("Channel/closed", vec![element], vec![channel], frame)
-        }
-        Intrinsic::ChannelCount { element, channel } => {
-            print_call("Channel/count", vec![element], vec![channel], frame)
-        }
-        Intrinsic::ChannelCapacity { element, channel } => {
-            print_call("Channel/capacity", vec![element], vec![channel], frame)
-        }
-        Intrinsic::IoType(result) => print_former("Io", result, frame),
+        } => IntrinsicForm::Call {
+            path: "Channel/take".into(),
+            implicits: vec![element],
+            explicits: vec![channel],
+        },
+        Intrinsic::ChannelClose { element, channel } => IntrinsicForm::Call {
+            path: "Channel/close".into(),
+            implicits: vec![element],
+            explicits: vec![channel],
+        },
+        Intrinsic::ChannelClosed { element, channel } => IntrinsicForm::Call {
+            path: "Channel/closed".into(),
+            implicits: vec![element],
+            explicits: vec![channel],
+        },
+        Intrinsic::ChannelCount { element, channel } => IntrinsicForm::Call {
+            path: "Channel/count".into(),
+            implicits: vec![element],
+            explicits: vec![channel],
+        },
+        Intrinsic::ChannelCapacity { element, channel } => IntrinsicForm::Call {
+            path: "Channel/capacity".into(),
+            implicits: vec![element],
+            explicits: vec![channel],
+        },
+        Intrinsic::IoType(result) => IntrinsicForm::Call {
+            path: "Io".into(),
+            implicits: vec![],
+            explicits: vec![result],
+        },
         Intrinsic::IoPure {
             result: type_,
             value,
-        } => print_call("Io/pure", vec![type_], vec![value], frame),
+        } => IntrinsicForm::Call {
+            path: "Io/pure".into(),
+            implicits: vec![type_],
+            explicits: vec![value],
+        },
         Intrinsic::IoBind {
             from: a,
             to: b,
             action,
             continuation: f,
-        } => print_call("Io/bind", vec![a, b], vec![action, f], frame),
+        } => IntrinsicForm::Call {
+            path: "Io/bind".into(),
+            implicits: vec![a, b],
+            explicits: vec![action, f],
+        },
+    }
+}
+
+fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
+    // The constant atoms as the surface writes them: `0`/`1` for bits, hexadecimal numerals for bytes.
+    let entry = |entry: LiteralEntry| match entry {
+        LiteralEntry::Bit(false) => pure("0"),
+        LiteralEntry::Bit(true) => pure("1"),
+        LiteralEntry::Byte(byte) => pure(format!("0x{byte:X}")),
+        LiteralEntry::Item(item) => sub(item, frame),
+        LiteralEntry::Spread(run) => flat([pure(".."), sub(run, frame)]),
+    };
+
+    match intrinsic_form(intrinsic, frame.spelling.grouped) {
+        IntrinsicForm::Named(path) => pure(frame.spelling.intrinsic_symbol(path)),
+        IntrinsicForm::Call {
+            path,
+            implicits,
+            explicits,
+        } => print_call(path, implicits, explicits, frame),
+        IntrinsicForm::Infix(op, left, right) => print_infix(op.symbol(), left, right, frame),
+        IntrinsicForm::Bool(false) => pure("false"),
+        IntrinsicForm::Bool(true) => pure("true"),
+        IntrinsicForm::Nat(value) => pure(value.to_string()),
+        // Spelled infix to match the operator intrinsics, its tail parenthesized when it too is an operator: `n + 1`, `(n + m) + 3`.
+        IntrinsicForm::NatAbove { tail, floor } => {
+            flat([print_operand(tail, frame), pure(format!(" + {floor}"))])
+        }
+        IntrinsicForm::Byte(value) => pure(format!("0x{value:02X}")),
+        IntrinsicForm::Int(value) => pure(format!("{value:+}")),
+        IntrinsicForm::Flt(value) => print_flt(value, frame),
+        IntrinsicForm::Packed(grain, entries) => {
+            print_packed(grain, entries.into_iter().map(entry).collect())
+        }
+        IntrinsicForm::List(entries) => {
+            print_entries("[", entries.into_iter().map(entry).collect())
+        }
+        // A token no source can spell, spelled rather than abort the diagnostic it is inside.
+        IntrinsicForm::Handle(token) => pure(format!("Handle({token})")),
     }
 }
 
