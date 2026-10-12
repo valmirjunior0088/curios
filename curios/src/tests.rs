@@ -38,6 +38,11 @@ mod recovery;
 mod recursion;
 mod reduction;
 mod respelling;
+mod runaways;
+// Only the runaway measurement builds the programs the fixtures answer.
+#[cfg(feature = "profile")]
+use runaways::*;
+
 mod runtime;
 mod scheduler;
 mod soundness;

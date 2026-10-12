@@ -5,5 +5,6 @@
 mod coordination;
 mod fixpoint;
 mod host_boundary;
+mod runaways;
 mod test_support;
 mod towers;
