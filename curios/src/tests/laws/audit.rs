@@ -6,12 +6,12 @@
 
 use {
     super::{
-        Answers, Audit, Binder, IMPORTS, Row, SEEDS, STRUCTURAL, applied, asked_alone, claim,
-        closes, declared, hold_to_the_table, name, orders, rows, spell, spell_over, top_level,
-        type_name, variables,
+        Answers, Audit, Binder, IMPORTS, Row, SEEDS, STRUCTURAL, Side, applied, asked_alone, claim,
+        closes, declared, hold_to_the_table, name, orders, rows, spell, spell_over, spell_sides,
+        top_level, type_name, variables,
     },
     crate::tests::typecheck,
-    curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation},
+    curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, declares},
     curios_num::Grain,
 };
 
@@ -195,6 +195,73 @@ fn every_law_holds_over_calls_apart_in_a_universe_instance() {
     if let Err(failures) = closes(&format!("{IMPORTS}\n{INSTANCES}"), &instances) {
         panic!("{}", failures.join("\n"));
     }
+}
+
+/// The commutative operation a value of `carrier` is written two ways with, and the carrier of its two operands: an operation its own reader holds one with its operands swapped, and the reader of a law over it takes whole. A truth value is an equality of two naturals, which the truth table reads as an atom. `None` at a carrier with no such operation.
+fn commuted(carrier: Carrier) -> Option<(Carrier, Operation)> {
+    let commuted = match carrier {
+        Carrier::Natural | Carrier::Integer => (carrier, Operation::And),
+        Carrier::Boolean => (Carrier::Natural, Operation::Equal),
+        Carrier::Float => (Carrier::Float, Operation::Min),
+        _ => return None,
+    };
+    assert!(declares(commuted.0, commuted.1, Family::Commutativity));
+    Some(commuted)
+}
+
+/// Every law with each variable `twice` picks written as one commutative operation over two binders of its own, in one order on the claim's left side and in the other on its right, closed by reflexivity through both checkers.
+fn held_at_two_spellings(twice: fn(usize) -> bool) {
+    let instances = rows(&declared())
+        .iter()
+        .filter_map(|row| {
+            let stated = variables(&row.law);
+            let spelled = |at: usize, carrier: Carrier| commuted(carrier).filter(|_| twice(at));
+            stated
+                .iter()
+                .enumerate()
+                .any(|(at, (_, carrier))| spelled(at, *carrier).is_some())
+                .then(|| {
+                    spell_sides(&row.law, |side, index, carrier| {
+                        let at = stated
+                            .iter()
+                            .position(|variable| *variable == (index, carrier))
+                            .expect("a variable of the law");
+                        let name = name(index, carrier);
+                        match spelled(at, carrier) {
+                            Some((operand, operation)) => {
+                                let (first, second) = (format!("{name}0"), format!("{name}1"));
+                                let operands = match side {
+                                    Side::Left => [first.clone(), second.clone()],
+                                    Side::Right => [second.clone(), first.clone()],
+                                };
+                                let of = type_name(operand);
+                                (
+                                    format!("({})", applied(operand, operation, &operands)),
+                                    format!("{first}: {of}, {second}: {of}"),
+                                )
+                            }
+                            None => (name.to_owned(), format!("{name}: {}", type_name(carrier))),
+                        }
+                    })
+                })
+        })
+        .collect::<Vec<_>>();
+    assert!(!instances.is_empty());
+    if let Err(failures) = closes(IMPORTS, &instances) {
+        panic!("{}", failures.join("\n"));
+    }
+}
+
+/// Every law with its first variable written two ways: `Nat/and(x0, x1)` on the left of the claim and `Nat/and(x1, x0)` on its right, an integer's `and`, a float's `min`, and for a truth value an equality of two naturals. The operation is one reader's and the law another's, so the law holds only where the operation is one atom of the law's reader in either spelling.
+#[test]
+fn every_law_holds_at_an_operand_written_two_ways() {
+    held_at_two_spellings(|at| at == 0);
+}
+
+/// The same with every variable written two ways, so a law over two variables pairs two such atoms.
+#[test]
+fn every_law_holds_at_every_operand_written_two_ways() {
+    held_at_two_spellings(|_| true);
 }
 
 /// A fresh variable of `carrier` and one: `a + 1`.

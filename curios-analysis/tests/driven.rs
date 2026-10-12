@@ -1801,21 +1801,21 @@ fn an_equation_hands_back_what_its_checker_is_to_ask() {
         "two heads are two atoms to every checker"
     );
 
-    let Ok(one) = Classes::of(&atoms, None, |_, _| Ok::<_, std::convert::Infallible>(true));
+    let Ok(mut one) = Classes::of(&atoms, None, |_, _| Ok::<_, std::convert::Infallible>(true));
     assert_eq!(
-        answers_classed(&mut kernel, &respelled, &key, &truth(true), &one),
+        answers_classed(&mut kernel, &respelled, &key, &truth(true), &mut one),
         Ok(Some(truth(true)))
     );
     assert_eq!(
-        answers_classed(&mut kernel, &dual, &key, &truth(true), &one),
+        answers_classed(&mut kernel, &dual, &key, &truth(true), &mut one),
         Ok(Some(truth(false))),
         "the dual over the classed atom is the key negated"
     );
-    let Ok(apart) = Classes::of(&atoms, None, |_, _| {
+    let Ok(mut apart) = Classes::of(&atoms, None, |_, _| {
         Ok::<_, std::convert::Infallible>(false)
     });
     assert_eq!(
-        answers_classed(&mut kernel, &respelled, &key, &truth(true), &apart),
+        answers_classed(&mut kernel, &respelled, &key, &truth(true), &mut apart),
         Ok(None),
         "atoms a checker holds apart leave the pair as it was"
     );

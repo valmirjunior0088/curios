@@ -207,6 +207,77 @@ const ATOMS_HELD: &[&str] = &[
     // A sign copied from a value that converts with the magnitude is the magnitude's own, and from that value negated its own flipped: the negation is read through to the value under it.
     "Eq()(Flt/copysign(r(a + b), r(b + a)), r(a + b))",
     "Eq()(Flt/copysign(r(a + b), Flt/neg(r(b + a))), Flt/neg(r(a + b)))",
+    // An operation one reader reads is one atom of the reader above it wherever its own reader holds it one. A commutative operation under a difference, a sum, a product and an equality.
+    "Eq()(Nat/and(a, b) - Nat/and(b, a), 0)",
+    "Eq()(Int/and(i, j) - Int/and(j, i), +0)",
+    "Eq()(Nat/or(a, b) + Nat/xor(c, d), Nat/xor(d, c) + Nat/or(b, a))",
+    "Eq()(Nat/or(a, b) * Nat/xor(c, d), Nat/xor(d, c) * Nat/or(b, a))",
+    "Eq()(Nat/or(a, b) == Nat/xor(c, d), Nat/xor(d, c) == Nat/or(b, a))",
+    "Eq()(Int/or(i, j) + Int/xor(k, l), Int/xor(l, k) + Int/or(j, i))",
+    "Eq()(Nat/and(a, b) + Nat/and(c, d), Nat/and(d, c) + Nat/and(b, a))",
+    "Eq()(Nat/and(a, b) == Nat/and(c, d), Nat/and(d, c) == Nat/and(b, a))",
+    // A commutative operation under another, and under itself, whose reader flattens nothing.
+    "Eq()(Nat/and(Nat/or(a, b), Nat/xor(c, d)), Nat/and(Nat/or(b, a), Nat/xor(d, c)))",
+    "Eq()(Nat/and(Nat/or(a, b), Nat/xor(c, d)), Nat/and(Nat/xor(d, c), Nat/or(b, a)))",
+    "Eq()(Nat/min(Nat/or(a, b), Nat/xor(c, d)), Nat/min(Nat/xor(d, c), Nat/or(b, a)))",
+    "Eq()(Nat/min(Nat/and(a, b), Nat/and(c, d)), Nat/min(Nat/and(d, c), Nat/and(b, a)))",
+    "Eq()(Nat/and(Nat/and(a, b), Nat/and(b, a)), Nat/and(a, b))",
+    // A sum under a commutative operation.
+    "Eq()(Nat/and(a + b, c + d), Nat/and(b + a, d + c))",
+    "Eq()(Nat/and(a + b, c + d), Nat/and(d + c, b + a))",
+    "Eq()(Int/and(i + j, k + l), Int/and(l + k, j + i))",
+    "Eq()(Nat/min(a + b, c + d), Nat/min(b + a, d + c))",
+    "Eq()(Nat/min(a + b, c + d), Nat/min(d + c, b + a))",
+    "Eq()(Nat/and(a + b, c + d) - Nat/and(b + a, d + c), 0)",
+    "Eq()(Nat/xor(a + b, c) + Nat/xor(d, a + c), Nat/xor(d, c + a) + Nat/xor(b + a, c))",
+    "Eq()(Nat/max(a + b, c + d) + Nat/min(a + c, b + d), Nat/min(d + b, c + a) + Nat/max(d + c, b + a))",
+    // A comparison under a connective.
+    "Eq()(Nat/eql(a, b) && Nat/eql(b, a), Nat/eql(a, b))",
+    "Eq()((a == b) && (b == a), a == b)",
+    "Eq()((a == b) && (c == d), (d == c) && (b == a))",
+    "Eq()((a != b) || (c != d), (d != c) || (b != a))",
+    "Eq()((a + b < c) && (d + n < m), (n + d < m) && (b + a < c))",
+    // A float operation under another.
+    "Eq()(Flt/min(r(a) + r(b), s(c) * s(d)), Flt/min(r(b) + r(a), s(d) * s(c)))",
+    "Eq()((r(a) + r(b)) + (s(c) * s(d)), (s(d) * s(c)) + (r(b) + r(a)))",
+    "Eq()(Flt/fma(r(a) + r(b), s(c) * s(d), r(n)), Flt/fma(s(d) * s(c), r(b) + r(a), r(n)))",
+    "Eq()(Flt/max(Flt/min(r(a), r(b)), Flt/min(s(c), s(d))), Flt/max(Flt/min(s(d), s(c)), Flt/min(r(b), r(a))))",
+    "Eq()(Flt/min(r(a) + r(b), s(c) + s(d)) + Flt/max(r(a) * s(c), r(b) * s(d)), Flt/max(s(d) * r(b), s(c) * r(a)) + Flt/min(s(d) + s(c), r(b) + r(a)))",
+    // A sum that is a factor of a product no reader expands is an atom of the monomial.
+    "Eq()((a + b) * (c + d) - (b + a) * (d + c), 0)",
+    "Eq()((a + b) * (c + d) + n - (b + a) * (d + c), n)",
+    "Eq()((i + j) * (k + l) - (j + i) * (l + k), +0)",
+    "Eq()(Nat/and((a + b) * (c + d), (a + c) * (b + d)), Nat/and((d + b) * (c + a), (d + c) * (b + a)))",
+    // An operation whose operand holds one in turn, an opaque atom at the bottom of each.
+    "Eq()(Nat/and(f(a + b), c) + Nat/xor(g(c + d), a), Nat/xor(a, g(d + c)) + Nat/and(c, f(b + a)))",
+    "Eq()(Nat/and(Nat/and(f(a + b), c), Nat/xor(g(c + d), a)), Nat/and(Nat/xor(a, g(d + c)), Nat/and(c, f(b + a))))",
+    "Eq()(Nat/and(a + b, c) == Nat/or(c + d, a), Nat/or(a, d + c) == Nat/and(c, b + a))",
+    "Eq()(Nat/and(a, b) * Nat/and(c, d) + Nat/and(a, c), Nat/and(c, a) + Nat/and(d, c) * Nat/and(b, a))",
+    "Eq()(Nat/and(a, b) + Nat/and(c, d) + Nat/and(a, c), Nat/and(c, a) + Nat/and(b, a) + Nat/and(d, c))",
+    // A comparison beside its dual, each over another spelling of one operation.
+    "Eq()((Nat/and(a, b) < n) && Bool/not(n <= Nat/and(b, a) + c), (Nat/and(b, a) < n) && (Nat/and(a, b) + c < n))",
+    // A side's own root against an operation inside the other side.
+    "Eq()(Nat/eql(a, b) || (Nat/eql(a, b) && p(c)), Nat/eql(b, a))",
+    // A stuck fold over two spellings of one operation, which a `match` on it reduces through.
+    "Eq()(match Nat/and(a, b) == Nat/and(b, a) | true => 0 | false => 1 end, 0)",
+];
+
+/// The controls beside the layer rows: what a node held to another by its own reader must still tell apart. Each is false, or is an association no reader of its operation holds, and each stands where a holding that asked too little would take it — operands of two operations crossed, an operand moved from one operation to the next, two operations of two kinds over one pair, a float's sum reassociated.
+const ATOMS_REFUSED: &[&str] = &[
+    // Operands crossed between two operations of one kind.
+    "Eq()(Nat/and(a, b) + Nat/and(c, d), Nat/and(a, d) + Nat/and(c, b))",
+    "Eq()(Nat/and(a, b) + Nat/and(b, c), Nat/and(b, a) + Nat/and(a, c))",
+    "Eq()((a == b) && (c == d), (a == d) && (c == b))",
+    "Eq()((a < b) && (b < c), (b < a) && (c < b))",
+    // An operand moved across the operation above it.
+    "Eq()(Nat/and(a + b, c), Nat/and(a, b + c))",
+    "Eq()(Flt/min(r(a) + r(b), r(c)), Flt/min(r(a), r(b) + r(c)))",
+    // Two operations of two kinds over one pair of operands.
+    "Eq()(Nat/and(a, b) - Nat/or(b, a), 0)",
+    "Eq()(Nat/or(a, b), Nat/and(b, a))",
+    "Eq()((a == b) || (p(c) && q(c)), (b == a) && (q(c) || p(c)))",
+    // A float's sum is no association: the inner sum is one value, rounded, and an atom of the outer.
+    "Eq()((r(a) + r(b)) + r(c), r(a) + (r(b) + r(c)))",
 ];
 
 const CARRIERS: &[Carrier] = &[
@@ -1200,8 +1271,8 @@ fn every_row_is_on_the_side_the_kernel_puts_it_asked_alone() {
 
 #[test]
 fn every_atom_law_closes_at_every_order_of_its_binders() {
-    // The atom rows, apart from the carriers above because their binders are not one telescope but a sweep of them: one program per order, every row an `Eq/refl()` proof both checkers must accept, and at the first order every row read back as a goal as well.
-    for (order, binders) in orders(ATOM_BINDERS, ATOM_ORDERS).into_iter().enumerate() {
+    // The atom rows, apart from the carriers above because their binders are not one telescope but a sweep of them: one program per order, every row an `Eq/refl()` proof both checkers must accept.
+    for binders in orders(ATOM_BINDERS, ATOM_ORDERS) {
         let rows = ATOMS_HELD
             .iter()
             .map(|claim| (binders.clone(), (*claim).to_owned()))
@@ -1212,11 +1283,27 @@ fn every_atom_law_closes_at_every_order_of_its_binders() {
                 failures.join("\n")
             );
         }
-        if order == 0 {
-            let found = misplaced(IMPORTS, "Atoms up to conversion", &rows, rows.len());
-            assert!(found.is_empty(), "{}", found.join("\n"));
-        }
     }
+}
+
+/// The atom rows and their controls at the order the binders are declared in, each on the side stated: read back as a written goal, and put to the kernel asked alone. A control either checker holds is an equation a holding took that no reader of its operation states.
+#[test]
+fn every_atom_row_and_its_control_is_on_the_side_stated() {
+    let binders = orders(ATOM_BINDERS, 1).remove(0);
+    let rows = ATOMS_HELD
+        .iter()
+        .chain(ATOMS_REFUSED)
+        .map(|claim| (binders.clone(), (*claim).to_owned()))
+        .collect::<Vec<_>>();
+    let name = "Atoms up to conversion";
+    let mut found = misplaced(IMPORTS, name, &rows, ATOMS_HELD.len());
+    found.extend(misplaced_by_the_kernel(
+        IMPORTS,
+        name,
+        &rows,
+        ATOMS_HELD.len(),
+    ));
+    assert!(found.is_empty(), "{}", found.join("\n"));
 }
 
 /// What the rows over calls apart in a universe instance are stated under: a family whose level only sizes its parameter, and three recursive definitions over it. Every written call of one takes a level of its own, which nothing ties to another call's and no unfolding settles, a member reproducing its levels at every step.
@@ -1465,6 +1552,30 @@ fn a_step_taken_through_an_annotation_is_one_the_kernel_takes_in_one() {
     for binders in orders(&binders, ATOM_ORDERS) {
         let source = format!(
             "use /std/{{Nat, Vec, Io}}; use /std/Bool/{{Holds}};\npub let stepped({binders}) -> Vec(Nat, w(b, q2) * w(a, p2)) =\n    let through: Vec(Nat, w(a, p2) * w(b, q1)) = v;\n    through;\nIo/pure(())"
+        );
+        if let Err(error) = typecheck(&source) {
+            panic!("under `{binders}`: {error}");
+        }
+    }
+}
+
+/// A hypothesis over two operations is handed on at their other spellings in one step, as it is through an annotation that respells one of them: conversion is transitive over an operation one reader reads under another's, whichever spelling a fact was stated in. And an arm of a guard over such an operation states the guard's fact at the operation's other spelling.
+#[test]
+fn a_fact_over_an_operation_is_one_over_its_other_spelling() {
+    let binders = ["x", "y", "z", "w", "n"].map(|name| Binder {
+        name,
+        type_: "Nat",
+        needs: &[],
+    });
+    let held = "held: Holds(Nat/or(x, y) + Nat/xor(z, w) == 7)";
+    let stepped = "Holds(Nat/xor(w, z) + Nat/or(y, x) == 7)";
+    for binders in orders(&binders, ATOM_ORDERS) {
+        let source = format!(
+            "{IMPORTS} use /std/Bool/{{True}};\n\
+             let direct({binders}, {held}) -> {stepped} = held;\n\
+             let through({binders}, {held}) -> {stepped} =\n    let step: Holds(Nat/or(y, x) + Nat/xor(z, w) == 7) = held;\n    step;\n\
+             let armed({binders}) -> Nat =\n    match Nat/and(x, y) + n == 3\n    | true =>\n        let fact: Holds(n + Nat/and(y, x) == 3) = True/qed();\n        0\n    | false => 1\n    end;\n\
+             Io/pure(())"
         );
         if let Err(error) = typecheck(&source) {
             panic!("under `{binders}`: {error}");

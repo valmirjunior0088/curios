@@ -71,6 +71,16 @@ pub enum Operation {
     Conversion {
         from: Carrier,
     },
+    /// A natural under a literal added to it, the floor its sum normal form keeps apart: the one operand is what stands under the floor.
+    Successor,
+    /// An integer's magnitude, a natural: declared at the naturals, over the integer it is the magnitude of.
+    Absolute,
+    /// An integer's sign, as an integer.
+    Signum,
+    /// A value negated.
+    Negation,
+    /// A magnitude under another value's sign: the magnitude, then the value the sign is read off.
+    Copysign,
 }
 
 /// What one operand of an operation was observed to be: an upper bound on every value it takes, and its value when it is a literal. A caller observes only what [`Operation::bound_reads`] asks for; anything else may be left `None`.

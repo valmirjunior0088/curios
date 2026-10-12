@@ -141,13 +141,19 @@ pub fn answers(
         return Ok(Answered::Value(value));
     }
     let atoms = atoms_of(&mut reduced, term, key)?;
-    Ok(match classable(&atoms) {
-        true => Answered::Atoms(atoms),
-        false => Answered::Silent,
-    })
+    if classable(&atoms) {
+        return Ok(Answered::Atoms(atoms));
+    }
+    // No two of the pair's atoms could be one to a checker, so no question is handed back: the pair is read once more as the readers class its nodes.
+    Ok(
+        match answers_classed(driver, term, key, value, &mut Classes::default())? {
+            Some(value) => Answered::Value(value),
+            None => Answered::Silent,
+        },
+    )
 }
 
-/// [`answers`] asked again of a pair it handed [`Answered::Atoms`] back for, read with each atom spelled as its class's representative: the value the equation gives the term, or `None` where the classed pair decides nothing either.
+/// [`answers`] asked again of a pair as its partition spells it, each opaque atom as its class's representative and each node as the first node its readers hold it one with: the value the equation gives the term, or `None` where the classed pair decides nothing either.
 ///
 /// The classed spellings are read as they stand, as the pair was: each is the term it was built from with atoms replaced by reduced terms they convert with.
 pub fn answers_classed(
@@ -155,12 +161,15 @@ pub fn answers_classed(
     term: &Term,
     key: &Term,
     value: &Term,
-    classes: &Classes,
+    classes: &mut Classes,
 ) -> Result<Option<Term>, ReduceError> {
     let mut reduced = Reduced(driver);
     let Some((this, that)) = classed(&mut reduced, term, key, classes)? else {
         return Ok(None);
     };
+    if this == that {
+        return Ok(Some(value.clone()));
+    }
     let (Subterm::Intrinsic(this_operation), Subterm::Intrinsic(that_operation)) = (&*this, &*that)
     else {
         return Ok(None);

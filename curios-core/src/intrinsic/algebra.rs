@@ -1,10 +1,10 @@
 //! What each intrinsic is algebraically: the operation `curios-algebra` gives it a meaning as, over the operands that meaning reads — or opaque.
 //!
-//! **The match is exhaustive and states opacity outright**, as [`Intrinsic::signature`]'s does: a new intrinsic has to say what it is to the algebra, possibly nothing, before it compiles, so an operation can neither gain a law by being forgotten nor lose one by being added. What each [`Operation`] means — which operands bound it, which it never exceeds, which conversion undoes which — is `curios-algebra`'s; this is only which intrinsic is which, and where its operands are. Only the implemented reasoning is declared: an intrinsic is declared where some rule reads it at its carrier, and declaring one never enables an identity nothing implements — which is why `Int`'s bitwise operations are opaque, no identity of theirs being implemented.
+//! **The match is exhaustive and states opacity outright**, as [`Intrinsic::signature`]'s does: a new intrinsic has to say what it is to the algebra, possibly nothing, before it compiles, so an operation can neither gain a law by being forgotten nor lose one by being added. What each [`Operation`] means — which operands bound it, which it never exceeds, which conversion undoes which — is `curios-algebra`'s; this is only which intrinsic is which, and where its operands are. Only the implemented reasoning is declared: an intrinsic is declared where some rule reads it at its carrier, and declaring one never enables an identity nothing implements — which is why a float's quotient, its remainder and its square root are opaque, no identity of theirs being implemented. An operation a rule reads through is declared though no law is its own — a `Nat`'s successor floor, `Int/abs`, `Int/sign`, a float's negation and `copysign` — since the layers of a term the classification walks are the operations this table declares, and a second list of what is read through would be a second statement of it.
 
 use {
     super::Intrinsic,
-    crate::{Subterm, Term},
+    crate::{Nat, Subterm, Term},
     curios_algebra::{Carrier, Family, Operation, declares},
     curios_num::{Grain, Rounding},
 };
@@ -338,16 +338,39 @@ impl Intrinsic {
                 Operation::AtMost,
                 Operands::Two([left, right]),
             ),
+            Intrinsic::Nat(Nat::Succ(_, inner)) => declared(
+                Carrier::Natural,
+                Operation::Successor,
+                Operands::One([inner]),
+            ),
+            Intrinsic::IntAbs(operand) => declared(
+                Carrier::Natural,
+                Operation::Absolute,
+                Operands::One([operand]),
+            ),
+            Intrinsic::IntSign(operand) => declared(
+                Carrier::Integer,
+                Operation::Signum,
+                Operands::One([operand]),
+            ),
+            Intrinsic::FltNeg(operand) => declared(
+                Carrier::Float,
+                Operation::Negation,
+                Operands::One([operand]),
+            ),
+            Intrinsic::FltCopysign(magnitude, sign) => declared(
+                Carrier::Float,
+                Operation::Copysign,
+                Operands::Two([magnitude, sign]),
+            ),
             Intrinsic::BoolType
             | Intrinsic::Bool { .. }
             | Intrinsic::NatType
-            | Intrinsic::Nat { .. }
+            | Intrinsic::Nat(Nat::Zero)
             | Intrinsic::ByteType
             | Intrinsic::Byte { .. }
             | Intrinsic::IntType
             | Intrinsic::Int { .. }
-            | Intrinsic::IntAbs { .. }
-            | Intrinsic::IntSign { .. }
             | Intrinsic::FltType
             | Intrinsic::Flt { .. }
             | Intrinsic::FltSub { .. }
@@ -355,11 +378,9 @@ impl Intrinsic {
             | Intrinsic::FltRem { .. }
             | Intrinsic::FltLt { .. }
             | Intrinsic::FltLe { .. }
-            | Intrinsic::FltNeg { .. }
             | Intrinsic::FltAbs { .. }
             | Intrinsic::FltSqrt { .. }
             | Intrinsic::FltRoundIntegral { .. }
-            | Intrinsic::FltCopysign { .. }
             | Intrinsic::NatToFlt { .. }
             | Intrinsic::IntToFlt { .. }
             | Intrinsic::FltToNat { .. }

@@ -25,7 +25,7 @@ use {
         accelerable, answers, answers_classed, atoms_within, classable,
         instantiate_universes_scoped, probe_spellings, reduce_closed, reduce_intrinsic, refold,
     },
-    curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS},
+    curios_analysis::{Answered, Classes, RESOLVED_SPELLING_LAYERS},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
         FreeMonoid, Func, Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat,
@@ -335,8 +335,8 @@ fn answered(
         Answered::Silent => None,
         _ if kernel.plain() => None,
         Answered::Atoms(atoms) => {
-            let classes = asked_classes(kernel, &atoms)?;
-            answers_classed(kernel, term, key, value, &classes)?
+            let mut classes = asked_classes(kernel, &atoms)?;
+            answers_classed(kernel, term, key, value, &mut classes)?
         }
         Answered::Whole => kernel
             .asked_scrutinee(index, term, key)?
@@ -344,7 +344,7 @@ fn answered(
     })
 }
 
-/// A stuck operation folded once more with its atoms classed by the kernel's own conversion, where that decides more than the fold did (`curios_analysis::refold`): `None` where its fold pairs no atoms, where no two of them may be one, or where the fold over the classed atoms still stands at the operation.
+/// A stuck operation folded once more over its operands as classed, its opaque atoms by the kernel's own conversion and the operations among them by their own readers, where that decides more than the fold did (`curios_analysis::refold`): `None` where the algebra declares it no operation, or where the fold over the classed operands still stands at the operation. Conversion is asked only where some two of its atoms may be one.
 ///
 /// **Reduction asks conversion here, and at a missed equation, and nowhere else.** A fold pairs atoms by identity, so two atoms that convert without being identical — a call under two proofs of its bound, two calls whose arguments commute a sum — left `f(a + b) == f(b + a)` stuck where conversion holds its sides one term, and conversion was no congruence under the fold. Each checker asks its own conversion, the elaborator's reducer at the same point.
 ///
@@ -358,12 +358,13 @@ fn refolded(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceErr
     };
     let atoms = atoms_within(kernel, operation)?;
     if !classable(&atoms) {
-        return Ok(None);
+        // Nothing is put to conversion, and the readers still class the operation's nodes.
+        return refold(kernel, operation, &mut Classes::default());
     }
     // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
     curios_profile::sample!("whnf::classable_fold", atoms.len());
-    let classes = asked_classes(kernel, &atoms)?;
-    refold(kernel, operation, &classes)
+    let mut classes = asked_classes(kernel, &atoms)?;
+    refold(kernel, operation, &mut classes)
 }
 
 /// `term` with each operand in weak-head normal form, where it is a tagged intrinsic — the form a refinement's reduced spelling and the value probed against it are both held in. Anything else is its own canonical form.

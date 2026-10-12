@@ -32,12 +32,12 @@ pub(crate) fn convert_intrinsic(
     let outcome = match pass {
         Pass::Settled(outcome) => outcome,
         Pass::Atoms(atoms) => {
-            let classes = classes(context, &cmp.pairs, &atoms)?;
+            let mut classes = classes(context, &cmp.pairs, &atoms)?;
             convert_classed(
                 &mut Elaborating { cmp, context },
                 this.clone(),
                 that.clone(),
-                &classes,
+                &mut classes,
             )?
         }
     };
@@ -102,8 +102,8 @@ pub(super) fn connectives_convert(
         Agreement::Agree => Ok(true),
         Agreement::Silent => Ok(false),
         Agreement::Atoms(atoms) => {
-            let classes = classes(context, pairs, &atoms)?;
-            connectives_agree_classed(context, this, that, &classes)
+            let mut classes = classes(context, pairs, &atoms)?;
+            connectives_agree_classed(context, this, that, &mut classes)
         }
     }
 }

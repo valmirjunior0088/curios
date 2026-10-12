@@ -2,7 +2,7 @@
 //!
 //! `neg`, `abs` and `copysign` each move a value's sign bit and read no other, so a composition of them is a magnitude under a sign ([`SignMagnitude`]) and is written in that reading's one form: `neg(neg(x))` is `x`, `abs(neg(x))` is `abs(x)`, `neg(copysign(x, y))` is `copysign(x, neg(y))`. A literal is its absolute value under the bit it has, so `copysign(x, 1.0)` is `abs(x)` and `copysign(-2.0, y)` is `copysign(2.0, y)`.
 //!
-//! **The values are compared by identity**, as every fold compares its atoms, and which two are one is the fold's checker's to say: the three operations are among those whose atoms a checker classes before the fold is taken again (`folds_over_atoms`).
+//! **The values are compared by identity**, as every fold compares its atoms, and which two are one is the fold's checker's to say: the three operations are among those the algebra's table declares, whose atoms a checker classes before the fold is taken again (`curios-analysis`'s `refold`).
 
 use {
     super::super::{ReduceError, Reducer},

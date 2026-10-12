@@ -201,6 +201,19 @@ const GUARDS: &[Guard] = &[
         dual: None,
         refused: &[],
     },
+    // An operation one reader reads, respelled under the comparison another reads: the guard's atom is the bitwise operation, which its own reader holds one with its operands swapped.
+    Guard {
+        guard: "Nat/and(a, b) < 10",
+        respelled: "Nat/and(b, a) < 10",
+        dual: Some("10 <= Nat/and(b, a)"),
+        refused: &[],
+    },
+    Guard {
+        guard: "Nat/and(a + b, c) == f(a)",
+        respelled: "f(a) == Nat/and(c, b + a)",
+        dual: None,
+        refused: &[],
+    },
     // What the filter in front of an equation still gives up: `c` stands where reduction erases it, and it is no proof.
     Guard {
         guard: "f(b) < 10",
@@ -321,6 +334,28 @@ const ATOMS: &[Atoms] = &[
     Atoms {
         left: "v(i + j)",
         right: "v(j + i)",
+        zero: "+0",
+        nat: false,
+        refused: &[],
+    },
+    // Two spellings of one operation, which its own reader holds one and no checker is asked about.
+    Atoms {
+        left: "Nat/and(a, b)",
+        right: "Nat/and(b, a)",
+        zero: "0",
+        nat: true,
+        refused: &[],
+    },
+    Atoms {
+        left: "Nat/and(a + b, c)",
+        right: "Nat/and(c, b + a)",
+        zero: "0",
+        nat: true,
+        refused: &[],
+    },
+    Atoms {
+        left: "Int/and(i, j)",
+        right: "Int/and(j, i)",
         zero: "+0",
         nat: false,
         refused: &[],

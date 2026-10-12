@@ -87,19 +87,39 @@ pub(super) fn spell_over(
     law: &Law,
     variable: impl Fn(usize, Carrier) -> (String, String),
 ) -> (String, String) {
-    let mut spelling = Spelling {
-        proofs: Vec::new(),
-        variable: &|index, carrier| variable(index, carrier).0,
+    spell_sides(law, |_, index, carrier| variable(index, carrier))
+}
+
+/// Which side of a claim a term stands on.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Side {
+    Left,
+    Right,
+}
+
+/// [`spell_over`] with each variable spelled by the side it stands on, and stated under one binder whichever side that is: a law whose two sides write one value two ways.
+pub(super) fn spell_sides(
+    law: &Law,
+    variable: impl Fn(Side, usize, Carrier) -> (String, String),
+) -> (String, String) {
+    let mut proofs = Vec::new();
+    let mut side = |side: Side, expr: &Expr| {
+        let mut spelling = Spelling {
+            proofs: std::mem::take(&mut proofs),
+            variable: &|index, carrier| variable(side, index, carrier).0,
+        };
+        let spelled = spelling.expr(expr);
+        proofs = spelling.proofs;
+        spelled
     };
     let claim = format!(
         "Eq()({}, {})",
-        spelling.expr(&law.left),
-        spelling.expr(&law.right)
+        side(Side::Left, &law.left),
+        side(Side::Right, &law.right)
     );
-    let proofs = spelling.proofs;
     let binders = variables(law)
         .iter()
-        .map(|(index, carrier)| variable(*index, *carrier).1)
+        .map(|(index, carrier)| variable(Side::Left, *index, *carrier).1)
         .chain(proofs)
         .collect::<Vec<_>>()
         .join(", ");

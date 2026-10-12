@@ -27,8 +27,8 @@ pub(super) fn convert_intrinsic(
     let outcome = match convert_intrinsics(kernel, this.clone(), that.clone())? {
         Pass::Settled(outcome) => outcome,
         Pass::Atoms(atoms) => {
-            let classes = classes(kernel, pairs, &atoms)?;
-            convert_classed(kernel, this.clone(), that.clone(), &classes)?
+            let mut classes = classes(kernel, pairs, &atoms)?;
+            convert_classed(kernel, this.clone(), that.clone(), &mut classes)?
         }
     };
     match outcome {
@@ -72,8 +72,8 @@ pub(super) fn connectives_convert(
         Agreement::Agree => Ok(true),
         Agreement::Silent => Ok(false),
         Agreement::Atoms(atoms) => {
-            let classes = classes(kernel, pairs, &atoms)?;
-            Ok(connectives_agree_classed(kernel, this, that, &classes)?)
+            let mut classes = classes(kernel, pairs, &atoms)?;
+            Ok(connectives_agree_classed(kernel, this, that, &mut classes)?)
         }
     }
 }

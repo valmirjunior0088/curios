@@ -927,7 +927,7 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     }
 }
 
-/// A stuck operation folded once more with its atoms classed by the elaborator's own conversion, where that decides more than the fold did (`curios_analysis::refold`) — the kernel's `refolded`, at the kernel's point, once every equation in force has been asked of the stuck form, and under the kernel's two conditions: only of a term that names a local, and never by plain reduction ([`Context::plainly`]).
+/// A stuck operation folded once more over its operands as classed, its opaque atoms by the elaborator's own conversion and the operations among them by their own readers, where that decides more than the fold did (`curios_analysis::refold`) — the kernel's `refolded`, at the kernel's point, once every equation in force has been asked of the stuck form, and under the kernel's two conditions: only of a term that names a local, and never by plain reduction ([`Context::plainly`]).
 ///
 /// Two atoms are one here only where they convert with nothing committed, so a fold over an atom still waiting on a metavariable stays stuck and is taken again once it is solved.
 fn refolded(context: &mut Context, folded: &Term) -> Result<Option<Term>, ReduceError> {
@@ -939,12 +939,13 @@ fn refolded(context: &mut Context, folded: &Term) -> Result<Option<Term>, Reduce
     };
     let atoms = atoms_within(context, operation)?;
     if !classable(&atoms) {
-        return Ok(None);
+        // Nothing is put to conversion, and the readers still class the operation's nodes.
+        return refold(context, operation, &mut Classes::default());
     }
     // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
     curios_profile::sample!("reduce::classable_fold", atoms.len());
-    let classes = asked_classes(context, &atoms)?;
-    refold(context, operation, &classes)
+    let mut classes = asked_classes(context, &atoms)?;
+    refold(context, operation, &mut classes)
 }
 
 /// What the shared rule says of a stuck reduct against each settled entry it could be a reduct of, innermost first: a term the carriers' readers hold equal to an entry's reduced spelling, or to that spelling negated, is the entry's term (`curios_analysis::answers`). The kernel asks the same function at the same point.
@@ -987,13 +988,13 @@ fn answered(
             Answered::Silent => None,
             _ if context.plain() => None,
             Answered::Atoms(atoms) => {
-                let classes = asked_classes(context, &atoms)?;
+                let mut classes = asked_classes(context, &atoms)?;
                 answers_classed(
                     &mut Reading(&mut *context),
                     probe,
                     &unerased,
                     &assumed,
-                    &classes,
+                    &mut classes,
                 )?
             }
             Answered::Whole => {
@@ -1019,8 +1020,8 @@ pub(crate) fn answered_guard(
         Answered::Value(answer) => Some(answer),
         Answered::Silent | Answered::Whole => None,
         Answered::Atoms(atoms) => {
-            let classes = asked_classes(context, &atoms)?;
-            answers_classed(&mut Reading(&mut *context), term, key, &holds, &classes)?
+            let mut classes = asked_classes(context, &atoms)?;
+            answers_classed(&mut Reading(&mut *context), term, key, &holds, &mut classes)?
         }
     };
     Ok(answer.and_then(|answer| answer.as_bool()))

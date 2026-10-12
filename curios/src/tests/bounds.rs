@@ -396,6 +396,15 @@ const ROWS: &[Row] = &[
         "f: (Nat) -> Nat, a: Nat, b: Nat, m: Nat, h: Holds(2 * m <= f(a + b))",
         "Holds(m <= f(b + a) / 2)",
     ),
+    // One operation under two spellings its own reader holds one: a fact is read a term at a time, and the operation read later takes the spelling of the one read first.
+    claim(
+        "x: Nat, y: Nat, n: Nat, low: Holds(Nat/and(x, y) < n)",
+        "Holds(Nat/and(y, x) < n + 1)",
+    ),
+    claim(
+        "x: Nat, y: Nat, z: Nat, n: Nat, low: Holds(Nat/and(x + y, z) <= n)",
+        "Holds(Nat/and(z, y + x) <= n + 1)",
+    ),
     // Two operations whose guards are one comparison to conversion, `a + c <= b + c` and `a <= b`, opened as one split: a second split inside the first would have a case no value reaches.
     claim(
         "a: Nat, b: Nat, c: Nat",

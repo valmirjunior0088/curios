@@ -28,6 +28,8 @@ mod contexts;
 mod generated;
 use generated::*;
 
+mod nested;
+
 mod parted;
 use parted::*;
 
