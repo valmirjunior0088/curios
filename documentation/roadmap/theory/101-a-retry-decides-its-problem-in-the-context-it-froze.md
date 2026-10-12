@@ -72,7 +72,7 @@ Each lands alone, on its own check.
 - **A retry that tells the caches nothing where it stands on the live frames.** It keeps the reducts across the retry: 189,120 units of `/std`'s 62 million at `4fe2620dc`, counted, and four more declarations' terms move for it. A reduct kept longer is the finding's question, not this rule's.
 - **A chain of bindings, each a node, in place of a stack of frames.** Every lookup changes for it, and a park holds 2.6 frames whose innermost holds 2.7 entries: there is nothing for a finer grain to share.
 - **A snapshot a frame, taken at the park.** It copies what sharing leaves alone, and a spelling settled in a retry is the snapshot's, not the frame's.
-- **Fewer parks instead.** A problem that waits for nothing is decided where it stands, and a `use` slot nothing can name is ([A term is admitted whichever of its parts is read first](100-a-term-is-admitted-whichever-of-its-parts-is-read-first.md)); a lambda that waits for its parameter's type has to wait.
+- **Fewer parks instead.** A problem that waits for nothing is decided where it stands, and a `use` slot nothing can name is (`curios-elab`'s decision on postponement); a lambda that waits for its parameter's type has to wait.
 - **A problem closed over its context**, as GHC files a wanted constraint under the givens and skolems of its implication and solves it by walking the tree ([`GHC.Tc.Types.Constraint`](https://hackage-content-origin.haskell.org/package/ghc-9.14.1/docs/GHC-Tc-Types-Constraint.html)). A retried check elaborates a term, which resolves names and binds under the scope itself.
 
 ## Non-goals
