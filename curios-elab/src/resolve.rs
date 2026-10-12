@@ -705,8 +705,9 @@ fn instantiate(
         };
         context.close_universe_instance(&minted.levels, &instance, &determined)?;
     }
+    // A premise is part of the answer resolution gives, so it is resolved where it stands: the scheme was taken where nothing named the slot, and what names a premise names the dictionary it belongs to.
     for (id, type_, provenance) in premises {
-        attempt_witness_goal(context, id, &type_, provenance, origin)?;
+        resolve_witness_goal(context, id, &type_, provenance, origin)?;
     }
     // A bound in the telescope is decided by the parameters the goal just pinned, so it is tried only now; one still waiting on a metavariable is parked like a premise on a flex key.
     for (slot, bound, provenance) in bounds {
@@ -731,8 +732,34 @@ fn instantiate(
     Ok(Resolution::Solved(term))
 }
 
-/// Attempt a freshly minted witness goal: solve it now, or park it on a flex key. A definite failure is an error at `origin`'s extent, and a key a witness that has not elaborated is spelled at is [`Error::Unfinished`], which voids the attempt. A slot unification has already solved is left as it stands.
+/// Pose a freshly minted witness goal. Where a term awaits its slot, the goal parks for that term: what resolution finds is the slot's own answer, taken where the term has read its parts and nothing solved the slot ([`answer_witness`]), so an argument whose type holds a dictionary names it whichever of the two the walk reaches first. Where no term awaits the slot, and inside an oracle, where nothing may park, the goal is resolved where it stands ([`resolve_witness_goal`]). It is posed here only for a slot a later part of its term can name: one nothing can has resolution as its one source, and its caller resolves it where it stands. A slot unification has already solved is left as it stands.
 pub(crate) fn attempt_witness_goal(
+    context: &mut Context,
+    slot: MetavarId,
+    goal: &Term,
+    provenance: WitnessOrigin,
+    origin: &Term,
+) -> Result<(), Error> {
+    if context.metavar_solution(slot).is_some() {
+        return Ok(());
+    }
+    if !context.parking_suppressed() && context.awaits_any(&Term::hole(slot)) {
+        context.park(
+            ParkedWork::Witness {
+                slot,
+                goal: goal.clone(),
+                provenance,
+            },
+            origin.clone(),
+        );
+        return Ok(());
+    }
+
+    resolve_witness_goal(context, slot, goal, provenance, origin)
+}
+
+/// Resolve a freshly minted witness goal where it stands: solved, or parked on a flex key. It is what a slot nothing after it names asks — a call's whose binder no later parameter's type and no result type mentions, an operator's, a scheme's premise — since resolution is the one source such a slot has, and what a dictionary's superclass field asks, whatever term awaits it: a superclass is the table's entry at its key, and no other field's type names another (`documentation/design/surface/concepts-resolve-with-global-coherence.md`), so the goal waits for nothing the literal has yet to read. A definite failure is an error at `origin`'s extent, and a key a witness that has not elaborated is spelled at is [`Error::Unfinished`], which voids the attempt. A slot unification has already solved is left as it stands.
+pub(crate) fn resolve_witness_goal(
     context: &mut Context,
     slot: MetavarId,
     goal: &Term,
@@ -769,8 +796,32 @@ pub(crate) fn attempt_witness_goal(
     }
 }
 
-/// Retry a parked witness goal under its frozen frame, from `retry_parked`'s wake path. A goal whose slot was solved while it waited — the metavariable it was parked on and the slot solved by one unification — is dropped, as [`attempt_witness_goal`] drops it.
+/// Retry a parked witness goal, from `retry_parked`'s wake path. A wake resolves nothing: a goal whose slot was solved while it waited, by the unification that named a dictionary for it, is dropped, and any other waits on, for the completion of the term that awaits its slot or for the item's drain ([`answer_witness`]). Resolved here, a key an earlier argument gave would take the registered witness before a later argument's type could name another.
 pub(crate) fn retry_witness(
+    context: &mut Context,
+    slot: MetavarId,
+    goal: Term,
+    provenance: WitnessOrigin,
+    origin: Term,
+    frame: FrozenFrame,
+) {
+    if context.metavar_solution(slot).is_some() {
+        return;
+    }
+
+    context.repark(
+        ParkedWork::Witness {
+            slot,
+            goal,
+            provenance,
+        },
+        origin,
+        frame,
+    );
+}
+
+/// Answer a parked witness goal under its frozen frame, where the term that awaited its slot completes or the item drains: the witness resolution finds solves the slot, a key still flex leaves the goal parked, and a definite miss is the error [`attempt_witness_goal`] raises. A goal whose slot was solved while it waited is dropped.
+pub(crate) fn answer_witness(
     context: &mut Context,
     slot: MetavarId,
     goal: Term,

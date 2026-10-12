@@ -2814,6 +2814,16 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.choices_awaited_by(term)
     }
 
+    /// [`Solutions::witnesses_awaited_by`].
+    pub(crate) fn witnesses_awaited_by(&self, term: Option<AwaitId>) -> Vec<MetavarId> {
+        self.underway.attempt.solutions.witnesses_awaited_by(term)
+    }
+
+    /// [`Solutions::take_witness`].
+    pub(crate) fn take_witness(&mut self, slot: MetavarId) -> Option<ParkedProblem> {
+        self.underway.attempt.solutions.take_witness(slot)
+    }
+
     /// [`Solutions::choice_waiting_on`].
     pub(crate) fn choice_waiting_on(&self, id: MetavarId) -> Option<ParkedChoice> {
         self.underway.attempt.solutions.choice_waiting_on(id)

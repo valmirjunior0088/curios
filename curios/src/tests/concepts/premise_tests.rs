@@ -248,7 +248,7 @@ fn a_literal_head_is_held_to_the_formers_marks() {
     );
 }
 
-// A type naming a dictionary other than the registered one is read under the one it names. Each of these leaves its `use` slot to the elaborator while the key type is still open, so the slot is solved by unification — against the expected type, or against the argument's — and resolution, which would write the registered `Key(Nat)` over it, finds the slot taken: the bare literal, the applied head, a constructor its expected type fixes, the operation and the witness over the type all answer through `never`. A constructor whose payload fixes the key type first states the dictionary, as `link` does here; `a_key_type_fixed_before_the_slot_takes_the_registered_dictionary` holds why.
+// A type naming a dictionary other than the registered one is read under the one it names. Each of these leaves its `use` slot to the elaborator while the key type is still open, so the slot is solved by unification — against the expected type, or against the argument's — and resolution, which would write the registered `Key(Nat)` over it, finds the slot taken: the bare literal, the applied head, a constructor its expected type fixes, the operation and the witness over the type all answer through `never`. `a_call_runs_under_the_dictionary_an_argument_names_wherever_its_key_is_fixed` holds the same where the key type is fixed first.
 #[test]
 fn a_type_naming_another_dictionary_is_read_under_it() {
     let source = r#"
@@ -360,11 +360,11 @@ fn a_premise_over_a_stuck_key_waits_for_the_argument_that_gives_it() {
     assert_eq!(run(source), b"true true true true true");
 }
 
-// A slot is resolved where it stands. With the key type written ahead of the premise, the goal is closed when the walk reaches it and takes the registered dictionary, so a value under another is a mismatch the elaborator reports — and the same call with the dictionary written is accepted.
+// A slot is answered where its call completes, so the dictionary an argument's type names is the call's wherever the key type was fixed: left to inference, written as an implicit, written ahead of the premise, given by an earlier argument, or fixed by a constructor's payload ahead of its expected type. Where no argument names one the call takes the registered dictionary, and one written at the slot is the one meant.
 #[test]
-fn a_key_type_fixed_before_the_slot_takes_the_registered_dictionary() {
-    let refused = r#"
-        use /std/{Nat, Bool, Str, Show, print};
+fn a_call_runs_under_the_dictionary_an_argument_names_wherever_its_key_is_fixed() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, print};
         pub concept Key(K: Type): pub Type {
             same(K, K) -> Bool
         }
@@ -375,34 +375,73 @@ fn a_key_type_fixed_before_the_slot_takes_the_registered_dictionary() {
             key: K,
             value: V
         }
+        pub induct Chain(K: Type, use Key(K), V: Type): pub Type
+        | done()
+        | link(K, V, Chain(K, V))
+        end
         let never: Key(Nat) = Key { same(a, b) = false };
+        let holds(@K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
+            Key/same(at.key, key);
         let holds_at(K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
             Key/same(at.key, key);
+        let holds_after(@K: Type, key: K, use Key(K), @V: Type, at: Slot(K, V)) -> Bool =
+            Key/same(at.key, key);
+        let heads(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K) -> Bool =
+            match chain | done() => false | link(at, _, _) => Key/same(at, key) end;
+        let plain: Slot(Nat, Str) = Slot { key = 2, value = "two" };
         let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
-        print(Bool/to_str(holds_at(Nat, bare, 2)))
+        let chain: Chain(Nat, use never, Str) = Chain/link(2, "two", Chain/done());
+        let two: Nat = 2;
+        print(Str/join(" ", [
+            Bool/to_str(holds(bare, 2)),
+            Bool/to_str(holds(@Nat, bare, 2)),
+            Bool/to_str(holds_at(Nat, bare, 2)),
+            Bool/to_str(holds_after(two, bare)),
+            Bool/to_str(heads(chain, 2)),
+            Bool/to_str(holds(@Nat, plain, 2)),
+            Bool/to_str(holds_at(Nat, plain, 2)),
+            Bool/to_str(holds_after(two, plain)),
+            Bool/to_str(holds_at(Nat, use never, bare, 2)),
+        ]))
         "#;
 
-    let message = error(refused);
+    assert_eq!(
+        run(source),
+        b"false false false false false true true true false"
+    );
+}
+
+// A dictionary's superclass is the table's entry at its key, whatever its other fields say: a field whose type names another dictionary is a mismatch, where a call's slot would have taken the one named. Answered with the literal's other slots, the superclass of `Keyed(Nat)` would be `other`, and `Hashy/code` would answer through the table and through `Keyed(Nat)` differently.
+#[test]
+fn a_superclass_is_the_registered_dictionary_whatever_a_field_names() {
+    let source = r#"
+        use /std/{Nat, Str, print};
+        pub concept Hashy(K: Type): pub Type {
+            code(K) -> Nat
+        }
+        satisfy Hashy(Nat) {
+            code(n) = n
+        }
+        let other: Hashy(Nat) = Hashy { code(n) = 0 };
+        pub struct Slot(K: Type, use Hashy(K), V: Type): pub Type {
+            key: K,
+            value: V
+        }
+        pub concept Keyed(K: Type): pub Type {
+            use Hashy(K),
+            sample: Slot(K, Nat),
+        }
+        let odd: Slot(Nat, use other, Nat) = Slot { key = 1, value = 1 };
+        satisfy Keyed(Nat) {
+            sample = odd
+        }
+        print("unreachable")
+        "#;
+
+    let message = error(source);
     assert!(message.contains("type mismatch"), "got: {message}");
-
-    let supplied = r#"
-        use /std/{Nat, Bool, Str, Show, print};
-        pub concept Key(K: Type): pub Type {
-            same(K, K) -> Bool
-        }
-        satisfy Key(Nat) {
-            same(a, b) = a == b
-        }
-        pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
-            key: K,
-            value: V
-        }
-        let never: Key(Nat) = Key { same(a, b) = false };
-        let holds_at(K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
-            Key/same(at.key, key);
-        let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
-        print(Bool/to_str(holds_at(Nat, use never, bare, 2)))
-        "#;
-
-    assert_eq!(run(supplied), b"false");
+    assert!(
+        message.contains("inferred: Slot(Nat, use Hashy { (n) => 0 }, Nat)"),
+        "got: {message}"
+    );
 }

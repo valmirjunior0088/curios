@@ -144,6 +144,8 @@ pub(crate) struct ParkedProblem {
 /// What a completing term may do for a parked problem nothing else answers: the problem's own answer, one among those it admits ([`ParkedWork::choice`]). Their order is the order they are taken in, each committing less than the next and able to decide it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Choice {
+    /// A `use` slot nothing solved takes the witness resolution finds for its goal, where the goal's key has come to a head resolution reads.
+    Witness,
     /// A tuple literal gives the metavariable it waits on its shape: a non-dependent product of one open type a field.
     Shape,
     /// The numerals that wait on one metavariable take their default together.
@@ -162,6 +164,7 @@ impl ParkedWork {
                 Subterm::Func(_) => Some(Choice::Lambda),
                 _ => None,
             },
+            ParkedWork::Witness { .. } => Some(Choice::Witness),
             _ => None,
         }
     }
@@ -367,6 +370,33 @@ impl Solutions {
             .collect();
 
         (choices, links)
+    }
+
+    /// The `use` slots nothing has solved whose goals `term` awaits, in the order the goals were parked. `None` asks for what no standing term awaits, which is the item's.
+    pub(crate) fn witnesses_awaited_by(&self, term: Option<AwaitId>) -> Vec<MetavarId> {
+        self.parked
+            .iter()
+            .filter_map(|parked| match &parked.work {
+                ParkedWork::Witness { slot, .. } if self.solution(*slot).is_none() => {
+                    let unsolved = parked
+                        .watching
+                        .iter()
+                        .copied()
+                        .filter(|id| self.solution(*id).is_none());
+                    (self.outermost(unsolved) == term).then_some(*slot)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Take the goal parked for the `use` slot `slot`, where it still waits: what a completing term answers itself.
+    pub(crate) fn take_witness(&mut self, slot: MetavarId) -> Option<ParkedProblem> {
+        let index = self.parked.iter().position(|parked| {
+            matches!(&parked.work, ParkedWork::Witness { slot: held, .. } if *held == slot)
+        })?;
+
+        Some(self.parked.remove(index))
     }
 
     /// The check with a choice of its own parked on the bare metavariable `id`, where one is: the field a part of a shape holds while the shape is being given.
@@ -629,7 +659,14 @@ impl Solutions {
             // Its type as well as its sides: a goal postponed because the type it is compared at is unsolved wakes when that type is.
             ParkedWork::Conversion(goal) => self.unsolved_in([&goal.this, &goal.that, &goal.type_]),
             ParkedWork::Checking { expected, .. } => self.unsolved_in([expected]),
-            ParkedWork::Witness { goal, .. } => self.unsolved_in([goal]),
+            // Its slot as well as its goal: unification may solve the slot, which ends the goal, and the slot is what a term awaits where the goal holds no metavariable.
+            ParkedWork::Witness { slot, goal, .. } => {
+                let mut watching = self.unsolved_in([goal]);
+                if self.solution(*slot).is_none() {
+                    watching.insert(*slot);
+                }
+                watching
+            }
             ParkedWork::Projection(projection) => self.unsolved_in([&projection.head_type]),
             ParkedWork::Match(parked) => self.unsolved_in([&parked.scrutinee_type]),
             ParkedWork::Discharge { bound, .. } => self.unsolved_in([bound]),

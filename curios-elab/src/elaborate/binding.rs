@@ -2,8 +2,8 @@ use {
     super::{Misaligned, align, check_witness_domain, insert_auto_argument, stands_at},
     crate::{
         BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, ParkedWork,
-        SlotPositions, attempt_witness_goal, check, check_is_sort, check_rec_totality, convert,
-        display_mismatch, elaborate, expect, reduce_with, stuck_on_metavar, written_monad,
+        SlotPositions, check, check_is_sort, check_rec_totality, convert, display_mismatch,
+        elaborate, expect, reduce_with, resolve_witness_goal, stuck_on_metavar, written_monad,
         zonk_solved_term_metas,
     },
     curios_core::{
@@ -386,7 +386,7 @@ pub(crate) fn numeral_default<'a>(
 ///
 /// What the operator *returns* is read here rather than restated beside [`InfixOp`]: the method's type at the operand type `?T` comes out of the concept's lowered field telescope, so `eql(A, A) -> Bool` and `add(A, A) -> A` are told apart by what the concept declares and not by a Rust-side list of which operators yield `Bool`.
 struct InfixMethod {
-    /// The witness metavariable slot, filled by [`attempt_witness_goal`] once the operand type is pinned.
+    /// The witness metavariable slot, filled by [`resolve_witness_goal`] once the operand type is pinned.
     slot: MetavarId,
     goal: Term,
     witness: Term,
@@ -955,8 +955,8 @@ pub(super) fn elaborate_infix(
         ));
     };
 
-    // Attempt the witness goal exactly like an omitted `use` argument: it resolves, parks on a flex operand type, or defers to a later witness registration, and a definite miss reports `no witness of Add(Point)` — the single operator error vocabulary.
-    attempt_witness_goal(
+    // The witness goal is resolved where it stands, as an omitted `use` argument nothing after it names is: it resolves, parks on a flex operand type, or defers to a later witness registration, and a definite miss reports `no witness of Add(Point)` — the single operator error vocabulary. Both operands are read by now, and no part of an operator names a dictionary, so resolution is the one source the slot has and nothing is left for it to wait on.
+    resolve_witness_goal(
         context,
         method.slot,
         &method.goal,

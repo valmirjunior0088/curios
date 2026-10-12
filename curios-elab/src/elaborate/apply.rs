@@ -3,7 +3,8 @@ use {
     crate::{
         ArgumentSite, Context, Entailed, ErasedSite, Error, FrozenFrame, Mode, ParkedWork, Sort,
         attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, elaborate, entail,
-        exhausted_bound, expect, is_prop, reduce_with, transitively_ground, zonk_solved_term_metas,
+        exhausted_bound, expect, is_prop, reduce_with, resolve_witness_goal, transitively_ground,
+        zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Level,
@@ -197,18 +198,32 @@ pub(super) fn insert_auto_argument(
             }
             Ok(hole)
         }
-        Plicity::Witness => {
-            let provenance = WitnessOrigin {
-                func: func.clone(),
-                binder: premise_label(position),
-            };
-            let (id, metavar) =
-                context.fresh_witness_metavar(type_.clone(), origin.extent(), provenance.clone());
-            attempt_witness_goal(context, id, type_, provenance, origin)?;
-            Ok(metavar)
-        }
+        Plicity::Witness => insert_witness_argument(context, type_, func, origin, position, true),
         Plicity::Explicit => unreachable!("explicit slots are never auto-filled"),
     }
+}
+
+/// Fill an omitted `use` slot: a fresh metavariable and its resolution goal. `named` says whether what follows the slot in its telescope mentions its binder — a later parameter's type or the result type — and so whether unification can give the slot a dictionary. One it can waits for its term ([`attempt_witness_goal`]), so that a part read later names the dictionary whichever of the two the walk reaches first; one it cannot has resolution as its one source, and is resolved where it stands ([`resolve_witness_goal`]).
+pub(super) fn insert_witness_argument(
+    context: &mut Context,
+    type_: &Term,
+    func: &CalleeId,
+    origin: &Term,
+    position: usize,
+    named: bool,
+) -> Result<Term, Error> {
+    let provenance = WitnessOrigin {
+        func: func.clone(),
+        binder: premise_label(position),
+    };
+    let (id, metavar) =
+        context.fresh_witness_metavar(type_.clone(), origin.extent(), provenance.clone());
+    match named {
+        true => attempt_witness_goal(context, id, type_, provenance, origin)?,
+        false => resolve_witness_goal(context, id, type_, provenance, origin)?,
+    }
+
+    Ok(metavar)
 }
 
 /// Try a bound standing as the hole `slot` once more: fill the hole if the bound has come to truth, record what it reduced to if it came to anything else, and answer whether it still waits on a metavariable.
@@ -432,6 +447,14 @@ pub(super) fn elaborate_apply(
                     })?
                 }
             }
+            None if *plicity == Plicity::Witness => insert_witness_argument(
+                context,
+                &ty,
+                &func_label,
+                term,
+                position,
+                cursor.binder_used(),
+            )?,
             None => {
                 insert_auto_argument(context, *plicity, &ty, hint, &func_label, term, position)?
             }

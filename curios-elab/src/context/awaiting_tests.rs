@@ -3,7 +3,7 @@
 use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Intrinsic, MetavarId, Nat, Term},
+    curios_core::{CalleeId, Free, Intrinsic, MetavarId, Nat, Term, WitnessOrigin},
     std::collections::BTreeSet,
 };
 
@@ -21,6 +21,14 @@ fn birth(context: &mut Context, id: usize) {
 
 fn awaited(context: &Context, id: usize) -> bool {
     context.awaits_any(&Term::hole(id))
+}
+
+/// Where a fixture's witness goal says it came from.
+fn premise() -> WitnessOrigin {
+    WitnessOrigin {
+        func: CalleeId::Function(Free::local(0, None)),
+        binder: "key".into(),
+    }
 }
 
 /// A check parked on a type that mentions each of `ids`, so that the problem watches them together.
@@ -194,13 +202,18 @@ fn a_problem_waits_on_what_its_metavariables_were_solved_to() {
     assert_eq!(context.wake_parked().len(), 1);
 }
 
-// A parked check states the choice a completing term may take for it, and the choices are taken in the order they are declared: a shape commits less than a default, and a default less than a lambda's check.
+// A parked problem states the choice a completing term may take for it, and the choices are taken in the order they are declared: a dictionary decides what a type beside it reduces to, a shape commits less than a default, and a default less than a lambda's check.
 #[test]
-fn a_parked_check_states_the_choice_its_term_may_take() {
+fn a_parked_problem_states_the_choice_its_term_may_take() {
     let parked = |term: Term| ParkedWork::Checking {
         term,
         expected: Term::hole(0),
         placeholder: MetavarId(1),
+    };
+    let goal = ParkedWork::Witness {
+        slot: MetavarId(2),
+        goal: Term::type_ground(),
+        provenance: premise(),
     };
     let number = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     let binder = Free::local(0, None);
@@ -215,6 +228,7 @@ fn a_parked_check_states_the_choice_its_term_may_take() {
         Some(Choice::Numeral)
     );
     assert_eq!(parked(lambda).choice(), Some(Choice::Lambda));
+    assert_eq!(goal.choice(), Some(Choice::Witness));
     assert_eq!(
         parked(Term::tuple(Vec::<Term>::new())).choice(),
         None,
@@ -225,7 +239,41 @@ fn a_parked_check_states_the_choice_its_term_may_take() {
         None,
         "a realized number is no literal"
     );
+    assert!(Choice::Witness < Choice::Shape);
     assert!(Choice::Shape < Choice::Numeral && Choice::Numeral < Choice::Lambda);
+}
+
+// A goal watches its slot as well as what its key mentions: over a closed key it is awaited as its slot is, by the term being read where one is and by the item where none is, and the solution that names a dictionary for the slot wakes it.
+#[test]
+fn a_witness_goal_is_awaited_as_its_slot_is() {
+    let mut context = context();
+    let pose = |context: &mut Context, slot: usize| {
+        birth(context, slot);
+        context.park(
+            ParkedWork::Witness {
+                slot: MetavarId(slot),
+                goal: Term::type_ground(),
+                provenance: premise(),
+            },
+            Term::type_ground(),
+        );
+    };
+    pose(&mut context, 0);
+    assert_eq!(context.witnesses_awaited_by(None), vec![MetavarId(0)]);
+
+    context
+        .awaiting(|context| {
+            pose(context, 1);
+            assert_eq!(
+                context.witnesses_awaited_by(None),
+                vec![MetavarId(0)],
+                "the second is its slot's term's, and not the item's"
+            );
+            context.solve_metavar(MetavarId(1), Term::type_ground());
+            assert_eq!(context.wake_parked().len(), 1);
+            Ok(())
+        })
+        .unwrap();
 }
 
 // What links hold together is one class, so a chain of them holds its ends: what the innermost of three terms parked is held by one link to the middle term's metavariable, and by another that one is held to the outer term's, so the problem is retried as awaited by the outer term, which neither link says of it.

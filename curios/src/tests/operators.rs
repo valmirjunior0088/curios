@@ -1,5 +1,5 @@
 use {
-    super::{error, run, run_text},
+    super::{error, run, run_text, typecheck_within},
     curios_runtime::MockHost,
 };
 
@@ -452,4 +452,30 @@ fn infix_equality_works_on_bin() {
         "#),
         b"true"
     );
+}
+
+// An operator's witness is resolved where it stands, both operands read and no part of an operator naming a dictionary: parked for the operator's completion it is answered under a frame that settles each guard's scrutinee again, and this function costs four times the budget.
+#[test]
+fn infix_under_a_guard_takes_its_witness_where_it_stands() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        let guarded(a: Nat, b: Nat, c: Nat) -> Nat =
+            match (a * b + c) % 7 <= (a + b * c) % 5
+            | true =>
+                match (a + c) / 3 <= (b * b + a) % 11
+                | true =>
+                    (a + b) * (b + c) + (c + a) * (a + b) + (a * a + b * b) * (c + 1)
+                        + (a + 2 * b) * (b + 3 * c) + (a * b + b * c + c * a) % 13
+                        + (a + b + c) / 2 + (a * c + 5) * (b + 7) + (a + b * 9) % 17
+                        + (a + b) * (b + c) + (c + a) * (a + b) + (a * a + b * b) * (c + 1)
+                        + (a + 2 * b) * (b + 3 * c) + (a * b + b * c + c * a) % 13
+                        + (a + b + c) / 2 + (a * c + 5) * (b + 7) + (a + b * 9) % 17
+                | false => 0
+                end
+            | false => 0
+            end;
+        /std/print("ok")
+    "#;
+
+    typecheck_within(120_000, source).unwrap();
 }

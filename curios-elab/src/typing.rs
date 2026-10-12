@@ -4,11 +4,11 @@ mod tests;
 use {
     super::{
         AwaitId, Binders, Choice, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedChoice,
-        ParkedProblem, ParkedWork, Problem, Sort, Watched, callee, convert, diagnose_embedding,
-        diagnose_shape, elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize,
-        numeral_default, probe_open_sort, problem_outcome, reduce_forced, refold_recs,
-        refused_scrutinee, retry_discharge, retry_match, retry_projection, retry_witness,
-        settle_qualities, shallow_scrutinee, subsume_outcome, synth_neutral,
+        ParkedProblem, ParkedWork, Problem, Sort, Watched, answer_witness, callee, convert,
+        diagnose_embedding, diagnose_shape, elaborate, elaborate_func_settle, embeds, is_monad,
+        monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome, reduce_forced,
+        refold_recs, refused_scrutinee, retry_discharge, retry_match, retry_projection,
+        retry_witness, settle_qualities, shallow_scrutinee, subsume_outcome, synth_neutral,
         zonk_solved_term_metas,
     },
     curios_analysis::{
@@ -613,12 +613,17 @@ impl Context<'_> {
         }
     }
 
-    /// Take one choice among the checks `term` awaits, the lowest-ranked there is ([`Choice`]): a literal's shape, then the numerals' default, then a lambda, at the function type its expectation has come to or, where it has come to none, at the type its annotations state. `taken` holds what was taken already — a metavariable shaped or defaulted, a lambda's placeholder — so a choice conversion could not commit is not offered again. Answers whether one was taken.
+    /// Take one choice among the problems `term` awaits, the lowest-ranked there is ([`Choice`]): a `use` slot's witness, then a literal's shape, then the numerals' default, then a lambda, at the function type its expectation has come to or, where it has come to none, at the type its annotations state. `taken` holds what was taken already — a metavariable shaped or defaulted, a lambda's placeholder — so a choice conversion could not commit is not offered again. Answers whether one was taken.
     fn take_choice(
         &mut self,
         term: Option<AwaitId>,
         taken: &mut BTreeSet<MetavarId>,
     ) -> Result<bool, Error> {
+        // A `use` slot first: a dictionary decides what a method's type reduces to, and so what a literal beside it is read at.
+        if self.answer_witnesses(term)? {
+            return Ok(true);
+        }
+
         let (choices, links) = self.choices_awaited_by(term);
         if choices.is_empty() {
             return Ok(false);
@@ -860,13 +865,43 @@ impl Context<'_> {
         Ok(())
     }
 
-    /// Retry every currently parked problem once without requiring the store to become empty. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked.
+    /// Retry every currently parked problem once without requiring the store to become empty, and answer each `use` slot no term awaits any more. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked. The slots are answered here and not left to the drain: a witness resolved once its declaration's levels have closed closes the levels it mints by itself, apart from the declaration's own.
     pub(crate) fn sweep_parked(&mut self) -> Result<(), Error> {
         let parked = self.take_parked();
         for goal in parked {
             retry_one(self, goal)?;
         }
-        self.retry_parked()
+        self.retry_parked()?;
+        while self.answer_witnesses(None)? {
+            self.retry_parked()?;
+        }
+
+        Ok(())
+    }
+
+    /// Answer each `use` slot among those `term` awaits whose goal resolution can decide ([`answer_witness`]), in one pass and before anything they woke is retried: two slots a parked conversion holds together are each resolution's to name, at an instance of its own, where a retry between them would hand the second the first's answer, and which of the two resolution named would follow the order they were parked in. Every goal is asked again each time, since one whose key was flex may have come to a head with a choice taken since. Answers whether a slot was solved.
+    fn answer_witnesses(&mut self, term: Option<AwaitId>) -> Result<bool, Error> {
+        let mut answered = false;
+        for slot in self.witnesses_awaited_by(term) {
+            let Some(ParkedProblem {
+                work:
+                    ParkedWork::Witness {
+                        slot,
+                        goal,
+                        provenance,
+                    },
+                origin,
+                frame,
+                ..
+            }) = self.take_witness(slot)
+            else {
+                continue;
+            };
+            answer_witness(self, slot, goal, provenance, origin, frame)?;
+            answered |= self.metavar_solution(slot).is_some();
+        }
+
+        Ok(answered)
     }
 
     /// Drain the parked store ([`Context::drain_store`]), then hold each product a literal shaped to the sort its metavariable was declared at ([`Context::hold_shapes`]). Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and frozen frames do not pile up.
@@ -1142,7 +1177,10 @@ fn retry_work(
             slot,
             goal,
             provenance,
-        } => return retry_witness(context, slot, goal, provenance, origin, frame),
+        } => {
+            retry_witness(context, slot, goal, provenance, origin, frame);
+            return Ok(());
+        }
         ParkedWork::Discharge {
             slot,
             bound,
