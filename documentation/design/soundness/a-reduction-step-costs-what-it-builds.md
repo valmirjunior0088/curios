@@ -19,6 +19,7 @@
 - **An operating-system memory limit or an allocator hook**: platform-dependent, too late, and inclusive of memory reduction did not cause.
 - **Exact heap-byte accounting**, which would price the allocator and the copies and term traffic a logical unit deliberately does not model (`DEFAULT_STEP_BUDGET`).
 - **Charging recursion when `recurse` actually grows the stack**, which makes acceptance depend on the thread's stack size.
+- **Charging a level for each comparison the kernel nests in another.** It nests no deeper than the terms it compares, and each level is reached by an opening the budget already paid for, so a frame charged there as reduction charges one would price that opening twice, in the checker that already pays the more.
 - **A memo outliving its declaration.** With free hits a declaration spends less than its work, depending on its neighbours. Charging a hit what its first computation spent counts that computation's own free hits, so the first unfolder decides every later charge. Pricing each unfold alone makes every declaration pay again for work a hit would have shared.
 - **Evaluating each definition's head form when it is defined**, which refuses an expensive constant nothing uses and spends on every definition.
 - **Charging a hit by its result's size**, which leaves a miss's computation unbudgeted.
