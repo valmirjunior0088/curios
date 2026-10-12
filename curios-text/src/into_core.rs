@@ -2411,6 +2411,30 @@ fn into_core_unit_within(
         in_scope.widens_nothing(public.own()),
         "an export of another unit's name shows it to nobody its own unit does not"
     );
+    // How a name is written by a reader standing at one of the unit's items: what a refusal of the audit spells the item and what it exposes by, as every report of the unit does once it is lowered ([`PreparedText::spellings`]). Made where the audit refuses, from the tables as they stand, and by no audit that passes.
+    let spelled = |item: &Qualifier, name: &curios_core::Global| {
+        let own_table = table
+            .own()
+            .iter()
+            .map(|(module, info)| (*module, info.clone()));
+        let own_public = public
+            .own()
+            .iter()
+            .map(|(module, interface)| (*module, interface.clone()));
+        let paths = writable_paths(&own_table.collect(), &own_public.collect(), &audiences);
+        let spellings = spellings_over(
+            &shared.imports.borrow(),
+            Rc::new(paths),
+            &own,
+            &visible_mounts,
+            predecessors,
+        );
+        let owner = curios_core::Global::Authored(*item);
+
+        spellings
+            .spell(&item.without_last(), Some(&owner), name)
+            .unwrap_or_else(|| name.faithful().to_string())
+    };
     audit_public_exposures(
         &public,
         in_scope,
@@ -2418,6 +2442,7 @@ fn into_core_unit_within(
         &facts,
         NominalScope::new(predecessors, &induct_decls, &struct_decls),
         &|extent| shared.anchoring.resolved(extent),
+        &spelled,
     )?;
 
     let dead = unused_declarations(&Declarations {

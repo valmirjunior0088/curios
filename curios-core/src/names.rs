@@ -408,6 +408,18 @@ impl Imports {
             .flat_map(|index| self.brought(&self.entries[*index]))
     }
 
+    /// The modules in scope at `owner`'s definition, or at the entrypoint tail: each with the label a `use` brought it in under, which a path through it begins with.
+    pub fn modules_at(&self, owner: Option<&Global>) -> impl Iterator<Item = (&Qualifier, &str)> {
+        owner
+            .and_then(|owner| self.by_item.get(owner))
+            .unwrap_or(&self.tail)
+            .iter()
+            .filter_map(|index| match &self.entries[*index] {
+                Import::Module { module, label } => Some((module, label.as_str())),
+                Import::Binding { .. } => None,
+            })
+    }
+
     /// Every binding some scope of the unit has imported, under each spelling it was imported by.
     pub fn everywhere(&self) -> impl Iterator<Item = Imported<'_>> {
         self.entries.iter().flat_map(|import| self.brought(import))
@@ -470,14 +482,16 @@ pub struct WritablePath {
 }
 
 impl Spellings {
-    /// The shortest spelling that resolves to `global` for a reader in module `island`, written inside `owner` (the entrypoint's final term when `None`): its bare label or a path through a child module, where the reader's own module declares the way there; an import in scope there, as it was written; or an absolute path whose audience includes the reader. `None` when the reader can reach it by none of those — a name only a refusal shows, spelled faithfully by the caller.
+    /// The shortest spelling that resolves to `global` for a reader in module `island`, written inside `owner` (the entrypoint's final term when `None`): its bare label or a path through a child module, where the reader's own module declares the way there; an import in scope there, as it was written; a path through a module in scope there, from the label it was imported under down; or an absolute path whose audience includes the reader. `None` when the reader can reach it by none of those — a name only a refusal shows, spelled faithfully by the caller.
+    ///
+    /// **The reverse of resolution, and held to it.** Every spelling this gives is one the lowering resolves to `global` from where the reader stands, and no shorter one is: a differential over the library puts each to the lowering's own doors (`curios-pipeline`'s `spelling_tests`).
     pub fn spell(
         &self,
         island: &Qualifier,
         owner: Option<&Global>,
         global: &Global,
     ) -> Option<String> {
-        let mut reachable = self
+        let seen = self
             .units
             .iter()
             .flat_map(|unit| {
@@ -485,13 +499,30 @@ impl Spellings {
 
                 paths.map(move |written| (written, unit.own))
             })
+            .filter(|(written, _)| written.audience.iter().any(|root| island.is_within(root)))
+            .collect::<Vec<_>>();
+        // Through a module a `use` brought into scope: its label, then the path from that module down. A head an import put in scope is vetted where the `use` is written and nowhere after, so a path under a prefix the reader may not name is written this way and no other.
+        let through = self.imports.modules_at(owner).flat_map(|(module, label)| {
+            seen.iter()
+                .filter(move |(written, _)| {
+                    written.path.is_within(module) && written.path != *module
+                })
+                .map(move |(written, _)| {
+                    let below = &written.path.segments()[module.segments().len()..];
+
+                    format!("{label}/{}", below.join("/"))
+                })
+        });
+        let through = through.collect::<Vec<_>>();
+
+        let mut reachable = seen
+            .into_iter()
             .filter(|(written, _)| {
                 !self
                     .closed
                     .iter()
                     .any(|prefix| written.path.is_within(prefix))
             })
-            .filter(|(written, _)| written.audience.iter().any(|root| island.is_within(root)))
             .collect::<Vec<_>>();
         // A declaration's own path, then each path it is exported at, by path, whichever unit gives it: a reader takes the first of two spellings equally short.
         reachable
@@ -510,6 +541,7 @@ impl Spellings {
                 .filter(|imported| imported.global == *global)
                 .map(|imported| imported.spelling()),
         );
+        candidates.extend(through);
 
         candidates
             .into_iter()

@@ -58,7 +58,7 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("exposes private item '/M/Secret'"),
+        error.contains("exposes private item 'Secret'"),
         "unexpected error: {error}"
     );
 }
@@ -81,7 +81,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("exposes private item '/M/Inner/T'"),
+        error.contains("exposes private item 'T'"),
         "unexpected error: {error}"
     );
 }
@@ -106,7 +106,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("exposes private item '/M/Hidden'"),
+        error.contains("exposes private item 'Hidden'"),
         "unexpected error: {error}"
     );
 }
@@ -150,7 +150,7 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("exposes private item '/M/Secret'"),
+        error.contains("exposes private item 'Secret'"),
         "unexpected error: {error}"
     );
 }
@@ -182,7 +182,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
         "#;
     let error = error(exposed);
     assert!(
-        error.contains("exposes private item '/M/Secret'"),
+        error.contains("exposes private item 'Secret'"),
         "unexpected error: {error}"
     );
 }

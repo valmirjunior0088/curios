@@ -144,21 +144,17 @@ fn referent_audience(
     audience
 }
 
-/// Every consumer of `item` — an item exposed to `exposure` — must be able to see everything `item`'s signature names. Checked against audiences rather than the declaration path, so an item re-exported out of a private module counts as visible exactly where the re-export puts it.
+/// Every consumer of an item exposed to `exposure` must be able to see everything the item's signature names, its `dependencies`: the first that one of them cannot see is handed back. Checked against audiences rather than the declaration path, so an item re-exported out of a private module counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
     audiences: AudienceScope<'_>,
     sources: &BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
     exposure: &[Qualifier],
-    item: &str,
     dependencies: impl IntoIterator<Item = curios_core::Global>,
-) -> Result<(), Error> {
+) -> Result<(), curios_core::Global> {
     for referent in dependencies {
         let reach = referent_audience(audiences, sources, &referent);
         if !Audiences::covers(exposure, &reach) {
-            return Err(Error::PrivateItemInPublicInterface {
-                item: item.to_string(),
-                referent: referent.path(),
-            });
+            return Err(referent);
         }
     }
 
@@ -169,7 +165,7 @@ fn audit_dependencies(
 ///
 /// The declared type of every definition is audited here rather than during lowering: only the converged interface graph knows where a name ends up visible, so a signature naming an item re-exported out of a private child is accepted, while one naming something its own consumers cannot reach is not.
 ///
-/// A refusal is placed at the name of the item that exposes: the declaration's own, or, for a binding a module re-exports, the declaration it stands for where this unit wrote it. `placed` gives the span an extent of one of the unit's declarations lies on.
+/// A refusal is placed at the name of the item that exposes: the declaration's own, or, for a binding a module re-exports, the declaration it stands for where this unit wrote it. `placed` gives the span an extent of one of the unit's declarations lies on. It names the item and what the item exposes as a reader standing at the item writes each: `spelled` gives a name's spelling for a reader at the item whose path it is handed.
 pub(super) fn audit_public_exposures(
     public: &Scoped<'_, PublicInterface>,
     audiences: AudienceScope<'_>,
@@ -177,6 +173,7 @@ pub(super) fn audit_public_exposures(
     facts: &[&LoweredItem],
     scope: NominalScope<'_>,
     placed: &dyn Fn(&curios_core::Extent) -> Option<Span>,
+    spelled: &dyn Fn(&Qualifier, &curios_core::Global) -> String,
 ) -> Result<(), Error> {
     curios_profile::profile!("audit_public_exposures");
     let aliases = aliases(items, facts);
@@ -199,6 +196,11 @@ pub(super) fn audit_public_exposures(
         Some(span) => error.at(span),
         None => error,
     };
+    let refused =
+        |item: &Qualifier, referent: curios_core::Global| Error::PrivateItemInPublicInterface {
+            item: spelled(item, &curios_core::Global::Authored(*item)),
+            referent: spelled(item, &referent),
+        };
 
     for ((name, _, island), declared) in definitions() {
         // Only definitions the source actually wrote. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and is audited through the declaration that produced it.
@@ -216,10 +218,14 @@ pub(super) fn audit_public_exposures(
             audiences,
             &sources,
             &exposure,
-            &name.path(),
             declared.signature.iter().copied(),
         )
-        .map_err(|error| at(error, declared.label.as_ref().and_then(placed)))?;
+        .map_err(|referent| {
+            at(
+                refused(path, referent),
+                declared.label.as_ref().and_then(placed),
+            )
+        })?;
     }
 
     // By module and by label, so the exposure reported is the first the names give and not the first a hash's order does.
@@ -232,12 +238,12 @@ pub(super) fn audit_public_exposures(
             let Some((nominal, traversed)) = exposed_nominal(entry, &aliases, scope) else {
                 continue;
             };
-            let item = module.with(label).join();
+            let item = module.with(label);
             let exposure = audiences.module(module);
-            let exposed = |error| {
+            let exposed = |referent| {
                 at(
-                    error,
-                    named(module.with(label)).or_else(|| named(entry.target)),
+                    refused(&item, referent),
+                    named(item).or_else(|| named(entry.target)),
                 )
             };
 
@@ -247,7 +253,6 @@ pub(super) fn audit_public_exposures(
                         audiences,
                         &sources,
                         &exposure,
-                        &item,
                         dependencies.iter().copied(),
                     )
                     .map_err(exposed)?;
@@ -256,7 +261,7 @@ pub(super) fn audit_public_exposures(
 
             if let Some(induct_decl) = scope.induct(&nominal) {
                 let nominal_dependencies = globals(induct_decl.arity.free_vars());
-                audit_dependencies(audiences, &sources, &exposure, &item, nominal_dependencies)
+                audit_dependencies(audiences, &sources, &exposure, nominal_dependencies)
                     .map_err(exposed)?;
 
                 if induct_decl.rep_public {
@@ -264,7 +269,6 @@ pub(super) fn audit_public_exposures(
                         audiences,
                         &sources,
                         &exposure,
-                        &item,
                         globals(
                             induct_decl
                                 .constructors
@@ -282,21 +286,14 @@ pub(super) fn audit_public_exposures(
                     param_dependencies.extend(domain.free_vars());
                     walk = rest.body();
                 }
-                audit_dependencies(
-                    audiences,
-                    &sources,
-                    &exposure,
-                    &item,
-                    globals(param_dependencies),
-                )
-                .map_err(exposed)?;
+                audit_dependencies(audiences, &sources, &exposure, globals(param_dependencies))
+                    .map_err(exposed)?;
 
                 if struct_decl.rep_public {
                     audit_dependencies(
                         audiences,
                         &sources,
                         &exposure,
-                        &item,
                         globals(struct_decl.fields().free_vars()),
                     )
                     .map_err(exposed)?;

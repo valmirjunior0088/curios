@@ -1103,7 +1103,7 @@ impl<'a> Context<'a> {
         });
     }
 
-    // Record that the module imported under `label` is in scope of this body, from here on: its public bindings are, each spelled through the label — `Eq/cong` for `use /std/{Eq}` — and which they are is the module's interface to say, read where the unit is assembled (`module_members`), never here. Direct bindings only: a deeper member is reached by a longer path the reader has not written, and its own module's import is the place it would be recorded.
+    // Record that the module imported under `label` is in scope of this body, from here on: its public bindings are, each spelled through the label — `Eq/cong` for `use /std/{Eq}` — and which they are is the module's interface to say, read where the unit is assembled (`module_members`), never here. Its direct bindings are listed for what a goal may be offered; a member further down is spelled through the same label, from the paths the units give it (`curios_core::Spellings::spell`), so nothing is recorded of it here.
     fn record_module_import(&mut self, module: &Qualifier, label: &str) {
         self.record(curios_core::Import::Module {
             module: *module,
