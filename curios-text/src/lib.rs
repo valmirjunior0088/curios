@@ -36,6 +36,9 @@ pub use term::*;
 mod into_core;
 pub use into_core::*;
 
+mod from_core;
+pub use from_core::*;
+
 mod format;
 pub use format::*;
 

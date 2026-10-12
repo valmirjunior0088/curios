@@ -446,7 +446,7 @@ impl<'a, B: Bound> Cursor<'a, B> {
     }
 
     /// Whether anything after the entry at this position names its binder. Read off the unopened remainder, which opening earlier binders does not change.
-    pub(crate) fn binder_used(&self) -> bool {
+    pub fn binder_used(&self) -> bool {
         match self.at {
             Telescope::Cons(_, _, rest) => rest.uses(0),
             Telescope::Done(_) => false,

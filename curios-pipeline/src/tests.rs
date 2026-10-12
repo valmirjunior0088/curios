@@ -22,5 +22,6 @@ mod placement_tests;
 mod resolution_tests;
 mod spelling_tests;
 mod suggestion_tests;
+mod translation_tests;
 mod tuple_tests;
 mod unit_tests;

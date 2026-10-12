@@ -9,9 +9,9 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Items,
-        Lexicon, Many, Outline, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
-        Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
-        UniverseError, Variance, WitnessId, WitnessSpelling, build_shorten,
+        Lexicon, Many, Members, Outline, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope,
+        Sharing, Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
+        UniverseContext, UniverseError, Variance, WitnessId, WitnessSpelling, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -1013,7 +1013,41 @@ impl Module {
             symbols: Rc::new(Symbols::of(self.module_symbols())),
             plicities: Rc::new(self.nominal_plicities(&located)),
             witnesses: Rc::new(self.witness_spelling(&located, syntax)),
+            members: Rc::new(self.members(&located)),
         }
+    }
+
+    /// What this unit's structures and constructors are written by ([`Members`]): each structure's fields under their marks and labels, a concept's record among them, and the marks each constructor is called by.
+    fn members(&self, located: &Located) -> Members {
+        let mut members = Members::default();
+        for name in &self.declared_as(Declared::is_former) {
+            let Some(nominal) = self
+                .definition_at(located, name)
+                .and_then(|former| former.kind.nominal().cloned())
+            else {
+                continue;
+            };
+            if let Some(record) = nominal.record() {
+                let fields = record.fields();
+                let written = fields
+                    .marks()
+                    .into_iter()
+                    .zip(fields.labels())
+                    .map(|(mark, label)| (mark, (!label.is_empty()).then(|| label.to_string())))
+                    .collect();
+                members.fields.insert(*name, written);
+            }
+            if let Some(family) = nominal.inductive() {
+                let constructors = family
+                    .constructors
+                    .iter()
+                    .map(|(tag, case)| (tag.clone(), case.telescope.marks()))
+                    .collect();
+                members.payloads.insert(*name, constructors);
+            }
+        }
+
+        members
     }
 
     /// What a report spells this unit's witnesses against (axis (h)): each concept's fields — a superclass edge's concept, or a method's wrapper, whether that wrapper takes the method's own parameters in its group, and the operator `syntax` names for it — and each witness's declared type. `syntax` is the registry's because this crate may not spell a prelude declaration.

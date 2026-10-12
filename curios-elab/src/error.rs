@@ -1575,25 +1575,7 @@ impl Error {
     ///
     /// Every elaboration error reaching a reader comes through here, so every axis of its spelling is set in one place: a global is named source-style, shortened against the unit's symbols together with those of its scope (axis (b)), the qualified-name universe an error's globals are spelled relative to, and axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     pub fn reports(&self, reading: &Reading<'_>) -> Vec<Report> {
-        let spelling = report_spelling(reading.module, reading.scope, reading.syntax);
-        let spelling = match reading.spellings {
-            Some(spellings) => {
-                // A report's reader stands in one of this unit's definitions, and resolution reads that definition's module.
-                let islands = reading
-                    .module
-                    .items
-                    .iter()
-                    .flat_map(Item::definitions)
-                    .map(|definition| (definition.name, definition.island))
-                    .collect();
-                let names = ReaderNames::new(Rc::clone(spellings), islands);
-
-                spelling.with_reader_names(Rc::new(names))
-            }
-            None => spelling,
-        };
-
-        self.located(&Rc::new(spelling), reading.anchors)
+        self.located(&Rc::new(reading.spelling()), reading.anchors)
     }
 
     /// One report per rendered error, at the innermost extent attached to it, and at the name of the declaration it arose in where it has none — or one per goal for a goal batch, each at its own occurrence, under whatever declaration prefix the wrappers add — and for a batch of refusals, every member's reports in order.
@@ -2011,6 +1993,27 @@ pub struct Reading<'a> {
     pub spellings: Option<&'a Rc<Spellings>>,
     /// Where the declarations an error's positions lie in were written, the unit's own first and then its scope's: an error holds extents of declarations ([`curios_core::Extent`]), and this is where one becomes a line of a file.
     pub anchors: &'a [&'a Anchors],
+}
+
+impl Reading<'_> {
+    /// How a term of the unit is spelled for a reader, before one is placed ([`Spelling::for_reader`]): every axis a report sets, and a global named as resolution finds it where the unit's tables are at hand. A report takes it and places its own reader; so does anything else that prints a term of the unit for one.
+    pub fn spelling(&self) -> Spelling {
+        let spelling = report_spelling(self.module, self.scope, self.syntax);
+        let Some(spellings) = self.spellings else {
+            return spelling;
+        };
+
+        // A report's reader stands in one of this unit's definitions, and resolution reads that definition's module.
+        let islands = self
+            .module
+            .items
+            .iter()
+            .flat_map(Item::definitions)
+            .map(|definition| (definition.name, definition.island))
+            .collect();
+
+        spelling.with_reader_names(Rc::new(ReaderNames::new(Rc::clone(spellings), islands)))
+    }
 }
 
 /// The faithful rendering: core's own names, every universe shown. Diagnostics go through [`Error::format`], which supplies a [`Spelling`].

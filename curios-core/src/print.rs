@@ -1,10 +1,10 @@
 use {
     super::{
-        Apply, Argument, Ascribed, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor, Field,
-        Free, Func, FuncType, Global, InductType, Infix, Intrinsic, Label, Let, Match, MatchResult,
-        Metavar, MetavarOrigin, Nat, NumLit, Proj, Quality, Rec, Scope, Spellings, Struct,
-        StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Universes,
-        Var, Variant,
+        Apply, Argument, Arity, Ascribed, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor,
+        Field, Free, Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label, Let,
+        Match, MatchResult, Metavar, MetavarOrigin, Nat, NumLit, Proj, Quality, Rec, Scope,
+        Spellings, Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple,
+        TupleType, Two, Universes, Var, Variant,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
@@ -98,6 +98,27 @@ pub struct Spelling {
     names: Option<Rc<ReaderNames>>,
     /// Where the reader stands (axes (b) and (h)).
     reader: ReaderPosition,
+    /// Each unit's structure fields and constructor payloads, the reader's own unit first: the marks and labels a field, a literal's entry and a constructor's argument are written by.
+    members: Vec<Rc<Members>>,
+    /// The reader's printer: a term shown to a reader is printed by it where it can be, and by this printer where it declines.
+    printer: Option<Rc<dyn ReaderPrinter>>,
+    /// Whether the reader's printer declined a term this spelling rendered. Shared by a spelling's copies and begun anew where a reader is placed ([`Spelling::for_reader`]), so it is one report's to read.
+    declined: Rc<Cell<bool>>,
+}
+
+/// What prints a term for a reader, where one is set ([`Spelling::with_reader_printer`]): the surface crate's, which this crate sits below and so is handed. A report's term is translated back to the surface tree and printed by the printer that formats source, and this printer prints what is read about the compiler: a dump, a kernel's refusal, and the term a reader's printer declines.
+pub trait ReaderPrinter {
+    /// The document `term` prints as for the reader `spelling` stands at, its binders labelled through `mint` in the order they are opened, or `None` where the term cannot be written back: it holds a form no program spells, or it is past what a report prints ([`Minting::elides`]).
+    fn print(&self, term: &Term, spelling: &Rc<Spelling>, mint: &Minting) -> Option<Printer>;
+}
+
+/// What a unit's structures and constructors are written by: each field's mark and label, each payload member's mark. Made once for a unit and kept with its [`Lexicon`].
+#[derive(Debug, Default)]
+pub struct Members {
+    /// Each structure's fields in slot order, a concept's among them: the mark a field is declared under, and its label where it has one.
+    pub(crate) fields: BTreeMap<Global, Vec<(Plicity, Option<String>)>>,
+    /// Each family's constructors in declaration order, with the marks each one is called by: the family's parameters, every one hidden, then its payload.
+    pub(crate) payloads: BTreeMap<Global, Vec<(Atom, Vec<Plicity>)>>,
 }
 
 /// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, and the witness binders in scope there, outermost first, which resolution searches before the global table.
@@ -151,6 +172,7 @@ pub struct Lexicon {
     pub(crate) symbols: Rc<Symbols>,
     pub(crate) plicities: Rc<BTreeMap<Global, Vec<Plicity>>>,
     pub(crate) witnesses: Rc<WitnessSpelling>,
+    pub(crate) members: Rc<Members>,
 }
 
 /// What axis (h) spells a witness against: each concept's fields — a method's wrapper and the operator dispatching to it, or the concept a superclass edge reaches — and each global witness's declared type, whose terminal is the concept application it answers. Built per unit by [`Module::lexicon`](crate::Module::lexicon) and merged across a render's scope, as the plicity marks are.
@@ -164,7 +186,7 @@ pub struct WitnessSpelling {
 
 /// One field of a concept, by position.
 #[derive(Clone)]
-pub(crate) enum FieldSpelling {
+pub enum FieldSpelling {
     /// A method or value field: the wrapper a program reaches it through, whether that wrapper takes a method's own parameters in its one group, and the operator dispatching to it.
     Method {
         wrapper: Global,
@@ -185,7 +207,7 @@ impl WitnessSpelling {
     }
 
     /// The fields of `concept`, by position, where a unit of the table declares it.
-    fn fields(&self, concept: &Global) -> Option<&Vec<FieldSpelling>> {
+    pub fn fields(&self, concept: &Global) -> Option<&Vec<FieldSpelling>> {
         self.concepts
             .get(concept)
             .or_else(|| self.units.iter().find_map(|unit| unit.fields(concept)))
@@ -198,7 +220,7 @@ impl WitnessSpelling {
             .or_else(|| self.units.iter().find_map(|unit| unit.declared(witness)))
     }
 
-    fn supers(&self, concept: &Global) -> impl Iterator<Item = (usize, &Global)> {
+    pub fn supers(&self, concept: &Global) -> impl Iterator<Item = (usize, &Global)> {
         self.fields(concept)
             .into_iter()
             .flatten()
@@ -210,7 +232,7 @@ impl WitnessSpelling {
     }
 
     /// The concept application a type names, when it names a concept this table knows: `Show(A)` elaborated to its record, or still the concept's name applied.
-    fn application(&self, type_: &Term) -> Option<(Global, Vec<Term>)> {
+    pub fn application(&self, type_: &Term) -> Option<(Global, Vec<Term>)> {
         let (name, arguments) = match &**type_ {
             Subterm::StructType(StructType { name, params, .. }) => (*name, params.clone()),
             Subterm::Apply(_) | Subterm::Var(_) | Subterm::Instance(_) => {
@@ -225,7 +247,7 @@ impl WitnessSpelling {
     }
 
     /// The concept application a global witness answers, its declared telescope opened at `arguments` — a premised witness is applied to its own hidden arguments. Without them the concept alone is known.
-    fn answers(&self, witness: &Global, arguments: &[Term]) -> Option<(Global, Vec<Term>)> {
+    pub fn answers(&self, witness: &Global, arguments: &[Term]) -> Option<(Global, Vec<Term>)> {
         let type_ = self.declared(witness)?;
         match &**type_ {
             Subterm::FuncType(FuncType { telescope, .. }) => {
@@ -303,7 +325,13 @@ impl Spelling {
     /// Render for a reader standing at `position` (axis (b)'s owner and axis (h)'s witness scope).
     pub fn for_reader(mut self, position: ReaderPosition) -> Self {
         self.reader = position;
+        self.declined = Rc::default();
         self
+    }
+
+    /// Whether a term rendered under this spelling since its reader was placed is one the reader's printer declined, and so printed as the compiler holds it. What a report reads to say so.
+    pub fn declined(&self) -> bool {
+        self.declined.get()
     }
 
     /// Where this render's reader stands.
@@ -346,6 +374,10 @@ impl Spelling {
             .chain(scope.iter().copied())
             .map(|unit| Rc::clone(&unit.plicities))
             .collect();
+        self.members = std::iter::once(own)
+            .chain(scope.iter().copied())
+            .map(|unit| Rc::clone(&unit.members))
+            .collect();
         self
     }
 
@@ -372,7 +404,7 @@ impl Spelling {
     }
 
     /// The display spelling of a name. A global with a shorter in-scope spelling takes it (axis (b)); a local binder gets its pretty rename (axis (a)), falling back to its minting hint. A name in neither map renders verbatim.
-    fn label(&self, name: &Free) -> String {
+    pub fn label(&self, name: &Free) -> String {
         if let Some(global) = name.as_global() {
             return self.symbol(global);
         }
@@ -386,13 +418,52 @@ impl Spelling {
     }
 
     /// The declared plicities of `name`'s arguments — parameters then indices, in the order a use site supplies them — or `None` when the declaration is not in this spelling's table, in which case an applied family renders unmarked.
-    fn nominal_marks(&self, name: &Global, arity: usize) -> Option<&[Plicity]> {
+    pub fn nominal_marks(&self, name: &Global, arity: usize) -> Option<&[Plicity]> {
         let marks = self
             .nominal_plicities
             .iter()
             .find_map(|unit| unit.get(name))?;
         // A declaration whose vector does not match the occurrence is not one this can speak about: render flat rather than mark the wrong argument.
         (marks.len() == arity).then_some(marks.as_slice())
+    }
+
+    /// The fields `structure` declares, in slot order, each under its mark and with its label where it has one: what a projection out of its value and an entry of its literal are written by. `None` where no unit of the spelling's scope declares it.
+    pub fn structure_fields(&self, structure: &Global) -> Option<&[(Plicity, Option<String>)]> {
+        self.members
+            .iter()
+            .find_map(|unit| unit.fields.get(structure))
+            .map(Vec::as_slice)
+    }
+
+    /// The marks `family`'s constructor `tag` is called by, in order: the family's parameters, every one hidden, then its payload, which is the tail a constructor's value holds.
+    pub fn payload_marks(&self, family: &Global, tag: &Atom) -> Option<&[Plicity]> {
+        self.members
+            .iter()
+            .find_map(|unit| unit.payloads.get(family))?
+            .iter()
+            .find(|(declared, _)| declared == tag)
+            .map(|(_, marks)| marks.as_slice())
+    }
+
+    /// The table a witness is spelled against (axis (h)), where one is set.
+    pub fn witness_table(&self) -> Option<&WitnessSpelling> {
+        self.witnesses.as_deref()
+    }
+
+    /// The certified-string declaration (axis (f)), where one is set.
+    pub fn string_declaration(&self) -> Option<&Global> {
+        self.string_literal.as_ref()
+    }
+
+    /// Whether a nested concatenation keeps its grouping (axis (g)).
+    pub fn keeps_grouping(&self) -> bool {
+        self.grouped
+    }
+
+    /// Print a term shown to a reader through `printer`, and through this crate's own where it declines.
+    pub fn with_reader_printer(mut self, printer: Rc<dyn ReaderPrinter>) -> Self {
+        self.printer = Some(printer);
+        self
     }
 }
 
@@ -719,7 +790,7 @@ const ELIDED: &str = "…";
 
 /// How one render labels the binders it opens. A scope remembers a binder's hint, never its identity, so the render mints one: the `k`th binder it opens is `PRINTED + k` under its hint. A dry run over the same term under the same spelling opens the same binders in the same order, which is how [`build_rename`] spells them before the render that uses the spellings.
 #[derive(Default)]
-struct Minting {
+pub struct Minting {
     next: Cell<u32>,
     /// How many child documents this render may still build — see [`RENDER_PER_NODE`].
     allowance: Cell<u64>,
@@ -751,7 +822,7 @@ impl Minting {
     }
 
     /// Spend one child document on `term`, answering whether it is elided instead: the allowance is spent and `term` has children a document would go on into. A term with no subterm is never elided, since naming it costs what eliding it would; a numeral past zero has one, the base its successors stand on, and is elided with the rest.
-    fn elides(&self, term: &Term) -> bool {
+    pub fn elides(&self, term: &Term) -> bool {
         match self.allowance.get().checked_sub(1) {
             Some(left) => {
                 self.allowance.set(left);
@@ -778,12 +849,60 @@ impl Minting {
     }
 
     /// Record `label` as a tuple type's, which keeps the spelling it was written with — see [`build_rename`].
-    fn note_tuple_label(&self, label: &Free) {
+    pub fn note_tuple_label(&self, label: &Free) {
         if let Some(recorded) = &self.recorded {
             recorded
                 .borrow_mut()
                 .tuple_labels
                 .insert(DisplayKey::of(label));
+        }
+    }
+
+    /// The label the next binder a render opens is printed under: a global its own name, and a local the identity minted from where the render meets it and the hint its scope remembers — `None` for a `constant` scope, which never had binders written.
+    fn label(&self, label: Option<&Label>) -> Free {
+        let name = match label {
+            Some(Label::Global(global)) => Free::Global(*global),
+            Some(Label::Local { hint, .. }) => self.local(*hint),
+            None => self.local(None),
+        };
+        self.record(&name);
+        name
+    }
+
+    /// The label the binder `cursor` stands at is opened under.
+    pub fn cursor_label<B: Bound>(&self, cursor: &Cursor<'_, B>) -> Free {
+        self.label(cursor.label())
+    }
+
+    /// Every binder of `scope`, labelled in order.
+    pub fn scope_labels<A: Arity, B: Bound>(&self, scope: &Scope<A, B>) -> Vec<Free> {
+        scope.label_iter().map(|label| self.label(label)).collect()
+    }
+
+    /// Every payload binder of `arm`, labelled in order.
+    pub fn arm_labels(&self, arm: &InductArm) -> Vec<Free> {
+        arm.label_iter().map(|label| self.label(label)).collect()
+    }
+
+    /// A mint a reader's printer is tried on: it labels from where this one stands and records as this one does, under an allowance of its own, so a term the printer declines leaves this mint as it was.
+    fn attempt(&self, term: &Term) -> Self {
+        let attempt = Self {
+            next: Cell::new(self.next.get()),
+            allowance: Cell::new(0),
+            recorded: self.recorded.as_ref().map(|_| RefCell::default()),
+        };
+        attempt.allow(term);
+        attempt
+    }
+
+    /// Take up what `attempt` labelled and recorded: the render it stood for is the one this mint's is.
+    fn adopt(&self, attempt: Self) {
+        self.next.set(attempt.next.get());
+        if let (Some(recorded), Some(attempted)) = (&self.recorded, attempt.recorded) {
+            let attempted = attempted.into_inner();
+            let mut recorded = recorded.borrow_mut();
+            recorded.names.extend(attempted.names);
+            recorded.tuple_labels.extend(attempted.tuple_labels);
         }
     }
 }
@@ -1124,15 +1243,9 @@ impl<'a> Frame<'a> {
         }
     }
 
-    /// The label the next binder this render opens is printed under: a global its own name, and a local the identity [`Minting`] mints from where the render meets it and the hint its scope remembers — `None` for a `constant` scope, which never had binders written.
+    /// The label the next binder this render opens is printed under ([`Minting::label`]).
     fn label(&self, label: Option<&Label>) -> Free {
-        let name = match label {
-            Some(Label::Global(global)) => Free::Global(*global),
-            Some(Label::Local { hint, .. }) => self.mint.local(*hint),
-            None => self.mint.local(None),
-        };
-        self.mint.record(&name);
-        name
+        self.mint.label(label)
     }
 
     /// Every binder of a scope, labelled in order.
@@ -1273,7 +1386,7 @@ fn string_literal(name: &Global, fields: &[Term], spelling: &Rc<Spelling>) -> Op
 }
 
 /// How much of a certified string a report spells before eliding the rest.
-const ELIDED_LITERAL_CHARACTERS: usize = 64;
+pub const ELIDED_LITERAL_CHARACTERS: usize = 64;
 
 /// A string's characters under the surface's escapes, so a rendered literal reads back as the one it came from.
 fn escaped(text: &str) -> String {
@@ -1413,13 +1526,13 @@ fn print_infix(symbol: &'static str, left: Term, right: Term, frame: Frame) -> P
 }
 
 /// A recognized type-former eta shape: the former's identity, the arguments left once its binders are stripped, and the former's whole arity, against which those arguments' declared marks are read.
-enum FormerEta {
+pub enum FormerEta {
     Nominal(Global, Vec<Term>, usize),
     Intrinsic(&'static str),
 }
 
 /// Recognize a type-former eta shape on the *unopened* telescope. Two shapes contract. `(x) => T(…, x)`: one binder, whose sole occurrence is the final argument of a saturated former body — a nominal type with no indices, or a unary intrinsic carrier. And `(x₁, …, xₖ) => F(p…)(x₁, …, xₖ)`: one binder per index of an indexed family, in order — the family at its parameters, which is a function of its own because the family takes its indices in a call of their own. The binders' plicities are deliberately not inspected: the eta-lambdas this contracts are imitation solutions, which copy their plicities from the former's birth type, so the binders already mirror the declaration. The arguments left must be closed under the binders (`reach() == 0`), which is what guarantees the binders occur nowhere else.
-fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<FormerEta> {
+pub fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<FormerEta> {
     let binders = telescope.len();
     if binders == 0 || plicities.len() != binders {
         return None;
@@ -2345,6 +2458,16 @@ pub(crate) fn print_term(term: Term, spelling: &Rc<Spelling>) -> Printer {
 
 /// [`print_term`] under `mint`: a fresh one for a render, a recording one for [`build_rename`]'s dry run — which is allowed what the render is, so the two elide at the same subterms and open the same binders in the same order.
 fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer {
+    // A reader's printer is tried on a mint of its own, taken up where it prints the term: one it declines is printed here as it would have been with no printer set.
+    if let Some(printer) = &spelling.printer {
+        let attempt = mint.attempt(&term);
+        if let Some(printed) = printer.print(&term, spelling, &attempt) {
+            mint.adopt(attempt);
+            return printed;
+        }
+        spelling.declined.set(true);
+    }
+
     mint.allow(&term);
     let frame = Frame {
         spelling,
