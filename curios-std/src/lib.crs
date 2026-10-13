@@ -36,7 +36,7 @@ pub use Byte/{let Byte};
 
 --- Natural numbers, unbounded: a machine word while a value is small, and a run of limbs once it outgrows one.
 ---
---- Subtraction truncates at zero. Division and remainder carry the precondition `Holds(0 < b)`. `lt` and `le` beneath hold the order lemmas a bound's proof is built from.
+--- Subtraction truncates at zero. Division and remainder carry the precondition `Nat/NonZero(b)`, the proposition `Holds(0 < b)` is. `lt` and `le` beneath hold the order lemmas a bound's proof is built from.
 pub mod Nat;
 pub use Nat/{let Nat};
 

@@ -471,7 +471,7 @@ Both operands of an operator have the same type. `==` and `!=` are two separate 
 
 An operator's result type is whatever its concept's method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
 
-`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Holds(0 < b)`: by reduction where `b` is a literal, and from the facts in scope — a hypothesis or a guard that `0 < b`, or that `b != 0`, which is the same proposition at `Nat` — otherwise ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)).
+`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/NonZero(b)`, which is `Holds(b != 0)`: by reduction where `b` is a literal, and from the facts in scope — a hypothesis or a guard that `b != 0`, or that `0 < b`, which is the same proposition at `Nat` — otherwise ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)).
 
 Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
 
@@ -1064,7 +1064,7 @@ A field's result may itself be a sort, which makes the field an associated type 
 
 ```crs
 satisfy Rem(Nat) {
-    Ok(b) = Holds(0 < b),
+    Ok(b) = NonZero(b),
     rem = rem,
 }
 ```

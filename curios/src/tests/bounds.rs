@@ -576,6 +576,15 @@ const ROWS: &[Row] = &[
     claim("n: Nat, p: Holds(n < 1)", "Holds(n == 0)"),
     claim("n: Nat, m: Nat, p: Holds(0 < n)", "Holds(n + m != 0)"),
     claim("n: Nat, m: Nat, p: Holds(0 < n)", "Holds(0 != m + n)"),
+    // Which is what `Nat`'s division asks, `Nat/NonZero` of its divisor: a hypothesis states it in either spelling, and one derived from a bound below a summand is the order it is.
+    body("total: Nat, n: Nat, p: Nat/NonZero(n)", "Nat", "total / n"),
+    body("total: Nat, n: Nat, p: Holds(0 < n)", "Nat", "total % n"),
+    body(
+        "total: Nat, n: Nat, m: Nat, p: Holds(0 < n)",
+        "Nat",
+        "total / (n + m)",
+    ),
+    claim("n: Nat, p: Holds(0 < n)", "Nat/NonZero(n)"),
     // And under a guard that is a disequality, which its own split reads: three ordered values, the middle one ruled out.
     body(
         "i: Nat, p: Holds(i <= 2)",

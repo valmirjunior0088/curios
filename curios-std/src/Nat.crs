@@ -43,6 +43,10 @@ pub use shl/{let shl};
 pub mod log2;
 pub use log2/{let log2};
 
+--- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is the proposition `Holds(0 < n)` is: a natural is not zero exactly where zero is below it, which conversion decides.
+pub let NonZero(n: Nat) -> Prop =
+    Holds(n != 0);
+
 satisfy Eql(Nat) {
     eql = eql,
     neq = neq,
@@ -67,15 +71,15 @@ satisfy Mul(Nat) {
     mul = mul,
 }
 
---- The divisor must be positive: `Holds(0 < b)`.
+--- The divisor must not be zero.
 satisfy Div(Nat) {
-    Ok(b) = Holds(0 < b),
+    Ok(b) = NonZero(b),
     div = div,
 }
 
---- The divisor must be positive: `Holds(0 < b)`.
+--- The divisor must not be zero.
 satisfy Rem(Nat) {
-    Ok(b) = Holds(0 < b),
+    Ok(b) = NonZero(b),
     rem = rem,
 }
 

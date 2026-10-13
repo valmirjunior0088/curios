@@ -223,7 +223,7 @@ impl Intrinsic {
                 flt_type(),
             ),
 
-            // The guarded divisions. A natural is nonzero exactly when zero is below it, which is why `Nat` needs no `NonZero` of its own.
+            // The guarded divisions. A natural is nonzero exactly when zero is below it, so the row asks `0 < divisor`, and `/std/Nat/NonZero`, which states `divisor != 0`, is that proposition to conversion.
             Self::NatDiv { divisor, .. } | Self::NatRem { divisor, .. } => sig(
                 vec![
                     Operand::At(nat_type()),
