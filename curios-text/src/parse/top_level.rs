@@ -100,7 +100,8 @@ pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, T
                 many0(move || {
                     parse_and_head().flat_map(move |(doc, vis_pub)| commit(member(doc, vis_pub)))
                 })
-                .and_drop(parse_literal(";")),
+                // Committed for the body's reason: a first member read to the end of its body is a declaration and nothing else, the local reading being the same text failing the same way, so the `;` it owes is the item's own to report and the loop recovers past it.
+                .and_drop(commit(parse_literal(";"))),
             )
             .map(move |rest| (first, rest))
         })
@@ -461,34 +462,39 @@ pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
             Some(_) => commit(fail(DOC_BEFORE_NOTHING)),
         };
 
-        bar.and_keep(parse_declared_label)
-            .and(
-                parse_literal("(")
-                    .and_keep(sep_by0_trailing(parse_induct_payload_field, || {
-                        parse_literal(",")
-                    }))
-                    .and_drop(parse_literal(")")),
-            )
-            // The case target: `: (index-exprs)` — the terminal with its mandatory part (the inductive name and the parameters) elided.
-            .and(
-                parse_literal(":")
-                    // Only a target may follow a constructor's payload, so past the `:` this owns the diagnosis; recoverable, a malformed target would be read as no target and the case list's `end` would complain at the colon.
-                    .and_keep(commit(
-                        parse_literal("(")
-                            .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
-                            .and_drop(parse_literal(")")),
-                    ))
-                    .map(Some)
-                    .or(pure(None)),
-            )
-            .map(
-                move |((label, payload), target): ((Label, Vec<_>), Option<Vec<Term>>)| TopCase {
-                    doc,
-                    label,
-                    payload,
-                    target,
-                },
-            )
+        // A bar in a case list begins a case and nothing else, so past it the case owns its diagnosis; recoverable, a case with no payload list would end the list before it and the list's `end` would complain at the bar.
+        bar.and_keep(commit(
+            parse_declared_label()
+                .and(
+                    parse_literal("(")
+                        .and_keep(sep_by0_trailing(parse_induct_payload_field, || {
+                            parse_literal(",")
+                        }))
+                        .and_drop(parse_literal(")")),
+                )
+                // The case target: `: (index-exprs)` — the terminal with its mandatory part (the inductive name and the parameters) elided.
+                .and(
+                    parse_literal(":")
+                        .and_keep(
+                            parse_literal("(")
+                                .and_keep(sep_by0_trailing(
+                                    || lazy(parse_term),
+                                    || parse_literal(","),
+                                ))
+                                .and_drop(parse_literal(")")),
+                        )
+                        .map(Some)
+                        .or(pure(None)),
+                ),
+        ))
+        .map(
+            move |((label, payload), target): ((Label, Vec<_>), Option<Vec<Term>>)| TopCase {
+                doc,
+                label,
+                payload,
+                target,
+            },
+        )
     })
 }
 
@@ -739,15 +745,17 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
 }
 
 // One concept of a `concept` item, after its `pub` and keyword — the struct member's shape with concept fields.
+//
+// Like `test`, `concept` stays a contextual word everywhere else, and the label is how far that reaches: `concept Name` is two names in a row and so no term at all, so past the label the rest commits and reports its own fault, which is what lets the item loop recover past a broken concept.
 fn parse_concept_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopConcept> {
-    declared(
+    declared(commit(
         parse_declaration_params()
             // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
             .and(parse_literal(":").and_keep(parse_representation_sort))
             .and_drop(parse_literal("{"))
             .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
             .and_drop(parse_literal("}")),
-    )
+    ))
     .map(
         move |(label, ((params, (rep_pub, result_sort)), fields))| TopConcept {
             doc,
@@ -883,7 +891,7 @@ const NOT_A_TOP_LEVEL_ITEM: &str = "Expected a top-level item: one of 'mod', 'us
 ///
 /// **The other four fall through, and the language decides which.** A failure inside one of these arms backtracks like any other, which is what lets the item loop end and a program's tail begin where an item does not. `concept`, `satisfy` and `test` are contextual words — `documentation/syntax.md` keeps them ordinary identifiers outside a declaration position, so one of them here may really be a program's tail calling a function of that name. `let` is reserved but shared with the term grammar: a top-level `let` requires an annotation, and `let x = 1; tail` has to fall through to a local `let`. It falls through only as far as the `=`: past `let name : T =` the local reading is the same text failing the same way, so the body commits and a broken body is the item's own diagnosis, which is what lets the item loop recover past it. An unrecognized head is recoverable for the same reason — it is how the item loop terminates before a program's tail begins.
 ///
-/// **How far the fall-through reaches is the arm's to say, and `test` says: as far as the label.** The rest of the grammar catches the prefix that discriminates an alternative and lets the tail commit — `parse_func` catches `(…) =>` and reports a broken body itself. `test` may be a program's tail, but `test name` is two names in a row and so no term at all, so [`parse_top_test`] lets its own refusal backtrack no further than the label and this arm hands it the item uncaught: past the label, a mistake inside a test is the diagnosis. `concept` and `satisfy` end theirs inside themselves for the same reason. Neither can end it at the keyword — `satisfy (…) => …` and a call `satisfy(…)` share their next token — so each commits at the first point its own grammar could be nothing else: `satisfy` at the concept's name, since `satisfy Name` is two names in a row and a `(` is no name, and a `concept` field at the `:` or `->` that introduces its type.
+/// **How far the fall-through reaches is the arm's to say, and `test` says: as far as the label.** The rest of the grammar catches the prefix that discriminates an alternative and lets the tail commit — `parse_func` catches `(…) =>` and reports a broken body itself. `test` may be a program's tail, but `test name` is two names in a row and so no term at all, so [`parse_top_test`] lets its own refusal backtrack no further than the label and this arm hands it the item uncaught: past the label, a mistake inside a test is the diagnosis. `concept` and `satisfy` end theirs inside themselves for the same reason. Neither can end it at the keyword — `satisfy (…) => …` and a call `satisfy(…)` share their next token — so each commits at the first point its own grammar could be nothing else: `satisfy` at the concept's name, since `satisfy Name` is two names in a row and a `(` is no name, and `concept` at its label, since `concept Name` is two names in a row too.
 ///
 /// **A `pub` in front makes every arm commit, because it removes the fall-through those refusals stay recoverable for.** `pub` is a keyword, so no term begins with one: after reading it there is no tail for a failed item to become, and an unrecognized head after it names no item rather than ending the item loop. Leaving those arms recoverable would throw the diagnosis away where it matters most. A module recovers it — `Module::parse_items_end` re-runs the item parser once input remains — but an entrypoint's grammar runs `parse_term` instead, which tries a local `let` at the `pub`, fails one token in, and wins [`Parser::or`]'s furthest-failure tie-break over the real error the arm has just let backtrack. Every mistake inside a `pub let` in a program would then report `Expected keyword 'let', obtained 'pub'` against the `let`, and the refusals `parse_top_witness` and `parse_top_test` write by hand for a `pub` they cannot accept would never reach a reader.
 ///

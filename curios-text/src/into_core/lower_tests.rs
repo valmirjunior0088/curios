@@ -165,3 +165,25 @@ fn bang_in_a_type_is_rejected() {
     // Types have no region to hoist an action to, so a `!` in an annotation is rejected during desugaring.
     assert!(run_err("let a : e! = x; a").contains("not allowed inside a type"));
 }
+
+/// The match lowering's refusals stand at what they are about: a named final arm and an irrefutable bind arm at the binder, and a motive no arm dispatches under at the motive.
+#[test]
+fn a_match_refusal_stands_at_the_binder_or_the_motive_it_is_about() {
+    for (source, underlined) in [
+        ("match m | some(x) => x | rest => 0 end", "rest"),
+        ("choose | some(x) = m => x | y = m => 0 | _ => 1 end", "y"),
+        (
+            "match (a, b) : (p) => Nat | (0, _) => 0 | (_, k) => k end",
+            "(p) => Nat",
+        ),
+    ] {
+        let report = run_err_report(source);
+        // The caret line under the source's one line: blanks to where the part begins, then a caret for each of its characters.
+        let at = source.find(underlined).expect("the part is written");
+        let carets = format!("| {}{}", " ".repeat(at), "^".repeat(underlined.len()));
+        assert!(
+            report.lines().any(|line| line.trim_start() == carets),
+            "{source}\n{report}"
+        );
+    }
+}

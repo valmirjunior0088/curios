@@ -95,8 +95,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         rest: curios_core::Term,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        if matches!(pattern, MatchPattern::Binder(_)) {
-            return Err(Error::BindArmIrrefutable);
+        if let MatchPattern::Binder(name) = pattern {
+            return Err(placed(Error::BindArmIrrefutable, name.span()));
         }
 
         // The `_` binds nothing its body can name.
@@ -136,8 +136,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     .iter()
                     .all(|arm| mem::discriminant(&arm.pattern) == mem::discriminant(&first.pattern))
         });
-        if !homogeneous && motive.is_some() {
-            return Err(Error::MatrixMotiveRequiresCtorHead);
+        if !homogeneous && let Some(motive) = motive {
+            return Err(placed(Error::MatrixMotiveRequiresCtorHead, motive.span()));
         }
 
         let rows = arms
@@ -324,11 +324,22 @@ fn dispatching(arms: &[MatrixArm]) -> Result<&[MatrixArm], Error> {
         {
             match &last.pattern {
                 MatchPattern::Binder(name) if name == "_" => Ok(init),
-                MatchPattern::Binder(_) => Err(Error::MatchNamedCatchAll),
+                MatchPattern::Binder(name) => Err(placed(
+                    Error::MatchNamedCatchAll,
+                    name.span().or(last.span.as_ref()),
+                )),
                 _ => Ok(arms),
             }
         }
         _ => Ok(arms),
+    }
+}
+
+/// `error` at `span`, where the tree holds one: a refusal about a binder or a motive stands on it and not on the match around it, which is where an enclosing lowering places whatever reaches it bare.
+fn placed(error: Error, span: Option<&Span>) -> Error {
+    match span {
+        Some(span) => error.at(span.clone()),
+        None => error,
     }
 }
 

@@ -1140,3 +1140,25 @@ fn a_documentation_comment_after_a_group_may_open_the_next_item() {
     };
     assert_eq!(members[0].doc.as_ref().unwrap().lines, ["Type."]);
 }
+
+// A bar in a case list begins a case and nothing else, so a constructor written with no payload list is reported after its label, where the list is missing, and not at its bar as a missing `end`.
+#[test]
+fn an_induct_case_with_no_payload_list_reports_where_the_list_is_missing() {
+    for (source, column) in [
+        ("induct Color : Type | red | green end", 27),
+        ("induct Shade : Type | dark() | light end", 38),
+    ] {
+        let error = source.parse::<Module>().unwrap_err();
+        assert!(
+            error.format().contains("Expected '('"),
+            "{source}: {}",
+            error.format()
+        );
+        assert_eq!(
+            error.report().span.expect("located").line_column(),
+            (1, column),
+            "{source}: {}",
+            error.format()
+        );
+    }
+}
