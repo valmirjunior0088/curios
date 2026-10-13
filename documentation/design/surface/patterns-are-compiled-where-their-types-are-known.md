@@ -21,7 +21,7 @@
 
 - **Compiling in lowering**, by either guess about a binder's cases, or by skipping a default no constructor reaches, which stops checking a default a reader wrote after exhaustive arms.
 - **A body bound once as a local function and applied from each leaf.** Core has no equation outside an arm, so the kernel types such a function without the arm's cases, and a function written without its parameters' types is refused.
-- **A second kind of Core node that shares a body among leaves.** The kernel would need a rule for what the body may assume. What the copies cost in a compiled program is [a body an arm writes once is emitted once](../../roadmap/compilation/209-a-body-an-arm-writes-once-is-emitted-once.md)'s.
+- **A second kind of Core node that shares a body among leaves.** The kernel would need a rule for what the body may assume. What the copies cost in a compiled program is [a body an arm writes once is emitted once](../../roadmap/compilation/210-a-body-an-arm-writes-once-is-emitted-once.md)'s.
 - **Keeping a hole for the type of a default bound once**, which is what types it in inference, and **a copy of it at each leaf**, for the ladder.
 - **A group for every constructor, named or not**, and **choosing the column to split by necessity**, which changes what every match compiles to for trees nothing has found large.
 - **A second pass computing usefulness beside the tree**, a second statement of which cases there are, and **a lint for an arm no value reaches**, which lowering cannot find.

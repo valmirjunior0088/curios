@@ -8,4 +8,4 @@
 
 ## Refinement
 
-- **A grammar built once.** A grammar built once and run at every position, a nonterminal being a function of the input where it is the builder of a closure, which revises the README's first decision; beside it, one declaration parsed from where its head places it ([A recompile walks the unit it does not redo](../compilation/203-a-recompile-walks-the-unit-it-does-not-redo.md#refinement)). Check: the same rows, retaken. It reaches every grammar function of `curios-text` and `curios-wasm`.
+- **A grammar built once.** A grammar built once and run at every position, a nonterminal being a function of the input where it is the builder of a closure, which revises the README's first decision; beside it, one declaration parsed from where its head places it ([A recompile walks the unit it does not redo](../compilation/204-a-recompile-walks-the-unit-it-does-not-redo.md#refinement)). Check: the same rows, retaken. It reaches every grammar function of `curios-text` and `curios-wasm`.

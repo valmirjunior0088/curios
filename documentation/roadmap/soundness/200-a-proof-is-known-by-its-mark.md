@@ -17,7 +17,7 @@
 
 **A mark is not exact, so nothing may read it in its type's place.** A binder at a proposition may bear no mark, and a function type's and a motive's binders state none. A reader that took the mark for the sort would hold two proofs apart wherever the mark is missing, and labels are outside a scope's identity, so two terms that differ in a mark are one term to every store.
 
-**Erasure decides what is kept by reducing a type.** `is_erasable` (`curios-elab/src/into_ersd`) reads a sort where the mark already says it, which is the second form [A reader of finished terms holds no elaboration state](../compilation/201-a-reader-of-finished-terms-holds-no-elaboration-state.md) weighs for what erasure reduces through.
+**Erasure decides what is kept by reducing a type.** `is_erasable` (`curios-elab/src/into_ersd`) reads a sort where the mark already says it, which is the second form [A reader of finished terms holds no elaboration state](../compilation/202-a-reader-of-finished-terms-holds-no-elaboration-state.md) weighs for what erasure reduces through.
 
 ## The form
 
