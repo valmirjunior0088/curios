@@ -419,6 +419,49 @@ impl ErasedUnit {
     }
 }
 
+#[cfg(feature = "test-support")]
+impl ErasedUnit {
+    /// [`declared_families`](crate::test_support::declared_families)' answer: each family read off the fragment of the item that declares it, a field at a family naming it.
+    pub(crate) fn declared_families(&self) -> Vec<crate::test_support::ErasedFamily> {
+        self.forms()
+            .flat_map(|form| {
+                let module = form.module();
+
+                form.environment().declared_induct_rows().map(move |row| {
+                    let family = module
+                        .family(row.family)
+                        .expect("a declared row's family is its fragment's");
+
+                    crate::test_support::ErasedFamily {
+                        name: family.debug_name.clone().unwrap_or_default(),
+                        constructors: family
+                            .constructors
+                            .iter()
+                            .map(|&id| {
+                                module
+                                    .constructor(id)
+                                    .expect("a declared row's constructor is its fragment's")
+                                    .fields
+                                    .iter()
+                                    .map(|field| crate::test_support::ErasedField {
+                                        shape: field.shape,
+                                        family: match field.shape {
+                                            curios_ersd::FieldShape::Family(family) => module
+                                                .family(family)
+                                                .and_then(|family| family.debug_name.clone()),
+                                            _ => None,
+                                        },
+                                    })
+                                    .collect()
+                            })
+                            .collect(),
+                    }
+                })
+            })
+            .collect()
+    }
+}
+
 /// An item's erased form as a unit holds it, with whether evaluating it at initialization computes: what another unit keeps of it without reading it.
 #[derive(Debug, Clone)]
 pub(super) struct Held {

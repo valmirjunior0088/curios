@@ -14,6 +14,7 @@ use {
         Context, ErasedUnit, Error, Established, Reading, Recompile, Recompiled, Traces,
         elaborate_and_zonk_unit_over,
     },
+    curios_ersd::FieldShape,
     curios_prelude::with_prelude,
     curios_std::std_directory,
     curios_text::{
@@ -1480,5 +1481,170 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             ));
         }
         assert!(found.is_empty(), "{}", found.join("\n\n"));
+    });
+}
+
+/// The family-slot probe: what typing a tagged family's reference fields would cost, family by family, over every family the prelude's units declare.
+///
+/// Every other recorded shape is typed by the door, and each is strictly additive: the same width, fewer instructions, and for a list or a closure a deleted `is_subtype` libcall. A tagged family's reference fields are the exception on both counts. Slots are grouped by carrier, so a family-typed slot cannot share the uniform range, and a family whose constructors disagree widens to gain one; and what the widening buys is the cheap kind of cast, an exact compare against a final type. So the question is where to type them, and the criterion is exact: a family widens or it does not. This reports the split, each family read off the item that declares it (`curios_elab::test_support::declared_families`), so the rule admitting the free ones is held to the library's own families and not to those one program reaches.
+///
+/// # How to run it
+///
+/// ```sh
+/// cargo test --package curios-pipeline --lib -- --ignored --nocapture family_slot_probe
+/// ```
+///
+/// # What it last printed
+///
+/// Counted on top of `89b3697ab`:
+///
+/// ```text
+/// families declared: 82, holding a family-typed field: 24
+///   free: 16 families, 16 slots typed at no width cost
+///   paid: 8 families, 11 slots typed for 10 slots of width
+///   /std/Map/Node/Node                 4 slots -> 5 slots, 0 typed -> 2 typed   PAID
+///   /std/Cli/Chosen                    3 slots -> 5 slots, 1 typed -> 3 typed   PAID
+///   /std/Cli/Outcome                   2 slots -> 4 slots, 0 typed -> 2 typed   PAID
+///   /std/Cli/Cluster                   4 slots -> 5 slots, 2 typed -> 3 typed   PAID
+///   /std/Test/Test                     2 slots -> 3 slots, 0 typed -> 1 typed   PAID
+///   /std/Tui/Wake                      2 slots -> 3 slots, 0 typed -> 1 typed   PAID
+///   /std/http/read/Step                3 slots -> 4 slots, 0 typed -> 1 typed   PAID
+///   /std/http/stream/Stop              2 slots -> 3 slots, 0 typed -> 1 typed   PAID
+/// ```
+///
+/// **What the figures decide.** `/std/Map/Node/Node`, the family a typed fork's children would serve, is a paid row: four slots to five, a quarter again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Against the `trees` finding that live bytes convert to time under an all-live collector, that is a trade to decline, and the door declines it. What the door does instead is admit the free column by the exact criterion: it types a family's reference slots iff the row's width is unchanged, which sixteen families meet, the command line's, the formatter's, the layout's and the TOML reader's among them. A product needs no such test: one writer can never widen a row, so its reference fields always type.
+#[test]
+#[ignore = "measurement, counted: reports the split rather than asserting"]
+fn family_slot_probe() {
+    with_prelude(|prelude| {
+        let families = prelude
+            .iter()
+            .flat_map(|unit| curios_elab::test_support::declared_families(unit.erased()))
+            .collect::<Vec<_>>();
+        let named = families
+            .iter()
+            .map(|family| (family.name.as_str(), family))
+            .collect::<BTreeMap<_, _>>();
+
+        // Whether a value of the family is always the row struct. An immediate family's bare constructor rides the i31, or for a `Nat` or an `Int` the boxed magnitude, so no heap type names its population and a slot can never be declared at it. A family no unit of the prelude declares is judged by nothing, and a slot at it stays untyped.
+        let always_a_row = |name: &str| -> bool {
+            let Some(family) = named.get(name) else {
+                return false;
+            };
+            let bare = family
+                .constructors
+                .iter()
+                .filter(|fields| {
+                    matches!(fields.as_slice(), [field] if matches!(field.shape, FieldShape::Immediate | FieldShape::Number))
+                })
+                .count();
+
+            family.constructors.len() < 2 || bare != 1
+        };
+
+        // The carrier a field occupies, mirroring the door's own rule. `family_typed` is the question this probe asks: a family-typed reference field is the one shape whose typing can cost width.
+        let class = |field: &curios_elab::test_support::ErasedField,
+                     family_typed: bool|
+         -> Option<String> {
+            match field.shape {
+                FieldShape::Immediate => Some("nat".into()),
+                FieldShape::Flt => Some("flt".into()),
+                FieldShape::List => Some("list".into()),
+                FieldShape::Closure(arity) => Some(format!("closure/{arity}")),
+                FieldShape::Product(schema) => Some(format!("product/{schema}")),
+                FieldShape::Family(_) => field
+                    .family
+                    .as_deref()
+                    .filter(|name| family_typed && always_a_row(name))
+                    .map(|name| format!("family/{name}")),
+                FieldShape::Number | FieldShape::Packed(_) | FieldShape::Opaque => None,
+            }
+        };
+
+        // The classed layout's width and typed-slot count for one family's constructor rows.
+        let layout = |rows: &[Vec<curios_elab::test_support::ErasedField>],
+                      family_typed: bool|
+         -> (usize, usize) {
+            let mut classed = BTreeMap::<String, usize>::new();
+            let mut opaque_slots = 0;
+            for row in rows {
+                let mut counts = BTreeMap::<String, usize>::new();
+                let mut opaque = 0;
+                for field in row {
+                    match class(field, family_typed) {
+                        Some(name) => *counts.entry(name).or_default() += 1,
+                        None => opaque += 1,
+                    }
+                }
+                for (name, count) in counts {
+                    let slot = classed.entry(name).or_default();
+                    *slot = (*slot).max(count);
+                }
+                opaque_slots = opaque_slots.max(opaque);
+            }
+            let typed: usize = classed.values().sum();
+
+            (1 + typed + opaque_slots, typed)
+        };
+
+        let (mut free_families, mut paid_families) = (0, 0);
+        let (mut free_slots, mut paid_slots, mut paid_width) = (0, 0, 0);
+        let mut report = Vec::new();
+
+        for family in &families {
+            let rows = &family.constructors;
+            // Collapsed and immediate encodings do not lay a tag out, so they are not what this asks about.
+            if rows.len() < 2 || !always_a_row(&family.name) {
+                continue;
+            }
+            if !rows
+                .iter()
+                .flatten()
+                .any(|field| matches!(field.shape, FieldShape::Family(_)))
+            {
+                continue;
+            }
+
+            let (uniform_width, uniform_typed) = layout(rows, false);
+            let (typed_width, typed_typed) = layout(rows, true);
+            let gain = typed_typed - uniform_typed;
+            let free = typed_width == uniform_width;
+            match free {
+                true => {
+                    free_families += 1;
+                    free_slots += gain;
+                }
+                false => {
+                    paid_families += 1;
+                    paid_slots += gain;
+                    paid_width += typed_width - uniform_width;
+                }
+            }
+            report.push(format!(
+                "  {:<34} {} slots -> {} slots, {} typed -> {} typed   {}",
+                family.name,
+                uniform_width,
+                typed_width,
+                uniform_typed,
+                typed_typed,
+                match free {
+                    true => "FREE",
+                    false => "PAID",
+                }
+            ));
+        }
+
+        println!(
+            "families declared: {}, holding a family-typed field: {}",
+            families.len(),
+            free_families + paid_families
+        );
+        println!("  free: {free_families} families, {free_slots} slots typed at no width cost");
+        println!(
+            "  paid: {paid_families} families, {paid_slots} slots typed for {paid_width} slots of width"
+        );
+        for line in report {
+            println!("{line}");
+        }
     });
 }

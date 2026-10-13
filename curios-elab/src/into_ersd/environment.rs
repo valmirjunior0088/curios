@@ -142,6 +142,15 @@ impl Environment {
     }
 
     /// The row this fragment's item declares for `name`: what another item's import of it is read off.
+    /// The row of each inductive this item declares, imports left out.
+    #[cfg(feature = "test-support")]
+    pub(super) fn declared_induct_rows(&self) -> impl Iterator<Item = &FamilyRow> {
+        self.induct_decls
+            .iter()
+            .filter(|(name, _)| !self.imported.contains(*name))
+            .map(|(_, row)| row)
+    }
+
     pub(super) fn declared_induct_row(&self, name: &Global) -> Option<&FamilyRow> {
         self.induct_decls
             .get(name)
