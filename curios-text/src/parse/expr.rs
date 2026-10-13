@@ -20,6 +20,30 @@ use {
     std::iter,
 };
 
+/// What refuses a definition with parameters and no result.
+const DEFINITION_STATES_ITS_RESULT: &str = "a definition with parameters states its result before its body: `let double(n: Nat) -> Nat = …`";
+
+/// What refuses `:=` where a definition's `=` belongs.
+const DEFINITION_TAKES_EQUALS: &str =
+    "a definition is written with `=`, as in `let x: Nat = 3;`: `:=` is no token of Curios";
+
+/// What refuses a lambda written with a bare parameter.
+pub(super) const LAMBDA_TAKES_PARENTHESES: &str =
+    "a lambda's parameters are written in parentheses: `(x) => x + 1`";
+
+/// `refusal` where `literal` stands, and nothing where it does not: the literal is consumed, so the refusal is past the choice point and outranks the token the form around it wanted there, with its caret on the literal.
+pub(super) fn refusing<'a>(literal: &'static str, refusal: &'static str) -> Parser<'a, ()> {
+    look_ahead(take_exact(literal))
+        .map(|()| true)
+        .or(pure(false))
+        .flat_map(move |stands| match stands {
+            true => mark()
+                .and_drop(take_exact(literal))
+                .flat_map(move |start| fail_from(&start, refusal)),
+            false => pure(()),
+        })
+}
+
 // A plain-label binding with a mandatory type: every top-level member, and every member of a local group after the first.
 pub(super) fn parse_binding<'a>() -> Parser<'a, (Label, LetSignature)> {
     declared(parse_let_signature())
@@ -39,6 +63,7 @@ fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
                     signature,
                 })
         }))
+        .and_drop(refusing("=>", LAMBDA_TAKES_PARENTHESES))
         .and_drop(parse_literal(";"))
         .map(|(first, rest)| LetGroup {
             members: iter::once(first).chain(rest).collect(),
@@ -73,10 +98,11 @@ pub(super) fn parse_func_let_signature<'a>(owns_body: bool) -> Parser<'a, LetSig
             parse_literal(",")
         }))
         .and_drop(parse_literal(")"))
-        .and_drop(parse_literal("->"))
+        .and_drop(parse_literal("->").map_err(DEFINITION_STATES_ITS_RESULT))
         // Past the arrow this is the definition sugar, so a member it refuses is its own to report.
         .flat_map(members)
         .and(lazy(parse_term))
+        .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
         .and_drop(parse_literal("="))
         .and(body(owns_body))
         .map(|((params, output), body)| LetSignature::Func {
@@ -88,8 +114,10 @@ pub(super) fn parse_func_let_signature<'a>(owns_body: bool) -> Parser<'a, LetSig
 
 // The plain `: T = body` form with a mandatory type.
 pub(super) fn parse_required_name_signature<'a>(owns_body: bool) -> Parser<'a, LetSignature> {
-    parse_literal(":")
+    refusing(":=", DEFINITION_TAKES_EQUALS)
+        .and_keep(parse_literal(":"))
         .and_keep(lazy(parse_term))
+        .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
         .and_drop(parse_literal("="))
         .and(body(owns_body))
         .map(|(type_, body)| LetSignature::Name {
@@ -108,10 +136,14 @@ fn body<'a>(owned: bool) -> Parser<'a, Term> {
 
 // The plain `(: T)? = body` form: the type may be omitted (inferred from `body`).
 pub(super) fn parse_optional_name_signature<'a>() -> Parser<'a, LetSignature> {
-    parse_literal(":")
-        .and_keep(lazy(parse_term))
-        .map(Some)
-        .or(pure(None))
+    refusing(":=", DEFINITION_TAKES_EQUALS)
+        .and_keep(
+            parse_literal(":")
+                .and_keep(lazy(parse_term))
+                .map(Some)
+                .or(pure(None)),
+        )
+        .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
         .and_drop(parse_literal("="))
         .and(lazy(parse_term))
         .map(|(type_, body)| LetSignature::Name { type_, body })
@@ -186,7 +218,10 @@ pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
             .and_keep(sep_by0_trailing(parse_apply_argument, || {
                 parse_literal(",")
             }))
-            .and_drop(commit(parse_literal(")")))
+            // A bare parameter and its arrow are a term and then no closer, so the list's own `)` would be the complaint.
+            .and_drop(commit(
+                refusing("=>", LAMBDA_TAKES_PARENTHESES).and_keep(parse_literal(")")),
+            ))
             .map(Suffix::Apply))
         // A postfix `!` — but not the `!=` operator, whose `!` would otherwise be eaten here as a bang, stranding the `=`.
         .or(take_exact("!")

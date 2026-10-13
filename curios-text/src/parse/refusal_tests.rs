@@ -1,4 +1,4 @@
-//! A form the grammar does not have, refused by what was read: two terms side by side, where the refusal stands, and what follows a term without being one.
+//! A form the grammar does not have, refused by what was read: two terms side by side, where the refusal stands and what follows a term without being one; and a head or a form missing a part, named for the part.
 
 use crate::*;
 
@@ -58,4 +58,57 @@ fn what_rightly_follows_a_term_is_not_a_second_term() {
 
     let later = refusal("let a : Nat = 1\nlet b : Nat = 2;\nb");
     assert!(later.contains("Expected ';'"), "{later}");
+}
+
+/// A head or a form missing a part its grammar requires is refused in a sentence that names the part: a structure's and a concept's sort, a definition's result, the `=` a definition is written with, a lambda's parentheses, a constructor's payload list, and the bars of a `match`.
+#[test]
+fn a_form_missing_its_part_is_refused_by_naming_the_part() {
+    for (source, said) in [
+        (
+            "struct Point { x : Nat, y : Nat }\n0",
+            "a structure states its sort before its fields",
+        ),
+        (
+            "pub concept Shape(A : Type) { area(A) -> Nat }\n0",
+            "a concept states its sort before its fields",
+        ),
+        (
+            "let double(n : Nat) = n + n;\ndouble(1)",
+            "a definition with parameters states its result",
+        ),
+        ("let x : Nat := 3;\nx", "`:=` is no token of Curios"),
+        ("let x := 3; x", "`:=` is no token of Curios"),
+        (
+            "List/map(xs, x => x + 1)",
+            "a lambda's parameters are written in parentheses",
+        ),
+        (
+            "let f = x => x + 1; f(1)",
+            "a lambda's parameters are written in parentheses",
+        ),
+        (
+            "induct Color : Type | red | green end\n0",
+            "a constructor is declared with its payload list",
+        ),
+        (
+            "match n { 0 => 1, _ => 2 }",
+            "a `match` writes its arms after bars",
+        ),
+    ] {
+        let report = refusal(source);
+        assert!(report.contains(said), "{source:?} reported {report}");
+    }
+}
+
+/// The braced `match` is refused only where no structure literal could be meant: a scrutinee that is one is still a scrutinee, a positional entry that is a lambda included.
+#[test]
+fn a_match_on_a_structure_literal_is_still_a_match() {
+    for source in [
+        "match Point { x = 1, y = 2 } | Point { x, y } => x end",
+        "match Wrap { (x) => x } | Wrap { f } => f(1) end",
+    ] {
+        if let Err(error) = source.parse::<Entrypoint>() {
+            panic!("{source:?} stopped parsing: {}", error.format());
+        }
+    }
 }

@@ -1,10 +1,10 @@
 use {
     super::{
-        CONCEPT_FIELD_TAKES_NO_IMPLICIT, INDEX_TAKES_NO_MARK, PAYLOAD_TAKES_NO_USE,
-        STRUCT_FIELD_TAKES_NO_USE, members, parse_apply_argument, parse_binding,
-        parse_field_member, parse_func_sugar_param, parse_func_type_param, parse_identifier,
-        parse_keyword, parse_literal, parse_mark, parse_name, parse_premise, parse_prop,
-        parse_tuple_field_prefix, parse_type, raised,
+        CONCEPT_FIELD_TAKES_NO_IMPLICIT, INDEX_TAKES_NO_MARK, LAMBDA_TAKES_PARENTHESES,
+        PAYLOAD_TAKES_NO_USE, STRUCT_FIELD_TAKES_NO_USE, members, parse_apply_argument,
+        parse_binding, parse_field_member, parse_func_sugar_param, parse_func_type_param,
+        parse_identifier, parse_keyword, parse_literal, parse_mark, parse_name, parse_premise,
+        parse_prop, parse_tuple_field_prefix, parse_type, raised, refusing,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
@@ -101,7 +101,9 @@ pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, T
                     parse_and_head().flat_map(move |(doc, vis_pub)| commit(member(doc, vis_pub)))
                 })
                 // Committed for the body's reason: a first member read to the end of its body is a declaration and nothing else, the local reading being the same text failing the same way, so the `;` it owes is the item's own to report and the loop recovers past it.
-                .and_drop(commit(parse_literal(";"))),
+                .and_drop(commit(
+                    refusing("=>", LAMBDA_TAKES_PARENTHESES).and_keep(parse_literal(";")),
+                )),
             )
             .map(move |rest| (first, rest))
         })
@@ -449,6 +451,10 @@ pub(super) fn parse_induct_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
         })
 }
 
+/// What refuses a constructor declared with no payload list.
+const CASE_STATES_ITS_PAYLOAD: &str =
+    "a constructor is declared with its payload list, empty where it carries nothing: `| red()`";
+
 pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
     parse_doc().flat_map(|doc| {
         // As `parse_and_head` decides: a bar makes the block this case's, `and` or `pub` hand it to the group's next member, and anything else is nothing it may document.
@@ -467,6 +473,7 @@ pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
             parse_declared_label()
                 .and(
                     parse_literal("(")
+                        .map_err(CASE_STATES_ITS_PAYLOAD)
                         .and_keep(sep_by0_trailing(parse_induct_payload_field, || {
                             parse_literal(",")
                         }))
@@ -656,12 +663,23 @@ fn parse_struct_field<'a>() -> Parser<'a, StructField> {
     })
 }
 
+/// What refuses a structure whose fields follow its head with no sort between them.
+const STRUCTURE_STATES_ITS_SORT: &str = "a structure states its sort before its fields: `struct Point: Type { … }`, or `: Prop` for a proposition";
+
+/// What refuses a concept whose fields follow its head with no sort between them.
+const CONCEPT_STATES_ITS_SORT: &str =
+    "a concept states its sort before its fields: `concept Shape(A: Type): Type { … }`";
+
 // One structure of a `struct` item, after its `pub` and keyword: the name, the parameters, the result sort with its own `pub`, and the fields.
 fn parse_struct_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopStruct> {
     declared(
         parse_declaration_params()
             // The result sort: `: Type` or `: Prop` after the parameters. Required.
-            .and(parse_literal(":").and_keep(parse_representation_sort))
+            .and(
+                parse_literal(":")
+                    .map_err(STRUCTURE_STATES_ITS_SORT)
+                    .and_keep(parse_representation_sort),
+            )
             .and_drop(parse_literal("{"))
             .and(sep_by0_trailing(parse_struct_field, || parse_literal(",")))
             .and_drop(parse_literal("}")),
@@ -751,7 +769,11 @@ fn parse_concept_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopCo
     declared(commit(
         parse_declaration_params()
             // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
-            .and(parse_literal(":").and_keep(parse_representation_sort))
+            .and(
+                parse_literal(":")
+                    .map_err(CONCEPT_STATES_ITS_SORT)
+                    .and_keep(parse_representation_sort),
+            )
             .and_drop(parse_literal("{"))
             .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
             .and_drop(parse_literal("}")),

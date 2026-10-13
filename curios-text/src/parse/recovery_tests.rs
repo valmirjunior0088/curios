@@ -172,7 +172,7 @@ fn a_private_concept_broken_past_its_label_costs_one_item() {
     };
     let first = broken(first);
     assert!(
-        first.report.message.contains("Expected ':'"),
+        first.report.message.contains("a concept states its sort"),
         "{}",
         first.report.message
     );

@@ -1150,7 +1150,9 @@ fn an_induct_case_with_no_payload_list_reports_where_the_list_is_missing() {
     ] {
         let error = source.parse::<Module>().unwrap_err();
         assert!(
-            error.format().contains("Expected '('"),
+            error
+                .format()
+                .contains("a constructor is declared with its payload list"),
             "{source}: {}",
             error.format()
         );
