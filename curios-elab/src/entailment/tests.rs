@@ -4,6 +4,7 @@ use {
     super::{Arms, Certificate, DERIVED_ROWS, Plan, Rational, Search, plan, refute},
     curios_algebra::{Atom, LinearForm, Monomial},
     curios_num::{Integer, Natural},
+    std::slice,
 };
 
 /// `Σ coefficient · atom + constant <= 0` over atoms `0..`, each ranked by its index.
@@ -191,13 +192,13 @@ fn a_split_is_opened_only_where_the_search_without_it_found_an_assignment() {
     let (facts, negated, splits) = truncated();
     let mut budget = DERIVED_ROWS;
     assert!(matches!(
-        plan(&facts, Some(&negated), &[], &mut budget),
+        plan(&facts, slice::from_ref(&negated), &[], &mut budget),
         Plan::Satisfied(_)
     ));
 
     let mut budget = DERIVED_ROWS;
     let Plan::Certified(Certificate::Split { holds, fails }) =
-        plan(&facts, Some(&negated), &splits, &mut budget)
+        plan(&facts, slice::from_ref(&negated), &splits, &mut budget)
     else {
         panic!("each case refutes the negated goal");
     };
@@ -218,7 +219,7 @@ fn a_split_is_opened_only_where_the_search_without_it_found_an_assignment() {
     let refuting = vec![facts[0].clone(), form(&[(1, 0), (-1, 1)], 1)];
     let mut budget = DERIVED_ROWS;
     assert!(matches!(
-        plan(&refuting, Some(&negated), &splits, &mut budget),
+        plan(&refuting, slice::from_ref(&negated), &splits, &mut budget),
         Plan::Certified(Certificate::Leaf(_))
     ));
 }
@@ -241,7 +242,7 @@ fn a_budget_runs_across_every_case() {
     assert!(each > 0, "every case derives rows");
 
     let mut budget = DERIVED_ROWS;
-    plan(&facts, Some(&negated), &splits, &mut budget);
+    plan(&facts, slice::from_ref(&negated), &splits, &mut budget);
     assert_eq!(DERIVED_ROWS - budget, each);
 }
 

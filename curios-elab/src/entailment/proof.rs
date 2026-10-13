@@ -2,13 +2,15 @@
 //!
 //! **A certificate is a sum of facts.** Each fact enters as a `Le` at its carrier — a strict fact as its successor, a guard's false arm through its dual, an equation as its two bounds — scaled by its multiplier through `le/mul_mono_r`, and `le/add` adds two. Conversion's cancellation does the rest: a sum whose sides differ by a constant reduces to `True` or `False`, which is clause 1 of what `curios-core`'s `linear` module says conversion decides.
 //!
-//! **The direct form.** Where the negated goal's multiplier is one, the facts' sum is the goal's view plus a constant `s >= 0` — `a <= b` and `b <= c` sum to `a <= c`, a strict fact to its successor's — and the sum with the literal fact `0 <= s` is the proof, one proposition with the goal by clause 5.
+//! **The direct form.** Where the goal is a `<` or a `<=` and its negation's multiplier is one, the facts' sum is the goal's view plus a constant `s >= 0` — `a <= b` and `b <= c` sum to `a <= c`, a strict fact to its successor's — and the sum with the literal fact `0 <= s` is the proof, one proposition with the goal by clause 5.
 //!
 //! **The refuting form.** Otherwise the proof splits on the goal's own decision, spelled as the bound's reduct spells it, so the arm's refinement is keyed where the bound reads it. The true arm is `True/qed()`. The false arm eliminates, with a zero-arm match, the sum of the facts with the negated goal — proved there by `le/of_not_lt` or `lt/of_not_le` at `qed` — whose type reduces to `False`: `a <= b` from `2 * a <= 2 * b` scales the negated goal `b + 1 <= a` by two and leaves `2 <= 0`.
 //!
 //! **The absurd form.** Where the goal is itself an empty proposition, the sum of the facts is the proof, its type reducing to that proposition; where the facts refute each other without the goal, the sum is eliminated by a zero-arm match in the goal's place.
 //!
 //! **A product with the negated goal** is proved from the negation's proof, which holds only in the false arm of the split on the goal, so a certificate that uses the negation at all — directly or through a product — is written in the refuting form, whatever its multiplier.
+//!
+//! **A goal that is a disequality or an equality** is an order's wherever conversion holds it to be one, `n != 0` being `0 < n` at `Nat`, and is written as that order's is. Any other is written in the refuting form alone, its negation being no one bound the facts' sum could meet. `a != b` negated is the equation, whose two bounds `eq_of_eql` gives at `qed` in the false arm and the certificate weighs apart. `a == b` negated is the disequality, which that arm's `qed` proves and which is read as a disequality in scope is: a strict bound where reduction orders the two sides, and otherwise the two cases of a split on `a <= b`, each a combination of its own, so the split on the goal's decision stands inside each.
 //!
 //! **A remainder lifted out of the facts** leaves their sum over the dividend, so a goal over the remainder is not met by it and is proved in the refuting form, its negation lifted as the facts were.
 //!
@@ -22,7 +24,7 @@ use {
         multiply, order, qed, split,
     },
     crate::Context,
-    curios_algebra::Carrier,
+    curios_algebra::{Carrier, Operation},
     curios_core::Term,
     curios_num::{Integer, Natural},
     curios_utilities::Plicity,
@@ -36,12 +38,12 @@ pub(super) enum Written {
     Unwritten,
 }
 
-/// The proof `certificate` stands for over `facts`, the goal where there is one, and its negation where it could be written.
+/// The proof `certificate` stands for over `facts`, the goal where there is one, and what its negation states.
 pub(super) fn write(
     context: &mut Context,
     facts: &Facts,
     goal: Option<&Target>,
-    negated: Option<&Fact>,
+    negated: &[Fact],
     certificate: &Certificate,
 ) -> Written {
     let lifted = goal.is_some_and(|goal| facts.lifted_over(&goal.form));
@@ -59,7 +61,7 @@ pub(super) fn write(
 /// What every case of a certificate is written against.
 struct Case<'a> {
     goal: Option<&'a Target>,
-    negated: Option<&'a Fact>,
+    negated: &'a [Fact],
     /// Whether the goal holds a remainder the facts were lifted over, which their sum does not meet.
     lifted: bool,
 }
@@ -87,16 +89,9 @@ impl Case<'_> {
 
     /// The proof one combination stands for: `multipliers` over `facts`, the negation's last.
     fn leaf(&self, context: &mut Context, facts: &[Fact], multipliers: &[Natural]) -> Option<Term> {
-        let (weights, goal_weight) = multipliers.split_at(facts.len());
-        let goal_weight = goal_weight
-            .first()
-            .cloned()
-            .unwrap_or_else(|| Natural::from(0u32));
-        let used = facts
-            .iter()
-            .zip(weights)
-            .filter(|(_, weight)| !weight.is_zero())
-            .collect::<Vec<_>>();
+        let (weights, goal_weights) = multipliers.split_at(facts.len());
+        let used = weighted(facts, weights);
+        let negations = weighted(self.negated, goal_weights);
         let integer = self
             .goal
             .is_some_and(|goal| goal.carrier == Carrier::Integer)
@@ -108,36 +103,41 @@ impl Case<'_> {
             false => Carrier::Natural,
         };
         let none = Integer::from(0);
-        let through_product = used.iter().any(|(fact, _)| fact.origin.negates());
+        // A fact proved only where the goal fails: a product with its negation, or a case of the split an equality's negation is.
+        let through_goal = used.iter().any(|(fact, _)| fact.origin.negates());
 
-        match (self.goal, self.negated) {
+        let Some(goal) = self.goal else {
             // The goal is empty, and the facts' sum is a proof of it.
-            (None, _) => sum(context, carrier, &used, none),
-            // The facts refute each other without the goal.
-            (Some(_), _) if goal_weight.is_zero() && !through_product => {
-                sum(context, carrier, &used, none).map(|refuted| eliminate(context, refuted))
-            }
-            (Some(goal), _)
-                if goal_weight == Natural::from(1u32) && !through_product && !self.lifted =>
-            {
-                sum(context, carrier, &used, slack(&used, goal))
-            }
-            (Some(goal), Some(negated)) => {
-                let mut with_goal = used.clone();
-                if !goal_weight.is_zero() {
-                    with_goal.push((negated, &goal_weight));
-                }
-                sum(context, carrier, &with_goal, none).map(|refuted| {
-                    let false_arm = eliminate(context, refuted);
-                    // Computed first: `split` borrows the context mutably, and so would an argument written in the same call.
-                    let true_arm = qed(context);
-                    split(context, &goal.decision, false_arm, true_arm)
-                })
-            }
-            // The negation is the only row that carries the goal's weight, so a weighted goal without one cannot be.
-            (Some(_), None) => None,
+            return sum(context, carrier, &used, none);
+        };
+        // The facts refute each other without the goal.
+        if negations.is_empty() && !through_goal {
+            return sum(context, carrier, &used, none).map(|refuted| eliminate(context, refuted));
         }
+        let direct = matches!(goal.relation, Operation::Less | Operation::AtMost)
+            && matches!(negations.as_slice(), [(_, weight)] if **weight == Natural::from(1u32))
+            && !through_goal
+            && !self.lifted;
+        if direct {
+            return sum(context, carrier, &used, slack(&used, goal));
+        }
+        let with_goal = used.into_iter().chain(negations).collect::<Vec<_>>();
+        sum(context, carrier, &with_goal, none).map(|refuted| {
+            let false_arm = eliminate(context, refuted);
+            // Computed first: `split` borrows the context mutably, and so would an argument written in the same call.
+            let true_arm = qed(context);
+            split(context, &goal.decision, false_arm, true_arm)
+        })
     }
+}
+
+/// Each of `facts` a combination weighs, beside its weight.
+fn weighted<'a>(facts: &'a [Fact], weights: &'a [Natural]) -> Vec<(&'a Fact, &'a Natural)> {
+    facts
+        .iter()
+        .zip(weights)
+        .filter(|(_, weight)| !weight.is_zero())
+        .collect()
 }
 
 /// The constant `s` by which the facts' weighted sum exceeds the goal's view, `Σ wᵢ·fᵢ = g + s`: read off the constants alone, since the monomials cancel exactly where the negated goal's multiplier is one. It is the certificate's constant less one, so it is never negative.

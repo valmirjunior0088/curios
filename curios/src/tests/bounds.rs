@@ -522,6 +522,52 @@ const ROWS: &[Row] = &[
         "a: Int, b: Int, k: Int, p: Holds(b * k <= a * k), q: Holds(k < +0)",
         "Holds(a <= b)",
     ),
+    // A disequality is a goal, its negation the equation's two bounds: `Int`'s division asks one, and an order of its divisor against zero answers it, on either side and through a sum.
+    body(
+        "a: Int, b: Int",
+        "Int",
+        "match +0 < b | true => a / b | false => +0 end",
+    ),
+    body(
+        "a: Int, b: Int",
+        "Int",
+        "match b < +0 | true => a / b | false => +0 end",
+    ),
+    body(
+        "a: Int, b: Int",
+        "Int",
+        "match b >= +1 | true => a % b | false => +0 end",
+    ),
+    claim(
+        "b: Int, c: Int, p: Holds(+0 < b), q: Holds(+0 <= c)",
+        "Holds(b + c != +0)",
+    ),
+    claim("i: Nat, n: Nat, p: Holds(i < n)", "Holds(i != n)"),
+    claim("i: Nat, n: Nat, p: Holds(n < i)", "Holds(i != n)"),
+    claim("i: Nat, n: Nat, p: Holds(i < n)", "Holds(Bool/not(i == n))"),
+    // An equality is a goal, its negation the disequality: the two cases the order of its sides makes, each refuted by a bound, at both carriers.
+    claim(
+        "a: Nat, b: Nat, p: Holds(a <= b), q: Holds(b <= a)",
+        "Holds(a == b)",
+    ),
+    claim(
+        "a: Int, b: Int, p: Holds(a <= b), q: Holds(b <= a)",
+        "Holds(a == b)",
+    ),
+    claim(
+        "a: Nat, b: Nat, c: Nat, p: Holds(a + c <= b), q: Holds(b <= a + c)",
+        "Holds(b == a + c)",
+    ),
+    // An equality or a disequality conversion holds to be an order is asked as that order: a sum of naturals against zero.
+    claim("n: Nat, p: Holds(n < 1)", "Holds(n == 0)"),
+    claim("n: Nat, m: Nat, p: Holds(0 < n)", "Holds(n + m != 0)"),
+    claim("n: Nat, m: Nat, p: Holds(0 < n)", "Holds(0 != m + n)"),
+    // And under a guard that is a disequality, which its own split reads: three ordered values, the middle one ruled out.
+    body(
+        "i: Nat, p: Holds(i <= 2)",
+        "Nat",
+        "match i == 1 | true => 0 | false => match i == 0 | true => 0 | false => let _: Holds(i == 2) = True/proved(); 0 end end",
+    ),
 ];
 
 /// What the procedure must refuse.
@@ -590,6 +636,16 @@ const CONTROLS: &[Row] = &[
         "i: Nat, m: Nat, n: Nat, q: Holds(m <= n)",
         "Nat",
         "let h = True/proved(); match i < m | true => let _: Holds(i < n) = h; 0 | false => 0 end",
+    ),
+    // A disequality a loose bound leaves open, and an equality one bound of the two leaves open.
+    claim("i: Nat, n: Nat, p: Holds(i <= n)", "Holds(i != n)"),
+    claim("a: Nat, b: Nat, p: Holds(a <= b)", "Holds(a == b)"),
+    claim("a: Int, b: Int", "Holds(a != b)"),
+    // `Int`'s division under a loose bound of its divisor, which zero meets.
+    body(
+        "a: Int, b: Int",
+        "Int",
+        "match +0 <= b | true => a / b | false => +0 end",
     ),
 ];
 

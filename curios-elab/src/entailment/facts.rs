@@ -113,13 +113,13 @@ impl Fact {
     }
 }
 
-/// The goal a decision states: `left < right` or `left <= right` at `carrier`, as its reduct spells it.
+/// The goal a decision states: `left ⋈ right` at `carrier`, `⋈` any of `<`, `<=`, `==` and `!=`, as its reduct spells it.
 pub(super) struct Target {
     pub(super) carrier: Carrier,
     pub(super) relation: Operation,
     pub(super) left: Term,
     pub(super) right: Term,
-    /// `left - right`, aligned to `<=`.
+    /// `left - right`, aligned to `<=`: the goal's view where it is an order, and the view of `left <= right` where it is an equality or a disequality, which names the goal's atoms and holds whatever remainder is lifted out of them.
     pub(super) form: LinearForm,
     /// The decision as the bound's reduct spells it: what the refuting form splits on, so the refinement its arms install is keyed where the bound reads it.
     pub(super) decision: Term,
@@ -230,7 +230,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// The goal `decision` states, or `None` where it is no `Nat` or `Int` `<` or `<=`: an equality's negation is a disjunction, and nothing else is a comparison the view reads. Read first, so its atoms are handed out before any fact's.
+    /// The goal `decision` states, or `None` where it is no `Nat` or `Int` comparison: an order, an equality, or a disequality, `Bool/not` of an equality among them. An equality or a disequality conversion holds to be an order — `n != 0` is `0 < n` at `Nat` — is that order's goal ([`Reader::ordered`]). Read first, so its atoms are handed out before any fact's.
     ///
     /// `stated` is the decision as the bound spells it, where opening the bound reaches one: its comparison's operands are the goal's sides and it is what the refuting form splits on, so the refinement the split installs is keyed as the bound reads it. `decision` is its reduct, read where the stated spelling opens to no comparison.
     pub(super) fn target(
@@ -253,12 +253,27 @@ impl<'a> Reader<'a> {
                 _ => return Ok(None),
             },
         };
-        let Some((carrier, relation @ (Operation::Less | Operation::AtMost), left, right)) =
-            sides(&comparison)
-        else {
+        // `Bool/not` of an equality is the disequality.
+        let read = match negated_equality(&comparison) {
+            Some((carrier, left, right)) => Some((carrier, Operation::Unequal, left, right)),
+            None => sides(&comparison),
+        };
+        let Some((carrier, relation, left, right)) = read else {
             return Ok(None);
         };
-        let Some(form) = self.form(context, carrier, relation, &left, &right)? else {
+        // An equality or a disequality conversion holds to be an order is asked as that order, which the facts' sum meets as it stands.
+        let (relation, left, right) = match relation {
+            Operation::Equal | Operation::Unequal => {
+                self.ordered(context, carrier, relation, left, right)?
+            }
+            _ => (relation, left, right),
+        };
+        // Another has no view aligned to `<=`: its is the order's over the same two sides.
+        let viewed = match relation {
+            Operation::Less => Operation::Less,
+            _ => Operation::AtMost,
+        };
+        let Some(form) = self.form(context, carrier, viewed, &left, &right)? else {
             return Ok(None);
         };
         Ok(Some(Target {
@@ -619,17 +634,12 @@ impl<'a> Reader<'a> {
     /// - **Neither**: the split on `a <= b`, whose case that holds adds `a < b` and whose case that fails adds `b < a`, opened only where the search needs it, as `omega` splits a disjunction ([`Reader::open`]).
     fn distinct(&mut self, context: &mut Context, kept: Kept) -> Result<(), Error> {
         let (carrier, a, b) = (kept.carrier, &kept.left, &kept.right);
-        let (this, that) = (
-            self.side(context, carrier, a)?,
-            self.side(context, carrier, b)?,
-        );
-        let read = unequal(carrier, &this, &that);
-        for (low, high, read_low, read_high) in [(b, a, &that, &this), (a, b, &this, &that)] {
-            let below = comparison_of(carrier, Operation::Less, read_low, read_high);
-            if matches!(self.views.align(&read, &below), Some(Aligned::Same)) {
-                let bound = comparison_of(carrier, Operation::Less, low, high);
-                return self.admit(context, bound, kept.proof, kept.origin);
-            }
+        let apart = Operation::Unequal;
+        if let (Operation::Less, low, high) =
+            self.ordered(context, carrier, apart, a.clone(), b.clone())?
+        {
+            let bound = comparison_of(carrier, Operation::Less, &low, &high);
+            return self.admit(context, bound, kept.proof, kept.origin);
         }
 
         let order = order(context, carrier);
@@ -673,6 +683,35 @@ impl<'a> Reader<'a> {
             reader.admit(context, strict(b, a), failed(a, b), origin.clone())
         })?;
         self.open(context, loose(a, b), holds, fails)
+    }
+
+    /// `left == right` or `left != right` as the order comparison conversion holds it to be, where it holds it to be one — a sum of naturals against zero is `sum <= 0` where the two are equal and `0 < sum` where they are not (`LinearForm::aligned`) — and as it stands otherwise.
+    fn ordered(
+        &mut self,
+        context: &mut Context,
+        carrier: Carrier,
+        relation: Operation,
+        left: Term,
+        right: Term,
+    ) -> Result<(Operation, Term, Term), Error> {
+        let (this, that) = (
+            self.side(context, carrier, &left)?,
+            self.side(context, carrier, &right)?,
+        );
+        let read = comparison_of(carrier, relation, &this, &that);
+        let order = match relation {
+            Operation::Equal => Operation::AtMost,
+            _ => Operation::Less,
+        };
+        for (low, high, read_low, read_high) in
+            [(&right, &left, &that, &this), (&left, &right, &this, &that)]
+        {
+            let candidate = comparison_of(carrier, order, read_low, read_high);
+            if matches!(self.views.align(&read, &candidate), Some(Aligned::Same)) {
+                return Ok((order, low.clone(), high.clone()));
+            }
+        }
+        Ok((relation, left, right))
     }
 
     /// A range check `proof` shows holds: `lo <= c` and `c <= hi`, through `le/of_in_range` over the arguments the check is passed as stated — so a guard's `qed` checks against the check the arm recorded, and a hypothesis is handed to the lemma as it is. The lemma's body was elaborated where no guard stood between the check and its unfolding.
@@ -1588,41 +1627,65 @@ pub(super) fn disequalities(
     Ok(true)
 }
 
+/// The goal negated, as the facts a refutation sums: each proved where a split on the goal's own decision came back `false`, which is where `qed` shows what the negation states.
+///
+/// - `left < right` and `left <= right`: the other order, by `le/of_not_lt` or `lt/of_not_le`.
+/// - `left != right`, where conversion holds it to be no order: the equation, as its two bounds, by `eq_of_eql` — what `omega` introduces for a `≠` goal.
+/// - `left == right`, where conversion holds it to be no order: the disequality, read as every disequality is ([`Reader::distinct`]): the strict bound reduction orders it to, or no fact at all and the split on `left <= right`, put before every other in `facts`.
+///
+/// Nothing where the lemma a negation is proved by is not in scope.
 pub(super) fn negated(
     context: &mut Context,
     views: &mut LinearViews,
     classes: &mut Classes,
     target: &Target,
-    lifts: &[Lift],
-) -> Result<Option<Fact>, Error> {
+    facts: &mut Facts,
+) -> Result<Vec<Fact>, Error> {
     let order = order(context, target.carrier);
-    let (name, statement) = match target.relation {
-        Operation::Less => (
-            order.of_not_lt,
-            comparison_of(
-                target.carrier,
-                Operation::AtMost,
-                &target.right,
-                &target.left,
-            ),
-        ),
-        _ => (
-            order.of_not_le,
-            comparison_of(target.carrier, Operation::Less, &target.right, &target.left),
-        ),
-    };
-    if !in_scope(context, &[name]) {
-        return Ok(None);
-    }
-    let arguments = [target.left.clone(), target.right.clone(), qed(context)];
-    let proof = Term::apply(global(name), arguments);
+    let (carrier, left, right) = (target.carrier, &target.left, &target.right);
+    let qed = qed(context);
     let mut reader = Reader::new(views, classes);
-    reader.admit(context, statement, proof, Origin::Negated)?;
-    let mut negation = reader.read.facts.pop();
-    for lift in lifts {
-        negation.iter_mut().for_each(|fact| lift.apply(fact));
+    // The lifts, so the negation is lifted as every fact is, and the splits, so an equality's joins the one open on its comparison.
+    reader.read.lifts = std::mem::take(&mut facts.lifts);
+    reader.read.splits = std::mem::take(&mut facts.splits);
+    let open = reader.read.splits.len();
+    match target.relation {
+        Operation::Less if in_scope(context, &[order.of_not_lt]) => {
+            let proof = Term::apply(global(order.of_not_lt), [left.clone(), right.clone(), qed]);
+            let dual = comparison_of(carrier, Operation::AtMost, right, left);
+            reader.admit(context, dual, proof, Origin::Negated)?;
+        }
+        Operation::AtMost if in_scope(context, &[order.of_not_le]) => {
+            let proof = Term::apply(global(order.of_not_le), [left.clone(), right.clone(), qed]);
+            let dual = comparison_of(carrier, Operation::Less, right, left);
+            reader.admit(context, dual, proof, Origin::Negated)?;
+        }
+        Operation::Unequal if in_scope(context, &[order.eq_of_eql]) => {
+            let equation = Term::apply(global(order.eq_of_eql), [left.clone(), right.clone(), qed]);
+            reader.equation(context, carrier, left, right, equation, Origin::Negated)?;
+        }
+        Operation::Equal => {
+            let kept = Kept {
+                carrier,
+                left: left.clone(),
+                right: right.clone(),
+                apart: true,
+                proof: qed,
+                stated: target.decision.clone(),
+                origin: Origin::Negated,
+            };
+            reader.distinct(context, kept)?;
+        }
+        _ => {}
     }
-    Ok(negation)
+    let mut read = reader.read;
+    // The goal's own split is the first the search opens: an equality is proved in its two cases, and no other split need open to reach them.
+    if read.splits.len() > open {
+        read.splits.rotate_right(1);
+    }
+    facts.lifts = read.lifts;
+    facts.splits = read.splits;
+    Ok(read.facts)
 }
 
 /// The product of each pair of `facts` and the negated goal, through `le/mul`: `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`, read as every fact is — the products Mathlib's `nlinarith` adds before its linear search, each a fact whose monomials that search reads as unknowns.
@@ -1633,7 +1696,7 @@ pub(super) fn products(
     views: &mut LinearViews,
     classes: &mut Classes,
     facts: &Facts,
-    negated: Option<&Fact>,
+    negated: &[Fact],
 ) -> Result<Vec<Fact>, Error> {
     let factors = facts
         .facts
@@ -1952,22 +2015,17 @@ fn negated_equality(comparison: &Intrinsic) -> Option<(Carrier, Term, Term)> {
     }
 }
 
-/// `left != right` at `carrier`.
-fn unequal(carrier: Carrier, left: &Term, right: &Term) -> Intrinsic {
-    let (left, right) = (left.clone(), right.clone());
-    match carrier {
-        Carrier::Natural => Intrinsic::NatNeq(left, right),
-        _ => Intrinsic::IntNeq(left, right),
-    }
-}
-
-/// `left ⋈ right` at `carrier`, `⋈` being `<` or `<=`.
+/// `left ⋈ right` at `carrier`, `⋈` being `<`, `==` or `!=`, and `<=` otherwise.
 fn comparison_of(carrier: Carrier, relation: Operation, left: &Term, right: &Term) -> Intrinsic {
     let (left, right) = (left.clone(), right.clone());
     match (carrier, relation) {
         (Carrier::Natural, Operation::Less) => Intrinsic::NatLt(left, right),
+        (Carrier::Natural, Operation::Equal) => Intrinsic::NatEql(left, right),
+        (Carrier::Natural, Operation::Unequal) => Intrinsic::NatNeq(left, right),
         (Carrier::Natural, _) => Intrinsic::NatLe(left, right),
         (_, Operation::Less) => Intrinsic::IntLt(left, right),
+        (_, Operation::Equal) => Intrinsic::IntEql(left, right),
+        (_, Operation::Unequal) => Intrinsic::IntNeq(left, right),
         _ => Intrinsic::IntLe(left, right),
     }
 }

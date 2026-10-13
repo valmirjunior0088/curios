@@ -38,7 +38,7 @@ pub(super) struct Arms {
 /// A refutation, per case of the splits it opened.
 #[derive(Debug, PartialEq)]
 pub(super) enum Certificate {
-    /// One combination: a multiplier per form of its case — the forms, then each opened case's own in the order they were opened, then the negated goal.
+    /// One combination: a multiplier per form of its case — the forms, then each opened case's own in the order they were opened, then the negated goal's.
     Leaf(Vec<Natural>),
     /// The next split, a refutation in each of its cases. Splits open in order along every path, so the one a `Split` opens is the first its path has not.
     Split {
@@ -55,10 +55,10 @@ pub(super) enum Plan {
     Exhausted,
 }
 
-/// Search `forms` with the negated goal last for a refutation, opening the splits in `splits` in order, each only where the search without it found an assignment: an assignment that leaves a truncated subtraction free may be one its definition excludes. One budget runs across every case.
+/// Search `forms` with the negated goal's last for a refutation, opening the splits in `splits` in order, each only where the search without it found an assignment: an assignment that leaves a truncated subtraction free may be one its definition excludes. One budget runs across every case.
 pub(super) fn plan(
     forms: &[LinearForm],
-    negated: Option<&LinearForm>,
+    negated: &[LinearForm],
     splits: &[Arms],
     budget: &mut usize,
 ) -> Plan {
