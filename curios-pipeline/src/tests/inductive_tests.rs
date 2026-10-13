@@ -353,7 +353,7 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
 
 #[test]
 fn impossible_inductive_arm_lowers_to_unreachable() {
-    // The element is a line read at run time so the scrutinee stays runtime — a fully-constant vector would be folded whole by ersd's `evaluate` pass, and the pruned arm would never reach the lowering this pins.
+    // The element is read at run time so the scrutinee stays runtime — a fully-constant vector would be folded whole by ersd's `evaluate` pass, and the pruned arm would never reach the lowering this pins.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -364,10 +364,10 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
             match v : (_, _) => T
             | cons(@j, x, xs) => x
             end;
-        /std/Io/bind(/std/Io/read_line(/std/Io/stdin), (line) =>
-            match line
-            | some(b) => /std/Io/write(/std/Io/stdout, first(Vec/cons(b, Vec/nil())))
-            | none() => /std/Io/pure(())
+        /std/Io/bind(/std/Io/read(/std/Io/stdin, 16), (arrived) =>
+            match arrived
+            | chunk(b) => /std/Io/write(/std/Io/stdout, first(Vec/cons(b, Vec/nil())))
+            | _ => /std/Io/pure(())
             end)
     "#;
 

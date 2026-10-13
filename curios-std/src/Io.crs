@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Bytes, Byte, Nat, Option, Result, Async, Handle};
+use /std/{Monad, Bytes, Nat, Result, Async, Handle};
 use /std/Bool/{Holds};
 
 --- The failure every host operation reports.
@@ -58,22 +58,6 @@ pub let stderr: Output =
 --- Up to `n` bytes, and at least one until the input ends, waited for on this program's own behalf. Inside a fiber, `Async/Read`'s `read` parks instead.
 pub let read(i: Input, n: Nat, @positive: Holds(0 < n)) -> Io(Chunk) =
     Async/Read/read(@Io, @Handle, i.0, n, @positive);
-
---- One line without its newline, `none` at the end of the input. An error ends the input as the end does, and what was read before it is still the line. It reads a byte at a time, so it consumes nothing past the newline.
-pub let read_line(i: Input) -> Io(Option(Bytes)) =
-    let go(acc: Bytes) -> Io(Option(Bytes)) =
-        let c = read(i, 1)!;
-        match c
-        | chunk(b, @some) =>
-            match Byte/to_nat(Bytes/get(b, 0, @some)) == '\n'
-            | true => Io/pure(Option/some(acc))
-            | false => go(x[..acc, ..b])
-            end
-        | _ =>
-            Io/pure(
-                match Bytes/len(acc) == 0 | true => Option/none() | false => Option/some(acc) end)
-        end;
-    go(x[]);
 
 --- The whole of `b`, a short write resent; the first failure is the answer.
 let written(o: Output, b: Bytes) -> Io(Result(Error, {})) =

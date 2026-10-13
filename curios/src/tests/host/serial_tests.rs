@@ -52,7 +52,8 @@ fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
         use /std/{Str, Bytes, Option, Show, Try, Async, Io, Path, Serial};
         let exchange(s: Serial) -> Try(Async, Io/Error, Bytes) =
             let _ = Try/attempt(Serial/write(s, Str/to_bytes("AT\r\n")))!;
-            let line = Try/attempt(Async/read_line(s))!;
+            let input = Io/Reader/new(s)!;
+            let line = Io/Reader/line(input)!;
             Try/pure(Option/unwrap_or(line, x[]));
         let fiber: Async({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), exchange))!;
@@ -108,7 +109,8 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
             let _ = Serial/set_rts(s, true)!;
             let _ = Serial/set_dtr(s, true)!;
             let _ = Serial/discard_input(s)!;
-            let line = Try/attempt(Async/read_line(s))!;
+            let input = Io/Reader/new(s)!;
+            let line = Io/Reader/line(input)!;
             Try/pure(Option/unwrap_or(line, x[]));
         let fiber: Async({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), reset))!;

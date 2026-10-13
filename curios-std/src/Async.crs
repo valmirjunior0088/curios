@@ -1,5 +1,4 @@
-use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Io, Handle,
-    print_err};
+use /std/{Bytes, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Io, Handle, print_err};
 use /std/time/{Duration, Instant};
 use /std/Handle/{Interest, Readiness};
 use /std/Bool/{Holds};
@@ -162,62 +161,6 @@ pub let read_all(
     s: S,
 ) -> M(Result(Io/Error, Bytes)) =
     drain((n, @positive) => Read/read(@M, @S, s, n, @positive));
-
---- The bytes before the first `delimiter`, which is consumed and dropped, or everything read when the stream ends first. It reads a byte at a time, so it consumes nothing past the delimiter.
-pub let read_until(
-    @M: (Type) -> Type,
-    @S: Type,
-    use Monad(M),
-    use Read(M, S),
-    s: S,
-    delimiter: Byte,
-) -> M(Result(Io/Error, Bytes)) =
-    let go(acc: Bytes) -> M(Result(Io/Error, Bytes)) =
-        let c = Read/read(s, 1)!;
-        match c
-        | chunk(b, @some) =>
-            match Bytes/get(b, 0, @some) == delimiter
-            | true => Monad/pure(Result/success(acc))
-            | false => go(x[..acc, ..b])
-            end
-        | eof() => Monad/pure(Result/success(acc))
-        | error(e) => Monad/pure(Result/failure(e))
-        end;
-    go(x[]);
-
---- One line without its line ending — a newline, or a carriage return and a newline — or `none` when the stream ends with nothing read; what is read before the end is the last line, and a failure drops what was read. It reads a byte at a time, so it consumes nothing past the line's end.
-pub let read_line(
-    @M: (Type) -> Type,
-    @S: Type,
-    use Monad(M),
-    use Read(M, S),
-    s: S,
-) -> M(Result(Io/Error, Option(Bytes))) =
-    let newline: Byte = '\n';
-    let carriage: Byte = '\r';
-    -- A carriage return is held back until the next byte says whether it ends the line.
-    let held(acc: Bytes, cr: Bool) -> Bytes =
-        match cr | true => x[..acc, carriage] | false => acc end;
-    let go(acc: Bytes, cr: Bool) -> M(Result(Io/Error, Option(Bytes))) =
-        let c = Read/read(s, 1)!;
-        match c
-        | chunk(b, @some) =>
-            let byte = Bytes/get(b, 0, @some);
-            choose
-            | byte == newline => Monad/pure(Result/success(Option/some(acc)))
-            | byte == carriage => go(held(acc, cr), true)
-            | _ => go(x[..held(acc, cr), ..b], false)
-            end
-        | eof() =>
-            Monad/pure(
-                Result/success(
-                    match cr || Bytes/len(acc) != 0
-                    | true => Option/some(held(acc, cr))
-                    | false => Option/none()
-                    end))
-        | error(e) => Monad/pure(Result/failure(e))
-        end;
-    go(x[], false);
 
 --- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer.
 pub let copy(

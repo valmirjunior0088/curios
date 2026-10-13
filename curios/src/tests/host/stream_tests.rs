@@ -108,13 +108,13 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
     assert_eq!(run(source), b"error / error / ok:3");
 }
 
-/// A program's own stream proves every chunk it hands a reader holds a byte. One that builds a chunk from bytes it cannot see is refused where it builds it; one that decides the length with `Nat/lt/try` passes over an empty piece, so `read_until` reads on to the delimiter rather than taking an empty chunk for it and ending the read early.
+/// A program's own stream proves every chunk it hands a reader holds a byte. One that builds a chunk from bytes it cannot see is refused where it builds it; one that decides the length with `Nat/lt/try` passes over an empty piece, so a reader over it reads on to the delimiter rather than taking an empty chunk for it and ending the read early.
 #[test]
 fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     let stream = |answer: &str| {
         format!(
             r#"
-            use /std/{{Nat, Bytes, Str, List, Result, Cell, Async, Io, print}};
+            use /std/{{Nat, Bytes, Str, List, Result, Cell, Try, Async, Io, print}};
             struct Pieces: Type {{ List({{Cell({{}}), Bytes}}) }}
             let next(ps: List({{Cell({{}}), Bytes}})) -> Io(Io/Chunk) =
                 match ps
@@ -136,9 +136,10 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
             let b = piece(Str/to_bytes("a"))!;
             let c = piece(x[])!;
             let d = piece(Str/to_bytes("\n"))!;
-            let r = Async/read_until(@Io, Pieces {{ [a, b, c, d] }}, '\n')!;
+            let input = Io/Reader/new(Pieces {{ [a, b, c, d] }})!;
+            let r = Try/run(Io/Reader/until(input, '\n'))!;
             match r
-            | success(bytes) => print(Result/unwrap_or(Str/of_bytes(bytes), "?"))
+            | success(found) => print(Result/unwrap_or(Str/of_bytes(found.bytes), "?"))
             | failure(_) => print("error")
             end
             "#
@@ -155,25 +156,29 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     assert_eq!(run(&decided), b"a");
 }
 
-/// Standard input arrives in chunks of several bytes, and `read_line` and `read_until` read a byte at a time across them: a line ends at its newline whichever chunk holds it, a carriage return before the newline goes with it, and the last line needs none.
+/// Standard input arrives in chunks of several bytes, and a reader's lines and fields are cut across them: a line ends at its newline whichever chunk holds it, a carriage return before the newline goes with it, and the last line needs none.
 #[test]
 fn lines_read_across_the_chunks_a_stream_arrives_in() {
     let source = r#"
-        use /std/{Str, Bytes, Option, Result, Async, Io, print};
+        use /std/{Str, Bytes, Bool, Option, Result, Try, Async, Io, print};
         let line(r: Result(Io/Error, Option(Bytes))) -> Str =
             match r
             | success(some(b)) => Result/unwrap_or(Str/of_bytes(b), "?")
             | success(none()) => "<end>"
             | failure(_) => "<error>"
             end;
-        let field(r: Result(Io/Error, Bytes)) -> Str =
-            match r | success(b) => Result/unwrap_or(Str/of_bytes(b), "?") | failure(_) => "<error>" end;
+        let field(r: Result(Io/Error, {bytes: Bytes, met: Bool})) -> Str =
+            match r
+            | success(found) => Result/unwrap_or(Str/of_bytes(found.bytes), "?")
+            | failure(_) => "<error>"
+            end;
         let fiber: Async({}) =
-            let a = Async/read_line(@Async, Io/stdin)!;
-            let b = Async/read_line(@Async, Io/stdin)!;
-            let c = Async/read_until(@Async, Io/stdin, ',')!;
-            let d = Async/read_line(@Async, Io/stdin)!;
-            let e = Async/read_line(@Async, Io/stdin)!;
+            let input = Io/Reader/new(Io/stdin)!;
+            let a = Try/run(Io/Reader/line(input))!;
+            let b = Try/run(Io/Reader/line(input))!;
+            let c = Try/run(Io/Reader/until(input, ','))!;
+            let d = Try/run(Io/Reader/line(input))!;
+            let e = Try/run(Io/Reader/line(input))!;
             print(Str/join("|", [line(a), line(b), field(c), line(d), line(e)]));
         Async/run(fiber)
     "#;

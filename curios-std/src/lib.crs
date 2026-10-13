@@ -108,7 +108,7 @@ pub use Cell/{let Cell};
 
 --- Cooperative tasks over the host's scheduler: a fiber that parks on a handle, a timer or a signal and resumes when it is ready.
 ---
---- `run` drives a root fiber to its answer or reports a deadlock, and `using` brackets a resource so that a cancelled task releases it. An `Io` action sequences inside an `Async` region as it is. `Read` and `Write` are what a stream is read and written through — the concepts a file, a socket, a child's pipe and the standard streams satisfy, parking the fiber wherever the host would block — with `read_all`, `read_until` and `copy` written once over them.
+--- `run` drives a root fiber to its answer or reports a deadlock, and `using` brackets a resource so that a cancelled task releases it. An `Io` action sequences inside an `Async` region as it is. `Read` and `Write` are what a stream is read and written through — the concepts a file, a socket, a child's pipe and the standard streams satisfy, parking the fiber wherever the host would block — with `read_all` and `copy` written once over them.
 pub mod Async;
 pub use Async/{let Async};
 
@@ -247,4 +247,3 @@ pub let print(s: Str) -> Io({}) =
 --- `s` to standard error.
 pub let print_err(s: Str) -> Io({}) =
     Io/write(Io/stderr, Str/to_bytes(s));
-
