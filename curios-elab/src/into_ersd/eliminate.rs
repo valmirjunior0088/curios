@@ -6,9 +6,9 @@
 
 use {
     super::{
-        Atom, Carrier, Cases, Error, InductArm, InductDecl, InductType, Intrinsic, Lowering, Many,
-        Match, Nat, Outcome, Retyping, Scope, Subterm, Telescope, Term, Three, Two, emitted,
-        is_erasable, narrow_case_key,
+        Atom, Carrier, Cases, Demanded, Error, InductArm, InductDecl, InductType, Intrinsic,
+        Lowering, Many, Match, Nat, Outcome, Retyping, Scope, Subterm, Telescope, Term, Three, Two,
+        demanded_type, emitted, is_erasable, narrow_case_key,
     },
     curios_analysis::{Invert, case_target_indices, pinned_by_targets},
     curios_core::{Free, MatchResult, Universes},
@@ -421,33 +421,25 @@ impl Lowering<'_> {
     /// The `List/fold` intrinsic as a bounded `Nat` fold over the list's length, one read per step: `fold-nat len(l) { zero => init; step(i, acc) => f(get(l, i), acc) }`. The loop is emitted here rather than spelled by the library, so the type level keeps the intrinsic's laws and the runtime keeps the loop. `FoldSequence` is the wrong shape for it, being a right fold whose accumulator is the suffix's result; a left fold threads its accumulator the other way, and the `Nat` loop runs that way already.
     ///
     /// The list and the stepper are aliased once through `scrutinee_operand`, so a compound operand is erased before the loop rather than once per step. The read inside the step carries a dead bound: erasure never reads a `get`'s proof, and `i < len(l)` holds by construction of the loop.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "one over the line: the fold's five operands as the intrinsic states them, beside the walk's context and hint"
-    )]
     pub(super) fn erase_list_fold(
         &mut self,
         context: &mut Retyping,
         element: &Term,
         result: &Term,
-        list: &Term,
-        init: &Term,
-        function: &Term,
+        [
+            (list, list_demand),
+            (init, init_demand),
+            (function, function_demand),
+        ]: [Demanded<'_>; 3],
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let nat_type = Term::intrinsic(Intrinsic::NatType);
-        let list_type = Term::intrinsic(Intrinsic::ListType(element.clone()));
+        let list_type = demanded_type(context, &list_demand);
         let (list, _) = match self.scrutinee_operand(context, list, &list_type)? {
             Ok(pair) => pair,
             Err(diverged) => return Ok(diverged),
         };
-        let function_type = Term::func_type(
-            [
-                (context.fresh(None), element.clone()),
-                (context.fresh(None), result.clone()),
-            ],
-            result.clone(),
-        );
+        let function_type = demanded_type(context, &function_demand);
         let (function, _) = match self.scrutinee_operand(context, function, &function_type)? {
             Ok(pair) => pair,
             Err(diverged) => return Ok(diverged),
@@ -458,7 +450,8 @@ impl Lowering<'_> {
             Err(diverged) => return Ok(diverged),
         };
 
-        let zero = self.open_arm(context, result, init)?;
+        let init_type = demanded_type(context, &init_demand);
+        let zero = self.open_arm(context, &init_type, init)?;
 
         let index_label = context.fresh(None);
         let accumulator_label = context.fresh(None);

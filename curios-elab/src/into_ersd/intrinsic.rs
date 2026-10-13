@@ -4,8 +4,7 @@
 
 use {
     super::{Error, Intrinsic, Lowering, Nat, Natural, Outcome, Retyping, Subterm, Term, emitted},
-    curios_core::Global,
-    curios_num::Grain,
+    curios_core::{Global, Operand},
     curios_utilities::SyntaxName,
 };
 
@@ -20,39 +19,47 @@ pub(super) fn narrow_case_key(value: &Natural) -> Result<u32, Error> {
         .ok_or_else(|| Error::nat_case_key_overflow(value.clone()))
 }
 
-fn nat_type() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
+/// One operand an operation computes with, beside what the roster demands of it.
+pub(super) type Demanded<'a> = (&'a Term, Operand);
+
+/// The operands `intrinsic` computes with, in order, each beside what [`Intrinsic::signature`] demands of it.
+///
+/// The roster is the one statement of an operand's type. Both checkers walk it, so an arm that spelled a type of its own could come to disagree with the one its operand was checked at, and erasure runs after the kernel, where a disagreement is a miscompilation rather than a refusal. Two operands are left out, a run holding nothing of either: one demanded as a type, and the proof of the operation's bound ([`Intrinsic::bound`]) — erasure is where a proof stops existing, and nowhere else has to know.
+fn computed<'a>(context: &Retyping, intrinsic: &'a Intrinsic) -> Vec<Demanded<'a>> {
+    let bound = intrinsic.bound();
+
+    intrinsic
+        .operands()
+        .into_iter()
+        .zip(intrinsic.signature(&context.syntax()).operands)
+        .filter(|(operand, demand)| {
+            !matches!(demand, Operand::IsType)
+                && !bound.is_some_and(|proof| std::ptr::eq(proof, *operand))
+        })
+        .collect()
 }
 
-fn bool_type() -> Term {
-    Term::intrinsic(Intrinsic::BoolType)
+/// The operands of an arm that reads each by its place.
+fn places<'a, const N: usize>(operands: Vec<Demanded<'a>>) -> [Demanded<'a>; N] {
+    operands
+        .try_into()
+        .expect("erase: the roster states the operation's arity")
 }
 
-fn byte_type() -> Term {
-    Term::intrinsic(Intrinsic::ByteType)
-}
-
-fn int_type() -> Term {
-    Term::intrinsic(Intrinsic::IntType)
-}
-
-fn flt_type() -> Term {
-    Term::intrinsic(Intrinsic::FltType)
-}
-
-fn bin_type(grain: Grain) -> Term {
-    Term::intrinsic(Intrinsic::BinType(grain))
-}
-
-fn list_type(element: Term) -> Term {
-    Term::intrinsic(Intrinsic::ListType(element))
-}
-
-/// The element shape of a packed binary: its grain's own scalar type.
-fn grain_element_type(grain: Grain) -> Term {
-    match grain {
-        Grain::X => byte_type(),
-        Grain::B => bool_type(),
+/// The type a demand states. A function's is assembled from its halves under binders minted here, the roster having no name source of its own.
+pub(super) fn demanded_type(context: &mut Retyping, demand: &Operand) -> Term {
+    match demand {
+        Operand::At(type_) => type_.clone(),
+        Operand::Function { domains, codomain } => {
+            let params = domains
+                .iter()
+                .map(|domain| (context.fresh(None), domain.clone()))
+                .collect::<Vec<_>>();
+            Term::func_type(params, codomain.clone())
+        }
+        Operand::IsType => {
+            unreachable!("erase: an operand demanded as a type is not computed with")
+        }
     }
 }
 
@@ -79,17 +86,37 @@ impl Lowering<'_> {
         Outcome::Emitted(curios_ersd::Atom::Constant(self.builder.constant(constant)))
     }
 
-    /// Erase the operands (each against its type, in order) and bind a scalar operation.
+    /// Erase one operand against what the roster demands of it.
+    fn demanded(
+        &mut self,
+        context: &mut Retyping,
+        (term, demand): &Demanded<'_>,
+    ) -> Result<Outcome, Error> {
+        let type_ = demanded_type(context, demand);
+        self.walk(context, term, &type_, None)
+    }
+
+    /// Erase a value put into a cell or a channel as the slot it fills: against what the roster demands of it, a proof or a type held as its stand-in ([`kept_operand`](Self::kept_operand)).
+    fn kept(
+        &mut self,
+        context: &mut Retyping,
+        (term, demand): &Demanded<'_>,
+    ) -> Result<Outcome, Error> {
+        let type_ = demanded_type(context, demand);
+        self.kept_operand(context, term, &type_, None)
+    }
+
+    /// Erase the operands (each against its demand, in order) and bind a scalar operation.
     fn operation(
         &mut self,
         context: &mut Retyping,
         operation: curios_ersd::Operation,
-        operands: &[(&Term, Term)],
+        operands: &[Demanded<'_>],
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let mut atoms = Vec::with_capacity(operands.len());
-        for (term, type_) in operands {
-            atoms.push(emitted!(self.walk(context, term, type_, None)?));
+        for operand in operands {
+            atoms.push(emitted!(self.demanded(context, operand)?));
         }
         Ok(self.bind(
             hint,
@@ -144,12 +171,12 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         operation: curios_ersd::SequenceOp,
-        operands: &[(&Term, Term)],
+        operands: &[Demanded<'_>],
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let mut atoms = Vec::with_capacity(operands.len());
-        for (term, type_) in operands {
-            atoms.push(emitted!(self.walk(context, term, type_, None)?));
+        for operand in operands {
+            atoms.push(emitted!(self.demanded(context, operand)?));
         }
         Ok(self.bind(
             hint,
@@ -161,18 +188,27 @@ impl Lowering<'_> {
     }
 }
 
-/// Transcribe one intrinsic. Every arm reads its runtime shapes off the types the node itself carries — a list literal included, whose element-type slot elaboration already solved.
+/// Transcribe one intrinsic. Every arm reads its operands, and the type each is erased at, off the roster ([`computed`]), and keeps the operation it binds.
 pub(super) fn erase_intrinsic(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
     intrinsic: &Intrinsic,
     hint: Option<&str>,
 ) -> Result<Outcome, Error> {
-    /// One scalar-operation arm: each operand erased against one shared operand type.
+    /// One scalar-operation arm, over the operands the roster states.
     macro_rules! op {
-        ($op:expr, $type_:expr, $($operand:expr),+) => {
-            lowering.operation(context, $op, &[$(($operand, $type_())),+], hint)
-        };
+        ($op:expr) => {{
+            let operands = computed(context, intrinsic);
+            lowering.operation(context, $op, &operands, hint)
+        }};
+    }
+
+    /// The sequence-family counterpart of `op!`.
+    macro_rules! seq {
+        ($op:expr) => {{
+            let operands = computed(context, intrinsic);
+            lowering.sequence(context, $op, &operands, hint)
+        }};
     }
 
     match intrinsic {
@@ -190,17 +226,15 @@ pub(super) fn erase_intrinsic(
         | Intrinsic::IoType(_) => Ok(Outcome::Emitted(lowering.unit())),
 
         &Intrinsic::Bool(value) => Ok(lowering.constant(curios_ersd::Constant::Bool(value))),
-        Intrinsic::BoolAnd(l, r) => op!(curios_ersd::Operation::BoolAnd, bool_type, l, r),
-        Intrinsic::BoolOr(l, r) => op!(curios_ersd::Operation::BoolOr, bool_type, l, r),
-        Intrinsic::BoolXor(l, r) => op!(curios_ersd::Operation::BoolXor, bool_type, l, r),
-        Intrinsic::BoolEql(l, r) => op!(curios_ersd::Operation::BoolEql, bool_type, l, r),
-        Intrinsic::BoolNeq(l, r) => op!(curios_ersd::Operation::BoolNeq, bool_type, l, r),
+        Intrinsic::BoolAnd(..) => op!(curios_ersd::Operation::BoolAnd),
+        Intrinsic::BoolOr(..) => op!(curios_ersd::Operation::BoolOr),
+        Intrinsic::BoolXor(..) => op!(curios_ersd::Operation::BoolXor),
+        Intrinsic::BoolEql(..) => op!(curios_ersd::Operation::BoolEql),
+        Intrinsic::BoolNeq(..) => op!(curios_ersd::Operation::BoolNeq),
 
         &Intrinsic::Byte(value) => Ok(lowering.constant(curios_ersd::Constant::Byte(value))),
-        Intrinsic::ByteToNat(inner) => op!(curios_ersd::Operation::ByteToNat, byte_type, inner),
-        Intrinsic::NatToByte { nat: inner, .. } => {
-            op!(curios_ersd::Operation::NatToByte, nat_type, inner)
-        }
+        Intrinsic::ByteToNat(..) => op!(curios_ersd::Operation::ByteToNat),
+        Intrinsic::NatToByte { .. } => op!(curios_ersd::Operation::NatToByte),
 
         Intrinsic::Nat(Nat::Zero) => {
             Ok(lowering.constant(curios_ersd::Constant::Nat(Natural::zero())))
@@ -213,7 +247,8 @@ pub(super) fn erase_intrinsic(
             ) {
                 return Ok(lowering.constant(curios_ersd::Constant::Nat(spine)));
             }
-            let inner_atom = emitted!(lowering.walk(context, inner, &nat_type(), None)?);
+            let [inner] = places(computed(context, intrinsic));
+            let inner_atom = emitted!(lowering.demanded(context, &inner)?);
             let spine_atom = curios_ersd::Atom::Constant(
                 lowering.builder.constant(curios_ersd::Constant::Nat(spine)),
             );
@@ -225,340 +260,105 @@ pub(super) fn erase_intrinsic(
                 },
             ))
         }
-        Intrinsic::NatEql(l, r) => op!(curios_ersd::Operation::NatEql, nat_type, l, r),
-        Intrinsic::NatNeq(l, r) => op!(curios_ersd::Operation::NatNeq, nat_type, l, r),
-        Intrinsic::NatAdd(l, r) => op!(curios_ersd::Operation::NatAdd, nat_type, l, r),
-        Intrinsic::NatSub(l, r) => op!(curios_ersd::Operation::NatSub, nat_type, l, r),
-        Intrinsic::NatMul(l, r) => op!(curios_ersd::Operation::NatMul, nat_type, l, r),
-        Intrinsic::NatLt(l, r) => op!(curios_ersd::Operation::NatLt, nat_type, l, r),
-        // The bound is dropped here and nowhere else has to know: erasure is where a proof stops existing.
-        Intrinsic::NatDiv {
-            dividend: l,
-            divisor: r,
-            ..
-        } => op!(curios_ersd::Operation::NatDiv, nat_type, l, r),
-        // The bound is dropped here and nowhere else has to know: erasure is where a proof stops existing.
-        Intrinsic::NatRem {
-            dividend: l,
-            divisor: r,
-            ..
-        } => op!(curios_ersd::Operation::NatRem, nat_type, l, r),
-        Intrinsic::NatLe(l, r) => op!(curios_ersd::Operation::NatLe, nat_type, l, r),
-        Intrinsic::NatAnd(l, r) => op!(curios_ersd::Operation::NatAnd, nat_type, l, r),
-        Intrinsic::NatOr(l, r) => op!(curios_ersd::Operation::NatOr, nat_type, l, r),
-        Intrinsic::NatXor(l, r) => op!(curios_ersd::Operation::NatXor, nat_type, l, r),
-        Intrinsic::NatMin(l, r) => op!(curios_ersd::Operation::NatMin, nat_type, l, r),
-        Intrinsic::NatMax(l, r) => op!(curios_ersd::Operation::NatMax, nat_type, l, r),
-        Intrinsic::NatShl(l, r) => op!(curios_ersd::Operation::NatShl, nat_type, l, r),
-        Intrinsic::NatPow(l, r) => op!(curios_ersd::Operation::NatPow, nat_type, l, r),
-        Intrinsic::NatShr(l, r) => op!(curios_ersd::Operation::NatShr, nat_type, l, r),
+        Intrinsic::NatEql(..) => op!(curios_ersd::Operation::NatEql),
+        Intrinsic::NatNeq(..) => op!(curios_ersd::Operation::NatNeq),
+        Intrinsic::NatAdd(..) => op!(curios_ersd::Operation::NatAdd),
+        Intrinsic::NatSub(..) => op!(curios_ersd::Operation::NatSub),
+        Intrinsic::NatMul(..) => op!(curios_ersd::Operation::NatMul),
+        Intrinsic::NatLt(..) => op!(curios_ersd::Operation::NatLt),
+        Intrinsic::NatDiv { .. } => op!(curios_ersd::Operation::NatDiv),
+        Intrinsic::NatRem { .. } => op!(curios_ersd::Operation::NatRem),
+        Intrinsic::NatLe(..) => op!(curios_ersd::Operation::NatLe),
+        Intrinsic::NatAnd(..) => op!(curios_ersd::Operation::NatAnd),
+        Intrinsic::NatOr(..) => op!(curios_ersd::Operation::NatOr),
+        Intrinsic::NatXor(..) => op!(curios_ersd::Operation::NatXor),
+        Intrinsic::NatMin(..) => op!(curios_ersd::Operation::NatMin),
+        Intrinsic::NatMax(..) => op!(curios_ersd::Operation::NatMax),
+        Intrinsic::NatShl(..) => op!(curios_ersd::Operation::NatShl),
+        Intrinsic::NatPow(..) => op!(curios_ersd::Operation::NatPow),
+        Intrinsic::NatShr(..) => op!(curios_ersd::Operation::NatShr),
 
         Intrinsic::Int(value) => Ok(lowering.constant(curios_ersd::Constant::Int(value.clone()))),
-        Intrinsic::IntEql(l, r) => op!(curios_ersd::Operation::IntEql, int_type, l, r),
-        Intrinsic::IntNeq(l, r) => op!(curios_ersd::Operation::IntNeq, int_type, l, r),
-        Intrinsic::IntAdd(l, r) => op!(curios_ersd::Operation::IntAdd, int_type, l, r),
-        Intrinsic::IntSub(l, r) => op!(curios_ersd::Operation::IntSub, int_type, l, r),
-        Intrinsic::IntMul(l, r) => op!(curios_ersd::Operation::IntMul, int_type, l, r),
-        // The bound is dropped here and nowhere else has to know: erasure is where a proof stops existing.
-        Intrinsic::IntDiv {
-            dividend: l,
-            divisor: r,
-            ..
-        } => op!(curios_ersd::Operation::IntDiv, int_type, l, r),
-        // The bound is dropped here and nowhere else has to know: erasure is where a proof stops existing.
-        Intrinsic::IntRem {
-            dividend: l,
-            divisor: r,
-            ..
-        } => op!(curios_ersd::Operation::IntRem, int_type, l, r),
-        Intrinsic::IntLt(l, r) => op!(curios_ersd::Operation::IntLt, int_type, l, r),
-        Intrinsic::IntLe(l, r) => op!(curios_ersd::Operation::IntLe, int_type, l, r),
-        Intrinsic::IntAnd(l, r) => op!(curios_ersd::Operation::IntAnd, int_type, l, r),
-        Intrinsic::IntOr(l, r) => op!(curios_ersd::Operation::IntOr, int_type, l, r),
-        Intrinsic::IntXor(l, r) => op!(curios_ersd::Operation::IntXor, int_type, l, r),
-        Intrinsic::IntMin(l, r) => op!(curios_ersd::Operation::IntMin, int_type, l, r),
-        Intrinsic::IntMax(l, r) => op!(curios_ersd::Operation::IntMax, int_type, l, r),
-        Intrinsic::IntShl(l, r) => lowering.operation(
-            context,
-            curios_ersd::Operation::IntShl,
-            &[(l, int_type()), (r, nat_type())],
-            hint,
-        ),
-        Intrinsic::IntShr(l, r) => lowering.operation(
-            context,
-            curios_ersd::Operation::IntShr,
-            &[(l, int_type()), (r, nat_type())],
-            hint,
-        ),
+        Intrinsic::IntEql(..) => op!(curios_ersd::Operation::IntEql),
+        Intrinsic::IntNeq(..) => op!(curios_ersd::Operation::IntNeq),
+        Intrinsic::IntAdd(..) => op!(curios_ersd::Operation::IntAdd),
+        Intrinsic::IntSub(..) => op!(curios_ersd::Operation::IntSub),
+        Intrinsic::IntMul(..) => op!(curios_ersd::Operation::IntMul),
+        Intrinsic::IntDiv { .. } => op!(curios_ersd::Operation::IntDiv),
+        Intrinsic::IntRem { .. } => op!(curios_ersd::Operation::IntRem),
+        Intrinsic::IntLt(..) => op!(curios_ersd::Operation::IntLt),
+        Intrinsic::IntLe(..) => op!(curios_ersd::Operation::IntLe),
+        Intrinsic::IntAnd(..) => op!(curios_ersd::Operation::IntAnd),
+        Intrinsic::IntOr(..) => op!(curios_ersd::Operation::IntOr),
+        Intrinsic::IntXor(..) => op!(curios_ersd::Operation::IntXor),
+        Intrinsic::IntMin(..) => op!(curios_ersd::Operation::IntMin),
+        Intrinsic::IntMax(..) => op!(curios_ersd::Operation::IntMax),
+        Intrinsic::IntShl(..) => op!(curios_ersd::Operation::IntShl),
+        Intrinsic::IntShr(..) => op!(curios_ersd::Operation::IntShr),
 
         &Intrinsic::Flt(value) => Ok(lowering.constant(curios_ersd::Constant::Flt(value))),
-        Intrinsic::FltAdd(rounding, l, r) => {
-            op!(curios_ersd::Operation::FltAdd(*rounding), flt_type, l, r)
-        }
-        Intrinsic::FltSub(rounding, l, r) => {
-            op!(curios_ersd::Operation::FltSub(*rounding), flt_type, l, r)
-        }
-        Intrinsic::FltMul(rounding, l, r) => {
-            op!(curios_ersd::Operation::FltMul(*rounding), flt_type, l, r)
-        }
-        Intrinsic::FltDiv(rounding, l, r) => {
-            op!(curios_ersd::Operation::FltDiv(*rounding), flt_type, l, r)
-        }
-        Intrinsic::FltFma(rounding, a, b, c) => {
-            op!(curios_ersd::Operation::FltFma(*rounding), flt_type, a, b, c)
-        }
-        Intrinsic::FltRem(l, r) => op!(curios_ersd::Operation::FltRem, flt_type, l, r),
-        Intrinsic::FltEql(l, r) => op!(curios_ersd::Operation::FltEql, flt_type, l, r),
-        Intrinsic::FltNeq(l, r) => op!(curios_ersd::Operation::FltNeq, flt_type, l, r),
-        Intrinsic::FltLt(l, r) => op!(curios_ersd::Operation::FltLt, flt_type, l, r),
-        Intrinsic::FltLe(l, r) => op!(curios_ersd::Operation::FltLe, flt_type, l, r),
-        Intrinsic::FltMin(l, r) => op!(curios_ersd::Operation::FltMin, flt_type, l, r),
-        Intrinsic::FltMax(l, r) => op!(curios_ersd::Operation::FltMax, flt_type, l, r),
-        Intrinsic::FltCopysign(l, r) => op!(curios_ersd::Operation::FltCopysign, flt_type, l, r),
-        Intrinsic::FltNeg(inner) => op!(curios_ersd::Operation::FltNeg, flt_type, inner),
-        Intrinsic::FltAbs(inner) => op!(curios_ersd::Operation::FltAbs, flt_type, inner),
-        Intrinsic::FltSqrt(rounding, inner) => {
-            op!(curios_ersd::Operation::FltSqrt(*rounding), flt_type, inner)
-        }
-        Intrinsic::FltRoundIntegral(rounding, inner) => {
-            op!(
-                curios_ersd::Operation::FltRoundIntegral(*rounding),
-                flt_type,
-                inner
-            )
+        Intrinsic::FltAdd(rounding, ..) => op!(curios_ersd::Operation::FltAdd(*rounding)),
+        Intrinsic::FltSub(rounding, ..) => op!(curios_ersd::Operation::FltSub(*rounding)),
+        Intrinsic::FltMul(rounding, ..) => op!(curios_ersd::Operation::FltMul(*rounding)),
+        Intrinsic::FltDiv(rounding, ..) => op!(curios_ersd::Operation::FltDiv(*rounding)),
+        Intrinsic::FltFma(rounding, ..) => op!(curios_ersd::Operation::FltFma(*rounding)),
+        Intrinsic::FltRem(..) => op!(curios_ersd::Operation::FltRem),
+        Intrinsic::FltEql(..) => op!(curios_ersd::Operation::FltEql),
+        Intrinsic::FltNeq(..) => op!(curios_ersd::Operation::FltNeq),
+        Intrinsic::FltLt(..) => op!(curios_ersd::Operation::FltLt),
+        Intrinsic::FltLe(..) => op!(curios_ersd::Operation::FltLe),
+        Intrinsic::FltMin(..) => op!(curios_ersd::Operation::FltMin),
+        Intrinsic::FltMax(..) => op!(curios_ersd::Operation::FltMax),
+        Intrinsic::FltCopysign(..) => op!(curios_ersd::Operation::FltCopysign),
+        Intrinsic::FltNeg(..) => op!(curios_ersd::Operation::FltNeg),
+        Intrinsic::FltAbs(..) => op!(curios_ersd::Operation::FltAbs),
+        Intrinsic::FltSqrt(rounding, ..) => op!(curios_ersd::Operation::FltSqrt(*rounding)),
+        Intrinsic::FltRoundIntegral(rounding, ..) => {
+            op!(curios_ersd::Operation::FltRoundIntegral(*rounding))
         }
 
-        Intrinsic::NatToInt(inner) => op!(curios_ersd::Operation::NatToInt, nat_type, inner),
-        Intrinsic::IntAbs(inner) => op!(curios_ersd::Operation::IntAbs, int_type, inner),
-        Intrinsic::IntSign(inner) => op!(curios_ersd::Operation::IntSign, int_type, inner),
-        Intrinsic::NatToFlt(rounding, inner) => {
-            op!(curios_ersd::Operation::NatToFlt(*rounding), nat_type, inner)
-        }
-        Intrinsic::IntToNat { int: inner, .. } => {
-            op!(curios_ersd::Operation::IntToNat, int_type, inner)
-        }
-        Intrinsic::IntToFlt(rounding, inner) => {
-            op!(curios_ersd::Operation::IntToFlt(*rounding), int_type, inner)
-        }
-        Intrinsic::FltToNat { flt: inner, .. } => {
-            op!(curios_ersd::Operation::FltToNat, flt_type, inner)
-        }
-        Intrinsic::FltToInt { flt: inner, .. } => {
-            op!(curios_ersd::Operation::FltToInt, flt_type, inner)
-        }
-        Intrinsic::FltMantissa { flt: inner, .. } => {
-            op!(curios_ersd::Operation::FltMantissa, flt_type, inner)
-        }
-        Intrinsic::FltExponent { flt: inner, .. } => {
-            op!(curios_ersd::Operation::FltExponent, flt_type, inner)
-        }
-        Intrinsic::FltToLeBytes(inner) => {
-            op!(curios_ersd::Operation::FltToLeBytes, flt_type, inner)
-        }
-        Intrinsic::FltOfLeBytes { bin: inner, .. } => lowering.operation(
-            context,
-            curios_ersd::Operation::FltOfLeBytes,
-            &[(inner, bin_type(Grain::X))],
-            hint,
-        ),
+        Intrinsic::NatToInt(..) => op!(curios_ersd::Operation::NatToInt),
+        Intrinsic::IntAbs(..) => op!(curios_ersd::Operation::IntAbs),
+        Intrinsic::IntSign(..) => op!(curios_ersd::Operation::IntSign),
+        Intrinsic::NatToFlt(rounding, ..) => op!(curios_ersd::Operation::NatToFlt(*rounding)),
+        Intrinsic::IntToNat { .. } => op!(curios_ersd::Operation::IntToNat),
+        Intrinsic::IntToFlt(rounding, ..) => op!(curios_ersd::Operation::IntToFlt(*rounding)),
+        Intrinsic::FltToNat { .. } => op!(curios_ersd::Operation::FltToNat),
+        Intrinsic::FltToInt { .. } => op!(curios_ersd::Operation::FltToInt),
+        Intrinsic::FltMantissa { .. } => op!(curios_ersd::Operation::FltMantissa),
+        Intrinsic::FltExponent { .. } => op!(curios_ersd::Operation::FltExponent),
+        Intrinsic::FltToLeBytes(..) => op!(curios_ersd::Operation::FltToLeBytes),
+        Intrinsic::FltOfLeBytes { .. } => op!(curios_ersd::Operation::FltOfLeBytes),
 
         Intrinsic::Bin(grain, value) => {
             Ok(lowering.constant(curios_ersd::Constant::Bin(*grain, value.clone())))
         }
-        Intrinsic::BinLen(grain, bin) => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinLen(*grain),
-            &[(bin, bin_type(*grain))],
-            hint,
-        ),
-        Intrinsic::BinEql(grain, l, r) => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinEql(*grain),
-            &[(l, bin_type(*grain)), (r, bin_type(*grain))],
-            hint,
-        ),
-        Intrinsic::BinGet {
-            grain,
-            bin,
-            index,
-            in_range: _,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinGet(*grain),
-            &[(bin, bin_type(*grain)), (index, nat_type())],
-            hint,
-        ),
-        Intrinsic::BinSlice {
-            grain,
-            bin,
-            start,
-            length,
-            within: _,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinSlice(*grain),
-            &[
-                (bin, bin_type(*grain)),
-                (start, nat_type()),
-                (length, nat_type()),
-            ],
-            hint,
-        ),
-        Intrinsic::BinAppend {
-            grain,
-            bin,
-            element,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinAppend(*grain),
-            &[
-                (bin, bin_type(*grain)),
-                (element, grain_element_type(*grain)),
-            ],
-            hint,
-        ),
-        Intrinsic::BinReinterp {
-            grain,
-            bin,
-            aligned: _,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinReinterp(*grain),
-            &[(bin, bin_type(*grain))],
-            hint,
-        ),
-        Intrinsic::BinReplicate { grain, count, atom } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinReplicate(*grain),
-            &[(count, nat_type()), (atom, grain_element_type(*grain))],
-            hint,
-        ),
-        Intrinsic::BinAnd {
-            grain,
-            left,
-            right,
-            same_length: _,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinAnd(*grain),
-            &[(left, bin_type(*grain)), (right, bin_type(*grain))],
-            hint,
-        ),
-        Intrinsic::BinOr {
-            grain,
-            left,
-            right,
-            same_length: _,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinOr(*grain),
-            &[(left, bin_type(*grain)), (right, bin_type(*grain))],
-            hint,
-        ),
-        Intrinsic::BinXor {
-            grain,
-            left,
-            right,
-            same_length: _,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::BinXor(*grain),
-            &[(left, bin_type(*grain)), (right, bin_type(*grain))],
-            hint,
-        ),
-        Intrinsic::BinConcat { grain, operands } => {
-            let pairs = operands
-                .iter()
-                .map(|operand| (operand, bin_type(*grain)))
-                .collect::<Vec<_>>();
-            lowering.sequence(
-                context,
-                curios_ersd::SequenceOp::BinConcat(*grain),
-                &pairs,
-                hint,
-            )
+        Intrinsic::BinLen(grain, ..) => seq!(curios_ersd::SequenceOp::BinLen(*grain)),
+        Intrinsic::BinEql(grain, ..) => seq!(curios_ersd::SequenceOp::BinEql(*grain)),
+        Intrinsic::BinGet { grain, .. } => seq!(curios_ersd::SequenceOp::BinGet(*grain)),
+        Intrinsic::BinSlice { grain, .. } => seq!(curios_ersd::SequenceOp::BinSlice(*grain)),
+        Intrinsic::BinAppend { grain, .. } => seq!(curios_ersd::SequenceOp::BinAppend(*grain)),
+        Intrinsic::BinReinterp { grain, .. } => {
+            seq!(curios_ersd::SequenceOp::BinReinterp(*grain))
         }
+        Intrinsic::BinReplicate { grain, .. } => {
+            seq!(curios_ersd::SequenceOp::BinReplicate(*grain))
+        }
+        Intrinsic::BinAnd { grain, .. } => seq!(curios_ersd::SequenceOp::BinAnd(*grain)),
+        Intrinsic::BinOr { grain, .. } => seq!(curios_ersd::SequenceOp::BinOr(*grain)),
+        Intrinsic::BinXor { grain, .. } => seq!(curios_ersd::SequenceOp::BinXor(*grain)),
+        Intrinsic::BinConcat { grain, .. } => seq!(curios_ersd::SequenceOp::BinConcat(*grain)),
 
-        Intrinsic::List {
-            element: element_type,
-            items: elements,
-        } => {
-            let pairs = elements
-                .iter()
-                .map(|element| (element, element_type.clone()))
-                .collect::<Vec<_>>();
-            lowering.sequence(context, curios_ersd::SequenceOp::ListBuild, &pairs, hint)
-        }
-        Intrinsic::ListLen {
-            element: element_type,
-            list,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::ListLen,
-            &[(list, list_type(element_type.clone()))],
-            hint,
-        ),
-        Intrinsic::ListGet {
-            element: element_type,
-            list,
-            index,
-            in_range: _,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::ListGet,
-            &[(list, list_type(element_type.clone())), (index, nat_type())],
-            hint,
-        ),
-        Intrinsic::ListSlice {
-            element: element_type,
-            list,
-            start,
-            length,
-            within: _,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::ListSlice,
-            &[
-                (list, list_type(element_type.clone())),
-                (start, nat_type()),
-                (length, nat_type()),
-            ],
-            hint,
-        ),
-        Intrinsic::ListAppend {
-            element: element_type,
-            list,
-            item: element,
-        } => lowering.sequence(
-            context,
-            curios_ersd::SequenceOp::ListAppend,
-            &[
-                (list, list_type(element_type.clone())),
-                (element, element_type.clone()),
-            ],
-            hint,
-        ),
-        Intrinsic::ListConcat {
-            element: element_type,
-            operands,
-        } => {
-            let pairs = operands
-                .iter()
-                .map(|operand| (operand, list_type(element_type.clone())))
-                .collect::<Vec<_>>();
-            lowering.sequence(context, curios_ersd::SequenceOp::ListConcat, &pairs, hint)
-        }
-        Intrinsic::ListMap {
-            from: domain,
-            to: codomain,
-            list,
-            function: mapper,
-        } => {
-            let list_atom =
-                emitted!(lowering.walk(context, list, &list_type(domain.clone()), None)?);
-            let mapper_type =
-                Term::func_type([(context.fresh(None), domain.clone())], codomain.clone());
-            let mapper_atom = emitted!(lowering.walk(context, mapper, &mapper_type, None)?);
+        Intrinsic::List { .. } => seq!(curios_ersd::SequenceOp::ListBuild),
+        Intrinsic::ListLen { .. } => seq!(curios_ersd::SequenceOp::ListLen),
+        Intrinsic::ListGet { .. } => seq!(curios_ersd::SequenceOp::ListGet),
+        Intrinsic::ListSlice { .. } => seq!(curios_ersd::SequenceOp::ListSlice),
+        Intrinsic::ListAppend { .. } => seq!(curios_ersd::SequenceOp::ListAppend),
+        Intrinsic::ListConcat { .. } => seq!(curios_ersd::SequenceOp::ListConcat),
+        Intrinsic::ListMap { .. } => {
+            let [list, mapper] = places(computed(context, intrinsic));
+            let list_atom = emitted!(lowering.demanded(context, &list)?);
+            let mapper_atom = emitted!(lowering.demanded(context, &mapper)?);
             Ok(lowering.bind(
                 hint,
                 curios_ersd::Rhs::Intrinsic {
@@ -569,12 +369,11 @@ pub(super) fn erase_intrinsic(
         }
 
         Intrinsic::ListFold {
-            element,
-            result,
-            list,
-            init,
-            function,
-        } => lowering.erase_list_fold(context, element, result, list, init, function, hint),
+            element, result, ..
+        } => {
+            let operands = places(computed(context, intrinsic));
+            lowering.erase_list_fold(context, element, result, operands, hint)
+        }
 
         &Intrinsic::Handle(token) => Ok(lowering.constant(curios_ersd::Constant::Handle(token))),
         // Every operation the host performs is typed `Io`, so every one erases to a thunk: the operands are computed where the description is *built*, and the operation itself happens only when the description is forced. Nothing below changes what the host call is — only where it sits relative to the closure boundary.
@@ -587,14 +386,10 @@ pub(super) fn erase_intrinsic(
                 },
             ))
         }),
-        Intrinsic::CellFill {
-            element,
-            cell,
-            value,
-        } => {
-            let cell_type = Term::intrinsic(Intrinsic::CellType(element.clone()));
-            let cell = emitted!(lowering.walk(context, cell, &cell_type, None)?);
-            let value = emitted!(lowering.kept_operand(context, value, element, None)?);
+        Intrinsic::CellFill { .. } => {
+            let [cell, value] = places(computed(context, intrinsic));
+            let cell = emitted!(lowering.demanded(context, &cell)?);
+            let value = emitted!(lowering.kept(context, &value)?);
             lowering.thunk(hint.or(Some("io/cell_fill")), move |lowering| {
                 Ok(lowering.bind(
                     None,
@@ -605,9 +400,9 @@ pub(super) fn erase_intrinsic(
                 ))
             })
         }
-        Intrinsic::CellPoll { element, cell, .. } => {
-            let cell_type = Term::intrinsic(Intrinsic::CellType(element.clone()));
-            let cell = emitted!(lowering.walk(context, cell, &cell_type, None)?);
+        Intrinsic::CellPoll { .. } => {
+            let [cell] = places(computed(context, intrinsic));
+            let cell = emitted!(lowering.demanded(context, &cell)?);
             let syntax = context.syntax().option;
             let some = lowering.outcome_constructor(context, syntax.family, syntax.some)?;
             let none = lowering.outcome_constructor(context, syntax.family, syntax.none)?;
@@ -621,8 +416,9 @@ pub(super) fn erase_intrinsic(
                 ))
             })
         }
-        Intrinsic::Channel { capacity, .. } => {
-            let capacity = emitted!(lowering.walk(context, capacity, &nat_type(), None)?);
+        Intrinsic::Channel { .. } => {
+            let [capacity] = places(computed(context, intrinsic));
+            let capacity = emitted!(lowering.demanded(context, &capacity)?);
             lowering.thunk(hint.or(Some("io/channel_new")), move |lowering| {
                 Ok(lowering.bind(
                     None,
@@ -633,14 +429,10 @@ pub(super) fn erase_intrinsic(
                 ))
             })
         }
-        Intrinsic::ChannelPush {
-            element,
-            channel,
-            value,
-        } => {
-            let channel_type = Term::intrinsic(Intrinsic::ChannelType(element.clone()));
-            let channel = emitted!(lowering.walk(context, channel, &channel_type, None)?);
-            let value = emitted!(lowering.kept_operand(context, value, element, None)?);
+        Intrinsic::ChannelPush { .. } => {
+            let [channel, value] = places(computed(context, intrinsic));
+            let channel = emitted!(lowering.demanded(context, &channel)?);
+            let value = emitted!(lowering.kept(context, &value)?);
             let syntax = context.syntax().channel;
             let taken = lowering.outcome_constructor(context, syntax.push, syntax.taken)?;
             let full = lowering.outcome_constructor(context, syntax.push, syntax.full)?;
@@ -659,11 +451,9 @@ pub(super) fn erase_intrinsic(
                 ))
             })
         }
-        Intrinsic::ChannelTake {
-            element, channel, ..
-        } => {
-            let channel_type = Term::intrinsic(Intrinsic::ChannelType(element.clone()));
-            let channel = emitted!(lowering.walk(context, channel, &channel_type, None)?);
+        Intrinsic::ChannelTake { .. } => {
+            let [channel] = places(computed(context, intrinsic));
+            let channel = emitted!(lowering.demanded(context, &channel)?);
             let syntax = context.syntax().channel;
             let item = lowering.outcome_constructor(context, syntax.take, syntax.item)?;
             let empty = lowering.outcome_constructor(context, syntax.take, syntax.empty)?;
@@ -678,12 +468,12 @@ pub(super) fn erase_intrinsic(
                 ))
             })
         }
-        Intrinsic::ChannelClose { element, channel }
-        | Intrinsic::ChannelClosed { element, channel }
-        | Intrinsic::ChannelCount { element, channel }
-        | Intrinsic::ChannelCapacity { element, channel } => {
-            let channel_type = Term::intrinsic(Intrinsic::ChannelType(element.clone()));
-            let channel = emitted!(lowering.walk(context, channel, &channel_type, None)?);
+        Intrinsic::ChannelClose { .. }
+        | Intrinsic::ChannelClosed { .. }
+        | Intrinsic::ChannelCount { .. }
+        | Intrinsic::ChannelCapacity { .. } => {
+            let [channel] = places(computed(context, intrinsic));
+            let channel = emitted!(lowering.demanded(context, &channel)?);
             let (operation, name) = match intrinsic {
                 Intrinsic::ChannelClose { .. } => {
                     (curios_ersd::ChannelOperation::Close, "io/channel_close")
@@ -714,29 +504,18 @@ pub(super) fn erase_intrinsic(
         // The description that performs nothing: a closure yielding an already-computed value.
         //
         // The operand is erased at the construction site like every other intrinsic's, not inside the thunk. The language is eager: `/sys/Io/pure` is an ordinary call-by-value wrapper, so a surface `Io/pure(e)` has evaluated `e` before this node exists at all, and erasing the operand inside the closure would delay nothing while making this one arm's evaluation order differ from the rest of the roster. What delays a program's effect is `IoBind`.
-        Intrinsic::IoPure {
-            result: type_,
-            value,
-        } => {
-            let value = emitted!(lowering.walk(context, value, type_, None)?);
+        Intrinsic::IoPure { .. } => {
+            let [value] = places(computed(context, intrinsic));
+            let value = emitted!(lowering.demanded(context, &value)?);
             lowering.thunk(hint.or(Some("io/pure")), move |_| {
                 Ok(Outcome::Emitted(value))
             })
         }
         // The description that performs `action`, then the description `continuation` computes from its result. The operands erase at the construction site like the rest of the roster (see `thunk`'s placement rule); the two forces and the continuation's application are the performance, and only they stay inside.
-        Intrinsic::IoBind {
-            from,
-            to,
-            action,
-            continuation,
-        } => {
-            let io_from: Term = Subterm::Intrinsic(Intrinsic::IoType(from.clone())).into();
-            let action_atom = emitted!(lowering.walk(context, action, &io_from, None)?);
-
-            let io_to: Term = Subterm::Intrinsic(Intrinsic::IoType(to.clone())).into();
-            let continuation_type = Term::func_type([(context.fresh(None), from.clone())], io_to);
-            let continuation_atom =
-                emitted!(lowering.walk(context, continuation, &continuation_type, None)?);
+        Intrinsic::IoBind { .. } => {
+            let [action, continuation] = places(computed(context, intrinsic));
+            let action_atom = emitted!(lowering.demanded(context, &action)?);
+            let continuation_atom = emitted!(lowering.demanded(context, &continuation)?);
 
             lowering.thunk(hint.or(Some("io/bind")), move |lowering| {
                 let result = emitted!(lowering.force(action_atom));
