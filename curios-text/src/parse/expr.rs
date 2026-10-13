@@ -440,6 +440,8 @@ const TERMS_SIDE_BY_SIDE: &str = "two terms stand side by side with nothing that
 // **Committed, because nothing else can be meant.** Two terms side by side are no form wherever they stand, so no alternative has a better reading to offer; and left recoverable, the refusal is dropped wherever a term is one of a list — an argument, a tuple's field — whose closer then complains where the first term began.
 //
 // **What is left alone.** A term on a later line is a sequence, which the enclosing form words: the `;` an item owes, a program's end. `and` follows a term and begins none where it opens the next member of a `let` group, and is a contextual word the name reader would take. A `/` opening an absolute path is what a missing `end` looks like, which the enclosing form names as [`refuse_asymmetric_operator`] leaves it to. A `(` never reaches here, being a call's own list wherever it stands, and a sign glued to a literal is that probe's too.
+//
+// **A word another language reserves is named.** `if c then a` and `return x` are two terms side by side to the grammar, and their author wrote neither a call nor an operator: where the word that ends the first term or begins the second is one another language reserves, a line says what Curios writes in its place ([`written_instead_of`]).
 fn refuse_juxtaposed_term<'a>() -> Parser<'a, ()> {
     // A zero-width span: the term's own parser has consumed the whitespace after it, so the probe stands where the next token begins and reads back what was skipped.
     spanned(pure(())).flat_map(|(here, ())| {
@@ -461,12 +463,55 @@ fn refuse_juxtaposed_term<'a>() -> Parser<'a, ()> {
             "and" => false,
             word => !is_keyword(word) || matches!(word, "true" | "false" | "match" | "choose"),
         };
-        match begins_a_term && !skipped.contains('\n') {
-            true => mark()
-                .and_drop(take_n(1))
-                .flat_map(|start| commit(fail_from(&start, TERMS_SIDE_BY_SIDE))),
-            false => pure(()),
+        if !begins_a_term || skipped.contains('\n') {
+            return pure(());
         }
+
+        let first = before.trim_end_matches(is_blank);
+        let ending = first
+            .chars()
+            .rev()
+            .take_while(|char| is_identifier_char(*char))
+            .map(char::len_utf8)
+            .sum::<usize>();
+        let foreign = [&first[first.len() - ending..], &rest[..word_length]]
+            .into_iter()
+            .find_map(|word| written_instead_of(word).map(|form| (word, form)));
+        let refusal = match foreign {
+            Some((word, form)) => {
+                format!("{TERMS_SIDE_BY_SIDE}\n  `{word}` is no keyword of Curios: {form}")
+            }
+            None => TERMS_SIDE_BY_SIDE.to_string(),
+        };
+        mark()
+            .and_drop(take_n(1))
+            .flat_map(move |start| commit(fail_from(&start, refusal.clone())))
+    })
+}
+
+/// What Curios writes where another language writes `word`, for a word one reserves and Curios does not; `None` for every other.
+///
+/// **A note, and no verdict.** It is read where a refusal already stands and adds a line to it. Each of these words is a name like any other, so a program that declares a function under one and calls it compiles as it did.
+fn written_instead_of(word: &str) -> Option<&'static str> {
+    Some(match word {
+        "if" | "then" | "else" => {
+            "a choice is a `match` on its condition, `match c | true => a | false => b end`"
+        }
+        "return" => "a function's body is its result, and nothing returns it",
+        "fn" | "def" | "fun" | "function" => {
+            "a function is declared with `let`, as in `let double(n: Nat) -> Nat = n + n;`"
+        }
+        "var" | "const" => {
+            "a name is bound once, with `let name = value;`, and is never assigned again"
+        }
+        "type" | "enum" | "data" | "class" => {
+            "a type is declared with `struct` or `induct`, and named with `let Name: Type = …;`"
+        }
+        "import" => "a module's names are brought into scope with `use /path/{name};`",
+        "for" | "while" => {
+            "a loop is a recursive function, or a `match` that folds over its scrutinee, `match n | 0 => … | k + 1; ih => … end`"
+        }
+        _ => return None,
     })
 }
 

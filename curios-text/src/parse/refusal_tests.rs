@@ -1,4 +1,4 @@
-//! A form the grammar does not have, refused by what was read: two terms side by side, where the refusal stands and what follows a term without being one; and a head or a form missing a part, named for the part.
+//! A form the grammar does not have, refused by what was read: two terms side by side, where the refusal stands and what follows a term without being one; a head or a form missing a part, named for the part; and a word another language reserves, named with the form written in its place.
 
 use crate::*;
 
@@ -111,4 +111,39 @@ fn a_match_on_a_structure_literal_is_still_a_match() {
             panic!("{source:?} stopped parsing: {}", error.format());
         }
     }
+}
+
+/// A word another language reserves, standing in the refusal of two terms, is named with what Curios writes in its place, whether it ends the first term or begins the second. Each is a name like any other: a function declared under one and called compiles as it did.
+#[test]
+fn a_word_another_language_reserves_is_named_with_the_form_written_instead() {
+    let leading = [
+        "if", "return", "fn", "def", "fun", "function", "var", "const", "type", "enum", "data",
+        "class", "import", "for", "while",
+    ];
+    let trailing = ["then", "else"];
+    let written = leading
+        .iter()
+        .map(|word| (word, format!("let f(n : Nat) -> Nat = {word} n;\nf(1)")))
+        .chain(
+            trailing
+                .iter()
+                .map(|word| (word, format!("let f(n : Nat) -> Nat = n {word} 1;\nf(1)"))),
+        );
+    for (word, source) in written {
+        let report = refusal(&source);
+        assert!(
+            report.contains("two terms stand side by side")
+                && report.contains(&format!("`{word}` is no keyword of Curios")),
+            "{source:?} reported {report}"
+        );
+
+        let declared = format!("let {word}(n : Nat) -> Nat = n;\n{word}(1)");
+        if let Err(error) = declared.parse::<Entrypoint>() {
+            panic!("{declared:?} stopped parsing: {}", error.format());
+        }
+    }
+
+    // A refusal that names no such word says nothing of one.
+    let plain = refusal("let three : Nat = add 1 2;\nthree");
+    assert!(!plain.contains("is no keyword of Curios"), "{plain}");
 }
