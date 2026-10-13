@@ -426,3 +426,47 @@ fn a_use_selector_spans_its_word_and_the_declaration_spans_through_the_semicolon
     );
     assert_eq!(text(glob.span.as_ref().unwrap()), "use /std/Nat/* ;");
 }
+
+/// What stands past a program's final term is refused as what it is, where it stands: a second term as one too many and a `;` as closing no term, each saying what a program closes with. A documentation block there documents nothing, and what begins no term at all is still the token the end of input was expected in place of.
+#[test]
+fn what_stands_past_a_programs_final_term_is_refused_as_what_it_is() {
+    for (source, place, said) in [
+        (
+            "/std/print(\"one\\n\")\n/std/print(\"two\\n\")\n",
+            (2, 1),
+            "this is a second",
+        ),
+        (
+            "/std/print(\"one\\n\");\n/std/print(\"two\\n\")\n",
+            (1, 20),
+            "no `;` follows it",
+        ),
+    ] {
+        let error = source.parse::<Entrypoint>().unwrap_err();
+        let report = error.format();
+        assert!(
+            report.contains("a program closes with one term") && report.contains(said),
+            "{source:?} reported {report}"
+        );
+        assert_eq!(
+            error.report().span.expect("located").line_column(),
+            place,
+            "{source:?} reported {report}"
+        );
+    }
+
+    let documented = "/std/print(\"one\\n\")\n--- Documents nothing.\n"
+        .parse::<Entrypoint>()
+        .unwrap_err()
+        .format();
+    assert!(
+        documented.contains("must immediately precede what it documents"),
+        "{documented}"
+    );
+
+    let stray = "/std/print(\"one\\n\")\n}\n"
+        .parse::<Entrypoint>()
+        .unwrap_err()
+        .format();
+    assert!(stray.contains("Expected 'end-of-file'"), "{stray}");
+}

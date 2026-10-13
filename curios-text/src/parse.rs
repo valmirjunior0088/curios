@@ -49,7 +49,7 @@ use {
     super::{Doc, Label, Name, Term},
     curios_parse::{
         Parser, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, mark, not_ahead,
-        obtained, pure, spanned, tagging, take_eof, take_exact, take_while,
+        obtained, pure, spanned, tagging, take_eof, take_exact, take_n, take_while,
     },
     curios_utilities::{Qualifier, Span, is_identifier_char, is_keyword},
     std::{cell::RefCell, collections::BTreeMap, iter},
@@ -119,9 +119,27 @@ const DOC_TWICE: &str = "two documentation comments precede one declaration; joi
 /// What refuses a `---` block followed by anything but what it may document.
 pub(crate) const DOC_BEFORE_NOTHING: &str = "a documentation comment `---` must immediately precede what it documents: a declaration, a constructor, a field or a concept method";
 
-/// The end of a program: its input exhausted past the final term. A documentation block standing there documents nothing and is refused as one, rather than left for `take_eof` to report as a token the grammar did not expect.
+/// What refuses a term standing past a program's final one. It states the rule and not the reader's intent: that the term before it is an action is nothing the grammar knows, so the sequencing form is given as what is written where it is one.
+const PROGRAM_CLOSES_WITH_ONE_TERM: &str = "a program closes with one term, the description it performs, and this is a second: an action that runs before the last is sequenced, as `let _ = …!;`";
+
+/// What refuses a `;` standing past a program's final term.
+const PROGRAM_TAKES_NO_SEMICOLON: &str = "a program closes with one term, the description it performs, and no `;` follows it: an action that runs before the last is sequenced, as `let _ = …!;`";
+
+/// The end of a program: its input exhausted past the final term. What stands there in its place is refused as what it is, rather than left for `take_eof` to report as a token the grammar did not expect: a documentation block, which documents nothing; a `;`, which closes a declaration and no term; and a second term, where a program has one.
+///
+/// The last two consume what they refuse, so each stands past the choice point and outranks `take_eof` in [`Parser::or`]'s tie-break, with its caret on what it read. Whether a term stands there is probed and the probe's own failure dropped: what begins no term is still a token the end of input was expected in place of, and not a term that was wanted.
 pub(crate) fn parse_program_end<'a>() -> Parser<'a, ()> {
-    take_eof().or(look_ahead(take_exact("---")).and_keep(commit(fail(DOC_BEFORE_NOTHING))))
+    take_eof()
+        .or(look_ahead(take_exact("---")).and_keep(commit(fail(DOC_BEFORE_NOTHING))))
+        .or(mark()
+            .and_drop(take_exact(";"))
+            .flat_map(|start| fail_from(&start, PROGRAM_TAKES_NO_SEMICOLON)))
+        .or(mark()
+            .and(look_ahead(lazy(parse_term)).map(|_| true).or(pure(false)))
+            .flat_map(|(start, begins_a_term)| match begins_a_term {
+                true => take_n(1).and_keep(fail_from(&start, PROGRAM_CLOSES_WITH_ONE_TERM)),
+                false => take_eof(),
+            }))
 }
 
 /// The head of a file: a byte-order mark where one leads it, then blanks and comments. The mark is no part of the program, so it is passed over where it stands and every span keeps the file's own offsets; nothing writes one back, and a mark anywhere else is a character the grammar does not take.
