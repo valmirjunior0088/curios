@@ -8,7 +8,7 @@
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
 //! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]).
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs. A product of two sums, which the fold leaves standing, is read distributed ([`Reader::side`]).
-//! - Where their products leave an assignment too, a disequality the scope states — an `==` guard's false arm, a `!=` guard's true one, a hypothesis or a field stating either, `Bool/not` of an equality among them — as the strict bound conversion holds it to be, `n != 0` being `0 < n`, proved by what states it; and a `!=` guard's false arm as the equation it is ([`disequalities`]). Read last and by a reader of its own, so what the scope kept hands out no atom, class or spelling a search before it reads ([`Kept`]).
+//! - Where their products leave an assignment too, a disequality the scope states — an `==` guard's false arm, a `!=` guard's true one, a hypothesis or a field stating either, `Bool/not` of an equality among them — as the strict bound conversion holds it to be, `n != 0` being `0 < n`, proved by what states it, and otherwise through the two cases the order of its sides makes ([`Reader::distinct`]); and a `!=` guard's false arm as the equation it is ([`disequalities`]). Read last and by a reader of its own, so what the scope kept hands out no atom, class or spelling a search before it reads ([`Kept`]).
 //! - That every monomial over naturals is at least zero, which conversion decides.
 //!
 //! A local definition and a variable a match refined need no reading of their own: every statement is read reduced, so a fact stated over a `let` meets a goal stated over its value, and one over `k` meets one over the successor an arm refined `k` to.
@@ -19,7 +19,7 @@
 //!
 //! **A fact is `left <= right` at its carrier**, as the proof's lemmas take it: a strict fact is the loose one of its successor, which conversion reads as one proposition at `Nat` as at `Int`, and an equation is two facts. Its form is `left - right` aligned to `<=`, read by the one reader every fact and the goal share, so their atoms are one table's.
 //!
-//! **What is not read is recorded.** A proposition stating a decision the view does not read — a disjunction, an opaque `Bool` function, a disequality conversion holds to be no order comparison — is kept for the report.
+//! **What is not read is recorded.** A proposition stating a decision the view does not read — a disjunction, an opaque `Bool` function — is kept for the report.
 
 use {
     super::{decision_of, global, in_scope, is_empty},
@@ -612,9 +612,13 @@ impl<'a> Reader<'a> {
         self.equation(context, kept.carrier, &left, &right, equation, kept.origin)
     }
 
-    /// A disequality, as the strict bound conversion holds it to be, where it is one: a sum of naturals against zero is its order comparison (`LinearForm::aligned`), so `n != 0` and `0 < n` are one proposition and the disequality's own proof proves the bound.
-    fn distinct(&mut self, context: &mut Context, apart: Kept) -> Result<(), Error> {
-        let (carrier, a, b) = (apart.carrier, &apart.left, &apart.right);
+    /// A disequality `a != b`, by what the scope says of the order of its two sides.
+    ///
+    /// - **Conversion holds it to be a strict bound**: a sum of naturals against zero is its order comparison (`LinearForm::aligned`), so `n != 0` and `0 < n` are one proposition and the disequality's own proof proves the bound.
+    /// - **Reduction decides the order**: where `a <= b` reduces to `true` the bound is `a < b`, by `lt/of_le_ne`, and where it reduces to `false` it is `b < a`, by `lt/of_not_le` — and the same of `b <= a`.
+    /// - **Neither**: the split on `a <= b`, whose case that holds adds `a < b` and whose case that fails adds `b < a`, opened only where the search needs it, as `omega` splits a disjunction ([`Reader::open`]).
+    fn distinct(&mut self, context: &mut Context, kept: Kept) -> Result<(), Error> {
+        let (carrier, a, b) = (kept.carrier, &kept.left, &kept.right);
         let (this, that) = (
             self.side(context, carrier, a)?,
             self.side(context, carrier, b)?,
@@ -624,11 +628,51 @@ impl<'a> Reader<'a> {
             let below = comparison_of(carrier, Operation::Less, read_low, read_high);
             if matches!(self.views.align(&read, &below), Some(Aligned::Same)) {
                 let bound = comparison_of(carrier, Operation::Less, low, high);
-                return self.admit(context, bound, apart.proof, apart.origin);
+                return self.admit(context, bound, kept.proof, kept.origin);
             }
         }
-        self.read.unread.push((apart.origin, apart.stated));
-        Ok(())
+
+        let order = order(context, carrier);
+        if !in_scope(context, &[order.of_le_ne, order.of_not_le]) {
+            self.read.unread.push((kept.origin, kept.stated));
+            return Ok(());
+        }
+        let qed = qed(context);
+        let strict = |low: &Term, high: &Term| comparison_of(carrier, Operation::Less, low, high);
+        let loose = |low: &Term, high: &Term| {
+            Term::intrinsic(comparison_of(carrier, Operation::AtMost, low, high))
+        };
+        // `low <= high` holding: the two apart, so `low < high`.
+        let bounded = |low: &Term, high: &Term| {
+            let arguments = [low.clone(), high.clone(), qed.clone(), kept.proof.clone()];
+            Term::apply(global(order.of_le_ne), arguments)
+        };
+        // `low <= high` failing: `high < low`.
+        let failed = |low: &Term, high: &Term| {
+            let arguments = [low.clone(), high.clone(), qed.clone()];
+            Term::apply(global(order.of_not_le), arguments)
+        };
+        for (low, high) in [(a, b), (b, a)] {
+            match &*reduce_with(context, &loose(low, high))? {
+                Subterm::Intrinsic(Intrinsic::Bool(true)) => {
+                    let proof = bounded(low, high);
+                    return self.admit(context, strict(low, high), proof, kept.origin);
+                }
+                Subterm::Intrinsic(Intrinsic::Bool(false)) => {
+                    let proof = failed(low, high);
+                    return self.admit(context, strict(high, low), proof, kept.origin);
+                }
+                _ => {}
+            }
+        }
+        let origin = &kept.origin;
+        let holds = self.apart(context, |reader, context| {
+            reader.admit(context, strict(a, b), bounded(a, b), origin.clone())
+        })?;
+        let fails = self.apart(context, |reader, context| {
+            reader.admit(context, strict(b, a), failed(a, b), origin.clone())
+        })?;
+        self.open(context, loose(a, b), holds, fails)
     }
 
     /// A range check `proof` shows holds: `lo <= c` and `c <= hi`, through `le/of_in_range` over the arguments the check is passed as stated — so a guard's `qed` checks against the check the arm recorded, and a hypothesis is handed to the lemma as it is. The lemma's body was elaborated where no guard stood between the check and its unfolding.
@@ -1527,17 +1571,17 @@ pub(super) fn disequalities(
         return Ok(false);
     }
     let mut reader = Reader::new(views, classes);
+    // The splits already read, so a disequality's joins the one open on its comparison, and the lifts, so its facts are lifted as every fact is.
+    reader.read.splits = std::mem::take(&mut facts.splits);
+    reader.read.lifts = std::mem::take(&mut facts.lifts);
     for kept in kept {
         reader.last(context, kept)?;
     }
     // The monomials these facts were read over need their signs too.
     reader.naturals(context, target)?;
-    let mut read = reader.read;
-    for fact in &mut read.facts {
-        for lift in &facts.lifts {
-            lift.apply(fact);
-        }
-    }
+    let read = reader.read;
+    facts.splits = read.splits;
+    facts.lifts = read.lifts;
     facts.facts.extend(read.facts);
     facts.unread.extend(read.unread);
     facts.spelled.extend(read.spelled);

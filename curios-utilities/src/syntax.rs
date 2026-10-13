@@ -483,6 +483,8 @@ pub struct OrderSyntax {
     pub of_not_le: SyntaxName,
     /// `a < b` gives `a <= b`: a failed `<=` guard's bound loosened to what a lemma over `<=` takes.
     pub of_lt: SyntaxName,
+    /// `a <= b` and `a == b` failing give `a < b`: the case of a disequality its loose bound holds in.
+    pub of_le_ne: SyntaxName,
     /// `a <= b` gives `min(a, b) = a`: the case of a `min` its first operand answers for.
     pub min_of_le: SyntaxName,
     /// `b <= a` gives `min(a, b) = b`: the case its second does.
@@ -504,6 +506,7 @@ impl OrderSyntax {
             of_not_lt,
             of_not_le,
             of_lt,
+            of_le_ne,
             min_of_le,
             min_of_ge,
             max_of_le,
@@ -511,8 +514,8 @@ impl OrderSyntax {
         } = self;
 
         [
-            add, scale, mul, of_eq, eq_of_eql, of_not_lt, of_not_le, of_lt, min_of_le, min_of_ge,
-            max_of_le, max_of_ge,
+            add, scale, mul, of_eq, eq_of_eql, of_not_lt, of_not_le, of_lt, of_le_ne, min_of_le,
+            min_of_ge, max_of_le, max_of_ge,
         ]
         .into_iter()
     }

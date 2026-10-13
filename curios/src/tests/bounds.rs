@@ -204,6 +204,25 @@ const ROWS: &[Row] = &[
         "Nat",
         "match Bool/not(List/len(xs) == n) | true => 0 | false => List/get(xs, i) end",
     ),
+    // A disequality neither side bounds, split on the order of its sides: a hypothesis at `Nat` and at `Int`, a guard's false arm under a bound a hypothesis holds, and the same past a ladder of equalities over another variable.
+    claim(
+        "i: Nat, n: Nat, p: Holds(i <= n), q: Holds(i != n)",
+        "Holds(i < n)",
+    ),
+    claim(
+        "i: Int, n: Int, p: Holds(i <= n), q: Holds(i != n)",
+        "Holds(i < n)",
+    ),
+    body(
+        "xs: List(Nat), i: Nat, within: Holds(i <= List/len(xs))",
+        "Nat",
+        "match i == List/len(xs) | true => 0 | false => List/get(xs, i) end",
+    ),
+    body(
+        "xs: List(Nat), i: Nat, c: Nat, within: Holds(i <= List/len(xs))",
+        "Nat",
+        "choose | c == 32 => 0 | c == 10 => 0 | c == 9 => 0 | c == 13 => 0 | i == List/len(xs) => 0 | _ => List/get(xs, i) end",
+    ),
     // A natural's bound read at `Int`.
     claim(
         "m: Nat, n: Nat, i: Int, p: Holds(m < n), q: Holds(i <= Nat/to_int(m))",
@@ -682,6 +701,44 @@ fn every_fact_of_a_filled_row_is_needed() {
         }
     }
     assert!(found.is_empty(), "{}", found.join("\n\n"));
+}
+
+/// `List/get(xs, i)` under `within: Holds(i <= List/len(xs))` and the guard it needs, `i != List/len(xs)`, written innermost or outermost of `unrelated` disequality guards over other variables.
+fn guarded(unrelated: usize, innermost: bool) -> String {
+    let binders = (0..unrelated)
+        .map(|at| format!(", x{at}: Nat, y{at}: Nat"))
+        .collect::<String>();
+    let mut guards = (0..unrelated)
+        .map(|at| format!("x{at} != y{at}"))
+        .collect::<Vec<_>>();
+    let needed = "i != List/len(xs)".to_string();
+    match innermost {
+        true => guards.push(needed),
+        false => guards.insert(0, needed),
+    }
+    let body = guards
+        .iter()
+        .rev()
+        .fold("List/get(xs, i)".to_string(), |body, guard| {
+            format!("match {guard} | true => {body} | false => 0 end")
+        });
+    format!(
+        "{HEADER}\nlet row(xs: List(Nat), i: Nat, within: Holds(i <= List/len(xs)){binders}) -> Nat = {body};\nIo/pure(())"
+    )
+}
+
+#[test]
+fn a_split_opens_nearest_guard_first_and_the_cap_bounds_the_rest() {
+    // The split a bound needs is the first opened where its guard is the nearest, so the guards around it cost nothing.
+    assert_eq!(typecheck(&guarded(12, true)), Ok(()));
+
+    // Where it is the outermost, every guard inside it is opened first, in both its cases: eight are 256 cases and the bound is filled, and ten are refused, for the cap and for nothing else.
+    assert_eq!(typecheck(&guarded(8, false)), Ok(()));
+    let refused = typecheck(&guarded(10, false)).expect_err("the cap is reached");
+    assert!(
+        refused.contains("ran out of its bound of 4096 derived rows"),
+        "{refused}"
+    );
 }
 
 /// The byte row: two hex digits make a byte, a fact scaled by a literal summed with another.

@@ -1,5 +1,5 @@
 pub use /sys/Int/{lt};
-use /std/{Int, Bool, Option};
+use /std/{Int, Bool, Option, Eq};
 use /std/Bool/{True, Holds};
 
 --- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
@@ -14,3 +14,17 @@ pub let try(a: Int, b: Int) -> Option(Holds(a < b)) =
 --- The dual of `le/of_not_lt`, and as it is, the hypothesis itself: conversion reads a negated `Int` comparison as its dual.
 pub let of_not_le(a: Int, b: Int, p: Holds(Bool/not(a <= b))) -> Holds(b < a) =
     p;
+
+--- A bound whose two sides differ is strict: `a <= b` and `a == b` failing give `a < b`.
+---
+--- The case of a disequality its loose bound holds in, as `of_not_le` is the case it fails in.
+pub let of_le_ne(a: Int, b: Int, p: Holds(a <= b), q: Holds(Bool/not(a == b))) -> Holds(a < b) =
+    match a < b
+    | true => True/qed()
+    | false =>
+        let back: Holds(b <= a) = Int/le/of_not_lt(a, b, True/qed());
+        let same: Eq()(a, b) = Int/le/antisym(a, b, p, back);
+        let absurd: Holds(Bool/not(a == a)) =
+            Eq/subst((x: Int) => Holds(Bool/not(a == x)), Eq/sym(same), q);
+        match absurd end
+    end;

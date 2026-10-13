@@ -1,5 +1,5 @@
 pub use /sys/Nat/{lt};
-use /std/{Nat, Bool, Option};
+use /std/{Nat, Bool, Option, Eq};
 use /std/Bool/{True, Holds};
 
 --- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
@@ -24,6 +24,20 @@ pub let of_not_le(a: Nat, b: Nat, p: Holds(Bool/not(a <= b))) -> Holds(b < a) =
         | 0 => match p end
         | ap + 1 => of_not_le(ap, bp, p)
         end
+    end;
+
+--- A bound whose two sides differ is strict: `a <= b` and `a == b` failing give `a < b`.
+---
+--- The case of a disequality its loose bound holds in, as `of_not_le` is the case it fails in.
+pub let of_le_ne(a: Nat, b: Nat, p: Holds(a <= b), q: Holds(Bool/not(a == b))) -> Holds(a < b) =
+    match a < b
+    | true => True/qed()
+    | false =>
+        let back: Holds(b <= a) = Nat/le/of_not_lt(a, b, True/qed());
+        let same: Eq()(a, b) = Nat/le/antisym(a, b, p, back);
+        let absurd: Holds(Bool/not(a == a)) =
+            Eq/subst((x: Nat) => Holds(Bool/not(a == x)), Eq/sym(same), q);
+        match absurd end
     end;
 
 --- A strict bound composed with a loose one stays strict.
