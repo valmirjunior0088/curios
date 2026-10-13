@@ -2,7 +2,7 @@
 use /std/{Str, Bytes, Nat, Bool, List, Spell, Test};
 use /std/ops/{Eql};
 use /std/http/{Limits, Refusal, Framing, read};
-use /std/http/read/{Step};
+use /std/Io/Reader/{Step};
 
 -- What a reader made of a piece once its segments ran out: the piece and what followed it, a refusal, or still wanting more.
 induct Fed(A: Type): pub Type
@@ -23,7 +23,7 @@ satisfy (@A: Type, use Spell(A)) => Spell(Fed(A)) {
 let fed(
     @S: Type,
     @A: Type,
-    piece: (S, Bytes) -> Step(S, A),
+    piece: (S, Bytes) -> Step(S, Refusal, A),
     state: S,
     held: Bytes,
     segments: List(Bytes),
@@ -55,7 +55,7 @@ let whole_at_every_cut(
     @S: Type,
     @A: Type,
     use Eql(A),
-    piece: (S, Bytes) -> Step(S, A),
+    piece: (S, Bytes) -> Step(S, Refusal, A),
     start: S,
     wire: Bytes,
     expected: Fed(A),
@@ -69,7 +69,7 @@ let wanting_at_every_stop(
     @S: Type,
     @A: Type,
     use Eql(A),
-    piece: (S, Bytes) -> Step(S, A),
+    piece: (S, Bytes) -> Step(S, Refusal, A),
     start: S,
     wire: Bytes,
     whole: Nat,
@@ -78,13 +78,13 @@ let wanting_at_every_stop(
         List/range(0, whole),
         (k) => fed(piece, start, x[], [front(wire, k)]) == Fed/wanting());
 
-let head: (Nat, Bytes) -> Step(Nat, Bytes) =
+let head: (Nat, Bytes) -> Step(Nat, Refusal, Bytes) =
     (searched, held) => read/head(Limits/server, true, searched, held);
 
-let chunked: (Bytes, Bytes) -> Step(Bytes, Bytes) =
+let chunked: (Bytes, Bytes) -> Step(Bytes, Refusal, Bytes) =
     (content, held) => read/chunked(Limits/server, content, held);
 
-let stated(n: Nat) -> ({}, Bytes) -> Step({}, Bytes) =
+let stated(n: Nat) -> ({}, Bytes) -> Step({}, Refusal, Bytes) =
     (_, held) => read/length(Limits/server, n, held);
 
 -- A head is its lines without the empty one that ends them, and what follows is left for the body, wherever the bytes are cut; short of its empty line it wants more.
@@ -130,7 +130,7 @@ test a_chunked_body_reads_whole_at_every_cut =
             fed(chunked, x[], x[], [Str/to_bytes("0\r\n"), Str/to_bytes("\r\n")]),
             Fed/whole(x[], x[]))]);
 
-let framed(framing: Framing) -> (Bytes, Bytes) -> Step(Bytes, Bytes) =
+let framed(framing: Framing) -> (Bytes, Bytes) -> Step(Bytes, Refusal, Bytes) =
     (content, held) => read/body(Limits/server, framing, content, held);
 
 -- A body is read as its framing delimits it, wherever the bytes are cut: nothing where there is none, its octets where a length is stated, its chunks' content where it is chunked. One framed by the close wants more however much has arrived, since only its stream's end says it is whole.

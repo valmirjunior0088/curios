@@ -1,25 +1,8 @@
-use /std/{Bytes, Byte, Nat, Bool, Option, Result, Spell};
+use /std/{Bytes, Byte, Nat, Bool, Option, Result};
 use /std/Bool/{True, Holds};
-use /std/ops/{Eql};
 use /std/http/{Limits, Refusal, Framing};
 use /std/http/Field/{Value};
-
---- What a reader made of the bytes it holds: the piece it was asked for and the bytes after it, a refusal, or that the piece has not all arrived — with where to resume and the bytes still held, so the next look reads none of them twice. A reader holds no stream: whoever owns one asks again once more bytes have arrived, and decides what a stream that ended means.
-pub induct Step(S: Type, A: Type): pub Type
-| more(S, Bytes)
-| took(A, Bytes)
-| refused(Refusal)
-end
-
-pub use Step/*;
-
-satisfy (@S: Type, @A: Type, use Eql(S), use Eql(A)) => Eql(Step(S, A)) {
-    ..
-}
-
-satisfy (@S: Type, @A: Type, use Spell(S), use Spell(A)) => Spell(Step(S, A)) {
-    ..
-}
+use /std/Io/Reader/{Step};
 
 let is(b: Bytes, i: Nat, byte: Nat) -> Bool =
     match Bytes/try_get(b, i) | some(x) => Byte/to_nat(x) == byte | none() => false end;
@@ -81,7 +64,7 @@ let head_end(b: Bytes, start: Nat, searched: Nat) -> Option(Found(b, start, 4)) 
     end;
 
 -- `head` of the bytes held from `start` on, where its start line begins. The index is a parameter, so the cuts made at it are stated of a value and of no walk.
-let head_from(limits: Limits, start: Nat, searched: Nat, held: Bytes) -> Step(Nat, Bytes) =
+let head_from(limits: Limits, start: Nat, searched: Nat, held: Bytes) -> Step(Nat, Refusal, Bytes) =
     let arrived = Bytes/len(held) - start;
     let line_fits =
         match line_end(held, start)
@@ -109,7 +92,12 @@ let head_from(limits: Limits, start: Nat, searched: Nat, held: Bytes) -> Step(Na
     end;
 
 --- A message's head: the bytes of its start line and its fields, their line ends between them, without the empty line that ends them. `lenient` skips the empty lines a request may be preceded by (RFC 9112 §2.2). The state is how far the bytes held have been searched. A start line past `limits.line` and a head past `limits.head` are refused.
-pub let head(limits: Limits, lenient: Bool, searched: Nat, held: Bytes) -> Step(Nat, Bytes) =
+pub let head(
+    limits: Limits,
+    lenient: Bool,
+    searched: Nat,
+    held: Bytes,
+) -> Step(Nat, Refusal, Bytes) =
     head_from(
         limits,
         match lenient | true => leading_lines(held, 0) | false => 0 end,
@@ -117,7 +105,7 @@ pub let head(limits: Limits, lenient: Bool, searched: Nat, held: Bytes) -> Step(
         held);
 
 --- A body of `n` bytes: the bytes held once there are that many. One longer than `limits.content` is refused before any of it is read.
-pub let length(limits: Limits, n: Nat, held: Bytes) -> Step({}, Bytes) =
+pub let length(limits: Limits, n: Nat, held: Bytes) -> Step({}, Refusal, Bytes) =
     match n <= limits.content
     | false => Step/refused(Refusal/content_too_large())
     | true =>
@@ -167,7 +155,7 @@ let trailers_end(b: Bytes, i: Nat) -> Option({at: Nat, within: Holds(at <= Bytes
     end;
 
 --- A chunked body (RFC 9112 §7.1): the content its chunks hold, the trailer section read past and dropped. The state is the content decoded so far, and the bytes held always begin at a chunk's size line, so each look reads whole chunks and nothing twice. A size line that is none, a chunk not followed by a line end, a size line past `limits.chunk_line`, a trailer section past `limits.head` and content past `limits.content` are refused.
-pub let chunked(limits: Limits, content: Bytes, held: Bytes) -> Step(Bytes, Bytes) =
+pub let chunked(limits: Limits, content: Bytes, held: Bytes) -> Step(Bytes, Refusal, Bytes) =
     match line_end(held, 0)
     | none() =>
         match Bytes/len(held) <= limits.chunk_line
@@ -214,7 +202,12 @@ pub let chunked(limits: Limits, content: Bytes, held: Bytes) -> Step(Bytes, Byte
     end;
 
 --- A body as `framing` delimits it: nothing, `length`'s octets, `chunked`'s content, or everything until its stream ends. The state is the content decoded so far, which a chunked body alone keeps apart from the bytes held. A body framed by the close is never taken: it wants more until whoever owns its stream sees it end, when the bytes held are the body, and it holds no more than `limits.content`.
-pub let body(limits: Limits, framing: Framing, content: Bytes, held: Bytes) -> Step(Bytes, Bytes) =
+pub let body(
+    limits: Limits,
+    framing: Framing,
+    content: Bytes,
+    held: Bytes,
+) -> Step(Bytes, Refusal, Bytes) =
     match framing
     | none() => Step/took(x[], held)
     | length(n) =>
@@ -231,7 +224,7 @@ pub let body(limits: Limits, framing: Framing, content: Bytes, held: Bytes) -> S
         end
     end;
 
---- A whole body from bytes that will not grow, as `framing` delimits it: what a reader that holds the entire message answers. A body that has not all arrived is `incomplete`, and one framed by the close is everything held.
+--- A whole body from bytes that will not grow, as `framing` delimits it: what whoever holds the entire message is answered. A body that has not all arrived is `incomplete`, and one framed by the close is everything held.
 pub let whole(limits: Limits, framing: Framing, held: Bytes) -> Result(Refusal, {Bytes, Bytes}) =
     match body(limits, framing, x[], held)
     | took(taken, rest) => Result/success((taken, rest))

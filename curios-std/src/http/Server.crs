@@ -1,4 +1,5 @@
 use /std/{Bytes, Str, Nat, Bool, List, Result, Try, Async, Io};
+use /std/Io/{Reader};
 use /std/time/{Duration, Timestamp};
 use /std/time/Timestamp/{Utc};
 use /std/tcp/{Socket, Listener};
@@ -71,49 +72,52 @@ let opened(scheme: Scheme, lines: Bytes) -> Result(Unread, Opened) =
     end;
 
 -- `100 Continue` written to `c` where the request expects it and its body is still to arrive: one whose head already refuses it, or whose content came with its head, is not invited to send it.
-let invite(limits: Limits, c: Socket, o: Opened, held: Bytes) -> Async(Result(Io/Error, {})) =
+let invite(limits: Limits, c: Socket, r: Reader(Socket), o: Opened) -> Async(Result(Io/Error, {})) =
     match expects_continue(o.head)
     | false => Async/pure(Result/success(()))
     | true =>
+        let held = Reader/held(r)!;
         match read/body(limits, o.framing, x[], held)
         | more(_, _) => Socket/write(c, Str/to_bytes("HTTP/1.1 100 Continue\r\n\r\n"))
         | _ => Async/pure(Result/success(()))
         end
     end;
 
--- The request `c` sends, read as its framing delimits it: the head, then everything a head alone decides — the address, the framing, whether the peer waits to be told to continue — and only then the body.
-let request(limits: Limits, scheme: Scheme, c: Socket) -> Async(Result(Unread, Request)) =
+-- The request `c` sends, read through `r` as its framing delimits it: the head, then everything a head alone decides — the address, the framing, whether the peer waits to be told to continue — and only then the body.
+let request(
+    limits: Limits,
+    scheme: Scheme,
+    c: Socket,
+    r: Reader(Socket),
+) -> Async(Result(Unread, Request)) =
     let first =
-        stream/fetch(
-            c,
-            (searched: Nat, held: Bytes) => read/head(limits, true, searched, held),
-            0,
-            x[])!;
+        Reader/take(r, (searched: Nat, held: Bytes) => read/head(limits, true, searched, held), 0)!;
     match first
     | failure(stop) =>
-        Async/pure(
-            Result/failure(
-                match stop
-                | refused(why) => Unread/refused(why)
-                | failed(_) => Unread/silent()
-                | ended((_, held)) =>
+        match stop
+        | refused(why) => Async/pure(Result/failure(Unread/refused(why)))
+        | failed(_, _) => Async/pure(Result/failure(Unread/silent()))
+        | ended(_) =>
+            let held = Reader/held(r)!;
+            Async/pure(
+                Result/failure(
                     match Bytes/len(held)
                     | 0 => Unread/silent()
                     | _ => Unread/refused(Refusal/incomplete())
-                    end
-                end))
-    | success((lines, rest)) =>
+                    end))
+        end
+    | success(lines) =>
         match opened(scheme, lines)
         | failure(why) => Async/pure(Result/failure(why))
         | success(o) =>
-            let invited = invite(limits, c, o, rest)!;
+            let invited = invite(limits, c, r, o)!;
             match invited
             | failure(_) => Async/pure(Result/failure(Unread/silent()))
             | success(_) =>
-                let content = stream/body(limits, c, o.framing, rest)!;
+                let content = stream/body(limits, r, o.framing)!;
                 Async/pure(
                     match content
-                    | success((body, _)) =>
+                    | success(body) =>
                         Result/success(
                             Request {
                                 method = o.head.method,
@@ -125,7 +129,7 @@ let request(limits: Limits, scheme: Scheme, c: Socket) -> Async(Result(Unread, R
                             match stop
                             | refused(why) => Unread/refused(why)
                             | ended(_) => Unread/refused(Refusal/incomplete())
-                            | failed(_) => Unread/silent()
+                            | failed(_, _) => Unread/silent()
                             end)
                     end)
             end
@@ -187,7 +191,8 @@ let allowed: Response =
 --- What a server does with one connection of `scheme`: read a request as its framing delimits it, hand it to `handler`, write the reply, and end the connection as HTTP asks — the sending half ended, what the peer still sends read until it closes or falls quiet, and the close left to whoever opened the connection. A request the reader refuses is answered with the status its refusal names, one that has not arrived whole within `s.deadline` 408, and a handler that fails 500; `OPTIONS *`, which asks about the server and no resource, is answered by the server with the methods it reads, and no handler sees it; a peer that sends nothing is told nothing. Every reply carries the `Date` it is sent at, unless its handler dated it. `serve` and `serve_tls` run it over a listener of their own, and a program with a listener of its own hands it each socket it accepts.
 pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Async({}) =
     (c) =>
-        let arrived = Async/timeout(s.deadline, request(s.limits, scheme, c))!;
+        let r = Reader/new(c)!;
+        let arrived = Async/timeout(s.deadline, request(s.limits, scheme, c, r))!;
         match arrived
         | none() => send(s, c, Method/get(), Response/of_refusal(Refusal/timed_out()))
         | some(read) =>

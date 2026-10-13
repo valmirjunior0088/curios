@@ -1,4 +1,5 @@
 use /std/{Bytes, Str, Nat, Bool, Option, Result, Try, Async};
+use /std/Io/{Reader};
 use /std/time/{Duration};
 use /std/tcp/{Socket};
 use /std/http/{Error, Method, Url, Request, Response, Limits, read, stream};
@@ -16,19 +17,13 @@ pub struct Client: pub Type {
 pub let default: Client =
     Client { timeout = Duration/of_secs(30), redirects = 3, limits = Limits/client };
 
--- The reply `c` sends to a request of `method`, read after the bytes held as its framing delimits it: every 1xx reply ahead of the final one is passed over (RFC 9110 §15.2), and the reading stops where the reply ends, whether or not the peer closes.
-let reply(
-    limits: Limits,
-    method: Method,
-    c: Socket,
-    held: Bytes,
-) -> Async(Result(Error, Response)) =
+-- The reply to a request of `method`, read through `r` as its framing delimits it: every 1xx reply ahead of the final one is passed over (RFC 9110 §15.2), and the reading stops where the final reply's framing ends.
+let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Async(Result(Error, Response)) =
     let first =
-        stream/fetch(
-            c,
+        Reader/take(
+            r,
             (searched: Nat, bytes: Bytes) => read/head(limits, false, searched, bytes),
-            0,
-            held)!;
+            0)!;
     match first
     | failure(stop) =>
         Async/pure(
@@ -36,22 +31,22 @@ let reply(
                 match stop
                 | refused(why) => Error/refused(why)
                 | ended(_) => Error/incomplete(Option/none())
-                | failed(e) => Error/net(e)
+                | failed(_, e) => Error/net(e)
                 end))
-    | success((lines, rest)) =>
+    | success(lines) =>
         match Response/head_of(lines)
         | failure(why) => Async/pure(Result/failure(Error/refused(why)))
         | success(head) =>
             match head.status.code < 200
-            | true => reply(limits, method, c, rest)
+            | true => reply(limits, method, r)
             | false =>
                 match Response/framing(method, head)
                 | failure(why) => Async/pure(Result/failure(Error/refused(why)))
                 | success(framing) =>
-                    let content = stream/body(limits, c, framing, rest)!;
+                    let content = stream/body(limits, r, framing)!;
                     Async/pure(
                         match content
-                        | success((body, _)) =>
+                        | success(body) =>
                             Result/map_failure(
                                 Response/from_head(head, body),
                                 (why) => Error/refused(why))
@@ -60,7 +55,7 @@ let reply(
                                 match stop
                                 | refused(why) => Error/refused(why)
                                 | ended(arrived) => Error/incomplete(Option/some((head, arrived)))
-                                | failed(e) => Error/net(e)
+                                | failed(_, e) => Error/net(e)
                                 end)
                         end)
                 end
@@ -80,7 +75,8 @@ let exchange(c: Client, request: Request) -> Try(Async, Error, Response) =
         Try/map_error(
             Socket/with(open, (s) =>
                 let wrote = Socket/write(s, Request/render(request))!;
-                let answered = reply(c.limits, request.method, s, x[])!;
+                let r = Reader/new(s)!;
+                let answered = reply(c.limits, request.method, r)!;
                 match wrote
                 | success(_) => Try/pure(answered)
                 | failure(unsent) =>

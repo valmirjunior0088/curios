@@ -1,4 +1,5 @@
-use /std/{Nat, Bytes, Byte, Bool, Option, Result, Monad, Io, Async, Try};
+use /std/{Nat, Bytes, Byte, Bool, Option, Result, Spell, Monad, Io, Async, Try};
+use /std/ops/{Eql};
 use /std/Io/{Error};
 use /std/Async/{Channel};
 
@@ -8,6 +9,28 @@ pub induct Step(St: Type, R: Type, A: Type): pub Type
 | took(A, Bytes)
 | refused(R)
 end
+
+satisfy (
+    @St: Type,
+    @R: Type,
+    @A: Type,
+    use Eql(St),
+    use Eql(R),
+    use Eql(A),
+) => Eql(Step(St, R, A)) {
+    ..
+}
+
+satisfy (
+    @St: Type,
+    @R: Type,
+    @A: Type,
+    use Spell(St),
+    use Spell(R),
+    use Spell(A),
+) => Spell(Step(St, R, A)) {
+    ..
+}
 
 --- How a piece went unread: it refused what arrived, the stream ended first, or the stream failed — the last two with where the piece stood. The bytes held stay in the reader each time.
 pub induct Stop(St: Type, R: Type): pub Type
