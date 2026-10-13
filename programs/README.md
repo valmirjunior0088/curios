@@ -6,8 +6,8 @@ Nothing here is a test fixture. Fixtures are written inline in the probes that a
 
 ## Who reads it
 
-- `curios/src/tests/codegen/` — `census.rs` surveys thirteen of the Curios-only programs and four of the workloads — every one but `lcg` —, `ladder.rs` and `structural.rs` name individual programs, and `churn.rs` measures three under the collector. Figures live beside the probe that reproduces them, never here.
-- [`xbench/`](../xbench/README.md) — the bench times the five workloads against Rust, compiled natively and to WebAssembly. That README owns the readings, how a figure is read from them, and when a comparison is refused.
+- `curios/src/tests/codegen/` — `census.rs` surveys thirteen of the Curios-only programs and four of the workloads — every one but `lcg` and `walk` —, `ladder.rs` and `structural.rs` name individual programs, and `churn.rs` measures three under the collector. Figures live beside the probe that reproduces them, never here.
+- [`xbench/`](../xbench/README.md) — the bench times the six workloads against Rust, compiled natively and to WebAssembly. That README owns the readings, how a figure is read from them, and when a comparison is refused.
 - `cargo xtask profile programs/<file>.crs` — one run under a profiling build, folded into its summaries; debug unless `--profile release` asks for the shipped compiler. What that build measures and where it files it is [`curios-profile`](../curios-profile/README.md)'s.
 
 Run one directly:
@@ -35,7 +35,7 @@ Every program except `hello_world.crs` and `dependent_vectors.crs` reads its wor
 
 ## The cross-language workloads
 
-All five are (a) expressible in a total, structurally-recursive language, (b) immune to constant-folding and closed-form shortcuts — the input arrives at runtime — and (c) bit-identical in output across every implementation, so a mismatch flags a mistranslation before any timing is trusted. [The bench](../xbench/README.md) enforces that last property before it times anything, and it — not co-location — is what keeps the two spellings agreeing.
+All six are (a) expressible in a total, structurally-recursive language, (b) immune to constant-folding and closed-form shortcuts — the input arrives at runtime — and (c) bit-identical in output across every implementation, so a mismatch flags a mistranslation before any timing is trusted. [The bench](../xbench/README.md) enforces that last property before it times anything, and it — not co-location — is what keeps the two spellings agreeing.
 
 - **`lcg`** — iterate `x = (75 · x) mod 65537` N times from `x = 1`. One multiply + one modulo per iteration; the max intermediate is 75·65536 ≈ 4.9M, far under i31. Measures integer ALU + loop/call overhead. Default `N = 100_000_000` (≈ 0.45s of Curios compute; below ~10⁷ it is startup-dominated). Anchor: `lcg(10⁸) = 17662`.
 - **`trees`** (the classic binary-trees allocation stress) — build a perfect tree of depth D whose nodes carry unique heap-numbered payloads (root `1`, children `2v` / `2v+1`), then reduce to `sum mod 1000003`. The unique payloads make every node distinct, defeating any structural subtree-sharing and forcing 2^(D+1)−1 real allocations; the modulus keeps the checksum inside i31. Measures allocation + GC and heap traversal. Default `D = 21` (≈ 4.2M nodes, ≈ 0.25s; D=23 ≈ 1s). Anchor: `trees(21) = 536864`.

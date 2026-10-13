@@ -10,7 +10,7 @@ A reading is a historical fact and cannot be re-run. That is what separates this
 xbench/
   src/lib.rs and beside it    the library: what a reading is, what it is taken under, the contest, the report
   src/main.rs                 the binary: the command line
-  src/readings.rs             every reading taken — none yet
+  src/readings.rs             every reading taken
   src/readings/reading_NN.rs  one reading each, as data
 
 ../programs/
