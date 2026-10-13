@@ -10,6 +10,8 @@ workspace = true
 
 [features]
 profile = ["curios-profile/enabled"]
+# `test_support`: a module's structural digest, the census's verdict on a field and the weight of a description's copy, for the suites of `curios-elab`, `curios-pipeline` and `curios` that pin what this crate built. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate's tests — the same reason `curios-runtime`'s `test-support` is a feature. **Never add this to `default`.**
+test-support = []
 
 [dependencies]
 curios-archive = { workspace = true }

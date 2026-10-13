@@ -29,3 +29,5 @@ curios-core = { workspace = true, features = ["test-support"] }
 curios-cert = { workspace = true }
 # The shared syntax-registry stand-in in `curios_analysis::fixture`, which every context this crate's tests build is handed. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-analysis = { workspace = true, features = ["test-support"] }
+# The structural digest of a module, which the erasure suite pins. A dev-dependency entry beside the normal one, for the same reason.
+curios-ersd = { workspace = true, features = ["test-support"] }

@@ -43,6 +43,8 @@ pub use analysis::*;
 mod into_cont;
 pub use into_cont::*;
 
+// A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: the path says at its use site that the caller reached for scaffolding rather than product API. This crate's own tests read it too, which the feature does not reach.
+#[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
 mod semantics;

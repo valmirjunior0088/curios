@@ -123,6 +123,7 @@ pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
 /// What each replacement holding a description would build among `module`'s closed calls, in the nodes the dry run charges for it.
 ///
 /// The pass's own steps over the module as one round finds it: each plan that holds a description is run dry under one replacement's widest budget in place of [`DESCRIPTION_COPY_NODE_LIMIT`], so a copy the tight cap declines is weighed beside those it admits, and a reader holds each to the cap by what the evaluator charges. A plan that materializes under no budget has no charge.
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) fn description_copy_charges(module: &Module) -> Vec<usize> {
     let block_items = index_block_items(module);
     let item_positions = index_item_positions(module);

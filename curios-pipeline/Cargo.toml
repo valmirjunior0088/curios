@@ -40,6 +40,8 @@ curios-wasm = { workspace = true }
 curios-prelude = { workspace = true }
 
 [dev-dependencies]
+# The structural digest of a module, which the erasure suite compares across two compilations. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
+curios-ersd = { workspace = true, features = ["test-support"] }
 # Where the standard library is authored, for the suites that compile it from its tree.
 curios-std = { workspace = true }
 # The directory of its own every suite here works in, canonical and removed however the test ends.
