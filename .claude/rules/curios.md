@@ -1,6 +1,8 @@
 ---
 paths:
-  - "**/*.crs"
+  - "curios-std/**/*.crs"
+  - "programs/**/*.crs"
+  - "editors/**/*.crs"
 ---
 
 # Writing Curios

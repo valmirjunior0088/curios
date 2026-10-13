@@ -155,7 +155,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Tools
 
-- [ ] [A learner is taught by what the compiler answers](roadmap/tools/200-a-learner-is-taught-by-what-the-compiler-answers.md) — `/learn-curios` opens on an equation and ends at a theorem, where a developer first meets the language at a program refused with the input that breaks it; it restates what the reference states, holds no turn to what a reader takes in at a glance, and loses its leave to probe after its first turn
+- [ ] [A learner is taught by what the compiler answers](roadmap/tools/200-a-learner-is-taught-by-what-the-compiler-answers.md) — `/learn-curios` is held by no session yet: how long its turns run, whether a fix stays the learner's and whether a call is denied after its first turn are what it asks for, and no dry run has counted them and no learner has met them
 - [ ] [The editor is answered at a position](roadmap/tools/201-the-editor-is-answered-at-a-position.md) — not refined yet; the language server publishes diagnostics and formats, and answers nothing about a place: no declaration, no signature, no member list, no type
 - [ ] [Profiling in the budget's own units](roadmap/tools/202-profiling-in-budget-units.md) — not refined yet; a profile reports durations rather than the budget's machine-independent units, and counts no priced site
 - [ ] [A value every program runs at its start is reported where it is declared](roadmap/tools/203-a-value-every-program-runs-at-its-start-is-reported.md) — not refined yet; a module-level value whose statements still compute once its unit is erased runs at the start of every program its unit is in scope of, and nothing says so where it is declared

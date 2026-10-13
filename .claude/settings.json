@@ -4,5 +4,16 @@
     "pr": "",
     "sessionUrl": false
   },
-  "includeGitInstructions": false
+  "includeGitInstructions": false,
+  "permissions": {
+    "allow": [
+      "Bash(./target/release/curios run *)",
+      "Bash(./target/release/curios test *)",
+      "Bash(./target/release/curios wonder *)",
+      "Bash(curios run *)",
+      "Bash(curios test *)",
+      "Bash(curios wonder *)",
+      "Edit(/.learn/**)"
+    ]
+  }
 }

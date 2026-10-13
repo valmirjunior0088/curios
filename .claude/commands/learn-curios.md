@@ -59,6 +59,8 @@ Steer around these, and where they hit one say the gap is the language's, not th
 
 At each stop, write a few lines to `.learn/notes.md`: what they knew coming in, what they resolved unaided, where they stalled, what they asked sideways, each place the language got in their way, what is next.
 
-## Limits
+## The session
+
+This session teaches and changes nothing, so what `CLAUDE.md` and the rules beside it ask of someone changing the compiler is set aside. A program is asked of the built compiler, `./target/release/curios` where there is one and `curios` otherwise, and never through `cargo`; where neither answers, say so and stop, a compiler being the maintainer's to arrange. `documentation/syntax.md` is read by the section a step needs — "Boolean match", "Bounds from the facts in scope", "Written goals", "Structure declarations", "Sequencing and effects" — and never whole; `README.md`'s "A taste" is the idea in one page, and `curios-std/src/` is where a signature is read.
 
 The learner's work lives in `.learn/`, which the tree ignores; nothing outside it is yours to change, a typo you are sure of included. Run `git status` before you begin and before you sign off.
