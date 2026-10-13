@@ -146,6 +146,13 @@ pub(crate) fn same_uncommitted_inside(
     this: &Term,
     that: &Term,
 ) -> Result<bool, ReduceError> {
+    // A question asked again in the quiet stretch it was answered in is answered as it was, at the transition every question spends.
+    if let Some(same) = context.remembered_same(this, that) {
+        context.spend(Cost::STEP)?;
+        return Ok(same);
+    }
+    let asked = context.asked_at();
+
     // Hand-paired rather than bracketed by a closure, as the witness probe's is: this sits on conversion's recursion.
     let mark = context.solution_mark();
     let solutions = context.solutions_committed();
@@ -174,7 +181,9 @@ pub(crate) fn same_uncommitted_inside(
     if committed || (withheld && !matches!(converts, Ok(true))) {
         context.note_declined();
     }
-    Ok(converts? && !committed)
+    let same = converts? && !committed;
+    context.remember_same(&asked, this, that, same);
+    Ok(same)
 }
 
 /// Which of `atoms` are one by `same`, as a classing asks of them (`curios-analysis`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about. The comparison is one conversion inside another, so it buys its depth with stack.
@@ -1122,6 +1131,7 @@ impl Convert {
                 Outcome::Mismatch(_) => {
                     // A pair of calls is unfolded against itself once: inside its own unfolding it is apart, since unfolded again it poses itself again.
                     if self.pairs.hold(&this.head, &that.head) {
+                        context.note_apart();
                         return Ok(false);
                     }
                     let (this_head, that_head) = (this.head.clone(), that.head.clone());
@@ -3166,6 +3176,9 @@ impl Convert {
                                     let pair = this_unfolded.is_some() && that_unfolded.is_some();
                                     let nested =
                                         pair && self.pairs.hold(&this_a.head, &that_a.head);
+                                    if nested {
+                                        context.note_apart();
+                                    }
                                     if nested && undecided {
                                         self.blocked.push(raw_problem(&type_));
                                         continue;
@@ -3280,6 +3293,9 @@ impl Convert {
                             // Two members no rule above decides are their two bodies, as the kernel forces both, and that once: met again inside their own unfolding they are apart, or wait where a metavariable left them undecided.
                             let nested =
                                 decided.is_none() && self.pairs.hold(&this_term, &that_term);
+                            if nested {
+                                context.note_apart();
+                            }
                             if nested && undecided {
                                 self.blocked.push(raw_problem(&type_));
                                 continue;

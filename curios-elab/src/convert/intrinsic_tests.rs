@@ -2,12 +2,52 @@
 
 use {
     super::test_support::*,
+    crate::same_uncommitted,
     curios_core::{
         Free, InstanceHead, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, ReduceError, Subterm,
         Term, Universes, Var,
     },
     curios_num::{Binary, Grain},
 };
+
+/// A question asked again with nothing written since is answered from what it was answered, at the one transition every question spends: the comparison is made once.
+#[test]
+fn a_question_asked_again_in_a_quiet_stretch_costs_a_transition() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+    context.assume(&x, &Term::intrinsic(Intrinsic::NatType));
+    context.assume(&y, &Term::intrinsic(Intrinsic::NatType));
+    let sum = |left: &Free, right: &Free| {
+        Term::intrinsic(Intrinsic::nat_add(
+            Term::intrinsic(Intrinsic::nat_mul(
+                Term::free_var(left),
+                Term::free_var(right),
+            )),
+            Term::free_var(right),
+        ))
+    };
+    let (this, that) = (sum(&x, &y), sum(&y, &x));
+
+    let before = context.consumed().units();
+    assert_eq!(same_uncommitted(&mut context, &this, &that), Ok(false));
+    let first = context.consumed().units() - before;
+    assert_eq!(same_uncommitted(&mut context, &that, &this), Ok(false));
+    let second = context.consumed().units() - before - first;
+
+    assert_eq!(second, 1, "the second asking spends its transition alone");
+    assert!(
+        first > second,
+        "where the first made the comparison: {first}"
+    );
+
+    // A write ends the stretch, what a verdict read being free to have changed: the comparison is made again, over the reducts the first left.
+    let z = context.fresh(Some("z"));
+    context.assume(&z, &Term::intrinsic(Intrinsic::NatType));
+    let spent = context.consumed().units();
+    assert_eq!(same_uncommitted(&mut context, &this, &that), Ok(false));
+    assert!(context.consumed().units() - spent > second);
+}
 
 #[test]
 fn intrinsic_nat_add_recurses_into_operands() {

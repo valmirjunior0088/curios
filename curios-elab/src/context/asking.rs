@@ -17,6 +17,8 @@ pub(crate) struct Asking {
     declined: u64,
     /// Whether a level equation has been withheld inside the question conversion is answering with nothing committed; `None` where it is answering none.
     withheld: Option<bool>,
+    /// How many pairs of heads conversion has met inside their own unfolding and left apart: a verdict reached across one rests on what was being unfolded there.
+    apart: u64,
 }
 
 impl Asking {
@@ -48,6 +50,16 @@ impl Asking {
     /// How many questions have been declined for a commit.
     pub(crate) fn declined(&self) -> u64 {
         self.declined
+    }
+
+    /// A pair of heads was met inside its own unfolding and left apart.
+    pub(crate) fn note_apart(&mut self) {
+        self.apart += 1;
+    }
+
+    /// How many pairs have been left apart inside their own unfolding.
+    pub(crate) fn apart(&self) -> u64 {
+        self.apart
     }
 
     /// Enter or leave a question asked with nothing committed, answering what stood before: one is entered with `Some(false)`, and what leaving it reads back says whether a level equation was withheld inside it.

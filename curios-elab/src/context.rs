@@ -157,6 +157,14 @@ impl Drop for UniverseMutation<'_> {
     }
 }
 
+/// Where the context stood when a question was asked with nothing committed ([`Context::asked_at`]): the two write stamps, and how many questions had been declined and how many pairs left apart.
+#[derive(Debug)]
+pub(crate) struct AskedAt {
+    stamps: ElaborationStamp,
+    declined: u64,
+    apart: u64,
+}
+
 /// A transaction watermark spanning both unification stores.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SolutionMark {
@@ -1920,6 +1928,56 @@ impl<'s> Context<'s> {
     /// How many questions have been declined for a commit.
     pub(crate) fn declined(&self) -> u64 {
         self.typing.asking.declined()
+    }
+
+    /// [`Asking::note_apart`].
+    pub(crate) fn note_apart(&mut self) {
+        self.typing.asking.note_apart();
+    }
+
+    /// Where the context stands as a question is asked with nothing committed: what its answer is held against before it is filed ([`Context::remember_same`]).
+    pub(crate) fn asked_at(&self) -> AskedAt {
+        AskedAt {
+            stamps: self.typing.caches.stamps(),
+            declined: self.typing.asking.declined(),
+            apart: self.typing.asking.apart(),
+        }
+    }
+
+    /// Whether a classing is asking about `this` and `that`, where the pair is one a table of verdicts may answer: `Some(true)` where the pair a classing is asking about is this one, `Some(false)` where none is asking, and `None` where one is asking about another pair, inside which this question is held and its answer is that pair's as much as its own.
+    fn asked_of(&self, this: &Term, that: &Term) -> Option<bool> {
+        match self.typing.asking.asked() {
+            None => Some(false),
+            Some((left, right)) => {
+                ((left == this && right == that) || (left == that && right == this)).then_some(true)
+            }
+        }
+    }
+
+    /// What `this` and `that` were answered to be, asked with nothing committed, where the context stands as it did then ([`Caches::same`]).
+    pub(crate) fn remembered_same(&mut self, this: &Term, that: &Term) -> Option<bool> {
+        let classing = self.asked_of(this, that)?;
+
+        self.typing
+            .caches
+            .same_get(this, that, classing, self.typing.asking.plain())
+    }
+
+    /// Remember what the question asked at `asked` answered, where it is a verdict of the two terms alone: it wrote nothing, so answering it again from the table leaves the context as asking it again would; no question inside it was declined for a commit, which the solver's next move could answer otherwise; no pair was left apart inside its own unfolding, a verdict of that path, which is the rule the kernel files its own by; and it was held inside no other pair a classing is asking about ([`Context::asked_of`]).
+    pub(crate) fn remember_same(&mut self, asked: &AskedAt, this: &Term, that: &Term, same: bool) {
+        if self.typing.caches.stamps_unchanged(&asked.stamps)
+            && self.typing.asking.declined() == asked.declined
+            && self.typing.asking.apart() == asked.apart
+            && let Some(classing) = self.asked_of(this, that)
+        {
+            self.typing.caches.same_insert(
+                this.clone(),
+                that.clone(),
+                classing,
+                self.typing.asking.plain(),
+                same,
+            );
+        }
     }
 
     /// Enter or leave a question asked with nothing committed (`same_uncommitted`), answering what stood before: one is entered with `Some(false)`, and what leaving it reads back says whether a level equation was withheld inside it.

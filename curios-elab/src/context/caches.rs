@@ -75,7 +75,13 @@ pub(crate) struct Caches {
     ///
     /// **Filed by the reduction that read it**, a table for each as the reducts have: a sort is read through reducts, and a term's reduct under a judgment's reduction is not its reduct under plain reduction.
     sorts: [HashMap<Term, Sort>; 2],
-    /// The stamps `sorts` was filled under.
+    /// What two terms were answered to be, asked with nothing committed (`same_uncommitted`), for the quiet stretch the sorts stand for and filed as they are, by the reduction that asked: a verdict is read through reducts, and reads the types locals are assumed at, the solutions, the levels and the equations in force, as a sort does. It is cleared wherever the sorts are, since nothing clears one and may leave the other.
+    ///
+    /// **Only a question that wrote nothing is filed** ([`Caches::same_insert`]'s caller holds it to that), so answering one from here leaves the context as asking it again would: no name is minted that the comparison would have minted.
+    ///
+    /// **A verdict is filed with whether a classing was asking it.** A classing made inside a question is held inside the pair a classing in progress is asking about, so a pair one is asking about and the same pair asked with none asking are two questions, and each is answered by its own.
+    same: [HashMap<(Term, Term, bool), bool>; 2],
+    /// The stamps `sorts` and `same` were filled under.
     sorts_at: ElaborationStamp,
     /// Each instance of a universe-polymorphic `rec` group reduction has opened in the declaration in progress, beside the group it instantiates and the levels it was opened at. An instance holds its levels substituted through every member, so the pair is what says which instance of which group a copy is without reading the levels back off it. It lives one declaration, as the levels' metavariables do.
     instances: HashMap<Keyed<RecGroup>, (RecGroup, Universes)>,
@@ -217,10 +223,13 @@ impl Caches {
         self.kernel_spellings.get_mut().clear();
     }
 
-    /// Every remembered sort, of both reductions.
+    /// Every remembered sort and every verdict filed beside them, of both reductions.
     fn clear_sorts(&mut self) {
         for sorts in &mut self.sorts {
             sorts.clear();
+        }
+        for same in &mut self.same {
+            same.clear();
         }
     }
 
@@ -236,7 +245,38 @@ impl Caches {
         self.sorts[usize::from(plain)].insert(type_, sort);
     }
 
-    /// Empty the sorts where either stamp has moved since they were filed, and file what follows under the stamps as they stand.
+    /// What `this` and `that` were answered to be, in either order, where nothing was written since: as plain reduction asked where `plain`, and as a judgment's did otherwise, of a classing where `classing` and of none otherwise.
+    pub(crate) fn same_get(
+        &mut self,
+        this: &Term,
+        that: &Term,
+        classing: bool,
+        plain: bool,
+    ) -> Option<bool> {
+        self.settle_sorts();
+
+        let same = &self.same[usize::from(plain)];
+        if same.is_empty() {
+            return None;
+        }
+        same.get(&(this.clone(), that.clone(), classing))
+            .or_else(|| same.get(&(that.clone(), this.clone(), classing)))
+            .copied()
+    }
+
+    pub(crate) fn same_insert(
+        &mut self,
+        this: Term,
+        that: Term,
+        classing: bool,
+        plain: bool,
+        same: bool,
+    ) {
+        self.settle_sorts();
+        self.same[usize::from(plain)].insert((this, that, classing), same);
+    }
+
+    /// Empty the sorts and the verdicts where either stamp has moved since they were filed, and file what follows under the stamps as they stand.
     fn settle_sorts(&mut self) {
         if !self.stamps_unchanged(&self.sorts_at) {
             self.clear_sorts();
@@ -428,6 +468,7 @@ impl Caches {
                 self.reduction_erased[1].clear();
                 self.closed[1].clear();
                 self.sorts[1].clear();
+                self.same[1].clear();
                 // A scrutinee's spelling reads the refinements in the window, which this boundary moves.
                 self.kernel_spellings.get_mut().clear();
             }
