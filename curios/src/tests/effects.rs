@@ -723,3 +723,20 @@ fn a_region_that_names_no_monad_is_still_refused() {
         "unexpected error: {undetermined}"
     );
 }
+
+/// A sequencing stranded in a region that is no monad names the monad the region would have to be, and leaves the result its continuation never produced as a goal: a blank is no term, so the report writes none.
+#[test]
+fn a_stranded_sequencing_leaves_its_result_a_goal() {
+    let stranded = error(
+        r#"
+        use /std/{Nat, Monad, Str};
+        let g(@M: (Type) -> Type, use Monad(M), a: M(Str)) -> Nat =
+            Monad/bind(a, (_) => Monad/pure(1));
+        /std/print("x")
+        "#,
+    );
+    assert!(
+        stranded.contains("this sequencing needs a region whose type is M(?)"),
+        "unexpected error: {stranded}"
+    );
+}

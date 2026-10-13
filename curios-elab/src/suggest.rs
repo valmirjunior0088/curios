@@ -6,7 +6,7 @@
 //!
 //! Every attempt runs inside the `solution_mark`/`rollback_solutions` bracket, and a hit is materialized (committed solutions spliced) *before* rollback — the pinned values the display shows would otherwise die with the transaction. Any error skips its candidate: the pass is infallible. Attempts are capped at [`ATTEMPTS`] per goal and the rendered list at [`CANDIDATES`], ranked complete-first, then fewest holes, then pool order.
 //!
-//! A candidate spells only explicit arguments — hidden slots re-infer when the author pastes it, exactly as they would when writing it by hand — with a shared `?`-named hole standing in for each explicit slot the attempt left unsolved. A hole-free constructor fit must additionally survive [`verifies`], a sandboxed oracle check in the goal's own scope, because index inversion refuses positions it cannot decide and `Solved` alone is not a fit; an application fit needs no second check, since the conversion that established it is definitive. Either way the paste-and-recheck promise is a machine guarantee. Representation privacy is deliberately not consulted: a candidate for a sealed type outside its module simply fails the author's re-check.
+//! A candidate spells only explicit arguments — hidden slots re-infer when the author pastes it, exactly as they would when writing it by hand — with one shared hole, a metavariable nothing solves and a report prints `?`, standing in for each explicit slot the attempt left unsolved. A hole-free constructor fit must additionally survive [`verifies`], a sandboxed oracle check in the goal's own scope, because index inversion refuses positions it cannot decide and `Solved` alone is not a fit; an application fit needs no second check, since the conversion that established it is definitive. Either way the paste-and-recheck promise is a machine guarantee. Representation privacy is deliberately not consulted: a candidate for a sealed type outside its module simply fails the author's re-check.
 //!
 //! A goal that is a bound is also put to the procedure that proves a bound from the facts in scope ([`crate::entail`]), in the same sandbox: a proof it finds is a complete fit of pool 0, and a refusal is kept for the report, which then says beside the goal what it says beside an omitted bound.
 //!
@@ -92,9 +92,8 @@ fn suggest_in_scope(
         context.rollback_solutions(mark);
         context.end_solutions(mark);
     }
-    // One shared hole identity per goal, so every unsolved slot spells the same bare `?`.
-    let hole_name = context.fresh(Some("?"));
-    let hole = Term::free_var(&hole_name);
+    // One shared hole per goal, a metavariable nothing solves, so every unsolved slot spells the same bare `?`.
+    let hole = Term::hole(context.mint_metavar());
 
     // Pool 0 — scope fits: a binder whose type may stand at the goal type is itself a candidate. An unnameable binder is skipped: the paste-and-recheck promise needs a spelling the author can write.
     for (name, type_) in telescope {

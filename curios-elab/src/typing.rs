@@ -415,7 +415,7 @@ fn is_sequencing(context: &Context, term: &Term) -> bool {
 
 /// Whether `type_` stands over a result: a former applied to at least one argument, which is the shape `M(B)` always has.
 ///
-/// Read on the expected side, this is what separates a stranded `!` from an ordinary mismatch inside a real region — `Io(Str)` against `Io(Nat)` disagrees about the result, while `Io(_)` against `Nat` is a region that cannot sequence at all. `Io` is named among the intrinsics because it is the one monad whose former is an intrinsic node rather than an application or a parameterized nominal type.
+/// Read on the expected side, this is what separates a stranded `!` from an ordinary mismatch inside a real region — `Io(Str)` against `Io(Nat)` disagrees about the result, while `Io(?)` against `Nat` is a region that cannot sequence at all. `Io` is named among the intrinsics because it is the one monad whose former is an intrinsic node rather than an application or a parameterized nominal type.
 fn wraps_a_result(type_: &Term) -> bool {
     match &**type_ {
         Subterm::Apply(_) | Subterm::Intrinsic(Intrinsic::IoType(_)) => true,
@@ -425,7 +425,7 @@ fn wraps_a_result(type_: &Term) -> bool {
     }
 }
 
-/// What a stranded-sequencing report names as the region's required type: the sequenced `M(B)` with every metavariable it still carries blanked to one binder rendered `_`. The report wants `M(B)` for its `M` alone — `B` is what the continuation would have produced, and a region that cannot sequence never determines it.
+/// What a stranded-sequencing report names as the region's required type: the sequenced `M(B)` with every metavariable it still carries blanked to one goal nothing solves, rendered `?`. The report wants `M(B)` for its `M` alone — `B` is what the continuation would have produced, and a region that cannot sequence never determines it.
 ///
 /// `None` when `M` is itself one of those holes: nothing pinned the monad, so the whole spelling would be placeholders and the report says "a monad" instead.
 fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term> {
@@ -435,7 +435,7 @@ fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term>
         return None;
     }
 
-    let hole = Term::free_var(&context.fresh(Some("_")));
+    let hole = Term::hole(context.mint_metavar());
     // Memoized on node identity: every metavariable blanks to the one hole, so a node's answer is the node's alone.
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
