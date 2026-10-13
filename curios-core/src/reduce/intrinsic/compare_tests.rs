@@ -576,6 +576,39 @@ fn a_floored_le_meets_the_lt_it_spells() {
     assert!(matches!(mirrored, Some(Aligned::Same)));
 }
 
+// A natural against zero, as conversion aligns it: `x != 0` and `0 < x` have one view once the disequality of a sum of naturals is read as the order comparison it is, and so do `x == 0` and `x <= 0` — on either side of the pair.
+//
+// Mutation-checked: with the reading left out of `LinearForm::aligned`, each pair is respelled.
+#[test]
+fn a_natural_against_zero_meets_the_order_it_spells() {
+    let x = sym(0, "x");
+    let apart = Intrinsic::NatNeq(x.clone(), lit(0));
+    let positive = Intrinsic::nat_lt(lit(0), x.clone());
+    let zero = Intrinsic::NatEql(x.clone(), lit(0));
+    let least = Intrinsic::nat_lte(x, lit(0));
+
+    for (this, that) in [
+        (&apart, &positive),
+        (&positive, &apart),
+        (&zero, &least),
+        (&least, &zero),
+    ] {
+        let aligned = align_comparisons(&mut Inert, this, that).expect("reduces");
+        assert!(matches!(aligned, Some(Aligned::Same)));
+    }
+}
+
+// The control: a disequality of two open sides is no order comparison — `x != y` holds on either side of `x < y` — so the pair is respelled and nothing is decided of it.
+#[test]
+fn a_disequality_of_two_open_sides_meets_no_order() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+    let apart = Intrinsic::NatNeq(x.clone(), y.clone());
+    let below = Intrinsic::nat_lt(x, y);
+
+    let aligned = align_comparisons(&mut Inert, &apart, &below).expect("reduces");
+    assert!(matches!(aligned, Some(Aligned::Respelled(_))));
+}
+
 // Two comparisons whose views differ are both respelled in the one spelling their views give — the positive part of the difference on the left of a `<=` — so the congruence after compares aligned operands: `n < y + 1` meets `x <= y` as `n <= y`, where `n` against `x` is what is left.
 #[test]
 fn two_comparisons_whose_views_differ_are_respelled_alike() {

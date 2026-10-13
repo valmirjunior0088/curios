@@ -129,6 +129,44 @@ const ROWS: &[Row] = &[
         "{}",
         "match k | 0 => () | j + 1 => let _: Holds(j < n) = True/proved(); () end",
     ),
+    // A zero check, which conversion holds to be the bound: a natural against zero is its order comparison, so an `==` guard's false arm, a `!=` guard's true one, a `Bool/not` of one and a `choose`'s default arm each answer `0 < count`, with the check on either side and over a length.
+    body(
+        "total: Nat, count: Nat",
+        "Nat",
+        "match count == 0 | true => 0 | false => total / count end",
+    ),
+    body(
+        "total: Nat, count: Nat",
+        "Nat",
+        "match 0 == count | true => 0 | false => total / count end",
+    ),
+    body(
+        "total: Nat, count: Nat",
+        "Nat",
+        "match count != 0 | true => total / count | false => 0 end",
+    ),
+    body(
+        "total: Nat, count: Nat",
+        "Nat",
+        "match Bool/not(count == 0) | true => total / count | false => 0 end",
+    ),
+    body(
+        "total: Nat, count: Nat",
+        "Nat",
+        "choose | count == 0 => 0 | _ => total / count end",
+    ),
+    body(
+        "total: Nat, xs: List(Nat)",
+        "Nat",
+        "match List/len(xs) == 0 | true => 0 | false => total / List/len(xs) end",
+    ),
+    // The same stated by a hypothesis, in either spelling: the fact states the bound outright.
+    body("total: Nat, n: Nat, p: Holds(n != 0)", "Nat", "total / n"),
+    body(
+        "total: Nat, n: Nat, p: Holds(Bool/not(n == 0))",
+        "Nat",
+        "total / n",
+    ),
     // A natural's bound read at `Int`.
     claim(
         "m: Nat, n: Nat, i: Int, p: Holds(m < n), q: Holds(i <= Nat/to_int(m))",

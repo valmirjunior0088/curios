@@ -21,7 +21,7 @@
 //! 3. **A side bounded by a literal, or through an operand it never exceeds**: `x % 7 < 7`, `x - y <= x` — the bounds oracle and domination.
 //! 4. **An equality whose constant the gcd of its coefficients does not divide**, which is false: `2 · x + 1 == 2 · y`.
 //!
-//! And between two comparisons: 5. **two comparisons whose views agree once aligned** — `<` read as the `<=` of its successor, an equality oriented by its atoms — are one proposition, whichever carrier each is at: `x + 1 <= y` and `x < y`, `Nat/to_int(m) + 1 <= Nat/to_int(n)` and `m < n`. Otherwise both are respelled from their views before the congruence compares them ([`LinearViews::align`]).
+//! And between two comparisons: 5. **two comparisons whose views agree once aligned** — `<` read as the `<=` of its successor, an equality oriented by its atoms, and an equality of a sum of naturals against zero read as the order comparison clause 2 makes it — are one proposition, whichever carrier each is at: `x + 1 <= y` and `x < y`, `Nat/to_int(m) + 1 <= Nat/to_int(n)` and `m < n`, `x != 0` and `0 < x`, `x + y == 0` and `x + y <= 0`. Otherwise both are respelled from their views before the congruence compares them ([`LinearViews::align`]).
 //!
 //! **It decides nothing else about a comparison whose view keeps an atom** — `x + 1 <= y`, `0 < x`, `i + 1 > 0` stay open. Each clause is a held row of `curios`'s law grid, carrier "What conversion decides about a comparison", with its complement a control beside it.
 //!
@@ -86,7 +86,7 @@ impl LinearViews {
         ))
     }
 
-    /// Two comparisons aligned through their views: one proposition where their views agree once aligned — `x + 1 <= y` and `x < y`, `Nat/to_int(m) < Nat/to_int(n)` and `m < n`, `i < j` and `+0 < j - i` — and otherwise both respelled in the one spelling their views give, so a congruence after meets aligned operands: `?n < y + 1` against `x <= y` becomes `?n <= y` against `x <= y`, which solves `?n` as `x`. `None` where either is no `Nat` or `Int` comparison.
+    /// Two comparisons aligned through their views: one proposition where their views agree once aligned — `x + 1 <= y` and `x < y`, `Nat/to_int(m) < Nat/to_int(n)` and `m < n`, `i < j` and `+0 < j - i`, `x != 0` and `0 < x` — and otherwise both respelled in the one spelling their views give, so a congruence after meets aligned operands: `?n < y + 1` against `x <= y` becomes `?n <= y` against `x <= y`, which solves `?n` as `x`. `None` where either is no `Nat` or `Int` comparison.
     ///
     /// **One reading replaces three.** The successor step between `<` and `<=`, `Int`'s difference split by sign, and the pull-back of an `Int` comparison of widened naturals to `Nat` are each a case of reading both comparisons as the difference of their sides over ℤ in one canonical form.
     pub fn align(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<Aligned> {

@@ -428,6 +428,15 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(x - y <= x, true)",
             // An equality whose constant the coefficients' gcd does not divide.
             "Eq()(2 * x + 1 == 2 * y, false)",
+            // A sum of naturals against zero is its order comparison: at least zero by its shape, so zero exactly where it is at most zero, and not zero exactly where it is at least one — at `Nat`, on either side, over a sum and a product, and through the embedding.
+            "Eq()(x != 0, 0 < x)",
+            "Eq()(x == 0, x <= 0)",
+            "Eq()(x == 0, x < 1)",
+            "Eq()(0 == x, x <= 0)",
+            "Eq()(x != 0, 1 <= x)",
+            "Eq()(x + y == 0, x + y <= 0)",
+            "Eq()(x * y != 0, 0 < x * y)",
+            "Eq()(Nat/to_int(m) != +0, +0 < Nat/to_int(m))",
         ],
         refused: &[
             // Controls, and none is a law: an atom of each sign is left (`x = 0, y = 0`, `i = 0, j = 0`); a natural atom with nothing above it may be zero; an `Int` atom may be negative; an operand an `x - y` falls short of only where `y` is positive; constants the gcd divides.
@@ -437,6 +446,11 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(i + 1 > +0, true)",
             "Eq()(x - y < x, true)",
             "Eq()(2 * x == 2 * y + 2, false)",
+            // Controls for the reading against zero, and none is a law: an `Int` atom is not zero below zero as above it (`i = -1`); a literal that is not zero leaves a value under it (`x = 0`); and two open sides are apart on either side (`x = 0, y = 1`).
+            "Eq()(i != +0, +0 < i)",
+            "Eq()(x != 1, 1 < x)",
+            "Eq()(x == y, x <= y)",
+            "Eq()(x != y, x < y)",
         ],
     },
     Carrier {

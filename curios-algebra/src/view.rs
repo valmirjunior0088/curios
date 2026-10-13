@@ -75,6 +75,8 @@ impl LinearForm {
 
 impl LinearForm {
     /// This form under `relation`, read as the alignment reads it so two comparisons of one proposition have one reading: a `<` is the `<=` of the difference plus one, which is exact over ℤ; an equality or an inequality is oriented so its first monomial's coefficient is positive — or, where none is left, its constant — since `a = b` is `-a = -b`; and a `<=` is as it stands.
+    ///
+    /// **A sum of naturals against zero is its order comparison.** Where an oriented equality has no constant and every monomial is a positive multiple of non-negative atoms, the sum is at least zero, so it is zero exactly where it is at most zero and is not zero exactly where it is at least one: the equality is read as that `<=`, and the inequality as the `<=` of one against the sum. So `n == 0` and `n <= 0` have one reading, as `n != 0` and `0 < n` do.
     pub fn aligned(mut self, relation: Operation) -> (Operation, Self) {
         match relation {
             Operation::Less => {
@@ -93,10 +95,33 @@ impl LinearForm {
                         *coefficient = -coefficient.clone();
                     }
                 }
-                (relation, self)
+                if !self.is_a_sum_of_naturals() {
+                    return (relation, self);
+                }
+                if relation == Operation::Unequal {
+                    self.constant = Integer::from(1);
+                    for (coefficient, _) in &mut self.terms {
+                        *coefficient = -coefficient.clone();
+                    }
+                }
+                (Operation::AtMost, self)
             }
             _ => (relation, self),
         }
+    }
+
+    /// Whether the form is a sum that is at least zero by its shape alone: no constant, and every monomial a positive multiple of non-negative atoms.
+    fn is_a_sum_of_naturals(&self) -> bool {
+        let zero = Integer::from(0);
+        self.constant == zero
+            && !self.terms.is_empty()
+            && self.terms.iter().all(|(coefficient, monomial)| {
+                *coefficient > zero
+                    && monomial
+                        .atoms()
+                        .iter()
+                        .all(|atom| self.nonnegative.contains(atom))
+            })
     }
 
     /// The two sides this form is the difference of, each with non-negative coefficients: the positive monomials and a positive constant on the left, and the negative ones and a negative constant negated on the right, each side's monomials in the form's order.

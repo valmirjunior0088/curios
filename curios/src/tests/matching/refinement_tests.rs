@@ -206,6 +206,56 @@ fn the_false_arm_of_a_comparison_proves_its_dual_across_the_successor_seam() {
     assert_eq!(run(source), b"7");
 }
 
+// A zero check proves the order it rules out, and an order check the zero it rules out: at `Nat` the false arm of `n == 0` is the fact `0 < n`, and the true arm of `0 < n` is the fact `n != 0`, each the arm's own equation read through the alignment of a natural against zero — in both checkers, since the program certifies.
+#[test]
+fn a_zero_check_and_the_order_it_rules_out_prove_each_other() {
+    let source = r#"
+        use /std/{Nat, Option};
+        use /std/Bool/{True, Holds};
+
+        let positive(n : Nat) -> Option(Holds(0 < n)) =
+            match n == 0
+            | true => Option/none()
+            | false => Option/some(True/qed())
+            end;
+
+        let apart(n : Nat) -> Option(Holds(n != 0)) =
+            match 0 < n
+            | true => Option/some(True/qed())
+            | false => Option/none()
+            end;
+
+        let shown(n : Nat) -> Nat =
+            match positive(n)
+            | some(_) => match apart(n) | some(_) => n | none() => 0 end
+            | none() => 0
+            end;
+
+        /std/print(Nat/to_str(shown(7)))
+        "#;
+    assert_eq!(run(source), b"7");
+}
+
+// The alignment gives both sides of a pair the one reading, so an implicit standing in a comparison against zero is still solved by the fact handed to it: through the equality it is written as, and through the order comparison the same fact is.
+#[test]
+fn an_implicit_is_solved_through_a_comparison_against_zero() {
+    let source = r#"
+        use /std/{Nat};
+        use /std/Bool/{True, Holds};
+
+        let same(@a : Nat, h : Holds(a == 0)) -> Nat = a;
+        let apart(@a : Nat, h : Holds(a != 0)) -> Nat = a;
+
+        let through(n : Nat, zero : Holds(n == 0), least : Holds(n <= 0)) -> Nat =
+            same(zero) + same(least);
+        let across(n : Nat, positive : Holds(0 < n)) -> Nat =
+            apart(positive);
+
+        /std/print(Nat/to_str(across(7, True/qed()) + through(0, True/qed(), True/qed())))
+        "#;
+    assert_eq!(run(source), b"7");
+}
+
 // The control: one step past the dual is another fact, not another spelling. `n <= 4` failing leaves `n` at 5, so `6 <= n` does not follow, and a retry that answered it would be deciding a proposition rather than looking one up.
 #[test]
 fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
