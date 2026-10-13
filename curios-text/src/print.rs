@@ -417,7 +417,7 @@ fn print_pattern(pattern: Pattern) -> Printer {
             }
         }
         Pattern::Struct { head, fields } => flat([
-            pure(head),
+            pure(head.join()),
             pure(" "),
             listed_block(
                 "{",

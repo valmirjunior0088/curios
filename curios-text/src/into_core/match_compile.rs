@@ -226,7 +226,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
                 binders.push(self.pattern_binder(pred_label));
 
-                curios_core::Pattern::Succ(self.hypothesis(ih, binders))
+                curios_core::Pattern::Succ(self.hypothesis(ih, binders)?)
             }
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value, _))) => {
                 curios_core::Pattern::Literal(value.clone())
@@ -240,7 +240,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 binders.push(self.pattern_binder(head_label));
                 binders.push(self.pattern_binder(tail_label));
 
-                curios_core::Pattern::Cons(self.hypothesis(ih, binders))
+                curios_core::Pattern::Cons(self.hypothesis(ih, binders)?)
             }
             MatchPattern::Bin(BinPattern::End(grain)) => curios_core::Pattern::End(*grain),
             MatchPattern::Bin(BinPattern::Atom {
@@ -252,7 +252,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 binders.push(self.pattern_binder(head_label));
                 binders.push(self.pattern_binder(tail_label));
 
-                curios_core::Pattern::Atom(*grain, self.hypothesis(ih, binders))
+                curios_core::Pattern::Atom(*grain, self.hypothesis(ih, binders)?)
             }
         })
     }
@@ -274,33 +274,44 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         hypothesis: &Option<Pattern>,
         binders: &mut Vec<Binder>,
-    ) -> Option<curios_core::Bind> {
+    ) -> Result<Option<curios_core::Bind>, Error> {
         hypothesis
             .as_ref()
             .map(|pattern| self.bind(pattern, binders))
+            .transpose()
     }
 
-    fn bind(&self, pattern: &Pattern, binders: &mut Vec<Binder>) -> curios_core::Bind {
-        match pattern {
+    fn bind(
+        &self,
+        pattern: &Pattern,
+        binders: &mut Vec<Binder>,
+    ) -> Result<curios_core::Bind, Error> {
+        Ok(match pattern {
             Pattern::Binder(name) => {
                 binders.push(self.pattern_binder(name));
 
                 curios_core::Bind::Binder
             }
-            Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
-                curios_core::Bind::Fields(self.binds(fields, binders))
-            }
-        }
+            Pattern::Tuple(fields) => curios_core::Bind::Fields(self.binds(fields, binders)?),
+            Pattern::Struct { head, fields } => curios_core::Bind::Struct {
+                head: head.join(),
+                structure: match self.resolve_nominal(head)? {
+                    Ok(structure) => curios_core::Free::Global(structure),
+                    Err(unbound) => unbound,
+                },
+                fields: self.binds(fields, binders)?,
+            },
+        })
     }
 
     fn binds(
         &self,
         fields: &[PatternField],
         binders: &mut Vec<Binder>,
-    ) -> Vec<(Option<String>, curios_core::Bind)> {
+    ) -> Result<Vec<(Option<String>, curios_core::Bind)>, Error> {
         fields
             .iter()
-            .map(|field| (field.label.clone(), self.bind(&field.value, binders)))
+            .map(|field| Ok((field.label.clone(), self.bind(&field.value, binders)?)))
             .collect()
     }
 }

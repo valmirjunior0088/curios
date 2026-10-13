@@ -310,3 +310,43 @@ fn a_tuple_written_at_the_head_is_matched_value_by_value() {
         assert_eq!(answer, b"511");
     }
 }
+
+// A struct pattern's head means one thing wherever a pattern is written. Under a `let`, a parameter and a fold's hypothesis it is held to the structure its binder is, as an arm's is to its scrutinee's, though both structures declare the field it reads; and a head that names nothing is refused as the name it is.
+#[test]
+fn a_struct_pattern_names_its_structure_at_every_binder() {
+    let program = |function: &str| {
+        format!(
+            r#"
+            use /std/{{Nat}};
+            struct A: Type {{ x: Nat }}
+            struct B: Type {{ x: Nat }}
+            {function}
+            /std/print(Nat/to_str(f(A {{ x = 3 }})))
+            "#
+        )
+    };
+    // Each binder position, its head written `HEAD`, beside what the program prints under the structure's own name.
+    let binders: [(&str, &[u8]); 3] = [
+        ("let f(a: A) -> Nat = let HEAD { x } = a; x;", b"3"),
+        ("let f(HEAD { x }: A) -> Nat = x;", b"3"),
+        (
+            "let h(n: Nat, a: A) -> A = match n | 0 => a | _k + 1; HEAD { x } => A { x = x + 1 } end; let f(a: A) -> Nat = h(2, a).x;",
+            b"5",
+        ),
+    ];
+
+    for (written, answer) in binders {
+        let under = |head: &str| program(&written.replace("HEAD", head));
+        assert_eq!(run(&under("A")), answer);
+
+        let other = error(&under("B"));
+        assert!(
+            other.contains(
+                "a `B` pattern matches a value of that structure, and this one is of type A"
+            ),
+            "{other}"
+        );
+        let unknown = error(&under("Nope"));
+        assert!(unknown.contains("`Nope` is not in scope"), "{unknown}");
+    }
+}

@@ -206,8 +206,9 @@ pub enum Pattern {
     /// A name, or `_`, which holds the position and binds nothing. A member with no binder at all — a `use` premise — is not a pattern: the site that admits one holds it apart ([`FuncSugarParam::Premise`]).
     Binder(Label),
     Tuple(Vec<PatternField>),
+    /// A structure's fields under the name the structure is written by, kept as written for the lowering to resolve: the pattern is held to the structure its binder is.
     Struct {
-        head: String,
+        head: Name,
         fields: Vec<PatternField>,
     },
 }

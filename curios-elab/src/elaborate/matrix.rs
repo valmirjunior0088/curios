@@ -82,6 +82,8 @@ struct Line<'m> {
     taken: Vec<Option<Term>>,
     /// The binders bound ahead of the body, each to what it stands for, in the order they were read: the first is outermost.
     lets: Vec<(Free, Term)>,
+    /// Each hypothesis the row writes under a structure's name: what it stands for, the name as written and what it resolves to. Held where the row's body stands ([`Compiler::body_of`]), a hypothesis having no type before its case is entered.
+    held: Vec<(Term, String, Free)>,
     /// The binders of the cases the row states, in the order it states them: what the binders of its own walk are replaced by where a leaf holds its instance.
     cases: Vec<Free>,
 }
@@ -199,6 +201,7 @@ impl<'m> Compiler<'m> {
             cells: vec![Some((&self.matrix.rows[row].pattern, 0))],
             taken: vec![None; self.labels[row].len()],
             lets: Vec::new(),
+            held: Vec::new(),
             cases: Vec::new(),
         }
     }
@@ -1392,7 +1395,13 @@ impl<'m> Compiler<'m> {
     ) {
         match bind {
             Bind::Binder => self.bind(context, line, place, value),
-            Bind::Fields(fields) => {
+            Bind::Fields(fields) | Bind::Struct { fields, .. } => {
+                if let Bind::Struct {
+                    head, structure, ..
+                } = bind
+                {
+                    line.held.push((value.clone(), head.clone(), *structure));
+                }
                 for (index, (label, field)) in fields.iter().enumerate() {
                     let projected = projection(&value, label.as_deref(), index);
                     self.project(context, line, field, place, projected);
@@ -1415,13 +1424,33 @@ impl<'m> Compiler<'m> {
             .collect::<Vec<_>>();
         let body = self.body(line.row).open(&values);
 
-        line.lets
+        let body = line
+            .lets
             .into_iter()
             .rev()
             .fold(body, |tail, (name, value)| {
                 let hole = Term::hole(context.mint_metavar());
 
                 Term::let_(&name, hole, value, tail)
+            });
+
+        // Each hypothesis written under a structure's name, as the one-row match over it whose row is the head over no field: the row takes nothing apart, and compiling it reads the head against the hypothesis's type, as an arm's pattern is read.
+        line.held
+            .into_iter()
+            .rev()
+            .fold(body, |tail, (value, head, structure)| {
+                Term::matrix(Matrix {
+                    head: value,
+                    motive: None,
+                    rows: vec![Row {
+                        pattern: Pattern::Struct {
+                            head,
+                            structure,
+                            fields: Vec::new(),
+                        },
+                        body: Term::func(Vec::<(Free, Term)>::new(), tail),
+                    }],
+                })
             })
     }
 

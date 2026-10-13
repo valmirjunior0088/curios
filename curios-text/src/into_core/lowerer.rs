@@ -707,7 +707,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let member = &group.members[0];
             let (type_, value) = (types[0].clone(), values[0].clone());
             let tail = self.bound(&binders, inner)?;
-            let let_term = self.bind_pattern(&member.binder, &binders, type_, value, tail);
+            let let_term = self.bind_pattern(&member.binder, &binders, type_, value, tail)?;
             return Ok((binds, let_term));
         }
 
@@ -911,6 +911,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         // The binders already minted for the leaves, consumed in the same pre-order `pattern_names` produced them, plus the field-`let` chains that put the compound patterns in scope — both advance with the walk.
         let mut seen = 0;
         let mut chains: Vec<(&[PatternField], curios_core::Free, &[Binder])> = Vec::new();
+        let mut heads: Vec<(&Name, curios_core::Free)> = Vec::new();
 
         for param in params {
             let FuncParam {
@@ -922,7 +923,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 Some(annotation) => {
                     let annotation =
                         self.bound(&binders[..seen], || self.input_type(annotation))?;
-                    self.wrap_pattern_chains(&chains, annotation)
+                    self.wrap_pattern_chains(&chains, annotation)?
                 }
                 None => curios_core::Term::hole(self.context.fresh_metavar()),
             };
@@ -932,6 +933,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 Pattern::Binder(_) => lowered.push((*plicity, leaves[0].1, domain)),
                 Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                     let synthetic = self.context.fresh_binder(None);
+                    if let Pattern::Struct { head, .. } = pattern {
+                        heads.push((head, synthetic));
+                    }
                     chains.push((fields, synthetic, leaves));
                     lowered.push((*plicity, synthetic, domain));
                 }
@@ -942,9 +946,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let body = chains
             .iter()
             .rev()
-            .fold(body, |tail, (fields, synthetic, leaves)| {
+            .try_fold(body, |tail, (fields, synthetic, leaves)| {
                 self.lower_pattern_fields(fields, synthetic, leaves, tail)
-            });
+            })?;
+        // Each struct pattern's head is held once, around the body its parameter stands over: an annotation that reads its fields is under the same parameter.
+        let body = heads
+            .iter()
+            .rev()
+            .try_fold(body, |tail, (head, synthetic)| {
+                self.held_to_head(head, synthetic, tail)
+            })?;
 
         Ok((lowered, body))
     }
@@ -954,16 +965,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         &self,
         chains: &[(&[PatternField], curios_core::Free, &[Binder])],
         annotation: curios_core::Term,
-    ) -> curios_core::Term {
+    ) -> Result<curios_core::Term, Error> {
         chains
             .iter()
             .rev()
-            .fold(annotation, |tail, (fields, synthetic, leaves)| {
+            .try_fold(annotation, |tail, (fields, synthetic, leaves)| {
                 let free = tail.free_vars();
                 // A leaf is mentioned iff one of the identities this chain binds occurs free — an exact test, where matching by spelling could only ever approximate one.
                 match leaves.iter().any(|(_, id)| free.contains(id)) {
                     true => self.lower_pattern_fields(fields, synthetic, leaves, tail),
-                    false => tail,
+                    false => Ok(tail),
                 }
             })
     }
@@ -1059,7 +1070,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         type_: curios_core::Term,
         value: curios_core::Term,
         tail: curios_core::Term,
-    ) -> curios_core::Term {
+    ) -> Result<curios_core::Term, Error> {
         self.bind_pattern_from(pattern, &mut binders.iter(), type_, value, tail)
     }
 
@@ -1070,18 +1081,57 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         type_: curios_core::Term,
         value: curios_core::Term,
         tail: curios_core::Term,
-    ) -> curios_core::Term {
-        match pattern {
+    ) -> Result<curios_core::Term, Error> {
+        Ok(match pattern {
             Pattern::Binder(_) => {
                 let (_, id) = binders.next().expect("one mint per written leaf");
                 curios_core::Term::let_(id, type_, value, tail)
             }
-            Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+            Pattern::Tuple(fields) => {
                 let synthetic = self.context.fresh_binder(None);
-                let inner = self.lower_pattern_fields_from(fields, &synthetic, binders, tail);
+                let inner = self.lower_pattern_fields_from(fields, &synthetic, binders, tail)?;
                 curios_core::Term::let_(&synthetic, type_, value, inner)
             }
-        }
+            Pattern::Struct { head, fields } => {
+                let synthetic = self.context.fresh_binder(None);
+                let inner = self.lower_pattern_fields_from(fields, &synthetic, binders, tail)?;
+                let inner = self.held_to_head(head, &synthetic, inner)?;
+                curios_core::Term::let_(&synthetic, type_, value, inner)
+            }
+        })
+    }
+
+    /// `tail` held to the structure a struct pattern is written under: the one-row match over the pattern's binder whose row is the head over no field. It takes nothing apart, and the matrix compiler holds it to the binder's type as it holds an arm's, so a head means one thing wherever a pattern is written.
+    pub(super) fn held_to_head(
+        &self,
+        head: &Name,
+        binder: &curios_core::Free,
+        tail: curios_core::Term,
+    ) -> Result<curios_core::Term, Error> {
+        let structure = match self.resolve_nominal(head)? {
+            Ok(structure) => curios_core::Free::Global(structure),
+            Err(unbound) => unbound,
+        };
+        let held = curios_core::Term::matrix(curios_core::Matrix {
+            head: curios_core::Term::var(curios_core::Var::free(*binder)),
+            motive: None,
+            rows: vec![curios_core::Row {
+                pattern: curios_core::Pattern::Struct {
+                    head: head.join(),
+                    structure,
+                    fields: Vec::new(),
+                },
+                body: curios_core::Term::func(
+                    Vec::<(curios_core::Free, curios_core::Term)>::new(),
+                    tail,
+                ),
+            }],
+        });
+
+        Ok(match head.span() {
+            Some(span) => self.context.placed(span, held),
+            None => held,
+        })
     }
 
     /// Projects each field of a compound pattern off the (already-bound) core variable `scrutinee_name`, in field order — folded right-to-left so the first field's `let` ends up outermost, matching the order a person would hand-write (`let x = p0.0; let y = p0.1; …`) — recursing into [`Self::bind_pattern`] for nested patterns. Each field's own type is a fresh metavar hole: there is never a per-field annotation to give, exactly like a hand-written `let x = p.0;`. Each projection is located at its field's pattern ([`pattern_span`]), so a report about reading the field — a head whose type never became a tuple — points at the destructuring rather than at whatever encloses it. The chain over a compound pattern already in scope: its leaves' minted identities are pulled from the surrounding walk, which produced them in this very order.
@@ -1091,7 +1141,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         scrutinee: &curios_core::Free,
         leaves: &[Binder],
         tail: curios_core::Term,
-    ) -> curios_core::Term {
+    ) -> Result<curios_core::Term, Error> {
         self.lower_pattern_fields_from(fields, scrutinee, &mut leaves.iter(), tail)
     }
 
@@ -1101,7 +1151,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         scrutinee_name: &curios_core::Free,
         binders: &mut impl Iterator<Item = &'i Binder>,
         tail: curios_core::Term,
-    ) -> curios_core::Term {
+    ) -> Result<curios_core::Term, Error> {
         // Right-to-left so the first field's `let` ends up outermost, but the binders were minted left-to-right, so they are consumed in a forward pass first.
         let mut bound = Vec::with_capacity(fields.len());
         for field in fields {
@@ -1124,9 +1174,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 None => proj,
             };
             let hole = curios_core::Term::hole(self.context.fresh_metavar());
-            tail = self.bind_pattern(&field.value, taken, hole, proj, tail);
+            tail = self.bind_pattern(&field.value, taken, hole, proj, tail)?;
         }
-        tail
+        Ok(tail)
     }
 
     /// Wraps `body` in one [`curios_core::Bang`] transient per collected bang. The first-collected bang (`binds[0]`) becomes the outermost node, preserving left-to-right evaluation order. Continuation lambdas are built with `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it robustly under nesting; the domain is a fresh hole, inference-solved. `elaborate_bang` later replaces each node with its `/std/Monad/bind` application, handing the wrapper the region's monad as its `@M` (read off the region's type by the flex-apply imitation rule) and inserting fresh implicits and a fresh `use` witness slot per `!` site: the region pins the constructor, which resolves the `Monad` witness, and every action is checked against it — so a region can sequence actions of differing result types, and different regions can use different monads.

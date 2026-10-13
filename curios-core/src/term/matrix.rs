@@ -120,6 +120,13 @@ impl Pattern {
 pub enum Bind {
     Binder,
     Fields(#[archived_omit_bounds] Vec<(Option<String>, Bind)>),
+    /// A structure's fields under the name the structure is written by: `head` as written and `structure` what it resolves to, as [`Pattern::Struct`] holds them. The hypothesis is held to that structure where it is bound.
+    Struct {
+        head: String,
+        structure: Free,
+        #[archived_omit_bounds]
+        fields: Vec<(Option<String>, Bind)>,
+    },
 }
 
 impl Bind {
@@ -127,7 +134,9 @@ impl Bind {
     pub fn binders(&self) -> usize {
         match self {
             Bind::Binder => 1,
-            Bind::Fields(fields) => fields.iter().map(|(_, field)| field.binders()).sum(),
+            Bind::Fields(fields) | Bind::Struct { fields, .. } => {
+                fields.iter().map(|(_, field)| field.binders()).sum()
+            }
         }
     }
 }

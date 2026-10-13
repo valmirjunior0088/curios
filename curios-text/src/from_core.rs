@@ -624,16 +624,26 @@ fn written_fields(
 fn written_bind(bind: &curios_core::Bind, names: &mut dyn Iterator<Item = Label>) -> Pattern {
     match bind {
         curios_core::Bind::Binder => Pattern::Binder(next_name(names)),
-        curios_core::Bind::Fields(fields) => Pattern::Tuple(
-            fields
-                .iter()
-                .map(|(label, field)| PatternField {
-                    label: label.clone(),
-                    value: written_bind(field, names),
-                })
-                .collect(),
-        ),
+        curios_core::Bind::Fields(fields) => Pattern::Tuple(written_binds(fields, names)),
+        curios_core::Bind::Struct { head, fields, .. } => Pattern::Struct {
+            head: name_of(head),
+            fields: written_binds(fields, names),
+        },
     }
+}
+
+/// The fields of a hypothesis's pattern, each as [`written_bind`] writes it.
+fn written_binds(
+    fields: &[(Option<String>, curios_core::Bind)],
+    names: &mut dyn Iterator<Item = Label>,
+) -> Vec<PatternField> {
+    fields
+        .iter()
+        .map(|(label, field)| PatternField {
+            label: label.clone(),
+            value: written_bind(field, names),
+        })
+        .collect()
 }
 
 fn infix(op: InfixOp, left: Term, right: Term) -> Term {

@@ -418,7 +418,7 @@ fn a_qualified_constructor_pattern_is_refused_by_name() {
     }
 }
 
-/// The one match pattern that may carry a path keeps it: a struct head is documentary, resolved by nothing.
+/// The one match pattern that may carry a path keeps it: a struct head is kept as written, for the lowering to resolve.
 #[test]
 fn a_struct_match_pattern_keeps_its_qualified_head() {
     assert!(

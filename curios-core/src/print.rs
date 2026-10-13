@@ -2803,7 +2803,7 @@ fn pattern_text(pattern: &Pattern, names: &mut dyn Iterator<Item = String>) -> S
 fn bind_text(bind: &Bind, names: &mut dyn Iterator<Item = String>) -> String {
     match bind {
         Bind::Binder => names.next().unwrap_or_default(),
-        Bind::Fields(fields) => {
+        Bind::Fields(fields) | Bind::Struct { fields, .. } => {
             let fields = fields
                 .iter()
                 .map(|(label, field)| {
@@ -2816,7 +2816,10 @@ fn bind_text(bind: &Bind, names: &mut dyn Iterator<Item = String>) -> String {
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            format!("({fields})")
+            match bind {
+                Bind::Struct { head, .. } => format!("{head} {{ {fields} }}"),
+                _ => format!("({fields})"),
+            }
         }
     }
 }
