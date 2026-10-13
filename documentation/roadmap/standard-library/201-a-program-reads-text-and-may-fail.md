@@ -2,7 +2,7 @@
 
 Working specification for the three steps a first program takes past printing: reading a line as text, reading a file as text, and ending in a failure. `/std` hands each over as bytes or as a `Try`, the program's final term is judged at `Io({})`, and no concept joins two `Str`, so a program that reads a number and prints it is three nested matches, and one that reads a file cannot be written at the top level at all.
 
-It is independent of every other spec.
+Its first step is taken after [A piece of a stream is cut from the bytes held](200-a-piece-of-a-stream-is-cut-from-the-bytes-held.md), which settles what `/std/read()` is. It is independent of every other spec.
 
 ## What this builds on
 

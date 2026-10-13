@@ -2,7 +2,7 @@
 
 Working specification for `/learn-curios`, the command that teaches the language inside an agent's session. Today it opens on an equation, ends at a theorem proved by induction, and tells its teacher that what the compiler decides unaided "cost nothing and prove nothing". This spec has it meet a developer where the language first answers one: at a program that would have crashed in the language they know, refused with the input that breaks it and accepted once a guard is written. The guard is a proof, and the learner hears so after writing it. The command stays a slash command of a checkout, for the few people the maintainer picks and instructs.
 
-It is independent of every other spec. [A refusal names the form it met](../surface/200-a-refusal-names-the-form-it-met.md) and [A program reads text and may fail](../standard-library/200-a-program-reads-text-and-may-fail.md) each remove lines of what the command steers its learner around.
+It is independent of every other spec. [A refusal names the form it met](../surface/200-a-refusal-names-the-form-it-met.md) and [A program reads text and may fail](../standard-library/201-a-program-reads-text-and-may-fail.md) each remove lines of what the command steers its learner around.
 
 ## What this builds on
 
