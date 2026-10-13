@@ -94,7 +94,7 @@ pub use Monad/{let Monad};
 
 --- A description of a computation that touches the host, never its result.
 ---
---- Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. `Error` is the failure every host operation reports and `Chunk` what one read answers with. Beside them are this process's own standard streams, read and written without a scheduler.
+--- Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. `Error` is the failure every host operation reports and `Chunk` what one read answers with. `Reader` is a stream with the bytes read ahead of what was asked of it, through which a line or any other piece is cut from them. Beside them are this process's own standard streams, read and written without a scheduler.
 pub mod Io;
 pub use Io/{let Io};
 
