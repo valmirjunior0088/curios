@@ -1,9 +1,9 @@
 use {
     super::{
-        DEFINITION_NAMES_ITS_MEMBERS, MEMO_ATOMIC_TERM, MEMO_TERM, Read, comment_ending_at,
-        members, parse_caller_sort, parse_choose, parse_func, parse_func_type, parse_intrinsic,
-        parse_keyword, parse_let_binder, parse_literal, parse_mark, parse_match, parse_name,
-        parse_parens, parse_pattern, parse_premise, parse_prop, parse_qualified_name,
+        DEFINITION_NAMES_ITS_MEMBERS, MEMO_ATOMIC_TERM, MEMO_TERM, MEMO_TERM_BEFORE_ARROW, Read,
+        comment_ending_at, members, parse_caller_sort, parse_choose, parse_func, parse_func_type,
+        parse_intrinsic, parse_keyword, parse_let_binder, parse_literal, parse_mark, parse_match,
+        parse_name, parse_parens, parse_pattern, parse_premise, parse_prop, parse_qualified_name,
         parse_struct_lit, parse_tuple, parse_tuple_type, parse_type, parse_usize_raw, refused,
     },
     crate::{
@@ -16,7 +16,7 @@ use {
         not_ahead, preceded_by_space, pure, sep_by0_trailing, shown, spanned, take_eof, take_exact,
         take_n, take_while, unseen,
     },
-    curios_utilities::{InfixOp, Plicity, Span, is_identifier_char},
+    curios_utilities::{InfixOp, Plicity, Span, is_identifier_char, is_keyword},
     std::iter,
 };
 
@@ -397,11 +397,60 @@ fn refuse_asymmetric_operator<'a>() -> Parser<'a, ()> {
     })
 }
 
-pub(crate) fn parse_term<'a>() -> Parser<'a, Term> {
-    memoize(MEMO_TERM, parse_term_inner())
+/// What refuses a term that begins on the line another has just ended on.
+const TERMS_SIDE_BY_SIDE: &str = "two terms stand side by side with nothing that joins them: a call is written `f(a, b)`, its arguments in one parenthesized list, and an operator takes whitespace on both sides";
+
+// Two terms on one line with nothing between them are no form: a call fills a parenthesized list, a path is whitespace-free and an operator is spaced on both sides. What another language writes by juxtaposition — `add 1 2`, `return x`, `if c then a` — therefore has no reading, and the enclosing form would report the token it wanted where the second term stands, `Expected ';', obtained '1'`. Probed once a whole term has been read: where what follows on the same line begins a term — a name, a literal, a list — the refusal is this one, with its caret on that term's first character.
+//
+// **Committed, because nothing else can be meant.** Two terms side by side are no form wherever they stand, so no alternative has a better reading to offer; and left recoverable, the refusal is dropped wherever a term is one of a list — an argument, a tuple's field — whose closer then complains where the first term began.
+//
+// **What is left alone.** A term on a later line is a sequence, which the enclosing form words: the `;` an item owes, a program's end. `and` follows a term and begins none where it opens the next member of a `let` group, and is a contextual word the name reader would take. A `/` opening an absolute path is what a missing `end` looks like, which the enclosing form names as [`refuse_asymmetric_operator`] leaves it to. A `(` never reaches here, being a call's own list wherever it stands, and a sign glued to a literal is that probe's too.
+fn refuse_juxtaposed_term<'a>() -> Parser<'a, ()> {
+    // A zero-width span: the term's own parser has consumed the whitespace after it, so the probe stands where the next token begins and reads back what was skipped.
+    spanned(pure(())).flat_map(|(here, ())| {
+        let text = &here.source.text;
+        let before = &text[..here.start];
+        let skipped = &before[before.trim_end_matches(is_blank).len()..];
+        let rest = &text[here.start..];
+        let word_length = rest
+            .chars()
+            .take_while(|char| is_identifier_char(*char))
+            .map(char::len_utf8)
+            .sum::<usize>();
+        // What begins a term, told by the token that stands there and by no parse of it: a term read ahead would raise its own committed refusals — a call's unclosed list — in the place of this one.
+        let begins_a_term = match &rest[..word_length] {
+            "" => rest
+                .chars()
+                .next()
+                .is_some_and(|char| matches!(char, '[' | '"' | '\'')),
+            "and" => false,
+            word => !is_keyword(word) || matches!(word, "true" | "false" | "match" | "choose"),
+        };
+        match begins_a_term && !skipped.contains('\n') {
+            true => mark()
+                .and_drop(take_n(1))
+                .flat_map(|start| commit(fail_from(&start, TERMS_SIDE_BY_SIDE))),
+            false => pure(()),
+        }
+    })
 }
 
-pub(super) fn parse_term_inner<'a>() -> Parser<'a, Term> {
+pub(crate) fn parse_term<'a>() -> Parser<'a, Term> {
+    memoize(MEMO_TERM, term(true))
+}
+
+/// [`parse_term`] where the form around the term owes an arrow before the term that follows it: a `choose` arm's condition, a bind arm's value. A term standing where that arrow belongs is the arm's missing `=>`, which the arm reports, so the term is read without [`refuse_juxtaposed_term`]'s probe.
+pub(super) fn parse_term_before_arrow<'a>() -> Parser<'a, Term> {
+    memoize(MEMO_TERM_BEFORE_ARROW, term(false))
+}
+
+/// A term, with the probe for a second one on its line where `probed`.
+fn term<'a>(probed: bool) -> Parser<'a, Term> {
+    let juxtaposed = move || match probed {
+        true => refuse_juxtaposed_term(),
+        false => pure(()),
+    };
+
     with_span(
         refuse_declaration_head().and_keep(
             // At end of input there is no character for [`refuse_non_term`] to consume, so every alternative below declines at the same offset and the tie-break reports the first of them. This stands ahead of them so that tie names the input instead.
@@ -410,7 +459,7 @@ pub(super) fn parse_term_inner<'a>() -> Parser<'a, Term> {
                 .or(parse_let)
                 .or(parse_func_type)
                 .or(parse_func)
-                .or(parse_infix_expr(0))
+                .or(parse_infix_expr(0).and_drop(juxtaposed))
                 .or(refuse_non_term),
         ),
     )

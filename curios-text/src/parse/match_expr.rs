@@ -1,7 +1,7 @@
 use {
     super::{
         members, parse_func_pattern_param, parse_keyword, parse_literal, parse_match_pattern,
-        parse_pattern, trimmed,
+        parse_pattern, parse_term_before_arrow, trimmed,
     },
     crate::{
         Choose, ChooseArm, ChooseTest, Func, Match, MatrixArm, Pattern, Subterm, Term, parse_term,
@@ -69,7 +69,7 @@ pub(super) fn parse_bind_arm<'a>() -> Parser<'a, ChooseArm> {
                 .and_drop(not_ahead(">")),
         )
         .and_drop(parse_whitespace)
-        .and(lazy(parse_term))
+        .and(lazy(parse_term_before_arrow))
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
         .map(|((pattern, value), body)| ChooseArm {
@@ -81,7 +81,7 @@ pub(super) fn parse_bind_arm<'a>() -> Parser<'a, ChooseArm> {
 // A choose condition arm `| cond => body`. The catch spans through `=>` so a condition term that merely *starts* like the default backtracks cleanly. A bare `_` parses as an ordinary `Name` term, so the choose's `| _ =>` default would otherwise be swallowed here; the `flat_map` guard rejects a lone `_` condition, letting `many0` stop and hand the default to `parse_choose_default`. A condition that merely *begins* with `_` (e.g. `_ready`) has a longer head and passes the guard, parsing as an ordinary condition.
 pub(super) fn parse_cond_arm<'a>() -> Parser<'a, ChooseArm> {
     parse_literal("|")
-        .and_keep(lazy(parse_term))
+        .and_keep(lazy(parse_term_before_arrow))
         .flat_map(|cond| match cond.as_subterm() {
             Subterm::Name(name) if name.is_single() && name.head() == "_" => {
                 fail("the `| _ =>` default is not a condition arm")

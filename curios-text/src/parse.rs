@@ -39,6 +39,8 @@ mod module_tests;
 #[cfg(test)]
 mod recovery_tests;
 #[cfg(test)]
+mod refusal_tests;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod top_level_tests;
@@ -62,6 +64,7 @@ const MEMO_TERM: u32 = 0;
 const MEMO_ATOMIC_TERM: u32 = 1;
 const MEMO_PATTERN: u32 = 2;
 const MEMO_MATCH_PATTERN: u32 = 3;
+const MEMO_TERM_BEFORE_ARROW: u32 = 4;
 
 thread_local! {
     /// Every comment the current parse run has consumed, keyed by start offset — recorded by [`parse_whitespace`], the single place comments die, and drained by the `parse_with_comments` entries. The packrat-memo pattern: per-thread and cleared per run, so runs never see each other's comments. Offset keying makes re-recording under backtracking idempotent, and memoized jumps that skip re-running whitespace are harmless because the cache-miss run already recorded.
