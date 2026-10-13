@@ -284,3 +284,29 @@ fn a_struct_pattern_names_the_structure_of_its_scrutinee() {
         "unexpected error: {error}"
     );
 }
+
+// A tuple written at the head is its values, each a scrutinee of its own: an arm that states a case of one refines it, as an arm of a match on that value alone does. `g` asks for a proof of `c`, which the `true` its row writes decides, at both leaves the row reaches.
+#[test]
+fn a_tuple_written_at_the_head_is_matched_value_by_value() {
+    let function = r#"
+        use /std/Bool/{Holds};
+        let g(c: Bool, @ok: Holds(c)) -> Nat = 1;
+        let f(m: Option(Nat), c: Bool) -> Nat =
+            match (m, c)
+            | (_, true) => g(c)
+            | (some(x), false) => x
+            | (none(), false) => 0
+            end;
+        "#;
+
+    for answer in answers(
+        function,
+        &[
+            "f(Option/some(5 + z), z == 0)",
+            "f(Option/none(), z == 0)",
+            "f(Option/some(5 + z), z == 1)",
+        ],
+    ) {
+        assert_eq!(answer, b"511");
+    }
+}

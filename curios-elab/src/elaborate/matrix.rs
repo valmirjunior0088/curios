@@ -1,6 +1,6 @@
 //! The matrix compiler: a match as it is written, compiled into the single-level matches the eliminators rebuild.
 //!
-//! [`elaborate_matrix`] takes the [`Matrix`] lowering wrote and builds the decision tree its rows come to (Maranget, "Compiling Pattern Matching to Good Decision Trees"), with each column's cases read off its type. Columns are taken left to right. A column no row takes apart is retired, each name written there bound to it. A tuple or struct column is flattened into its fields' projections. Any other is a dispatch: the rows that name a case are its arm, a row that writes a binder there joins the arm of every case some row names, and where the type has a case no row names, the rows that write a binder are what any other value takes.
+//! [`elaborate_matrix`] takes the [`Matrix`] lowering wrote and builds the decision tree its rows come to (Maranget, "Compiling Pattern Matching to Good Decision Trees"), with each column's cases read off its type. Columns are taken left to right. A column no row takes apart is retired, each name written there bound to it. A tuple or struct column is flattened into its fields' projections, and into the fields themselves where the column is a tuple written in place. Any other is a dispatch: the rows that name a case are its arm, a row that writes a binder there joins the arm of every case some row names, and where the type has a case no row names, the rows that write a binder are what any other value takes.
 //!
 //! Each dispatch is an eliminator's own, taken a step at a time ([`NominalSplit`] and its kin): the column is resolved as a scrutinee, each case is entered as an arm of it is, with the rows of that case over the columns left as the arm's body, and the match is rebuilt from the arms. So what an arm assumes is stated once, for the tree and for a match written one level deep.
 //!
@@ -18,7 +18,7 @@ use {
     crate::{Context, Error, HeldFrames, reduce_with, resolved_for_display},
     curios_core::{
         Atom, Bind, Free, InductArm, Many, Matrix, Pattern, Row, Scope, StructType, Subterm,
-        Telescope, Term,
+        Telescope, Term, Tuple,
     },
     curios_num::{Grain, Natural},
     curios_utilities::{Plicity, recurse},
@@ -1856,7 +1856,19 @@ fn held_to_structure(
 }
 
 /// The field of `value` a pattern reads: by its label where it is written with one, and by its position.
+///
+/// A tuple literal's field is the term written there, so a match over `(a, b)` reads `a` and `b` themselves: an arm that states a case of one refines it as an arm of a match on it alone does, where a projection of the literal is a term no variable stands for.
 fn projection(value: &Term, label: Option<&str>, index: usize) -> Term {
+    if let Subterm::Tuple(Tuple { fields, names }) = &**value {
+        let at = match label {
+            Some(label) => names.iter().position(|name| name.as_deref() == Some(label)),
+            None => Some(index),
+        };
+        if let Some(field) = at.and_then(|at| fields.get(at)) {
+            return field.clone();
+        }
+    }
+
     match label {
         Some(label) => Term::proj_label(value.clone(), label.to_string()),
         None => Term::proj_position(value.clone(), index),
