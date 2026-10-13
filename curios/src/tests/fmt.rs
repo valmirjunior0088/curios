@@ -197,6 +197,36 @@ fn constant_args_leave_no_formatter_in_cont() {
     );
 }
 
+/// The library's write is a loop that waits and resends, and the description a constant `print` holds of it is copied under the tight cap the closed evaluator keeps for descriptions. Past that cap the copy is declined, the `print` stays a call, and the collapses this module pins fail with it; this states the margin, so an edit to `/std/Handle`'s write that crosses the cap fails here by the cap's name.
+#[test]
+fn a_constant_prints_descriptions_are_copied_within_the_evaluators_cap() {
+    let entrypoint = r#"/std/print("hello world")"#.parse::<Entrypoint>().expect("fixture parses");
+
+    let mut linked = None;
+    compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |stage| {
+            if let Stage::Ersd(module) = stage {
+                linked = Some(module.clone());
+            }
+        },
+    )
+    .expect("fixture compiles");
+    let copy = curios_ersd::test_support::heaviest_description_copy(
+        &linked.expect("Stage::Ersd observed"),
+    )
+    .expect("a `print` holds a description");
+
+    assert!(
+        copy.charged <= copy.cap,
+        "the heaviest description a constant `print` copies weighs {} nodes, past the {} of `curios-ersd`'s `DESCRIPTION_COPY_NODE_LIMIT`: the evaluator declines the copy, and no constant `print` folds",
+        copy.charged,
+        copy.cap,
+    );
+}
+
 /// A format the evaluator declines, one past its step budget, is left to the Cont optimizer, which specializes the formatter itself: the program compiles, and prints the format.
 #[test]
 fn a_format_past_the_evaluators_budget_still_prints() {

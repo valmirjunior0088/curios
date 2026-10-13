@@ -4,11 +4,30 @@
 
 use {
     super::{
-        Atom, BlockId, Constant, FunctionId, Module, RecGroupId, Rhs, Statement, StatementId,
-        Terminator, sequence_census, spell_function, spell_value,
+        Atom, BlockId, Constant, DESCRIPTION_COPY_NODE_LIMIT, FunctionId, Module, RecGroupId, Rhs,
+        Statement, StatementId, Terminator, description_copy_charges, sequence_census,
+        spell_function, spell_value,
     },
     curios_utilities::ArenaId,
 };
+
+/// A description's copy, weighed as the closed evaluator charges for it, beside the cap a replacement holding one is copied within: past `cap`, the copy is declined and the call it would have replaced stays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DescriptionCopy {
+    pub charged: usize,
+    pub cap: usize,
+}
+
+/// The heaviest description the closed evaluator would copy among `module`'s closed calls, or `None` where no replacement holds one. The module is read as one round of the evaluator finds it, so what a test hands over is a program's module as linked.
+pub fn heaviest_description_copy(module: &Module) -> Option<DescriptionCopy> {
+    description_copy_charges(module)
+        .into_iter()
+        .max()
+        .map(|charged| DescriptionCopy {
+            charged,
+            cap: DESCRIPTION_COPY_NODE_LIMIT,
+        })
+}
 
 /// Whether the census marks `constructor`'s field indexed-only — the verdict under which the door settles every store into it. Names are the schema's debug names — the family's is its qualified spelling (`/std/Map/Node/Node`, `/Box` for an entrypoint's own) — and an unknown name panics with the known ones listed, since a silent `false` here would defeat the loudness this surface exists for.
 pub fn census_settles_constructor_field(

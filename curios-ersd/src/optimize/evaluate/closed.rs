@@ -32,6 +32,60 @@ struct Planned {
     kind: Kind,
 }
 
+impl Planned {
+    /// The block the candidate stands in, where it stands in one.
+    fn block(&self) -> Option<BlockId> {
+        match self.owner {
+            Owner::Block(block) => Some(block),
+            Owner::Items => None,
+        }
+    }
+
+    /// Where the replacement's group is bound: the statement it is spliced ahead of, that statement's owner, and the item position a copy bound there is shared from. A candidate at item level binds ahead of itself; one inside a block binds ahead of the item that hosts the block, and keeps the block-local splice where the entry expression owns the block and no item stands ahead of it.
+    fn splice_point(
+        &self,
+        block_items: &BTreeMap<BlockId, StatementId>,
+        item_positions: &BTreeMap<StatementId, usize>,
+    ) -> (StatementId, Owner, Option<usize>) {
+        match self.owner {
+            Owner::Items => (
+                self.statement,
+                Owner::Items,
+                item_positions.get(&self.statement).copied(),
+            ),
+            Owner::Block(block) => match block_items.get(&block) {
+                Some(&item) => (item, Owner::Items, item_positions.get(&item).copied()),
+                None => (self.statement, self.owner, None),
+            },
+        }
+    }
+
+    /// Whether the replacement holds a description anywhere ([`Value::contains_description`]).
+    fn contains_description(&self, module: &Module) -> bool {
+        match &self.kind {
+            Kind::Value(value) => value.contains_description(module),
+            Kind::Foreign(_, operands) | Kind::Call(_, operands) => operands
+                .iter()
+                .any(|operand| operand.contains_description(module)),
+        }
+    }
+
+    /// The dry run: whether the replacement materializes whole within `budget`, which is charged what it would build.
+    fn materializes(
+        &self,
+        module: &Module,
+        budget: &mut ReifyBudget,
+        scope: &mut ReifyScope,
+    ) -> bool {
+        match &self.kind {
+            Kind::Value(value) => reify_check(module, value, budget, scope).is_ok(),
+            Kind::Foreign(_, values) | Kind::Call(_, values) => {
+                reify_check_all(module, values, budget, scope).is_ok()
+            }
+        }
+    }
+}
+
 enum Kind {
     /// The candidate evaluated to a value; the statement becomes an alias.
     Value(Value),
@@ -46,13 +100,7 @@ enum Kind {
 /// Under the `profile` feature each round samples its ledger — the closed candidates found, the bails by reason, the replacements installed and the residual calls among them — so a round's cost reads beside its yield. A residual call is the one replacement that leaves an `Apply` behind for the next round to find again, which is why it is counted apart.
 pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::profile!("evaluate_closed_terms");
-    let owners = index_owners(module);
-    let candidates = (0..module.statements().len()).filter_map(|index| {
-        let statement = StatementId(index as u32);
-
-        Some((statement, *owners.get(&statement)?))
-    });
-    let plans = plan(module, candidates);
+    let plans = plan(module, every_statement(module).into_iter());
     curios_profile::sample!("evaluate::candidates", plans.len());
     curios_profile::sample!("evaluate::bail::effect", bailed(&plans, Bail::Effect));
     curios_profile::sample!("evaluate::bail::fuel", bailed(&plans, Bail::Fuel));
@@ -70,6 +118,29 @@ pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::sample!("evaluate::installed", installed.0);
     curios_profile::sample!("evaluate::residual_calls", installed.1);
     installed.0 > 0
+}
+
+/// What each replacement holding a description would build among `module`'s closed calls, in the nodes the dry run charges for it.
+///
+/// The pass's own steps over the module as one round finds it: each plan that holds a description is run dry under one replacement's widest budget in place of [`DESCRIPTION_COPY_NODE_LIMIT`], so a copy the tight cap declines is weighed beside those it admits, and a reader holds each to the cap by what the evaluator charges. A plan that materializes under no budget has no charge.
+pub(crate) fn description_copy_charges(module: &Module) -> Vec<usize> {
+    let block_items = index_block_items(module);
+    let item_positions = index_item_positions(module);
+    let mut scope = ReifyScope::new();
+
+    plan(module, every_statement(module).into_iter())
+        .into_iter()
+        .flatten()
+        .filter(|plan| plan.contains_description(module))
+        .filter_map(|plan| {
+            let (_, _, position) = plan.splice_point(&block_items, &item_positions);
+            scope.begin_replacement(position, plan.block());
+            let mut probe = ReifyBudget::new();
+
+            plan.materializes(module, &mut probe, &mut scope)
+                .then(|| probe.spent())
+        })
+        .collect()
 }
 
 /// [`evaluate_closed_terms`] over the top-level items at `from` and after, and no other statement: one round of [`evaluate_since`](crate::evaluate_since).
@@ -166,12 +237,7 @@ fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usiz
         false => Default::default(),
     };
     // Where each item stands, so a shared copy is reused only by a candidate its splice point precedes. Stable for the same reason.
-    let item_positions: BTreeMap<StatementId, usize> = module
-        .items()
-        .iter()
-        .enumerate()
-        .map(|(position, &statement)| (statement, position))
-        .collect();
+    let item_positions = index_item_positions(module);
 
     for plan in planned {
         if reify_pool == 0 {
@@ -182,33 +248,13 @@ fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usiz
         // Binding it in the block instead would cost the same grammar `n² + 2` copies where the identical applications written at item level cost `n + 2`: a group bound inside a block that need not dominate anything contributes to no other replacement, so every definition would re-materialize the whole chain below it.
         //
         // A block the entry expression owns has no item ahead of it. Such a candidate keeps the block-local splice and shares only within itself.
-        let (splice_before, splice_owner, position) = match plan.owner {
-            Owner::Items => (
-                plan.statement,
-                Owner::Items,
-                item_positions.get(&plan.statement).copied(),
-            ),
-            Owner::Block(block) => match block_items.get(&block) {
-                Some(&item) => (item, Owner::Items, item_positions.get(&item).copied()),
-                None => (plan.statement, plan.owner, None),
-            },
-        };
+        let (splice_before, splice_owner, position) =
+            plan.splice_point(&block_items, &item_positions);
         let hoisting = plan.owner != splice_owner;
         // Before the dry run, which reads the candidate's block through the same gates the real run does.
-        scope.begin_replacement(
-            position,
-            match plan.owner {
-                Owner::Block(block) => Some(block),
-                Owner::Items => None,
-            },
-        );
+        scope.begin_replacement(position, plan.block());
         // A candidate holding a description gets the tight cap: a big description-bearing replacement is a sequencing chain's suffix, and copying it per link per round is the compounding the cap stops; the small staged residuals pass untouched. Probe and real run share the cap, or a plan the probe admits would strand at the tighter gate.
-        let contains_description = match &plan.kind {
-            Kind::Value(value) => value.contains_description(module),
-            Kind::Foreign(_, operands) | Kind::Call(_, operands) => operands
-                .iter()
-                .any(|operand| operand.contains_description(module)),
-        };
+        let contains_description = plan.contains_description(module);
         let capped = |pool: usize| {
             if contains_description {
                 ReifyBudget::within_capped(pool, DESCRIPTION_COPY_NODE_LIMIT)
@@ -217,17 +263,8 @@ fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usiz
             }
         };
         // Dry-run first: a plan that cannot fully materialize is skipped before anything is emitted, so nothing is ever stranded.
-        {
-            let mut probe = capped(reify_pool);
-            let ok = match &plan.kind {
-                Kind::Value(value) => reify_check(module, value, &mut probe, &mut scope).is_ok(),
-                Kind::Foreign(_, values) | Kind::Call(_, values) => {
-                    reify_check_all(module, values, &mut probe, &mut scope).is_ok()
-                }
-            };
-            if !ok {
-                continue;
-            }
+        if !plan.materializes(module, &mut capped(reify_pool), &mut scope) {
+            continue;
         }
         let mut spliced = Vec::new();
         let mut budget = capped(reify_pool);
@@ -483,6 +520,29 @@ fn index_block_items(module: &Module) -> BTreeMap<BlockId, StatementId> {
     }
 
     hosts
+}
+
+/// Every statement of the module that stands in a block or among the items, with where: the candidates of a module-wide round.
+fn every_statement(module: &Module) -> Vec<(StatementId, Owner)> {
+    let owners = index_owners(module);
+
+    (0..module.statements().len())
+        .filter_map(|index| {
+            let statement = StatementId(index as u32);
+
+            Some((statement, *owners.get(&statement)?))
+        })
+        .collect()
+}
+
+/// Where each top-level item stands in the item list.
+fn index_item_positions(module: &Module) -> BTreeMap<StatementId, usize> {
+    module
+        .items()
+        .iter()
+        .enumerate()
+        .map(|(position, &statement)| (statement, position))
+        .collect()
 }
 
 /// Map each statement to its owner — its block, or the top-level item list.

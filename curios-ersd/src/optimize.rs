@@ -6,7 +6,7 @@ mod prune;
 use prune::*;
 
 mod evaluate;
-use evaluate::*;
+pub(crate) use evaluate::*;
 
 mod rebase;
 use rebase::*;
