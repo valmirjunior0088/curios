@@ -1341,7 +1341,7 @@ impl NominalSplit {
 
 /// For each payload of `tag`'s case, the binder among `written` that names it, or `None` where none does.
 ///
-/// An arm's written binders meet the payload's slots as a lambda's meet a function type's ([`align`]): the plain binders are the plain payloads, in order, and between two of them the hidden binders written are the first of their run. A hidden payload no binder was written for is bound all the same, hintless, so nothing in the arm names it and it is in scope as its mark makes it.
+/// An arm's written binders meet the payload's slots as a lambda's meet a function type's ([`align()`]): the plain binders are the plain payloads, in order, and between two of them the hidden binders written are the first of their run. A hidden payload no binder was written for is bound all the same, hintless, so nothing in the arm names it and it is in scope as its mark makes it.
 pub(super) fn payload_fills(
     tag: &Atom,
     payload: &Telescope<Vec<Term>>,
