@@ -38,6 +38,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Compilation
 
+- [ ] [An append to a flattened run copies the append alone](roadmap/compilation/200-an-append-to-a-flattened-run-copies-the-append-alone.md) — not refined yet; a loop that appends and then reads the older part of what it holds flattens at every second append, each a copy of the whole; waits on a measurement, a prototype and what a payload with room pays at the host boundary
 - [ ] [A compilation is a graph of item tasks](roadmap/compilation/201-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
 - [ ] [A reader of finished terms holds no elaboration state](roadmap/compilation/202-a-reader-of-finished-terms-holds-no-elaboration-state.md) — the reader erasure reads through keeps an elaborator's context whose elaboration half is empty, and what erases is decided through the reducer and the conversion that elaborate
 - [ ] [A type former is spelled by its entry](roadmap/compilation/203-a-type-former-is-spelled-by-its-entry.md) — not refined yet; a type former stores a type, a body and a universe context its entry states, elaboration reconciles the two, and the kernel certifies a module whose two schemes disagree
