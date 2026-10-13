@@ -38,6 +38,7 @@ use {
         Context, Error, Mode, elaborate, named_members, reduce_with, same_uncommitted,
         zonk_solved_term_metas,
     },
+    curios_algebra::{LinearForm, Monomial},
     curios_analysis::Classes,
     curios_core::{Cases, Free, Global, LinearViews, Match, Probe, Subterm, Term, Var},
     curios_utilities::SyntaxName,
@@ -130,13 +131,20 @@ pub(crate) fn entail(
         context.credit(proof);
     }
     Ok(match entailed {
-        // A bound that is a metavariable elaboration has solved, as the statement `True/proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and a counterexample would name an atom by the body it unfolds to. What the solution states is read here, for the report alone: the proof is written over what the search read, and one written over the solution does not check. A reading that runs out leaves the report as the search made it.
-        Entailed::Refused(refusal) if stated.is_none() => {
-            let solved = zonk_solved_term_metas(context, bound);
-            match stated_spellings(context, &solved) {
-                Ok(spelled) => Entailed::Refused(refusal.respelled(&spelled)),
-                Err(_) => Entailed::Refused(refusal),
-            }
+        Entailed::Refused(refusal) => {
+            // A bound that is a metavariable elaboration has solved, as the statement `True/proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and a counterexample would name an atom by the body it unfolds to. What the solution states is read here, for the report alone: the proof is written over what the search read, and one written over the solution does not check. A reading that runs out leaves the report as the search made it.
+            let refusal = match stated {
+                Some(_) => refusal,
+                None => {
+                    let solved = zonk_solved_term_metas(context, bound);
+                    match stated_spellings(context, &solved) {
+                        Ok(spelled) => refusal.respelled(&spelled),
+                        Err(_) => refusal,
+                    }
+                }
+            };
+            // An atom is written as the operand it was read from states it, where a metavariable elaboration has since solved may still stand: substituted, as it is in the bound the report names above it.
+            Entailed::Refused(refusal.rewritten(|atom| zonk_solved_term_metas(context, atom)))
         }
         entailed => entailed,
     })
@@ -216,11 +224,15 @@ fn linear(
                         true => match search(&facts, &negated, &mut budget) {
                             Plan::Certified(certificate) => Ok(certificate),
                             Plan::Exhausted => Err(SearchOutcome::Exhausted(DERIVED_ROWS)),
-                            // A product is an unknown of its own to the search, so only a search over no product gives values of the atoms.
                             Plan::Satisfied(assignment) if !multiplied => {
                                 Err(SearchOutcome::Counterexample(assignment))
                             }
-                            Plan::Satisfied(_) => Err(linear),
+                            // A product is an unknown of its own to the search, so the atoms' values are those of a search over no product — and not the linear search's, which read no disequality and may give one the lie.
+                            Plan::Satisfied(_) => Err(SearchOutcome::Counterexample(valued(
+                                &facts,
+                                &negated,
+                                &mut budget,
+                            ))),
                         },
                         false => Err(linear),
                     }
@@ -270,21 +282,43 @@ fn linear(
 
 /// Search `facts`, their splits and the negated goal's, spending from `budget`.
 fn search(facts: &Facts, negated: &[Fact], budget: &mut usize) -> Plan {
-    let forms_of = |facts: &[Fact]| {
-        facts
-            .iter()
-            .map(|fact| fact.form.clone())
-            .collect::<Vec<_>>()
-    };
-    let arms = facts
+    plan(
+        &forms_of(&facts.facts),
+        &forms_of(negated),
+        &arms_of(facts),
+        budget,
+    )
+}
+
+/// The values a search over `facts` less their products leaves the atoms at, spending from `budget`: what a refusal reports where the search over the products left an assignment, a product being an unknown of its own there. Nothing where the cap runs out first.
+fn valued(facts: &Facts, negated: &[Fact], budget: &mut usize) -> Vec<(Monomial, Rational)> {
+    let linear = facts
+        .facts
+        .iter()
+        .filter(|fact| !matches!(fact.origin, Origin::Product(..)))
+        .map(|fact| fact.form.clone())
+        .collect::<Vec<_>>();
+    match plan(&linear, &forms_of(negated), &arms_of(facts), budget) {
+        Plan::Satisfied(assignment) => assignment,
+        Plan::Certified(_) | Plan::Exhausted => Vec::new(),
+    }
+}
+
+/// The forms of `facts`, in their order.
+fn forms_of(facts: &[Fact]) -> Vec<LinearForm> {
+    facts.iter().map(|fact| fact.form.clone()).collect()
+}
+
+/// The case splits of `facts`, as the forms each case adds.
+fn arms_of(facts: &Facts) -> Vec<Arms> {
+    facts
         .splits
         .iter()
         .map(|split| Arms {
             holds: forms_of(&split.holds),
             fails: forms_of(&split.fails),
         })
-        .collect::<Vec<_>>();
-    plan(&forms_of(&facts.facts), &forms_of(negated), &arms, budget)
+        .collect()
 }
 
 /// `Bool/holds_of_eq(decision, Eq/refl())`: the decision holds because it is `true`, which conversion's probe-side decisions settle where reduction does not — `b || Bool/not(b)`. `None` where the two names are not in scope.

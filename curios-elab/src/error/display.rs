@@ -157,6 +157,16 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
             String::new()
         }
     };
+    // A guard read as it was written states itself, and its line names it once.
+    let fact = |from: &Origin, statement: &Term| {
+        let stated = statement.spelled(spelling).to_string();
+        match from {
+            Origin::Guard(written, _) if written.spelled(spelling).to_string() == stated => {
+                origin(from)
+            }
+            _ => format!("{}: {stated}", origin(from)),
+        }
+    };
     let mut lines = String::new();
     if !refusal.considered.is_empty() {
         let heading = match refusal.conclusion {
@@ -171,15 +181,11 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
         };
         lines += &format!("\n  {heading}");
         for (from, statement) in &refusal.considered {
-            lines += &format!("\n    {}: {}", origin(from), statement.spelled(spelling));
+            lines += &format!("\n    {}", fact(from, statement));
         }
     }
     for (from, statement) in &refusal.unread {
-        lines += &format!(
-            "\n  not read: {}: {}",
-            origin(from),
-            statement.spelled(spelling)
-        );
+        lines += &format!("\n  not read: {}", fact(from, statement));
     }
     match &refusal.conclusion {
         Conclusion::Counterexample(assignment) if !assignment.is_empty() => {
@@ -1183,6 +1189,9 @@ impl fmt::Display for Displayed<'_> {
                         format!("no {given} or expected type determined it (its type is {bound})")
                     }
                 };
+                // A bound the search read is one the facts in scope may prove, so the way out named first is a fact: a guard. One it read nothing in has the written proof alone.
+                let searched =
+                    *proposition && refusal.as_ref().is_some_and(|refusal| !refusal.is_silent());
                 match callee {
                     // A literal's slot is a field, written in braces under `@`. One declared as its type alone has no name to quote.
                     Callee::Structure(name) => {
@@ -1191,16 +1200,24 @@ impl fmt::Display for Displayed<'_> {
                             "_" => "a hidden field".to_string(),
                             binder => format!("hidden field '{binder}'"),
                         };
+                        let guard = match searched {
+                            true => "decide the bound with a guard before the literal, or ",
+                            false => "",
+                        };
                         write!(
                             f,
-                            "{field} of '{name}' was not filled\n  {why}\n  write it explicitly: {name} {{ @... }}"
+                            "{field} of '{name}' was not filled\n  {why}\n  {guard}write it explicitly: {name} {{ @... }}"
                         )
                     }
                     Callee::Function(func) => {
                         let func = spelled_free(func, spelling);
+                        let guard = match searched {
+                            true => "decide the bound with a guard before the call, or ",
+                            false => "",
+                        };
                         write!(
                             f,
-                            "implicit argument '{binder}' of '{func}' was not inferred\n  {why}\n  supply it explicitly: {func}(@...)"
+                            "implicit argument '{binder}' of '{func}' was not inferred\n  {why}\n  {guard}supply it explicitly: {func}(@...)"
                         )
                     }
                     // An operator has no argument list to write the bound into, so the report names the two places it can be established: a guard before the operation, or the method call the operator stands for — with its type argument first, since a leading `@` fills that slot and not the bound.

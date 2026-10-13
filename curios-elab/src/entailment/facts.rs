@@ -676,12 +676,17 @@ impl<'a> Reader<'a> {
             }
         }
         let origin = &kept.origin;
-        let holds = self.apart(context, |reader, context| {
+        let mut holds = self.apart(context, |reader, context| {
             reader.admit(context, strict(a, b), bounded(a, b), origin.clone())
         })?;
-        let fails = self.apart(context, |reader, context| {
+        let mut fails = self.apart(context, |reader, context| {
             reader.admit(context, strict(b, a), failed(a, b), origin.clone())
         })?;
+        // Neither case's bound is what the scope states: a report names the disequality, once for the two.
+        let stated = Term::intrinsic(comparison_of(carrier, apart, a, b));
+        for fact in holds.iter_mut().chain(&mut fails) {
+            fact.stated = stated.clone();
+        }
         self.open(context, loose(a, b), holds, fails)
     }
 

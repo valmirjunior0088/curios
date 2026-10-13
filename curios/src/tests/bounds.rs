@@ -928,6 +928,76 @@ fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
 }
 
 #[test]
+fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
+    let refusal = |declared: &str, binders: &str, body: &str| {
+        let program =
+            format!("{HEADER}\n{declared}\nlet row({binders}) -> Nat = {body};\nIo/pure(())");
+        typecheck(&program).expect_err("the control is refused")
+    };
+    let index = |guard: &str, taken: &str, other: &str| {
+        refusal(
+            "",
+            "xs: List(Nat), i: Nat",
+            &format!("match {guard} | {taken} => List/get(xs, i) | {other} => 0 end"),
+        )
+    };
+    let by_guard =
+        "decide the bound with a guard before the call, or supply it explicitly: List/get(@...)";
+
+    // A guard one short of the bound: read as written, so named once, and a value it leaves — the atom spelled as the bound spells it, an implicit a call solved substituted.
+    let short = index("i <= List/len(xs)", "true", "false");
+    assert!(
+        short.contains(
+            "    a guard, i <= List/len(@Nat, xs)\n  it fails at i = 0, List/len(@Nat, xs) = 0\n"
+        ) && short.contains(by_guard),
+        "{short}"
+    );
+
+    // A false arm is the other comparison, so both are named.
+    let dual = index("List/len(xs) < i", "false", "true");
+    assert!(
+        dual.contains("    a guard's false arm, List/len(@Nat, xs) < i: i <= List/len(@Nat, xs)\n"),
+        "{dual}"
+    );
+
+    // A disequality the bound does not follow from is named as one, and the value the bound fails at is one it allows.
+    let apart = index("i == List/len(xs)", "false", "true");
+    assert!(
+        apart.contains(
+            "    a guard's false arm, i == List/len(@Nat, xs): i != List/len(@Nat, xs)\n  it fails at i = 1, List/len(@Nat, xs) = 0\n"
+        ),
+        "{apart}"
+    );
+    let unequal = index("i != List/len(xs)", "true", "false");
+    assert!(
+        unequal.contains("    a guard, i != List/len(@Nat, xs)\n  it fails at i = 1"),
+        "{unequal}"
+    );
+
+    // A hidden field's bound is decided before the literal.
+    let field = refusal(
+        "struct Positive: Type { n: Nat, @Holds(0 < n) }",
+        "n: Nat",
+        "Positive { n = n }.n",
+    );
+    assert!(
+        field.contains("it fails at n = 0\n  decide the bound with a guard before the literal, or write it explicitly: Positive { @... }"),
+        "{field}"
+    );
+
+    // A bound the search reads nothing in has no guard that would decide it.
+    let opaque = refusal(
+        "let needs(f: (Nat) -> Bool, n: Nat, @_: Holds(f(n))) -> Nat = n;",
+        "f: (Nat) -> Bool, n: Nat",
+        "needs(f, n)",
+    );
+    assert!(
+        opaque.contains("\n  supply it explicitly: needs(@...)") && !opaque.contains("a guard"),
+        "{opaque}"
+    );
+}
+
+#[test]
 fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
     let goal = |binders: &str| {
         let program = format!(

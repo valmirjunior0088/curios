@@ -67,10 +67,15 @@ impl Refusal {
     }
 
     /// The refusal with its counterexample's atoms written through `spelled`, each reduct as the operand stated beside it.
-    pub(super) fn respelled(mut self, spelled: &[(Term, Term)]) -> Self {
+    pub(super) fn respelled(self, spelled: &[(Term, Term)]) -> Self {
+        self.rewritten(|atom| respelled(spelled, atom))
+    }
+
+    /// The refusal with each of its counterexample's atoms as `write` writes it.
+    pub(super) fn rewritten(mut self, mut write: impl FnMut(&Term) -> Term) -> Self {
         if let Conclusion::Counterexample(values) = &mut self.conclusion {
             for (atom, _) in values {
-                *atom = respelled(spelled, atom);
+                *atom = write(atom);
             }
         }
         self
@@ -85,7 +90,14 @@ impl Refusal {
     ) -> Self {
         // A fact two hypotheses state as one, as a structure update's base and the term it stands for do, is listed once.
         let mut considered: Vec<(Origin, Term)> = Vec::new();
-        for fact in facts.facts.iter().filter(|fact| fact.origin.is_reported()) {
+        // A disequality read as the two cases its sides' order makes is a fact of neither alone, and is named with the scope's.
+        let cases = facts
+            .splits
+            .iter()
+            .flat_map(|split| split.holds.iter().chain(&split.fails))
+            .filter(|fact| fact.origin.named().is_some());
+        let scope = facts.facts.iter().filter(|fact| fact.origin.is_reported());
+        for fact in scope.chain(cases) {
             let stated = (fact.origin.clone(), fact.stated.clone());
             if !considered.contains(&stated) {
                 considered.push(stated);
