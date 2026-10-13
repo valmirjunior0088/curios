@@ -1002,6 +1002,11 @@ impl<'s> Context<'s> {
         dead
     }
 
+    /// [`Frames::open_arm`]: say that the frame being elaborated is the arm at `case` of a match on `guard`, so that a bound given up under it is told whether a value reaches the arm.
+    pub(crate) fn open_arm(&mut self, guard: &Term, case: &Term) {
+        self.typing.frames.open_arm(guard.clone(), case.clone());
+    }
+
     /// [`Frames::assume`], stamping the write.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.typing.caches.note_write();
@@ -2076,6 +2081,11 @@ impl<'s> Context<'s> {
     /// Record why the procedure that proves a bound from the facts in scope proved nothing, for the report the hole becomes.
     pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
         self.underway.attempt.solutions.note_refusal(id, refusal);
+    }
+
+    /// [`Solutions::note_dead_arm`].
+    pub(crate) fn note_dead_arm(&mut self, id: MetavarId, dead: DeadArm) {
+        self.underway.attempt.solutions.note_dead_arm(id, dead);
     }
 
     /// Mint a metavariable for an omitted `use` argument — like [`Context::fresh_metavar`] but carrying witness provenance, and returning the id so the caller can register the resolution goal.

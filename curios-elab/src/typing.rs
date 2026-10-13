@@ -3,13 +3,13 @@ mod tests;
 
 use {
     super::{
-        AwaitId, Beside, Binders, Choice, Context, Error, HeldConversion, HeldFrames, Mode, Opened,
-        Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem, Rejected,
-        Sort, Spines, Watched, answer_witness, answers_differ, callee, convert, diagnose_embedding,
-        diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines, is_monad,
-        monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome, reduce_forced,
-        refold_recs, retry_discharge, retry_witness, settle_qualities, shallow_scrutinee,
-        subsume_outcome, synth_neutral, zonk_solved_term_metas,
+        AwaitId, Beside, Binders, Choice, Context, DeadArm, Error, HeldConversion, HeldFrames,
+        Mode, Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
+        Rejected, Sort, Spines, Watched, answer_witness, answers_differ, callee, convert,
+        diagnose_embedding, diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines,
+        is_monad, monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome,
+        reduce_forced, refold_recs, retry_discharge, retry_witness, settle_qualities,
+        shallow_scrutinee, subsume_outcome, synth_neutral, zonk_solved_term_metas,
     },
     curios_analysis::{
         RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
@@ -1567,8 +1567,21 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
     Ok(())
 }
 
+/// Why the arm at `value` of a match on `head` is never taken, where a guard says so: its own, which is always another case ([`unreachable_arm`]), or that of an arm around it, which the arm's case contradicts ([`contradicted_guard`]). Asked where an error leaves the arm, and of each arm around a bound given up under one.
+pub(crate) fn dead_guard(context: &mut Context, head: &Term, value: &Term) -> Option<DeadArm> {
+    if let Some(case) = unreachable_arm(context, head, value) {
+        return Some(DeadArm::Guard {
+            guard: head.clone(),
+            case,
+        });
+    }
+
+    contradicted_guard(context, head, value)
+        .map(|(guard, case)| DeadArm::EnclosingGuard { guard, case })
+}
+
 /// The case a guard always is, where that is a case other than `value`, the arm's: the arm is then never taken, and an error its body raises is reported as one in a dead arm — which is where a proof resting on the guard fails, since no equation is recorded under a spelling that mentions no local ([`records_case_equation`]). `None` where the guard is the arm's own case, or no literal or constructor at all — a guard its locals decide stays stuck.
-pub(crate) fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) -> Option<Term> {
+fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) -> Option<Term> {
     let spelled = Unfolding::everything(&*context).term(head);
     let case = reduce_with(context, &spelled).ok()?;
     another_case(context, &case, value, &[])
@@ -1577,11 +1590,7 @@ pub(crate) fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) 
 }
 
 /// The guard of an arm around this one that the arm at `value` contradicts, with the case that guard always is there: where `head` is a variable, an equation in force — or one the arm already withholds — whose scrutinee names no local once the variable is spelled as `value`, and which computes to another case than the one its arm assumed. The arm is then never taken, and a proof resting on that guard fails in it, since the equation answers nothing there ([`Context::kernel_spelling`], and the withholding `Context::refine` does).
-pub(crate) fn contradicted_guard(
-    context: &mut Context,
-    head: &Term,
-    value: &Term,
-) -> Option<(Term, Term)> {
+fn contradicted_guard(context: &mut Context, head: &Term, value: &Term) -> Option<(Term, Term)> {
     let solution = scrutinee_solution(&*context, head, value)?;
     let equations = context
         .scrutinee_equations()

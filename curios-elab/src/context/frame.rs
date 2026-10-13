@@ -204,6 +204,8 @@ pub(crate) struct Frame {
     pub(super) scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
     /// Why the frame's arm is never taken, where the frame is an arm its scrutinee's indices rule out — `None` for every other frame. The reason is known where the arm opens, and an implicit bound nothing discharges under it is reported once the arm has closed, so it is kept here for the metavariable born there to read ([`HeldFrames::dead_arm`]).
     pub(super) dead_arm: Option<Rc<DeadArm>>,
+    /// The guard and the case of the arm the frame is, where it is an arm that refines its scrutinee to a case — `None` for every other frame. Whether a value reaches such an arm is found by reducing its guard, which nothing does where the arm opens: it is asked where an error leaves the arm, and where a bound nothing discharges under it is given up ([`HeldFrames::arms`]).
+    pub(super) arm: Option<(Term, Term)>,
     /// The frame's assumptions in binding order, a companion to `assumptions`, which is keyed by name and loses order.
     pub(super) locals: Vec<(Free, Term)>,
     /// The frame's `use`-plicity binders in binding order, a subset of `locals`: resolution's search space, scanned innermost first.
@@ -222,6 +224,7 @@ impl Frame {
             refinement_scrutinees: Recorded::new(),
             scrutinee_spellings: Default::default(),
             dead_arm: None,
+            arm: None,
             locals: Vec::new(),
             witnesses: Vec::new(),
         }
@@ -313,6 +316,24 @@ impl HeldFrames {
             .iter()
             .rev()
             .find_map(|frame| frame.dead_arm.as_ref())
+    }
+
+    /// The arms among the frames that refine a scrutinee to a case, innermost first: each with its guard and its case, and the frames as far as its own, which are the ones its guard is read under.
+    pub(crate) fn arms(&self) -> Vec<(HeldFrames, Term, Term)> {
+        self.0
+            .iter()
+            .enumerate()
+            .rev()
+            .filter_map(|(index, frame)| {
+                let (guard, case) = frame.arm.as_ref()?;
+
+                Some((
+                    Self(self.0[..=index].iter().cloned().collect()),
+                    guard.clone(),
+                    case.clone(),
+                ))
+            })
+            .collect()
     }
 
     /// Whether every refinement these frames register is one `other`'s register: what containment between two birth contexts asks beside their names.

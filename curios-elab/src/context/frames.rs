@@ -106,6 +106,11 @@ impl<'s> Frames<'s> {
     pub(crate) fn rule_out(&mut self, dead: Rc<DeadArm>) {
         self.innermost().dead_arm = Some(dead);
     }
+
+    /// Say that the frame being elaborated is the arm at `case` of a match on `guard`. It leaves with the frame.
+    pub(crate) fn open_arm(&mut self, guard: Term, case: Term) {
+        self.innermost().arm = Some((guard, case));
+    }
     /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases), so a binder carries no runtime-multiplicity mark.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.locals_stamp.fresh();

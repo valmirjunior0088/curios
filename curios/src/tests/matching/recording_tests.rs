@@ -14,6 +14,28 @@ fn assert_refused_in_a_dead_arm(source: &str) {
     );
 }
 
+/// A bound nothing discharges under a guard that is always another case is reported once its arm has closed, and still says the arm is never taken: the guard is asked where the bound is given up, and the reason kept for the report.
+#[test]
+fn a_bound_given_up_in_a_dead_arm_says_the_arm_is_never_taken() {
+    let error = error(
+        r#"
+        use /std/{Nat, Bool, print};
+        use /std/Bool/{Holds};
+
+        let flag: Bool = false;
+        let needs(n: Nat, @_: Holds(flag)) -> Nat = n;
+        let dead(n: Nat) -> Nat = match flag | true => needs(n) | false => 0 end;
+
+        print(Nat/to_str(dead(1)))
+        "#,
+    );
+    assert!(
+        error.contains("implicit argument '_' of 'needs' was not inferred")
+            && error.contains("this arm is never taken: its guard flag is always false"),
+        "expected the bound's report to say the arm is dead, got: {error}"
+    );
+}
+
 /// A dispatch whose method ignores its locals resolves to a spelling that mentions none, `Nat/lt(3, 2)`. The written guard `x == y` is recorded; the resolved one is not, in either checker, so a proof about it is refused in the arm. Mutation-checked with the other three: removing the rule from `refine_head` accepts all four in the elaborator and leaves the kernel to refuse them.
 #[test]
 fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {

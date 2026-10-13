@@ -1121,8 +1121,10 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                             entry.and_then(|entry| entry.reduct.clone()),
                             entry.and_then(|entry| entry.refusal.as_deref().cloned()),
                         );
-                        // Minted in an arm its scrutinee's indices rule out, the hole is one no value reaches, which the report says beside it: the arm closed before this walk.
-                        let unsolved = match entry.and_then(|entry| entry.frames.dead_arm()) {
+                        // Minted in an arm no value reaches — one its scrutinee's indices rule out, or one a guard says is never taken, which was asked where the bound was given up — the hole is one no value reaches, which the report says beside it: the arm closed before this walk.
+                        let unsolved = match entry
+                            .and_then(|entry| entry.frames.dead_arm().or(entry.dead_arm.as_ref()))
+                        {
                             Some(dead) => unsolved.in_dead_arm(dead),
                             None => unsolved,
                         };

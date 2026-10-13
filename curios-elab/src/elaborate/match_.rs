@@ -1,9 +1,9 @@
 use {
     super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
     crate::{
-        BinderSite, MotiveShape, check_motive, contradicted_guard, decided_sort_of, hold_prop,
-        is_prop, probe_open_sort, quality_of, reduce_with, refine_head, resolved_for_display,
-        same_uncommitted, unreachable_arm, zonk_solved_term_metas,
+        BinderSite, MotiveShape, check_motive, dead_guard, decided_sort_of, hold_prop, is_prop,
+        probe_open_sort, quality_of, reduce_with, refine_head, resolved_for_display,
+        same_uncommitted, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
     curios_core::{
@@ -136,7 +136,7 @@ fn check_fold_arm(
         return check(context, body, result.at(head, &[], &[], value));
     }
 
-    refine_head(context, head, value)
+    open_arm(context, head, value)
         .and_then(|()| {
             retype_locals(context, head, value, Vec::new());
             check(context, body, result.at(head, &[], &[], value))
@@ -144,13 +144,17 @@ fn check_fold_arm(
         .map_err(|error| from_arm(context, head, value, error))
 }
 
-/// `error`, raised in the arm at `value`, reported as one in a dead arm where the guard is always another case — see [`unreachable_arm`] — or where the arm's case contradicts the guard of an arm around it — see [`contradicted_guard`].
+/// Open the arm at `value` of a match on `head` in the frame being elaborated: the frame is told what arm it is ([`Context::open_arm`]), and the scrutinee is refined to the case ([`refine_head`]).
+fn open_arm(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
+    context.open_arm(head, value);
+
+    refine_head(context, head, value)
+}
+
+/// `error`, raised in the arm at `value`, reported as one in a dead arm where a guard says the arm is never taken ([`dead_guard`]).
 fn from_arm(context: &mut Context, head: &Term, value: &Term, error: Error) -> Error {
-    if let Some(case) = unreachable_arm(context, head, value) {
-        return error.in_unreachable_arm(head.clone(), case);
-    }
-    match contradicted_guard(context, head, value) {
-        Some((guard, case)) => error.under_contradicted_guard(guard, case),
+    match dead_guard(context, head, value) {
+        Some(dead) => error.in_dead_arm(&dead),
         None => error,
     }
 }
@@ -493,7 +497,7 @@ fn elaborate_switch(
         let literal: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n.clone()))).into();
         let body = context
             .with_frame(|context| {
-                refine_head(context, &head_elaborated, &literal)?;
+                open_arm(context, &head_elaborated, &literal)?;
                 retype_locals(context, &head_elaborated, &literal, Vec::new());
                 check(
                     context,
@@ -693,7 +697,7 @@ fn elaborate_bool_match(
     let false_literal: Term = Subterm::Intrinsic(Intrinsic::Bool(false)).into();
     let false_elaborated = context
         .with_frame(|context| {
-            refine_head(context, &head_elaborated, &false_literal)?;
+            open_arm(context, &head_elaborated, &false_literal)?;
             retype_locals(context, &head_elaborated, &false_literal, Vec::new());
             check(
                 context,
@@ -706,7 +710,7 @@ fn elaborate_bool_match(
     let true_literal: Term = Subterm::Intrinsic(Intrinsic::Bool(true)).into();
     let true_elaborated = context
         .with_frame(|context| {
-            refine_head(context, &head_elaborated, &true_literal)?;
+            open_arm(context, &head_elaborated, &true_literal)?;
             retype_locals(context, &head_elaborated, &true_literal, Vec::new());
             check(
                 context,
@@ -986,7 +990,7 @@ fn elaborate_induct_match(
         let (body_elaborated, held) = context
             .with_frame(|context| {
                 let ix_c = assume_payload(context, telescope, &labels);
-                refine_head(context, &head_elaborated, &ctor_val)?;
+                open_arm(context, &head_elaborated, &ctor_val)?;
 
                 // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the kernel's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved, and an error it raises is reported as one in an arm that may be left out. Refinements never justify the typing (the motive application does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
                 let solutions = match solve_indices(context, &actual_indices, &ix_c, &labels)? {

@@ -1504,23 +1504,7 @@ impl Error {
         }
     }
 
-    /// Say that the arm this error arose in is dead: its guard `guard` is always `case`, a case other than the arm's.
-    pub(crate) fn in_unreachable_arm(self, guard: Term, case: Term) -> Self {
-        Self::InUnreachableArm {
-            dead: Box::new(DeadArm::Guard { guard, case }),
-            error: Box::new(self),
-        }
-    }
-
-    /// Say that the arm this error arose in is dead: in it `guard`, the guard of an arm around it, is always `case`, a case other than the one that arm assumed.
-    pub(crate) fn under_contradicted_guard(self, guard: Term, case: Term) -> Self {
-        Self::InUnreachableArm {
-            dead: Box::new(DeadArm::EnclosingGuard { guard, case }),
-            error: Box::new(self),
-        }
-    }
-
-    /// Say that the arm this error arose in is dead, for `dead`: a reason known where the arm opens, as its indices' clash is, where the two above find theirs once an error is raised.
+    /// Say that the arm this error arose in is dead, for `dead`: a reason known where the arm opens, as its indices' clash is, or one a guard gives, found once an error is raised or a bound given up.
     pub(crate) fn in_dead_arm(self, dead: &DeadArm) -> Self {
         Self::InUnreachableArm {
             dead: Box::new(dead.clone()),

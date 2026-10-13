@@ -6,7 +6,7 @@
 
 use {
     super::{HeldFrames, SharedTelescope},
-    crate::{Problem, Refusal},
+    crate::{DeadArm, Problem, Refusal},
     curios_core::{
         Bound, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm, Term, Transient,
         WitnessOrigin,
@@ -39,6 +39,8 @@ pub(crate) struct MetaEntry {
     pub reduct: Option<Term>,
     /// Why the procedure that proves a bound from the facts in scope proved nothing, the last time it was asked: the facts it considered and what its search concluded, which the unsolved report states beside the bound and cannot ask for itself.
     pub refusal: Option<Rc<Refusal>>,
+    /// Why the arm the metavariable was born in is never taken, where a guard says so: found where the bound it stands for was given up, since the report of the bound is made once the arm has closed, by a walk that cannot reduce a guard. An arm its scrutinee's indices rule out is the frames' to say ([`HeldFrames::dead_arm`]).
+    pub dead_arm: Option<Rc<DeadArm>>,
     /// Its place among the metavariables links hold together.
     held: Held,
 }
@@ -501,6 +503,7 @@ impl Solutions {
             proposition: false,
             reduct: None,
             refusal: None,
+            dead_arm: None,
             held: Held::Head {
                 awaited: self.reading,
                 members: 1,
@@ -526,6 +529,13 @@ impl Solutions {
     pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.refusal = Some(Rc::new(refusal));
+        }
+    }
+
+    /// Record why the arm `id` was born in is never taken, for the report the hole becomes.
+    pub(crate) fn note_dead_arm(&mut self, id: MetavarId, dead: DeadArm) {
+        if let Some(Some(entry)) = self.entries.get_mut(id.0) {
+            entry.dead_arm = Some(Rc::new(dead));
         }
     }
 

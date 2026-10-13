@@ -2,9 +2,9 @@ use {
     super::{Misaligned, align, flexible, park_checking, trivially_inhabited},
     crate::{
         ArgumentSite, Context, Entailed, ErasedSite, Error, HeldFrames, Mode, ParkedWork, Sort,
-        attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, elaborate, entail,
-        exhausted_bound, expect, is_prop, reduce_with, resolve_witness_goal, transitively_ground,
-        zonk_solved_term_metas,
+        attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, dead_guard,
+        elaborate, entail, exhausted_bound, expect, is_prop, reduce_with, resolve_witness_goal,
+        transitively_ground, zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Level,
@@ -185,6 +185,10 @@ pub(super) fn insert_auto_argument(
             );
             if let Some(refusal) = refusal {
                 context.note_refusal(slot, refusal);
+                // Given up where it stands: its subject waits on nothing, so no retry comes.
+                if !waiting {
+                    note_dead_guard(context, slot);
+                }
             }
             if waiting && context.may_park() {
                 context.park(
@@ -266,10 +270,29 @@ pub(crate) fn attempt_discharge(
     if waits_on_metavariable(context, &reduced) {
         return Ok(true);
     }
+    note_dead_guard(context, slot);
     if matches!(&*reduced, Subterm::InductType(_)) {
         context.note_reduct(slot, reduced);
     }
     Ok(false)
+}
+
+/// Record on `slot`, a bound given up, why the arm it was born in is never taken, where a guard says so: each arm around the call is asked what an error leaving it is asked ([`dead_guard`]), innermost first, its guard read under the frames that stood as far as its own. The bound is reported once its arm has closed, by a walk that cannot reduce a guard, so the reason is found here and kept ([`MetaEntry::dead_arm`](crate::MetaEntry)). An arm its scrutinee's indices rule out says so already, by the frames the slot was born under.
+fn note_dead_guard(context: &mut Context, slot: MetavarId) {
+    let Some(entry) = context.metavar_entry(slot) else {
+        return;
+    };
+    if entry.frames.dead_arm().is_some() {
+        return;
+    }
+
+    for (frames, guard, case) in entry.frames.arms() {
+        let dead = context.at_birth(&frames, |context| dead_guard(context, &guard, &case));
+        if let Some(dead) = dead {
+            context.note_dead_arm(slot, dead);
+            return;
+        }
+    }
 }
 
 /// Retry a parked discharge standing on the frames it was parked under ([`attempt_discharge`]), parking it again while it still waits.
