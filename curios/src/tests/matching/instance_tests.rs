@@ -158,3 +158,20 @@ fn a_result_is_typed_where_an_equation_around_an_arm_computes_to_another_case() 
     assert_eq!(run(&restated), b"held");
     assert_eq!(run(&respelled), b"held");
 }
+
+// A row that a binder of its own puts under cases it does not state is elaborated once, at its own pattern, and each leaf that takes it holds that body with the leaf's binders in its variables' places, typed by the kernel where it stands. `(_, true)` is reached under `some` and under `none`, and its body holds a match of its own.
+#[test]
+fn a_row_reached_at_two_leaves_is_typed_at_each() {
+    let source = r#"
+        use /std/{Bool, Nat, Option};
+        let f(m: Option(Nat), c: Bool, d: Bool) -> Nat =
+            match (m, c)
+            | (_, true) => (match d | true => 1 | false => 2 end)
+            | (some(x), false) => x
+            | (none(), false) => 0
+            end;
+        /std/print(Nat/to_str(f(Option/some(5), true, true) + 10 * f(Option/none(), true, false) + 100 * f(Option/some(5), false, true)))
+        "#;
+
+    assert_eq!(run(source), b"521");
+}

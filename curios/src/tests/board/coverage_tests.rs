@@ -7,7 +7,7 @@ use super::test_support::*;
 fn an_elimination_must_enumerate_its_constructors() {
     rejected_by(
         AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS,
-        "missing match case",
+        "no arm matches",
     );
 }
 

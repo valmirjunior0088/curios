@@ -313,9 +313,9 @@ fn constructor_pattern_hidden_binder_past_its_run_has_no_slot() {
     );
 }
 
-// Rows of one constructor write the same hidden payloads: lowering lays the matrix out before any signature is known, so a row that names the length beside one that leaves it out is two shapes in one column.
+// Rows of one constructor meet its payloads each by its own marks: a row that names the length stands beside one that leaves it out.
 #[test]
-fn constructor_pattern_rows_of_one_constructor_agree_on_their_hidden_payloads() {
+fn constructor_pattern_rows_of_one_constructor_write_their_own_hidden_payloads() {
     let source = r#"
         use /std/{Nat, Str, Option};
         induct Vec(T : Type) : (n : Nat) -> pub Type
@@ -331,11 +331,8 @@ fn constructor_pattern_rows_of_one_constructor_agree_on_their_hidden_payloads() 
             end;
         /std/print(Nat/to_str(first(Vec/cons(4, Vec/nil()), Option/none())))
         "#;
-    assert!(
-        error(source).contains("match arm patterns disagree on shape for the same column"),
-        "{}",
-        error(source)
-    );
+
+    assert_eq!(run(source), b"4");
 }
 
 // Marking a plain payload slot with `@` is likewise rejected.

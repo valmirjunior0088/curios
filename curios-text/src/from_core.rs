@@ -164,12 +164,17 @@ fn placed(term: curios_core::Term, frame: Frame, inferred: bool) -> Option<Term>
 
 /// A name as it is written: a path from the root where it leads with a slash, a path from the scope otherwise.
 fn named(spelled: &str) -> Term {
+    Subterm::Name(name_of(spelled)).into()
+}
+
+/// [`named`], as the name itself.
+fn name_of(spelled: &str) -> Name {
     let (absolute, path) = match spelled.strip_prefix('/') {
         Some(path) => (true, path),
         None => (false, spelled),
     };
 
-    Subterm::Name(Name::new(absolute, Qualifier::from(path.split('/')))).into()
+    Name::new(absolute, Qualifier::from(path.split('/')))
 }
 
 /// A declaration as the reader writes it. A witness has no name a program writes, so one reaching here is one resolution would not put back.
@@ -491,19 +496,11 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
     })
 }
 
-/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each row as its pattern over the names its body binds. One that falls through is a `choose` bind arm, which no `match` spells, and is declined.
+/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each row as its pattern over the names its body binds. A `choose` bind arm reads back as the match of two arms it stands for.
 ///
 /// The motive's binders are opened ahead of the scrutinee's and the arms' after both, the order `curios-core`'s printer opens them in.
 fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
-    let curios_core::Matrix {
-        head,
-        motive,
-        rows,
-        fallthrough,
-    } = matrix;
-    if fallthrough.is_some() {
-        return None;
-    }
+    let curios_core::Matrix { head, motive, rows } = matrix;
 
     let motive = match motive {
         Some(motive) => Some(sub(motive, frame)?),
@@ -561,8 +558,8 @@ fn written_pattern(
                 .collect(),
         },
         curios_core::Pattern::Tuple(fields) => MatchPattern::Tuple(written_fields(fields, names)),
-        curios_core::Pattern::Struct { head, fields } => MatchPattern::Struct {
-            head: head.clone(),
+        curios_core::Pattern::Struct { head, fields, .. } => MatchPattern::Struct {
+            head: name_of(head),
             fields: written_fields(fields, names),
         },
         curios_core::Pattern::Bool(value) => MatchPattern::Bool(*value),

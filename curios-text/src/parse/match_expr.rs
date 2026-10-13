@@ -36,7 +36,7 @@ pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Term>)> {
     )
 }
 
-// A match-arm: `| pattern => body`, where `pattern` may nest across constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`). A bare binder arm is legal alone (equivalent to a `let`) and a final bare `_` after dispatching arms is the default, but elaboration rejects a binder beside a concrete-shape arm in one column of one group, since arms have no priority order (`curios-elab`'s matrix compiler).
+// A match-arm: `| pattern => body`, where `pattern` may nest across constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`). A bare binder arm is legal alone (equivalent to a `let`), a binder may stand beside a concrete pattern in any column, and a final bare `_` is the row that cannot fail. Arms have no priority order, so two may match one value only where the first is a case of the other (`curios-elab`'s matrix compiler).
 pub(super) fn parse_induct_match_branch<'a>() -> Parser<'a, MatrixArm> {
     parse_literal("|")
         .and_keep(commit(

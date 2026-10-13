@@ -1,4 +1,4 @@
-//! The matrix form's own rules: consistent arity, no duplicate row or tag, and where a motive may sit.
+//! The matrix form's own rules: consistent arity, no duplicate row or tag, where a motive may sit, and where the row that cannot fail is typed.
 
 use crate::tests::{error, run};
 
@@ -78,26 +78,6 @@ fn a_duplicate_arm_is_reported_at_the_later_arm() {
     );
 }
 
-// A plain binder row (a named catch-all, which the full-enumeration matrix refuses) mixed with a concrete constructor row in the same column.
-#[test]
-fn match_rejects_mixed_binder_and_ctor_column() {
-    let source = r#"
-        use /std/{Option, Nat};
-        let f(o : Option(Nat)) -> Nat =
-            match o
-            | x => 0
-            | some(y) => y
-            end;
-        /std/print(Nat/to_str(f(Option/some(3))))
-        "#;
-
-    let error = error(source);
-    assert!(
-        error.contains("disagree on shape"),
-        "unexpected error: {error}"
-    );
-}
-
 // A dependent motive requires the head to dispatch on a constructor tag directly — there is no core `Match` node for a tuple-headed match to attach it to.
 #[test]
 fn match_rejects_a_motive_on_tuple_head() {
@@ -118,7 +98,7 @@ fn match_rejects_a_motive_on_tuple_head() {
     );
 }
 
-// A `Nat` column missing its `0` case entirely, reported by the case it lacks. These four hardcoded carriers have no core-side exhaustiveness mechanism to fall back on, unlike an ordinary constructor tag.
+// A `Nat` column missing its `0` case entirely, reported as the value no arm matches.
 #[test]
 fn match_rejects_incomplete_nat_pattern() {
     let source = r#"
@@ -132,7 +112,7 @@ fn match_rejects_incomplete_nat_pattern() {
 
     let error = error(source);
     assert!(
-        error.contains("must also cover `0`"),
+        error.contains("no arm matches `0`"),
         "unexpected error: {error}"
     );
 }
@@ -151,23 +131,6 @@ fn match_allows_dependent_motive_on_nat_head() {
         "#;
 
     assert_eq!(run(source), b"2");
-}
-
-// A `_` nested inside a constructor's payload, where another row writes a concrete pattern, is a binder beside a concrete shape in one column of one group.
-#[test]
-fn nested_underscore_mixed_with_concrete_stays_inconsistent_shape() {
-    let source = r#"
-        use /std/{Option, Nat};
-        let f(m : Option(Option(Nat))) -> Nat =
-            match m | some(some(x)) => x | some(_) => 0 | none() => 1 end;
-        /std/print(Nat/to_str(f(Option/none())))
-        "#;
-
-    let error = error(source);
-    assert!(
-        error.contains("disagree on shape"),
-        "unexpected error: {error}"
-    );
 }
 
 // A literal inside a constructor's payload, with a `_` to fall through to, is a dispatch by value and no fold.
@@ -222,47 +185,6 @@ fn a_match_shape_refusal_is_located_at_the_match() {
             error.contains("mixes successor-peeling") && error.contains(line),
             "{source:?} reported {error}"
         );
-    }
-}
-
-// An incomplete carrier match names the case it lacks, at whatever depth the column sits, and a literal dispatch names the rule it broke: the default it requires.
-#[test]
-fn an_incomplete_carrier_match_names_the_missing_case() {
-    for (type_, arms, expected) in [
-        (
-            "Bool",
-            "| true => 1",
-            "a `Bool` match must also cover `false`",
-        ),
-        (
-            "List(Nat)",
-            "| [] => 0",
-            "a `List` match must also cover `[head, ..tail]`",
-        ),
-        ("Nat", "| p + 1 => p", "a `Nat` match must also cover `0`"),
-        (
-            "Bytes",
-            "| x[] => 0",
-            "a `Bytes` match must also cover `x[head, ..tail]`",
-        ),
-        (
-            "Nat",
-            "| 0 => 1 | 1 => 2",
-            "a `Nat` dispatch over literals must end in `| _ =>`",
-        ),
-        (
-            "Option(Nat)",
-            "| some(5) => 1 | some(6) => 2",
-            "a `Nat` dispatch over literals must end in `| _ =>`",
-        ),
-    ] {
-        let source = format!(
-            "use /std/{{Nat, Bool, Bytes, List, Option}};\nlet f(b: {type_}) -> Nat =\n    match b {arms} end;\n/std/print(\"\")\n"
-        );
-
-        let error = error(&source);
-        assert!(error.contains(expected), "{source:?} reported {error}");
-        assert!(!error.contains("nested"), "{source:?} reported {error}");
     }
 }
 

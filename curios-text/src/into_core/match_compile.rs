@@ -2,7 +2,7 @@ use {
     super::{Binder, Hoisted, Lowerer},
     crate::{
         BinPattern, Choose, ChooseArm, ChooseTest, Error, ListPattern, Match, MatchPattern,
-        MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
+        MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
     },
     curios_utilities::Span,
     std::mem,
@@ -86,7 +86,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
     }
 
-    /// Lowers a `choose` bind arm `| pattern = value => body` — with `value` and `rest`, what it falls through to, already lowered — as the matrix of its one row over `value` that falls through to `rest`. A refutable pattern only: a bare-binder pattern cannot fail (a plain `let`) and is rejected.
+    /// Lowers a `choose` bind arm `| pattern = value => body` — with `value` and `rest`, the rest of its ladder, already lowered — as the matrix of two rows over `value`: its own, and a `_` whose body is `rest`, which a value the pattern does not match takes. A refutable pattern only: a bare-binder pattern cannot fail (a plain `let`) and is rejected.
     pub(super) fn bind_arm(
         &self,
         pattern: &MatchPattern,
@@ -99,11 +99,23 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             return Err(Error::BindArmIrrefutable);
         }
 
+        // The `_` binds nothing its body can name.
+        let (_, unnamed) = self.mint([String::new()]).remove(0);
+        let rest = curios_core::Row {
+            pattern: curios_core::Pattern::Binder,
+            body: curios_core::Term::func(
+                vec![(
+                    unnamed,
+                    curios_core::Term::hole(self.context.fresh_metavar()),
+                )],
+                rest,
+            ),
+        };
+
         Ok(curios_core::Term::matrix(curios_core::Matrix {
             head: value,
             motive: None,
-            rows: vec![self.row(pattern, body, None, leaf)?],
-            fallthrough: Some(rest),
+            rows: vec![self.row(pattern, body, None, leaf)?, rest],
         }))
     }
 
@@ -141,7 +153,6 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             head,
             motive,
             rows,
-            fallthrough: None,
         }))
     }
 
@@ -154,7 +165,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Row, Error> {
         let mut binders = Vec::new();
-        let pattern = self.pattern(pattern, &mut binders);
+        let pattern = self.pattern(pattern, &mut binders)?;
         let body = self.bound(&binders, || leaf(self, body))?;
         // A pattern's binder has no type written: the scrutinee's gives it one where the pattern is compiled.
         let function = curios_core::Term::func(
@@ -179,9 +190,13 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         })
     }
 
-    /// A pattern as Core holds it, with every name it binds minted onto `binders` in the order it writes them.
-    fn pattern(&self, pattern: &MatchPattern, binders: &mut Vec<Binder>) -> curios_core::Pattern {
-        match pattern {
+    /// A pattern as Core holds it, with every name it binds minted onto `binders` in the order it writes them. A struct pattern's head is resolved as a struct literal's is ([`Lowerer::resolve_nominal`]): the scrutinee's type is held to the structure it names where the pattern is compiled.
+    fn pattern(
+        &self,
+        pattern: &MatchPattern,
+        binders: &mut Vec<Binder>,
+    ) -> Result<curios_core::Pattern, Error> {
+        Ok(match pattern {
             MatchPattern::Binder(name) => {
                 binders.push(self.pattern_binder(name));
 
@@ -191,21 +206,19 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 tag: curios_core::Atom::from(tag.as_str()),
                 args: args
                     .iter()
-                    .map(|(plicity, arg)| (*plicity, self.pattern(arg, binders)))
-                    .collect(),
+                    .map(|(plicity, arg)| Ok((*plicity, self.pattern(arg, binders)?)))
+                    .collect::<Result<_, Error>>()?,
             },
-            MatchPattern::Tuple(fields) => curios_core::Pattern::Tuple(
-                fields
-                    .iter()
-                    .map(|field| (field.label.clone(), self.pattern(&field.value, binders)))
-                    .collect(),
-            ),
+            MatchPattern::Tuple(fields) => {
+                curios_core::Pattern::Tuple(self.fields(fields, binders)?)
+            }
             MatchPattern::Struct { head, fields } => curios_core::Pattern::Struct {
-                head: head.clone(),
-                fields: fields
-                    .iter()
-                    .map(|field| (field.label.clone(), self.pattern(&field.value, binders)))
-                    .collect(),
+                head: head.join(),
+                structure: match self.resolve_nominal(head)? {
+                    Ok(structure) => curios_core::Free::Global(structure),
+                    Err(unbound) => unbound,
+                },
+                fields: self.fields(fields, binders)?,
             },
             MatchPattern::Bool(value) => curios_core::Pattern::Bool(*value),
             MatchPattern::Char(character) => curios_core::Pattern::Character(*character),
@@ -241,7 +254,19 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
                 curios_core::Pattern::Atom(*grain, self.hypothesis(ih, binders))
             }
-        }
+        })
+    }
+
+    /// The fields of a tuple or struct pattern, each under the label it is written with.
+    fn fields(
+        &self,
+        fields: &[MatchPatternField],
+        binders: &mut Vec<Binder>,
+    ) -> Result<Vec<(Option<String>, curios_core::Pattern)>, Error> {
+        fields
+            .iter()
+            .map(|field| Ok((field.label.clone(), self.pattern(&field.value, binders)?)))
+            .collect()
     }
 
     /// What a fold's hypothesis is bound by, where one is written, its names minted onto `binders` after the binders it stands beside.

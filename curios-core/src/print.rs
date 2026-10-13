@@ -2651,13 +2651,8 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         ]),
         // The body a derived witness asks for, before elaboration has written it: no surface form spells it, so the dump names the transient.
         Subterm::Transient(Transient::Derive) => pure("derive"),
-        // A match as it is written, before its patterns are compiled: each arm as its pattern over the names its body binds, and what a bind arm falls through to as a last arm no pattern heads.
-        Subterm::Transient(Transient::Matrix(Matrix {
-            head,
-            motive,
-            rows,
-            fallthrough,
-        })) => {
+        // A match as it is written, before its patterns are compiled: each arm as its pattern over the names its body binds.
+        Subterm::Transient(Transient::Matrix(Matrix { head, motive, rows })) => {
             // The motive's binders are opened ahead of the scrutinee's, as a compiled match's are, and the arms' after both.
             let motive = match motive {
                 Some(motive) => flat([pure(": "), sub(motive, frame)]),
@@ -2687,22 +2682,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                     ])
                 })
                 .collect::<Vec<_>>();
-            let fallthrough = match fallthrough {
-                Some(rest) => flat([
-                    pure("\n| else =>\n"),
-                    indent(flat([sub(rest, frame), pure(";")])),
-                ]),
-                None => pure(""),
-            };
-
-            flat([
-                pure("match "),
-                head,
-                motive,
-                pure(";"),
-                flat(arms),
-                fallthrough,
-            ])
+            flat([pure("match "), head, motive, pure(";"), flat(arms)])
         }
         // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing. Under axis (e) neither is: the spine is elaboration state like the id, and the reader gets `?`.
         Subterm::Metavar(metavar) => {
@@ -2736,6 +2716,13 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
 mod tests;
 
 /// A character rendered as its literal body: the five escapes by their spellings, anything else verbatim.
+impl Pattern {
+    /// The pattern as source writes it, each binder under the next of `names`: what a report names an arm by.
+    pub fn written(&self, names: &mut dyn Iterator<Item = String>) -> String {
+        pattern_text(self, names)
+    }
+}
+
 /// A pattern of a [`Matrix`]'s row as source writes it, each binder under the next of `names`.
 fn pattern_text(pattern: &Pattern, names: &mut dyn Iterator<Item = String>) -> String {
     let fields = |fields: &[(Option<String>, Pattern)], names: &mut dyn Iterator<Item = String>| {
@@ -2778,6 +2765,7 @@ fn pattern_text(pattern: &Pattern, names: &mut dyn Iterator<Item = String>) -> S
         Pattern::Struct {
             head,
             fields: written,
+            ..
         } => {
             format!("{head} {{ {} }}", fields(written, names))
         }

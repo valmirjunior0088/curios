@@ -733,7 +733,6 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
                     pattern: Pattern::Binder,
                     body: markers.visited(),
                 }],
-                fallthrough: Some(markers.visited()),
             })
         }),
         Specimen::of(&mut markers, |markers| {

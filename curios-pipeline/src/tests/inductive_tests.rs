@@ -419,7 +419,7 @@ fn omission_requires_a_definite_clash() {
     "#;
     let error = compile(open_forcing).unwrap_err();
     assert!(
-        error.contains("missing arm 'same'"),
+        error.contains("no arm matches `same(_)`"),
         "unexpected error: {error}"
     );
 

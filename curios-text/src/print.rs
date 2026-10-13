@@ -466,7 +466,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             }
         }
         MatchPattern::Struct { head, fields } => flat([
-            pure(head),
+            pure(head.join()),
             pure(" "),
             listed_block(
                 "{",

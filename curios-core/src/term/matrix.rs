@@ -1,14 +1,14 @@
 //! A match as it is written: the form lowering hands elaboration before a pattern is compiled.
 //!
-//! Nothing here judges, reduces or binds. A [`Matrix`] is plain data over terms — its scrutinee, its motive, its rows' bodies and what it falls through to — and a row's binders are its body's own: the body is an ordinary function over them, as a [`Bang`](crate::Bang)'s continuation is, so no walk of Core learns a binder from a pattern. A [`Pattern`] says where each of those binders stands, counted in the order the pattern writes them.
+//! Nothing here judges, reduces or binds. A [`Matrix`] is plain data over terms — its scrutinee, its motive and its rows' bodies — and a row's binders are its body's own: the body is an ordinary function over them, as a [`Bang`](crate::Bang)'s continuation is, so no walk of Core learns a binder from a pattern. A [`Pattern`] says where each of those binders stands, counted in the order the pattern writes them.
 
 use {
-    crate::{Atom, Term},
+    crate::{Atom, Free, Term},
     curios_num::{Grain, Natural},
     curios_utilities::Plicity,
 };
 
-/// A match before its patterns are compiled: the scrutinee, the motive where one is written, and the arms in the order they are written. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.
+/// A match before its patterns are compiled: the scrutinee, the motive where one is written, and the arms in the order they are written. A `choose` bind arm is the two rows `pattern => body | _ => rest`, the rest of its ladder being what a value the pattern does not match takes. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Matrix {
@@ -16,17 +16,14 @@ pub struct Matrix {
     /// The motive as it is written, and `None` where no `:` is.
     pub motive: Option<Term>,
     pub rows: Vec<Row>,
-    /// What a value no row matches falls through to: the rest of a `choose` ladder past a bind arm. A headed match has none, and writes a default as its last row.
-    pub fallthrough: Option<Term>,
 }
 
 impl Matrix {
-    /// The direct child terms: the scrutinee, the motive, each row's body and the fallthrough.
+    /// The direct child terms: the scrutinee, the motive and each row's body.
     pub fn subterms(&self) -> impl Iterator<Item = &Term> {
         std::iter::once(&self.head)
             .chain(&self.motive)
             .chain(self.rows.iter().map(|row| &row.body))
-            .chain(&self.fallthrough)
     }
 
     /// This matrix with every child term mapped, its patterns as they stand.
@@ -42,7 +39,6 @@ impl Matrix {
                     body: f(&row.body),
                 })
                 .collect(),
-            fallthrough: self.fallthrough.as_ref().map(&mut *f),
         }
     }
 }
@@ -69,9 +65,10 @@ pub enum Pattern {
     },
     /// A tuple pattern, each field under the label it is written with.
     Tuple(#[archived_omit_bounds] Vec<(Option<String>, Pattern)>),
-    /// A struct pattern, under the head it is written with.
+    /// A struct pattern: the head it is written with, which a report prints, and the structure that head resolved to, or the binder it lowered to where it names none.
     Struct {
         head: String,
+        structure: Free,
         #[archived_omit_bounds]
         fields: Vec<(Option<String>, Pattern)>,
     },
@@ -114,14 +111,6 @@ impl Pattern {
                 2 + hypothesis.as_ref().map_or(0, Bind::binders)
             }
         }
-    }
-
-    /// Whether the pattern dispatches on a case of its scrutinee: a constructor or a carrier's leaf, where a binder takes any value and a tuple or struct pattern only projects.
-    pub fn dispatches(&self) -> bool {
-        !matches!(
-            self,
-            Pattern::Binder | Pattern::Tuple(_) | Pattern::Struct { .. }
-        )
     }
 }
 

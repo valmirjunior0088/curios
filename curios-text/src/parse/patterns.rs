@@ -232,10 +232,7 @@ pub(super) fn parse_struct_match_pattern<'a>() -> Parser<'a, MatchPattern> {
         .and_drop(parse_literal("{"))
         .and(sep_by0_trailing(field, || parse_literal(",")))
         .and_drop(parse_literal("}"))
-        .map(|(head, fields)| MatchPattern::Struct {
-            head: head.join(),
-            fields,
-        })
+        .map(|(head, fields)| MatchPattern::Struct { head, fields })
 }
 
 // A constructor match pattern `tag(p, …)` — `nil()` for the nullary case. The `(` immediately after the tag is the commit point, distinguishing it from a bare name. Unlike `parse_func_param`'s definition-sugar arguments, each argument here is itself a full `MatchPattern`, so a constructor's payload can nest arbitrarily (`some(some(x))`, `pair(some(x), y)`, …). Each argument retains its plicity: a payload slot the constructor declared `@` must be matched `@name`. `use` is refused where it stands — a payload is plain or `@`, and no pattern or term begins with the word, so nothing else could be meant.

@@ -1019,22 +1019,44 @@ impl fmt::Display for Displayed<'_> {
                     "match arm patterns disagree on shape for the same column"
                 )
             }
-            Error::MatrixDuplicateRow => {
+            Error::MatrixDuplicateRow { covered } => {
                 write!(
                     f,
                     "duplicate or overlapping match arm: every arm must be reachable and distinct"
-                )
+                )?;
+                match covered {
+                    Some(covered) => write!(
+                        f,
+                        ", and no value reaches this one past the arms before it, `{covered}` among them"
+                    ),
+                    None => Ok(()),
+                }
             }
-            Error::MatrixIncompleteCarrierMatch { carrier, missing } => {
+            Error::MatrixUncovered { value, indexed } => {
+                write!(f, "no arm matches `{value}`")?;
+                match indexed {
+                    true => write!(
+                        f,
+                        ": its index target is not provably impossible at the scrutinee's indices — write the arm"
+                    ),
+                    false => Ok(()),
+                }
+            }
+            Error::MatrixArmsMeet {
+                value,
+                first,
+                second,
+            } => {
                 write!(
                     f,
-                    "a `{carrier}` match must also cover `{missing}`, or end in `| _ =>`"
+                    "the arms `{first}` and `{second}` both match `{value}`, and neither is a case of the other: arm order decides nothing, so write an arm for `{value}` before them"
                 )
             }
-            Error::MatrixNatDispatchNeedsDefault => {
+            Error::MatrixStructHead { head, scrutinee } => {
+                let scrutinee = scrutinee.spelled(spelling);
                 write!(
                     f,
-                    "a `Nat` dispatch over literals must end in `| _ =>`: no set of literals covers every natural"
+                    "a `{head}` pattern matches a value of that structure, and this one is of type {scrutinee}"
                 )
             }
             Error::MatrixMixedNatDispatch => {

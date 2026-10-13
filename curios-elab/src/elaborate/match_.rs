@@ -293,7 +293,7 @@ impl NatSplit {
 
     /// The match over the two arms, the second closed over the binders it was entered under.
     pub(super) fn rebuild(
-        self,
+        &self,
         zero: Term,
         predecessor: &Free,
         hypothesis: &Free,
@@ -301,8 +301,8 @@ impl NatSplit {
     ) -> (Term, Term) {
         let result_type = self.result.of(&self.head, &[]);
         let rebuilt = Subterm::Match(Match {
-            head: self.head,
-            result: self.result,
+            head: self.head.clone(),
+            result: self.result.clone(),
             // `Nat` is the free monoid on one payload-less generator: its cons arm binds just (predecessor, ih), so the carrier is `Nat` and the head is absent.
             cases: Cases::FreeMonoid {
                 carrier: Carrier::Nat {
@@ -517,28 +517,28 @@ impl SequenceSplit {
 
     /// The match over the two arms, the second closed over the binders it was entered under.
     pub(super) fn rebuild(
-        self,
+        &self,
         empty: Term,
         [atom, tail, hypothesis]: &[Free; 3],
         cons: Term,
     ) -> (Term, Term) {
         let result_type = self.result.of(&self.head, &[]);
         let cons_case = Scope::close(Three, &[atom, tail, hypothesis], cons);
-        let carrier = match self.atoms {
+        let carrier = match &self.atoms {
             Atoms::List { element } => Carrier::List {
-                elem: element,
+                elem: element.clone(),
                 empty_case: empty,
                 cons_case,
             },
             Atoms::Bin { grain } => Carrier::Bin {
-                grain,
+                grain: *grain,
                 empty_case: empty,
                 cons_case,
             },
         };
         let rebuilt = Subterm::Match(Match {
-            head: self.head,
-            result: self.result,
+            head: self.head.clone(),
+            result: self.result.clone(),
             cases: Cases::FreeMonoid { carrier },
         })
         .into();
@@ -710,11 +710,11 @@ impl SwitchSplit {
     }
 
     /// The match over `cases`, which arrive strictly ascending as `Cases::Switch` states them, and the default.
-    pub(super) fn rebuild(self, cases: Vec<(Natural, Term)>, default: Term) -> (Term, Term) {
+    pub(super) fn rebuild(&self, cases: Vec<(Natural, Term)>, default: Term) -> (Term, Term) {
         let result_type = self.result.of(&self.head, &[]);
         let rebuilt = Subterm::Match(Match {
-            head: self.head,
-            result: self.result,
+            head: self.head.clone(),
+            result: self.result.clone(),
             cases: Cases::Switch { cases, default },
         })
         .into();
@@ -922,11 +922,11 @@ impl BoolSplit {
     }
 
     /// The match over the two arms.
-    pub(super) fn rebuild(self, false_case: Term, true_case: Term) -> (Term, Term) {
+    pub(super) fn rebuild(&self, false_case: Term, true_case: Term) -> (Term, Term) {
         let result_type = self.result.of(&self.head, &[]);
         let rebuilt = Subterm::Match(Match {
-            head: self.head,
-            result: self.result,
+            head: self.head.clone(),
+            result: self.result.clone(),
             cases: Cases::Bool {
                 false_case,
                 true_case,
@@ -1188,6 +1188,11 @@ impl NominalSplit {
         Ok(matches!(inversion, Invert::Impossible))
     }
 
+    /// Whether the family is indexed, which is where inversion may excuse an arm left out.
+    pub(super) fn indexed(&self) -> bool {
+        !self.actual_indices.is_empty()
+    }
+
     /// The refusal of a match that leaves out the arm for `tag` where nothing rules the case out.
     pub(super) fn missing(&self, tag: &Atom) -> Error {
         match self.actual_indices.is_empty() {
@@ -1305,7 +1310,7 @@ impl NominalSplit {
 
     /// The match over `cases`, in the order [`NominalSplit::constructors`] gives, and the catch-all where one is written. `undecided` is what [`NominalSplit::admit`] answered, and `term` the match a sort decided here is reported with.
     pub(super) fn rebuild(
-        self,
+        &self,
         context: &mut Context,
         cases: Vec<(Atom, InductArm)>,
         default: Option<Term>,
@@ -1320,8 +1325,8 @@ impl NominalSplit {
         let stated =
             (self.pinned && default.is_none() && cases.len() == 1).then(|| self.head_type.clone());
         let rebuilt = Subterm::Match(Match {
-            head: self.head,
-            result: self.result,
+            head: self.head.clone(),
+            result: self.result.clone(),
             cases: Cases::Induct {
                 cases,
                 default,
@@ -1330,7 +1335,7 @@ impl NominalSplit {
         })
         .into();
 
-        Ok((rebuilt, self.result_type))
+        Ok((rebuilt, self.result_type.clone()))
     }
 }
 

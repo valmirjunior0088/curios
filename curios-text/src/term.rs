@@ -280,7 +280,7 @@ pub struct Match {
     pub head: Term,
     /// The written motive, a term checked against the eliminator's motive type `(ī : Ī(p̄)) -> I(p̄, ī) -> Sort` — ordinarily a lambda binding the scrutinee's indices and then the scrutinee. `None` records that no `:` was written, and lowering mints a silent metavariable for it.
     pub motive: Option<Term>,
-    /// The arms, in source order. Each pairs a (possibly nested, across constructors/tuples/structs — see [`MatchPattern`]) pattern with its body; zero arms is legal (a vacuous elimination, e.g. of `False`). The grammar enforces "full enumeration" (no wildcard/catch-all, no row priority — see `curios-elab`'s matrix compiler); elaboration rejects an overlapping/duplicate row.
+    /// The arms, in source order. Each pairs a (possibly nested, across constructors/tuples/structs — see [`MatchPattern`]) pattern with its body; zero arms is legal (a vacuous elimination, e.g. of `False`). Arms have no priority: two may match one value only where the first is a case of the other, and elaboration rejects an arm no value reaches and a value no arm matches (see `curios-elab`'s matrix compiler).
     pub arms: Vec<MatrixArm>,
 }
 
@@ -302,7 +302,7 @@ impl PartialEq for MatrixArm {
 /// A match-arm pattern: genuinely refutable, unlike [`Pattern`] (which is always irrefutable — see its own doc comment). Distinct from `Pattern` on purpose, even though `Tuple`/`Struct` mirror its field grammar exactly: a `let`/lambda/function-sugar binder site never dispatches on shape, but a match arm's whole point is dispatching on shape, so the two must never be conflated.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchPattern {
-    /// A plain name (or `_`) — never splits a column by itself; legal only when every row shares this shape in that column (see `curios-elab`'s matrix compiler).
+    /// A plain name (or `_`) — never splits a column by itself: where another row takes the column apart, a row that writes one is under every case of it (see `curios-elab`'s matrix compiler).
     Binder(Label),
     /// An inductive constructor tag applied to sub-patterns — positional (constructors have no field labels in this language). Each argument retains its plicity mark (`@`/`use`): a payload slot the constructor declared implicit must be matched with `@`. The marks lower to the Core arm untouched; core elaboration checks them against the constructor's canonical payload plicities.
     Variant {
@@ -313,7 +313,7 @@ pub enum MatchPattern {
     Tuple(Vec<MatchPatternField>),
     /// A struct pattern — the same labeled/punned/positional grammar as struct literals and the irrefutable [`Pattern::Struct`], not the positional constructor-call shape (structs have field labels; inductive constructors don't).
     Struct {
-        head: String,
+        head: Name,
         fields: Vec<MatchPatternField>,
     },
     /// A `Bool` literal leaf: `true` or `false`.

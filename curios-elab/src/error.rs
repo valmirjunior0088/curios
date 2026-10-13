@@ -364,17 +364,28 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
-    /// Two rows of a match write incompatible shapes in one column: a binder beside a concrete pattern in one group, which nothing orders since arms have no priority, or two concrete shapes that disagree — a tuple or struct of another arity or other labels, a struct under another head, one constructor over another number of payloads.
+    /// The rows that take one column apart write shapes that disagree: a tuple or struct of another arity or other labels, a struct of another structure, a constructor beside a carrier's case.
     MatrixInconsistentShape,
-    /// Two rows of a match write one pattern in every column, a constructor repeated in a match one level deep among them. Every arm is reachable and distinct: arms have no priority to break the tie with.
-    MatrixDuplicateRow,
-    /// A `Bool`, `Nat`, list or packed column split without both of its cases and with no `| _ =>` to stand in for one; `missing` spells the case the rows lack. A constructor a nominal match leaves out is index inversion's to excuse, and a carrier has none, so both of its cases are required here, at whatever depth the column sits.
-    MatrixIncompleteCarrierMatch {
-        carrier: &'static str,
-        missing: &'static str,
+    /// An arm no value reaches: every value it matches is taken by an arm written before it. A repeated arm is one, and so is a final `_` after arms that cover every case. `covered` is an arm before it that takes a value it matches, as that arm is written.
+    MatrixDuplicateRow {
+        covered: Option<String>,
     },
-    /// A `Nat` column dispatching on literals with no `| _ =>`: no set of literals covers every natural, so the form requires its default.
-    MatrixNatDispatchNeedsDefault,
+    /// A value no arm matches, written as the pattern that matches it: the cases read on the way to it, and `_` wherever none was. `indexed` says the case left out is a constructor of an indexed family, which inversion excuses only where its indices clash with the scrutinee's.
+    MatrixUncovered {
+        value: String,
+        indexed: bool,
+    },
+    /// Two arms that match one value, neither a case of the other. Arms have no priority, so nothing says which of the two the value takes. `value` is the value as a pattern, which is the arm that parts them, and `first` and `second` are the two arms as written.
+    MatrixArmsMeet {
+        value: String,
+        first: String,
+        second: String,
+    },
+    /// A struct pattern written under `head` over a scrutinee whose type is not that structure.
+    MatrixStructHead {
+        head: String,
+        scrutinee: Box<Term>,
+    },
     /// A `Nat` column mixing a successor arm with a literal one. A literal peels no successor, so the two are the fold and the dispatch, and one column is one of them.
     MatrixMixedNatDispatch,
     /// A packed column mixing bit and byte patterns. A scrutinee is of one grain, so every row of its column writes one prefix.
@@ -1868,6 +1879,7 @@ impl Error {
                 out.push(expected)
             }
             Self::NotAStructType { found } => out.push(found),
+            Self::MatrixStructHead { scrutinee, .. } => out.push(scrutinee),
             Self::InformativePropStruct { field_type, .. } => out.push(field_type),
             Self::NotStrictlyPositive { site_type, .. } => out.push(site_type),
             Self::OperatorUndefined { type_, .. } => out.push(type_),

@@ -1,5 +1,6 @@
 //! Matching: patterns, the matrix form, motives, refinement and `choose`, end to end.
 
+mod binder_tests;
 mod choose_tests;
 mod instance_tests;
 mod matrix_tests;

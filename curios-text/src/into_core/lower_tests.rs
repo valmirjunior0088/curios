@@ -93,7 +93,7 @@ fn a_match_lowers_to_the_matrix_it_is_written_as() {
     let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
         panic!("expected a matrix at the top, got {term:?}");
     };
-    assert!(matrix.motive.is_none() && matrix.fallthrough.is_none());
+    assert!(matrix.motive.is_none());
     assert_eq!(
         matrix
             .rows
@@ -111,15 +111,15 @@ fn a_match_lowers_to_the_matrix_it_is_written_as() {
 }
 
 #[test]
-fn a_bind_arm_lowers_to_a_matrix_that_falls_through() {
-    // `| pattern = value => body` is the matrix of its one row over `value`, falling through to the rest of the ladder.
+fn a_bind_arm_lowers_to_the_two_rows_it_stands_for() {
+    // `| pattern = value => body` is the matrix of two rows over `value`: its own, and a `_` that takes the rest of the ladder.
     let term = run("choose | some(x) = m => x | _ => 0 end");
 
     let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
         panic!("expected a matrix at the top, got {term:?}");
     };
-    assert_eq!(matrix.rows.len(), 1);
-    assert!(matrix.fallthrough.is_some());
+    assert_eq!(matrix.rows.len(), 2);
+    assert_eq!(matrix.rows[1].pattern, curios_core::Pattern::Binder);
 }
 
 #[test]
