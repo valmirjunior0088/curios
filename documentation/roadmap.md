@@ -20,7 +20,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Arithmetic
 
-- [ ] [A disequality is a fact](roadmap/arithmetic/200-a-disequality-is-a-fact.md) — an `==` guard's false arm and a `!=` guard's true one are read as no fact, so `match n == 0 | true => … | false => a / n end` is refused at `Nat` where `0 < n` is accepted and where the same guard is accepted at `Int`
+- [ ] [A disequality is a fact](roadmap/arithmetic/200-a-disequality-is-a-fact.md) — an `==` guard's false arm and a `!=` guard's true one are read as no fact, so `match n == 0 | true => … | false => a / n end` is refused at `Nat` where `0 < n` is accepted and where the same guard is accepted at `Int`; and a disequality is read as no goal, so at `Int` it is `+0 < b` that is refused before `a / b`
 - [ ] [Exact rationals and their laws](roadmap/arithmetic/201-exact-rationals.md) — no canonical rational library, executable binary64 conversions, exact decimals or library proofs
 - [ ] [Alternate floating-point exception handling](roadmap/arithmetic/202-flt-exception-handling.md) — IEEE 754's remaining §8 policies, and per-operation substitution and recording
 - [ ] [Correctly rounded elementary functions](roadmap/arithmetic/203-flt-elementary-functions.md) — the §9.2 functions are absent, and fuel and exhaustion need a contract
