@@ -8,6 +8,7 @@
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
 //! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]).
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs. A product of two sums, which the fold leaves standing, is read distributed ([`Reader::side`]).
+//! - Where their products leave an assignment too, a disequality the scope states — an `==` guard's false arm, a `!=` guard's true one, a hypothesis or a field stating either, `Bool/not` of an equality among them — as the strict bound conversion holds it to be, `n != 0` being `0 < n`, proved by what states it; and a `!=` guard's false arm as the equation it is ([`disequalities`]). Read last and by a reader of its own, so what the scope kept hands out no atom, class or spelling a search before it reads ([`Kept`]).
 //! - That every monomial over naturals is at least zero, which conversion decides.
 //!
 //! A local definition and a variable a match refined need no reading of their own: every statement is read reduced, so a fact stated over a `let` meets a goal stated over its value, and one over `k` meets one over the successor an arm refined `k` to.
@@ -18,7 +19,7 @@
 //!
 //! **A fact is `left <= right` at its carrier**, as the proof's lemmas take it: a strict fact is the loose one of its successor, which conversion reads as one proposition at `Nat` as at `Int`, and an equation is two facts. Its form is `left - right` aligned to `<=`, read by the one reader every fact and the goal share, so their atoms are one table's.
 //!
-//! **What is not read is recorded.** A proposition stating a decision the view does not read — a disjunction, an opaque `Bool` function, an equality's false arm — is kept for the report.
+//! **What is not read is recorded.** A proposition stating a decision the view does not read — a disjunction, an opaque `Bool` function, a disequality conversion holds to be no order comparison — is kept for the report.
 
 use {
     super::{decision_of, global, in_scope, is_empty},
@@ -29,8 +30,8 @@ use {
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in},
     curios_core::{
-        Apply, Cases, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match, Nat,
-        Probe, StructType, Subterm, Term, TupleType,
+        Aligned, Apply, Cases, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match,
+        Nat, Probe, StructType, Subterm, Term, TupleType,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{OrderSyntax, Plicity, SyntaxName},
@@ -124,14 +125,32 @@ pub(super) struct Target {
     pub(super) decision: Term,
 }
 
-/// What the scope states: the facts read, the case splits their operations define, the remainders lifted out of them, and the propositions stating a decision the view does not read.
+/// What the scope states: the facts read, the case splits their operations define, the remainders lifted out of them, the comparisons kept for the last reading, and the propositions stating a decision the view does not read.
 pub(super) struct Facts {
     pub(super) facts: Vec<Fact>,
     pub(super) splits: Vec<Split>,
     pub(super) lifts: Vec<Lift>,
     pub(super) unread: Vec<(Origin, Term)>,
+    /// What the scope states that is read last ([`disequalities`]).
+    kept: Vec<Kept>,
     /// Each reduct an operand was read through, beside the operand as stated.
     spelled: Vec<(Term, Term)>,
+}
+
+/// A comparison the scope states that is read only where a search over the facts and their products leaves an assignment: a disequality, and the equation a `!=` guard's false arm gives.
+///
+/// **Kept, and not read where it is met.** A reading hands out atoms, classes and spellings that every search over the scope then shares, so a comparison read where the guards are would have a proof that takes no part of it written another way. What is kept touches none of them.
+struct Kept {
+    carrier: Carrier,
+    left: Term,
+    right: Term,
+    /// Whether the two are stated apart, or equal.
+    apart: bool,
+    /// What shows it: `Holds(Bool/not(left == right))` where they are apart, and `Holds(left == right)` where they are equal.
+    proof: Term,
+    /// The statement as its origin spells it, for the report where nothing reads it.
+    stated: Term,
+    origin: Origin,
 }
 
 impl Facts {
@@ -200,6 +219,7 @@ impl<'a> Reader<'a> {
                 splits: Vec::new(),
                 lifts: Vec::new(),
                 unread: Vec::new(),
+                kept: Vec::new(),
                 spelled: Vec::new(),
             },
             divided: Vec::new(),
@@ -363,6 +383,18 @@ impl<'a> Reader<'a> {
         proof: Term,
         origin: Origin,
     ) -> Result<(), Error> {
+        if let Some((carrier, left, right)) = negated_equality(comparison) {
+            self.read.kept.push(Kept {
+                carrier,
+                left,
+                right,
+                apart: true,
+                proof,
+                stated: stated.clone(),
+                origin,
+            });
+            return Ok(());
+        }
         match sides(comparison) {
             Some((_, Operation::Less | Operation::AtMost, ..)) => {
                 self.admit(context, comparison.clone(), proof, origin)
@@ -373,6 +405,18 @@ impl<'a> Reader<'a> {
                 let eq_of_eql = order(context, carrier).eq_of_eql;
                 let equation = Term::apply(global(eq_of_eql), [left.clone(), right.clone(), proof]);
                 self.equation(context, carrier, &left, &right, equation, origin)
+            }
+            Some((carrier, Operation::Unequal, left, right)) => {
+                self.read.kept.push(Kept {
+                    carrier,
+                    left,
+                    right,
+                    apart: true,
+                    proof,
+                    stated: stated.clone(),
+                    origin,
+                });
+                Ok(())
             }
             _ => {
                 self.read.unread.push((origin, stated.clone()));
@@ -502,7 +546,12 @@ impl<'a> Reader<'a> {
         written: &Term,
         origin: Origin,
     ) -> Result<(), Error> {
-        let Some((carrier, relation, left, right)) = sides(comparison) else {
+        // `Bool/not` of an equality is the equality by its other case.
+        let read = match negated_equality(comparison) {
+            Some((carrier, left, right)) => Some((carrier, Operation::Unequal, left, right)),
+            None => sides(comparison),
+        };
+        let Some((carrier, relation, left, right)) = read else {
             self.read.unread.push((origin, written.clone()));
             return Ok(());
         };
@@ -528,12 +577,58 @@ impl<'a> Reader<'a> {
                     Term::apply(global(order.eq_of_eql), [left.clone(), right.clone(), qed]);
                 self.equation(context, carrier, &left, &right, equation, origin)
             }
-            // An equality's false arm, and an inequality's true one, is a disjunction.
+            // An equality's false arm, and an inequality's true one, is a disequality, and an inequality's false arm is the equation: each kept for the last reading.
+            (Operation::Equal | Operation::Unequal, _) => {
+                self.read.kept.push(Kept {
+                    carrier,
+                    left,
+                    right,
+                    apart: (relation == Operation::Equal) != case,
+                    proof: qed,
+                    stated: written.clone(),
+                    origin,
+                });
+                Ok(())
+            }
             _ => {
                 self.read.unread.push((origin, written.clone()));
                 Ok(())
             }
         }
+    }
+
+    /// One comparison the scope kept, read now: an equation as the two bounds it gives, and a disequality as [`Reader::distinct`] reads it.
+    fn last(&mut self, context: &mut Context, kept: Kept) -> Result<(), Error> {
+        if kept.apart {
+            return self.distinct(context, kept);
+        }
+        let eq_of_eql = order(context, kept.carrier).eq_of_eql;
+        if !in_scope(context, &[eq_of_eql]) {
+            self.read.unread.push((kept.origin, kept.stated));
+            return Ok(());
+        }
+        let (left, right) = (kept.left, kept.right);
+        let equation = Term::apply(global(eq_of_eql), [left.clone(), right.clone(), kept.proof]);
+        self.equation(context, kept.carrier, &left, &right, equation, kept.origin)
+    }
+
+    /// A disequality, as the strict bound conversion holds it to be, where it is one: a sum of naturals against zero is its order comparison (`LinearForm::aligned`), so `n != 0` and `0 < n` are one proposition and the disequality's own proof proves the bound.
+    fn distinct(&mut self, context: &mut Context, apart: Kept) -> Result<(), Error> {
+        let (carrier, a, b) = (apart.carrier, &apart.left, &apart.right);
+        let (this, that) = (
+            self.side(context, carrier, a)?,
+            self.side(context, carrier, b)?,
+        );
+        let read = unequal(carrier, &this, &that);
+        for (low, high, read_low, read_high) in [(b, a, &that, &this), (a, b, &this, &that)] {
+            let below = comparison_of(carrier, Operation::Less, read_low, read_high);
+            if matches!(self.views.align(&read, &below), Some(Aligned::Same)) {
+                let bound = comparison_of(carrier, Operation::Less, low, high);
+                return self.admit(context, bound, apart.proof, apart.origin);
+            }
+        }
+        self.read.unread.push((apart.origin, apart.stated));
+        Ok(())
     }
 
     /// A range check `proof` shows holds: `lo <= c` and `c <= hi`, through `le/of_in_range` over the arguments the check is passed as stated — so a guard's `qed` checks against the check the arm recorded, and a hypothesis is handed to the lemma as it is. The lemma's body was elaborated where no guard stood between the check and its unfolding.
@@ -1419,6 +1514,36 @@ fn subject_of(context: &Context, name: &Free) -> Term {
     }
 }
 
+/// What the comparisons the scope kept add to `facts`, read where a search over `facts` and their products left an assignment — by a reader of its own over the same atoms and classes, as [`products`] are, and lifted as every fact is. Whether there was one to read.
+pub(super) fn disequalities(
+    context: &mut Context,
+    views: &mut LinearViews,
+    classes: &mut Classes,
+    facts: &mut Facts,
+    target: Option<&Target>,
+) -> Result<bool, Error> {
+    let kept = std::mem::take(&mut facts.kept);
+    if kept.is_empty() {
+        return Ok(false);
+    }
+    let mut reader = Reader::new(views, classes);
+    for kept in kept {
+        reader.last(context, kept)?;
+    }
+    // The monomials these facts were read over need their signs too.
+    reader.naturals(context, target)?;
+    let mut read = reader.read;
+    for fact in &mut read.facts {
+        for lift in &facts.lifts {
+            lift.apply(fact);
+        }
+    }
+    facts.facts.extend(read.facts);
+    facts.unread.extend(read.unread);
+    facts.spelled.extend(read.spelled);
+    Ok(true)
+}
+
 pub(super) fn negated(
     context: &mut Context,
     views: &mut LinearViews,
@@ -1749,18 +1874,47 @@ fn bound(context: &mut Context, statement: Term, body: Term) -> Term {
     Term::let_(&binder, statement, body, Term::free_var(&binder))
 }
 
-/// A comparison's carrier, relation and operands, for the six the fragment reads.
+/// A comparison's carrier, relation and operands, for the eight the fragment reads.
 fn sides(comparison: &Intrinsic) -> Option<(Carrier, Operation, Term, Term)> {
     let (carrier, relation, left, right) = match comparison {
         Intrinsic::NatLt(left, right) => (Carrier::Natural, Operation::Less, left, right),
         Intrinsic::NatLe(left, right) => (Carrier::Natural, Operation::AtMost, left, right),
         Intrinsic::NatEql(left, right) => (Carrier::Natural, Operation::Equal, left, right),
+        Intrinsic::NatNeq(left, right) => (Carrier::Natural, Operation::Unequal, left, right),
         Intrinsic::IntLt(left, right) => (Carrier::Integer, Operation::Less, left, right),
         Intrinsic::IntLe(left, right) => (Carrier::Integer, Operation::AtMost, left, right),
         Intrinsic::IntEql(left, right) => (Carrier::Integer, Operation::Equal, left, right),
+        Intrinsic::IntNeq(left, right) => (Carrier::Integer, Operation::Unequal, left, right),
         _ => return None,
     };
     Some((carrier, relation, left.clone(), right.clone()))
+}
+
+/// The carrier and the two sides of the equality `comparison` negates, where it is `Bool/not` of one as it unfolds, `Bool/xor(a == b, true)`: a disequality written through `==`, which conversion holds one with `a != b`.
+///
+/// Read off the reduct as it stands and reduced no further: under the guard's own arm the equality inside reduces to the case the arm decides.
+fn negated_equality(comparison: &Intrinsic) -> Option<(Carrier, Term, Term)> {
+    let Intrinsic::BoolXor(negated, flag) = comparison else {
+        return None;
+    };
+    let (Subterm::Intrinsic(equality), Subterm::Intrinsic(Intrinsic::Bool(true))) =
+        (&**negated, &**flag)
+    else {
+        return None;
+    };
+    match sides(equality) {
+        Some((carrier, Operation::Equal, left, right)) => Some((carrier, left, right)),
+        _ => None,
+    }
+}
+
+/// `left != right` at `carrier`.
+fn unequal(carrier: Carrier, left: &Term, right: &Term) -> Intrinsic {
+    let (left, right) = (left.clone(), right.clone());
+    match carrier {
+        Carrier::Natural => Intrinsic::NatNeq(left, right),
+        _ => Intrinsic::IntNeq(left, right),
+    }
 }
 
 /// `left ⋈ right` at `carrier`, `⋈` being `<` or `<=`.

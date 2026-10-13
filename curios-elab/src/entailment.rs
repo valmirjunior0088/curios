@@ -11,6 +11,7 @@
 //! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]). A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
 //! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder through the quotient's bounds, a truncated subtraction through the case split `omega` makes, a `min` or a `max` through the split on its operands' order and an `Int`'s `abs` or `sign` through the splits on its operand's sign, each opened only where the search needs it ([`plan`]), and a power of a base conversion holds at least one, as the `pow(2, m)` a shift by a symbolic count multiplies by is, through its being at least one.
 //! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them.
+//! - Where the products leave one too, through the disequalities the scope states, each as the order comparison conversion holds it to be ([`disequalities`]): `total / (n + m)` under `Holds(n != 0)`. Asked last, so a bound the facts prove is proved as it was before a disequality was read at all.
 //! - An empty proposition the facts refute: how `False/refuted` reaches the procedure, and `True/proved` wherever its proposition is one.
 //!
 //! **What failure is.** The bound's refusal, as the fill leaves it, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
@@ -196,14 +197,32 @@ fn linear(
         Plan::Satisfied(assignment) => {
             let linear = SearchOutcome::Counterexample(assignment);
             let products = products(context, &mut views, &mut classes, &facts, negated.as_ref())?;
-            if products.is_empty() {
-                Err(linear)
-            } else {
-                facts.facts.extend(products);
-                match search(&facts, negated.as_ref(), &mut budget) {
-                    Plan::Certified(certificate) => Ok(certificate),
-                    Plan::Exhausted => Err(SearchOutcome::Exhausted(DERIVED_ROWS)),
-                    Plan::Satisfied(_) => Err(linear),
+            let multiplied = !products.is_empty();
+            let with_products = match multiplied {
+                true => {
+                    facts.facts.extend(products);
+                    Some(search(&facts, negated.as_ref(), &mut budget))
+                }
+                false => None,
+            };
+            match with_products {
+                Some(Plan::Certified(certificate)) => Ok(certificate),
+                Some(Plan::Exhausted) => Err(SearchOutcome::Exhausted(DERIVED_ROWS)),
+                // Last, what the scope's disequalities add: read only where nothing above settles the search, so a bound the facts prove is proved as it was before a disequality was read at all.
+                Some(Plan::Satisfied(_)) | None => {
+                    let target = target.as_ref();
+                    match disequalities(context, &mut views, &mut classes, &mut facts, target)? {
+                        true => match search(&facts, negated.as_ref(), &mut budget) {
+                            Plan::Certified(certificate) => Ok(certificate),
+                            Plan::Exhausted => Err(SearchOutcome::Exhausted(DERIVED_ROWS)),
+                            // A product is an unknown of its own to the search, so only a search over no product gives values of the atoms.
+                            Plan::Satisfied(assignment) if !multiplied => {
+                                Err(SearchOutcome::Counterexample(assignment))
+                            }
+                            Plan::Satisfied(_) => Err(linear),
+                        },
+                        false => Err(linear),
+                    }
                 }
             }
         }

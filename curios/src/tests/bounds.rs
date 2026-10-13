@@ -167,6 +167,43 @@ const ROWS: &[Row] = &[
         "Nat",
         "total / n",
     ),
+    // A bound that follows from a zero check and is not it: the disequality is read as the order fact conversion holds it to be — from a hypothesis in either spelling, from a guard's false arm, and from a proof field one level down.
+    body(
+        "total: Nat, n: Nat, m: Nat, p: Holds(n != 0)",
+        "Nat",
+        "total / (n + m)",
+    ),
+    body(
+        "total: Nat, n: Nat, m: Nat, p: Holds(Bool/not(n == 0))",
+        "Nat",
+        "total / (n + m)",
+    ),
+    body(
+        "total: Nat, n: Nat, m: Nat",
+        "Nat",
+        "match n == 0 | true => 0 | false => total / (n + m) end",
+    ),
+    body(
+        "total: Nat, n: Nat, m: Nat",
+        "Nat",
+        "match Bool/not(n == 0) | true => total / (n + m) | false => 0 end",
+    ),
+    body(
+        "total: Nat, m: Nat, v: {n: Nat, ok: Holds(n != 0)}",
+        "Nat",
+        "total / (v.n + m)",
+    ),
+    // A `!=` guard's false arm is the equation, through `!=` and through `Bool/not` of an `==`'s true arm.
+    body(
+        "xs: List(Nat), i: Nat, n: Nat, p: Holds(i < n)",
+        "Nat",
+        "match List/len(xs) != n | true => 0 | false => List/get(xs, i) end",
+    ),
+    body(
+        "xs: List(Nat), i: Nat, n: Nat, p: Holds(i < n)",
+        "Nat",
+        "match Bool/not(List/len(xs) == n) | true => 0 | false => List/get(xs, i) end",
+    ),
     // A natural's bound read at `Int`.
     claim(
         "m: Nat, n: Nat, i: Int, p: Holds(m < n), q: Holds(i <= Nat/to_int(m))",
