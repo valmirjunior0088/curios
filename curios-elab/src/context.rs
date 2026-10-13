@@ -645,7 +645,7 @@ impl<'s> Context<'s> {
         local
     }
 
-    /// [`Context::fresh`] for a binder a scope is closed over before anything reads it, as each binder of the matrix compiler's tree is: the local remembers where the lowering wrote its binder, as a lowered one does, so the scope closed over it does, and the local opened from that scope is the one a proof credits ([`Context::fresh_for`]).
+    /// [`Context::fresh`] for a binder a scope is closed over before anything reads it, as the binder of a `let` the matrix compiler writes ahead of a row's body is: the local remembers where the lowering wrote its binder, as a lowered one does, so the scope closed over it does, and the local opened from that scope is the one a proof credits ([`Context::fresh_for`]).
     pub(crate) fn fresh_written(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
         let index = u32::try_from(self.typing.fresh_names.fresh()).expect("binder space exhausted");
 

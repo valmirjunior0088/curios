@@ -1,32 +1,40 @@
-//! The matrix compiler: a match as it is written, compiled into the single-level matches the eliminators type.
+//! The matrix compiler: a match as it is written, compiled into the single-level matches the eliminators rebuild.
 //!
-//! [`elaborate_matrix`] takes the [`Matrix`] lowering wrote and builds what a person would get from nesting matches by hand: rows are grouped by the constructor in the leftmost column and the constructor's arguments become new columns, a column in which every row is a binder is retired with each name bound to it, a tuple or struct column is flattened into projections, and a final top-level `_`, or what a bind arm falls through to, is the default of every dispatch it reaches. The tree is then elaborated as any term is.
+//! [`elaborate_matrix`] takes the [`Matrix`] lowering wrote and builds what a person would get from nesting matches by hand: rows are grouped by the constructor in the leftmost column and the constructor's arguments become new columns, a column in which every row is a binder is retired with each name bound to it, a tuple or struct column is flattened into projections, and a final top-level `_`, or what a bind arm falls through to, is the default of every dispatch it reaches.
+//!
+//! Each dispatch is an eliminator's own, taken a step at a time ([`NominalSplit`] and its kin): the column is resolved as a scrutinee, each case is entered as an arm of it is, with the rows of that case over the columns left as the arm's body, and the match is rebuilt from the arms. So what an arm assumes is stated once, for the tree and for a match written one level deep, and a row's body is elaborated where its last column is read, in the frames its cases opened.
 //!
 //! Arms have no priority: a binder beside a concrete pattern in one column of one group is refused, and so are two rows alike in every column.
 
 use {
-    super::{Mode, elaborate},
-    crate::{Context, Error},
-    curios_core::{Atom, Bind, Free, Many, Matrix, Pattern, Row, Scope, Subterm, Term, Var},
+    super::{
+        BoolSplit, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit, SwitchSplit,
+        check, elaborate, holds_goal, leaving, payload_fills,
+    },
+    crate::{Context, Error, reduce_with},
+    curios_core::{
+        Atom, Bind, Free, InductArm, Many, Matrix, Pattern, Row, Scope, Subterm, Telescope, Term,
+    },
     curios_num::{Grain, Natural},
-    curios_utilities::Plicity,
+    curios_utilities::{Plicity, recurse},
     std::collections::BTreeMap,
 };
 
-/// Compile `matrix` and elaborate the tree it comes to, which stands where the match is written.
+/// Compile `matrix`, which `term` holds, into the tree of matches it comes to, each elaborated as it is built.
 pub(super) fn elaborate_matrix(
     context: &mut Context,
     matrix: &Matrix,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let compiled = Compiler::new(context, matrix).whole()?;
-    let compiled = match term.extent() {
-        Some(extent) => compiled.with_extent(extent),
-        None => compiled,
+    let compiler = Compiler {
+        matrix,
+        term,
+        labels: matrix.rows.iter().map(labels).collect(),
+        default: None,
     };
 
-    elaborate(context, &compiled, mode)
+    compiler.whole(context, mode)
 }
 
 /// One of a row's binders as its body's telescope labels it: the name it is written with, and where the lowering wrote it among its declaration's binders.
@@ -50,27 +58,19 @@ struct Line<'m> {
     lets: Vec<(Free, Term)>,
 }
 
-struct Compiler<'c, 'k, 'm> {
-    context: &'c mut Context<'k>,
+struct Compiler<'m> {
     matrix: &'m Matrix,
+    /// The match as it is written, which a report of one of its dispatches is placed at.
+    term: &'m Term,
     /// Each row's binders, as its body labels them.
     labels: Vec<Vec<Label>>,
     /// What a case no row covers falls through to, the same at every dispatch of one matrix: a headed match's final `_`, or the rest of a bind arm's ladder. `None` is full enumeration, where a nominal match leans on index inversion for a constructor no row names and a carrier requires both of its cases.
     default: Option<Term>,
 }
 
-impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
-    fn new(context: &'c mut Context<'k>, matrix: &'m Matrix) -> Self {
-        Self {
-            context,
-            matrix,
-            labels: matrix.rows.iter().map(labels).collect(),
-            default: None,
-        }
-    }
-
+impl<'m> Compiler<'m> {
     /// The whole matrix: its rows over its scrutinee, with what it falls through to where it has one. A bind arm falls through to the rest of its ladder, and a headed match to its final `_` where its other arms dispatch.
-    fn whole(mut self) -> Result<Term, Error> {
+    fn whole(mut self, context: &mut Context, mode: Mode) -> Result<(Term, Term), Error> {
         let matrix = self.matrix;
         let rows = matrix.rows.len();
 
@@ -81,7 +81,7 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
                 .map(|row| refutations(&row.pattern))
                 .sum::<usize>();
 
-            return self.defaulted(rows, rest.clone(), refuted > 1);
+            return self.defaulted(context, rows, rest.clone(), refuted > 1, mode);
         }
 
         match catch_all(&matrix.rows) {
@@ -90,45 +90,60 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
                 let default = self.body(rows - 1).open(&[&matrix.head]);
                 let shared = !flat(&matrix.rows[..rows - 1]);
 
-                self.defaulted(rows - 1, default, shared)
+                self.defaulted(context, rows - 1, default, shared, mode)
             }
-            false => self.arms(rows),
+            false => self.arms(context, rows, mode),
         }
     }
 
     /// The first `arms` rows with `default` where no row covers a case. Where `shared`, the default is bound once as a function of no argument and called from each dispatch it reaches, so it is written once and evaluated only where a value falls through to it.
-    fn defaulted(&mut self, arms: usize, default: Term, shared: bool) -> Result<Term, Error> {
+    fn defaulted(
+        &mut self,
+        context: &mut Context,
+        arms: usize,
+        default: Term,
+        shared: bool,
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         if !shared {
             self.default = Some(default);
 
-            return self.arms(arms);
+            return self.arms(context, arms, mode);
         }
 
-        let fallthrough = self.context.fresh(None);
-        self.default = Some(Term::apply(
-            Term::var(Var::free(fallthrough)),
-            Vec::<Term>::new(),
-        ));
-        let compiled = self.arms(arms)?;
+        // Bound as a `let` with no type written binds it: at the type it is inferred at, and defined for the rows, whose type leaves the frame as a block's does.
         let thunk = Term::func(Vec::<(Free, Term)>::new(), default);
-        let hole = Term::hole(self.context.mint_metavar());
+        let (thunk, thunk_type) = elaborate(context, &thunk, Mode::Infer)?;
 
-        Ok(Term::let_(&fallthrough, hole, thunk, compiled))
+        context.with_frame(|context| {
+            let fallthrough = context.fresh(None);
+            context.define_assuming(&fallthrough, &thunk_type, &thunk, None);
+            self.default = Some(Term::apply(
+                Term::free_var(&fallthrough),
+                Vec::<Term>::new(),
+            ));
+
+            let (compiled, type_) = self.arms(context, arms, mode)?;
+            let type_ = reduce_with(context, &type_)?;
+            let type_ = leaving(context, type_, &[(fallthrough, thunk.clone())]);
+
+            Ok((
+                Term::let_block(vec![(fallthrough, thunk_type, thunk)], compiled),
+                type_,
+            ))
+        })
     }
 
     /// The first `arms` rows over the scrutinee. With no row the match is a vacuous elimination, which has no column to read a dispatch off and is the nominal one.
-    fn arms(&mut self, arms: usize) -> Result<Term, Error> {
+    fn arms(
+        &mut self,
+        context: &mut Context,
+        arms: usize,
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         let head = self.matrix.head.clone();
         if arms == 0 {
-            let motive = self.motive(true);
-            let cases = Vec::<(Atom, _, Term)>::new();
-
-            return Ok(Term::induct_match_scoped_marked(
-                head,
-                motive,
-                cases,
-                self.default.clone(),
-            ));
+            return self.variants(context, vec![head], Vec::new(), true, mode);
         }
 
         let lines = (0..arms)
@@ -140,20 +155,22 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             })
             .collect();
 
-        self.columns(vec![head], lines, true)
+        self.columns(context, vec![head], lines, true, mode)
     }
 
-    /// One step: the leftmost column is retired where every row writes a binder, flattened where every row writes a tuple or a struct, and otherwise split by what the rows write. `top` says the column is the scrutinee itself, which is where a written motive attaches.
+    /// One step: the leftmost column is retired where every row writes a binder, flattened where every row writes a tuple or a struct, and otherwise split by what the rows write. `top` says the column is the scrutinee itself, which is where a written motive attaches, and `mode` is how what the rows come to is read: as the match is at its scrutinee, and against the type of its case beneath a dispatch.
     fn columns(
         &mut self,
+        context: &mut Context,
         mut columns: Vec<Term>,
         mut lines: Vec<Line<'m>>,
         top: bool,
-    ) -> Result<Term, Error> {
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         if columns.is_empty() {
             // The rows keep the order of their arms, so the first is the arm a value reaches and the one after it the first that none does.
             return match <[Line<'m>; 1]>::try_from(lines) {
-                Ok([line]) => Ok(self.leaf(line)),
+                Ok([line]) => self.leaf(context, line, mode),
                 Err(lines) => Err(Error::MatrixDuplicateRow.at_opt(
                     lines
                         .get(1)
@@ -169,10 +186,10 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             let scrutinee = columns.remove(0);
             for line in &mut lines {
                 let (_, place) = line.patterns.remove(0);
-                self.bind(line, place, scrutinee.clone());
+                self.bind(context, line, place, scrutinee.clone());
             }
 
-            return self.columns(columns, lines, false);
+            return recurse(|| self.columns(context, columns, lines, false, mode));
         }
 
         if lines
@@ -193,7 +210,7 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.variants(columns, lines, top)
+                self.variants(context, columns, lines, top, mode)
             }
             Pattern::Tuple(_) => {
                 if !every(
@@ -202,7 +219,7 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.fields(columns, lines)
+                self.fields(context, columns, lines, mode)
             }
             Pattern::Struct { .. } => {
                 if !every(|first, other| {
@@ -217,14 +234,14 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.fields(columns, lines)
+                self.fields(context, columns, lines, mode)
             }
             Pattern::Bool(_) => {
                 if !every(|_, other| matches!(other, Pattern::Bool(_))) {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.booleans(columns, lines, top)
+                self.booleans(context, columns, lines, top, mode)
             }
             // A character is a dispatch case spelled by its scalar value, so it shares a column with the numerals.
             Pattern::Zero | Pattern::Succ(_) | Pattern::Literal(_) | Pattern::Character(_) => {
@@ -240,35 +257,63 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.naturals(columns, lines, top)
+                self.naturals(context, columns, lines, top, mode)
             }
             Pattern::Nil | Pattern::Cons(_) => {
                 if !every(|_, other| matches!(other, Pattern::Nil | Pattern::Cons(_))) {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.lists(columns, lines, top)
+                self.lists(context, columns, lines, top, mode)
             }
             Pattern::End(_) | Pattern::Atom(..) => {
                 if !every(|_, other| matches!(other, Pattern::End(_) | Pattern::Atom(..))) {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.packed(columns, lines, top)
+                self.packed(context, columns, lines, top, mode)
             }
             Pattern::Binder => unreachable!("a binder beside a concrete pattern is refused above"),
         }
     }
 
-    /// Rows grouped by the constructor they name, each group over the payload's columns and then the columns left.
-    ///
-    /// A group of one row names a payload it binds by the row's own binder, as a match written one level deep does; a payload a pattern takes apart, and every payload of a group of several rows, is a binder of the compiler's.
+    /// The arm of one case: its rows over the columns left, read against the type the case is typed at, or what the matrix falls through to where no row is of the case.
+    fn case(
+        &mut self,
+        context: &mut Context,
+        columns: Vec<Term>,
+        lines: Vec<Line<'m>>,
+        expected: Term,
+    ) -> Result<Term, Error> {
+        match lines.is_empty() {
+            true => self.fallen(context, expected),
+            // Guarded by [`recurse`]: a row is read a pattern at a time, so the depth is that of the patterns a reader wrote.
+            false => {
+                recurse(|| self.columns(context, columns, lines, false, Mode::Check(expected)))
+                    .map(|(arm, _)| arm)
+            }
+        }
+    }
+
+    /// What a case with no row falls through to, checked where it stands.
+    fn fallen(&self, context: &mut Context, expected: Term) -> Result<Term, Error> {
+        let default = self
+            .default
+            .as_ref()
+            .expect("a case with no row is refused where nothing stands in for it");
+
+        check(context, default, expected)
+    }
+
+    /// Rows grouped by the constructor they name, each group the arm of its case, over the payload's columns and then the columns left. The arms are elaborated in the order the family declares its constructors, as a match written one level deep has them.
     fn variants(
         &mut self,
+        context: &mut Context,
         mut columns: Vec<Term>,
         lines: Vec<Line<'m>>,
         top: bool,
-    ) -> Result<Term, Error> {
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -284,57 +329,117 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
                 .push((args.as_slice(), place, line));
         }
 
-        let mut cases = Vec::with_capacity(groups.len());
-        for (_, (tag, mut group)) in groups {
-            // Rows under one constructor agree on how many payloads they write and on the mark of each.
-            let plicities = group[0]
-                .0
-                .iter()
-                .map(|(plicity, _)| *plicity)
-                .collect::<Vec<_>>();
-            if group.iter().any(|(args, ..)| {
-                args.iter()
-                    .map(|(plicity, _)| *plicity)
-                    .ne(plicities.iter().copied())
-            }) {
+        // Rows under one constructor agree on how many payloads they write and on the mark of each.
+        for (_, group) in groups.values() {
+            let marks = |args: &[(Plicity, Pattern)]| {
+                args.iter().map(|(plicity, _)| *plicity).collect::<Vec<_>>()
+            };
+            let written = marks(group[0].0);
+            if group.iter().any(|(args, ..)| marks(args) != written) {
                 return Err(Error::MatrixInconsistentShape);
             }
+        }
 
-            if group.len() == 1 {
-                let (args, mut place, mut line) = group.pop().expect("a group of one row");
-                let mut binders = Vec::with_capacity(args.len());
-                let mut payload_columns = Vec::new();
-                let mut payload_patterns = Vec::new();
-                for (plicity, pattern) in args {
-                    match pattern {
-                        Pattern::Binder => {
-                            let name = self.name(&line, place);
-                            line.taken[place] = Some(Term::free_var(&name));
-                            binders.push((*plicity, name));
-                        }
-                        other => {
-                            let payload = self.context.fresh(None);
-                            payload_columns.push(Term::free_var(&payload));
-                            payload_patterns.push((other, place));
-                            binders.push((*plicity, payload));
-                        }
+        let scrutinee = Scrutinee::read(context, &scrutinee)?;
+        let motive = self.motive(context, top);
+        let term = self.term;
+        let defaulted = self.default.is_some();
+
+        context.awaiting(|context| {
+            let vacuous = groups.is_empty() && !defaulted;
+            let split = NominalSplit::resolve(context, scrutinee, &motive, (term, &mode), vacuous)?;
+            let undecided = split.admit(context, groups.is_empty(), defaulted)?;
+            split.declared(groups.values().map(|(tag, _)| tag))?;
+
+            let mut arms = Vec::with_capacity(groups.len());
+            for tag in split.constructors() {
+                let Some((_, group)) = groups.remove(&tag.as_string()) else {
+                    // A default covers every constructor no row names; with none, an arm may be left out only where inversion rules its case out.
+                    if defaulted || split.ruled_out(context, tag)? {
+                        continue;
                     }
-                    place += pattern.binders();
-                }
-                payload_patterns.append(&mut line.patterns);
-                line.patterns = payload_patterns;
-                payload_columns.extend(rest.iter().cloned());
 
-                let body = self.columns(payload_columns, vec![line], false)?;
-                cases.push((tag, binders, body));
-                continue;
+                    return Err(split.missing(tag));
+                };
+
+                arms.push(self.variant(context, &split, tag, group, &rest)?);
             }
 
-            let payloads = plicities
-                .iter()
-                .map(|_| self.context.fresh(None))
-                .collect::<Vec<_>>();
-            let group = group
+            let default = match defaulted {
+                true => Some(
+                    split.default(context, |context, expected| self.fallen(context, expected))?,
+                ),
+                false => None,
+            };
+
+            split.rebuild(context, arms, default, undecided, term)
+        })
+    }
+
+    /// The arm of `tag`'s case over the rows that name it.
+    ///
+    /// A group of one row names a payload it binds by the row's own binder, as a match written one level deep does; a payload a pattern takes apart, a payload no row writes, and every payload of a group of several rows, is a binder of the compiler's.
+    fn variant(
+        &mut self,
+        context: &mut Context,
+        split: &NominalSplit,
+        tag: &Atom,
+        mut group: Group<'m>,
+        rest: &[Term],
+    ) -> Result<(Atom, InductArm), Error> {
+        let written = group[0]
+            .0
+            .iter()
+            .map(|(plicity, _)| *plicity)
+            .collect::<Vec<_>>();
+        let payload = split.payload(tag);
+        let fills = payload_fills(tag, &payload, &written)?;
+
+        let mut binders = Vec::with_capacity(fills.len());
+        let mut columns = Vec::new();
+        let lines = if group.len() == 1 {
+            let (args, first, mut line) = group.pop().expect("a group of one row");
+            let mut places = Vec::with_capacity(args.len());
+            let mut place = first;
+            for (_, pattern) in args {
+                places.push(place);
+                place += pattern.binders();
+            }
+
+            let mut patterns = Vec::new();
+            for fill in &fills {
+                let binder = match fill.map(|member| (&args[member].1, places[member])) {
+                    Some((Pattern::Binder, place)) => {
+                        let name = self.name(context, &line, place);
+                        line.taken[place] = Some(Term::free_var(&name));
+
+                        name
+                    }
+                    Some((pattern, place)) => {
+                        let payload = context.fresh(None);
+                        columns.push(Term::free_var(&payload));
+                        patterns.push((pattern, place));
+
+                        payload
+                    }
+                    None => context.fresh(None),
+                };
+                binders.push(binder);
+            }
+            patterns.append(&mut line.patterns);
+            line.patterns = patterns;
+
+            vec![line]
+        } else {
+            for fill in &fills {
+                let payload = context.fresh(None);
+                if fill.is_some() {
+                    columns.push(Term::free_var(&payload));
+                }
+                binders.push(payload);
+            }
+
+            group
                 .into_iter()
                 .map(|(args, mut place, mut line)| {
                     let mut patterns = Vec::with_capacity(args.len() + line.patterns.len());
@@ -347,31 +452,24 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
 
                     line
                 })
-                .collect();
-            let mut payload_columns = payloads.iter().map(Term::free_var).collect::<Vec<_>>();
-            payload_columns.extend(rest.iter().cloned());
+                .collect()
+        };
+        columns.extend(rest.iter().cloned());
 
-            let body = self.columns(payload_columns, group, false)?;
-            cases.push((tag, plicities.into_iter().zip(payloads).collect(), body));
-        }
-
-        let motive = self.motive(top);
-
-        Ok(Term::induct_match_scoped_marked(
-            scrutinee,
-            motive,
-            cases,
-            self.default.clone(),
-        ))
+        split.arm(context, tag, payload, &binders, |context, expected| {
+            self.case(context, columns, lines, expected)
+        })
     }
 
     /// Rows split by the `Bool` they write. `Bool` has no vacuity to excuse a case, so both are required where nothing stands in for one.
     fn booleans(
         &mut self,
+        context: &mut Context,
         mut columns: Vec<Term>,
         lines: Vec<Line<'m>>,
         top: bool,
-    ) -> Result<Term, Error> {
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -401,28 +499,32 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             }
         }
 
-        let motive = self.motive(top);
-        let false_case = match falses.is_empty() {
-            true => self.fallen(),
-            false => self.columns(rest.clone(), falses, false)?,
-        };
-        let true_case = match trues.is_empty() {
-            true => self.fallen(),
-            false => self.columns(rest, trues, false)?,
-        };
+        let scrutinee = Scrutinee::read(context, &scrutinee)?;
+        let motive = self.motive(context, top);
+        let term = self.term;
 
-        Ok(Term::bool_match_scoped(
-            scrutinee, motive, false_case, true_case,
-        ))
+        context.awaiting(|context| {
+            let split = BoolSplit::resolve(context, scrutinee, &motive, term, &mode)?;
+            let false_case = split.arm(context, false, |context, expected| {
+                self.case(context, rest.clone(), falses, expected)
+            })?;
+            let true_case = split.arm(context, true, |context, expected| {
+                self.case(context, rest, trues, expected)
+            })?;
+
+            Ok(split.rebuild(false_case, true_case))
+        })
     }
 
     /// Rows over a `Nat` column, in one of two forms its rows choose: induction where a row peels a successor, `0` and `n + 1` with a hypothesis, and dispatch otherwise, over the literals written with the default as what any other value takes. A literal beside a successor is refused: no one form peels a successor and dispatches on a value.
     fn naturals(
         &mut self,
+        context: &mut Context,
         mut columns: Vec<Term>,
         lines: Vec<Line<'m>>,
         top: bool,
-    ) -> Result<Term, Error> {
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -441,13 +543,13 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             }
         }
 
-        let motive = self.motive(top);
+        let term = self.term;
 
         if successors.is_empty() {
             // No set of literals covers every natural, so a dispatch has a default.
-            let Some(default) = self.default.clone() else {
+            if self.default.is_none() {
                 return Err(Error::MatrixNatDispatchNeedsDefault);
-            };
+            }
             let mut groups: BTreeMap<Natural, Vec<Line<'m>>> = BTreeMap::new();
             for line in zeros {
                 groups.entry(Natural::zero()).or_default().push(line);
@@ -455,12 +557,24 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             for (value, line) in literals {
                 groups.entry(value).or_default().push(line);
             }
-            let mut cases = Vec::with_capacity(groups.len());
-            for (value, group) in groups {
-                cases.push((value, self.columns(rest.clone(), group, false)?));
-            }
 
-            return Ok(Term::switch_scoped(scrutinee, motive, cases, default));
+            let scrutinee = Scrutinee::read(context, &scrutinee)?;
+            let motive = self.motive(context, top);
+
+            return context.awaiting(|context| {
+                let split = SwitchSplit::resolve(context, scrutinee, &motive, term, &mode)?;
+                let mut cases = Vec::with_capacity(groups.len());
+                for (value, group) in groups {
+                    let arm = split.arm(context, &value, |context, expected| {
+                        self.case(context, rest.clone(), group, expected)
+                    })?;
+                    cases.push((value, arm));
+                }
+                let default =
+                    split.default(context, |context, expected| self.fallen(context, expected))?;
+
+                Ok(split.rebuild(cases, default))
+            });
         }
 
         if !literals.is_empty() {
@@ -473,53 +587,54 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             });
         }
 
-        let zero_case = match zeros.is_empty() {
-            true => self.fallen(),
-            false => self.columns(rest.clone(), zeros, false)?,
-        };
+        let reads_hypothesis = self.reads_hypothesis(&successors, 1);
+        let scrutinee = Scrutinee::read(context, &scrutinee)?;
+        let motive = self.motive(context, top);
 
-        let (predecessor, hypothesis, successor_case) = if successors.len() == 1 {
-            let (place, bind, mut line) = successors.pop().expect("one row peels a successor");
-            let predecessor = self.name(&line, place);
-            line.taken[place] = Some(Term::free_var(&predecessor));
-            let hypothesis = self.hypothesis(&mut line, bind, place + 1);
-            let successor_case = self.columns(rest, vec![line], false)?;
+        context.awaiting(|context| {
+            let split =
+                NatSplit::resolve(context, scrutinee, &motive, (term, &mode), reads_hypothesis)?;
+            let zero = split.zero(context, |context, expected| {
+                self.case(context, rest.clone(), zeros, expected)
+            })?;
 
-            (predecessor, hypothesis, successor_case)
-        } else {
-            let predecessor = self.context.fresh(None);
-            let hypothesis = self.context.fresh(None);
-            let mut group = Vec::with_capacity(successors.len());
-            for (place, bind, mut line) in successors {
-                self.bind(&mut line, place, Term::free_var(&predecessor));
-                self.shared_hypothesis(&mut line, bind, place + 1, &hypothesis);
-                group.push(line);
-            }
-            let successor_case = self.columns(rest, group, false)?;
+            let (predecessor, hypothesis, group) = if successors.len() == 1 {
+                let (place, bind, mut line) = successors.pop().expect("one row peels a successor");
+                let predecessor = self.name(context, &line, place);
+                line.taken[place] = Some(Term::free_var(&predecessor));
+                let hypothesis = self.hypothesis(context, &mut line, bind, place + 1);
 
-            (predecessor, hypothesis, successor_case)
-        };
+                (predecessor, hypothesis, vec![line])
+            } else {
+                let predecessor = context.fresh(None);
+                let hypothesis = context.fresh(None);
+                let mut group = Vec::with_capacity(successors.len());
+                for (place, bind, mut line) in successors {
+                    self.bind(context, &mut line, place, Term::free_var(&predecessor));
+                    self.shared_hypothesis(context, &mut line, bind, place + 1, &hypothesis);
+                    group.push(line);
+                }
 
-        Ok(Term::nat_match_scoped(
-            scrutinee,
-            motive,
-            zero_case,
-            &predecessor,
-            &hypothesis,
-            successor_case,
-        ))
+                (predecessor, hypothesis, group)
+            };
+            let successor =
+                split.successor(context, &predecessor, &hypothesis, |context, expected| {
+                    self.case(context, rest, group, expected)
+                })?;
+
+            Ok(split.rebuild(zero, &predecessor, &hypothesis, successor))
+        })
     }
 
     /// Rows split into `[]` and `[head, ..tail]`, both required where nothing stands in for one.
     fn lists(
         &mut self,
-        mut columns: Vec<Term>,
+        context: &mut Context,
+        columns: Vec<Term>,
         lines: Vec<Line<'m>>,
         top: bool,
-    ) -> Result<Term, Error> {
-        let scrutinee = columns.remove(0);
-        let rest = columns;
-
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         let mut empties = Vec::new();
         let mut conses: Vec<Peeled<'m>> = Vec::new();
         for mut line in lines {
@@ -544,33 +659,25 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             }
         }
 
-        let motive = self.motive(top);
-        let empty_case = match empties.is_empty() {
-            true => self.fallen(),
-            false => self.columns(rest.clone(), empties, false)?,
-        };
-        let (head, tail, hypothesis, cons_case) = self.cons(conses, rest)?;
-
-        Ok(Term::list_match_scoped(
-            scrutinee,
-            Term::hole(self.context.mint_metavar()),
-            motive,
-            empty_case,
-            &[&head, &tail, &hypothesis],
-            cons_case,
-        ))
+        self.sequence(
+            context,
+            Sequence::List,
+            columns,
+            (empties, conses),
+            top,
+            mode,
+        )
     }
 
     /// Rows split into the empty packed sequence and one atom ahead of a tail, at the one grain every row writes, both required where nothing stands in for one.
     fn packed(
         &mut self,
-        mut columns: Vec<Term>,
+        context: &mut Context,
+        columns: Vec<Term>,
         lines: Vec<Line<'m>>,
         top: bool,
-    ) -> Result<Term, Error> {
-        let scrutinee = columns.remove(0);
-        let rest = columns;
-
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         let mut grain: Option<Grain> = None;
         let mut empties = Vec::new();
         let mut atoms: Vec<Peeled<'m>> = Vec::new();
@@ -607,67 +714,128 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             }
         }
 
-        let motive = self.motive(top);
-        let empty_case = match empties.is_empty() {
-            true => self.fallen(),
-            false => self.columns(rest.clone(), empties, false)?,
-        };
-        let (head, tail, hypothesis, atom_case) = self.cons(atoms, rest)?;
-
-        Ok(Term::bin_match_scoped(
-            grain,
-            scrutinee,
-            motive,
-            empty_case,
-            &[&head, &tail, &hypothesis],
-            atom_case,
-        ))
+        self.sequence(
+            context,
+            Sequence::Bin(grain),
+            columns,
+            (empties, atoms),
+            top,
+            mode,
+        )
     }
 
-    /// The arm of a list's or a packed sequence's nonempty case over `rows`, with the binders it is closed over: the head, the tail and the hypothesis. No row is the default, whose binders nothing names; one row names the three by its own binders; and several share three of the compiler's, each row binding its names to them.
-    fn cons(
+    /// The fold over a list's or a packed sequence's column: the rows of its empty case and of its nonempty one, each the arm of its case over the columns left.
+    fn sequence(
         &mut self,
-        mut rows: Vec<Peeled<'m>>,
-        rest: Vec<Term>,
-    ) -> Result<(Free, Free, Free, Term), Error> {
-        if rows.is_empty() {
-            return Ok((
-                self.context.fresh(None),
-                self.context.fresh(None),
-                self.context.fresh(None),
-                self.fallen(),
-            ));
-        }
+        context: &mut Context,
+        sequence: Sequence,
+        mut columns: Vec<Term>,
+        (empties, conses): (Vec<Line<'m>>, Vec<Peeled<'m>>),
+        top: bool,
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
+        let scrutinee = columns.remove(0);
+        let rest = columns;
 
+        let reads_hypothesis = self.reads_hypothesis(&conses, 2);
+        let scrutinee = Scrutinee::read(context, &scrutinee)?;
+        let motive = self.motive(context, top);
+        let term = self.term;
+
+        context.awaiting(|context| {
+            let split = SequenceSplit::resolve(
+                context,
+                sequence,
+                scrutinee,
+                &motive,
+                (term, &mode),
+                reads_hypothesis,
+            )?;
+            let empty = split.empty(context, |context, expected| {
+                self.case(context, rest.clone(), empties, expected)
+            })?;
+
+            let (binders, group) = self.peel(context, conses);
+            let cons = split.cons(context, &binders, |context, expected| {
+                self.case(context, rest, group, expected)
+            })?;
+
+            Ok(split.rebuild(empty, &binders, cons))
+        })
+    }
+
+    /// The binders a list's or a packed sequence's nonempty case is entered under — the head, the tail and the hypothesis — and its rows with those binders read. No row leaves the case to the default, whose binders nothing names; one row names the three by its own binders; and several share three of the compiler's, each row binding its names to them.
+    fn peel(
+        &mut self,
+        context: &mut Context,
+        mut rows: Vec<Peeled<'m>>,
+    ) -> ([Free; 3], Vec<Line<'m>>) {
         if rows.len() == 1 {
             let (place, bind, mut line) = rows.pop().expect("one row writes the case");
-            let head = self.name(&line, place);
+            let head = self.name(context, &line, place);
             line.taken[place] = Some(Term::free_var(&head));
-            let tail = self.name(&line, place + 1);
+            let tail = self.name(context, &line, place + 1);
             line.taken[place + 1] = Some(Term::free_var(&tail));
-            let hypothesis = self.hypothesis(&mut line, bind, place + 2);
-            let case = self.columns(rest, vec![line], false)?;
+            let hypothesis = self.hypothesis(context, &mut line, bind, place + 2);
 
-            return Ok((head, tail, hypothesis, case));
+            return ([head, tail, hypothesis], vec![line]);
         }
 
-        let head = self.context.fresh(None);
-        let tail = self.context.fresh(None);
-        let hypothesis = self.context.fresh(None);
+        let head = context.fresh(None);
+        let tail = context.fresh(None);
+        let hypothesis = context.fresh(None);
         let mut group = Vec::with_capacity(rows.len());
         for (place, bind, mut line) in rows {
-            self.bind(&mut line, place, Term::free_var(&head));
-            self.bind(&mut line, place + 1, Term::free_var(&tail));
-            self.shared_hypothesis(&mut line, bind, place + 2, &hypothesis);
+            self.bind(context, &mut line, place, Term::free_var(&head));
+            self.bind(context, &mut line, place + 1, Term::free_var(&tail));
+            self.shared_hypothesis(context, &mut line, bind, place + 2, &hypothesis);
             group.push(line);
         }
-        let case = self.columns(rest, group, false)?;
 
-        Ok((head, tail, hypothesis, case))
+        ([head, tail, hypothesis], group)
+    }
+
+    /// Whether the rows of a nonempty case may read its hypothesis, which is what makes their column a fold: `operands` is how many binders the case opens ahead of it. A lone row reads it where its body names the binder it writes for it, or where it takes it apart; rows that share the case each bind what they write to the one hypothesis, which reads it; and a body holding a written goal may name anything in scope.
+    fn reads_hypothesis(&self, rows: &[Peeled<'m>], operands: usize) -> bool {
+        let written = match rows {
+            [(place, bind, line)] => match bind {
+                Some(Bind::Binder) => self.names(line.row, place + operands),
+                Some(fields) => fields.binders() > 0,
+                None => false,
+            },
+            rows => rows
+                .iter()
+                .any(|(_, bind, _)| bind.as_ref().is_some_and(|bind| bind.binders() > 0)),
+        };
+
+        written
+            || rows
+                .iter()
+                .any(|(.., line)| holds_goal(&self.matrix.rows[line.row].body))
+    }
+
+    /// Whether the body of the row at `row` names its binder at `place`.
+    fn names(&self, row: usize, place: usize) -> bool {
+        let mut cursor = self.body(row).cursor();
+        for _ in 0..place {
+            let (_, domain) = cursor
+                .entry()
+                .expect("a row's body binds what its pattern writes");
+            // A row's binder has no type written, so nothing after it reads what stands in its place here.
+            cursor.advance(domain);
+        }
+
+        cursor.binder_used()
     }
 
     /// A tuple or struct column flattened into one column for each field, a projection of the scrutinee: a value of either has one shape, so matching one is reading its fields. Rows agree, field by field, on the label each is written with.
-    fn fields(&mut self, mut columns: Vec<Term>, lines: Vec<Line<'m>>) -> Result<Term, Error> {
+    fn fields(
+        &mut self,
+        context: &mut Context,
+        mut columns: Vec<Term>,
+        lines: Vec<Line<'m>>,
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
@@ -711,22 +879,28 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             .collect::<Vec<_>>();
         projections.extend(rest);
 
-        self.columns(projections, flattened, false)
+        recurse(|| self.columns(context, projections, flattened, false, mode))
     }
 
     /// The binder a single row's hypothesis is: the row's own where it writes a name, and one of the compiler's where it writes none or writes a pattern, whose leaves are bound to its projections.
-    fn hypothesis(&mut self, line: &mut Line<'m>, bind: &Option<Bind>, place: usize) -> Free {
+    fn hypothesis(
+        &mut self,
+        context: &mut Context,
+        line: &mut Line<'m>,
+        bind: &Option<Bind>,
+        place: usize,
+    ) -> Free {
         match bind {
             Some(Bind::Binder) => {
-                let name = self.name(line, place);
+                let name = self.name(context, line, place);
                 line.taken[place] = Some(Term::free_var(&name));
 
                 name
             }
-            None => self.context.fresh(None),
+            None => context.fresh(None),
             Some(fields) => {
-                let hypothesis = self.context.fresh(None);
-                self.project(line, fields, place, Term::free_var(&hypothesis));
+                let hypothesis = context.fresh(None);
+                self.project(context, line, fields, place, Term::free_var(&hypothesis));
 
                 hypothesis
             }
@@ -736,35 +910,48 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
     /// What a row among several binds of the hypothesis they share: nothing where it writes none, its name, or the leaves of its pattern.
     fn shared_hypothesis(
         &mut self,
+        context: &mut Context,
         line: &mut Line<'m>,
         bind: &Option<Bind>,
         place: usize,
         shared: &Free,
     ) {
         if let Some(bind) = bind {
-            self.project(line, bind, place, Term::free_var(shared));
+            self.project(context, line, bind, place, Term::free_var(shared));
         }
     }
 
     /// Bind what `bind` writes to `value`: a name to the value, and a pattern's leaves to its projections, by position or by label as each is written.
-    fn project(&mut self, line: &mut Line<'m>, bind: &Bind, mut place: usize, value: Term) {
+    fn project(
+        &mut self,
+        context: &mut Context,
+        line: &mut Line<'m>,
+        bind: &Bind,
+        mut place: usize,
+        value: Term,
+    ) {
         match bind {
-            Bind::Binder => self.bind(line, place, value),
+            Bind::Binder => self.bind(context, line, place, value),
             Bind::Fields(fields) => {
                 for (index, (label, field)) in fields.iter().enumerate() {
                     let projected = match label {
                         Some(label) => Term::proj_label(value.clone(), label.clone()),
                         None => Term::proj_position(value.clone(), index),
                     };
-                    self.project(line, field, place, projected);
+                    self.project(context, line, field, place, projected);
                     place += field.binders();
                 }
             }
         }
     }
 
-    /// A row with every column read: its body over what its binders stand for, under the binders bound ahead of it.
-    fn leaf(&mut self, line: Line<'m>) -> Term {
+    /// A row with every column read: its body over what its binders stand for, under the binders bound ahead of it, elaborated where it stands.
+    fn leaf(
+        &mut self,
+        context: &mut Context,
+        line: Line<'m>,
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
         let values = line
             .taken
             .iter()
@@ -775,19 +962,21 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
             })
             .collect::<Vec<_>>();
         let body = self.body(line.row).open(&values);
-
-        line.lets
+        let leaf = line
+            .lets
             .into_iter()
             .rev()
             .fold(body, |tail, (name, value)| {
-                let hole = Term::hole(self.context.mint_metavar());
+                let hole = Term::hole(context.mint_metavar());
 
                 Term::let_(&name, hole, value, tail)
-            })
+            });
+
+        elaborate(context, &leaf, mode)
     }
 
     /// The body of the row at `row`, as the function over its binders it is.
-    fn body(&self, row: usize) -> &'m curios_core::Telescope<Term> {
+    fn body(&self, row: usize) -> &'m Telescope<Term> {
         match &*self.matrix.rows[row].body {
             Subterm::Func(func) => &func.telescope,
             _ => unreachable!("a row's body is a function over its binders"),
@@ -795,32 +984,26 @@ impl<'c, 'k, 'm> Compiler<'c, 'k, 'm> {
     }
 
     /// A fresh local for the binder at `place` of the row `line` is, under the label the row wrote it with.
-    fn name(&mut self, line: &Line<'m>, place: usize) -> Free {
+    fn name(&self, context: &mut Context, line: &Line<'m>, place: usize) -> Free {
         let (hint, written) = &self.labels[line.row][place];
 
-        self.context.fresh_written(hint.as_deref(), *written)
+        context.fresh_for(hint.as_deref(), *written)
     }
 
     /// Bind the binder at `place` to `value` ahead of the row's body.
-    fn bind(&mut self, line: &mut Line<'m>, place: usize, value: Term) {
-        let name = self.name(line, place);
+    fn bind(&self, context: &mut Context, line: &mut Line<'m>, place: usize, value: Term) {
+        let (hint, written) = &self.labels[line.row][place];
+        let name = context.fresh_written(hint.as_deref(), *written);
         line.taken[place] = Some(Term::free_var(&name));
         line.lets.push((name, value));
     }
 
     /// The motive of one split: the written one at the scrutinee's, and elsewhere, or where none is written, a hole the arms settle.
-    fn motive(&mut self, top: bool) -> Scope<Many> {
+    fn motive(&self, context: &mut Context, top: bool) -> Scope<Many> {
         Term::match_motive_written(match (top, &self.matrix.motive) {
             (true, Some(motive)) => motive.clone(),
-            _ => Term::hole(self.context.mint_metavar()),
+            _ => Term::hole(context.mint_metavar()),
         })
-    }
-
-    /// What a case with no row falls through to.
-    fn fallen(&self) -> Term {
-        self.default
-            .clone()
-            .expect("a case with no row is refused where nothing stands in for it")
     }
 }
 
