@@ -616,6 +616,47 @@ fn a_bang_in_an_inference_position_region_is_refused() {
     );
 }
 
+/// A region whose type is an implicit nothing solves is refused as the inference-position one is, at its `!`: the sequencing waits under the one placeholder it parked with, so the item's drain meets no progress and ends.
+#[test]
+fn a_region_whose_type_never_comes_is_refused_at_its_bang() {
+    let source = r#"
+        use /std/{Io, print};
+        let ignore(@T: Type, program: () -> T) -> Io({}) = print("x");
+        ignore(() =>
+            let _ = print("a")!;
+            print("b"))
+        "#;
+
+    let error = typecheck(source).expect_err("a region nothing states must refuse");
+    assert!(
+        error.contains("the monad of this region was never determined"),
+        "expected the region's refusal, got: {error}"
+    );
+    assert!(
+        error.contains("let _ = print(\"a\")!;"),
+        "expected the refusal at the `!`, got: {error}"
+    );
+}
+
+/// A region waits for its type where a part read after it states one: the arm beside it solves the implicit both are checked at, and the sequencing is then read in that monad.
+#[test]
+fn a_region_waits_for_the_arm_beside_it_to_state_its_type() {
+    let source = r#"
+        use /std/{Nat, Io, print};
+        let ignore(@T: Type, program: () -> T) -> Io({}) = print("x");
+        let n: Nat = 3;
+        ignore(() =>
+            match n
+            | 0 =>
+                let _ = print("a")!;
+                print("b")
+            | _ => print("more")
+            end)
+        "#;
+
+    assert_eq!(run(source), b"x");
+}
+
 /// A region whose type is known and is no monad names that type, rather than reporting the wrapper's unsolved hole.
 ///
 /// The rigid twin of the refusal above. `elaborate_bang` reads the monad from the region, and when a *rigid* region yields none its head applies to nothing, so `?M(?B)` can never meet it — left to the wrapper's own inference it would report `no witness of Monad(?) found`, blaming a premise of `/std/Monad/bind`, a call the author never wrote, and printing a hole where the region's type is already in hand. `documentation/syntax.md` writes the first of these programs out with the intended reading beside it.

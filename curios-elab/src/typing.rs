@@ -8,7 +8,7 @@ use {
         Rejected, Sort, Spines, Watched, answer_witness, answers_differ, callee, convert,
         diagnose_embedding, diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines,
         is_monad, monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome,
-        reduce_forced, refold_recs, retry_discharge, retry_witness, settle_qualities,
+        reduce_forced, refold_recs, region_flex, retry_discharge, retry_witness, settle_qualities,
         shallow_scrutinee, subsume_outcome, synth_neutral, zonk_solved_term_metas,
     },
     curios_analysis::{
@@ -516,7 +516,9 @@ fn annotated(context: &mut Context, func: &Func) -> bool {
     true
 }
 
-/// Whether `arg` is a form that cannot be elaborated yet because the type structure it needs is an unsolved metavariable: a tuple literal or a numeral whose whole expected type, or a lambda one of whose expected *domains*, reduces to one. (A lambda only needs its domains known: the body, which may project any parameter, can't be checked against an unknown domain; its codomain may stay a metavariable.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification. A list literal is one of them: it is a list whatever it holds, and each element waits by itself.
+/// Whether `arg` is a form that cannot be elaborated yet because the type structure it needs is an unsolved metavariable: a tuple literal or a numeral whose whole expected type, or a lambda one of whose expected *domains*, reduces to one, or a `!` whose region is headed by one. (A lambda only needs its domains known: the body, which may project any parameter, can't be checked against an unknown domain; its codomain may stay a metavariable.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification. A list literal is one of them: it is a list whatever it holds, and each element waits by itself.
+///
+/// Every form that parks itself as a checking problem is answered here by the predicate it parked under, since a retry asks this before it elaborates ([`retry_checking`]): a form this did not know would be elaborated, park itself again under a fresh placeholder and fill the one it had, which a drain reads as a solution landed, without end.
 pub(crate) fn blocked_on_metavar(
     context: &mut Context,
     arg: &Term,
@@ -528,10 +530,15 @@ pub(crate) fn blocked_on_metavar(
     let is_tuple = matches!(&**arg, Subterm::Tuple(_));
     // A numeral waits as they do, on its whole type and nothing else: it is realized at whatever that comes to.
     let is_numeral = matches!(&**arg, Subterm::Transient(Transient::NumLit(_)));
-    if !is_lambda && !is_tuple && !is_numeral {
+    // A `!` waits on its region's head alone, which names the monad it sequences in.
+    let is_bang = matches!(&**arg, Subterm::Transient(Transient::Bang(_)));
+    if !is_lambda && !is_tuple && !is_numeral && !is_bang {
         return Ok(false);
     }
     let reduced = reduce_with(context, ty)?;
+    if is_bang {
+        return Ok(region_flex(context, &reduced));
+    }
     if stuck_on_metavar(context, &reduced) {
         // A tuple, a numeral or a lambda whose whole expected type is stuck on an unsolved metavar — a bare one, or a reduction waiting on one.
         return Ok(true);

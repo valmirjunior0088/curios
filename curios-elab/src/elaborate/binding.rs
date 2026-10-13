@@ -816,7 +816,7 @@ pub(crate) fn is_monad(context: &Context, key: &HeadKey) -> bool {
 }
 
 /// Whether the region's weak-head form is still headed by an unsolved metavariable — including a stuck application of one, the higher-kinded case.
-fn region_flex(context: &Context, whnf: &Term) -> bool {
+pub(crate) fn region_flex(context: &Context, whnf: &Term) -> bool {
     match &**whnf {
         Subterm::Metavar(metavar) => context.metavar_solution(metavar.id).is_none(),
         Subterm::Apply(apply) => region_flex(context, &apply.head),
