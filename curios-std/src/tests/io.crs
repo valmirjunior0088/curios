@@ -1,2 +1,4 @@
--- `/std/Io`: the pieces a reader's named reads ask for.
+-- `/std/Io` and what closes a program: the pieces a reader's named reads ask for, and the witnesses of `/std/Program` where what they perform lets a test go on.
 mod reader;
+
+mod program;

@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Spell, Show, print, proc};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Spell, Show, Program, print, proc};
 use /std/ops/{Eql};
 
 --- How a test came out.
@@ -98,6 +98,13 @@ let report(name: Str, t: Test) -> Io(Bool) =
         let inner = io!;
         report(name, inner)
     end;
+
+--- A test that closes a program is reported as `curios test` reports one, under the name `program`, and the program ends with status `1` where it did not hold.
+satisfy Program(Test) {
+    perform(test) =
+        let held = report("program", test)!;
+        match held | true => Io/pure(()) | false => proc/exit(1) end,
+}
 
 let parse_index(raw: Bytes) -> Option(Nat) =
     match Str/of_bytes(raw) | success(s) => Nat/of_str(s) | failure(_) => Option/none() end;

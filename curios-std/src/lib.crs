@@ -163,6 +163,10 @@ pub use Serial/{let Serial};
 --- TCP over the host's sockets: connections and listeners as streams, parking the fiber wherever a peer decides.
 pub mod tcp;
 
+--- What may close a program: the concept the compiler performs a program's closing term through, witnessed by a description that yields nothing, by one over `Io` that may fail, and by a `Test`.
+pub mod Program;
+pub use Program/{let Program};
+
 --- Checks `curios test` runs: the description a `test name = body;` declaration's body builds, with `assert`, `equal`, `all`, `perform` and `try`.
 ---
 --- A test takes no parameters; a claim about every instantiation is a proof, a `let` whose type states it. `main` is the tail that runs a unit's tests and reports each as passed or failed, and `curios test` reports one that traps or exits as trapped or exited.

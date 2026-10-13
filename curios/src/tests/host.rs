@@ -11,6 +11,7 @@ mod os_tests;
 mod outcome_tests;
 mod plugin_tests;
 mod proc_tests;
+mod program_tests;
 mod reader_tests;
 mod serial_tests;
 mod stream_tests;

@@ -1,0 +1,31 @@
+-- What closes a program, each witness asked by hand where what it performs lets the test go on: a failure ends the process, which a program's own test reads (`curios/src/tests/host/program_tests.rs`).
+use /std/{Nat, Bool, Io, Try, Test, Program};
+use /std/Async/{Channel};
+
+-- A description that yields nothing and leaves `n` where a take finds it.
+let leave(sender: Channel/Sender(Nat), n: Nat) -> Io({}) =
+    let _ = Channel/try_send(sender, n)!;
+    Io/pure(());
+
+-- The same description, as one that may fail and does not.
+let leave_or_fail(sender: Channel/Sender(Nat), n: Nat) -> Try(Io, Io/Error, {}) =
+    leave(sender, n);
+
+-- Whether the next take is `n`.
+let left(receiver: Channel/Receiver(Nat), n: Nat) -> Io(Bool) =
+    let taken = Channel/try_recv(receiver)!;
+    Io/pure(match taken | item(m) => m == n | _ => false end);
+
+test a_description_that_yields_nothing_is_performed_as_itself =
+    Test/perform(() =>
+        let ends = Channel/new(@Nat, 1)!;
+        let _ = Program/perform(leave(ends.0, 7))!;
+        let held = left(ends.1, 7)!;
+        Io/pure(Test/assert(held)));
+
+test a_description_that_may_fail_and_does_not_runs_to_its_end =
+    Test/perform(() =>
+        let ends = Channel/new(@Nat, 1)!;
+        let _ = Program/perform(leave_or_fail(ends.0, 7))!;
+        let held = left(ends.1, 7)!;
+        Io/pure(Test/assert(held)));

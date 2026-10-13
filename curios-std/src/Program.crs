@@ -1,0 +1,28 @@
+use /std/{Str, Show, Try, Io, print_err, proc};
+
+--- What may close a program: a type whose value is performed as one.
+---
+--- The compiler writes `perform` around the term a program closes with, so that term is of any type with a witness here. One witness may occupy a head, so a type closes a program in one way: `Io` at `{}` and no other payload, `Try` over `Io` and no other base.
+pub concept Program(T: Type): pub Type {
+    --- The value performed as a whole program. Where it does not succeed it says why and ends the process with a status that is not `0`.
+    perform(T) -> Io({}),
+}
+
+pub use Program/*;
+
+--- A description that yields nothing is the program it describes.
+satisfy Program(Io({})) {
+    perform(program) = program,
+}
+
+--- A description that may fail is run: a failure is written to standard error as it is shown, and the program ends with status `1`.
+satisfy (@E: Type, use Show(E)) => Program(Try(Io, E, {})) {
+    perform(program) =
+        let outcome = Try/run(program)!;
+        match outcome
+        | success(_) => Io/pure(())
+        | failure(why) =>
+            let _ = print_err(Str/concat(Show/show(why), "\n"))!;
+            proc/exit(1)
+        end,
+}
