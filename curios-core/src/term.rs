@@ -2480,7 +2480,9 @@ impl Term {
 
     /// This term with every solved variable replaced by its solution, simultaneously: parallel substitution of `solutions`, as one identity-memoized, free-vars-pruned traversal. A subtree mentioning no solved name is returned by reference, and a shared input node is rewritten once rather than once per occurrence, so sharing and warm memo cells survive it.
     ///
-    /// `Scope::close` followed by `open` computes the same term, but `close`'s capture rebuilds every node — unpruned and unshared — so each arm's specialization would expand shared subtrees into trees and re-copy nested bodies once per enclosing arm. Inserting a value verbatim under any binder depth is sound only while the value carries no loose index to shift; the solutions an arm's specialization produces — case values and inverted index targets, complete terms both — never do, and the assert is what keeps that a checked contract.
+    /// **A variable in a metavariable's spine is left standing.** A traversal asks a bare variable there of the variable hook alone ([`Subterm::traverse`]), which this walk answers nothing through, so `?m[x]` substituted at `x` is `?m[x]` still, and still names `x`. `Scope::close` followed by `open` reaches the spine, and is the same term only where no solved name stands in one. The elaborator's zonk rests on the spine being left: it materializes a metavariable's solution, and each element of its spine, by a walk of its own at every occurrence, and with a term in a spine it walks that term once for each path to it (`zonk_solved_term_metas`, in `curios-elab`).
+    ///
+    /// Inserting a value verbatim under any binder depth is sound only while the value carries no loose index to shift; the solutions an arm's specialization produces — case values and inverted index targets, complete terms both — never do, and the assert is what keeps that a checked contract.
     pub fn substitute(&self, solutions: &[(Free, Term)]) -> Term {
         if solutions.is_empty() {
             return self.clone();

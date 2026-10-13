@@ -43,6 +43,22 @@ fn close_open_substitutes_label_name() {
     assert_eq!(var, &Var::free(y));
 }
 
+/// A substitution leaves a variable of a metavariable's spine standing, where closing and opening the same name reaches it: the elaborator's zonk rests on the first.
+#[test]
+fn a_substitution_leaves_a_spine_its_variable() {
+    let x = Free::local(0, Some("x"));
+    let value = Term::type_ground();
+    let held = Term::metavar_birthed(MetavarId(0), MetavarOrigin::Hole, vec![Term::free_var(&x)]);
+    let term = Term::tuple([Term::free_var(&x), held.clone()]);
+
+    let substituted = term.substitute(&[(x, value.clone())]);
+    assert_eq!(substituted, Term::tuple([value.clone(), held]));
+    assert!(substituted.mentions_free(&x));
+
+    let opened = Scope::close(One, &[&x], term).open(&[&value]);
+    assert!(!opened.mentions_free(&x));
+}
+
 #[test]
 fn close_open_preserves_nested_bind() {
     let x = Free::local(0, Some("x"));

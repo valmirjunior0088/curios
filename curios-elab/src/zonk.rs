@@ -80,7 +80,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
     ) -> B {
         let rewrite_solutions = Rc::clone(&solutions);
         let rewrite_active = Rc::clone(&active);
-        // Memoized on node identity, so a graph is materialized once per node and stays a graph: the candidates `convert`'s solver materializes are reducts, whose trees can be exponential in their depth, and unmemoized this walk would pay the tree. The memo is sound because the hook answers from the node alone within one visit: it reads no depth, and the active set it consults is the same at every call, since each nested materialization restores it before returning.
+        // Memoized on node identity, so a graph is materialized once per node and stays a graph: the candidates `convert`'s solver materializes are reducts, whose trees can be exponential in their depth, and unmemoized this walk would pay the tree. The memo is sound because the hook answers from the node alone within one visit: it reads no depth, and the active set it consults is the same at every call, since each nested materialization restores it before returning. The memo is one walk's: a solution and each element of a spine are materialized by walks of their own, so a spine that held a term, where `Term::substitute` leaves it a bare variable, would be walked once for each path to it.
         let mut visit = Visit::rewriting_shared(
             |_, _| None,
             Box::new(move |_, term| {
