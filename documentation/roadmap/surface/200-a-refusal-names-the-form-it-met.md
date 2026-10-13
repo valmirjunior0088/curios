@@ -17,7 +17,7 @@ It is independent of every other spec.
 
 ## The gap
 
-Probed at `d5046c5cc`, each on standard input.
+Probed at `76a6cf3cf`, each on standard input.
 
 | Written | Reported |
 | --- | --- |
@@ -39,7 +39,7 @@ Probed at `d5046c5cc`, each on standard input.
 
 The first six rows are three positions: past a program's final term, two terms side by side, and — for the word read as the tail — both. The next five are a declaration or a form missing a part its grammar requires. The last four are decided where types are known, and each is exact there: a label that is a function of the head's own module, a unit value where a type stands, a result that is itself a function, a binder spelled as a constructor of the scrutinee's type.
 
-Three shortfalls are of where a refusal stands and of what it costs, whatever it says, probed at `653af23d2`:
+Three shortfalls are of where a refusal stands and of what it costs, whatever it says, probed at `76a6cf3cf`:
 
 - **A private `let` that fails at its `;`, and a private `concept` that fails outside a field's type, take the file's diagnosis with them.** `parse_top_let` (`curios-text/src/parse/top_level.rs`) reads the `;` that closes a group with nothing committed, where the body before it commits, and `parse_concept_member` commits nothing but a field's type, past its `:` or `->`. So `let b(n: Nat) -> Nat = n +;`, a `let` or a group whose `;` is left out, and a `concept` with no sort, no closing brace or no comma between two fields each fail recoverably: the item loop ends there and the file is refused with that one report, a program by `run -` and a module by `wonder diagnostics -` alike. With `let a: Nat = "one";` before the item and `let c: Str = 3;` after it, neither mismatch is reported, where the same file reports all three once the item is `pub`, where the `let`'s body is what fails, `(n + 1;`, and where a `satisfy` is left unclosed. The `concept`'s one report is the tail's besides, `Expected 'end-of-file'` with its caret under the concept's name, where the `pub` one reports `Expected '}'` at the token that stands where the brace is missing. `concept Name` is two names in a row, as `test name` is.
 - **A constructor written with no payload list is reported at its bar, as a missing `end`.** `induct Color: Type | red | green end` reports `Expected keyword 'end', obtained '|'` with its caret under the bar before `red`, and `induct Shade: Type | dark() | light end` under the bar before `light`. `parse_top_induct_case` (`curios-text/src/parse/top_level.rs`) reads the bar, the label and then `(` with nothing committed, so a missing `(` backtracks past the bar, the case list ends before that case, and the `end` that follows the list complains at the bar. A bar in a case list begins a case and nothing else; a `match` arm and a `choose` arm that lack a pattern, a guard or an `=>` are each reported where the part is missing.
@@ -54,17 +54,17 @@ Three shortfalls are of where a refusal stands and of what it costs, whatever it
 
 ## Decisions
 
-None is settled. What the tree's rules already fix:
+Each settled on 2026-10-13.
+
+- **A refusal may read the word that was written, in a note.** Two terms side by side are refused as that, naming both, with the call's spelling beside it; that `if` is no form of Curios cannot be said without knowing `if`. A table of words other languages reserve — `if`, `else`, `then`, `return`, `fn`, `def`, `fun`, `function`, `var`, `const`, `type`, `enum`, `data`, `class`, `import`, `for`, `while` — each with the form Curios writes, is what Elm and Python do. A note added to a refusal that already stands changes no verdict and no place, so nothing branches on a name's spelling; the positions are worded first, by what the grammar read, and the table is the last stage.
+- **The refusal past a final term states the rule.** `print("one\n")` followed by a second term is most often a sequence, and saying so presumes the first is an effect, which the parser does not know. The refusal says that a program closes with one term, the description it performs, names the second as one too many, and gives `let _ = …!;` as what is written where the first is an action.
+- **The binder spelled as a constructor is worded in the lowering**, which holds no type (`Error::MatchNamedCatchAll`, `curios-text/src/into_core/match_compile.rs`): it stands at the binder once the first stage lands, and its sentence gains what holds without a type, that a constructor is written with its payload list, `none()`.
+- **`(x) -> x + 1` where a lambda was meant is left out** unless the fifth stage finds it exact: it parses as a function type and is reported as `` `x` is not in scope ``, and nothing short of the expected type tells it from a function type written on purpose.
+
+What the tree's rules already fix:
 
 - **Nothing here adds a form.** Syntax forms are closed, and each row is refused after this spec as before; only what the refusal says and where it stands move.
 - **A refusal is worded where the parser has read what discriminates the mistake**, by a commitment it asks for, never by a guess after the failure.
-
-## Open questions
-
-- **Whether a refusal may read the word that was written.** Two terms side by side can be refused as that, naming both, with the call's spelling beside it; it cannot say that `if` is no form of Curios without knowing `if`. A table of words other languages reserve — `if`, `else`, `then`, `return`, `fn`, `def`, `fun`, `function`, `var`, `const`, `type`, `enum`, `data`, `class`, `import`, `for`, `while` — each with the form Curios writes, is what Elm and Python do. The tree states that nothing branches on a name's spelling; a note added to a refusal that already stands changes no verdict and no place. Recommended, and not settled: the positions first, worded by what the grammar read; the table as the last stage, as a note line alone, decided once the stages before it show what the positions already say.
-- **What the refusal past a final term says of the term before it.** `print("one\n")` followed by a second term is most often a sequence, and the form is `let _ = print("one\n")!;`. Saying so presumes the first is an effect, which the parser does not know. Recommended: the refusal states the rule — a program closes with one term, the description it performs — names the second term as one too many, and gives the sequencing form as what is written where the first is an action.
-- **Where the binder spelled as a constructor is worded.** The refusal is the lowering's (`Error::MatchNamedCatchAll`, `curios-text/src/into_core/match_compile.rs`), which holds no type. Recommended: it stays there, standing at the binder once the first stage lands, and its sentence gains what holds without a type, that a constructor is written with its payload list, `none()`.
-- **`(x) -> x + 1` where a lambda was meant** parses as a function type and is reported as `` `x` is not in scope ``. Nothing short of the expected type tells it from a function type written on purpose. Left out unless the fifth stage finds it exact.
 
 ## Stages
 
@@ -72,8 +72,8 @@ None is settled. What the tree's rules already fix:
 2. **Past a program's final term.** `parse_program_end` probes what stands there: a term, a `;`, or the end. Check: fixtures for the first three rows, each standing where it stands today and saying what a program closes with; a documentation block there still reports as it does.
 3. **Two terms side by side.** A probe beside `refuse_asymmetric_operator`, once an operand has ended and what follows begins one. Check: `if n > 10 then …`, `return n + n` and `add 1 2` in a `let`'s body, in an argument and in an arm's body; and every file of `curios-std/src/`, `programs/` and `editors/grammar/test/corpus/` parses to what it parsed to, which is what shows the probe refuses nothing the grammar has.
 4. **A head or a form missing its part.** A structure's or a concept's sort, a top-level `let`'s result, `:=`, a lambda's parentheses, a constructor's payload list. Each is a sentence at a commitment the alternative owes, which the first stage has made where it was missing. Check: a fixture a row, and the parser's own tests unchanged elsewhere.
-5. **The forms decided where types are known, and the named final arm.** A label that the head's own module declares as a function, where the head is no record; `()` where a type is expected; arguments past a call's list where the result is itself a function. Each names what is written instead: `List/len(xs)`, `{}`, `f(a)(b)`. The named final arm's sentence is the lowering's, as the third open question settles it. Check: a fixture each, and one for each where the condition does not hold and the report is the one it was.
-6. **The note for a reserved word of another language**, if the first open question settles for it. Check: a fixture a word, and that a program which declares a function under one of the words and calls it compiles as it did.
+5. **The forms decided where types are known, and the named final arm.** A label that the head's own module declares as a function, where the head is no record; `()` where a type is expected; arguments past a call's list where the result is itself a function. Each names what is written instead: `List/len(xs)`, `{}`, `f(a)(b)`. The named final arm's sentence is the lowering's. Check: a fixture each, and one for each where the condition does not hold and the report is the one it was.
+6. **The note for a reserved word of another language.** Check: a fixture a word, and that a program which declares a function under one of the words and calls it compiles as it did.
 
 ## Verification
 
