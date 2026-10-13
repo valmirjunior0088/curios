@@ -19,13 +19,33 @@ mod weak_tests;
 
 use {
     curios_core::{
-        Extent, Level, LevelHead, Quality, QualityMetaId, UniverseConstraint,
+        Extent, Free, Global, Level, LevelHead, Quality, QualityMetaId, UniverseConstraint,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
         UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes,
     },
     curios_utilities::recurse,
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
+
+/// Where a scheme is instantiated: the declaration an occurrence names, and where that occurrence is written, when a term of the declaration being elaborated wrote it. A constraint the scheme states is restated under both ([`UniverseSolver::instantiate_at`]).
+#[derive(Debug, Clone, Copy)]
+pub struct Occurrence {
+    pub instantiated: Global,
+    pub extent: Option<Extent>,
+}
+
+impl Occurrence {
+    /// The occurrence a term written at `extent` is of `name`, where `name` is a declaration's: only a top-level name is generalized over a scheme, so a use of a local instantiates none.
+    pub(crate) fn naming(name: &Free, extent: Option<Extent>) -> Option<Self> {
+        match name {
+            Free::Global(instantiated) => Some(Self {
+                instantiated: *instantiated,
+                extent,
+            }),
+            Free::Local(_) => None,
+        }
+    }
+}
 
 /// A stable point to which all universe assignments and constraints can be rolled back after a speculative elaboration branch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1555,8 +1575,12 @@ impl UniverseSolver {
         self.constraints.substitute_head(head, &solution)
     }
 
-    /// Instantiate a closed context for one use, returning its fresh argument vector after inserting the substituted residual constraints transactionally. The levels it mints are the use's own — `Provenance::Occurrence`.
-    pub fn instantiate(&mut self, context: &UniverseContext) -> Result<Universes, UniverseError> {
+    /// Instantiate a closed context for one use, `occurrence` where a term names it, returning its fresh argument vector after inserting the substituted residual constraints transactionally. The levels it mints are the use's own — `Provenance::Occurrence`.
+    pub fn instantiate(
+        &mut self,
+        context: &UniverseContext,
+        occurrence: Option<Occurrence>,
+    ) -> Result<Universes, UniverseError> {
         let levels = (0..context.parameter_count)
             .map(|_| Level::meta(self.mint(Provenance::Occurrence, None)))
             .collect::<Vec<_>>();
@@ -1565,17 +1589,18 @@ impl UniverseSolver {
             .map(|_| self.fresh_quality(None))
             .collect::<Vec<_>>();
         let universes = Universes { levels, qualities };
-        self.instantiate_at(context, &universes)?;
+        self.instantiate_at(context, &universes, occurrence)?;
         Ok(universes)
     }
 
-    /// Insert a closed context's residual constraints at an already chosen occurrence instance. Used when re-elaborating an explicit `Instance`: its stored arguments are authoritative and must not be replaced by a second fresh instantiation.
+    /// Insert a closed context's residual constraints at an already chosen occurrence instance, each restated under `occurrence` where there is one: at the place the occurrence is written, and naming the declaration it instantiates. Used when re-elaborating an explicit `Instance`: its stored arguments are authoritative and must not be replaced by a second fresh instantiation.
     ///
     /// A stored context is validated where it is built ([`Self::generalize`]) and where it is restored (`validate_universes`), not here: every occurrence of every polymorphic binding instantiates, and re-deciding a context's consistency per occurrence repeats a whole constraint solve for an invariant that cannot have changed.
     pub fn instantiate_at(
         &mut self,
         context: &UniverseContext,
         universes: &Universes,
+        occurrence: Option<Occurrence>,
     ) -> Result<(), UniverseError> {
         let levels = &universes.levels;
         if levels.len() != context.parameter_count {
@@ -1608,10 +1633,11 @@ impl UniverseSolver {
                 (Ok(lower), Ok(upper)) => UniverseConstraint {
                     lower,
                     upper,
-                    // Where the scheme's declaration raised it is that declaration's, in a text this compilation may never have read. The error this constraint closes is located by the term being elaborated, as every error is on its way out, and names what it instantiated.
+                    // Where the scheme's declaration raised it is that declaration's, in a text this compilation may never have read. A conflict is found once the terms that forced it are checked and left behind, so nothing places it on its way out: the constraint is restated where the occurrence that instantiates it is written and names the declaration instantiated, and the conflict it closes is reported at a term its reader wrote, with whose bound it is. One restated with no occurrence in hand carries neither. The declaration and the binder its scheme's own was raised for stay, either way.
                     origin: UniverseConstraintOrigin {
-                        extent: None,
+                        extent: occurrence.and_then(|occurrence| occurrence.extent),
                         kind: UniverseConstraintKind::SchemeInstantiation,
+                        instantiated: occurrence.map(|occurrence| occurrence.instantiated),
                         ..constraint.origin.clone()
                     },
                 },
@@ -1673,7 +1699,11 @@ impl UniverseSolver {
                 constraints.push(UniverseConstraint {
                     lower: rewrite(&constraint.lower)?,
                     upper: rewrite(&constraint.upper)?,
-                    origin: constraint.origin.clone(),
+                    // Whose scheme an instance restated a constraint of is the instance's to say: a scheme stores where its own declaration came by each.
+                    origin: UniverseConstraintOrigin {
+                        instantiated: None,
+                        ..constraint.origin.clone()
+                    },
                 });
             } else {
                 return Err(UniverseError::EscapingLevel);

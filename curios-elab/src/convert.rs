@@ -37,8 +37,8 @@ use {
         unfold_rec_apply,
     },
     crate::{
-        Declined, Error, metavar_origins, metavar_spines, named_members, read_outside_spines,
-        zonk_solved_term_metas,
+        Declined, Error, Occurrence, metavar_origins, metavar_spines, named_members,
+        read_outside_spines, zonk_solved_term_metas,
     },
     curios_analysis::Classes,
     curios_core::{
@@ -853,6 +853,7 @@ impl Convert {
                             kind,
                             declaration: None,
                             binder: None,
+                            instantiated: None,
                         },
                     )
                     .map_err(ReduceError::Universe)?;
@@ -2440,9 +2441,14 @@ impl Convert {
             return Ok(universes.clone());
         };
 
+        // An occurrence no term wrote: the family is named for a conflict its scheme closes, and placed nowhere.
+        let occurrence = Occurrence {
+            instantiated: *name,
+            extent: None,
+        };
         let fresh = context
             .universes_mut()
-            .instantiate(&scheme)
+            .instantiate(&scheme, Some(occurrence))
             .map_err(ReduceError::Universe)?;
         Self::compare_instance_levels(context, name, &fresh, universes)?;
 
@@ -2521,6 +2527,7 @@ impl Convert {
                     kind,
                     declaration: None,
                     binder: None,
+                    instantiated: None,
                 };
                 let own = context
                     .fresh_universe_beside(level, Some(origin.clone()))

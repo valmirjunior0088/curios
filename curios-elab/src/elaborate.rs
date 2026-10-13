@@ -179,14 +179,14 @@ fn elaborate_subterm(
                 InstanceHead::RecProj(group, index) => {
                     context
                         .universes_mut()
-                        .instantiate_at(group.universe_context(), &instance.universes)
+                        .instantiate_at(group.universe_context(), &instance.universes, None)
                         .map_err(Error::from)?;
 
                     instantiate_universes_scoped(&group.member_type(*index), &instance.universes)
                         .map_err(Error::from)?
                 }
                 InstanceHead::Var(var) => context
-                    .instantiate_assumption_at(var.unwrap(), &instance.universes)?
+                    .instantiate_assumption_at(var.unwrap(), &instance.universes, term.extent())?
                     .ok_or_else(|| context.unbound_variable(instance.head.to_term()))?,
             };
             (term.clone(), type_)
@@ -203,7 +203,7 @@ fn elaborate_subterm(
         Subterm::Proj(proj) => elaborate_proj(context, proj)?,
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
-        Subterm::Var(var) => match context.instantiate_assumption(var.unwrap())? {
+        Subterm::Var(var) => match context.instantiate_assumption(var.unwrap(), term.extent())? {
             Some((type_, universes)) => {
                 let rebuilt = if universes.is_empty() {
                     term.clone()
@@ -235,8 +235,8 @@ fn elaborate_subterm(
             return elaborate_ascribed(context, ascribed, term, mode);
         }
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
-        Subterm::InductType(ut) => elaborate_induct_type(context, ut)?,
-        Subterm::Variant(uc) => elaborate_variant(context, uc)?,
+        Subterm::InductType(ut) => elaborate_induct_type(context, ut, term.extent())?,
+        Subterm::Variant(uc) => elaborate_variant(context, uc, term.extent())?,
         Subterm::StructType(st) => elaborate_struct_type(context, st, term)?,
         Subterm::Struct(s) => {
             context.awaiting(|context| elaborate_struct(context, s, term, &mode))?

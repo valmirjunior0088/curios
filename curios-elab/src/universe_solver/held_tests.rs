@@ -13,7 +13,7 @@ fn occurrence(solver: &mut UniverseSolver) -> UniverseMetaId {
         quality_count: 0,
         constraints: Vec::new(),
     };
-    let instance = solver.instantiate(&scheme).unwrap();
+    let instance = solver.instantiate(&scheme, None).unwrap();
 
     bare_meta(&instance.levels[0]).expect("an instance's level is one bare meta")
 }

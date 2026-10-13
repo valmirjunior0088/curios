@@ -4,8 +4,8 @@ use {
         premise_label,
     },
     crate::{
-        Context, Error, Mode, attempt_witness_goal, check, elaborate, expect, is_prop, reduce_with,
-        resolve_witness_goal,
+        Context, Error, Mode, Occurrence, attempt_witness_goal, check, elaborate, expect, is_prop,
+        reduce_with, resolve_witness_goal,
     },
     curios_core::{
         CalleeId, Free, Global, ImplicitOrigin, Probe, Struct, StructDecl, StructEntry, StructType,
@@ -19,6 +19,7 @@ fn instantiate_struct_decl(
     context: &mut Context,
     struct_decl: StructDecl,
     universes: Option<&Universes>,
+    occurrence: Occurrence,
 ) -> Result<(StructDecl, Universes), Error> {
     let (arity, universes) = match universes {
         Some(universes) => (
@@ -29,9 +30,11 @@ fn instantiate_struct_decl(
             )?,
             universes.clone(),
         ),
-        None => {
-            context.instantiate_universe_bound(&struct_decl.universe_context, &struct_decl.arity)?
-        }
+        None => context.instantiate_universe_bound(
+            &struct_decl.universe_context,
+            &struct_decl.arity,
+            Some(occurrence),
+        )?,
     };
     let arguments = universes.clone();
     let result_sort =
@@ -71,8 +74,12 @@ pub(super) fn elaborate_struct_type(
         });
     };
     let explicit_universes = (!universes.is_empty()).then_some(universes);
+    let occurrence = Occurrence {
+        instantiated: *name,
+        extent: term.extent(),
+    };
     let (struct_decl, universes) =
-        instantiate_struct_decl(context, struct_decl, explicit_universes)?;
+        instantiate_struct_decl(context, struct_decl, explicit_universes, occurrence)?;
 
     if params.is_empty() && struct_decl.param_count() != 0 {
         let mut cursor = struct_decl.arity.cursor();
@@ -187,8 +194,12 @@ pub(super) fn elaborate_struct(
         });
     };
     let explicit_universes = (!written_universes.is_empty()).then_some(written_universes);
+    let occurrence = Occurrence {
+        instantiated: *name,
+        extent: term.extent(),
+    };
     let (struct_decl, universes) =
-        instantiate_struct_decl(context, struct_decl, explicit_universes)?;
+        instantiate_struct_decl(context, struct_decl, explicit_universes, occurrence)?;
 
     // Construction privacy: a private-representation struct may be built only within its declaring module's subtree. Checked here (alongside projection privacy in `elaborate_proj`) via `island`, set per item by `elaborate_module_suffix`.
     if !struct_decl.rep_public

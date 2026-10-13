@@ -1,6 +1,7 @@
 use {
     super::*,
-    curios_core::{Anchor, Anchored, Extent},
+    curios_core::{Anchor, Anchored, Extent, Global},
+    curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
 
@@ -31,9 +32,8 @@ fn origin(label: &str) -> UniverseConstraintOrigin {
     UniverseConstraintOrigin::new(UniverseConstraintKind::Other(label.into()))
 }
 
-/// A constraint instantiated from a scheme carries no position, and names the declaration and binder the scheme's own was raised for: where that was raised is a line of the scheme's declaration, another unit's among them.
-#[test]
-fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
+/// A scheme stating one constraint, raised in a declaration of another unit.
+fn raised_in_a_scheme() -> UniverseContext {
     let raised = UniverseConstraintOrigin {
         extent: Some(Extent {
             anchor: Anchor::of(Anchored::Entry),
@@ -44,8 +44,9 @@ fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
         kind: UniverseConstraintKind::Cumulativity,
         declaration: Some("/lib/wrap".into()),
         binder: Some("A".into()),
+        instantiated: None,
     };
-    let scheme = UniverseContext {
+    UniverseContext {
         parameter_count: 2,
         quality_count: 0,
         constraints: vec![UniverseConstraint {
@@ -53,10 +54,16 @@ fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
             upper: Level::param(UniverseParam(1)),
             origin: raised,
         }],
-    };
+    }
+}
+
+/// A constraint instantiated from a scheme with no occurrence in hand carries no position, and names the declaration and binder the scheme's own was raised for: where that was raised is a line of the scheme's declaration, another unit's among them.
+#[test]
+fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
+    let scheme = raised_in_a_scheme();
     let mut solver = UniverseSolver::new(0);
 
-    solver.instantiate(&scheme).unwrap();
+    solver.instantiate(&scheme, None).unwrap();
 
     let [instantiated] = solver.constraints() else {
         panic!("one constraint, got {:?}", solver.constraints());
@@ -71,6 +78,41 @@ fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
         Some("/lib/wrap")
     );
     assert_eq!(instantiated.origin.binder.as_deref(), Some("A"));
+    assert_eq!(instantiated.origin.instantiated, None);
+}
+
+/// A constraint an occurrence instantiates is restated where the occurrence is written and names the declaration the occurrence instantiates: the conflict it closes is reported at a term its reader wrote, with whose bound it is.
+#[test]
+fn a_constraint_an_occurrence_instantiates_takes_its_place_and_names_what_it_instantiates() {
+    let scheme = raised_in_a_scheme();
+    let used = Global::Authored(Qualifier::from(["app", "coerce"]));
+    let written = Extent {
+        anchor: Anchor::of(Anchored::Entry),
+        start: 9,
+        end: 15,
+        stamp: 0,
+    };
+    let mut solver = UniverseSolver::new(0);
+
+    solver
+        .instantiate(
+            &scheme,
+            Some(Occurrence {
+                instantiated: used,
+                extent: Some(written),
+            }),
+        )
+        .unwrap();
+
+    let [instantiated] = solver.constraints() else {
+        panic!("one constraint, got {:?}", solver.constraints());
+    };
+    assert_eq!(instantiated.origin.extent, Some(written));
+    assert_eq!(
+        instantiated.origin.kind,
+        UniverseConstraintKind::SchemeInstantiation
+    );
+    assert_eq!(instantiated.origin.instantiated, Some(used));
 }
 
 #[test]
@@ -415,8 +457,8 @@ fn contexts_are_alpha_stable_and_instances_are_fresh() {
     };
     universe_context_validate(&context).unwrap();
     let mut solver = UniverseSolver::new(7);
-    let first = solver.instantiate(&context).unwrap();
-    let second = solver.instantiate(&context).unwrap();
+    let first = solver.instantiate(&context, None).unwrap();
+    let second = solver.instantiate(&context, None).unwrap();
     let first_metas = first
         .levels
         .iter()

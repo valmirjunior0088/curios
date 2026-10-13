@@ -1,10 +1,11 @@
 use {
     super::{Misaligned, align, check_witness_domain, insert_auto_argument, stands_at},
     crate::{
-        BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, ParkedWork,
-        Provenance, Restriction, SlotPositions, check, check_is_sort, check_rec_totality, convert,
-        display_mismatch, elaborate, expect, metavar_origins, metavar_spines, read_by_value,
-        reduce_with, resolve_witness_goal, stuck_on_metavar, written_monad, zonk_solved_term_metas,
+        BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, Occurrence,
+        ParkedWork, Provenance, Restriction, SlotPositions, check, check_is_sort,
+        check_rec_totality, convert, display_mismatch, elaborate, expect, metavar_origins,
+        metavar_spines, read_by_value, reduce_with, resolve_witness_goal, stuck_on_metavar,
+        written_monad, zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
@@ -549,7 +550,12 @@ fn infix_method(
         .expect("the operator concepts declare their table fields");
 
     // Mint the witness goal exactly like an omitted `use` argument.
-    let (_, universes) = context.instantiate_universe_bound(&concept.universe_context, &())?;
+    let occurrence = Occurrence {
+        instantiated: *concept_name,
+        extent: term.extent(),
+    };
+    let (_, universes) =
+        context.instantiate_universe_bound(&concept.universe_context, &(), Some(occurrence))?;
     let goal = Term::struct_type_at(*concept_name, universes.clone(), vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Operator(op),

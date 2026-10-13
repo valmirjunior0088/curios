@@ -329,7 +329,7 @@ pub(crate) fn synth_neutral(
                 return Ok(Some(type_.clone()));
             }
             match context
-                .instantiate_assumption_universes(name)
+                .instantiate_assumption_universes(name, None)
                 .map_err(ReduceError::Universe)?
             {
                 Some((type_, _)) => Ok(Some(type_)),

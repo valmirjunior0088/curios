@@ -7,7 +7,7 @@
 //! Constraint provenance is diagnostic-only: semantic equality and hashing compare normalized inequalities but ignore their extents and explanations. Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before Ersd.
 
 use {
-    super::Extent,
+    super::{Extent, Global},
     curios_utilities::Mint,
     std::{
         collections::BTreeMap,
@@ -452,6 +452,20 @@ pub fn names_a_proposition(path: &[UniverseConstraintOrigin]) -> bool {
     })
 }
 
+/// The declarations whose schemes an inconsistency's path runs through, each once and in the order the path meets them: what a report names beside the constraint, since a bound a scheme states is written in no term of the declaration that broke it.
+pub fn instantiated_on(path: &[UniverseConstraintOrigin]) -> Vec<Global> {
+    let mut named = Vec::new();
+    for origin in path {
+        if let Some(instantiated) = origin.instantiated
+            && !named.contains(&instantiated)
+        {
+            named.push(instantiated);
+        }
+    }
+
+    named
+}
+
 /// The sort an inconsistency is reported about, as its reader wrote it: `Prop` where its path runs through a proposition and through no type, `Type` otherwise.
 pub fn inconsistent_sort(path: &[UniverseConstraintOrigin]) -> &'static str {
     let through_a_type = path.iter().any(|origin| {
@@ -475,6 +489,8 @@ pub struct UniverseConstraintOrigin {
     pub kind: UniverseConstraintKind,
     pub declaration: Option<String>,
     pub binder: Option<String>,
+    /// The declaration an occurrence instantiated, where the constraint is one that declaration's scheme states, restated at the occurrence's instance: whose bound it is, to a reader who wrote the occurrence and never the bound. A scheme stores none: it is an instance's to say.
+    pub instantiated: Option<Global>,
 }
 
 impl UniverseConstraintOrigin {
@@ -484,6 +500,7 @@ impl UniverseConstraintOrigin {
             kind,
             declaration: None,
             binder: None,
+            instantiated: None,
         }
     }
 }
@@ -691,6 +708,9 @@ impl fmt::Display for UniverseError {
                 )?;
                 for origin in path {
                     write!(formatter, "\n  required by {:?}", origin.kind)?;
+                    if let Some(instantiated) = &origin.instantiated {
+                        write!(formatter, " of {}", instantiated.faithful())?;
+                    }
                     if let Some(declaration) = &origin.declaration {
                         write!(formatter, " in {declaration}")?;
                     }

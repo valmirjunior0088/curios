@@ -147,7 +147,7 @@ fn suggest_in_scope(
         let head = Term::var(Var::free(Free::Global(name)));
         // A candidate is a use of its declaration, so its type is read at an instance of its own, as an occurrence's is: the levels and the sorts the declaration leaves to a caller are the goal's to state. The instance goes with the attempt.
         let mark = context.solution_mark();
-        let fit = match context.instantiate_assumption(&Free::Global(name)) {
+        let fit = match context.instantiate_assumption(&Free::Global(name), None) {
             Ok(Some((type_, _))) => apply_fit(context, telescope, &head, &type_, goal_type, &hole),
             Ok(None) | Err(_) => None,
         };

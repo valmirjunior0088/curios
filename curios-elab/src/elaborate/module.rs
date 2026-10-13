@@ -181,6 +181,7 @@ fn telescope_sizing<B: Bound>(
                         kind: kind.clone(),
                         declaration: Some(declaration.faithful().to_string()),
                         binder: hint.map(str::to_string),
+                        instantiated: None,
                     },
                 )
                 .map_err(Error::from)?;

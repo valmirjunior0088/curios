@@ -63,8 +63,8 @@ mod tests;
 
 use {
     super::{
-        DeadArm, Error, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
-        zonk_universe_levels_scoped,
+        DeadArm, Error, Occurrence, Provenance, UniverseMark, UniverseSolver, UniverseStateToken,
+        Witness, zonk_universe_levels_scoped,
     },
     crate::{
         Published, Refusal, Sort, hold_at_one_instance, key_spelling, metavar_spines,
@@ -1117,9 +1117,11 @@ impl<'s> Context<'s> {
         universes
     }
 
+    /// The type `name` is assumed at, at a fresh instance of the scheme it was generalized over: the instance of the occurrence written at `extent`, where a term wrote one, which the scheme's constraints are restated under ([`Occurrence`]).
     pub(crate) fn instantiate_assumption_universes(
         &mut self,
         name: &Free,
+        extent: Option<Extent>,
     ) -> Result<Option<(Term, Universes)>, UniverseError> {
         let Some(type_) = self.assumption(name).cloned() else {
             return Ok(None);
@@ -1132,7 +1134,9 @@ impl<'s> Context<'s> {
         if universe_context.width() == 0 {
             return Ok(Some((type_, Universes::default())));
         }
-        let universes = self.universes_mut().instantiate(&universe_context)?;
+        let universes = self
+            .universes_mut()
+            .instantiate(&universe_context, Occurrence::naming(name, extent))?;
         let type_ = instantiate_universes_scoped(&type_, &universes)?;
         Ok(Some((type_, universes)))
     }
@@ -1140,8 +1144,9 @@ impl<'s> Context<'s> {
     pub(crate) fn instantiate_assumption(
         &mut self,
         name: &Free,
+        extent: Option<Extent>,
     ) -> Result<Option<(Term, Universes)>, Error> {
-        self.instantiate_assumption_universes(name)
+        self.instantiate_assumption_universes(name, extent)
             .map_err(Error::from)
     }
 
@@ -1149,6 +1154,7 @@ impl<'s> Context<'s> {
         &mut self,
         name: &Free,
         universes: &Universes,
+        extent: Option<Extent>,
     ) -> Result<Option<Term>, Error> {
         let Some(type_) = self.assumption(name).cloned() else {
             return Ok(None);
@@ -1173,7 +1179,11 @@ impl<'s> Context<'s> {
         }
         let universe_context = found.unwrap_or_default();
         self.universes_mut()
-            .instantiate_at(&universe_context, universes)
+            .instantiate_at(
+                &universe_context,
+                universes,
+                Occurrence::naming(name, extent),
+            )
             .map_err(Error::from)?;
         let type_ = instantiate_universes_scoped(&type_, universes).map_err(Error::from)?;
         Ok(Some(type_))
@@ -1183,13 +1193,14 @@ impl<'s> Context<'s> {
         &mut self,
         universe_context: &UniverseContext,
         value: &B,
+        occurrence: Option<Occurrence>,
     ) -> Result<(B, Universes), Error> {
         if universe_context.width() == 0 {
             return Ok((value.clone(), Universes::default()));
         }
         let universes = self
             .universes_mut()
-            .instantiate(universe_context)
+            .instantiate(universe_context, occurrence)
             .map_err(Error::from)?;
         let value = instantiate_universes_scoped(value, &universes).map_err(Error::from)?;
         Ok((value, universes))
@@ -1211,7 +1222,7 @@ impl<'s> Context<'s> {
             );
         }
         self.universes_mut()
-            .instantiate_at(universe_context, universes)?;
+            .instantiate_at(universe_context, universes, None)?;
         instantiate_universes_scoped(value, universes)
     }
 
@@ -1231,7 +1242,7 @@ impl<'s> Context<'s> {
             );
         }
         self.universes_mut()
-            .instantiate_at(&induct_decl.universe_context, universes)?;
+            .instantiate_at(&induct_decl.universe_context, universes, None)?;
         let mut instantiated = induct_decl.clone();
         instantiated.arity = instantiate_universes_scoped(&instantiated.arity, universes)?;
         instantiated.result_sort =
@@ -1260,7 +1271,7 @@ impl<'s> Context<'s> {
             );
         }
         self.universes_mut()
-            .instantiate_at(&struct_decl.universe_context, universes)?;
+            .instantiate_at(&struct_decl.universe_context, universes, None)?;
         let mut instantiated = struct_decl.clone();
         instantiated.arity = instantiate_universes_scoped(&instantiated.arity, universes)?;
         instantiated.result_sort =

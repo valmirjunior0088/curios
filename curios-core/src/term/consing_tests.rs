@@ -146,6 +146,7 @@ fn a_universe_context_is_consed_without_its_positions() {
         kind: UniverseConstraintKind::WrittenType,
         declaration: Some("/lib/wrap".into()),
         binder: Some("A".into()),
+        instantiated: None,
     };
     let context = UniverseContext {
         parameter_count: 1,

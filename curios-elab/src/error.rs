@@ -1714,6 +1714,27 @@ impl Error {
                     Watched::Slot { .. } | Watched::Described(_) => None,
                 })
                 .collect(),
+            // Each use whose scheme's bound is on the cycle, past the place the report itself stands at, which is the first the path knows.
+            Self::UniverseInconsistency { path, .. } => {
+                let here = path.iter().find_map(|origin| origin.extent);
+                let mut noted = Vec::new();
+
+                path.iter()
+                    .filter_map(|origin| {
+                        let instantiated = origin.instantiated?;
+                        let extent = origin.extent.filter(|extent| Some(*extent) != here)?;
+                        if noted.contains(&extent) {
+                            return None;
+                        }
+                        noted.push(extent);
+
+                        note(
+                            extent.resolved(anchors),
+                            format!("'{}' is used here", spelling.symbol(&instantiated)),
+                        )
+                    })
+                    .collect()
+            }
             _ => Vec::new(),
         }
     }

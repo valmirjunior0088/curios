@@ -13,7 +13,7 @@
 
 use {
     super::{
-        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Outcome, ParkedWork,
+        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Occurrence, Outcome, ParkedWork,
         ShapeDiagnosis, Witness, attempt_discharge, convert_outcome, reduce_with,
         resolved_for_display,
     },
@@ -435,7 +435,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
         .expect("the goal was classified as a registered concept");
     context
         .universes_mut()
-        .instantiate_at(&concept.universe_context, &universes)
+        .instantiate_at(&concept.universe_context, &universes, None)
         .map_err(Error::from)?;
 
     // Step 2: superclass projections of local binders, breadth-first by depth. The graph is acyclic (checked at registration), so this is finite; two matches at the same minimal depth are ambiguous.
@@ -608,7 +608,7 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
 fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
     match &**node {
         Subterm::Var(var) => context
-            .instantiate_assumption(var.unwrap())?
+            .instantiate_assumption(var.unwrap(), None)?
             .map(|(type_, _)| type_)
             .ok_or_else(|| context.unbound_variable(node.clone())),
         Subterm::Proj(proj) => {
@@ -651,8 +651,16 @@ fn instantiate(
 ) -> Result<Resolution, Error> {
     // Hand-paired for the same reason as [`probe_match`]: this is the recursion, one level per nested premise, and this body is large.
     let mark = context.solution_mark();
-    let (signature, universes) =
-        context.instantiate_universe_bound(&witness.universe_context, &witness.signature)?;
+    // The witness is instantiated for the term that raised its goal, which is where a bound its scheme states is reported.
+    let occurrence = Occurrence {
+        instantiated: witness.name,
+        extent: origin.extent(),
+    };
+    let (signature, universes) = context.instantiate_universe_bound(
+        &witness.universe_context,
+        &witness.signature,
+        Some(occurrence),
+    )?;
     let minted = universes.clone();
     let name = Free::from(&witness.name);
     let head = if universes.is_empty() {

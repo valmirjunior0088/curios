@@ -483,6 +483,13 @@ impl fmt::Display for Displayed<'_> {
                     renamed_level(lower, &names),
                     renamed_level(upper, &names),
                 )?;
+                for instantiated in curios_core::instantiated_on(path) {
+                    write!(
+                        f,
+                        "\n  required by the bounds '{}' sets on the levels it is used at",
+                        spelling.symbol(&instantiated)
+                    )?;
+                }
                 if curios_core::names_a_proposition(path) {
                     write!(
                         f,

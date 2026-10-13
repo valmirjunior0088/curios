@@ -1,8 +1,8 @@
 use {
     super::{FieldSource, check_dependent_fields, park_checking},
     crate::{
-        Context, Error, Mode, Sort, check, check_is_sort, elaborate, expect, reduce_with,
-        resolved_for_display, stuck_on_metavar,
+        Context, Error, Mode, Occurrence, Sort, check, check_is_sort, elaborate, expect,
+        reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_core::{
         Bound, Extent, Field, InductType, Level, Proj, Quality, SelfReference, StructType, Subterm,
@@ -270,10 +270,11 @@ pub(super) fn check_args_against<B: Bound>(
     Ok((elaborated, terminal))
 }
 
-/// Type an intrinsic inductive type against its registry entry: the parameters are checked pointwise (dependently) through the declaration's arity, then the indices through the telescope that arity terminates in, and the whole node is a `Type`.
+/// Type an intrinsic inductive type against its registry entry: the parameters are checked pointwise (dependently) through the declaration's arity, then the indices through the telescope that arity terminates in, and the whole node is a `Type`. `extent` is where the node is written, which a fresh instance of the family's scheme is an occurrence at.
 pub(super) fn elaborate_induct_type(
     context: &mut Context,
     ut: &InductType,
+    extent: Option<Extent>,
 ) -> Result<(Term, Term), Error> {
     let InductType {
         name,
@@ -286,8 +287,15 @@ pub(super) fn elaborate_induct_type(
         return Err(Error::unknown_declaration(*name));
     };
     let (arity, result_sort, universes) = if written_universes.is_empty() {
-        let (arity, universes) = context
-            .instantiate_universe_bound(&induct_decl.universe_context, &induct_decl.arity)?;
+        let occurrence = Occurrence {
+            instantiated: *name,
+            extent,
+        };
+        let (arity, universes) = context.instantiate_universe_bound(
+            &induct_decl.universe_context,
+            &induct_decl.arity,
+            Some(occurrence),
+        )?;
         let result_sort = instantiate_universes_scoped(&induct_decl.result_sort, &universes)
             .map_err(Error::from)?;
         (arity, result_sort, universes)
@@ -322,10 +330,11 @@ pub(super) fn elaborate_induct_type(
     ))
 }
 
-/// Type an intrinsic constructor value against its registry signature: the instantiated parameters and the payload are checked through the constructor's full telescope, whose terminal gives the constructed `InductType`.
+/// Type an intrinsic constructor value against its registry signature: the instantiated parameters and the payload are checked through the constructor's full telescope, whose terminal gives the constructed `InductType`. `extent` is where the node is written, as [`elaborate_induct_type`] takes it.
 pub(super) fn elaborate_variant(
     context: &mut Context,
     uc: &Variant,
+    extent: Option<Extent>,
 ) -> Result<(Term, Term), Error> {
     let Variant {
         name,
@@ -351,8 +360,15 @@ pub(super) fn elaborate_variant(
         let Some(signature) = induct_decl.constructor(tag).map(|c| c.telescope.clone()) else {
             return Err(Error::match_case_missing(*name, tag.to_string()));
         };
-        let (signature, universes) =
-            context.instantiate_universe_bound(&induct_decl.universe_context, &signature)?;
+        let occurrence = Occurrence {
+            instantiated: *name,
+            extent,
+        };
+        let (signature, universes) = context.instantiate_universe_bound(
+            &induct_decl.universe_context,
+            &signature,
+            Some(occurrence),
+        )?;
         (signature, universes)
     } else {
         let induct_decl = context.instantiate_induct_decl_at(&induct_decl, written_universes)?;

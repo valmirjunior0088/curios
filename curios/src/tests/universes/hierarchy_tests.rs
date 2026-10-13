@@ -194,3 +194,78 @@ fn a_self_recursive_call_a_level_above_its_own_certifies() {
 
     assert_eq!(run(source), b"0");
 }
+
+/// The caret line a report places under `written`, where it stands in `line` of the source.
+fn caret_under(line: &str, written: &str, from: usize) -> String {
+    let column = from + line[from..].find(written).expect("the line writes it");
+
+    format!(
+        "{:>5} | {}{}",
+        "",
+        " ".repeat(column),
+        "^".repeat(written.len())
+    )
+}
+
+// **A conflict a scheme's bound closes names the declaration instantiated, at a use of it.** `lt` holds the level of its first argument's type under its second's domain, a bound its scheme states and no term of `bad` writes. Restated at a use with no place and no name, it left the report wherever else on the cycle carried a position, saying nothing of `lt`.
+#[test]
+fn a_conflict_a_schemes_bound_closes_names_the_declaration_instantiated() {
+    const BAD: &str = "        let bad(H: (Type) -> Type) -> Type = lt(H, H);";
+    let source = format!(
+        r#"
+        let tie(@T: Type, _: T) -> Type = T;
+        let lt(F: (Type) -> Type, G: (Type) -> Type) -> Type = G(tie(F));
+{BAD}
+        /std/print("no")
+        "#
+    );
+
+    let message = error(&source);
+    assert!(
+        message.contains("this Type would need to be strictly below itself"),
+        "{message}"
+    );
+    assert!(
+        message.contains("required by the bounds 'lt' sets on the levels it is used at"),
+        "the message names whose bound the cycle runs through:\n{message}"
+    );
+    assert!(
+        message.contains(&caret_under(BAD, "lt", 0)),
+        "the report stands at the use:\n{message}"
+    );
+}
+
+// Two uses whose bounds close the cycle between them, with no other constraint on it: a function's domains are equated by assignment, which raises none. The report stands at one use and holds the other as a place of its own, where it stood at the label of `bad` and named neither.
+#[test]
+fn a_conflict_two_uses_close_alone_stands_at_one_and_notes_the_other() {
+    const BAD: &str = "        let bad: Type = let p = P; let q = Q; {lt(p, q), lt(q, p)};";
+    let source = format!(
+        r#"
+        let tie(@T: Type, _: T) -> Type = T;
+        let lt(F: (Type) -> Type, G: (Type) -> Type) -> Type = G(tie(F));
+        let P(A: Type) -> Type = A;
+        let Q(A: Type) -> Type = A;
+{BAD}
+        /std/print("no")
+        "#
+    );
+
+    let message = error(&source);
+    assert!(
+        message.contains("required by the bounds 'lt' sets on the levels it is used at"),
+        "{message}"
+    );
+    let first = caret_under(BAD, "lt", 0);
+    let second = caret_under(BAD, "lt", BAD.find("lt(q").expect("the second use"));
+    let (report, note) = message
+        .split_once("'lt' is used here")
+        .unwrap_or_else(|| panic!("the other use is a place of its own:\n{message}"));
+    assert!(
+        report.contains(&first),
+        "the report stands at one use:\n{message}"
+    );
+    assert!(
+        note.contains(&second),
+        "the note stands at the other:\n{message}"
+    );
+}

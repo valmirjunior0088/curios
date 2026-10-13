@@ -687,6 +687,7 @@ impl<'a> Context<'a> {
                 kind: written,
                 declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
                 binder: None,
+                instantiated: None,
             }),
         });
         let id = curios_core::UniverseMetaId(id);
@@ -724,6 +725,7 @@ impl<'a> Context<'a> {
             kind: curios_core::UniverseConstraintKind::WrittenSort,
             declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
             binder: None,
+            instantiated: None,
         }));
         if let Some(span) = span {
             self.shared
