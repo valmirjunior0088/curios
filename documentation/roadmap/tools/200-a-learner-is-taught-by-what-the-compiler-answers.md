@@ -1,13 +1,13 @@
 # A learner is taught by what the compiler answers
 
-Working specification for `/learn-curios`, the command that teaches the language inside an agent's session. Today it opens on an equation, ends at a theorem proved by induction, and tells its teacher that what the compiler decides unaided "cost nothing and prove nothing". This spec has it meet a developer where the language first answers one: at a program that would have crashed in the language they know, refused with the input that breaks it and accepted once a guard is written. The guard is a proof, and the learner hears so after writing it. The command stays a slash command of a checkout, for the few people the maintainer picks and instructs.
+Working specification for `/learn-curios`, the command that teaches the language inside an agent's session. It meets a developer where the language first answers one: at a program that would have crashed in the language they know, refused with the input that breaks it and accepted once a guard is written. The guard is a proof, and the learner hears so after writing it. It is a slash command of a checkout, for the few people the maintainer picks and instructs. The command is written to that shape; what is left is the session it runs in, and what sessions show of it.
 
 It is independent of every other spec. [A refusal names the form it met](../surface/200-a-refusal-names-the-form-it-met.md) and [A program reads text and may fail](../standard-library/201-a-program-reads-text-and-may-fail.md) each remove lines of what the command steers its learner around.
 
 ## What this builds on
 
-- **The command as it stands** (`.claude/commands/learn-curios.md`, 97 lines). It fixes an end — the learner has "stated a proposition about a function they wrote and proved it" — and says of the way there that "there is no lesson plan here and you must not invent one". It fixes the first program, two `Eq()` claims of which one is false, and the first question, which of them the compiler takes. It keeps the learner's work in `.learn/`, which the tree ignores, and it holds the teacher to showing the compiler's output whole, to closing a goal privately before setting it, and to never filling a hole the learner is working on.
-- **A bound is refused with the input that breaks it.** An unguarded `total / people` is refused as `the bound of the '/' operator was not discharged`, with `it fails at people = 0` and `decide the bound with a guard before the operation`; an unguarded `List/get(xs, i)` with `it fails at i = 0, List/len(@?, xs) = 0`. Under a guard that decides the bound — `0 < people`, `i < List/len(xs)`, a zero pattern — the same line is accepted with no proof written, and a zero check is a guard like any other ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)). A guard one short of the bound, `i <= List/len(xs)`, is refused as `it does not follow from the facts in scope`, naming the guard and the empty list it fails at. Each but the zero check holds at `2af536ae7`, by probe.
+- **The command as it stands** (`.claude/commands/learn-curios.md`, 64 lines). It fixes an end — the learner has "resolved, with no help from you, a refusal that would have been a crash in the language they know" — and says of the way there that "there is no lesson plan here and you must not invent one". It holds a stance in four sentences, a turn bound at three sentences beside the compiler's output; one program, the opening; the order the compiler's answers come in, as where a session leans; what done is; six lines of what only a teacher knows, each naming what it stands on; and the notes a resumed session reads first. It keeps the learner's work in `.learn/`, which the tree ignores.
+- **A bound is refused with the input that breaks it.** An unguarded `total / people` is refused as `the bound of the '/' operator was not discharged`, with `it fails at people = 0` and `decide the bound with a guard before the operation`; an unguarded `List/get(xs, i)` with `it fails at i = 0, List/len(@Nat, xs) = 0` and `decide the bound with a guard before the call`. Under a guard that decides the bound — `0 < people`, `i < List/len(xs)`, a zero pattern — the same line is accepted with no proof written, and a zero check is a guard like any other ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)). A guard one short of the bound, `i <= List/len(xs)`, is refused as `it does not follow from the facts in scope`, naming the guard and the empty list it fails at. Each holds at `76a6cf3cf`, by probe.
 - **An obligation moves to where the value comes from.** A function states a bound as an implicit parameter, `@_: Holds(0 < people)`, and every caller is held to it: `share(total, guests)` is refused with `it fails at guests = 0`, and `share(total, guests + 1)` is accepted with nothing written. A structure states one in a hidden field, `struct Positive: pub Type { n: Nat, @Holds(0 < n) }`, discharged where the value is built and a fact wherever it is in scope ([A hidden member takes no position](../../design/theory/a-hidden-member-takes-no-position.md)). `/std` is written so: `List/try_get` is one guard around `List/get`.
 - **A claim about every input is a `let`.** `let _total_of_two(a: Nat, b: Nat) -> Eq()(total([a, b]), a + b) = Eq/refl();` is accepted where `total` computes it, and where `total` is wrong the mismatch shows what it computed, `a + b + 1`, against what was claimed ([A test is a declared description, and a proof is a `let`](../../design/tools/a-test-is-a-declared-description-and-a-proof-is-a-let.md)). `curios test` runs the declared tests of the same file.
 - **A goal says what stands at a place.** `?` reports the scope, the type and up to three fits, every goal of a program in one run, and a program that holds goals exits 2 where a refusal exits 1. On a guarded bound it reports `? : /std/Bool/Holds(i < List/len(@Nat, xs))` with `? ≈ /std/Bool/True/qed()`, and on an unguarded one the input the bound fails at. The fits are offered because "the gap between stating an obligation and answering it is smallest where beginners live" ([A diagnostic spells what its reader can write](../../design/tools/a-diagnostic-spells-what-its-reader-can-write.md)).
@@ -18,15 +18,8 @@ It is independent of every other spec. [A refusal names the form it met](../surf
 
 ## The gap
 
-- **It opens where the language is strangest.** The first line a learner reads is `let a: Eq()(2 + 3, 5) = Eq/refl();`: a proposition, an empty list that is [one parameter group per call](../../design/theory/a-call-fills-one-parameter-group.md) and a constructor, before the learner has written a function.
-- **It ends at a theorem, and counts what the compiler decides as nothing.** The end is a proposition `Eq/refl()` alone cannot close, and the laws conversion decides "cost nothing and prove nothing". A developer who guards a division has proved a bound and is told nothing of it, and one who came to write a program has no finish the command recognizes.
-- **It names the logic before the learner has used it.** The opening has the teacher "say that a type can state a claim and a value can prove it", and the distinction it guards hardest is that "a proposition is a type, a proof is a value of it".
-- **It states the language.** That linear arithmetic on `Nat` is computation, which carriers bind a hypothesis after `;`, what a program's final term is, how a goal reports: each is the reference's or the compiler's, restated. One has drifted: `Eq.crs` is "seventeen lines" in the command and twenty-three in the tree.
-- **Nothing bounds a turn.** The command says to ask before explaining and to teach one thing at a time, and says nothing of how much a message holds.
 - **Its leave to probe ends with its first turn.** From the learner's second reply a private probe asks permission, and the request shows the learner the answer being closed.
 - **The session is a contributor's.** The instructions the checkout loads are for changing the compiler: they ask a program through `cargo run`, which builds the workspace first, and they ask for the whole reference before a line of a learner's file is written.
-- **A session resumes from programs alone.** Files in `.learn/` are read as an earlier session; what the learner knew, where they stalled and what they asked is nowhere.
-- **Done is checked for the program and not for the learner.** The proof compiled, they saw the errors, and they "can say what makes it a proof rather than a test". Nothing asks that they resolve a refusal the teacher took no part in.
 
 ## What is known
 
@@ -69,7 +62,7 @@ Each settled on 2026-10-13.
 - **The compiler's fits are part of what is taught.** A `?` and what it offers is how a developer asks the compiler, and no report is withheld to keep an answer back.
 - **What holds the command is the learners' own sessions and a few dry runs**, not a cohort of simulated learners.
 
-## What the command becomes
+## What the command holds
 
 - **It states a goal, a stance, a direction and its limits.** The goal: the learner leaves having resolved, with no help, a refusal that would have been a crash in the language they know, and having heard that what they wrote was a proof. Four sentences carry the stance. *The compiler is the one believed*: a claim about Curios reaches the learner as output on their screen or as a run handed to them, and the teacher asserts nothing it could have run. *A turn is one move*: one thing for the learner to do — predict, run, change, choose — and no more prose than is read at a glance, the compiler's output shown whole and counted apart. *A fix is theirs*: never written for them while they work, and made smaller where they stall. *Nothing is set that has not been closed*: the teacher runs each step privately first.
 - **The direction is the order the compiler's answers come in.** A program refused with the input that breaks it; the guard that makes it compile; the bound moved into a signature, where a caller is refused in turn, or into a type built once; a claim about every input, accepted or shown false; a `?` on a bound the learner guarded, which shows the proposition and the proof they had already written. It is where the session leans when the learner gives it nowhere else to go, and a learner who brought a program of their own is followed.
@@ -78,12 +71,12 @@ Each settled on 2026-10-13.
 - **A refusal is set beside what the learner already knows.** What their language does with the same program, and when, is said in a clause: an exception at run time, an `undefined`, a panic. The language comes from `$ARGUMENTS`, from what they say, or from one question asked where a comparison would carry the step.
 - **A stalled learner is handed the compiler's nudge, then a smaller step.** A `?` at the place, with its fits, comes before any hint of the teacher's, and a hint of the teacher's is a narrower program and never the line itself.
 - **Done is one act the compiler checks and the teacher takes no part in.** The last refusal is a sibling of one resolved together — the last element of a list that may be empty, a share among a count that may be zero — set and then left: no turn of the teacher stands between its report and the run that accepts the fix. The learner then says in their own words what the compiler now rules out, and the teacher offers two or three next steps from what the session touched, a proof by induction among them.
-- **What only a teacher knows is a short list in the command.** What a newcomer writes and what Curios writes instead — no `if`, `return` or assignment, an effect sequenced as `let _ = …!;`, one call a place of a format, no `+` between two `Str`, arguments and input as bytes — and what surprises without being refused: `3 - 5` is `0`, a mismatch prints `n + n` as `2 * n`, and an indexed family's refusal reads worse than a bound's. Each line names the spec or the decision it stands on and goes when the tree stops needing it.
+- **What only a teacher knows is a short list in the command.** What a newcomer writes and what Curios writes instead — no `if`, `return` or assignment, an effect sequenced as `let _ = …!;`, one call a place of a format, no `+` between two `Str`, arguments and input as bytes — and what surprises without being refused: `3 - 5` is `0`, and a mismatch prints `n + n` as `2 * n`. Each line names the spec or the decision it stands on and goes when the tree stops needing it.
 - **Where the learner stood is written down.** At each stop the teacher writes a few lines in `.learn/notes.md`: what they knew coming in, what they resolved unaided, where they stalled, what they asked sideways, each place the language got in their way, what is next. A resumed session reads it and opens with a question about the last thing done.
 - **The tree sets the session up.** `.claude/settings.json` allows the tree's compiler and writing under `.learn/` for the whole session, so a private probe asks nothing of the learner. The command says the session teaches and changes nothing: a program is asked of the built compiler and never through `cargo run`, and the reference is read by the section a step needs.
 - **The maintainer's word carries what the command cannot.** Before: Claude Code, a clone, a compiler, `claude` started at the root, `/learn-curios`. After: the learner's `.learn/`, with their leave.
 
-One turn, as it would read, the compiler's lines as `2af536ae7` prints them:
+One turn, as it would read, the compiler's lines as `76a6cf3cf` prints them:
 
 ```text
 teacher   What does this print?
@@ -94,9 +87,9 @@ compiler  Processing     .learn/first.crs
           implicit argument 'ok' of 'List/get' was not inferred
             nothing discharged /std/Bool/Holds(i < List/len(@Nat, xs))
             it does not follow from the facts in scope:
-              a guard, i <= List/len(@Nat, xs): i <= List/len(@Nat, xs)
-            it fails at i = 0, List/len(@?, xs) = 0
-            supply it explicitly: List/get(@...)
+              a guard, i <= List/len(@Nat, xs)
+            it fails at i = 0, List/len(@Nat, xs) = 0
+            decide the bound with a guard before the call, or supply it explicitly: List/get(@...)
 
              --> .learn/first.crs:4:39
               4 |     match i <= List/len(xs) | true => List/get(xs, i) | false => 0 end;
@@ -119,9 +112,8 @@ teacher   It never ran: an empty list and index 0 get past the guard. Change one
 
 ## Stages
 
-1. **The command states the goal, the stance, the direction and the list.** Every other fact of the language leaves, to the reference it restated; the stale figure goes. Check, by reading: each sentence is a rule of teaching, a limit, a pointer or a line of the list; each path it names exists; each line of the list names what it stands on; and each program the command holds is accepted or refused as it says, by probe.
-2. **The tree sets the session up.** The allow rule, the sentence that sets the contributor's instructions aside, and where the Curios rule reaches. Check, under the dry run: no call is denied after the first turn, no `cargo` command is run, and `documentation/syntax.md` is not read whole before the first message.
-3. **Three dry runs, then the first learner.** Check: the dry run's counts, against the command as it stands at the commit before; then the first learner's `.learn/`, read for whether done was unaided.
+1. **The tree sets the session up.** The allow rule, the sentence that sets the contributor's instructions aside, and where the Curios rule reaches. Check, under the dry run: no call is denied after the first turn, no `cargo` command is run, and `documentation/syntax.md` is not read whole before the first message.
+2. **Three dry runs, then the first learner.** Check: the dry run's counts, against the command as it stands at the commit before; then the first learner's `.learn/`, read for whether done was unaided.
 
 ## Verification
 
