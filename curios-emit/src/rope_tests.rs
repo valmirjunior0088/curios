@@ -24,6 +24,63 @@ fn bin_read_calls_the_read_helper_and_forces_its_input() {
     assert_contains(&wat, "call $bytes/force");
 }
 
+/// The text of one emitted function, from its header to the next function's.
+fn func<'a>(wat: &'a str, name: &str) -> &'a str {
+    let start = wat
+        .find(&format!("(func {name} "))
+        .expect("the function is emitted");
+    let end = wat[start + 1..]
+        .find("(func ")
+        .map_or(wat.len(), |next| start + 1 + next);
+
+    &wat[start..end]
+}
+
+/// A read of a node that was never flattened looks in its two children before it reaches for `force`, in each grain: a read that falls in a flat child copies nothing.
+#[test]
+fn a_read_of_an_unflattened_node_looks_in_its_children_before_it_forces() {
+    let packed = |grain| {
+        wat(&intrinsic_main(
+            curios_cont::Intrinsic::BinGet(grain),
+            vec![bin_lit(vec![1, 2, 3]), nat(1)],
+        ))
+    };
+
+    for (wat, read, node, force) in [
+        (
+            packed(Grain::X),
+            "$bytes/read",
+            "$rope/bin/node",
+            "$bytes/force",
+        ),
+        (
+            packed(Grain::B),
+            "$bits/read",
+            "$rope/bin/node",
+            "$bits/force",
+        ),
+        (
+            wat(&list_read()),
+            "$list/read",
+            "$rope/list/node",
+            "$list/force",
+        ),
+    ] {
+        let read = func(&wat, read);
+        let left = read
+            .find(&format!("struct.get {node} $left"))
+            .expect("the helper reads the left child");
+        let right = read
+            .find(&format!("struct.get {node} $right"))
+            .expect("the helper reads the right child");
+        let force = read
+            .find(&format!("call {force}"))
+            .expect("the helper still forces");
+
+        assert!(left < right && right < force, "{read}");
+    }
+}
+
 #[test]
 fn bin_eql_calls_the_equality_helper() {
     let wat = wat(&intrinsic_main(

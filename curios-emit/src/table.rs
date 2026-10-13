@@ -1028,7 +1028,7 @@ impl<'a> Table<'a> {
         self.list_slice.get().is_some()
     }
 
-    /// `$bytes/read (ref $rope/bin, i32) -> i32`: one byte read — straight off a leaf payload, through a `view`'s window without forcing, and via `$bytes/force` (memoized) on a node.
+    /// `$bytes/read (ref $rope/bin, i32) -> i32`: one byte read — straight off a leaf payload, through a `view`'s window without forcing, off a node's cache, and at an uncached node from the child that holds the byte where that child is flat-available, with `$bytes/force` (memoized) only where it is not.
     pub(crate) fn bytes_read_func(&self) -> curios_wasm::FuncName {
         self.bytes_read
             .get_or_init(|| curios_wasm::FuncName::from("bytes/read"))

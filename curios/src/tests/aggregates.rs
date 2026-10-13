@@ -5,4 +5,5 @@ mod monoid_tests;
 mod option_result_tests;
 mod packed_tests;
 mod spread_tests;
+mod test_support;
 mod vec_tests;

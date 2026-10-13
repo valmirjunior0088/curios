@@ -3,7 +3,7 @@
 //! - `$<carrier>/force` flattens a byte- or element-grain rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else fills a fresh payload by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
 //! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on re-entry.
 //! - `$<carrier>/slice` builds the O(1) window: bounds-check, the trivial windows answer an empty leaf or the rope itself, a view collapses (so windows never stack), and an uncached node base is forced first — which memoizes — so every `view` in existence has a *flat-available* base (a leaf or a cached node).
-//! - `$<carrier>/read` answers one element: off a leaf payload, *through* a view's window without forcing (the invariant above makes that O(1)), or via `force` on a node.
+//! - `$<carrier>/read` answers one element: off a leaf payload, *through* a view's window without forcing (the invariant above makes that O(1)), off a flattened node's cache, and at a node never flattened from the child that holds the element where that child is flat-available — so a read of what was just appended copies nothing — with `force` only where the child is not.
 //! - `$bits/force` performs the same iterative walk in logical bit units, filling a zeroed packed payload and memoizing it on an entry node.
 //! - `$bytes/eql` compares two `Bytes` ropes bytewise: unequal lengths answer without forcing, equal lengths force both payloads once and walk them.
 //! - `$list/map` applies a unary closure to every element of the forced payload, filling a fresh leaf.
@@ -556,6 +556,134 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
+    /// What a read does at a node that was never flattened: it answers from the child that holds `i` where that child is flat-available — a leaf, a window, a flattened node — and flattens the node only where the child is not. On the way out `p` holds the payload to read and `j` the index within it, in the grain's own units.
+    ///
+    /// ```wat
+    /// child := r.left
+    /// if i >= child.len → j := i - child.len; child := r.right
+    /// child.tag == 0 → p := child.payload
+    /// child.tag == 2 → j := child.offset + j; p := the payload or cache of child.base
+    /// otherwise      → p := child.cache ?? (j := i; force(r))
+    /// ```
+    ///
+    /// **One level, and no further.** A child that is itself unflattened would be read by a descent, and a walk over a deep chain that was never read would pay its depth at every read, where flattening the node makes each later read one array access. So an append then a read of the part just appended copies nothing, which is what a stream's reader and a push-then-peek loop do, and an alternation that reads the older part still flattens, at every second append.
+    fn unflattened_read_instrs(
+        rope: &RopeData,
+        force_func: curios_wasm::FuncName,
+        r: &curios_wasm::LocalName,
+        i: &curios_wasm::LocalName,
+        j: &curios_wasm::LocalName,
+        p: &curios_wasm::LocalName,
+        sb: &curios_wasm::LocalName,
+    ) -> Vec<curios_wasm::Instr> {
+        let flat_base = curios_wasm::Instr::If {
+            label_name: curios_wasm::LabelName::from("child_view_base"),
+            block_type: curios_wasm::BlockType::Empty,
+            then_instructions: vec![
+                get(sb),
+                cast(&rope.leaf),
+                field_get(&rope.leaf, &rope.payload_field),
+                set(p),
+            ],
+            else_instructions: vec![
+                get(sb),
+                cast(&rope.node),
+                field_get(&rope.node, &rope.cache_field),
+                set(p),
+            ],
+        };
+        let through_view = vec![
+            get(sb),
+            cast(&rope.view),
+            field_get(&rope.view, &rope.offset_field),
+            get(j),
+            curios_wasm::Instr::I32Add,
+            set(j),
+            get(sb),
+            cast(&rope.view),
+            field_get(&rope.view, &rope.base_field),
+            set(sb),
+            get(sb),
+            field_get(&rope.base, &rope.tag_field),
+            curios_wasm::Instr::I32Eqz,
+            flat_base,
+        ];
+        let node_or_force = vec![
+            get(sb),
+            cast(&rope.node),
+            field_get(&rope.node, &rope.cache_field),
+            set(p),
+            get(p),
+            curios_wasm::Instr::RefIsNull,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("child_node"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(r),
+                    curios_wasm::Instr::Call {
+                        func_name: force_func,
+                    },
+                    set(p),
+                    get(i),
+                    set(j),
+                ],
+                else_instructions: vec![],
+            },
+        ];
+
+        vec![
+            get(r),
+            cast(&rope.node),
+            field_get(&rope.node, &rope.left_field),
+            set(sb),
+            get(i),
+            get(sb),
+            field_get(&rope.base, &rope.len_field),
+            curios_wasm::Instr::I32GeU,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("right"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(i),
+                    get(sb),
+                    field_get(&rope.base, &rope.len_field),
+                    curios_wasm::Instr::I32Sub,
+                    set(j),
+                    get(r),
+                    cast(&rope.node),
+                    field_get(&rope.node, &rope.right_field),
+                    set(sb),
+                ],
+                else_instructions: vec![],
+            },
+            get(sb),
+            field_get(&rope.base, &rope.tag_field),
+            curios_wasm::Instr::I32Eqz,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("child_leaf"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(sb),
+                    cast(&rope.leaf),
+                    field_get(&rope.leaf, &rope.payload_field),
+                    set(p),
+                ],
+                else_instructions: vec![
+                    get(sb),
+                    field_get(&rope.base, &rope.tag_field),
+                    curios_wasm::Instr::I32Const { value: 2 },
+                    curios_wasm::Instr::I32Eq,
+                    curios_wasm::Instr::If {
+                        label_name: curios_wasm::LabelName::from("child_view"),
+                        block_type: curios_wasm::BlockType::Empty,
+                        then_instructions: through_view,
+                        else_instructions: node_or_force,
+                    },
+                ],
+            },
+        ]
+    }
+
     /// `$<carrier>/read (ref <base>, i32) -> <element>`.
     ///
     /// ```wat
@@ -563,10 +691,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// if r.tag == 0 → r.payload[i]                    ;; leaf
     /// if r.tag == 2 →                                 ;; view: read through
     ///   (r.base.tag == 0 ? r.base.payload : r.base.cache)[r.offset + i]
-    /// (r.cache ?? force(r))[i]                        ;; node: answer the memo, fill it once
+    /// r.cache != null → r.cache[i]                    ;; node: answer the memo
+    /// otherwise → the child that holds i, or force(r) ;; `unflattened_read_instrs`
     /// ```
     ///
-    /// The node arm probes the cache before reaching for `force`: a cache is written once and never cleared, so on every walk over an already-forced rope the probe halves the serial call chain a per-element read costs — which is most of what a hot descent pays.
+    /// The node arm probes the cache first: a cache is written once and never cleared, so on every walk over an already-forced rope the probe halves the serial call chain a per-element read costs — which is most of what a hot descent pays.
     ///
     /// Binary-sequence elements are packed bytes (`array.get_u`, an `i32` result); `List` elements are the top type (`array.get`).
     pub(crate) fn emit_read_func(
@@ -681,13 +810,9 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                             curios_wasm::Instr::If {
                                 label_name: curios_wasm::LabelName::from("settle"),
                                 block_type: curios_wasm::BlockType::Empty,
-                                then_instructions: vec![
-                                    get(&r),
-                                    curios_wasm::Instr::Call {
-                                        func_name: force_func,
-                                    },
-                                    set(&p),
-                                ],
+                                then_instructions: Self::unflattened_read_instrs(
+                                    rope, force_func, &r, &i, &j, &p, &sb,
+                                ),
                                 else_instructions: vec![],
                             },
                         ],
@@ -708,7 +833,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// Read one logical bit from a packed rope. Leaves and settled windows read their packed payload directly. An uncached node is forced once; later reads take its packed cache without walking the tree.
+    /// Read one logical bit from a packed rope. Leaves and settled windows read their packed payload directly. An uncached node answers from a flat child as the byte grain's does ([`Self::unflattened_read_instrs`]), in logical bit units, and is forced where the child is not; later reads take its packed cache without walking the tree.
     pub(crate) fn emit_bits_read_func(
         &mut self,
         func_name: curios_wasm::FuncName,
@@ -796,13 +921,9 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                             curios_wasm::Instr::If {
                                 label_name: curios_wasm::LabelName::from("settle"),
                                 block_type: curios_wasm::BlockType::Empty,
-                                then_instructions: vec![
-                                    get(&r),
-                                    curios_wasm::Instr::Call {
-                                        func_name: force_func,
-                                    },
-                                    set(&p),
-                                ],
+                                then_instructions: Self::unflattened_read_instrs(
+                                    &rope, force_func, &r, &i, &j, &p, &sb,
+                                ),
                                 else_instructions: vec![],
                             },
                         ],

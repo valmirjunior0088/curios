@@ -1,6 +1,7 @@
 //! Indexed vectors a program declares for itself: the type-level `Vec` over `Nat` induction, and the indexed inductive whose `append` is executed rather than only compiled. The packed splices and folds are the corpus's `/aggregates/packed`.
 
 use {
+    super::test_support::{ARRIVAL, BITS, BYTES, reads_in_every_shape},
     crate::tests::{run, run_text},
     curios_runtime::MockHost,
 };
@@ -157,4 +158,15 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
     run_text(source, system).expect("the program runs");
 
     assert_eq!(io.output(), b"true true true");
+}
+
+/// **A packed run reads as its flat copy does, whatever its node's children are.** A read of a node that was never flattened answers from the child that holds its index where that child is flat — a leaf, a window, a flattened node — and flattens the node where it is not, so each shape takes a different arm of the read: every element of each, read upward and then downward, is the settled run's.
+#[test]
+fn a_packed_run_reads_as_its_flat_copy_in_every_shape_its_children_take() {
+    for carrier in [&BYTES, &BITS] {
+        let (system, io) = MockHost::builder().stdin_chunks(vec![ARRIVAL]).build();
+
+        run_text(&reads_in_every_shape(carrier), system).expect("the reads run");
+        assert_eq!(io.output(), b"111111111", "{}", carrier.run);
+    }
 }
