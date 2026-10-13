@@ -36,7 +36,7 @@ pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Term>)> {
     )
 }
 
-// A match-arm: `| pattern => body`, where `pattern` may nest across constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`). A bare binder arm is legal alone (equivalent to a `let`) and a final bare `_` after dispatching arms is the default, but lowering rejects a binder beside a concrete-shape arm in one column of one group, since arms have no priority order (see `into_core::match_compile`).
+// A match-arm: `| pattern => body`, where `pattern` may nest across constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`). A bare binder arm is legal alone (equivalent to a `let`) and a final bare `_` after dispatching arms is the default, but elaboration rejects a binder beside a concrete-shape arm in one column of one group, since arms have no priority order (`curios-elab`'s matrix compiler).
 pub(super) fn parse_induct_match_branch<'a>() -> Parser<'a, MatrixArm> {
     parse_literal("|")
         .and_keep(commit(
@@ -120,7 +120,7 @@ pub(super) fn parse_choose<'a>() -> Parser<'a, Term> {
         .map(|(arms, default)| Subterm::Choose(Choose { arms, default }).into())
 }
 
-// A `match` is exactly one surface shape: the general headed pattern matrix. Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch), `List`, `Bin` — is just a matrix whose arm patterns are that carrier's leaves (see `parse_match_pattern`), lowered by `into_core::match_compile`'s `compile_bool`/`compile_nat`/`compile_list`/`compile_bin`. The headless ladder is `choose` (`parse_choose`), parsed separately. Zero arms are legal: under index inversion every impossible arm is silently omittable, and a scrutinee whose indices clash with *every* constructor's target eliminates with no arms at all.
+// A `match` is exactly one surface shape: the general headed pattern matrix. Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch), `List`, `Bin` — is just a matrix whose arm patterns are that carrier's leaves (see `parse_match_pattern`), compiled by `curios-elab`'s matrix compiler. The headless ladder is `choose` (`parse_choose`), parsed separately. Zero arms are legal: under index inversion every impossible arm is silently omittable, and a scrutinee whose indices clash with *every* constructor's target eliminates with no arms at all.
 pub(super) fn parse_match<'a>() -> Parser<'a, Term> {
     parse_match_prefix()
         .and(many0(parse_induct_match_branch))

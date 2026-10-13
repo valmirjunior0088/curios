@@ -23,6 +23,9 @@ use frees::*;
 mod shape;
 pub use shape::*;
 
+mod matrix;
+pub use matrix::*;
+
 mod subterm;
 pub use subterm::*;
 

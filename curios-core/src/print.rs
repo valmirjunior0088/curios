@@ -1,9 +1,10 @@
 use {
     super::{
-        Apply, Argument, Arity, Ascribed, Atom, Bang, Bound, Carrier, Cases, Cursor, Field, Free,
-        Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label, Let, Match,
-        MatchResult, Nat, NumLit, Proj, Quality, Rec, Scope, Spellings, Struct, StructType,
-        Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Universes, Var, Variant,
+        Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor, Field,
+        Free, Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label, Let, Match,
+        MatchResult, Matrix, Nat, NumLit, Pattern, Proj, Quality, Rec, Row, Scope, Spellings,
+        Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two,
+        Universes, Var, Variant,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
@@ -2650,6 +2651,59 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         ]),
         // The body a derived witness asks for, before elaboration has written it: no surface form spells it, so the dump names the transient.
         Subterm::Transient(Transient::Derive) => pure("derive"),
+        // A match as it is written, before its patterns are compiled: each arm as its pattern over the names its body binds, and what a bind arm falls through to as a last arm no pattern heads.
+        Subterm::Transient(Transient::Matrix(Matrix {
+            head,
+            motive,
+            rows,
+            fallthrough,
+        })) => {
+            // The motive's binders are opened ahead of the scrutinee's, as a compiled match's are, and the arms' after both.
+            let motive = match motive {
+                Some(motive) => flat([pure(": "), sub(motive, frame)]),
+                None => pure(""),
+            };
+            let head = sub(head, frame);
+            let arms = rows
+                .into_iter()
+                .map(|Row { pattern, body }| {
+                    let Subterm::Func(Func { telescope }) = &*body else {
+                        unreachable!("a row's body is a function over its binders");
+                    };
+                    let mut names = Vec::with_capacity(telescope.len());
+                    let body = lambda_parameters(
+                        telescope.cursor(),
+                        &telescope.marks(),
+                        frame,
+                        &mut names,
+                    );
+
+                    flat([
+                        pure("\n| "),
+                        pure(pattern_text(&pattern, &mut names.into_iter())),
+                        pure(" =>"),
+                        body,
+                        pure(";"),
+                    ])
+                })
+                .collect::<Vec<_>>();
+            let fallthrough = match fallthrough {
+                Some(rest) => flat([
+                    pure("\n| else =>\n"),
+                    indent(flat([sub(rest, frame), pure(";")])),
+                ]),
+                None => pure(""),
+            };
+
+            flat([
+                pure("match "),
+                head,
+                motive,
+                pure(";"),
+                flat(arms),
+                fallthrough,
+            ])
+        }
         // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing. Under axis (e) neither is: the spine is elaboration state like the id, and the reader gets `?`.
         Subterm::Metavar(metavar) => {
             if frame.spelling.anonymous_metavars {
@@ -2682,6 +2736,111 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
 mod tests;
 
 /// A character rendered as its literal body: the five escapes by their spellings, anything else verbatim.
+/// A pattern of a [`Matrix`]'s row as source writes it, each binder under the next of `names`.
+fn pattern_text(pattern: &Pattern, names: &mut dyn Iterator<Item = String>) -> String {
+    let fields = |fields: &[(Option<String>, Pattern)], names: &mut dyn Iterator<Item = String>| {
+        fields
+            .iter()
+            .map(|(label, field)| {
+                let field = pattern_text(field, names);
+                match label {
+                    Some(label) => format!("{label} = {field}"),
+                    None => field,
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let peeled =
+        |hypothesis: &Option<Bind>, names: &mut dyn Iterator<Item = String>| match hypothesis {
+            Some(hypothesis) => format!("; {}", bind_text(hypothesis, names)),
+            None => String::new(),
+        };
+
+    match pattern {
+        Pattern::Binder => names.next().unwrap_or_default(),
+        Pattern::Variant { tag, args } => {
+            let args = args
+                .iter()
+                .map(|(plicity, arg)| {
+                    format!(
+                        "{}{}",
+                        plicity_mark(Some(plicity)),
+                        pattern_text(arg, names)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            format!("{}({args})", tag.as_string())
+        }
+        Pattern::Tuple(written) => format!("({})", fields(written, names)),
+        Pattern::Struct {
+            head,
+            fields: written,
+        } => {
+            format!("{head} {{ {} }}", fields(written, names))
+        }
+        Pattern::Bool(value) => value.to_string(),
+        Pattern::Zero => "0".to_string(),
+        Pattern::Succ(hypothesis) => {
+            let predecessor = names.next().unwrap_or_default();
+
+            format!("{predecessor} + 1{}", peeled(hypothesis, names))
+        }
+        Pattern::Literal(value) => value.to_string(),
+        Pattern::Character(character) => format!("'{}'", escape_character(*character)),
+        Pattern::Nil => "[]".to_string(),
+        Pattern::Cons(hypothesis) => {
+            let head = names.next().unwrap_or_default();
+            let tail = names.next().unwrap_or_default();
+
+            format!("[{head}, ..{tail}]{}", peeled(hypothesis, names))
+        }
+        Pattern::End(grain) => format!("{}[]", grain_letter(*grain)),
+        Pattern::Atom(grain, hypothesis) => {
+            let head = names.next().unwrap_or_default();
+            let tail = names.next().unwrap_or_default();
+
+            format!(
+                "{}[{head}, ..{tail}]{}",
+                grain_letter(*grain),
+                peeled(hypothesis, names)
+            )
+        }
+    }
+}
+
+/// What a fold's hypothesis is bound by, as source writes it, each binder under the next of `names`.
+fn bind_text(bind: &Bind, names: &mut dyn Iterator<Item = String>) -> String {
+    match bind {
+        Bind::Binder => names.next().unwrap_or_default(),
+        Bind::Fields(fields) => {
+            let fields = fields
+                .iter()
+                .map(|(label, field)| {
+                    let field = bind_text(field, names);
+                    match label {
+                        Some(label) => format!("{label} = {field}"),
+                        None => field,
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            format!("({fields})")
+        }
+    }
+}
+
+/// The letter a packed literal of `grain` opens with.
+fn grain_letter(grain: Grain) -> &'static str {
+    match grain {
+        Grain::B => "b",
+        Grain::X => "x",
+    }
+}
+
 fn escape_character(character: char) -> String {
     match character {
         '\n' => "\\n".to_string(),

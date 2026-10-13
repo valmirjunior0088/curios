@@ -4,9 +4,10 @@
 
 use {
     crate::{
-        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Many, Quality, Scope, Subterm,
-        Telescope, Term, Three, Two, UniverseContext, UniverseError, UniverseScheme, Universes,
-        Var, Visit, instantiate_qualities, instantiate_universes_scoped, project_erased_universes,
+        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Many, Matrix, Quality, Scope,
+        Subterm, Telescope, Term, Three, Two, UniverseContext, UniverseError, UniverseScheme,
+        Universes, Var, Visit, instantiate_qualities, instantiate_universes_scoped,
+        project_erased_universes,
     },
     curios_num::{Grain, Natural},
     curios_utilities::{InfixOp, Mint, Plicity, Sign},
@@ -68,21 +69,27 @@ pub enum Transient {
     Ascribed(Ascribed),
     /// A witness body the compiler writes — the body position of a derived `satisfy C(T) { .. }`; consumed by `elaborate_derive`, which reads the concept application it is checked against and expands it or refuses. Carries nothing: the expected type is the whole of its input.
     Derive,
+    /// A match as it is written; consumed by `elaborate_matrix`, which compiles its patterns into the single-level [`Match`] forms.
+    Matrix(Matrix),
 }
 
 impl Transient {
-    /// The direct child terms, for the structural walks that must traverse a lowered (or display-folded) term. Transients are plain data over their children — none binds a variable of its own (`Bang`'s continuation is an ordinary `Func`, which carries the binder) — so the walks need no scope handling here.
+    /// The direct child terms, for the structural walks that must traverse a lowered (or display-folded) term. Transients are plain data over their children — none binds a variable of its own (`Bang`'s continuation is an ordinary `Func`, which carries the binder, and so is the body of a `Matrix`'s row) — so the walks need no scope handling here.
     pub fn subterms(&self) -> impl Iterator<Item = &Term> {
-        let children = match self {
-            Transient::Infix(Infix { left, right, .. }) => [Some(left), Some(right)],
-            Transient::NumLit(_) | Transient::Derive => [None, None],
+        let (children, matrix) = match self {
+            Transient::Infix(Infix { left, right, .. }) => ([Some(left), Some(right)], None),
+            Transient::NumLit(_) | Transient::Derive => ([None, None], None),
             Transient::Bang(Bang {
                 action,
                 continuation,
-            }) => [Some(action), Some(continuation)],
-            Transient::Ascribed(Ascribed { term, type_ }) => [Some(term), Some(type_)],
+            }) => ([Some(action), Some(continuation)], None),
+            Transient::Ascribed(Ascribed { term, type_ }) => ([Some(term), Some(type_)], None),
+            Transient::Matrix(matrix) => ([None, None], Some(matrix)),
         };
-        children.into_iter().flatten()
+        children
+            .into_iter()
+            .flatten()
+            .chain(matrix.into_iter().flat_map(Matrix::subterms))
     }
 
     /// Rebuild this transient with every child term mapped, for the structural rewrites.
@@ -106,6 +113,7 @@ impl Transient {
                 term: f(term),
                 type_: f(type_),
             }),
+            Transient::Matrix(matrix) => Transient::Matrix(matrix.map_subterms(f)),
         }
     }
 }

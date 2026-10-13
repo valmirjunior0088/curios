@@ -152,3 +152,116 @@ fn match_allows_dependent_motive_on_nat_head() {
 
     assert_eq!(run(source), b"2");
 }
+
+// A `_` nested inside a constructor's payload, where another row writes a concrete pattern, is a binder beside a concrete shape in one column of one group.
+#[test]
+fn nested_underscore_mixed_with_concrete_stays_inconsistent_shape() {
+    let source = r#"
+        use /std/{Option, Nat};
+        let f(m : Option(Option(Nat))) -> Nat =
+            match m | some(some(x)) => x | some(_) => 0 | none() => 1 end;
+        /std/print(Nat/to_str(f(Option/none())))
+        "#;
+
+    let error = error(source);
+    assert!(
+        error.contains("disagree on shape"),
+        "unexpected error: {error}"
+    );
+}
+
+// A literal inside a constructor's payload, with a `_` to fall through to, is a dispatch by value and no fold.
+#[test]
+fn a_nested_nat_literal_dispatches_by_value() {
+    let source = r#"
+        use /std/{Option, Nat};
+        let f(m : Option(Nat)) -> Nat =
+            match m | some(5) => 1 | _ => 0 end;
+        /std/print(Nat/to_str(f(Option/some(5)) + 10 * f(Option/some(4)) + 100 * f(Option/none())))
+        "#;
+
+    assert_eq!(run(source), b"1");
+}
+
+// A literal arm and a successor arm in one `Nat` column are the dispatch and the fold, and one column is one of them.
+#[test]
+fn nat_literal_mixed_with_succ_is_rejected() {
+    let source = r#"
+        use /std/{Option, Nat};
+        let f(m : Option(Nat)) -> Nat =
+            match m | some(5) => 1 | some(n + 1; ih) => n | _ => 0 end;
+        /std/print(Nat/to_str(f(Option/some(5))))
+        "#;
+
+    let error = error(source);
+    assert!(
+        error.contains("mixes successor-peeling"),
+        "unexpected error: {error}"
+    );
+}
+
+// A refusal of a match's shape stands under the match, wherever in a body the match is written: a whole body, an operand, a lambda's body.
+#[test]
+fn a_match_shape_refusal_is_located_at_the_match() {
+    for (source, line) in [
+        (
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    match b\n    | some(5) => 1\n    | some(n + 1; ih) => n\n    | _ => 0\n    end;\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "    4 |     match b",
+        ),
+        (
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    1 + (match b | some(5) => 1 | some(n + 1; ih) => n | _ => 0 end);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "    4 |     1 + (match b",
+        ),
+        (
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    let g = (k: Option(Nat)) =>\n        match k | some(5) => 1 | some(n + 1; ih) => n | _ => 0 end;\n    g(b);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "    5 |         match k",
+        ),
+    ] {
+        let error = error(source);
+        assert!(
+            error.contains("mixes successor-peeling") && error.contains(line),
+            "{source:?} reported {error}"
+        );
+    }
+}
+
+// An incomplete carrier match names the case it lacks, at whatever depth the column sits, and a literal dispatch names the rule it broke: the default it requires.
+#[test]
+fn an_incomplete_carrier_match_names_the_missing_case() {
+    for (type_, arms, expected) in [
+        (
+            "Bool",
+            "| true => 1",
+            "a `Bool` match must also cover `false`",
+        ),
+        (
+            "List(Nat)",
+            "| [] => 0",
+            "a `List` match must also cover `[head, ..tail]`",
+        ),
+        ("Nat", "| p + 1 => p", "a `Nat` match must also cover `0`"),
+        (
+            "Bytes",
+            "| x[] => 0",
+            "a `Bytes` match must also cover `x[head, ..tail]`",
+        ),
+        (
+            "Nat",
+            "| 0 => 1 | 1 => 2",
+            "a `Nat` dispatch over literals must end in `| _ =>`",
+        ),
+        (
+            "Option(Nat)",
+            "| some(5) => 1 | some(6) => 2",
+            "a `Nat` dispatch over literals must end in `| _ =>`",
+        ),
+    ] {
+        let source = format!(
+            "use /std/{{Nat, Bool, Bytes, List, Option}};\nlet f(b: {type_}) -> Nat =\n    match b {arms} end;\n/std/print(\"\")\n"
+        );
+
+        let error = error(&source);
+        assert!(error.contains(expected), "{source:?} reported {error}");
+        assert!(!error.contains("nested"), "{source:?} reported {error}");
+    }
+}

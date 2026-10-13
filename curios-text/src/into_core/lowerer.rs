@@ -542,7 +542,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         ),
                         ChooseTest::Bind { pattern, value } => {
                             let value = self.term(value)?;
-                            MatchCompiler::new(self).lower_bind_arm(
+                            MatchCompiler::new(self).bind_arm(
                                 pattern,
                                 value,
                                 &arm.body,
@@ -555,9 +555,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 acc
             }
             Subterm::Match(match_) => {
-                // The matrix compiler recursively decomposes (possibly nested, across constructors/tuples/structs) arm patterns into single-level core `Match`/projection forms — see `MatchCompiler::compile_matrix`. A final `| _ =>` catch-all is split off as the dispatch default.
+                // A match is handed on as the matrix of its arms, each as it is written — see `MatchCompiler::headed`. Elaboration compiles the patterns, where the scrutinee's type is known.
                 let head = self.term(&match_.head)?;
-                MatchCompiler::new(self).compile_matrix_headed(
+                MatchCompiler::new(self).headed(
                     head,
                     &match_.motive,
                     &match_.arms,
@@ -1127,14 +1127,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             tail = self.bind_pattern(&field.value, taken, hole, proj, tail);
         }
         tail
-    }
-
-    /// A `Nat` succ or `List`/`Bin` cons arm's induction-hypothesis binder: an omitted `; ih` (`None` — there is no source name at all) mints an unwritten binder; a written one is minted with its spelling as the hint.
-    pub(super) fn cons_ih_binder(&self, ih_label: &Option<Label>) -> Binder {
-        match ih_label {
-            Some(name) => self.pattern_binder(name),
-            None => (String::new(), self.context.fresh_binder(None)),
-        }
     }
 
     /// Wraps `body` in one [`curios_core::Bang`] transient per collected bang. The first-collected bang (`binds[0]`) becomes the outermost node, preserving left-to-right evaluation order. Continuation lambdas are built with `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it robustly under nesting; the domain is a fresh hole, inference-solved. `elaborate_bang` later replaces each node with its `/std/Monad/bind` application, handing the wrapper the region's monad as its `@M` (read off the region's type by the flex-apply imitation rule) and inserting fresh implicits and a fresh `use` witness slot per `!` site: the region pins the constructor, which resolves the `Monad` witness, and every action is checked against it — so a region can sequence actions of differing result types, and different regions can use different monads.

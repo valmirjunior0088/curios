@@ -645,6 +645,16 @@ impl<'s> Context<'s> {
         local
     }
 
+    /// [`Context::fresh`] for a binder a scope is closed over before anything reads it, as each binder of the matrix compiler's tree is: the local remembers where the lowering wrote its binder, as a lowered one does, so the scope closed over it does, and the local opened from that scope is the one a proof credits ([`Context::fresh_for`]).
+    pub(crate) fn fresh_written(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
+        let index = u32::try_from(self.typing.fresh_names.fresh()).expect("binder space exhausted");
+
+        match written {
+            Some(written) => Free::local_written(index, hint, written),
+            None => Free::local(index, hint),
+        }
+    }
+
     /// Elaborate the item `declaration` from here on — `None` for an entry's final term — forgetting where the previous item's locals were opened: a proof is written only while its bound's item elaborates. Its scheme is open until its universe levels are finalized.
     pub(crate) fn enter_item(&mut self, declaration: Option<Global>) {
         self.underway.credits.begin_item();

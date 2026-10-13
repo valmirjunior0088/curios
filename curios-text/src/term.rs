@@ -274,17 +274,17 @@ pub struct StructLit {
     pub entries: Vec<StructLitEntry>,
 }
 
-/// A headed dependent elimination: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `into_core::match_compile` into the same single-level core match/projection forms a person would get from hand-nesting matches.
+/// A headed dependent elimination: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, handed to Core as written (`into_core::match_compile`) and compiled by the pattern-matrix scheme of `curios-elab`'s matrix compiler into the same single-level core match/projection forms a person would get from hand-nesting matches.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Match {
     pub head: Term,
     /// The written motive, a term checked against the eliminator's motive type `(ī : Ī(p̄)) -> I(p̄, ī) -> Sort` — ordinarily a lambda binding the scrutinee's indices and then the scrutinee. `None` records that no `:` was written, and lowering mints a silent metavariable for it.
     pub motive: Option<Term>,
-    /// The arms, in source order. Each pairs a (possibly nested, across constructors/tuples/structs — see [`MatchPattern`]) pattern with its body; zero arms is legal (a vacuous elimination, e.g. of `False`). The grammar enforces "full enumeration" (no wildcard/catch-all, no row priority — see `into_core::match_compile`'s doc comment); lowering rejects a repeated tag and an overlapping/duplicate row.
+    /// The arms, in source order. Each pairs a (possibly nested, across constructors/tuples/structs — see [`MatchPattern`]) pattern with its body; zero arms is legal (a vacuous elimination, e.g. of `False`). The grammar enforces "full enumeration" (no wildcard/catch-all, no row priority — see `curios-elab`'s matrix compiler); elaboration rejects an overlapping/duplicate row.
     pub arms: Vec<MatrixArm>,
 }
 
-/// One arm of a [`Match`]: `| pattern => body`. Compiled by `into_core::match_compile` into the single-level core match/projection forms — exactly what a person would get from hand-nesting matches (see its doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every argument a plain [`MatchPattern::Binder`]) lowers to one core arm binding the written names.
+/// One arm of a [`Match`]: `| pattern => body`. Compiled by `curios-elab`'s matrix compiler into the single-level core match/projection forms — exactly what a person would get from hand-nesting matches (see its doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every argument a plain [`MatchPattern::Binder`]) comes to one core arm binding the written names.
 #[derive(Debug, Clone)]
 pub struct MatrixArm {
     pub pattern: MatchPattern,
@@ -302,7 +302,7 @@ impl PartialEq for MatrixArm {
 /// A match-arm pattern: genuinely refutable, unlike [`Pattern`] (which is always irrefutable — see its own doc comment). Distinct from `Pattern` on purpose, even though `Tuple`/`Struct` mirror its field grammar exactly: a `let`/lambda/function-sugar binder site never dispatches on shape, but a match arm's whole point is dispatching on shape, so the two must never be conflated.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchPattern {
-    /// A plain name (or `_`) — never splits a column by itself; legal only when every row shares this shape in that column (see the matrix compiler in `into_core::match_compile`).
+    /// A plain name (or `_`) — never splits a column by itself; legal only when every row shares this shape in that column (see `curios-elab`'s matrix compiler).
     Binder(Label),
     /// An inductive constructor tag applied to sub-patterns — positional (constructors have no field labels in this language). Each argument retains its plicity mark (`@`/`use`): a payload slot the constructor declared implicit must be matched with `@`. The marks lower to the Core arm untouched; core elaboration checks them against the constructor's canonical payload plicities.
     Variant {

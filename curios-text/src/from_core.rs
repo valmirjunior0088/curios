@@ -10,9 +10,9 @@ use {
     crate::{
         Apply, Argument, BinPattern, BinSegment, Field, Func, FuncParam, FuncType, FuncTypeParam,
         Infix, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry, ListPattern, Literal,
-        Match, MatchPattern, MatrixArm, Name, NatLiteral, NatPattern, NumLit, Pattern, Proj,
-        ProofLiteral, Radix, StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField,
-        TupleType, TupleTypeParam, print_term, spell,
+        Match, MatchPattern, MatchPatternField, MatrixArm, Name, NatLiteral, NatPattern, NumLit,
+        Pattern, PatternField, Proj, ProofLiteral, Radix, StrLit, StructLit, StructLitEntry,
+        Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam, print_term, spell,
     },
     curios_core::Bound,
     curios_num::{Floating, Grain, Integer, Natural},
@@ -485,9 +485,158 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         Core::Transient(curios_core::Transient::Bang(_) | curios_core::Transient::Ascribed(_)) => {
             return None;
         }
+        Core::Transient(curios_core::Transient::Matrix(matrix)) => written_matrix(matrix, frame)?,
         // A goal is what a program writes for a term it leaves open, whatever elaboration knows of it.
         Core::Metavar(_) => Subterm::Goal.into(),
     })
+}
+
+/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each row as its pattern over the names its body binds. One that falls through is a `choose` bind arm, which no `match` spells, and is declined.
+///
+/// The motive's binders are opened ahead of the scrutinee's and the arms' after both, the order `curios-core`'s printer opens them in.
+fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
+    let curios_core::Matrix {
+        head,
+        motive,
+        rows,
+        fallthrough,
+    } = matrix;
+    if fallthrough.is_some() {
+        return None;
+    }
+
+    let motive = match motive {
+        Some(motive) => Some(sub(motive, frame)?),
+        None => None,
+    };
+    let head = unchecked(head, frame)?;
+    let arms = rows
+        .into_iter()
+        .map(|curios_core::Row { pattern, body }| {
+            let curios_core::Subterm::Func(function) = &*body else {
+                return None;
+            };
+            let mut params = Vec::with_capacity(function.telescope.len());
+            let body = lambda_parameters(
+                function.telescope.cursor(),
+                &function.telescope.marks(),
+                frame,
+                false,
+                &mut params,
+            )?;
+            let mut names = params.into_iter().map(|param| {
+                match param.expect("every slot is filled").pattern {
+                    Pattern::Binder(name) => name,
+                    Pattern::Tuple(_) | Pattern::Struct { .. } => {
+                        unreachable!("a lambda's parameter is read back as a name")
+                    }
+                }
+            });
+
+            Some(MatrixArm {
+                pattern: written_pattern(&pattern, &mut names),
+                body,
+                span: None,
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+
+    Some(Subterm::Match(Match { head, motive, arms }).into())
+}
+
+/// A row's pattern as a program writes it, each binder under the next of `names`.
+fn written_pattern(
+    pattern: &curios_core::Pattern,
+    names: &mut dyn Iterator<Item = Label>,
+) -> MatchPattern {
+    let name = next_name;
+
+    match pattern {
+        curios_core::Pattern::Binder => MatchPattern::Binder(name(names)),
+        curios_core::Pattern::Variant { tag, args } => MatchPattern::Variant {
+            tag: tag.as_string(),
+            args: args
+                .iter()
+                .map(|(plicity, arg)| (*plicity, written_pattern(arg, names)))
+                .collect(),
+        },
+        curios_core::Pattern::Tuple(fields) => MatchPattern::Tuple(written_fields(fields, names)),
+        curios_core::Pattern::Struct { head, fields } => MatchPattern::Struct {
+            head: head.clone(),
+            fields: written_fields(fields, names),
+        },
+        curios_core::Pattern::Bool(value) => MatchPattern::Bool(*value),
+        curios_core::Pattern::Zero => MatchPattern::Nat(NatPattern::Zero),
+        curios_core::Pattern::Succ(hypothesis) => {
+            let pred_label = name(names);
+
+            MatchPattern::Nat(NatPattern::Succ {
+                pred_label,
+                ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
+            })
+        }
+        curios_core::Pattern::Literal(value) => {
+            MatchPattern::Nat(NatPattern::Lit(NatLiteral(value.clone(), Radix::Dec(0))))
+        }
+        curios_core::Pattern::Character(character) => MatchPattern::Char(*character),
+        curios_core::Pattern::Nil => MatchPattern::List(ListPattern::Nil),
+        curios_core::Pattern::Cons(hypothesis) => {
+            let head_label = name(names);
+            let tail_label = name(names);
+
+            MatchPattern::List(ListPattern::Cons {
+                head_label,
+                tail_label,
+                ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
+            })
+        }
+        curios_core::Pattern::End(grain) => MatchPattern::Bin(BinPattern::End(*grain)),
+        curios_core::Pattern::Atom(grain, hypothesis) => {
+            let head_label = name(names);
+            let tail_label = name(names);
+
+            MatchPattern::Bin(BinPattern::Atom {
+                grain: *grain,
+                head_label,
+                tail_label,
+                ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
+            })
+        }
+    }
+}
+
+/// The next of a row's names, or `_` past the last: a row's body binds one name for each binder its pattern writes.
+fn next_name(names: &mut dyn Iterator<Item = Label>) -> Label {
+    names.next().unwrap_or_else(|| Label::from("_".to_string()))
+}
+
+fn written_fields(
+    fields: &[(Option<String>, curios_core::Pattern)],
+    names: &mut dyn Iterator<Item = Label>,
+) -> Vec<MatchPatternField> {
+    fields
+        .iter()
+        .map(|(label, field)| MatchPatternField {
+            label: label.clone(),
+            value: written_pattern(field, names),
+        })
+        .collect()
+}
+
+/// What a fold's hypothesis is bound by, as a program writes it, each binder under the next of `names`.
+fn written_bind(bind: &curios_core::Bind, names: &mut dyn Iterator<Item = Label>) -> Pattern {
+    match bind {
+        curios_core::Bind::Binder => Pattern::Binder(next_name(names)),
+        curios_core::Bind::Fields(fields) => Pattern::Tuple(
+            fields
+                .iter()
+                .map(|(label, field)| PatternField {
+                    label: label.clone(),
+                    value: written_bind(field, names),
+                })
+                .collect(),
+        ),
+    }
 }
 
 fn infix(op: InfixOp, left: Term, right: Term) -> Term {

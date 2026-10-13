@@ -364,6 +364,21 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
+    /// Two rows of a match write incompatible shapes in one column: a binder beside a concrete pattern in one group, which nothing orders since arms have no priority, or two concrete shapes that disagree — a tuple or struct of another arity or other labels, a struct under another head, one constructor over another number of payloads.
+    MatrixInconsistentShape,
+    /// Two rows of a match write one pattern in every column, a constructor repeated in a match one level deep among them. Every arm is reachable and distinct: arms have no priority to break the tie with.
+    MatrixDuplicateRow,
+    /// A `Bool`, `Nat`, list or packed column split without both of its cases and with no `| _ =>` to stand in for one; `missing` spells the case the rows lack. A constructor a nominal match leaves out is index inversion's to excuse, and a carrier has none, so both of its cases are required here, at whatever depth the column sits.
+    MatrixIncompleteCarrierMatch {
+        carrier: &'static str,
+        missing: &'static str,
+    },
+    /// A `Nat` column dispatching on literals with no `| _ =>`: no set of literals covers every natural, so the form requires its default.
+    MatrixNatDispatchNeedsDefault,
+    /// A `Nat` column mixing a successor arm with a literal one. A literal peels no successor, so the two are the fold and the dispatch, and one column is one of them.
+    MatrixMixedNatDispatch,
+    /// A packed column mixing bit and byte patterns. A scrutinee is of one grain, so every row of its column writes one prefix.
+    MatrixMixedBinGrain,
     /// A match over constructors — or, where `no_arms`, one with none, which eliminates only an empty type — whose scrutinee's type is no inductive.
     NotAInductType {
         head_type: Box<Term>,

@@ -24,6 +24,9 @@ use intrinsic::*;
 mod match_;
 use match_::*;
 
+mod matrix;
+use matrix::*;
+
 mod module;
 pub use module::*;
 
@@ -233,6 +236,9 @@ fn elaborate_subterm(
         Subterm::Transient(Transient::Derive) => return elaborate_derive(context, term, mode),
         Subterm::Transient(Transient::Ascribed(ascribed)) => {
             return elaborate_ascribed(context, ascribed, term, mode);
+        }
+        Subterm::Transient(Transient::Matrix(matrix)) => {
+            return elaborate_matrix(context, matrix, term, mode);
         }
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::InductType(ut) => elaborate_induct_type(context, ut, term.extent())?,

@@ -4,8 +4,9 @@
 
 use {
     super::{
-        Apply, Ascribed, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit,
-        Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes, Var,
+        Apply, Ascribed, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, Matrix,
+        NumLit, Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
+        Var,
     },
     curios_num::{Binary, Grain, Natural, Rounding},
     curios_utilities::{InfixOp, Sign, StringSyntax, SyntaxName},
@@ -257,6 +258,11 @@ impl Term {
     /// The body of a derived witness ([`Transient::Derive`]) — elaboration-transient, consumed by `elaborate_derive` against the concept application it is checked at.
     pub fn derive() -> Self {
         Self::from(Subterm::Transient(Transient::Derive))
+    }
+
+    /// A match as it is written ([`Transient::Matrix`]) — elaboration-transient, consumed by `elaborate_matrix`, which compiles its patterns.
+    pub fn matrix(matrix: Matrix) -> Self {
+        Self::from(Subterm::Transient(Transient::Matrix(matrix)))
     }
 
     /// Carry a *written* motive — the surface term `into_core` lowered, before elaboration has closed it into a scope — as an arity-0 [`Scope`].

@@ -1013,6 +1013,39 @@ impl fmt::Display for Displayed<'_> {
                     "constructor '{atom}' takes {expected} argument(s) but the match arm binds {got}"
                 )
             }
+            Error::MatrixInconsistentShape => {
+                write!(
+                    f,
+                    "match arm patterns disagree on shape for the same column"
+                )
+            }
+            Error::MatrixDuplicateRow => {
+                write!(
+                    f,
+                    "duplicate or overlapping match arm: every arm must be reachable and distinct"
+                )
+            }
+            Error::MatrixIncompleteCarrierMatch { carrier, missing } => {
+                write!(
+                    f,
+                    "a `{carrier}` match must also cover `{missing}`, or end in `| _ =>`"
+                )
+            }
+            Error::MatrixNatDispatchNeedsDefault => {
+                write!(
+                    f,
+                    "a `Nat` dispatch over literals must end in `| _ =>`: no set of literals covers every natural"
+                )
+            }
+            Error::MatrixMixedNatDispatch => {
+                write!(
+                    f,
+                    "a `Nat` match arm mixes successor-peeling (`n + 1; ih`) with literal dispatch (`5`) in one column; use one or the other"
+                )
+            }
+            Error::MatrixMixedBinGrain => {
+                write!(f, "binary match arms mix `b[…]` and `x[…]` patterns")
+            }
             // A name a program wrote is reported by the reason the lowering filed for it, in that value's own words, so a misspelled name reads the same whichever stage refuses for it.
             Error::UnboundVariable { why: Some(why), .. } => write!(f, "{why}"),
             Error::UnboundVariable { term, why: None } => {

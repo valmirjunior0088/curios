@@ -1,4 +1,4 @@
-//! Goals, `!`, `choose`, match compilation, and the packed runs constant atoms fold into.
+//! Goals, `!`, `choose`, a match as the matrix it is written as, and the packed runs constant atoms fold into.
 
 use super::test_support::*;
 
@@ -86,93 +86,50 @@ fn named_catch_all_is_rejected() {
 }
 
 #[test]
-fn nested_underscore_mixed_with_concrete_stays_inconsistent_shape() {
-    // A `_` *nested* inside a constructor payload (not a final top-level arm) still mixes a binder with a concrete shape in the same column — the pre-existing full-enumeration boundary, not a catch-all.
-    let error = run_err("match m | some(some(x)) => x | some(_) => 0 | none() => 1 end");
-    assert!(
-        error.contains("disagree on shape"),
-        "unexpected error: {error}"
-    );
-}
+fn a_match_lowers_to_the_matrix_it_is_written_as() {
+    // A match is handed on as its arms, each a pattern and its body as a function over the names the pattern binds, in the order it writes them: elaboration compiles the patterns, where the scrutinee's type is known. A binder beside a concrete pattern is nothing lowering refuses. (Names need not resolve: lowering precedes name resolution.)
+    let term = run("match m | some(some(x)) => x | some(_) => 0 | none() => 1 end");
 
-#[test]
-fn nested_nat_literal_lowers_to_switch() {
-    // A literal `5` inside a constructor payload, with a `_` fallthrough, is value dispatch — it lowers through `compile_nat`'s switch mode to a `Cases::Switch`, not the `Nat` eliminator. (`wrap`/`b` need not resolve: lowering precedes name resolution.)
-    let term = run("match b | wrap(5) => 1 | _ => 0 end");
-    assert!(
-        format!("{term:?}").contains("Switch"),
-        "expected a Cases::Switch, got {term:?}"
+    let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
+        panic!("expected a matrix at the top, got {term:?}");
+    };
+    assert!(matrix.motive.is_none() && matrix.fallthrough.is_none());
+    assert_eq!(
+        matrix
+            .rows
+            .iter()
+            .map(|row| row.pattern.binders())
+            .collect::<Vec<_>>(),
+        [1, 1, 0],
     );
-}
-
-#[test]
-fn nat_literal_mixed_with_succ_is_rejected() {
-    // A literal case and a `n + 1; ih` successor arm in the same `Nat` column select incompatible core forms (a value `switch` vs. the eliminator).
-    let error = run_err("match b | wrap(5) => 1 | wrap(n + 1; ih) => n | _ => 0 end");
-    assert!(
-        error.contains("mixes successor-peeling"),
-        "unexpected error: {error}"
-    );
-}
-
-/// A refusal the matrix compiler raises names the match it refused: `region` and `collect` place the error at the term they were lowering, as `term` places its own. They stamped only the core term they returned, so every arm-shape error a value body reached — a whole body, an operand, a lambda's body alike — rendered as bare text with no location.
-#[test]
-fn a_match_shape_refusal_is_located_at_the_match() {
-    for (source, line) in [
-        (
-            "let f : Type =\n    match b\n    | wrap(5) => 1\n    | wrap(n + 1; ih) => n\n    | _ => 0\n    end;\n()",
-            "2 |",
-        ),
-        (
-            "let f : Type =\n    1 + (match b | wrap(5) => 1 | wrap(n + 1; ih) => n | _ => 0 end);\n()",
-            "2 |",
-        ),
-        (
-            "let f : Type =\n    let g = (k : Type) =>\n        match k | wrap(5) => 1 | wrap(n + 1; ih) => n | _ => 0 end;\n    g(1);\n()",
-            "3 |",
-        ),
-    ] {
-        let report = run_err_report(source);
-        assert!(
-            report.contains("mixes successor-peeling") && report.contains(line),
-            "{source:?} reported {report}"
-        );
+    for row in &matrix.rows {
+        let curios_core::Subterm::Func(body) = &*row.body else {
+            panic!("expected a row's body to be a function, got {:?}", row.body);
+        };
+        assert_eq!(body.telescope.len(), row.pattern.binders());
     }
 }
 
-/// An incomplete carrier match names the case it lacks, at whatever depth the column sits, and a literal dispatch names the rule it broke: the mandatory default. One message once served every site — "a nested column must cover both of its cases" — which was false at the top level and, for a dispatch, pointed at a successor arm the form does not have.
 #[test]
-fn an_incomplete_carrier_match_names_the_missing_case() {
-    for (source, expected) in [
-        (
-            "match b | true => 1 end",
-            "a `Bool` match must also cover `false`",
-        ),
-        (
-            "match b | [] => 0 end",
-            "a `List` match must also cover `[head, ..tail]`",
-        ),
-        (
-            "match b | p + 1 => p end",
-            "a `Nat` match must also cover `0`",
-        ),
-        (
-            "match b | x[] => 0 end",
-            "a `Bytes` match must also cover `x[head, ..tail]`",
-        ),
-        (
-            "match b | 0 => 1 | 1 => 2 end",
-            "a `Nat` dispatch over literals must end in `| _ =>`",
-        ),
-        (
-            "match b | wrap(5) => 1 | wrap(6) => 2 end",
-            "a `Nat` dispatch over literals must end in `| _ =>`",
-        ),
-    ] {
-        let error = run_err(source);
-        assert!(error.contains(expected), "{source:?} reported {error}");
-        assert!(!error.contains("nested"), "{source:?} reported {error}");
-    }
+fn a_bind_arm_lowers_to_a_matrix_that_falls_through() {
+    // `| pattern = value => body` is the matrix of its one row over `value`, falling through to the rest of the ladder.
+    let term = run("choose | some(x) = m => x | _ => 0 end");
+
+    let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
+        panic!("expected a matrix at the top, got {term:?}");
+    };
+    assert_eq!(matrix.rows.len(), 1);
+    assert!(matrix.fallthrough.is_some());
+}
+
+#[test]
+fn a_motive_on_a_head_that_does_not_dispatch_is_rejected() {
+    // A motive attaches to the scrutinee's own dispatch, which a tuple pattern never builds: it projects.
+    let error = run_err("match p : (q) => T | (x, y) => x end");
+    assert!(
+        error.contains("written motive"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]

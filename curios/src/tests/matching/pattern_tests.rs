@@ -151,7 +151,7 @@ fn nested_bool_pattern_dispatches_by_shape() {
     assert_eq!(run(source), b"5");
 }
 
-// The carrier-leaf twin of `flat_option_match_lowers_without_synthetic_indirection`: a single, non-nested `some(0)`/`some(n + 1; ih)`/`none()` match lowers and runs end to end, exercising `compile_ctor`'s and `compile_nat`'s single-row fast paths together, which is where the erasure hint compounding would reappear for a carrier leaf.
+// The carrier-leaf twin of `flat_option_match_lowers_without_synthetic_indirection`: a single, non-nested `some(0)`/`some(n + 1; ih)`/`none()` match lowers and runs end to end, exercising the single-row fast paths of the matrix compiler's `variants` and `naturals` together, which is where the erasure hint compounding would reappear for a carrier leaf.
 #[test]
 fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
     let source = r#"

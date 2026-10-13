@@ -74,21 +74,6 @@ pub enum Error {
     },
     /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bin`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
-    /// Two match-arm rows write incompatible shapes for the same column — a plain binder beside a concrete constructor/tuple/struct shape in one group, which the matrix cannot order since arms have no priority (a final top-level `_` is split off as the default before the matrix sees the rows), or two concrete shapes that disagree (a tuple/struct of different arity or field labels, a struct with a different head name, or the same constructor tag applied with a different number of arguments).
-    MatrixInconsistentShape,
-    /// Two match-arm rows specify the exact same pattern in every column — including a flat, single-column match with a literally repeated constructor tag. Every arm must be reachable and distinct; arms have no priority order to break the tie with.
-    MatrixDuplicateRow,
-    /// A `Bool`/`Nat`/`List`/`Bits`/`Bytes` leaf-pattern column split without both of its required cases present and no `| _ =>` to stand in — `missing` is the spelling of the case the rows lack. Unlike an ordinary constructor tag (whose omission the matrix compiler defers entirely to `induct_match`'s vacuity inversion), these hardcoded carriers have no core-side exhaustiveness mechanism — the matrix compiler must enforce completeness itself. Raised for a column at any depth, so the report names neither.
-    MatrixIncompleteCarrierMatch {
-        carrier: &'static str,
-        missing: &'static str,
-    },
-    /// A `Nat` column dispatching on literals with no `| _ =>` default. A `switch` over `Nat` is never exhaustive, so `documentation/syntax.md` makes the default mandatory for the dispatch form — a rule of its own, which the two-case message above misstated as a missing successor arm.
-    MatrixNatDispatchNeedsDefault,
-    /// A `Nat` match-arm column mixes successor-peeling (`n + 1; ih`) with literal dispatch (`5`, `0x90`). A literal case peels no successor, so the two select incompatible core forms (the `Nat` eliminator vs. a value `switch`) and cannot share one column — write one or the other.
-    MatrixMixedNatDispatch,
-    /// A binary-pattern column mixes bit and byte grains. A single scrutinee has one binary type, so every row in the column must use the same prefix.
-    MatrixMixedBinGrain,
     /// A `choose` bind arm `| pattern = value =>` whose `pattern` is a bare binder — irrefutable, so it always fires and the rest of the ladder is dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
     BindArmIrrefutable,
     /// A headed match ended in a *named* catch-all (`| x =>`) among concrete constructor arms. Only a bare `| _ =>` is a catch-all default; a named binder there is almost certainly a mistake (a misspelled constructor, or a binder that silently swallows every remaining case).
@@ -287,39 +272,6 @@ impl fmt::Display for Error {
                     f,
                     "a written motive is only legal when every arm dispatches on the same kind of tag/literal directly"
                 )
-            }
-            Error::MatrixInconsistentShape => {
-                write!(
-                    f,
-                    "match arm patterns disagree on shape for the same column"
-                )
-            }
-            Error::MatrixDuplicateRow => {
-                write!(
-                    f,
-                    "duplicate or overlapping match arm: every arm must be reachable and distinct"
-                )
-            }
-            Error::MatrixIncompleteCarrierMatch { carrier, missing } => {
-                write!(
-                    f,
-                    "a `{carrier}` match must also cover `{missing}`, or end in `| _ =>`"
-                )
-            }
-            Error::MatrixNatDispatchNeedsDefault => {
-                write!(
-                    f,
-                    "a `Nat` dispatch over literals must end in `| _ =>`: no set of literals covers every natural"
-                )
-            }
-            Error::MatrixMixedNatDispatch => {
-                write!(
-                    f,
-                    "a `Nat` match arm mixes successor-peeling (`n + 1; ih`) with literal dispatch (`5`) in one column; use one or the other"
-                )
-            }
-            Error::MatrixMixedBinGrain => {
-                write!(f, "binary match arms mix `b[…]` and `x[…]` patterns")
             }
             Error::BindArmIrrefutable => {
                 write!(

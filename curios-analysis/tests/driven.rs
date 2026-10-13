@@ -17,9 +17,9 @@ use {
     curios_core::{
         Apply, Argument, Atom, Bang, Carrier, Cases, Exhaustion, Field, Free, Global, InductArm,
         InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic, Level, Many,
-        Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj, Rec, Scope,
-        Struct, StructEntry, StructType, Subterm, Telescope, Term, Three, Totality, Transient,
-        Tuple, Two, UniverseContext, Universes, Var, Variant,
+        Match, MatchResult, Matrix, Metavar, MetavarId, MetavarOrigin, Nat, Pattern, Polarity,
+        Proj, Rec, Row, Scope, Struct, StructEntry, StructType, Subterm, Telescope, Term, Three,
+        Totality, Transient, Tuple, Two, UniverseContext, Universes, Var, Variant,
     },
     curios_num::{Grain, Natural, Rounding},
     curios_utilities::{InfixOp, Plicity, Qualifier},
@@ -602,7 +602,10 @@ fn forms(term: &Term) -> Vec<&'static str> {
             InstanceHead::RecProj(..) => "a universe instance of a projected group",
         }],
         Subterm::Transient(transient) => vec![match transient {
-            Transient::Infix(_) | Transient::Bang(_) | Transient::Ascribed(_) => "a transient",
+            Transient::Infix(_)
+            | Transient::Bang(_)
+            | Transient::Ascribed(_)
+            | Transient::Matrix(_) => "a transient",
             Transient::NumLit(_) | Transient::Derive => "a leaf",
         }],
         Subterm::Intrinsic(_) => vec!["an intrinsic"],
@@ -721,6 +724,17 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         }),
         Specimen::of(&mut markers, |markers| {
             Term::ascribed(markers.visited(), markers.visited())
+        }),
+        Specimen::of(&mut markers, |markers| {
+            Term::matrix(Matrix {
+                head: markers.visited(),
+                motive: Some(markers.visited()),
+                rows: vec![Row {
+                    pattern: Pattern::Binder,
+                    body: markers.visited(),
+                }],
+                fallthrough: Some(markers.visited()),
+            })
         }),
         Specimen::of(&mut markers, |markers| {
             Term::intrinsic(Intrinsic::ListType(markers.visited()))

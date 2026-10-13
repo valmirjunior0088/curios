@@ -4,7 +4,7 @@
 //!
 //! 1. **Discovery** (`Resolved::of`): the prefixes the unit claims checked disjoint from the predecessors', then every module they declare read through its source, for what its items declare (`head`). A file a baseline read as the same text is not parsed: what it declares is what the baseline kept of it.
 //! 2. **Interface resolution** (`interface::resolve_unit`): each module's declarations seeded into its interface, then every `pub use` resolved to a fixed point, before any body is lowered.
-//! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term. A declaration a baseline lowered from the same text, every name it resolved resolving as it did, is taken from the baseline and not lowered (`lowered`), and a file is parsed where the first of its declarations is.
+//! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and each match written as its matrix (`match_compile`), then the entry's final term. A declaration a baseline lowered from the same text, every name it resolved resolving as it did, is taken from the baseline and not lowered (`lowered`), and a file is parsed where the first of its declarations is.
 //! 4. **Witness names** (`witness`): each witness given the name its signature spells, which is read through the unit's definitions and so only once every item is lowered.
 //! 5. **Audit** (`audit`, `lint`): what the public interface exposes, and the declarations nothing reaches.
 //!
