@@ -124,7 +124,7 @@ fn closure_index_dispatch_measurements() {
 ///
 /// **The zeroes are not a null result, they are the wrong corpus for the question.** These fixtures take their runtime taint from `proc/args()!` and never read stdin, so none of them reaches the UTF-8 decode path where the protocol actually fires. What they do establish is that the pass is inert everywhere it has no candidate — which is most places.
 ///
-/// The allocation counts are taken pre-Binaryen, so some of what the pass removes earlier, Binaryen may remove later; only a runtime figure accounts for that. Toggling the pass on `programs/parse_digits.crs` and nothing else moved `user` time by one to two percent (debug compiler): the per-character loop is not allocation-bound on the tuple the protocol removes.
+/// The allocation counts are taken pre-Binaryen, so some of what the pass removes earlier, Binaryen may remove later; only a runtime figure accounts for that. Withholding the pass on `programs/parse_digits.crs`, as [`copy_growth_measurements`] says how, and nothing else moved `user` time by one to two percent (debug compiler): the per-character loop is not allocation-bound on the tuple the protocol removes.
 #[test]
 #[ignore = "measurement, counted: reports what the return protocol reaches rather than asserting"]
 fn split_return_measurements() {
@@ -166,7 +166,7 @@ fn split_return_measurements() {
 ///
 /// # Which instrument sees what
 ///
-/// **Peak memory cannot see a transient allocation, and it is not a shortcoming of the measurement.** The return protocol removes roughly one five-field object per character, and running `programs/parse_digits.crs` at 1000000 with that pass toggled and nothing else changed leaves its maximum resident set flat. Transient garbage never accumulates, so its cost is allocation *work* rather than footprint, and that lands on the clock. Retention is the opposite: `trees` holds what it builds, and its resident set moves from 21.14 MB at depth 18, about what `parse_digits` reads below, to 138.76 MB at depth 21 on nothing but what it keeps.
+/// **Peak memory cannot see a transient allocation, and it is not a shortcoming of the measurement.** The return protocol removes roughly one five-field object per character, and running `programs/parse_digits.crs` at 1000000 with that pass withheld and nothing else changed leaves its maximum resident set flat: 20 560 kB with the pass (20 400 to 20 756) and 20 468 kB without (20 252 to 20 732), each the median of five runs of the native binary under `/usr/bin/time -v` with their span, the two interleaved and printing the same answer, taken at `7d5a88b6e`. The pass is withheld in a copy of the tree, where the round in `curios-cont/src/optimize.rs` reads `false && split_returns(module)` in place of the call, and the copy's release compiler builds the second binary. Transient garbage never accumulates, so its cost is allocation *work* rather than footprint, and that lands on the clock. Retention is the opposite: `trees` holds what it builds, and its resident set moves from 21.14 MB at depth 18, about what `parse_digits` reads below, to 138.76 MB at depth 21 on nothing but what it keeps.
 ///
 /// So: **time for a change to transient allocation, resident set for a change to retention, emitted size for a change that copies.** Reaching for the wrong one reports a confident null.
 ///
