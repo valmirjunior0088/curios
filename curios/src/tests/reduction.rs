@@ -1073,20 +1073,20 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
 ///
 /// # What it last printed
 ///
-/// At `96d967b9b`:
+/// At `76a6cf3cf`:
 ///
 /// ```text
 ///   primitive            text elab      kernel  bytes elab      kernel
-///   literal                  74947       74973       18390       18416
-///   take_while               48931       48957        9910        9936
-///   char, byte               58355       58381       31930       31956
-///   char_if, byte_if         64538       64564       38120       38146
-///   expect                   60868       60894       35136       35162
-///   rest                      8391        6494        8699        6515
-///   until                    49214       49240
+///   literal                  72800       72721       18537       18458
+///   take_while               48133       48054       10067        9988
+///   char, byte               59075       58996       32175       32096
+///   char_if, byte_if         65131       65052       38238       38159
+///   expect                   61448       61369       35241       35162
+///   rest                      8476        6102        9476        6115
+///   until                    46809       46730
 /// ```
 ///
-/// **A text primitive costs four to five times its twin where the primitive is the walk**, `literal` and `take_while`, and under twice where each step is a parser run through `times`: `char`, `char_if` and `expect`. `rest` cuts once and reads nothing.
+/// **A text primitive costs about four times its twin, or near five, where the primitive is the walk**, `literal` and `take_while`, and under twice where each step is a parser run through `times`: `char`, `char_if` and `expect`. `rest` cuts once and reads nothing.
 #[test]
 #[ignore = "measurement, counted: reports what each parser primitive costs over text and over bytes rather than asserting"]
 fn parse_primitive_measurements() {
