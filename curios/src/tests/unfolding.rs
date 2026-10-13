@@ -100,6 +100,9 @@ end
 /// No `!`, unlike [`ENTRY`]: nothing measured here needs the runtime taint, since both checkers walk every declaration whether the entry reaches it or not.
 const TAIL: &str = "/std/print(\"ok\")\n";
 
+/// What a `!` in a `Parse` region comes to once its witness is resolved: `/std/Parse`'s `Monad` witness binds by `chain`, so a copy of the sequencing a grammar writes is a copy of this function, whatever `Parse/bind` a program may also call by name.
+const SEQUENCED: &str = "/std/Parse/chain";
+
 /// How many emitted functions carry `needle` in their debug name — one copy of a source function per hit.
 fn copies(module: &curios_ersd::Module, needle: &str) -> usize {
     module
@@ -219,15 +222,15 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 ///
 /// # What it last printed
 ///
-/// **Release**, `aarch64-apple-darwin`.
+/// Taken on top of `7ded6ac34`, **release**, `x86_64-unknown-linux-gnu`. A copy is counted by the function a `Parse` region's `!` comes to, `Parse/chain`.
 ///
-/// | spelling | `Parse/bind` copies at 16 rules | emitted functions | compile | growth of copies |
+/// | spelling | `Parse/chain` copies at 16 rules | emitted functions | compile | growth of copies |
 /// | --- | --- | --- | --- | --- |
-/// | no application inside a continuation | 18 | 166 | 0.69 s | `n + 2` |
-/// | **as written** — applications inside the continuation | **18** | **262** | **1.52 s** | **`n + 2`** |
-/// | applications hoisted to items | 18 | 262 | 1.54 s | `n + 2` |
+/// | no application inside a continuation | 18 | 1434 | 0.79 s | `n + 2` |
+/// | **as written** — applications inside the continuation | **18** | **1562** | **1.50 s** | **`n + 2`** |
+/// | applications hoisted to items | 18 | 1562 | 1.55 s | `n + 2` |
 ///
-/// **Where the application is written decides nothing.** The as-written row and the hoisted row agree to the copy, to the function, and to within a hundredth of a second, at every size — 4/108, 6/130, 10/174, 14/218, 18/262. The hoisted spelling is the sharing emulated in source and therefore a ceiling, and the as-written spelling reaches it because a replacement's residual group is bound at item level. Bound inside the candidate's block, the as-written row grows as `n² + 2`.
+/// **Where the application is written decides nothing.** The as-written row and the hoisted row agree to the copy and to the function at every size — 4/1338, 6/1370, 10/1434, 14/1498, 18/1562 — and to within five hundredths of a second. The hoisted spelling is the sharing emulated in source and therefore a ceiling, and the as-written spelling reaches it because a replacement's residual group is bound at item level. Bound inside the candidate's block, the as-written row grows as `n² + 2`.
 ///
 /// # Where the time goes
 ///
@@ -250,7 +253,7 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 #[test]
 #[ignore = "measurement, mixed: reports what a spelling costs rather than asserting"]
 fn combinator_sharing_measurements() {
-    println!("rules  inner            bind copies  functions  compile");
+    println!("rules  inner            chain copies functions  compile");
     for inner in [Inner::None, Inner::InBlock, Inner::Hoisted] {
         let label = match inner {
             Inner::None => "none",
@@ -264,7 +267,7 @@ fn combinator_sharing_measurements() {
             let elapsed = start.elapsed().as_secs_f64();
             println!(
                 "{rules:<6} {label:<16} {:<12} {:<10} {elapsed:.2} s",
-                copies(&module, "/std/Parse/bind"),
+                copies(&module, SEQUENCED),
                 emitted(&module),
             );
         }
@@ -478,10 +481,14 @@ fn a_proved_web_of_twenty_definitions_compiles() {
 /// Eight rules rather than sixteen because this one is not ignored.
 #[test]
 fn an_application_inside_a_continuation_is_shared_like_one_at_item_level() {
-    let absent = copies(&ersd_optm(&grammar(8, Inner::None)), "/std/Parse/bind");
-    let inside = copies(&ersd_optm(&grammar(8, Inner::InBlock)), "/std/Parse/bind");
-    let hoisted = copies(&ersd_optm(&grammar(8, Inner::Hoisted)), "/std/Parse/bind");
+    let absent = copies(&ersd_optm(&grammar(8, Inner::None)), SEQUENCED);
+    let inside = copies(&ersd_optm(&grammar(8, Inner::InBlock)), SEQUENCED);
+    let hoisted = copies(&ersd_optm(&grammar(8, Inner::Hoisted)), SEQUENCED);
 
+    assert!(
+        absent > 0,
+        "the instrument counts nothing: no emitted function is named for `{SEQUENCED}`, so the two laws below would hold between zeroes"
+    );
     assert_eq!(
         inside, hoisted,
         "where a combinator application is written must not decide what it costs"
