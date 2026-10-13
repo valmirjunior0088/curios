@@ -48,7 +48,7 @@ Set one last refusal, a sibling of one you resolved together — the last elemen
 
 Steer around these, and where they hit one say the gap is the language's, not theirs. A line goes when what it stands on lands.
 
-- No `if`, `return` or assignment: a choice is a `match` on a `Bool`, and a program closes with one term, a second being refused as `Expected 'end-of-file'` (`documentation/roadmap/surface/200-a-refusal-names-the-form-it-met.md`).
+- A name is bound once and never assigned: `x = x + 1` is refused as `Expected ';'`, with no word of `let` (`documentation/syntax.md`, "Local `let`").
 - An effect before the last is sequenced as `let _ = …!;` (`documentation/syntax.md`, "Sequencing and effects").
 - A format takes one call a place, `Fmt/print("% of %\n")(a)(b)` (`curios-std/src/Fmt.crs`).
 - No `+` joins two `Str`, and input and arguments arrive as bytes (`documentation/roadmap/standard-library/201-a-program-reads-text-and-may-fail.md`).
