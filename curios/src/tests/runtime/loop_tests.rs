@@ -1,8 +1,10 @@
 //! Loops that stay linear, and the values they carry through storage and retrieval.
 
 use {
-    crate::tests::{cont_optm, run, run_text},
+    crate::tests::{cont_optm, cont_optm_module, run, run_text},
+    curios_cont::{Callee, Node, ValueExpr},
     curios_runtime::MockHost,
+    std::collections::BTreeSet,
 };
 
 // Erasure aliases a non-variable scrutinee before projecting, which matters for code size and is unobservable at run time: a scrutinee that type-checks is pure, since `Io` has no eliminator (`effects::an_io_scrutinee_is_refused` holds that half), so re-erasing one changes nothing a program sees. `tests::codegen` is where a claim about emitted shape belongs.
@@ -241,6 +243,73 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
         cont_optm.contains("/count@w("),
         "the deferred recursion must be the rebase's worker, a loop over an accumulator:\n{}",
         &cont_optm[..cont_optm.len().min(4000)]
+    );
+}
+
+/// A span builds its answer once, where its walk stops: what a step's recursion returns to constructs nothing, so no step rebuilds the answer of the one after it and a character passed keeps no frame. A walk that restates its proof around its recursion erases to that rebuild, a pair a character under a frame a character, and a program's stack holds the depth, so the shape is looked for and not the depth, as the worker is above. The text is read from standard input, or the closed walk would be evaluated where the program is compiled.
+#[test]
+fn a_span_builds_its_answer_where_its_walk_stops() {
+    let module = cont_optm_module(
+        r#"
+        use /std/{Str, Nat, Char, Option, Result, Io};
+        use /std/Str/{At};
+        let input = /std/read()!;
+        match input: (_) => Io({})
+        | some(bytes) =>
+            match Str/of_bytes(bytes): (_) => Io({})
+            | success(s) =>
+                let run = Str/span(s, At/start(s), (c) => Char/to_nat(c) != 10);
+                /std/print(Nat/to_str(run.past.offset))
+            | failure(_) => /std/print("invalid utf-8")
+            end
+        | none() => /std/print("no input")
+        end
+        "#,
+    );
+
+    // The walk recurs by calling what its step is handed, a value the library names `again`: the program reaches no other walk, and the function that holds the step is the optimizer's to name.
+    let recursions = module
+        .value_ids()
+        .filter(|id| {
+            module
+                .value(*id)
+                .is_some_and(|value| value.debug_name.as_deref() == Some("again"))
+        })
+        .collect::<BTreeSet<_>>();
+
+    let mut calls = 0;
+    for node in module.nodes().iter().flatten() {
+        let Node::ApplyFun {
+            callee: Callee::Closure(callee),
+            return_to,
+            ..
+        } = node
+        else {
+            continue;
+        };
+        if !recursions.contains(callee) {
+            continue;
+        }
+        calls += 1;
+
+        // The bindings the call returns to, in a line: a return continuation has none.
+        let mut next = module
+            .continuation(*return_to)
+            .map(|continuation| continuation.body);
+        while let Some(id) = next {
+            next = match module.node(id).expect("a continuation's body is live") {
+                Node::LetValue {
+                    value: ValueExpr::Tuple(_) | ValueExpr::Row(..) | ValueExpr::List(_),
+                    ..
+                } => panic!("a step of the span builds a value after its recursion:\n{module}"),
+                Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => Some(*next),
+                _ => None,
+            };
+        }
+    }
+    assert!(
+        calls > 0,
+        "the walk recurs through what its step is handed:\n{module}"
     );
 }
 

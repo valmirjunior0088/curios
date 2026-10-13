@@ -490,7 +490,7 @@ pub let join(sep: Str, parts: List(Str)) -> Str =
         (i, ok) => List/get(@Str, parts, i, @ok),
         (l, r) => concat(concat(l, sep), r));
 
--- That the walk has not gone back goes down with the position, here and in `occurrence`, so the recursion is a tail call and a character passed keeps no frame.
+-- That the walk has not gone back goes down with the position, here, in `span` and in `occurrence`, so the recursion is a tail call and a character passed keeps no frame.
 --- Where `s` holds `piece` from `from` on, stepping both a character at a time from `p`: the position past it, which is not before `from`, or `none`.
 let meets(
     s: Str,
@@ -533,19 +533,21 @@ pub let span(
     pred: (Char) -> Bool,
 ) -> {past: At(s), reach: Holds(from.offset <= past.offset)} =
     At/forward(
-        (at) => {past: At(s), reach: Holds(at.offset <= past.offset)},
+        (at) =>
+            (reached: Holds(from.offset <= at.offset)) -> {
+                past: At(s),
+                reach: Holds(from.offset <= past.offset)},
         (at, again) =>
-            match At/try_next(s, at)
-            | some(n) =>
-                match pred(n.char)
-                | true =>
-                    let rest = again(n.past, n.progress);
-                    (past = rest.past, reach = True/proved())
-                | false => (past = at, reach = Nat/le/refl(at.offset))
-                end
-            | none() => (past = at, reach = Nat/le/refl(at.offset))
-            end,
-        from);
+            (reached) =>
+                match At/try_next(s, at)
+                | some(n) =>
+                    match pred(n.char)
+                    | true => again(n.past, n.progress)(True/proved())
+                    | false => (past = at, reach = reached)
+                    end
+                | none() => (past = at, reach = reached)
+                end,
+        from)(Nat/le/refl(from.offset));
 
 --- Where `s` holds `piece` up to `from`, stepping both back a character at a time from `p`: the position where it starts, or `none`.
 let meets_back(s: Str, from: At(s), piece: Str, p: At(piece)) -> Option(At(s)) =
