@@ -77,10 +77,12 @@ fn bind_arm_bare_binder_is_rejected() {
 
 #[test]
 fn named_catch_all_is_rejected() {
-    // A named final arm among concrete constructor arms is not a catch-all.
-    let error = run_err("match m | some(x) => x | rest => 0 end");
+    // A named final arm among concrete constructor arms is not a catch-all, and the name may have been meant as a constructor, which is written with its payload list.
+    let error = run_err("match m | some(x) => x | none => 0 end");
     assert!(
-        error.contains("named final arm") && error.contains("_"),
+        error.contains("named final arm")
+            && error.contains("`| _ =>`")
+            && error.contains("`| none() =>`"),
         "unexpected error: {error}"
     );
 }

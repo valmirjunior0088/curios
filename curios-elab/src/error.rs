@@ -281,6 +281,8 @@ pub enum Error {
     },
     NotATupleType {
         expected: Box<Term>,
+        /// Whether the tuple is `()` standing where a type is expected: the unit value written for the unit type.
+        unit_for_a_type: bool,
     },
     TupleArityMismatch {
         expected: usize,
@@ -332,6 +334,8 @@ pub enum Error {
     WrongNumberOfArguments {
         expected: usize,
         got: usize,
+        /// Whether the arguments past the list are a call's and what that call answers is itself a function, which a call of its own takes them in.
+        answers_a_function: bool,
     },
     /// A lambda writes binders that claim no parameter of the expected function type.
     ///
@@ -939,9 +943,10 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_a_tuple_type<U: Into<Term>>(expected: U) -> Self {
+    pub(crate) fn not_a_tuple_type<U: Into<Term>>(expected: U, unit_for_a_type: bool) -> Self {
         Self::NotATupleType {
             expected: Box::new(expected.into()),
+            unit_for_a_type,
         }
     }
 
@@ -1011,7 +1016,24 @@ impl Error {
     }
 
     pub(crate) fn wrong_number_of_arguments(expected: usize, got: usize) -> Self {
-        Self::WrongNumberOfArguments { expected, got }
+        Self::WrongNumberOfArguments {
+            expected,
+            got,
+            answers_a_function: false,
+        }
+    }
+
+    /// [`Error::wrong_number_of_arguments`] for a call written with arguments past its list, `answers_a_function` saying whether what the call answers is itself a function.
+    pub(crate) fn arguments_past_the_list(
+        expected: usize,
+        got: usize,
+        answers_a_function: bool,
+    ) -> Self {
+        Self::WrongNumberOfArguments {
+            expected,
+            got,
+            answers_a_function,
+        }
     }
 
     pub(crate) fn surplus_func_binders(surplus: usize, slots: usize) -> Self {
@@ -1875,7 +1897,7 @@ impl Error {
             | Self::NotListType { head_type }
             | Self::NotBinType { head_type, .. }
             | Self::NotAInductType { head_type, .. } => out.push(head_type),
-            Self::NotAFunctionType { expected, .. } | Self::NotATupleType { expected } => {
+            Self::NotAFunctionType { expected, .. } | Self::NotATupleType { expected, .. } => {
                 out.push(expected)
             }
             Self::NotAStructType { found } => out.push(found),

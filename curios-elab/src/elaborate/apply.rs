@@ -403,15 +403,28 @@ pub(super) fn elaborate_apply(
         .map(|argument| argument.plicity)
         .collect::<Vec<_>>();
     let marks = ft.plicities();
-    let fills = align(&marks, &written).map_err(|misaligned| match misaligned {
-        Misaligned::Missing | Misaligned::Extra { .. } => {
-            let explicit = |marks: &[Plicity]| {
-                marks
-                    .iter()
-                    .filter(|mark| matches!(mark, Plicity::Explicit))
-                    .count()
-            };
+    let explicit = |marks: &[Plicity]| {
+        marks
+            .iter()
+            .filter(|mark| matches!(mark, Plicity::Explicit))
+            .count()
+    };
+    // Arguments past the list are most often a second list's: where what the call answers is itself a function, the refusal says so. Read off the result with its parameters opened at names of their own, which a result that does not depend on them reduces past; one that reduction cannot open is said nothing of.
+    let aligned = align(&marks, &written);
+    let answers_a_function = matches!(aligned, Err(Misaligned::Extra { .. })) && {
+        let parameters = marks
+            .iter()
+            .map(|_| Term::free_var(&context.fresh(None)))
+            .collect::<Vec<_>>();
+        let result = ft.telescope.open(&parameters.iter().collect::<Vec<_>>());
+        reduce_with(context, &result).is_ok_and(|result| matches!(&*result, Subterm::FuncType(_)))
+    };
+    let fills = aligned.map_err(|misaligned| match misaligned {
+        Misaligned::Missing => {
             Error::wrong_number_of_arguments(explicit(&marks), explicit(&written))
+        }
+        Misaligned::Extra { .. } => {
+            Error::arguments_past_the_list(explicit(&marks), explicit(&written), answers_a_function)
         }
         Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
             written[member],

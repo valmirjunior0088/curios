@@ -77,7 +77,10 @@ pub enum Error {
     /// A `choose` bind arm `| pattern = value =>` whose `pattern` is a bare binder — irrefutable, so it always fires and the rest of the ladder is dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
     BindArmIrrefutable,
     /// A headed match ended in a *named* catch-all (`| x =>`) among concrete constructor arms. Only a bare `| _ =>` is a catch-all default; a named binder there is almost certainly a mistake (a misspelled constructor, or a binder that silently swallows every remaining case).
-    MatchNamedCatchAll,
+    MatchNamedCatchAll {
+        /// The name the arm binds, which its author may have meant as a constructor.
+        binder: String,
+    },
     /// A recursive local binding — one that names itself, or a member of a `let … and …;` group — whose binder is a pattern. A pattern binds projections, none of which its own value could name.
     RecursivePatternBinding,
     /// A recursive local binding with no type annotation. A body that mentions the binding cannot be the source of its type.
@@ -279,10 +282,10 @@ impl fmt::Display for Error {
                     "a bind arm `| pattern = value =>` needs a refutable pattern; a bare binder is irrefutable — use a `let`"
                 )
             }
-            Error::MatchNamedCatchAll => {
+            Error::MatchNamedCatchAll { binder } => {
                 write!(
                     f,
-                    "a named final arm cannot be a catch-all; write `| _ =>` for a default, or name the constructor"
+                    "a named final arm cannot be a catch-all: write `| _ =>` for a default, or the constructor with its payload list, `| {binder}() =>`"
                 )
             }
             Error::RecursivePatternBinding => {

@@ -325,7 +325,9 @@ fn dispatching(arms: &[MatrixArm]) -> Result<&[MatrixArm], Error> {
             match &last.pattern {
                 MatchPattern::Binder(name) if name == "_" => Ok(init),
                 MatchPattern::Binder(name) => Err(placed(
-                    Error::MatchNamedCatchAll,
+                    Error::MatchNamedCatchAll {
+                        binder: name.to_string(),
+                    },
                     name.span().or(last.span.as_ref()),
                 )),
                 _ => Ok(arms),

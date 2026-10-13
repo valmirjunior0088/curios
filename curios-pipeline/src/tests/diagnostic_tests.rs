@@ -468,3 +468,68 @@ fn a_mismatch_at_a_polymorphic_reference_keeps_its_caret() {
         "the caret drifted off the reference: {error}"
     );
 }
+
+/// A mistake decided where types are known names what is written instead, and only where that is what it is: `()` where a type is expected, and arguments past a call's list where what the call answers is itself a function.
+#[test]
+fn a_typed_mistake_names_what_is_written_instead() {
+    let report = |source: &str| compile(source).map(|_| ()).unwrap_err();
+
+    let unit = report(
+        r#"
+        use /std/{Io};
+
+        let go() -> Io(()) = Io/pure(());
+
+        go()
+    "#,
+    );
+    assert!(
+        unit.contains("the unit type is written `{}`"),
+        "unexpected report: {unit}"
+    );
+
+    // A tuple that is no unit, where no tuple type is expected, is reported as it was.
+    let pair = report(
+        r#"
+        use /std/{Nat, Io};
+
+        let n: Nat = (1, 2);
+
+        Io/pure(())
+    "#,
+    );
+    assert!(
+        pair.contains("introduced a tuple") && !pair.contains("unit type"),
+        "unexpected report: {pair}"
+    );
+
+    let curried = report(
+        r#"
+        use /std/{Nat, Fmt};
+
+        Fmt/print("% + % = %\n")(1, 2)
+    "#,
+    );
+    assert!(
+        curried.contains("wrong number of arguments: expected 1, got 2")
+            && curried.contains("`f(a)(b)`"),
+        "unexpected report: {curried}"
+    );
+
+    // Where the call answers no function, its arguments are only too many.
+    let surplus = report(
+        r#"
+        use /std/{Nat, Io};
+
+        let double(n: Nat) -> Nat = n + n;
+        let four: Nat = double(1, 2);
+
+        Io/pure(())
+    "#,
+    );
+    assert!(
+        surplus.contains("wrong number of arguments: expected 1, got 2")
+            && !surplus.contains("`f(a)(b)`"),
+        "unexpected report: {surplus}"
+    );
+}

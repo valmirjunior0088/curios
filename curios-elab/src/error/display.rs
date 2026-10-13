@@ -565,12 +565,22 @@ impl fmt::Display for Displayed<'_> {
                     "projected from a non-tuple\n  head has type: {head_type}"
                 )
             }
-            Error::NotATupleType { expected } => {
+            Error::NotATupleType {
+                expected,
+                unit_for_a_type,
+            } => {
                 let expected = expected.spelled(spelling);
                 write!(
                     f,
                     "introduced a tuple where the expected type is not a tuple type\n  expected: {expected}"
-                )
+                )?;
+                match unit_for_a_type {
+                    true => write!(
+                        f,
+                        "\n  `()` is the unit value, and a type stands here: the unit type is written `{{}}`"
+                    ),
+                    false => Ok(()),
+                }
             }
             Error::TupleArityMismatch { expected, got } => {
                 write!(
@@ -648,11 +658,22 @@ impl fmt::Display for Displayed<'_> {
 
                 write!(f, "expected {expected} but got {head_type}")
             }
-            Error::WrongNumberOfArguments { expected, got } => {
+            Error::WrongNumberOfArguments {
+                expected,
+                got,
+                answers_a_function,
+            } => {
                 write!(
                     f,
                     "wrong number of arguments: expected {expected}, got {got}"
-                )
+                )?;
+                match answers_a_function {
+                    true => write!(
+                        f,
+                        "\n  a call fills one parameter list, and what this one answers is itself a function: the rest are a call of their own, `f(a)(b)`"
+                    ),
+                    false => Ok(()),
+                }
             }
             Error::SurplusFuncBinders { surplus, slots } => {
                 let binders = match surplus {

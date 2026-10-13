@@ -113,7 +113,9 @@ pub(super) fn elaborate_tuple(
             return park_checking(context, term, &expected);
         }
         _ => {
-            return Err(Error::not_a_tuple_type(expected.clone()));
+            // `()` where a universe is expected is the unit value written for the unit type.
+            let unit_for_a_type = fields.is_empty() && matches!(&*reduced, Subterm::Sort(..));
+            return Err(Error::not_a_tuple_type(expected.clone(), unit_for_a_type));
         }
     };
 
