@@ -14,7 +14,7 @@
 //!
 //! **A remainder lifted out of the facts** leaves their sum over the dividend, so a goal over the remainder is not met by it and is proved in the refuting form, its negation lifted as the facts were.
 //!
-//! **A certificate over case splits** is written as the split on each opened guard, `b <= a` for a truncated `a - b`, with each arm's proof over the facts that case adds.
+//! **A certificate over case splits** is written as the split on each opened guard, `b <= a` for a truncated `a - b`, with each arm's proof over the facts that case adds. One over what every case states opens none: `a - b <= a` is a fact as it stands, and the combination that weighs it is written as one over the facts is.
 //!
 //! **The carrier of a sum** is `Int` where the goal or any fact it sums is at `Int`, and `Nat` otherwise. A `Nat` fact enters an `Int` sum as its sides widened, the proposition conversion aligns it with. `Nat` addition never truncates, so a `Nat` sum is exact.
 
@@ -50,6 +50,7 @@ pub(super) fn write(
     let case = Case {
         goal,
         negated,
+        common: &facts.common,
         lifted,
     };
     match case.write(context, facts.facts.clone(), &facts.splits, certificate) {
@@ -62,6 +63,8 @@ pub(super) fn write(
 struct Case<'a> {
     goal: Option<&'a Target>,
     negated: &'a [Fact],
+    /// What every case of the splits states, which a combination over no case may weigh.
+    common: &'a [Fact],
     /// Whether the goal holds a remainder the facts were lifted over, which their sum does not meet.
     lifted: bool,
 }
@@ -77,6 +80,10 @@ impl Case<'_> {
     ) -> Option<Term> {
         match certificate {
             Certificate::Leaf(multipliers) => self.leaf(context, &facts, multipliers),
+            Certificate::Common(multipliers) => {
+                let facts = facts.into_iter().chain(self.common.iter().cloned());
+                self.leaf(context, &facts.collect::<Vec<_>>(), multipliers)
+            }
             Certificate::Split { holds, fails } => {
                 let (opened, later) = splits.split_first()?;
                 let with = |extra: &[Fact]| facts.iter().chain(extra).cloned().collect::<Vec<_>>();

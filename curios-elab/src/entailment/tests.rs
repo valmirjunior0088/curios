@@ -192,13 +192,13 @@ fn a_split_is_opened_only_where_the_search_without_it_found_an_assignment() {
     let (facts, negated, splits) = truncated();
     let mut budget = DERIVED_ROWS;
     assert!(matches!(
-        plan(&facts, slice::from_ref(&negated), &[], &mut budget),
+        plan(&facts, slice::from_ref(&negated), &[], &[], &mut budget),
         Plan::Satisfied(_)
     ));
 
     let mut budget = DERIVED_ROWS;
     let Plan::Certified(Certificate::Split { holds, fails }) =
-        plan(&facts, slice::from_ref(&negated), &splits, &mut budget)
+        plan(&facts, slice::from_ref(&negated), &[], &splits, &mut budget)
     else {
         panic!("each case refutes the negated goal");
     };
@@ -219,7 +219,71 @@ fn a_split_is_opened_only_where_the_search_without_it_found_an_assignment() {
     let refuting = vec![facts[0].clone(), form(&[(1, 0), (-1, 1)], 1)];
     let mut budget = DERIVED_ROWS;
     assert!(matches!(
-        plan(&refuting, slice::from_ref(&negated), &splits, &mut budget),
+        plan(
+            &refuting,
+            slice::from_ref(&negated),
+            &[],
+            &splits,
+            &mut budget
+        ),
+        Plan::Certified(Certificate::Leaf(_))
+    ));
+}
+
+#[test]
+fn what_every_case_states_is_asked_after_the_forms_alone_and_before_a_case() {
+    let (facts, negated, splits) = truncated();
+    // `t <= a`, which both cases of `a - b` state.
+    let common = vec![form(&[(-1, 0), (1, 2)], 0)];
+
+    // A goal that turns on no case, `t <= a + 1`, negated `a + 2 <= t`: one combination, with what every case states and no case opened.
+    let loose = form(&[(1, 0), (-1, 2)], 2);
+    let mut budget = DERIVED_ROWS;
+    let Plan::Certified(Certificate::Common(multipliers)) = plan(
+        &facts,
+        slice::from_ref(&loose),
+        &common,
+        &splits,
+        &mut budget,
+    ) else {
+        panic!("what both cases state refutes the negated goal");
+    };
+    let forms = facts
+        .iter()
+        .chain(&common)
+        .chain([&loose])
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(is_false_constant(&forms, &multipliers));
+
+    // A goal that turns on the case is refuted case by case, by the combinations that refute it where nothing is stated of both.
+    let certified = |common: &[LinearForm]| {
+        let mut budget = DERIVED_ROWS;
+        match plan(
+            &facts,
+            slice::from_ref(&negated),
+            common,
+            &splits,
+            &mut budget,
+        ) {
+            Plan::Certified(certificate) => certificate,
+            _ => panic!("each case refutes the negated goal"),
+        }
+    };
+    assert!(matches!(certified(&common), Certificate::Split { .. }));
+    assert_eq!(certified(&common), certified(&[]));
+
+    // And one the forms alone refute is refuted by them.
+    let refuting = vec![facts[0].clone(), form(&[(1, 0), (-1, 1)], 1)];
+    let mut budget = DERIVED_ROWS;
+    assert!(matches!(
+        plan(
+            &refuting,
+            slice::from_ref(&negated),
+            &common,
+            &splits,
+            &mut budget
+        ),
         Plan::Certified(Certificate::Leaf(_))
     ));
 }
@@ -242,7 +306,7 @@ fn a_budget_runs_across_every_case() {
     assert!(each > 0, "every case derives rows");
 
     let mut budget = DERIVED_ROWS;
-    plan(&facts, slice::from_ref(&negated), &splits, &mut budget);
+    plan(&facts, slice::from_ref(&negated), &[], &splits, &mut budget);
     assert_eq!(DERIVED_ROWS - budget, each);
 }
 

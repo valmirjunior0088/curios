@@ -332,6 +332,11 @@ const ROWS: &[Row] = &[
         "Nat",
         "match k <= n | true => let _: Holds(k + (n - k) <= n) = True/proved(); 0 | false => 0 end",
     ),
+    // What both cases state, `a - b <= a`, is a fact with no split: ten subtractions are no 1,024 cases.
+    claim(
+        "a1: Nat, b1: Nat, a2: Nat, b2: Nat, a3: Nat, b3: Nat, a4: Nat, b4: Nat, a5: Nat, b5: Nat, a6: Nat, b6: Nat, a7: Nat, b7: Nat, a8: Nat, b8: Nat, a9: Nat, b9: Nat, a10: Nat, b10: Nat",
+        "Holds((a1 - b1) + (a2 - b2) + (a3 - b3) + (a4 - b4) + (a5 - b5) + (a6 - b6) + (a7 - b7) + (a8 - b8) + (a9 - b9) + (a10 - b10) <= a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10)",
+    ),
     // Division and remainder by a literal, through the quotient and remainder they denote.
     claim(
         "code: Nat, p: Holds(code < 0x800)",
@@ -415,6 +420,15 @@ const ROWS: &[Row] = &[
     claim(
         "i: Int, j: Int, k: Int, p: Holds(i <= k), q: Holds(j <= k)",
         "Holds(Int/max(i, j) <= k)",
+    ),
+    // What both cases state — a `min` at most each operand, a `max` at least each — is a fact with no split: ten of either are no 1,024 cases.
+    claim(
+        "a1: Nat, b1: Nat, a2: Nat, b2: Nat, a3: Nat, b3: Nat, a4: Nat, b4: Nat, a5: Nat, b5: Nat, a6: Nat, b6: Nat, a7: Nat, b7: Nat, a8: Nat, b8: Nat, a9: Nat, b9: Nat, a10: Nat, b10: Nat",
+        "Holds(Nat/min(a1, b1) + Nat/min(a2, b2) + Nat/min(a3, b3) + Nat/min(a4, b4) + Nat/min(a5, b5) + Nat/min(a6, b6) + Nat/min(a7, b7) + Nat/min(a8, b8) + Nat/min(a9, b9) + Nat/min(a10, b10) <= a1 + b2 + a3 + b4 + a5 + b6 + a7 + b8 + a9 + b10)",
+    ),
+    claim(
+        "a1: Int, b1: Int, a2: Int, b2: Int, a3: Int, b3: Int, a4: Int, b4: Int, a5: Int, b5: Int, a6: Int, b6: Int, a7: Int, b7: Int, a8: Int, b8: Int, a9: Int, b9: Int, a10: Int, b10: Int",
+        "Holds(a1 + b2 + a3 + b4 + a5 + b6 + a7 + b8 + a9 + b10 <= Int/max(a1, b1) + Int/max(a2, b2) + Int/max(a3, b3) + Int/max(a4, b4) + Int/max(a5, b5) + Int/max(a6, b6) + Int/max(a7, b7) + Int/max(a8, b8) + Int/max(a9, b9) + Int/max(a10, b10))",
     ),
     // An `abs` and a `sign` are read through the cases their operand's sign makes, conversion deciding each from its operand as a term and reading no fact: a magnitude widened back is its operand where a fact holds that at least zero and is at least it wherever, an operand between a bound and its negation has its magnitude at most the bound, read at `Int` and at `Nat`, the triangle inequality opens three splits, and a sign is within one of zero and on the side its operand is, a difference's as its operands' order says.
     claim(

@@ -40,6 +40,8 @@ pub(super) struct Arms {
 pub(super) enum Certificate {
     /// One combination: a multiplier per form of its case — the forms, then each opened case's own in the order they were opened, then the negated goal's.
     Leaf(Vec<Natural>),
+    /// One combination over the forms and what every case of the splits states, with no case opened: a multiplier per form, then per form every case states, then per form of the negated goal.
+    Common(Vec<Natural>),
     /// The next split, a refutation in each of its cases. Splits open in order along every path, so the one a `Split` opens is the first its path has not.
     Split {
         holds: Box<Certificate>,
@@ -56,9 +58,12 @@ pub(super) enum Plan {
 }
 
 /// Search `forms` with the negated goal's last for a refutation, opening the splits in `splits` in order, each only where the search without it found an assignment: an assignment that leaves a truncated subtraction free may be one its definition excludes. One budget runs across every case.
+///
+/// **What every case states is asked first.** `common` holds what both cases of each split state, and where the forms alone leave an assignment they are searched with it before a case is opened: a sum of `n` operations that turns on no case is one combination, where its cases are `2ⁿ`. Asked after the forms alone, so a bound they refute is refuted as it was, and not inside a case, whose own forms state it.
 pub(super) fn plan(
     forms: &[LinearForm],
     negated: &[LinearForm],
+    common: &[LinearForm],
     splits: &[Arms],
     budget: &mut usize,
 ) -> Plan {
@@ -68,12 +73,27 @@ pub(super) fn plan(
         Search::Exhausted => return Plan::Exhausted,
         Search::Satisfied(assignment) => assignment,
     };
+    if !common.is_empty() {
+        let with_common = forms
+            .iter()
+            .chain(common)
+            .chain(negated)
+            .cloned()
+            .collect::<Vec<_>>();
+        match refute(&with_common, budget) {
+            Search::Refuted(multipliers) => {
+                return Plan::Certified(Certificate::Common(multipliers));
+            }
+            Search::Exhausted => return Plan::Exhausted,
+            Search::Satisfied(_) => {}
+        }
+    }
     let Some((cases, later)) = splits.split_first() else {
         return Plan::Satisfied(assignment);
     };
     let case = |extra: &[LinearForm], budget: &mut usize| {
         let with = forms.iter().chain(extra).cloned().collect::<Vec<_>>();
-        plan(&with, negated, later, budget)
+        plan(&with, negated, &[], later, budget)
     };
     let holds = match case(&cases.holds, budget) {
         Plan::Certified(certificate) => certificate,

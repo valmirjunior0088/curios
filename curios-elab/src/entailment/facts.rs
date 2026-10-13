@@ -6,7 +6,7 @@
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
-//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]).
+//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]). A subtraction, a `min` and a `max` are read too through what both of their cases state and conversion decides — `a - b <= a`, a `min` at most each operand, a `max` at least each — asked where the facts alone leave an assignment and before any case is opened, so a bound the facts prove is proved as it was and one that turns on no case opens none.
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs. A product of two sums, which the fold leaves standing, is read distributed ([`Reader::side`]).
 //! - Where their products leave an assignment too, a disequality the scope states — an `==` guard's false arm, a `!=` guard's true one, a hypothesis or a field stating either, `Bool/not` of an equality among them — as the strict bound conversion holds it to be, `n != 0` being `0 < n`, proved by what states it, and otherwise through the two cases the order of its sides makes ([`Reader::distinct`]); and a `!=` guard's false arm as the equation it is ([`disequalities`]). Read last and by a reader of its own, so what the scope kept hands out no atom, class or spelling a search before it reads ([`Kept`]).
 //! - That every monomial over naturals is at least zero, which conversion decides.
@@ -129,6 +129,8 @@ pub(super) struct Target {
 pub(super) struct Facts {
     pub(super) facts: Vec<Fact>,
     pub(super) splits: Vec<Split>,
+    /// What both cases of a split state, where conversion decides it: asked only where the facts alone leave an assignment and before any case is opened (`plan`), so a bound the facts prove is proved as it was, and one that turns on no case opens none.
+    pub(super) common: Vec<Fact>,
     pub(super) lifts: Vec<Lift>,
     pub(super) unread: Vec<(Origin, Term)>,
     /// What the scope states that is read last ([`disequalities`]).
@@ -217,6 +219,7 @@ impl<'a> Reader<'a> {
             read: Facts {
                 facts: Vec::new(),
                 splits: Vec::new(),
+                common: Vec::new(),
                 lifts: Vec::new(),
                 unread: Vec::new(),
                 kept: Vec::new(),
@@ -763,7 +766,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Each `min` and `max` among the atoms read so far, at `Nat` and at `Int`, through the cases its operands' order makes: `a <= b`, where `min(a, b) = a` and `max(a, b) = b`, and `b < a`, where each is the other operand. A case the scope already decides is read as facts; otherwise the cases are kept as a split the search opens where it needs it, as a truncated subtraction's are. Whether it read one.
+    /// Each `min` and `max` among the atoms read so far, at `Nat` and at `Int`, through the cases its operands' order makes: `a <= b`, where `min(a, b) = a` and `max(a, b) = b`, and `b < a`, where each is the other operand. A case the scope already decides is read as facts; otherwise the cases are kept as a split the search opens where it needs it, as a truncated subtraction's are, beside what both of them state and conversion decides ([`Facts::common`]): a `min` is at most each operand, and a `max` at least each. Whether it read one.
     ///
     /// Conversion decides a `min` and a `max` from their operands as terms and reads no fact, so this is where a bound over one meets what the scope says of its operands.
     fn extrema(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
@@ -809,6 +812,20 @@ impl<'a> Reader<'a> {
                     self.kept(context, extremum, &a, &b, false)?
                 }
                 _ => {
+                    let node = Term::intrinsic(extremum.node(a.clone(), b.clone()));
+                    let both = self.apart(context, |reader, context| {
+                        for operand in [&a, &b] {
+                            let (low, high) = match extremum.lattice {
+                                Lattice::Meet => (&node, operand),
+                                Lattice::Join => (operand, &node),
+                            };
+                            let within =
+                                comparison_of(extremum.carrier, Operation::AtMost, low, high);
+                            reader.admit(context, within, qed(context), Origin::Definition)?;
+                        }
+                        Ok(())
+                    })?;
+                    self.read.common.extend(both);
                     let holds = self.apart(context, |reader, context| {
                         reader.kept(context, extremum, &a, &b, true)
                     })?;
@@ -1110,7 +1127,8 @@ impl<'a> Reader<'a> {
                 .splits
                 .iter_mut()
                 .flat_map(|split| split.holds.iter_mut().chain(&mut split.fails));
-            for fact in self.read.facts.iter_mut().chain(cases) {
+            let common = self.read.common.iter_mut();
+            for fact in self.read.facts.iter_mut().chain(common).chain(cases) {
                 lift.apply(fact);
             }
             self.read.lifts.push(lift);
@@ -1141,7 +1159,7 @@ impl<'a> Reader<'a> {
         }))
     }
 
-    /// Each truncated subtraction `a - b` among the atoms read so far, through the cases its definition makes: `b <= a`, where `b + (a - b) = a`, and `a < b`, where `a - b <= 0`. A case the scope already decides — under a guard, or where conversion decides `b <= a` — is read as facts; otherwise the cases are kept as a split the search opens where it needs one. Whether it read one.
+    /// Each truncated subtraction `a - b` among the atoms read so far, through the cases its definition makes: `b <= a`, where `b + (a - b) = a`, and `a < b`, where `a - b <= 0`. A case the scope already decides — under a guard, or where conversion decides `b <= a` — is read as facts; otherwise the cases are kept as a split the search opens where it needs one, beside what both of them state, `a - b <= a`, which conversion decides and the search asks before it opens a case ([`Facts::common`]): a bound that does not turn on the case opens no split, where a sum of `n` subtractions would open `2ⁿ` cases. Whether it read one.
     fn subtractions(
         &mut self,
         context: &mut Context,
@@ -1178,6 +1196,12 @@ impl<'a> Reader<'a> {
                 Subterm::Intrinsic(Intrinsic::Bool(true)) => self.exact(context, &a, &b)?,
                 Subterm::Intrinsic(Intrinsic::Bool(false)) => self.truncated(context, &a, &b)?,
                 _ => {
+                    let difference = Term::intrinsic(Intrinsic::NatSub(a.clone(), b.clone()));
+                    let within = Intrinsic::NatLe(difference, a.clone());
+                    let both = self.apart(context, |reader, context| {
+                        reader.admit(context, within, qed(context), Origin::Definition)
+                    })?;
+                    self.read.common.extend(both);
                     let holds =
                         self.apart(context, |reader, context| reader.exact(context, &a, &b))?;
                     let fails =
