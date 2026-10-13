@@ -28,4 +28,6 @@
 - **A tactic syntax.** [Syntax forms are closed](../surface/syntax-forms-are-closed-semantics-extend-by-witness.md); the entry points are `/std` declarations with `@` bounds.
 - **Running after the item closes.** It would lose the guards.
 - **A heuristic search.** Acceptance would depend on the heuristic; the procedure is complete for its fragment within a deterministic cap.
+- **A split one of whose cases the facts refute, read as its other case before any is opened.** It would spare a bound the guards around the one it needs, at the cost of a search a split and of a certificate that names its splits out of order; the nearest guard opens first, and the cap answers the rest.
+- **A default arm read as its siblings' literals ruled out.** `match count | 0 => 0 | _ => total / count end` is refused, and the spelling that is read is `| k + 1 =>`: an arm is typed under the cases its own pattern states and nothing else ([Patterns are compiled where their types are known](../surface/patterns-are-compiled-where-their-types-are-known.md)), and what an arm is typed under is that decision's to change, for a consumer that asks.
 - **A simplex engine.** A Bland's-rule simplex over integer tableaus would replace Fourier–Motzkin behind the same interface if a row exhausted the cap; none does.

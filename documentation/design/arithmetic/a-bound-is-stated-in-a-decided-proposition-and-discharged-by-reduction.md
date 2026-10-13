@@ -17,4 +17,5 @@
 - **An inductive order such as `Nat/le/Ind`**, alone or beside the decided one: call sites build evidence constructor by constructor, and two statements of one relation need bridges both ways.
 - **A decision procedure as the discharge rule.** The fill would become a search; the procedure stands beside it instead.
 - **A total `/std` face beside a proof-carrying one.** Both return the same type, so nothing pushes a caller to the checked one, and the bound reverts to discipline.
+- **One `NonZero` for every carrier.** It needs a concept that gives a type its zero, and a proposition stated through a concept is decided only where the concept resolves. What the carriers share is `Div`'s own `Ok`, and each states its division's bound as a `NonZero` of its own over its own zero, `/std/Nat/NonZero` beside `/std/Int/NonZero`.
 - **Witness resolution for obligations.** Metavariables are solved by unification alone, proof irrelevance manufactures no inhabitant, and `HeadKey` keys only on type heads, so a value-indexed `NonZero(b)` cannot be a concept.
