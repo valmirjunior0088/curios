@@ -71,7 +71,8 @@ let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     let r = Try/run(stat(path))!;
     match r
     | success(m) => Try/pure(want(m.kind))
-    | failure(e) => match e | not_found() => Try/pure(false) | _ => Try/raise(e) end
+    | failure(not_found()) => Try/pure(false)
+    | failure(e) => Try/raise(e)
     end;
 
 --- Whether anything is at `path`.

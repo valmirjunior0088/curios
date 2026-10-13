@@ -7,11 +7,8 @@ use /std/Bool/{True, Holds};
 --- Conversion decides a sign where the comparison decides the operand's as a term, and reads no hypothesis: under one these laws are the step. Each is by [`Int/view`], whose arms are the forms a sign is computed of.
 pub let of_pos(a: Int, p: Holds(+0 < a)) -> Eq()(sign(a), +1) =
     match Int/view(a)
-    | nonneg(n) =>
-        match n
-        | 0 => match p end
-        | _ + 1 => Eq/refl()
-        end
+    | nonneg(0) => match p end
+    | nonneg(_ + 1) => Eq/refl()
     | neg(_) => match p end
     end;
 
@@ -25,38 +22,29 @@ pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(sign(a), -1) =
 --- `sign(a)` is at most zero where `a` is.
 pub let of_not_pos(a: Int, p: Holds(a <= +0)) -> Holds(sign(a) <= +0) =
     match Int/view(a)
-    | nonneg(n) =>
-        match n
-        | 0 => True/qed()
-        | _ + 1 => match p end
-        end
+    | nonneg(0) => True/qed()
+    | nonneg(_ + 1) => match p end
     | neg(_) => True/qed()
     end;
 
 --- `sign(a)` is at least zero where `a` is.
 pub let of_not_neg(a: Int, p: Holds(+0 <= a)) -> Holds(+0 <= sign(a)) =
     match Int/view(a)
-    | nonneg(n) => match n | 0 => True/qed() | _ + 1 => True/qed() end
+    | nonneg(0) => True/qed()
+    | nonneg(_ + 1) => True/qed()
     | neg(_) => match p end
     end;
 
 --- The sign of a product is the product of the signs.
 pub let of_mul(a: Int, b: Int) -> Eq()(sign(a * b), sign(a) * sign(b)) =
-    match Int/view(a)
-    | nonneg(m) =>
-        match m
-        | 0 => Eq/refl()
-        | _ + 1 =>
-            match Int/view(b)
-            | nonneg(n) => match n | 0 => Eq/refl() | _ + 1 => Eq/refl() end
-            | neg(_) => Eq/refl()
-            end
-        end
-    | neg(_) =>
-        match Int/view(b)
-        | nonneg(n) => match n | 0 => Eq/refl() | _ + 1 => Eq/refl() end
-        | neg(_) => Eq/refl()
-        end
+    match (Int/view(a), Int/view(b))
+    | (nonneg(0), _) => Eq/refl()
+    | (nonneg(_ + 1), nonneg(0)) => Eq/refl()
+    | (nonneg(_ + 1), nonneg(_ + 1)) => Eq/refl()
+    | (nonneg(_ + 1), neg(_)) => Eq/refl()
+    | (neg(_), nonneg(0)) => Eq/refl()
+    | (neg(_), nonneg(_ + 1)) => Eq/refl()
+    | (neg(_), neg(_)) => Eq/refl()
     end;
 
 --- A sign is its own sign.

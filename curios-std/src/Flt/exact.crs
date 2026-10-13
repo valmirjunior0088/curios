@@ -33,14 +33,11 @@ let rounds_up_in(
     inexact: Bool,
 ) -> Bool =
     match mode
-    | direction(r) =>
-        match r
-        | ties_to_even() => above || tie && odd
-        | ties_to_away() => above || tie
-        | toward_zero() => false
-        | toward_positive() => inexact && Bool/not(negative)
-        | toward_negative() => inexact && negative
-        end
+    | direction(ties_to_even()) => above || tie && odd
+    | direction(ties_to_away()) => above || tie
+    | direction(toward_zero()) => false
+    | direction(toward_positive()) => inexact && Bool/not(negative)
+    | direction(toward_negative()) => inexact && negative
     | ties_toward_zero() => above
     end;
 
@@ -58,14 +55,10 @@ pub let rounds_up(
 --- Whether a result past the largest finite value becomes the infinity of its sign rather than that value (§7.4): always when rounding to nearest, ties toward zero included, when directed only toward the infinity of its own sign.
 let overflows_to_infinity(mode: Mode, negative: Bool) -> Bool =
     match mode
-    | direction(r) =>
-        match r
-        | toward_zero() => false
-        | toward_positive() => Bool/not(negative)
-        | toward_negative() => negative
-        | _ => true
-        end
-    | ties_toward_zero() => true
+    | direction(toward_zero()) => false
+    | direction(toward_positive()) => Bool/not(negative)
+    | direction(toward_negative()) => negative
+    | _ => true
     end;
 
 let sign_bit(negative: Bool) -> Nat =

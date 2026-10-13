@@ -56,14 +56,11 @@ pub let all(tests: List(Test)) -> Test =
 
 let case(index: Nat, t: Test) -> Test =
     match t
-    | verdict(v) =>
-        match v
-        | passed() => t
-        | failed(message) =>
-            Test/verdict(
-                Verdict/failed(
-                    Str/concat("case ", Str/concat(Nat/to_str(index), Str/concat(": ", message)))))
-        end
+    | verdict(passed()) => t
+    | verdict(failed(message)) =>
+        Test/verdict(
+            Verdict/failed(
+                Str/concat("case ", Str/concat(Nat/to_str(index), Str/concat(": ", message)))))
     | action(io) =>
         perform(() =>
             let inner = io!;
@@ -72,7 +69,8 @@ let case(index: Nat, t: Test) -> Test =
 
 let conjoin(left: Test, right: Test) -> Test =
     match left
-    | verdict(v) => match v | passed() => right | failed(_) => left end
+    | verdict(passed()) => right
+    | verdict(failed(_)) => left
     | action(io) =>
         perform(() =>
             let inner = io!;
@@ -90,15 +88,12 @@ pub let try(@E: Type, use Show(E), thunk: () -> Try(Io, E, Test)) -> Test =
 
 let report(name: Str, t: Test) -> Io(Bool) =
     match t
-    | verdict(v) =>
-        match v
-        | passed() =>
-            let _ = print(Str/concat(name, ": passed\n"))!;
-            Io/pure(true)
-        | failed(message) =>
-            let _ = print(Str/concat(name, Str/concat(": failed\n  ", Str/concat(message, "\n"))))!;
-            Io/pure(false)
-        end
+    | verdict(passed()) =>
+        let _ = print(Str/concat(name, ": passed\n"))!;
+        Io/pure(true)
+    | verdict(failed(message)) =>
+        let _ = print(Str/concat(name, Str/concat(": failed\n  ", Str/concat(message, "\n"))))!;
+        Io/pure(false)
     | action(io) =>
         let inner = io!;
         report(name, inner)

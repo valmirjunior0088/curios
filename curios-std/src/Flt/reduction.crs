@@ -23,61 +23,40 @@ pub let of(x: Flt) -> Term =
 --- The exact product `a · b` as a term: a NaN operand's NaN, invalid for an infinity against a zero, and otherwise signed as the operands are.
 pub let product(a: Flt, b: Flt) -> Term =
     let negative = Flt/is_sign_minus(a) != Flt/is_sign_minus(b);
-    -- What `a`'s kind meets in `b`'s: `x` is `a`'s value when `a` is a number, and `none` when it is an infinity.
-    let with(x: Option(Dyadic)) -> Term =
-        match of(b)
-        | nan(_) => Term/nan(a + b)
-        | invalid() => Term/invalid()
-        | infinite(_) =>
-            match x
-            | some(d) =>
-                match d.mantissa == +0
-                | true => Term/invalid()
-                | false => Term/infinite(negative)
-                end
-            | none() => Term/infinite(negative)
-            end
-        | number(y, _) =>
-            match x
-            | some(d) => Term/number(d * y, negative)
-            | none() =>
-                match y.mantissa == +0
-                | true => Term/invalid()
-                | false => Term/infinite(negative)
-                end
-            end
-        end;
-    match of(a)
-    | nan(_) => Term/nan(a + b)
-    | invalid() => Term/invalid()
-    | infinite(_) => with(Option/none())
-    | number(x, _) => with(Option/some(x))
+    match (of(a), of(b))
+    | (nan(_), _) => Term/nan(a + b)
+    | (infinite(_), nan(_)) => Term/nan(a + b)
+    | (number(_, _), nan(_)) => Term/nan(a + b)
+    | (invalid(), _) => Term/invalid()
+    | (infinite(_), invalid()) => Term/invalid()
+    | (number(_, _), invalid()) => Term/invalid()
+    | (infinite(_), infinite(_)) => Term/infinite(negative)
+    | (infinite(_), number(y, _)) =>
+        match y.mantissa == +0 | true => Term/invalid() | false => Term/infinite(negative) end
+    | (number(x, _), infinite(_)) =>
+        match x.mantissa == +0 | true => Term/invalid() | false => Term/infinite(negative) end
+    | (number(x, _), number(y, _)) => Term/number(x * y, negative)
     end;
 
 --- The exact sum `a + b` as a term, in the direction `r` a zero sum's sign reads (§6.3): a NaN operand's NaN, and invalid for the infinities of both signs.
 pub let sum(r: Rounding, a: Flt, b: Flt) -> Term =
-    match of(a)
-    | nan(_) => Term/nan(a + b)
-    | invalid() => Term/invalid()
-    | infinite(x) =>
-        match of(b)
-        | nan(_) => Term/nan(a + b)
-        | invalid() => Term/invalid()
-        | infinite(y) => match x == y | true => Term/infinite(x) | false => Term/invalid() end
-        | number(_, _) => Term/infinite(x)
-        end
-    | number(x, _) =>
-        match of(b)
-        | nan(_) => Term/nan(a + b)
-        | invalid() => Term/invalid()
-        | infinite(y) => Term/infinite(y)
-        | number(y, _) =>
-            let s = x + y;
-            -- An exact zero sum takes the sign a rounded sum gives it, which rounding cannot change.
-            match s.mantissa == +0
-            | true => Term/number(s, Flt/is_sign_minus(rounded/add(r, a, b)))
-            | false => Term/number(s, s.mantissa < +0)
-            end
+    match (of(a), of(b))
+    | (nan(_), _) => Term/nan(a + b)
+    | (infinite(_), nan(_)) => Term/nan(a + b)
+    | (number(_, _), nan(_)) => Term/nan(a + b)
+    | (invalid(), _) => Term/invalid()
+    | (infinite(_), invalid()) => Term/invalid()
+    | (number(_, _), invalid()) => Term/invalid()
+    | (infinite(x), infinite(y)) =>
+        match x == y | true => Term/infinite(x) | false => Term/invalid() end
+    | (infinite(x), number(_, _)) => Term/infinite(x)
+    | (number(_, _), infinite(y)) => Term/infinite(y)
+    | (number(x, _), number(y, _)) =>
+        let s = x + y;
+        -- An exact zero sum takes the sign a rounded sum gives it, which rounding cannot change.
+        match s.mantissa == +0
+        | true => Term/number(s, Flt/is_sign_minus(rounded/add(r, a, b)))
+        | false => Term/number(s, s.mantissa < +0)
         end
     end;
 

@@ -15,11 +15,8 @@ pub let refl(d: Nat) -> Divides(d, d) =
 
 --- Transitivity.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Divides(a, b), q: Divides(b, c)) -> Divides(a, c) =
-    match p
-    | intro(k, e) =>
-        match q
-        | intro(m, f) => Divides/intro(m * k, Eq/subst((x: Nat) => Eq()(c, m * x), e, f))
-        end
+    match (p, q)
+    | (intro(k, e), intro(m, f)) => Divides/intro(m * k, Eq/subst((x: Nat) => Eq()(c, m * x), e, f))
     end;
 
 --- Every number divides zero.
@@ -32,14 +29,10 @@ pub let one(n: Nat) -> Divides(1, n) =
 
 --- A divisor of two numbers divides their sum.
 pub let add(@d: Nat, @a: Nat, @b: Nat, p: Divides(d, a), q: Divides(d, b)) -> Divides(d, a + b) =
-    match p
-    | intro(k, e) =>
-        match q
-        | intro(m, f) =>
-            let first: Eq()(a + b, k * d + b) =
-                Eq/subst((x: Nat) => Eq()(a + b, x + b), e, Eq/refl());
-            Divides/intro(k + m, Eq/subst((x: Nat) => Eq()(a + b, k * d + x), f, first))
-        end
+    match (p, q)
+    | (intro(k, e), intro(m, f)) =>
+        let first: Eq()(a + b, k * d + b) = Eq/subst((x: Nat) => Eq()(a + b, x + b), e, Eq/refl());
+        Divides/intro(k + m, Eq/subst((x: Nat) => Eq()(a + b, k * d + x), f, first))
     end;
 
 --- A divisor of a number divides its every multiple.
