@@ -15,7 +15,7 @@ Core states a member's mark in its telescope's entry and nowhere beside it. What
 
 **Rejected.**
 
-- **Padding a group's rows in lowering**, so that rows of one constructor may write different hidden members: the match matrix is laid out before any signature is known, and the padding would be discarded where [typed patterns](../../roadmap/surface/200-typed-patterns.md) aligns each row.
+- **Padding a group's rows in lowering**, so that rows of one constructor may write different hidden members: lowering knows no signature, and each row is met with the constructor's payloads by its own marks where the patterns are compiled ([Patterns are compiled where their types are known](../surface/patterns-are-compiled-where-their-types-are-known.md)).
 - **One sealed pair of a telescope and its marks**, behind one door: the correspondence is asserted where it could be unspellable, and a nested arity still needs two vectors. **A telescope generic in its annotation**: a tuple type could then spell no mark, at the price of a type parameter through every function the two checkers share between a tuple's fields and a structure's. **A mark on the binder's label**: a label is no part of a scope's identity, and a rebuild that re-mints its binders drops one.
 - **Counting plain members in a projection with no written form.** An elaborated term is elaborated again, and a slot would be read as a position.
 - **A struct pattern held to a written mark.** A hidden member takes no position there and a named one is read by its label, so no pattern has a mark to write.

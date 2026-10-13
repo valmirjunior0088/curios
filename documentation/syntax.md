@@ -552,7 +552,7 @@ Embeddings never chain. Declaring `Monad/Lift(Io, Job)` and `Monad/Lift(Job, Sch
 
 ### Match shell and motives
 
-A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the missing arm is demanded by name. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled. Where the facts in scope refute each other and no written term says so, `False/refuted()` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
+A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the match is refused with the value no arm matches, written as a pattern. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled. Where the facts in scope refute each other and no written term says so, `False/refuted()` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
 The motive states the result type as a family. It is an ordinary term, checked against the eliminator's motive type — a function of the scrutinee's indices, in declaration order, and then the scrutinee:
 
@@ -577,6 +577,8 @@ Parameters are never binders. They are uniform across constructors and fixed by 
 
 Each arm is checked against the motive at that constructor's target indices, and the match as a whole at the scrutinee's actual indices. A `| _ =>` default binds nothing and refines no index, so it is checked at the actual indices too.
 
+An arm's body is typed once, under the cases its own pattern states and nothing else. What a body may rest on — the case of its scrutinee, a bound a case decides, the indices a constructor fixes — is what its arm writes, whichever other arms the match holds: an arm that writes a binder where another names a constructor learns nothing of that constructor.
+
 A binder may be written bare, as `_`, or annotated. An annotation is an ordinary type in an ordinary position: checked by conversion against the binder's expected type, obeying the usual plicity rules, and free to name the binders before it. Annotating the scrutinee binder is how a reader recovers the eliminated family on the motive line.
 
 ```crs
@@ -600,7 +602,7 @@ match option
 end
 ```
 
-A constructor is named bare: the scrutinee's type supplies the namespace, so `Option/some(n)` is refused as a pattern. A pattern is written as the call that builds the value is: the plain payloads each take a pattern, in order, and a payload the constructor declared implicit (`@`) is left out, or written under `@` ahead of the plain payload it precedes, where the arm names it. A payload left out is bound all the same, so a bound it states is a fact in the arm. Rows of one constructor write the same hidden payloads. Witness payloads are not a surface feature, so `use` is not accepted in a constructor pattern.
+A constructor is named bare: the scrutinee's type supplies the namespace, so `Option/some(n)` is refused as a pattern. A pattern is written as the call that builds the value is: the plain payloads each take a pattern, in order, and a payload the constructor declared implicit (`@`) is left out, or written under `@` ahead of the plain payload it precedes, where the arm names it. A payload left out is bound all the same, so a bound it states is a fact in the arm. Rows of one constructor may write different hidden payloads, each met with the constructor's by its own marks. Witness payloads are not a surface feature, so `use` is not accepted in a constructor pattern.
 
 ```crs
 match vector
@@ -623,11 +625,27 @@ match value
 end
 ```
 
-Concrete constructor rows have no priority. Each reachable combination needed by the program must be represented by a compatible row.
+### Binders beside patterns
 
-### Dispatch default arm
+A binder — a name or `_` — may stand wherever a pattern may, beside the concrete patterns other arms write in its place. The arm is then reached under every case of that place: each case another arm names, and every case none does.
 
-A final top-level bare `_` may follow any run of concrete *dispatching* arms — inductive constructors, `true`/`false`, `Nat` shapes, `[]`/`[head, ..tail]`, `b[]`/`x[]` — and covers every shape not named earlier. It is not available after tuple or struct arms, which project exhaustively rather than dispatching.
+```crs
+match value
+| some(some(inner)) => inner
+| some(_) => 0
+| none() => 1
+end
+```
+
+Arms have no priority: the order they are written in never changes what a match means. Two arms may match one value only where the arm written first is a case of the other — every value it matches, the other matches too — so a general arm stands after its exceptions, as `some(_)` stands after `some(some(inner))`. Three refusals hold the rule:
+
+- Two arms that match one value, neither a case of the other, are refused with the value they share written as a pattern, which is the arm that parts them. `(true, _)` and `(_, true)` meet at `(true, true)`.
+- An arm no value reaches is refused: one written after an arm it is a case of, and a final `_` after arms that already cover every case.
+- A value no arm matches is refused, written as the pattern that matches it — `(some(_), none())` — with `_` wherever no case was read.
+
+### The arm that cannot fail
+
+A final arm whose pattern takes nothing apart that could fail — a bare `_`, most often — takes every value the arms before it leave.
 
 ```crs
 match option
@@ -636,11 +654,11 @@ match option
 end
 ```
 
-Only a bare `_` in this exact position is a default, and nested wildcard defaults are not accepted. `_` is the only wildcard: a final arm binding a name called `rest` is a binder, and is refused as a catch-all. A lone `_` with no concrete arm is an irrefutable binder match rather than an inductive default.
+It states no case, so its body is typed where the match stands and at the match's own type, however deep the patterns before it nest. After arms that each dispatch on the scrutinee itself — inductive constructors, `true`/`false`, `Nat` shapes, `[]`/`[head, ..tail]`, `b[]`/`x[]` — it is written `_`: a final arm binding a name there is refused, the scrutinee being in scope under the name it already has. A lone `_` with no concrete arm is an irrefutable binder match rather than a default.
 
 ### Multiple scrutinees
 
-A tuple scrutinee supports matrix matching over several values. Columns are considered left to right, grouping rows by the shape in each column.
+A tuple scrutinee supports matrix matching over several values. Columns are considered left to right, grouping rows by the shape in each column. Each value of a tuple written at the head is a scrutinee of its own: an arm that states a case of one refines that value, as an arm of a match on it alone does.
 
 ```crs
 match (left, right)
@@ -650,13 +668,21 @@ match (left, right)
 end
 ```
 
-A binder may occupy a later column when an earlier column has already distinguished its row. A binder and a concrete shape cannot compete in the same column of the same group.
+A binder may stand in any column, under the rules of [Binders beside patterns](#binders-beside-patterns):
 
-Tuple and struct patterns over non-inductive values compile to projections rather than constructor dispatch.
+```crs
+match (left, right)
+| (some(x), some(y)) => x + y
+| (_, none()) => 0
+| (none(), some(y)) => y
+end
+```
+
+Tuple and struct patterns over non-inductive values compile to projections rather than constructor dispatch. A struct pattern is written under the name of the structure its scrutinee is.
 
 ### Boolean match
 
-A `Bool` match covers both shapes: one `true` arm and one `false` arm in either order, or one of them followed by the bare `_` default described under [Dispatch default arm](#dispatch-default-arm).
+A `Bool` match covers both shapes: one `true` arm and one `false` arm in either order, or one of them followed by the bare `_` described under [The arm that cannot fail](#the-arm-that-cannot-fail).
 
 ```crs
 match condition
@@ -687,7 +713,7 @@ end
 
 ### Natural-number dispatch
 
-A natural-number dispatch has literal arms and a mandatory `_` default.
+A natural-number dispatch has literal arms and an arm that writes a binder, which takes every other value: no set of literals covers every natural.
 
 ```crs
 match tag
@@ -742,7 +768,7 @@ choose
 end
 ```
 
-A condition arm fires when its expression evaluates to `true`. A bind arm evaluates the expression on the right of `=` and fires when it matches the refutable pattern on the left. A bare binder is not allowed as a bind-arm pattern, because it cannot fail: an arm that always fires is a `let`.
+A condition arm fires when its expression evaluates to `true`. A bind arm evaluates the expression on the right of `=` and fires when it matches the refutable pattern on the left. A bare binder is not allowed as a bind-arm pattern, because it cannot fail: an arm that always fires is a `let`, and a tuple or struct pattern that takes nothing apart is refused the same way, as an arm that leaves the rest of the ladder unreached.
 
 Each selected arm receives the same definitional refinement that an equivalent nested headed match would provide.
 
