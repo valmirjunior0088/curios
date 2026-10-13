@@ -23,6 +23,8 @@ pub induct Error: pub Type
 | not_directory()
 --- The peer reset the connection.
 | reset()
+--- What was read is past the bound its reader states.
+| too_long()
 --- Anything else, carrying the host's own code.
 | other(Nat)
 end
@@ -55,6 +57,7 @@ satisfy Show(Error) {
         | is_directory() => "is_directory"
         | not_directory() => "not_directory"
         | reset() => "reset"
+        | too_long() => "too_long"
         | other(n) => Str/flatten(["other(", Nat/to_str(n), ")"])
         end,
 }

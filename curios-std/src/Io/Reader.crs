@@ -1,0 +1,233 @@
+use /std/{Nat, Bytes, Byte, Bool, Option, Result, Monad, Io, Async, Try};
+use /std/Io/{Error};
+use /std/Async/{Channel};
+
+--- What a piece made of the bytes it was asked of: the piece and the bytes after it, a refusal, or that it has not all arrived — with where to resume and the bytes still held, so the next look reads none of them twice. A piece holds no stream: a reader asks it again once more bytes have arrived, and whoever asked the reader decides what a stream that ended means.
+pub induct Step(St: Type, R: Type, A: Type): pub Type
+| more(St, Bytes)
+| took(A, Bytes)
+| refused(R)
+end
+
+--- How a piece went unread: it refused what arrived, the stream ended first, or the stream failed — the last two with where the piece stood. The bytes held stay in the reader each time.
+pub induct Stop(St: Type, R: Type): pub Type
+| refused(R)
+| ended(St)
+| failed(St, Error)
+end
+
+--- The pieces the named reads ask for.
+pub mod piece;
+
+-- What a reader's slot holds: the bytes read past the last piece, and how many pieces have been cut from them.
+struct Held: Type {
+    cuts: Nat,
+    bytes: Bytes,
+}
+
+--- A stream with the bytes read ahead of what was asked of it, kept beside the stream: a read answers its piece, and the reader it was asked of is the reader after it. A read that a deadline abandons has put back what it took, and two fibers reading one reader each get whole pieces.
+pub struct Reader(S: Type): Type {
+    stream: S,
+    limit: Nat,
+    put: Channel/Sender(Held),
+    get: Channel/Receiver(Held),
+}
+
+--- A reader over `stream` whose named reads refuse a piece past `limit` bytes.
+pub let within(@S: Type, stream: S, limit: Nat) -> Io(Reader(S)) =
+    let ends = Channel/new(@Held, 1)!;
+    Io/pure(Reader { stream = stream, limit = limit, put = ends.0, get = ends.1 });
+
+--- A reader over `stream` whose named reads refuse a piece past 1 MiB.
+pub let new(@S: Type, stream: S) -> Io(Reader(S)) =
+    within(stream, 1048576);
+
+-- An empty slot is a reader that has read nothing yet: it holds nothing and has cut nothing.
+let taken(@S: Type, r: Reader(S)) -> Io(Held) =
+    let slot = Channel/try_recv(r.get)!;
+    Io/pure(match slot | item(held) => held | _ => Held { cuts = 0, bytes = x[] } end);
+
+let kept(@S: Type, r: Reader(S), held: Held) -> Io({}) =
+    let _ = Channel/try_send(r.put, held)!;
+    Io/pure(());
+
+--- The bytes `r` holds, left where they are.
+pub let held(@S: Type, r: Reader(S)) -> Io(Bytes) =
+    let now = taken(r)!;
+    let _ = kept(r, now)!;
+    Io/pure(now.bytes);
+
+-- Everything `r` holds, taken as one piece.
+let drained(@S: Type, r: Reader(S)) -> Io(Bytes) =
+    let now = taken(r)!;
+    let _ = kept(r, Held { cuts = now.cuts + 1, bytes = x[] })!;
+    Io/pure(now.bytes);
+
+-- Whether `r` holds other than the `bytes` a piece left at `cuts`: what another reader cut or took in meanwhile, which the piece has not been asked of.
+let touched(@S: Type, r: Reader(S), cuts: Nat, bytes: Bytes) -> Io(Bool) =
+    let now = taken(r)!;
+    let _ = kept(r, now)!;
+    Io/pure(Bool/not(now.cuts == cuts && Bytes/len(now.bytes) == Bytes/len(bytes)));
+
+--- `piece` asked of the bytes `r` holds, and asked again each time its stream yields more, until it answers: the piece, or how it went unread. The bytes after the piece, and all of them where there is none, stay in `r`.
+---
+--- The bytes are put back before every read of the stream, so a read abandoned while it waits has lost nothing. A piece another reader cut meanwhile is seen by its count, and the search starts over from `state`.
+pub let take(
+    @M: (Type) -> Type,
+    @S: Type,
+    @St: Type,
+    @R: Type,
+    @A: Type,
+    use Monad(M),
+    use Monad/Lift(Io, M),
+    use Async/Read(M, S),
+    r: Reader(S),
+    piece: (St, Bytes) -> Step(St, R, A),
+    state: St,
+) -> M(Result(Stop(St, R), A)) =
+    let go(from: St, seen: Nat) -> M(Result(Stop(St, R), A)) =
+        let now = Monad/lift(taken(r))!;
+        let at = match seen == now.cuts | true => from | false => state end;
+        match piece(at, now.bytes)
+        | took(a, rest) =>
+            let _ = Monad/lift(kept(r, Held { cuts = now.cuts + 1, bytes = rest }))!;
+            Monad/pure(Result/success(a))
+        | refused(why) =>
+            let _ = Monad/lift(kept(r, now))!;
+            Monad/pure(Result/failure(Stop/refused(why)))
+        | more(next, bytes) =>
+            -- A piece that kept fewer bytes than it was asked of has cut some.
+            let cuts =
+                match Bytes/len(bytes) == Bytes/len(now.bytes)
+                | true => now.cuts
+                | false => now.cuts + 1
+                end;
+            let _ = Monad/lift(kept(r, Held { cuts = cuts, bytes = bytes }))!;
+            let arrived = Async/Read/read(@M, @S, r.stream, 65536)!;
+            match arrived
+            | chunk(fresh) =>
+                let then = Monad/lift(taken(r))!;
+                let _ =
+                    Monad/lift(
+                        kept(r, Held { cuts = then.cuts, bytes = x[..then.bytes, ..fresh] }))!;
+                go(next, cuts)
+            | eof() =>
+                let moved = Monad/lift(touched(r, cuts, bytes))!;
+                match moved
+                | true => go(next, cuts)
+                | false => Monad/pure(Result/failure(Stop/ended(next)))
+                end
+            | error(e) =>
+                let moved = Monad/lift(touched(r, cuts, bytes))!;
+                match moved
+                | true => go(next, cuts)
+                | false => Monad/pure(Result/failure(Stop/failed(next, e)))
+                end
+            end
+        end;
+    go(state, 0);
+
+-- A named read's answer where its piece went unread: the refusal or the failure raised, and `at_end` of what `r` held where its stream ended.
+let settled(
+    @M: (Type) -> Type,
+    @S: Type,
+    @St: Type,
+    @A: Type,
+    @B: Type,
+    use Monad(M),
+    use Monad/Lift(Io, M),
+    r: Reader(S),
+    got: Result(Stop(St, Error), A),
+    whole: (A) -> B,
+    at_end: (Bytes) -> B,
+) -> M(Result(Error, B)) =
+    match got
+    | success(a) => Monad/pure(Result/success(whole(a)))
+    | failure(stop) =>
+        match stop
+        | refused(why) => Monad/pure(Result/failure(why))
+        | failed(_, e) => Monad/pure(Result/failure(e))
+        | ended(_) =>
+            let last = Monad/lift(drained(r))!;
+            Monad/pure(Result/success(at_end(last)))
+        end
+    end;
+
+--- One line without its line ending — a newline, or a carriage return and a newline. Where the stream ends, what is held is the last line, and `none` where nothing is. A line past `r`'s bound is `too_long`, and its bytes stay held.
+pub let line(
+    @M: (Type) -> Type,
+    @S: Type,
+    use Monad(M),
+    use Monad/Lift(Io, M),
+    use Async/Read(M, S),
+    r: Reader(S),
+) -> Try(M, Error, Option(Bytes)) =
+    let read() -> M(Result(Error, Option(Bytes))) =
+        let got =
+            take(r, (searched: Nat, bytes: Bytes) => piece/line(r.limit, searched, bytes), 0)!;
+        settled(
+            r,
+            got,
+            (found: Bytes) => Option/some(found),
+            (last: Bytes) =>
+                match Bytes/len(last) == 0
+                | true => Option/none()
+                | false => Option/some(last)
+                end);
+    Try/attempt(read());
+
+--- The bytes before the first `delimiter`, which is taken and dropped, and whether it was met: where the stream ends first, what is held and `false`. Bytes past `r`'s bound with no delimiter among them are `too_long`, and stay held.
+pub let until(
+    @M: (Type) -> Type,
+    @S: Type,
+    use Monad(M),
+    use Monad/Lift(Io, M),
+    use Async/Read(M, S),
+    r: Reader(S),
+    delimiter: Byte,
+) -> Try(M, Error, {bytes: Bytes, met: Bool}) =
+    let read() -> M(Result(Error, {bytes: Bytes, met: Bool})) =
+        let got =
+            take(
+                r,
+                (searched: Nat, bytes: Bytes) => piece/until(r.limit, delimiter, searched, bytes),
+                0)!;
+        settled(
+            r,
+            got,
+            (found: Bytes) => (bytes = found, met = true),
+            (last: Bytes) => (bytes = last, met = false));
+    Try/attempt(read());
+
+--- `n` bytes, and whether there were that many: where the stream ends short of them, what arrived and `false`. A count past `r`'s bound is `too_long` before any of it is read.
+pub let exactly(
+    @M: (Type) -> Type,
+    @S: Type,
+    use Monad(M),
+    use Monad/Lift(Io, M),
+    use Async/Read(M, S),
+    r: Reader(S),
+    n: Nat,
+) -> Try(M, Error, {bytes: Bytes, whole: Bool}) =
+    let read() -> M(Result(Error, {bytes: Bytes, whole: Bool})) =
+        let got = take(r, (_: {}, bytes: Bytes) => piece/exactly(r.limit, n, bytes), ())!;
+        settled(
+            r,
+            got,
+            (found: Bytes) => (bytes = found, whole = true),
+            (last: Bytes) => (bytes = last, whole = false));
+    Try/attempt(read());
+
+--- Everything up to the end of the stream, the bytes held first. More than `r`'s bound is `too_long`, and stays held.
+pub let rest(
+    @M: (Type) -> Type,
+    @S: Type,
+    use Monad(M),
+    use Monad/Lift(Io, M),
+    use Async/Read(M, S),
+    r: Reader(S),
+) -> Try(M, Error, Bytes) =
+    let read() -> M(Result(Error, Bytes)) =
+        let got = take(r, (_: {}, bytes: Bytes) => piece/rest(r.limit, bytes), ())!;
+        settled(r, got, (found: Bytes) => found, (last: Bytes) => last);
+    Try/attempt(read());

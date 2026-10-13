@@ -40,6 +40,7 @@ fn read_all_of_a_missing_path_is_not_found() {
             | is_directory() => /std/print("is a directory")
             | not_directory() => /std/print("not a directory")
             | reset() => /std/print("reset")
+            | too_long() => /std/print("too long")
             | other(_) => /std/print("other")
             end
         end

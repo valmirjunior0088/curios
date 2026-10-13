@@ -7,6 +7,10 @@ use /std/Bool/{Holds};
 pub mod Error;
 pub use Error/{let Error};
 
+--- A stream with the bytes read ahead of what was asked of it, and the reads that cut a piece from them.
+pub mod Reader;
+pub use Reader/{let Reader};
+
 satisfy Monad(Io) {
     pure = pure,
     bind = bind,

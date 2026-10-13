@@ -1,0 +1,154 @@
+-- The pieces a reader's named reads ask for, asked over every way their bytes may arrive in two segments, and over every place they may stop.
+use /std/{Str, Bytes, Nat, Bool, List, Spell, Io, Test};
+use /std/ops/{Eql};
+use /std/Io/{Reader};
+use /std/Io/Reader/{Step};
+
+-- What a piece came to once its segments ran out: the piece and what followed it, a refusal, or still wanting more.
+induct Fed: pub Type
+| whole(Bytes, Bytes)
+| refused()
+| wanting()
+end
+
+satisfy Eql(Fed) {
+    ..
+}
+
+satisfy Spell(Fed) {
+    ..
+}
+
+-- A reader that holds `held`, asks `piece`, and takes one more of `segments` each time it is told more is wanted.
+let fed(
+    @St: Type,
+    @R: Type,
+    piece: (St, Bytes) -> Step(St, R, Bytes),
+    state: St,
+    held: Bytes,
+    segments: List(Bytes),
+) -> Fed =
+    match piece(state, held)
+    | took(a, rest) => Fed/whole(a, Bytes/flatten([rest, ..segments]))
+    | refused(_) => Fed/refused()
+    | more(next, kept) =>
+        match segments
+        | [] => Fed/wanting()
+        | [segment, ..later] => fed(piece, next, x[..kept, ..segment], later)
+        end
+    end;
+
+let front(b: Bytes, k: Nat) -> Bytes =
+    match Nat/le/try(k, Bytes/len(b))
+    | some(within) => Bytes/slice(b, 0, k, @within)
+    | none() => b
+    end;
+
+let past(b: Bytes, k: Nat) -> Bytes =
+    match Nat/le/try(k, Bytes/len(b))
+    | some(within) => Bytes/drop(b, k, @within)
+    | none() => x[]
+    end;
+
+-- Whether `piece` reads `wire` as `expected` however `wire` is cut in two.
+let alike_at_every_cut(
+    @St: Type,
+    @R: Type,
+    piece: (St, Bytes) -> Step(St, R, Bytes),
+    start: St,
+    wire: Bytes,
+    expected: Fed,
+) -> Bool =
+    List/all(
+        List/range(0, Bytes/len(wire) + 1),
+        (k) => fed(piece, start, x[], [front(wire, k), past(wire, k)]) == expected);
+
+-- Whether `piece` still wants more at every place short of `whole` that `wire` may stop.
+let wanting_at_every_stop(
+    @St: Type,
+    @R: Type,
+    piece: (St, Bytes) -> Step(St, R, Bytes),
+    start: St,
+    wire: Bytes,
+    whole: Nat,
+) -> Bool =
+    List/all(
+        List/range(0, whole),
+        (k) => fed(piece, start, x[], [front(wire, k)]) == Fed/wanting());
+
+let line(limit: Nat) -> (Nat, Bytes) -> Step(Nat, Io/Error, Bytes) =
+    (searched, held) => Reader/piece/line(limit, searched, held);
+
+let field(limit: Nat) -> (Nat, Bytes) -> Step(Nat, Io/Error, Bytes) =
+    (searched, held) => Reader/piece/until(limit, ',', searched, held);
+
+let counted(limit: Nat, n: Nat) -> ({}, Bytes) -> Step({}, Io/Error, Bytes) =
+    (_, held) => Reader/piece/exactly(limit, n, held);
+
+let left(limit: Nat) -> ({}, Bytes) -> Step({}, Io/Error, Bytes) =
+    (_, held) => Reader/piece/rest(limit, held);
+
+-- A line is the bytes before its newline, a carriage return that ends them going with it, and what follows is left for the next read, wherever the bytes are cut — between the carriage return and the newline too; short of its newline it wants more.
+test a_line_reads_whole_at_every_cut =
+    let wire = Str/to_bytes("first\r\nsecond\nthird");
+    Test/all([
+        Test/assert(
+            alike_at_every_cut(
+                line(64),
+                0,
+                wire,
+                Fed/whole(Str/to_bytes("first"), Str/to_bytes("second\nthird")))),
+        Test/assert(wanting_at_every_stop(line(64), 0, wire, 7)),
+        Test/equal(
+            fed(line(64), 0, Str/to_bytes("second\nthird"), []),
+            Fed/whole(Str/to_bytes("second"), Str/to_bytes("third"))),
+        Test/equal(
+            fed(line(64), 0, Str/to_bytes("a\rb\n"), []),
+            Fed/whole(Str/to_bytes("a\rb"), x[])),
+        Test/equal(fed(line(64), 0, Str/to_bytes("\n"), []), Fed/whole(x[], x[]))]);
+
+-- A line longer than its bound is refused wherever it is cut, its newline arrived or not, and one as long as its bound is read.
+test a_line_past_its_bound_is_refused_at_every_cut =
+    Test/all([
+        Test/assert(alike_at_every_cut(line(4), 0, Str/to_bytes("abcde\nx"), Fed/refused())),
+        Test/assert(
+            alike_at_every_cut(
+                line(4),
+                0,
+                Str/to_bytes("abcd\nx"),
+                Fed/whole(Str/to_bytes("abcd"), Str/to_bytes("x"))))]);
+
+-- The bytes before a delimiter are read whole wherever they are cut, the delimiter taken and dropped; short of it the piece wants more, and past its bound it is refused.
+test the_bytes_before_a_delimiter_read_whole_at_every_cut =
+    let wire = Str/to_bytes("key,value,more");
+    Test/all([
+        Test/assert(
+            alike_at_every_cut(
+                field(64),
+                0,
+                wire,
+                Fed/whole(Str/to_bytes("key"), Str/to_bytes("value,more")))),
+        Test/assert(wanting_at_every_stop(field(64), 0, wire, 4)),
+        Test/assert(alike_at_every_cut(field(2), 0, wire, Fed/refused()))]);
+
+-- A stated count is that many bytes wherever they are cut, and wants more until it has them; none is the empty piece at once, and a count past its bound is refused before a byte is read.
+test a_stated_count_reads_whole_at_every_cut =
+    let wire = Str/to_bytes("hello world");
+    Test/all([
+        Test/assert(
+            alike_at_every_cut(
+                counted(64, 5),
+                (),
+                wire,
+                Fed/whole(Str/to_bytes("hello"), Str/to_bytes(" world")))),
+        Test/assert(wanting_at_every_stop(counted(64, 5), (), wire, 5)),
+        Test/equal(fed(counted(64, 0), (), x[], []), Fed/whole(x[], x[])),
+        Test/equal(fed(counted(4, 5), (), x[], []), Fed/refused())]);
+
+-- What is left is never taken, however much has arrived, and more than its bound is refused.
+test what_is_left_wants_more_up_to_its_bound =
+    Test/all([
+        Test/equal(fed(left(4), (), x[], [Str/to_bytes("ab"), Str/to_bytes("cd")]), Fed/wanting()),
+        Test/equal(
+            fed(left(4), (), x[], [Str/to_bytes("ab"), Str/to_bytes("cde")]),
+            Fed/refused())]);
