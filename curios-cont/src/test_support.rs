@@ -7,7 +7,7 @@
 use {
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
-        Module, Node, NodeId, ValueExpr, ValueId, function_nodes,
+        Module, Node, NodeId, Row, RowId, Slot, ValueExpr, ValueId, function_nodes,
     },
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_num::Natural,
@@ -392,8 +392,18 @@ pub(super) fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId)
     (module, helper, owner)
 }
 
+/// A variant family's row of two slots, its tag and one payload: the vocabulary a tagged fixture builds in, and the one a pattern specialization reads.
+pub(super) fn tagged_family(module: &mut Module, name: &str) -> RowId {
+    module.add_row(Row {
+        debug_name: Some(name.into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    })
+}
+
+/// The dispatch shape: `consume(t)` switches on the tag of a value of a two-constructor family and returns its payload, and `main` calls it once for each of `sites`, each call handed a construction of the family at that site's tag. `padding` dead nodes inflate `consume` past whatever a test needs it to outgrow.
 pub(super) fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, FunctionId) {
     let mut module = Module::new();
+    let family = tagged_family(&mut module, "family");
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
 
@@ -427,13 +437,13 @@ pub(super) fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<Nod
     });
     let project_val = module.add_node(Node::LetIntrinsic {
         result: val,
-        op: Intrinsic::TupleGet(1),
+        op: Intrinsic::RowGet(family, 1),
         args: vec![Atom::Value(t)],
         next: switch,
     });
     let mut consume_body = module.add_node(Node::LetIntrinsic {
         result: tag,
-        op: Intrinsic::TupleGet(0),
+        op: Intrinsic::RowGet(family, 0),
         args: vec![Atom::Value(t)],
         next: project_val,
     });
@@ -482,10 +492,13 @@ pub(super) fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<Nod
             ctors[i],
             Node::LetValue {
                 result: value,
-                value: ValueExpr::Tuple(vec![
-                    Atom::Literal(Literal::Nat(Natural::from(sites[i]))),
-                    Atom::Literal(Literal::Nat(Natural::from(i as u32))),
-                ]),
+                value: ValueExpr::Row(
+                    family,
+                    vec![
+                        Atom::Literal(Literal::Nat(Natural::from(sites[i]))),
+                        Atom::Literal(Literal::Nat(Natural::from(i as u32))),
+                    ],
+                ),
                 next: calls[i],
             },
         );
@@ -626,14 +639,15 @@ pub(super) fn duplicate_pair_module(
     (module, first_node, second_node, add)
 }
 
-/// The option-join shape: `main(x)` builds `some(x)` or `none()` in two predecessors, both jumping one join continuation whose body switches on the tuple's tag — the allocation-then-rescrutinize shape jump-pattern specialization exists to collapse.
+/// The option-join shape: `main(x)` builds `some(x)` or `none()` in two predecessors, both jumping one join continuation whose body switches on the tag of the family's row — the allocation-then-rescrutinize shape jump-pattern specialization exists to collapse.
 pub(super) fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
     let mut module = Module::new();
+    let family = tagged_family(&mut module, "option");
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let x = module.add_value(Some("x".into()));
 
-    // join(p): switch TupleGet(0)[p] { 0 => return TupleGet(1)[p], 1 => return 7 }.
+    // join(p): switch RowGet(0)[p] { 0 => return RowGet(1)[p], 1 => return 7 }.
     let p = module.add_value(Some("p".into()));
     let tag = module.add_value(Some("tag".into()));
     let payload = module.add_value(Some("payload".into()));
@@ -646,7 +660,7 @@ pub(super) fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId)
     }));
     let some_body = module.add_node(Node::LetIntrinsic {
         result: payload,
-        op: Intrinsic::TupleGet(1),
+        op: Intrinsic::RowGet(family, 1),
         args: vec![Atom::Value(p)],
         next: some_return,
     });
@@ -692,7 +706,7 @@ pub(super) fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId)
     });
     let read_tag = module.add_node(Node::LetIntrinsic {
         result: tag,
-        op: Intrinsic::TupleGet(0),
+        op: Intrinsic::RowGet(family, 0),
         args: vec![Atom::Value(p)],
         next: dispatch,
     });
@@ -720,10 +734,13 @@ pub(super) fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId)
     }));
     let build_some = module.add_node(Node::LetValue {
         result: some_value,
-        value: ValueExpr::Tuple(vec![
-            Atom::Literal(Literal::Nat(Natural::from(0u32))),
-            Atom::Value(x),
-        ]),
+        value: ValueExpr::Row(
+            family,
+            vec![
+                Atom::Literal(Literal::Nat(Natural::from(0u32))),
+                Atom::Value(x),
+            ],
+        ),
         next: some_jump,
     });
     module.define_continuation(
@@ -740,7 +757,14 @@ pub(super) fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId)
     }));
     let build_none = module.add_node(Node::LetValue {
         result: none_value,
-        value: ValueExpr::Tuple(vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))]),
+        // Padded to the family's width, as the door pads a constructor that holds less than its row.
+        value: ValueExpr::Row(
+            family,
+            vec![
+                Atom::Literal(Literal::Nat(Natural::from(1u32))),
+                Atom::Filler,
+            ],
+        ),
         next: none_jump,
     });
     module.define_continuation(

@@ -9,7 +9,7 @@ use {
         known_values, simplify_nodes,
         test_support::{
             PolymorphicLoop, has_switch, known_callee, polymorphic_loop, tagged_consumer,
-            tagged_join,
+            tagged_family, tagged_join,
         },
     },
     curios_num::Natural,
@@ -242,7 +242,7 @@ fn specializes_a_constructor_argument_and_collapses_the_switch() {
     let mut budget = BRANCH_CLONE_LIMIT;
     assert!(
         specialize_call_patterns(&mut module, &mut budget),
-        "a known tagged-tuple argument is specialized"
+        "a family's construction of known tag is specialized"
     );
     assert_eq!(
         budget,
@@ -335,6 +335,7 @@ fn call_pattern_specialization_is_deterministic() {
 fn specialization_peels_a_recursive_callee_into_the_general_function() {
     // consume(t): leaf returns the field; node recurses on the child.
     let mut module = Module::new();
+    let tree = tagged_family(&mut module, "tree");
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
 
@@ -390,13 +391,13 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     });
     let project_child = module.add_node(Node::LetIntrinsic {
         result: child,
-        op: Intrinsic::TupleGet(1),
+        op: Intrinsic::RowGet(tree, 1),
         args: vec![Atom::Value(t)],
         next: scope,
     });
     let project_tag = module.add_node(Node::LetIntrinsic {
         result: tag,
-        op: Intrinsic::TupleGet(0),
+        op: Intrinsic::RowGet(tree, 0),
         args: vec![Atom::Value(t)],
         next: project_child,
     });
@@ -419,10 +420,13 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     });
     let ctor = module.add_node(Node::LetValue {
         result: root,
-        value: ValueExpr::Tuple(vec![
-            Atom::Literal(Literal::Nat(Natural::from(0u32))),
-            Atom::Literal(Literal::Nat(Natural::from(5u32))),
-        ]),
+        value: ValueExpr::Row(
+            tree,
+            vec![
+                Atom::Literal(Literal::Nat(Natural::from(0u32))),
+                Atom::Literal(Literal::Nat(Natural::from(5u32))),
+            ],
+        ),
         next: call,
     });
     let body = module.add_node(Node::LetFun {
@@ -496,40 +500,44 @@ fn jump_specialization_respects_its_budget() {
     assert!(!specialize_jump_patterns(&mut module, &mut budget));
 }
 
-/// Keep tag and width equal while varying only the constructor vocabulary. The projection belongs to the selected pattern; the tests inspect routing before the general consumer's other paths simplify.
+/// A product's row of two slots, the first a raw word: a row whose first field is data, where a family's is its tag.
+fn product_row(module: &mut Module) -> RowId {
+    module.add_row(Row {
+        debug_name: Some("product".into()),
+        slots: vec![Slot::Nat, Slot::Opaque],
+    })
+}
+
+/// Rebuild the fixture's constructions, in order, each in the vocabulary given — a row, or a structural tuple for `None` — at one tag and one width, so they differ in vocabulary alone. The consumer's projections read the first's. The tests inspect routing before the general consumer's other paths simplify.
 fn set_constructor_rows(module: &mut Module, rows: &[Option<RowId>]) {
     let ids: Vec<_> = module.live_nodes().map(|(id, _)| id).collect();
     let mut constructors = rows.iter();
     for id in ids {
         match module.node_mut(id).unwrap() {
-            Node::LetValue {
-                value: ValueExpr::Tuple(fields),
-                ..
-            } => {
-                let row = constructors
-                    .next()
-                    .expect("each fixture constructor has a vocabulary");
-                *fields = vec![
+            Node::LetValue { value, .. } => {
+                let ValueExpr::Row(_, fields) = value else {
+                    continue;
+                };
+                let fields = vec![
                     Atom::Literal(Literal::Nat(Natural::from(0u32))),
                     fields.get(1).cloned().unwrap_or(Atom::Filler),
                 ];
-                if let Some(row) = row {
-                    let fields = std::mem::take(fields);
-                    if let Node::LetValue { value, .. } = module.node_mut(id).unwrap() {
-                        *value = ValueExpr::Row(*row, fields);
-                    }
-                }
+                *value = match constructors
+                    .next()
+                    .expect("each fixture constructor has a vocabulary")
+                {
+                    Some(row) => ValueExpr::Row(*row, fields),
+                    None => ValueExpr::Tuple(fields),
+                };
             }
-            Node::LetIntrinsic {
-                op: Intrinsic::TupleGet(index),
-                ..
-            } => {
-                if let Some(row) = rows[0] {
-                    let index = *index;
-                    if let Node::LetIntrinsic { op, .. } = module.node_mut(id).unwrap() {
-                        *op = Intrinsic::RowGet(row, index);
-                    }
-                }
+            Node::LetIntrinsic { op, .. } => {
+                let Intrinsic::RowGet(_, index) = *op else {
+                    continue;
+                };
+                *op = match rows[0] {
+                    Some(row) => Intrinsic::RowGet(row, index),
+                    None => Intrinsic::TupleGet(index),
+                };
             }
             _ => {}
         }
@@ -540,99 +548,121 @@ fn set_constructor_rows(module: &mut Module, rows: &[Option<RowId>]) {
 
 #[test]
 fn call_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
-    for nominal in [false, true] {
-        let (mut module, calls, consume) = tagged_consumer(0, &[0, 0, 0, 0]);
-        let first = module.add_row(Row {
-            debug_name: Some("first".into()),
-            slots: vec![Slot::Tag, Slot::Opaque],
-        });
-        let second = module.add_row(Row {
-            debug_name: Some("second".into()),
-            slots: vec![Slot::Tag, Slot::Opaque],
-        });
-        let selected = nominal.then_some(first);
-        let other = if nominal { None } else { Some(first) };
-        set_constructor_rows(&mut module, &[selected, selected, Some(second), other]);
+    let (mut module, calls, consume) = tagged_consumer(0, &[0, 0, 0, 0]);
+    let first = tagged_family(&mut module, "first");
+    let second = tagged_family(&mut module, "second");
+    set_constructor_rows(&mut module, &[Some(first), Some(first), Some(second), None]);
 
-        let mut budget = BRANCH_CLONE_LIMIT;
-        assert!(specialize_call_patterns(&mut module, &mut budget));
-        module.verify().unwrap();
-        let clone = known_callee(&module, calls[0]);
-        assert_ne!(clone, consume);
+    let mut budget = BRANCH_CLONE_LIMIT;
+    assert!(specialize_call_patterns(&mut module, &mut budget));
+    module.verify().unwrap();
+    let clone = known_callee(&module, calls[0]);
+    assert_ne!(clone, consume);
+    assert_eq!(
+        known_callee(&module, calls[1]),
+        clone,
+        "the matching vocabulary reuses the clone"
+    );
+    for &call in &calls[2..] {
         assert_eq!(
-            known_callee(&module, calls[1]),
-            clone,
-            "the matching vocabulary reuses the clone"
+            known_callee(&module, call),
+            consume,
+            "a different vocabulary keeps the general function"
         );
-        for &call in &calls[2..] {
-            assert_eq!(
-                known_callee(&module, call),
-                consume,
-                "a different vocabulary keeps the general function"
-            );
-        }
-        assert_eq!(budget, BRANCH_CLONE_LIMIT - 1);
     }
+    assert_eq!(budget, BRANCH_CLONE_LIMIT - 1);
 }
 
 #[test]
 fn jump_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
-    for nominal in [false, true] {
-        for other_nominal in [false, true] {
-            if !nominal && !other_nominal {
-                continue;
-            }
-            let (mut module, join, some_jump, none_jump, x) = tagged_join();
-            let first = module.add_row(Row {
-                debug_name: Some("first".into()),
-                slots: vec![Slot::Tag, Slot::Opaque],
-            });
-            let second = module.add_row(Row {
-                debug_name: Some("second".into()),
-                slots: vec![Slot::Tag, Slot::Opaque],
-            });
-            set_constructor_rows(
-                &mut module,
-                &[nominal.then_some(first), other_nominal.then_some(second)],
-            );
-            // Both switch edges carry the same constructor, while the other predecessor carries a different vocabulary with the same tag and width.
-            let Some(Node::ApplyCont(edge)) = module.node(some_jump) else {
-                panic!("the predecessor is a jump")
+    for other_is_a_family in [false, true] {
+        let (mut module, join, some_jump, none_jump, x) = tagged_join();
+        let first = tagged_family(&mut module, "first");
+        let second = tagged_family(&mut module, "second");
+        set_constructor_rows(
+            &mut module,
+            &[Some(first), other_is_a_family.then_some(second)],
+        );
+        // Both switch edges carry the same constructor, while the other predecessor carries a different vocabulary with the same tag and width.
+        let Some(Node::ApplyCont(edge)) = module.node(some_jump) else {
+            panic!("the predecessor is a jump")
+        };
+        let edge = edge.clone();
+        *module.node_mut(some_jump).unwrap() = Node::Switch {
+            scrutinee: Atom::Value(x),
+            cases: BTreeMap::from([(0, edge.clone())]),
+            default: Some(edge),
+        };
+        module.verify().unwrap();
+        let mut budget = BRANCH_CLONE_LIMIT;
+        assert!(specialize_jump_patterns(&mut module, &mut budget));
+        module.verify().unwrap();
+        let Some(Node::Switch {
+            cases,
+            default: Some(default),
+            ..
+        }) = module.node(some_jump)
+        else {
+            panic!("the predecessor stays a switch")
+        };
+        let edge = &cases[&0];
+        assert_ne!(edge.target, join);
+        assert_eq!(
+            default.target, edge.target,
+            "equivalent switch edges reuse the clone"
+        );
+        assert_eq!(edge.args, vec![Atom::Value(x)]);
+        let Some(Node::ApplyCont(other)) = module.node(none_jump) else {
+            panic!("the other predecessor stays a jump")
+        };
+        assert_eq!(
+            other.target, join,
+            "a different vocabulary keeps the general join"
+        );
+        assert_eq!(other.args.len(), 1);
+        assert_eq!(budget, BRANCH_CLONE_LIMIT - 1);
+    }
+}
+
+/// A literal that leads a structural tuple or a product's row is data, where a family's row carries its tag there: neither is a pattern, so a callee that takes one apart keeps every call.
+#[test]
+fn a_call_handed_no_family_row_is_no_pattern() {
+    for product in [false, true] {
+        let (mut module, calls, consume) = tagged_consumer(0, &[0, 0]);
+        let row = product.then(|| product_row(&mut module));
+        set_constructor_rows(&mut module, &[row, row]);
+
+        let mut budget = BRANCH_CLONE_LIMIT;
+        assert!(
+            !specialize_call_patterns(&mut module, &mut budget),
+            "a first field that is data selects nothing"
+        );
+        assert_eq!(budget, BRANCH_CLONE_LIMIT);
+        for &call in &calls {
+            assert_eq!(known_callee(&module, call), consume);
+        }
+    }
+}
+
+/// The join's half of the rule above: an edge that jumps a structural tuple or a product's row into a join keeps its target.
+#[test]
+fn a_jump_handed_no_family_row_is_no_pattern() {
+    for product in [false, true] {
+        let (mut module, join, some_jump, none_jump, _) = tagged_join();
+        let row = product.then(|| product_row(&mut module));
+        set_constructor_rows(&mut module, &[row, row]);
+
+        let mut budget = BRANCH_CLONE_LIMIT;
+        assert!(
+            !specialize_jump_patterns(&mut module, &mut budget),
+            "a first field that is data selects nothing"
+        );
+        assert_eq!(budget, BRANCH_CLONE_LIMIT);
+        for jump in [some_jump, none_jump] {
+            let Some(Node::ApplyCont(edge)) = module.node(jump) else {
+                panic!("the predecessor stays a jump")
             };
-            let edge = edge.clone();
-            *module.node_mut(some_jump).unwrap() = Node::Switch {
-                scrutinee: Atom::Value(x),
-                cases: BTreeMap::from([(0, edge.clone())]),
-                default: Some(edge),
-            };
-            module.verify().unwrap();
-            let mut budget = BRANCH_CLONE_LIMIT;
-            assert!(specialize_jump_patterns(&mut module, &mut budget));
-            module.verify().unwrap();
-            let Some(Node::Switch {
-                cases,
-                default: Some(default),
-                ..
-            }) = module.node(some_jump)
-            else {
-                panic!("the predecessor stays a switch")
-            };
-            let edge = &cases[&0];
-            assert_ne!(edge.target, join);
-            assert_eq!(
-                default.target, edge.target,
-                "equivalent switch edges reuse the clone"
-            );
-            assert_eq!(edge.args, vec![Atom::Value(x)]);
-            let Some(Node::ApplyCont(other)) = module.node(none_jump) else {
-                panic!("the other predecessor stays a jump")
-            };
-            assert_eq!(
-                other.target, join,
-                "a different vocabulary keeps the general join"
-            );
-            assert_eq!(other.args.len(), 1);
-            assert_eq!(budget, BRANCH_CLONE_LIMIT - 1);
+            assert_eq!(edge.target, join);
         }
     }
 }

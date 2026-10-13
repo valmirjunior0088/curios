@@ -2,7 +2,7 @@ use {
     crate::{
         Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, CallAnalysis, Callee, ContinuationId, Edge,
         FunctionId, Intrinsic, Lattice, Literal, Module, Node, NodeId, RowId, SCC_CLONE_NODE_LIMIT,
-        Solver, ValueExpr, ValueId, analyze_calls, continuation_transfers, copied_extent,
+        Slot, Solver, ValueExpr, ValueId, analyze_calls, continuation_transfers, copied_extent,
         copy_bodies, function_nodes, nodes_from, resolve_atom, visit_atoms_mut,
     },
     curios_num::Natural,
@@ -240,18 +240,18 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut usize) -> b
     }
     false
 }
-/// SpecConstr-style call-pattern specialization. When a known-callee call passes a statically-known tagged tuple into a parameter the callee deconstructs, clone the callee with that constructor rebuilt at its entry so the existing aggregate-projection and known-switch simplifications collapse the deconstruction on a later iteration. The constructor's dynamic fields are threaded as fresh parameters (a worker/wrapper rebuild) and the clone's recursive self-calls fall back to the general function, so it peels the one matched level rather than assuming the recursion stays in pattern. Every call sharing the `(callee, index, tag, arity, row)` pattern repoints to the single clone, so equivalent sites specialize once. The row identity distinguishes nominal constructors of the same width and tag from each other and from structural tuples, since the clone rebuilds the selected constructor. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
+/// SpecConstr-style call-pattern specialization. When a known-callee call passes a variant family's construction whose tag is known ([`tagged_row_values`]) into a parameter the callee deconstructs, clone the callee with that constructor rebuilt at its entry so the existing aggregate-projection and known-switch simplifications collapse the deconstruction on a later iteration. The constructor's dynamic fields are threaded as fresh parameters (a worker/wrapper rebuild) and the clone's recursive self-calls fall back to the general function, so it peels the one matched level rather than assuming the recursion stays in pattern. Every call sharing the `(callee, index, tag, arity, row)` pattern repoints to the single clone, so equivalent sites specialize once. The row identity distinguishes two families' constructors of the same width and tag, since the clone rebuilds the selected one. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
 pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
     }
-    let constructors = tagged_tuple_values(module);
+    let constructors = tagged_row_values(module);
     if constructors.is_empty() {
         return false;
     }
 
-    // The first specializable pattern in deterministic (node, then argument) order: a known-callee call whose argument is a known tagged tuple that the callee deconstructs, whose callee has a lexical `LetFun` owner and a clonable body within the growth budget.
-    let mut chosen: Option<(FunctionId, usize, u32, usize, Option<RowId>)> = None;
+    // The first specializable pattern in deterministic (node, then argument) order: a known-callee call whose argument is a family's construction of known tag that the callee deconstructs, whose callee has a lexical `LetFun` owner and a clonable body within the growth budget.
+    let mut chosen: Option<(FunctionId, usize, u32, usize, RowId)> = None;
     'search: for (_, node) in module.live_nodes() {
         let Node::ApplyFun {
             callee: Callee::Known(callee),
@@ -337,10 +337,7 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
     rebuilt.extend(field_params.iter().map(|&p| Atom::Value(p)));
     let entry = module.add_node(Node::LetValue {
         result: old_param,
-        value: match row {
-            Some(row) => ValueExpr::Row(row, rebuilt),
-            None => ValueExpr::Tuple(rebuilt),
-        },
+        value: ValueExpr::Row(row, rebuilt),
         next: clone_body,
     });
     params.splice(index..=index, field_params);
@@ -353,7 +350,7 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
         functions.push(clone);
     }
 
-    // Repoint every call sharing the pattern to the single clone, splicing each site's own constructor fields in place of the tuple argument.
+    // Repoint every call sharing the pattern to the single clone, splicing each site's own constructor fields in place of the constructed argument.
     for node_id in 0..module.nodes().len() {
         let Some(Node::ApplyFun {
             callee: Callee::Known(target),
@@ -391,40 +388,38 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
     *budget -= 1;
     true
 }
-/// The `LetValue`-bound tagged constructions: values whose defining expression is a tuple or a row construction whose first field is a `Nat` literal, read as the tag. These are the constructor call patterns branch specialization can bake into a callee.
-pub(crate) fn tagged_tuple_values(
-    module: &Module,
-) -> BTreeMap<ValueId, (u32, Vec<Atom>, Option<RowId>)> {
+/// The `LetValue`-bound constructions of a variant family whose tag is known: a construction of a row that carries [`Slot::Tag`] at slot zero, with a `Nat` literal standing there. These are the constructor call patterns branch specialization can bake into a callee.
+///
+/// A family's row alone carries a tag. A product row's first field and a structural tuple's are data, so a literal there selects nothing: a product has one pattern, its construction, which is `split_workers`' to deliver.
+pub(crate) fn tagged_row_values(module: &Module) -> BTreeMap<ValueId, (u32, Vec<Atom>, RowId)> {
     let mut result = BTreeMap::new();
     for (_, node) in module.live_nodes() {
-        let (value, fields, row) = match node {
-            Node::LetValue {
-                result: value,
-                value: ValueExpr::Tuple(fields),
-                ..
-            } => (value, fields, None),
-            Node::LetValue {
-                result: value,
-                value: ValueExpr::Row(row, fields),
-                ..
-            } => (value, fields, Some(*row)),
-            _ => continue,
+        let Node::LetValue {
+            result: value,
+            value: ValueExpr::Row(row, fields),
+            ..
+        } = node
+        else {
+            continue;
         };
+        if module.row(*row).slots.first() != Some(&Slot::Tag) {
+            continue;
+        }
         if let Some(Atom::Literal(Literal::Nat(tag))) = fields.first()
             && let Some(tag) = u32::try_from(tag).ok()
         {
-            result.insert(*value, (tag, fields.clone(), row));
+            result.insert(*value, (tag, fields.clone(), *row));
         }
     }
     result
 }
-/// Whether `function` projects a field out of `param`, i.e. contains a projection on it — a `TupleGet` for a structural product, a `RowGet` for a row. This is the profitability gate: baking a known constructor into a parameter only pays off when the body actually deconstructs it, and a gate that knew only one of the two vocabularies would silently decline every variant.
+/// Whether `function` projects a field out of `param`, i.e. contains a `RowGet` on it, the one projection a family's value has. This is the profitability gate: baking a known constructor into a parameter only pays off when the body actually deconstructs it.
 pub(crate) fn deconstructs_param(module: &Module, function: FunctionId, param: ValueId) -> bool {
     function_nodes(module, function).iter().any(|&id| {
         matches!(
             module.node(id),
             Some(Node::LetIntrinsic {
-                op: Intrinsic::TupleGet(_) | Intrinsic::RowGet(..),
+                op: Intrinsic::RowGet(..),
                 args,
                 ..
             }) if args.first() == Some(&Atom::Value(param))
@@ -468,19 +463,19 @@ pub(crate) fn clone_scc(
 ) -> BTreeMap<FunctionId, FunctionId> {
     copy_bodies(module, members, &BTreeSet::new()).functions
 }
-/// SpecConstr for continuation joins — the join-point analogue of [`specialize_call_patterns`]. When an edge jumps a statically-known tagged tuple into a multi-transfer continuation that deconstructs it, clone the continuation with the constructor rebuilt at its entry and its dynamic fields threaded as parameters, so the existing aggregate-projection and known-switch simplifications collapse the deconstruction — and usually the allocation and the branch — on a later iteration. Every edge sharing the `(target, index, tag, arity, row)` pattern repoints to the single clone. The row identity matches the constructor the clone rebuilds, as for calls. Single-transfer joins are excluded: `inline_single_use_continuations` already collapses them outright. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
+/// SpecConstr for continuation joins — the join-point analogue of [`specialize_call_patterns`]. When an edge jumps a variant family's construction whose tag is known into a multi-transfer continuation that deconstructs it, clone the continuation with the constructor rebuilt at its entry and its dynamic fields threaded as parameters, so the existing aggregate-projection and known-switch simplifications collapse the deconstruction — and usually the allocation and the branch — on a later iteration. Every edge sharing the `(target, index, tag, arity, row)` pattern repoints to the single clone. The row identity matches the constructor the clone rebuilds, as for calls. Single-transfer joins are excluded: `inline_single_use_continuations` already collapses them outright. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
 pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
     }
-    let constructors = tagged_tuple_values(module);
+    let constructors = tagged_row_values(module);
     if constructors.is_empty() {
         return false;
     }
     let transfers = continuation_transfers(module);
 
     // The first specializable pattern in deterministic (node, then edge, then argument) order.
-    let mut chosen: Option<(ContinuationId, usize, u32, usize, Option<RowId>)> = None;
+    let mut chosen: Option<(ContinuationId, usize, u32, usize, RowId)> = None;
     'search: for (_, node) in module.live_nodes() {
         let edges: Vec<&Edge> = match node {
             Node::ApplyCont(edge) => vec![edge],
@@ -541,10 +536,7 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) 
     rebuilt.extend(field_params.iter().map(|&p| Atom::Value(p)));
     let entry = module.add_node(Node::LetValue {
         result: old_param,
-        value: match row {
-            Some(row) => ValueExpr::Row(row, rebuilt),
-            None => ValueExpr::Tuple(rebuilt),
-        },
+        value: ValueExpr::Row(row, rebuilt),
         next: clone_body,
     });
     params.splice(index..=index, field_params);
@@ -557,27 +549,26 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) 
         continuations.push(clone);
     }
 
-    // Repoint every edge sharing the pattern, splicing each edge's own constructor fields in place of the tuple argument.
-    let repoint = |edge: &mut Edge,
-                   constructors: &BTreeMap<ValueId, (u32, Vec<Atom>, Option<RowId>)>|
-     -> bool {
-        if edge.target != target {
-            return false;
-        }
-        let Some(Atom::Value(value)) = edge.args.get(index) else {
-            return false;
+    // Repoint every edge sharing the pattern, splicing each edge's own constructor fields in place of the constructed argument.
+    let repoint =
+        |edge: &mut Edge, constructors: &BTreeMap<ValueId, (u32, Vec<Atom>, RowId)>| -> bool {
+            if edge.target != target {
+                return false;
+            }
+            let Some(Atom::Value(value)) = edge.args.get(index) else {
+                return false;
+            };
+            let Some((site_tag, site_fields, site_row)) = constructors.get(value) else {
+                return false;
+            };
+            if *site_tag != tag || site_fields.len() != arity || *site_row != row {
+                return false;
+            }
+            let spliced = site_fields[1..].to_vec();
+            edge.target = clone;
+            edge.args.splice(index..=index, spliced);
+            true
         };
-        let Some((site_tag, site_fields, site_row)) = constructors.get(value) else {
-            return false;
-        };
-        if *site_tag != tag || site_fields.len() != arity || *site_row != row {
-            return false;
-        }
-        let spliced = site_fields[1..].to_vec();
-        edge.target = clone;
-        edge.args.splice(index..=index, spliced);
-        true
-    };
     for node_index in 0..module.nodes().len() {
         let node_id = NodeId(node_index as u32);
         let Some(node) = module.node_mut(node_id) else {
@@ -611,7 +602,7 @@ pub(crate) fn continuation_projects(
             matches!(
                 module.node(id),
                 Some(Node::LetIntrinsic {
-                    op: Intrinsic::TupleGet(_) | Intrinsic::RowGet(..),
+                    op: Intrinsic::RowGet(..),
                     args,
                     ..
                 }) if args.first() == Some(&Atom::Value(param))

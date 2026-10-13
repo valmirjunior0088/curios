@@ -47,20 +47,20 @@ fn optimization_collapses_the_tagged_join_outright() {
     let (mut module, _, _, _, _) = tagged_join();
     optimize(&mut module);
 
-    // The whole allocate-then-rescrutinize shape dissolves: no tuple is built and no projection or tag dispatch survives.
+    // The whole allocate-then-rescrutinize shape dissolves: no row is built and no projection or tag dispatch survives.
     for node in module.nodes().iter().flatten() {
         assert!(
             !matches!(
                 node,
                 Node::LetValue {
-                    value: ValueExpr::Tuple(_),
+                    value: ValueExpr::Row(..),
                     ..
                 } | Node::LetIntrinsic {
-                    op: Intrinsic::TupleGet(_),
+                    op: Intrinsic::RowGet(..),
                     ..
                 }
             ),
-            "expected the join's tuples and projections to collapse, found {node:?}"
+            "expected the join's rows and projections to collapse, found {node:?}"
         );
     }
 }
