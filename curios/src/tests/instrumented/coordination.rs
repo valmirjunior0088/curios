@@ -34,24 +34,24 @@ use {
 ///
 /// ## What it last printed
 ///
-/// Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.4-ogc3.1.fc44.x86_64`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration. Times are milliseconds; sample 0 is the warmup and is excluded from the medians.
+/// Timed, taken on top of `7ded6ac34`. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc2.1.fc44.x86_64`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration. Times are milliseconds; sample 0 is the warmup and is excluded from the medians.
 ///
 /// | Workload | Sample | Compile (ms) | Run (ms) | Output bytes |
 /// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_async` | 0 (warmup) | 1613.081 | 2.342 | 6 |
-/// | `monad_async` | 1 | 1459.401 | 2.070 | 6 |
-/// | `monad_async` | 2 | 1449.361 | 2.069 | 6 |
-/// | `monad_async` | 3 | 1448.959 | 1.967 | 6 |
-/// | `monad_async` | 4 | 1449.392 | 2.036 | 6 |
-/// | `monad_async` | 5 | 1444.012 | 2.131 | 6 |
-/// | `tui` | 0 (warmup) | 3977.918 | 54.264 | 11368 |
-/// | `tui` | 1 | 3929.009 | 44.272 | 11368 |
-/// | `tui` | 2 | 3951.643 | 43.544 | 11368 |
-/// | `tui` | 3 | 3950.362 | 43.637 | 11368 |
-/// | `tui` | 4 | 3909.094 | 43.176 | 11368 |
-/// | `tui` | 5 | 3917.634 | 64.601 | 11368 |
+/// | `monad_async` | 0 (warmup) | 1395.798 | 1.679 | 6 |
+/// | `monad_async` | 1 | 1355.283 | 1.745 | 6 |
+/// | `monad_async` | 2 | 1353.717 | 1.784 | 6 |
+/// | `monad_async` | 3 | 1359.175 | 1.727 | 6 |
+/// | `monad_async` | 4 | 1366.402 | 1.496 | 6 |
+/// | `monad_async` | 5 | 1355.213 | 1.623 | 6 |
+/// | `tui` | 0 (warmup) | 4061.824 | 40.514 | 11368 |
+/// | `tui` | 1 | 3949.655 | 40.300 | 11368 |
+/// | `tui` | 2 | 3959.136 | 40.569 | 11368 |
+/// | `tui` | 3 | 3901.249 | 40.719 | 11368 |
+/// | `tui` | 4 | 3894.582 | 38.928 | 11368 |
+/// | `tui` | 5 | 3899.996 | 44.502 | 11368 |
 ///
-/// Compilation medians are **1449.361 ms** for `monad_async` and **3929.009 ms** for `tui`; execution medians are **2.069 ms** and **43.637 ms**. Tui's final execution sample is an outlier at 64.601 ms, and no cause is assigned from timings alone.
+/// Compilation medians are **1355.283 ms** for `monad_async` and **3901.249 ms** for `tui`; execution medians are **1.727 ms** and **40.569 ms**. Tui's final execution sample is the slowest at 44.502 ms, and no cause is assigned from timings alone.
 ///
 /// All twelve captures passed the behavior and closed-span assertions, terminal restoration and all three screen clears included.
 #[test]
