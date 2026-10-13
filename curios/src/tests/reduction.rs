@@ -190,22 +190,22 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 ///
 /// # What it last printed
 ///
-/// **Release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation.
+/// Taken on top of `d5046c5cc`, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation.
 ///
 /// ```text
 /// Bytes
 ///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        800    227.2ms    231.8ms    240.5ms          4.6ms          8.6ms         65536         65536
-///       1600    215.7ms    247.3ms    262.6ms         31.6ms         15.3ms        131072        262144
-///       3200    209.0ms    296.9ms    325.7ms         87.8ms         28.8ms        262144        262144
-///       6400    206.7ms    391.1ms    452.2ms        184.4ms         61.1ms        524288        524288
+///        800    176.8ms    167.9ms    178.7ms          0.0ns         10.9ms         65536        131072
+///       1600    144.0ms    196.3ms    217.4ms         52.3ms         21.1ms        131072        262144
+///       3200    144.1ms    251.9ms    288.6ms        107.8ms         36.7ms        262144        524288
+///       6400    143.9ms    359.0ms    437.6ms        215.2ms         78.6ms        524288       1048576
 ///
 /// List
 ///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        250    229.4ms    217.1ms    239.7ms          0.0ns         22.6ms         65536         65536
-///        500    227.5ms    233.2ms    253.1ms          5.6ms         19.9ms         32768         65536
-///       1000    227.1ms    246.0ms    279.5ms         18.9ms         33.5ms        131072        131072
-///       2000    233.5ms    287.1ms    333.7ms         53.6ms         46.6ms        131072        262144
+///        250    169.8ms    164.5ms    184.3ms          0.0ns         19.9ms         32768         32768
+///        500    203.6ms    162.4ms    235.0ms          0.0ns         72.6ms         65536         65536
+///       1000    201.0ms    188.3ms    272.6ms          0.0ns         84.2ms        131072        131072
+///       2000    202.6ms    237.8ms    341.3ms         35.2ms        103.4ms        262144        262144
 /// ```
 ///
 /// **The two arms' floors sit within one power of two of each other at every rung**, and both double with the input: the transitions are what a budget sees, and ten bytes of payload price six units a step. Construction shows in the wall-time excess of the `growing-fixed` column alone — tens of milliseconds, growing linearly.

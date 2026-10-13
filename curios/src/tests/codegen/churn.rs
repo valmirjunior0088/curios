@@ -132,13 +132,13 @@ fn collections(compiled: &Compiled, k: u64) -> (usize, Option<String>) {
 ///
 /// # What it last printed
 ///
-/// x86-64 Linux dev machine, wasmtime 47.0.3 with the sixteen-mebibyte default (see `curios-runtime/README.md`), the command above:
+/// Taken on top of `d5046c5cc` on an x86-64 Linux dev machine, wasmtime 47.0.3 with the sixteen-mebibyte default (see `curios-runtime/README.md`), the command above:
 ///
 /// ```text
 /// == chain collection decomposition (K = 400)
-///   stock: churn 0.176 ms/round, 0.030 collections/round, no heap growth recorded
-///   ballast 250k (~16 MiB heap): churn 0.143 ms/round, 0.040 collections/round, no heap growth recorded
-///   ballast 4M (~256 MiB heap): churn 0.345 ms/round, 0.003 collections/round, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
+///   stock: churn 0.072 ms/round, 0.037 collections/round, no heap growth recorded
+///   ballast 250k (~16 MiB heap): churn 0.058 ms/round, 0.040 collections/round, no heap growth recorded
+///   ballast 4M (~256 MiB heap): churn 0.183 ms/round, 0.003 collections/round, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
 /// ```
 ///
 /// # The reading
@@ -263,14 +263,14 @@ end
 ///
 /// # What it last printed
 ///
-/// x86-64 Linux dev machine, release, under the sixteen-mebibyte default:
+/// Taken on top of `d5046c5cc` on an x86-64 Linux dev machine, release, under the sixteen-mebibyte default:
 ///
 /// ```text
 /// == spines collection decomposition
-///   stock, N=12500: churn 0.62 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
-///   stock, N=25000: churn 0.90 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
-///   ballast 250k, N=25000: churn 0.75 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
-///   ballast 4M, N=25000: churn 1.08 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
+///   stock, N=12500: churn 0.65 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
+///   stock, N=25000: churn 0.70 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
+///   ballast 250k, N=25000: churn 0.56 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
+///   ballast 4M, N=25000: churn 0.54 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
 /// ```
 ///
 /// **The collector's share of the remaining insert is nil** — zero collections per thousand inserts at stock, at both Ns. The remaining insert cost (`map_wall_spines_slope`) is mutator work, so a rebuild-and-collection lever — a generational nursery among them — has nothing to take on this workload; what is left to rank is the representation tax against per-insert key construction, which `shapes.rs`'s instruments measure.

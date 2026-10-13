@@ -515,16 +515,16 @@ fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
 ///
 /// # What it last printed
 ///
-/// The latest reading of each row, in release, with the run it came from; different runs may come from different hosts, so wall clocks compare only within one run. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
+/// The latest reading of each row, taken on top of `d5046c5cc` in release on `x86_64-unknown-linux-gnu`, over two runs of one host. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
 ///
-/// | What | Measured | Run |
-/// | --- | --- | --- |
-/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the items' erased forms | 34.1–35.3 ms | A |
-/// | Re-erasing one whole unit over the stored Core | 621 ms | B |
-/// | Certifying one whole unit | 12.6 s, 0 refusals | C |
-/// | Heaviest declaration that certification makes | 512 455 units, peak depth 6 | C |
+/// | What | Measured |
+/// | --- | --- |
+/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the items' erased forms | 19.2–20.3 ms |
+/// | Re-erasing one whole unit over the stored Core | 1.2 s |
+/// | Certifying one whole unit | 3.5–3.6 s, 0 refusals |
+/// | Heaviest declaration that certification makes | 982 481 units, peak depth 17 |
 ///
-/// The heaviest declaration's figure counts the closed machine re-deriving within a run — the trade that buys a closed fold's check back a thousandfold — and at sixty times under the default budget it decides nothing.
+/// The heaviest declaration's figure counts the closed machine re-deriving within a run — the trade that buys a closed fold's check back a thousandfold — and at thirty times under the default budget it decides nothing.
 #[test]
 #[ignore = "measurement, mixed: reports timings and counts over the stored image rather than asserting"]
 fn stored_prelude_measurements() {
