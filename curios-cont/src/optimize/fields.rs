@@ -666,8 +666,19 @@ fn insert_above(module: &mut Module, carrier: NodeId, nodes: Vec<Node>) {
     }
 }
 
-/// Virtualize one whole window region: every parameter becomes `(base, offset, length)` under a recorded group, every slice becomes a guarded extent plus an offset sum, every read reaches the base directly, and every entry edge opens its rope as a whole window. The physical views and the helper calls that built them are simply never emitted — nothing here deletes them, they are unread.
+/// Virtualize every window region the module admits, the widest first, each as [`split_widest_window`] virtualizes one.
+///
+/// One region a call would leave the rest to the optimizer's own fixpoint, at a round of every pass for each region and another for the fold its split exposes, which is what [`split_parameters`] sweeps to avoid. A split records its groups and rewrites its slices, so the uses and the regions are read again from the module as each split leaves it: the widest region is then the widest of what remains, and a region a split has reached into is declined as it is from one round to the next. Termination is each split's own: it records a group over a parameter that had none, under the growth ceiling.
 pub(crate) fn split_windows(module: &mut Module) -> bool {
+    let mut split = false;
+    while split_widest_window(module) {
+        split = true;
+    }
+    split
+}
+
+/// Virtualize one whole window region: every parameter becomes `(base, offset, length)` under a recorded group, every slice becomes a guarded extent plus an offset sum, every read reaches the base directly, and every entry edge opens its rope as a whole window. The physical views and the helper calls that built them are simply never emitted — nothing here deletes them, they are unread.
+fn split_widest_window(module: &mut Module) -> bool {
     let uses = window_uses(module);
     let resumes = resume_targets(module);
 

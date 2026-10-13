@@ -870,19 +870,17 @@ fn optimization_maintains_every_record() {
     module.verify().expect("the optimized module verifies");
 }
 
-/// The suffix walk in miniature: a rope enters a loop as a whole window, each iteration reads its head and recurses on its tail slice. After the window split the loop carries `(base, offset, length)`, the slice is an extent guard plus an offset sum, and no physical view is ever constructed.
-fn walk_module() -> (Module, crate::ContinuationId) {
-    let mut module = Module::default();
-    let rope = module.add_value(Some("rope".into()));
-    let scrutinee = module.add_value(Some("scrutinee".into()));
+/// Define `header` as one suffix walk: its parameter is a window, each iteration reads the window's head and loops on its tail slice while `scrutinee` is zero, and hands the head to `exit` otherwise.
+fn define_walk(
+    module: &mut Module,
+    header: crate::ContinuationId,
+    scrutinee: ValueId,
+    exit: crate::ContinuationId,
+) {
     let window = module.add_value(Some("window".into()));
     let length = module.add_value(Some("length".into()));
     let head = module.add_value(Some("head".into()));
     let tail = module.add_value(Some("tail".into()));
-
-    let function = module.reserve_function();
-    let return_cont = module.reserve_continuation();
-    let header = module.reserve_continuation();
 
     let spin = module.add_node(Node::Switch {
         scrutinee: Atom::Value(scrutinee),
@@ -895,7 +893,7 @@ fn walk_module() -> (Module, crate::ContinuationId) {
         )]
         .into(),
         default: Some(Edge {
-            target: return_cont,
+            target: exit,
             args: vec![Atom::Value(head)],
         }),
     });
@@ -932,6 +930,19 @@ fn walk_module() -> (Module, crate::ContinuationId) {
             body: measure,
         },
     );
+}
+
+/// The suffix walk in miniature: a rope enters a loop as a whole window, each iteration reads its head and recurses on its tail slice. After the window split the loop carries `(base, offset, length)`, the slice is an extent guard plus an offset sum, and no physical view is ever constructed.
+fn walk_module() -> (Module, crate::ContinuationId) {
+    let mut module = Module::default();
+    let rope = module.add_value(Some("rope".into()));
+    let scrutinee = module.add_value(Some("scrutinee".into()));
+
+    let function = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let header = module.reserve_continuation();
+
+    define_walk(&mut module, header, scrutinee, return_cont);
     let enter = module.add_node(Node::ApplyCont(Edge {
         target: header,
         args: vec![Atom::Value(rope)],
@@ -952,6 +963,55 @@ fn walk_module() -> (Module, crate::ContinuationId) {
     );
     module.set_entry(function);
     (module, header)
+}
+
+/// Two suffix walks one after the other, each over a rope of its own: the first hands its head to a continuation that enters the second, whose head is the answer. Two regions, neither reaching a position of the other.
+fn two_walks_module() -> (Module, [crate::ContinuationId; 2]) {
+    let mut module = Module::default();
+    let first = module.add_value(Some("first".into()));
+    let second = module.add_value(Some("second".into()));
+    let scrutinee = module.add_value(Some("scrutinee".into()));
+    let passed = module.add_value(Some("passed".into()));
+
+    let function = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let headers = [module.reserve_continuation(), module.reserve_continuation()];
+    let between = module.reserve_continuation();
+
+    define_walk(&mut module, headers[0], scrutinee, between);
+    define_walk(&mut module, headers[1], scrutinee, return_cont);
+    let onward = module.add_node(Node::ApplyCont(Edge {
+        target: headers[1],
+        args: vec![Atom::Value(second)],
+    }));
+    module.define_continuation(
+        between,
+        Continuation {
+            debug_name: Some("between".into()),
+            params: vec![passed],
+            body: onward,
+        },
+    );
+    let enter = module.add_node(Node::ApplyCont(Edge {
+        target: headers[0],
+        args: vec![Atom::Value(first)],
+    }));
+    let body = module.add_node(Node::LetCont {
+        continuations: vec![headers[0], between, headers[1]],
+        body: enter,
+    });
+    module.define_function(
+        function,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![first, second, scrutinee],
+            return_cont,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(function);
+    (module, headers)
 }
 
 /// One invocation virtualizes the whole region: three window parameters under a recorded group, the slice gone in favour of a guarded extent, the read reaching the base, and the entry opening the rope as its own whole window.
@@ -992,6 +1052,57 @@ fn a_suffix_walk_virtualizes_its_windows() {
     assert_eq!(
         extents, 1,
         "the eager bounds trap stays, as the extent guard"
+    );
+}
+
+/// One invocation virtualizes every region the module admits: each of two walks carries its three fields under a recorded group, no physical view is left for either, and a second invocation finds nothing to do.
+#[test]
+fn one_call_virtualizes_every_region_it_admits() {
+    let (mut module, headers) = two_walks_module();
+    module.verify().expect("the fixture is well-formed");
+
+    assert!(super::split_windows(&mut module));
+    module
+        .verify()
+        .expect("the window split preserves well-formedness");
+
+    for header in headers {
+        let definition = module.continuation(header).expect("the header survives");
+        assert_eq!(
+            definition.params.len(),
+            3,
+            "each window became three fields"
+        );
+        assert_eq!(
+            module.field_groups().get(&header),
+            Some(&vec![FieldGroup { start: 0, width: 3 }]),
+            "and each split is recorded",
+        );
+    }
+    let slices = module
+        .nodes()
+        .iter()
+        .flatten()
+        .filter(|node| {
+            matches!(
+                node,
+                Node::LetIntrinsic {
+                    op: Intrinsic::BinSlice(_)
+                        | Intrinsic::BinRest(_)
+                        | Intrinsic::ListSlice
+                        | Intrinsic::ListRest,
+                    ..
+                }
+            )
+        })
+        .count();
+    assert_eq!(
+        slices, 0,
+        "no physical view is left to either walk:\n{module}"
+    );
+    assert!(
+        !super::split_windows(&mut module),
+        "and no region is left for a second call",
     );
 }
 
