@@ -109,9 +109,9 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
         let fiber: Async({}) =
             let outcome = Try/run(Session/with((s) =>
                 let first = Session/read(@Nat, s)!;
-                let _ = print(match first.1 | some(events) => Nat/to_str(List/len(events)) | none() => "eof" end)!;
-                let second = Session/read(@Nat, first.0)!;
-                let _ = print(match second.1
+                let _ = print(match first | some(events) => Nat/to_str(List/len(events)) | none() => "eof" end)!;
+                let second = Session/read(@Nat, s)!;
+                let _ = print(match second
                     | some(events) => match events
                         | [event, .._] => match event
                             | key(k) => match k.code | up() => " up " | _ => " wrong-key " end
@@ -121,12 +121,12 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
                         end
                     | none() => " early-eof "
                     end)!;
-                let third = Session/read(@Nat, second.0)!;
-                let _ = print(match third.1 | none() => "eof" | some(_) => "more" end)!;
+                let third = Session/read(@Nat, s)!;
+                let _ = print(match third | none() => "eof" | some(_) => "more" end)!;
                 Try/pure(())))!;
             Async/pure(());
         Async/run(fiber)
-    "# , host).expect("threaded input");
+    "# , host).expect("held input");
     let output = String::from_utf8_lossy(&io.output()).into_owned();
     assert!(output.contains("0 up eof"), "{output:?}");
     assert_eq!(io.raw_modes(), vec![true, false]);

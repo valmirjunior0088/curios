@@ -140,12 +140,12 @@ pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
             let got = Try/run(Session/read(@E, session))!;
             match got
             | failure(why) => fail(why)
-            | success((next, input)) =>
+            | success(input) =>
                 match input
                 | none() => Async/pure(())
                 | some(events) =>
                     let _ = List/each(events, push)!;
-                    reader(next)
+                    reader(session)
                 end
             end;
         let ticker(session: Session) -> Async({}) =

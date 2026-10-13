@@ -1,4 +1,6 @@
-use /std/{Nat, Bytes, List, Option, Io, Try, Async, Tty};
+use /std/{Nat, Bytes, Bool, List, Option, Result, Io, Try, Async, Tty};
+use /std/Io/{Reader};
+use /std/Io/Reader/{Step, Stop};
 use /std/time/{Duration};
 use /std/Tui/{Frame, Event, input, render, ansi};
 
@@ -11,7 +13,7 @@ struct Held: Type {
 --- A terminal taken: what it remembers between draws and reads.
 pub struct Session: Type {
     tty: Tty,
-    rest: Bytes,
+    input: Reader(Io/Input),
     previous: Option(Held),
     size: Tty/Size,
 }
@@ -36,7 +38,8 @@ pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async,
     Tty/with_raw_async(
         t,
         let first = Tty/size(t)!;
-        let s = Session { tty = t, rest = x[], previous = Option/none(), size = first };
+        let input = Reader/new(Io/stdin)!;
+        let s = Session { tty = t, input = input, previous = Option/none(), size = first };
         let _ = enter!;
         let outcome = Async/using(leave, Try/run(body(s)))!;
         let a = outcome!;
@@ -75,33 +78,45 @@ pub let draw(
     let _ = Io/write(Io/stdout, render(before, frame, cursor))!;
     Async/pure(Session { ..s, previous = Option/some(Held { w = w, h = h, frame = frame }) });
 
---- The updated session and next burst of input as events, parking until one arrives; `none` once standard input has ended. A read that fails is raised, the one a burst opens with and the one it waits on for the rest of a key alike.
-pub let read(@E: Type, s: Session) -> Try(Async, Io/Error, {Session, Option(List(Event(E)))}) =
-    -- One read of standard input: an `Async` action by its declaration, which is what a `Try` region embeds it by.
-    let incoming: Async(Io/Chunk) = Async/Read/read(Io/stdin, 1024);
-    let got = incoming!;
+-- One arrival of input and the events it completes, what it leaves undecoded staying held: the state is whether the arrival has come.
+let burst(@E: Type, arrived: Bool, held: Bytes) -> Step(Bool, {}, List(Event(E))) =
+    match arrived
+    | false => Step/more(true, held)
+    | true =>
+        let decoded = input/decode(@E, held);
+        Step/took(decoded.events, decoded.rest)
+    end;
+
+--- The next burst of input as events, parking until one arrives; `none` once standard input has ended. A read that fails is raised, the one a burst opens with and the one it waits on for the rest of a key alike.
+pub let read(@E: Type, s: Session) -> Try(Async, Io/Error, Option(List(Event(E)))) =
+    -- A take of the reader is an `Async` action by its declaration, which is what a `Try` region embeds it by.
+    let arrival: Async(Result(Stop(Bool, {}), List(Event(E)))) =
+        Reader/take(s.input, (arrived: Bool, held: Bytes) => burst(@E, arrived, held), false);
+    let got = arrival!;
     match got
-    | eof() => Try/pure((s, Option/none()))
-    | error(why) => Try/raise(why)
-    | chunk(bytes) =>
-        let d = input/decode(x[..s.rest, ..bytes]);
-        match Bytes/len(d.rest) == 0: (_) => Try(Async, Io/Error, {Session, Option(List(Event(E)))})
-        | true => Try/pure((Session { ..s, rest = x[] }, Option/some(d.events)))
+    | failure(stop) =>
+        match stop | failed(_, why) => Try/raise(why) | _ => Try/pure(Option/none()) end
+    | success(events) =>
+        let rest = Reader/held(s.input)!;
+        match Bytes/len(rest) == 0: (_) => Try(Async, Io/Error, Option(List(Event(E))))
+        | true => Try/pure(Option/some(events))
         | false =>
-            let settle() -> Try(Async, Io/Error, {Session, Option(List(Event(E)))}) =
-                Try/pure((
-                    Session { ..s, rest = x[] },
-                    Option/some([..d.events, ..input/flush(d.rest)])));
-            let more = Async/timeout(Duration/of_millis(30), incoming)!;
+            let more = Async/timeout(Duration/of_millis(30), arrival)!;
             match more
-            | some(chunk(next)) =>
-                let settled = input/decode(x[..d.rest, ..next]);
-                Try/pure((
-                    Session { ..s, rest = settled.rest },
-                    Option/some([..d.events, ..settled.events])))
-            | some(error(why)) => Try/raise(why)
-            | some(eof()) => settle()
-            | none() => settle()
+            | some(success(settled)) => Try/pure(Option/some([..events, ..settled]))
+            | some(failure(failed(_, why))) => Try/raise(why)
+            | _ =>
+                -- Nothing more came: what is held is read as it stands, and taken.
+                let flushing: Async(Result(Stop({}, {}), List(Event(E)))) =
+                    Reader/take(
+                        s.input,
+                        (_: {}, held: Bytes) => Step/took(input/flush(@E, held), x[]),
+                        ());
+                let flushed = flushing!;
+                Try/pure(
+                    Option/some([
+                        ..events,
+                        ..match flushed | success(last) => last | failure(_) => [] end]))
             end
         end
     end;
