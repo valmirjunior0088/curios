@@ -282,25 +282,25 @@ fn type_level_sequence_cost_measurements() {
 ///
 /// # What it last printed
 ///
-/// **Release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation on both sides.
+/// Taken at `ac663f240`, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation on both sides.
 ///
 /// ```text
 /// Bytes
 ///          n  floor elaborator  floor kernel  divergence
-///        800             65536         65536          1x
-///       1600            131072        262144          2x
-///       3200            262144        262144          1x
-///       6400            524288        524288          1x
+///        800            131072        131072          1x
+///       1600            262144        262144          1x
+///       3200            524288        524288          1x
+///       6400           1048576       1048576          1x
 ///
 /// List
 ///          n  floor elaborator  floor kernel  divergence
-///        250             32768         65536          2x
+///        250             32768         32768          1x
 ///        500             65536         65536          1x
 ///       1000            131072        131072          1x
 ///       2000            262144        262144          1x
 /// ```
 ///
-/// **Parity holds, and structurally.** The two checkers run one shared evaluator for the closed accumulation; the scattered 2× rungs are adjacent powers of two, which the sweep cannot distinguish. Where the two checkers *do* part is a `Str` literal — [`str_literal_cost_measurements`] carries that table — and it is a difference in how many times the elaborator demands one scan, not in what a demand costs.
+/// **Parity holds, and structurally.** The two checkers run one shared evaluator for the closed accumulation, and the two floors are one power of two at every rung, which is as fine as the sweep tells them apart. Where the two checkers *do* part is a `Str` literal — [`str_literal_cost_measurements`] carries that table — and it is a difference in how many times the elaborator demands one scan, not in what a demand costs.
 ///
 /// **A memo hit is free in both checkers.** A kernel charging a hit the whole recorded cost of the computation it replaced would refuse for exhaustion, at 8–16× the elaborator's floor, programs the elaborator accepts within its budget — and since the compile path puts one budget to both and meets the larger, that is the number a user would meet, with no disagreement about any rule.
 #[test]

@@ -92,15 +92,16 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// The idiomatic walks alone, in one interleaved session of their own with the two harness workloads as controls, `user` seconds over five runs: `parse_digits` at N = 1 000 000 0.46–0.48, `parse_multibyte` at N = 300 000 0.42–0.43, `lcg` at 100 000 000 0.31, `trees` at 21 0.24–0.26. A delta read across two sessions is not attributable to the change between them, so a change to the walk is timed against a control built from the same tree in the same session.
 ///
-/// The static half:
+/// The static half, taken at `ac663f240`:
 ///
 /// ```text
-/// parse_digits:   0 closure sites, 2 env sites, 10 slice calls, 443738 bytes of wat
-/// parse_bindless: 0 closure sites, 3 env sites, 10 slice calls, 458940 bytes of wat
-/// parse_manual:   0 closure sites, 2 env sites, 10 slice calls, 496933 bytes of wat
+/// parse_digits:   0 closure sites, 4 env sites, 21 slice calls, 1153927 bytes of wat
+/// parse_bindless: 0 closure sites, 6 env sites, 21 slice calls, 1202540 bytes of wat
+///     $envr/2093$/std/Nat/of_str/1
+/// parse_manual:   0 closure sites, 4 env sites, 21 slice calls, 1273107 bytes of wat
 /// ```
 ///
-/// The env sites that remain belong to `/std/Nat/of_str/1` and `/std/Str/trim_bounds/1` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event; it is never the half that answers "what does this cost".
+/// Four env sites in every rung, `parse_manual` included, carry the hint of a local `go`: two loops, each of which builds its environment once in `$start` and once in its own body. `parse_bindless` adds `/decode/1` and `/std/Nat/of_str/1`, the one site the walk's own filter names. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event; it is never the half that answers "what does this cost".
 #[test]
 #[ignore = "measurement, counted: divides the string-walk gap rather than asserting"]
 fn string_walk_ladder_measurements() {

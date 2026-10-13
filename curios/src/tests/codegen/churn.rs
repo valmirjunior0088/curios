@@ -128,7 +128,7 @@ fn collections(compiled: &Compiled, k: u64) -> (usize, Option<String>) {
 ///
 /// `--release` is load-bearing: the collector under measurement is host-side wasmtime code, and a debug build inflates exactly the share this probe exists to isolate.
 ///
-/// Three arrangements run the identical churn phase — `ROUNDS` rounds over the harness's 10 000-cell chain — inside heaps the dead ballast pre-grows to different sizes, and the churn cost is the K = `ROUNDS` time minus the K = 0 time, which cancels startup and the ballast phase itself. Collections are counted from the engine's own `Begin GC` records through `curios-profile`'s log bridge, in separate runs so the raised log level never touches a timed figure.
+/// Three arrangements run the identical churn phase — `ROUNDS` rounds over the harness's 10 000-cell chain — inside heaps the dead ballast pre-grows to different sizes, and the churn cost is the K = `ROUNDS` time minus the K = 0 time, which cancels startup and the ballast phase itself. Collections are counted from the engine's own `Begin GC` records through `curios_runtime::test_support::collected`, in separate runs so the raised log level never touches a timed figure.
 ///
 /// # What it last printed
 ///
