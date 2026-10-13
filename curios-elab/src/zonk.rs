@@ -1155,7 +1155,9 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                     // Handled by the unconditional report above.
                     MetavarOrigin::Goal => unreachable!("a goal never reaches the splice path"),
                 };
-                match term.extent() {
+                // At the term the hole was minted for, where its birth was handed one: the occurrence met here may be one a substitution rebuilt, which carries no place.
+                let written = context.metavar_entry(*id).and_then(|entry| entry.written);
+                match written.or(term.extent()) {
                     Some(extent) => error.at(extent),
                     None => error,
                 }

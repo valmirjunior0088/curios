@@ -8,8 +8,8 @@ use {
     super::{HeldFrames, SharedTelescope},
     crate::{DeadArm, Problem, Refusal},
     curios_core::{
-        Bound, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm, Term, Transient,
-        WitnessOrigin,
+        Bound, Extent, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm, Term,
+        Transient, WitnessOrigin,
     },
     curios_utilities::Entropy,
     std::{
@@ -41,6 +41,8 @@ pub(crate) struct MetaEntry {
     pub refusal: Option<Rc<Refusal>>,
     /// Why the arm the metavariable was born in is never taken, where a guard says so: found where the bound it stands for was given up, since the report of the bound is made once the arm has closed, by a walk that cannot reduce a guard. An arm its scrutinee's indices rule out is the frames' to say ([`HeldFrames::dead_arm`]).
     pub dead_arm: Option<Rc<DeadArm>>,
+    /// Where the term the metavariable was minted for is written, where its mint was handed one: a call's for an omitted implicit, a literal's for its element type. An unsolved one is reported there, whichever of its occurrences the report's walk meets, since an occurrence a substitution rebuilt carries no place.
+    pub written: Option<Extent>,
     /// Its place among the metavariables links hold together.
     held: Held,
 }
@@ -504,11 +506,19 @@ impl Solutions {
             reduct: None,
             refusal: None,
             dead_arm: None,
+            written: None,
             held: Held::Head {
                 awaited: self.reading,
                 members: 1,
             },
         });
+    }
+
+    /// Record where the term `id` was minted for is written, at its birth.
+    pub(crate) fn note_written(&mut self, id: MetavarId, extent: Extent) {
+        if let Some(Some(entry)) = self.entries.get_mut(id.0) {
+            entry.written = Some(extent);
+        }
     }
 
     /// Record that `id`'s `result` is a proposition. Separate from birth because only the implicit-insertion path knows, and it knows after the sort is asked, not at the mint.

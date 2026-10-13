@@ -429,7 +429,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Derive => curios_core::Term::derive(),
             // A registry-synthesized literal (string or list) desugars via the meta-emitter to a proof-carrying construction (see `proof_literal`), never a core intrinsic.
             Subterm::ProofLiteral(literal) => self.proof_literal(literal)?,
-            Subterm::Literal(literal) => curios_core::Term::intrinsic(self.literal(literal)?),
+            Subterm::Literal(literal) => curios_core::Term::intrinsic(self.literal(span, literal)?),
             Subterm::Intrinsic(intrinsic) => {
                 curios_core::Term::intrinsic(intrinsic.try_map(&mut |operand| self.term(operand))?)
             }
@@ -857,7 +857,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             ),
             // An `List` literal's elements and spread operands hoist their bangs into this region, like an application's arguments.
             Subterm::Literal(Literal::List(entries)) => curios_core::Term::intrinsic(
-                self.lower_list_literal(entries, |term| self.collect(term, binds))?,
+                self.lower_list_literal(term.span(), entries, |term| self.collect(term, binds))?,
             ),
             // A `Bits`/`Bytes` literal's spread operands hoist likewise (a spread-free literal has no subterms and lowers unchanged).
             Subterm::Literal(Literal::Bin(grain, segments)) => {
@@ -1203,15 +1203,25 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         })
     }
 
+    /// A list literal's element-type slot: an implicit the literal cannot name, minted fresh and solved by elaboration, bidirectionally from the expected type when checking and from the elements otherwise. It is placed at the literal, which is the written term a report that nothing solved it is about.
+    fn element_type(&self, span: Option<&Span>) -> curios_core::Term {
+        let hole = curios_core::Term::hole(self.context.fresh_metavar());
+        match span {
+            Some(span) => self.context.placed(span, hole),
+            None => hole,
+        }
+    }
+
     /// Flush the pending elements onto `operands`.
     ///
     /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `ListAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `x[..xs, y]` lower alike. Two or more go into an `List` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BinAppend` only where it cannot.
     fn flush_list_run(
         &self,
+        span: Option<&Span>,
         operands: &mut Vec<curios_core::Term>,
         run: &mut Vec<curios_core::Term>,
     ) {
-        let element = || curios_core::Term::hole(self.context.fresh_metavar());
+        let element = || self.element_type(span);
 
         match (run.len(), operands.last()) {
             (0, _) => {}
@@ -1232,11 +1242,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Lowers a list literal's entries. A spread-free literal lowers to a plain `List`, `[]` included. With spreads, elements join the literal through [`Self::flush_list_run`] and the whole becomes an n-ary `ListConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `ListConcat` case in `curios_elab`'s `elaborate_intrinsic`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
     pub(super) fn lower_list_literal(
         &self,
+        span: Option<&Span>,
         entries: &[ListEntry],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Intrinsic, Error> {
-        // The literal's element-type slot: an implicit the literal cannot name, minted fresh and solved by elaboration — bidirectionally from the expected type when checking, from the elements otherwise.
-        let element = || curios_core::Term::hole(self.context.fresh_metavar());
+        let element = || self.element_type(span);
 
         let mut operands = Vec::new();
         let mut run = Vec::new();
@@ -1245,7 +1255,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             match entry {
                 ListEntry::Elem(term) => run.push(lower(term)?),
                 ListEntry::Spread(term) => {
-                    self.flush_list_run(&mut operands, &mut run);
+                    self.flush_list_run(span, &mut operands, &mut run);
                     operands.push(lower(term)?);
                 }
             }
@@ -1258,7 +1268,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             });
         }
 
-        self.flush_list_run(&mut operands, &mut run);
+        self.flush_list_run(span, &mut operands, &mut run);
 
         match operands.len() {
             // A lone list-shaped operand is the value itself; the concatenation would only be normalised away. Only the family the literal builds may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`[..b]`) against a list type instead of adopting the operand's own — `[..true]` would collapse to `true` and typecheck as `Bool`.
@@ -1386,7 +1396,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(curios_core::Intrinsic::BinConcat { grain, operands })
     }
 
-    pub(super) fn literal(&self, literal: &Literal) -> Result<curios_core::Intrinsic, Error> {
+    /// Lowers a literal written at `span`, where its term has one.
+    pub(super) fn literal(
+        &self,
+        span: Option<&Span>,
+        literal: &Literal,
+    ) -> Result<curios_core::Intrinsic, Error> {
         Ok(match literal {
             Literal::Bool(b) => curios_core::Intrinsic::Bool(*b),
             Literal::Flt(flt) => curios_core::Intrinsic::Flt(*flt),
@@ -1394,7 +1409,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Literal::Bin(grain, segments) => {
                 Self::lower_bin_literal(*grain, segments, |term| self.term(term))?
             }
-            Literal::List(entries) => self.lower_list_literal(entries, |term| self.term(term))?,
+            Literal::List(entries) => {
+                self.lower_list_literal(span, entries, |term| self.term(term))?
+            }
         })
     }
 }

@@ -44,10 +44,11 @@ pub(super) fn elaborate_metavar(
                 // Rebuild the hole with the identity spine over its frozen telescope: the rebuilt term is what flows downstream, so every surviving occurrence carries the delayed substitution. Telescope and spine are the shared per-Γ snapshot.
                 let (telescope, spine) = context.identity_snapshot();
                 context.birth_metavar(id, telescope, expected.clone());
-                if matches!(metavar.origin, MetavarOrigin::Goal)
-                    && let Some(extent) = term.extent()
-                {
-                    context.note_goal_extent(id, extent);
+                if let Some(extent) = term.extent() {
+                    context.note_written(id, extent);
+                    if matches!(metavar.origin, MetavarOrigin::Goal) {
+                        context.note_goal_extent(id, extent);
+                    }
                 }
 
                 // A metavariable born with witness provenance is a witness goal, attempted the moment it is born — how a term built ahead of elaboration (a derived witness body) supplies a `use` argument under a provenance of its own, where `elaborate_apply` would otherwise name the goal after the applied function.

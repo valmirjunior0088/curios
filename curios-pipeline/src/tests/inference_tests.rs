@@ -375,3 +375,44 @@ fn a_family_applied_to_its_binder_is_solved_by_abstraction() {
 
     assert_eq!(typecheck(source), Ok(()));
 }
+
+#[test]
+fn a_hole_nothing_solved_is_refused_where_its_term_is_written() {
+    // A literal's element type and an omitted implicit are holes minted for a written term, and the report that nothing solved one stands at that term, in a declaration and in a program's tail alike. Placed by the occurrence the report's walk happens to meet, it stood at the declaration's label, a line its reader did not get wrong, and in a tail, which no declaration labels, at no place at all.
+    for (source, line, term) in [
+        (
+            "use /std/{Nat, Io};\nlet count: Nat =\n    let empty = [];\n    1;\nIo/pure(())\n",
+            "let empty = [];",
+            "[]",
+        ),
+        (
+            "use /std/{Nat, Option, Io};\nlet count: Nat =\n    let nothing = Option/none();\n    1;\nIo/pure(())\n",
+            "let nothing = Option/none();",
+            "Option/none()",
+        ),
+        (
+            "use /std/{Io};\nlet empty = [];\nIo/pure(())\n",
+            "let empty = [];",
+            "[]",
+        ),
+        (
+            "use /std/{Option, Io};\nlet nothing = Option/none();\nIo/pure(())\n",
+            "let nothing = Option/none();",
+            "Option/none()",
+        ),
+    ] {
+        let error = compile(source).map(|_| ()).unwrap_err();
+        let lines = error.lines().collect::<Vec<_>>();
+        let shown = lines
+            .iter()
+            .position(|shown| shown.contains(line))
+            .unwrap_or_else(|| panic!("the report shows the line `{line}`: {error}"));
+        let column = lines[shown].find(term).expect("the line holds the term");
+        let carets = lines.get(shown + 1).copied().unwrap_or_default();
+        assert_eq!(
+            (carets.find('^'), carets.matches('^').count()),
+            (Some(column), term.len()),
+            "the report stands under `{term}`: {error}"
+        );
+    }
+}

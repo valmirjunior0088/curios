@@ -2109,6 +2109,11 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.note_dead_arm(id, dead);
     }
 
+    /// [`Solutions::note_written`].
+    pub(crate) fn note_written(&mut self, id: MetavarId, extent: Extent) {
+        self.underway.attempt.solutions.note_written(id, extent);
+    }
+
     /// Mint a metavariable for an omitted `use` argument — like [`Context::fresh_metavar`] but carrying witness provenance, and returning the id so the caller can register the resolution goal.
     pub(crate) fn fresh_witness_metavar(
         &mut self,
@@ -2467,7 +2472,10 @@ impl<'s> Context<'s> {
         let metavar = Term::metavar_birthed(id, origin, spine);
 
         let metavar = match extent {
-            Some(extent) => metavar.with_extent(extent),
+            Some(extent) => {
+                self.note_written(id, extent);
+                metavar.with_extent(extent)
+            }
             None => metavar,
         };
 
