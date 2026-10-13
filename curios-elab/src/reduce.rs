@@ -1414,7 +1414,7 @@ fn remember(context: &mut Context, declined: u64, entry: Term, result: &Term) {
 ///
 /// Display-only and best-effort: the result is never fed back into the kernel, and an exhausted step budget propagates so callers can fall back to the un-normalized spelling. The binder-heavy stuck forms (`Rec`, `Match`) keep their WHNF shape rather than being reduced under their own binders — they seldom carry the arithmetic this targets, and opening every case arm buys a diagnostic nothing.
 ///
-/// A name whose unfolding stalls at one of those forms keeps its name. `double(n)` over a `rec` unfolds to the folded call's canonical neutral — a `RecProj`-headed application — and a `match`-defined function applied to a variable unfolds to a stuck `Match`; the printer has no name for either, so it spells the whole body, a recursive group twice over, once per reference, and the reader's `n` is renamed against the binders the body brought in. The body says nothing the name does not, so the head stays as written and only the arguments normalize. A name that unfolds to something that *computed* — a literal, a constructor, a type former — still unfolds, which is what the witness-collapse and `2 + 3` fixtures in `curios/src/tests/runtime/diagnostic_tests.rs` and `curios-pipeline/src/tests/diagnostic_tests.rs` hold.
+/// A name whose unfolding stalls at one of those forms keeps its name. `double(n)` over a `rec` unfolds to the folded call's canonical neutral — a `RecProj`-headed application — and a `match`-defined function applied to a variable unfolds to a stuck `Match`; the printer has no name for either, so it spells the whole body, a recursive group twice over, once per reference, and the reader's `n` is renamed against the binders the body brought in. The body says nothing the name does not, so the head stays as written and only the arguments normalize. A stuck call an arm built, headed by its group's projection where its author wrote the name, keeps its head for the same reason: normalized alone, the projection is forced to its member's body and the call is spelled as that body applied. A name that unfolds to something that *computed* — a literal, a constructor, a type former — still unfolds, which is what the witness-collapse and `2 + 3` fixtures in `curios/src/tests/runtime/diagnostic_tests.rs` and `curios-pipeline/src/tests/diagnostic_tests.rs` hold.
 ///
 /// **A term is normalized once per display.** A report shows types elaboration built, and a type is a graph — sixty lines of `let`, each pairing the one before it with itself, state a type of sixty-one nodes — so a walk that normalized every occurrence would rebuild the type's tree, which no budget stops: a remembered reduct is free and a level is charged only where it is a new peak. Every position recurses through `normalize_known`, which keeps what this display has normalized. An answer stays true for the whole display, since the walk changes nothing a normal form reads — no definition, refinement or solution — and every term it is asked about is closed: a binder is opened to a fresh variable before its scope is entered, so two terms that are equal here denote the same thing.
 pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
@@ -1460,7 +1460,11 @@ fn normalize_level(
 
     let inner = match Term::unwrap_or_clone(reduced) {
         Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
-            head: normalize_known(context, known, head)?,
+            // A folded recursive call reduction left standing keeps its head, as a name whose unfolding stalls keeps its name: normalized alone, the head is forced to its member's body, a lambda applied where it stands, and the refold after this walk names a group and no body.
+            head: match is_folded(&head) {
+                true => normalize_arguments(context, known, head)?,
+                false => normalize_known(context, known, head)?,
+            },
             arguments: normalize_argument_vec(context, known, arguments)?,
         }),
         Subterm::Proj(Proj { head, field }) => Subterm::Proj(Proj {

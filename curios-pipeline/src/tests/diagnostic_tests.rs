@@ -283,6 +283,34 @@ fn a_mismatch_marks_an_implicit_struct_parameter() {
 }
 
 #[test]
+fn a_stuck_call_under_a_constructor_is_spelled_by_its_name() {
+    // The first induction over a declared type: reducing `add(N/s(k), N/z())` fires the successor arm, and the call the arm built stands in the constructor's payload, headed by the group's projection. It is the call `add(k, N/z())` wherever it stands, where a head normalized alone spelled it as the member's body applied on one side and as that body's stuck `match` on the other, beside the name the author wrote.
+    let source = r#"
+        use /std/{Eq, Io};
+
+        induct N: Type
+        | z()
+        | s(N)
+        end
+
+        let add(a: N, b: N) -> N =
+            match a | z() => b | s(k) => N/s(add(k, b)) end;
+
+        let step(k: N) -> Eq()(add(N/s(k), N/z()), N/s(add(k, N/z()))) = Eq/refl();
+
+        let wrong(k: N) -> Eq()(add(N/s(k), N/z()), N/s(k)) = step(k);
+
+        Io/pure(())
+    "#;
+    let error = compile(source).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("inferred: Eq(@N)(N/s(add(k, N/z())), N/s(add(k, N/z())))")
+            && error.contains("expected: Eq(@N)(N/s(add(k, N/z())), N/s(k))"),
+        "unexpected report: {error}"
+    );
+}
+
+#[test]
 fn a_mismatch_over_an_applied_head_is_located() {
     // A value body's spine forms are rebuilt by the `!`-hoisting walk rather than routed through the span-stamping lowering entry, so an applied head can reach elaboration unspanned and report with no snippet at all, where the same mismatch over a bare variable reports one; this holds it to the snippet.
     let source = r#"
