@@ -40,7 +40,7 @@ let single: Vec(Nat, 1) = empty;
 ```
 
 ```text
-while elaborating /vector/single:
+while elaborating single:
 type mismatch
   inferred: Vec(Nat, 0)
   expected: Vec(Nat, 1)
