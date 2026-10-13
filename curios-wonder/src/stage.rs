@@ -1,12 +1,14 @@
-//! The `stage` query: the program's representation at one rung of the pipeline, reprinted.
+//! The `stage` query: the program's representation at one rung of the pipeline, reprinted, and a library's at the rungs a unit has.
 //!
 //! The rungs are [`Stage::NAMES`], observed exactly where the driver emits them; the last, `wasm-optm`, is emitted by the native product where Binaryen runs rather than by the driver, so the engine cannot render it and hands the module back for the transport to finish — the one rung `curios` can reach and `curios-js` cannot.
 
 use {
-    crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid},
+    crate::{Diagnosis, Overlaid, Severity, Subject, of_error, open, overlaid},
     curios_pipeline::{Cache, Fold, Stage},
-    curios_text::Overlay,
+    curios_text::{Module, Overlay, RootSource},
+    curios_unit::Unit,
     curios_verdicts::Verdicts,
+    std::path::Path,
 };
 
 /// One rung, reprinted and handed on where the driver emitted it.
@@ -91,4 +93,78 @@ pub fn stage(
         (false, Ok((module, _foreigns))) => Ok(Reached::Wasm(Box::new(module))),
         (false, Err(error)) => Err(Refusal::Diagnostics(of_error(error))),
     }
+}
+
+/// The rung `name` of a library — the last of `units`, compiled against the ones before it and the prelude — asked through `file`, handed to `shown`. A unit has the rungs [`Stage::of_a_unit`] names and no other: every rung from `ersd` on is rooted at a program's entry, and is [`Refusal::Unit`] here.
+///
+/// **Each rung reprints what the unit holds of it, and none prints an entry.** `text` is the parse of the file asked through, since a unit is several files and the rung's printer reprints one. `core` is the unit's lowered module, which a unit restored from a store holds without its items, so the unit is lowered again in this process with no store. `core-elab` is its elaborated module as it stands, compiled over `cache` as a build compiles it.
+pub fn unit_stage(
+    budget: u64,
+    units: Vec<RootSource>,
+    file: &Path,
+    overlay: &Overlay,
+    cache: Option<&Verdicts>,
+    name: &str,
+    mut shown: impl FnMut(&str),
+) -> Result<Rendering, Refusal> {
+    let Some(name) = Stage::NAMES.into_iter().find(|known| *known == name) else {
+        return Err(Refusal::NoSuchStage {
+            asked: name.to_string(),
+        });
+    };
+    if !Stage::of_a_unit(name) {
+        return Err(Refusal::Unit);
+    }
+
+    let units = overlaid(units, overlay);
+    let reached = cache.map(|cache| Overlaid::over(cache, overlay));
+    let rendered = match name {
+        "text" => {
+            let parsed = match overlay.get(file) {
+                Some(text) => Module::overlaid(file, text).map_err(|error| error.report()),
+                None => Module::from_path(file).map_err(|error| error.report()),
+            };
+
+            parsed.map(|module| module.to_string()).map_err(|report| {
+                vec![Diagnosis {
+                    severity: Severity::Error,
+                    report,
+                }]
+            })
+        }
+        "core" => last_unit(budget, &units, None, |unit| unit.text().core().to_string()),
+        _ => last_unit(
+            budget,
+            &units,
+            reached.as_ref().map(|cache| cache as &dyn Cache),
+            |unit| unit.core().to_string(),
+        ),
+    };
+
+    match rendered {
+        Ok(rendering) => {
+            shown(&rendering);
+
+            Ok(Rendering {
+                name,
+                diagnostics: Vec::new(),
+            })
+        }
+        Err(diagnostics) => Err(Refusal::Diagnostics(diagnostics)),
+    }
+}
+
+/// What `read` makes of the last of `units` once the fold has compiled it over `cache`, or what stopped the fold.
+fn last_unit(
+    budget: u64,
+    units: &[RootSource],
+    cache: Option<&dyn Cache>,
+    read: impl FnOnce(&Unit) -> String,
+) -> Result<String, Vec<Diagnosis>> {
+    Fold::new(budget, units, cache)
+        .units(
+            |_| {},
+            |_, produced| Ok(produced.last().map(read).unwrap_or_default()),
+        )
+        .map_err(of_error)
 }

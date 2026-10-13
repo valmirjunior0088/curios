@@ -38,8 +38,8 @@ use {
     curios_text::Formatted,
     curios_utilities::Source,
     curios_wonder::{
-        Linted, STDIN_LABEL, lint, serve, std_documentation, wonder_cost, wonder_diagnostics,
-        wonder_stage, wonder_tests,
+        Linted, STDIN_LABEL, Staged, lint, serve, std_documentation, wonder_cost,
+        wonder_diagnostics, wonder_stage, wonder_tests,
     },
     std::{
         collections::BTreeSet,
@@ -551,7 +551,15 @@ fn dispatch() -> Result<(), Failure> {
             } => wonder_stage(
                 elaboration.budget,
                 &name,
-                contract.admit_program(target, manifest, None, &here()?)?,
+                // A rung a unit has is a library's as well as a program's, and the contract the rung selected says which.
+                match contract.accepts {
+                    Accepts::ProgramOrLibrary => {
+                        contract.admit_staged(target, manifest, &here()?)?
+                    }
+                    _ => {
+                        Staged::Program(contract.admit_program(target, manifest, None, &here()?)?)
+                    }
+                },
                 |module| {
                     optimize(&module, true, |stage| println!("{stage}"));
                 },

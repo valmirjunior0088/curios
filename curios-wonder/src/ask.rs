@@ -7,7 +7,7 @@
 use {
     crate::{
         Diagnosed, Diagnosis, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject, Uncosted,
-        cost, declared_tests, diagnosed, stage,
+        cost, declared_tests, diagnosed, stage, unit_stage,
     },
     curios_cont::{Fate, Outcome},
     curios_package::{Entry, Library, Program, Selection},
@@ -214,17 +214,30 @@ pub(crate) fn rendered(
     (reports, unfiled)
 }
 
-/// `wonder stage STAGE [TARGET]`: `program`'s rung, reprinted, to stdout.
+/// What `wonder stage` reprints a rung of: a program, at any rung, or a library through one of its files, at the rungs a unit has.
+pub enum Staged {
+    Program(Program),
+    Library(Library),
+}
+
+/// `wonder stage STAGE [TARGET]`: the rung of what `staged` is, reprinted, to stdout.
 ///
 /// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering. `unfiled` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_stage(
     budget: u64,
     name: &str,
-    program: Program,
+    staged: Staged,
     finish: impl FnOnce(Box<curios_wasm::Module>),
     unfiled: impl FnOnce(String),
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
+
+    let program = match staged {
+        Staged::Program(program) => program,
+        Staged::Library(library) => {
+            return library_stage(budget, name, library, &overlay, unfiled);
+        }
+    };
 
     let refusal = written_as_a_module(label_of(program.entry()));
     let asked = Asked::about_program(program).map_err(CompileError::failure)?;
@@ -247,10 +260,7 @@ pub fn wonder_stage(
             finish(module);
             Ok(())
         }
-        Err(Refusal::NoSuchStage { asked }) => Err(CompileError::failure(format!(
-            "no stage named {asked:?}; the stages are {}",
-            curios_pipeline::Stage::NAMES.join(", ")
-        ))),
+        Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
         Err(Refusal::Unit) => Err(CompileError::failure(refusal)),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     };
@@ -259,6 +269,57 @@ pub fn wonder_stage(
     }
 
     answered
+}
+
+/// [`wonder_stage`] for a library: its unit's rung, reprinted, to stdout. The file the library was selected through is the one whose text the `text` rung reprints, and its header where it was selected through none.
+fn library_stage(
+    budget: u64,
+    name: &str,
+    library: Library,
+    overlay: &Overlay,
+    unfiled: impl FnOnce(String),
+) -> Result<(), CompileError> {
+    let file = match &library.through {
+        Some(file) => file.clone(),
+        // The header leads the files a library is written in.
+        None => library
+            .declared_files()
+            .map_err(CompileError::failure)?
+            .into_iter()
+            .next()
+            .unwrap_or_default(),
+    };
+    let store = Verdicts::at(library.root);
+
+    let reached = unit_stage(
+        budget,
+        library.units,
+        &file,
+        overlay,
+        Some(&store),
+        name,
+        |text| println!("{text}"),
+    );
+    let answered = match reached {
+        Ok(_) => Ok(()),
+        Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
+        // Whoever admits a library admits it at a rung a unit has, and refuses it at any other in its own words.
+        Err(Refusal::Unit) => unreachable!("a library was admitted at a program's rung"),
+        Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+    };
+    if let Some(unstored) = refused(Some(&store)) {
+        unfiled(unstored);
+    }
+
+    answered
+}
+
+/// What asking for a rung the pipeline has none of is refused with.
+fn no_such_stage(asked: &str) -> CompileError {
+    CompileError::failure(format!(
+        "no stage named {asked:?}; the stages are {}",
+        curios_pipeline::Stage::NAMES.join(", ")
+    ))
 }
 
 /// What the optimizer did to each of `program`'s declarations, one tab-separated row per line.

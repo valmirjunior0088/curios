@@ -36,6 +36,11 @@ impl<'a> Stage<'a> {
         "wasm-optm",
     ];
 
+    /// Whether `name` is a rung a unit has: its text, its lowered module and its elaborated one, the three names [`Stage::NAMES`] opens with. From `ersd` on a program's entry roots what is rendered, and a unit has none.
+    pub fn of_a_unit(name: &str) -> bool {
+        Self::NAMES[..3].contains(&name)
+    }
+
     /// This stage's name, matching its entry in [`Stage::NAMES`].
     pub fn name(&self) -> &'static str {
         match self {

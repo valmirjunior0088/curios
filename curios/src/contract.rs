@@ -10,9 +10,10 @@ mod tests;
 use {
     crate::{Elaboration, ManifestFlag, Mode, Pinned, Query},
     curios_package::{Entire, Entry, Library, Program, Selection, Spelling},
+    curios_pipeline::Stage,
     curios_text::Overlay,
     curios_verdicts::Verdicts,
-    curios_wonder::file_target,
+    curios_wonder::{Staged, file_target},
     std::{
         env,
         path::{Path, PathBuf},
@@ -24,6 +25,8 @@ use {
 pub(crate) enum Accepts {
     /// One program: one selected, or the governing package entire narrowed to its sole or `default` executable.
     Program,
+    /// One program, as [`Accepts::Program`] takes one, or a library selected through one of its files.
+    ProgramOrLibrary,
     /// A library: the governing package entire narrowed to its own.
     Library,
     /// Whatever the argument selects.
@@ -215,6 +218,15 @@ pub(crate) const STAGE: Contract = Contract {
     product: Product::Nothing,
 };
 
+/// `wonder stage` at a rung a unit has ([`Stage::of_a_unit`]): a library's file is reprinted there as a program is, where every rung past them is a program's alone.
+pub(crate) const STAGE_OF_A_UNIT: Contract = Contract {
+    command: "wonder stage",
+    accepts: Accepts::ProgramOrLibrary,
+    own_file_only: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
 pub(crate) const SERVER: Contract = Contract {
     command: "wonder server",
     accepts: Accepts::Nothing,
@@ -242,6 +254,7 @@ impl Mode {
                 Query::Diagnostics { .. } => &DIAGNOSTICS,
                 Query::Tests { .. } => &TESTS,
                 Query::Cost { .. } => &COST,
+                Query::Stage { name, .. } if Stage::of_a_unit(name) => &STAGE_OF_A_UNIT,
                 Query::Stage { .. } => &STAGE,
                 Query::Server { .. } => &SERVER,
             },
@@ -353,7 +366,9 @@ impl Contract {
             }
         };
         let none = match self.accepts {
-            Accepts::Program => "the governing package's sole or `default` executable",
+            Accepts::Program | Accepts::ProgramOrLibrary => {
+                "the governing package's sole or `default` executable"
+            }
             Accepts::Library => "the governing package's library",
             Accepts::Any | Accepts::Entire => "the governing package entire",
             Accepts::Files => "every file the governing package declares",
@@ -416,6 +431,22 @@ impl Contract {
         }
 
         Ok(program)
+    }
+
+    /// What `target` selects for a rung a unit has: a program as [`Contract::admit_program`] admits one, or the library a file of one selects.
+    pub(crate) fn admit_staged(
+        &self,
+        target: Option<&str>,
+        manifest: Option<&Path>,
+        directory: &Path,
+    ) -> Result<Staged, String> {
+        debug_assert_eq!(self.accepts, Accepts::ProgramOrLibrary, "{}", self.command);
+
+        Ok(match Self::selection(target, manifest, directory)? {
+            Selection::Program(program) => Staged::Program(program),
+            Selection::Entire(entire) => Staged::Program(entire.default_program()?),
+            Selection::Library(library) => Staged::Library(library),
+        })
     }
 
     /// The library `target` selects: a library, or the package entire's own.

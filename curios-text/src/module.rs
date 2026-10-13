@@ -480,6 +480,11 @@ impl Module {
         Self::read(path.as_ref()).map(|(module, _)| module)
     }
 
+    /// [`Module::from_path`] with `text` standing in for what `path` holds — an editor's unsaved buffer.
+    pub fn overlaid(path: &Path, text: &str) -> Result<Self, ParserError> {
+        Self::parse(&Source::held(path, text))
+    }
+
     /// [`Module::from_path`], additionally handing back the [`Source`] it parsed — which costs a refcount, since the module's spans already hold it.
     pub(crate) fn read(path: &Path) -> Result<(Self, Arc<Source>), LoadError> {
         let source = Source::read(path).map_err(|error| LoadError::Read {

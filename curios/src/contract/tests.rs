@@ -51,6 +51,7 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["wonder", "tests", TARGET],
         &["wonder", "cost", TARGET],
         &["wonder", "stage", "core", TARGET],
+        &["wonder", "stage", "ersd", TARGET],
         &["wonder", "server"],
     ];
 
@@ -238,6 +239,14 @@ impl Standing<'_> {
             Accepts::Program => contract
                 .admit_program(target, None, mode.output(), directory)
                 .map(|program| self.program(&program)),
+            Accepts::ProgramOrLibrary => {
+                contract
+                    .admit_staged(target, None, directory)
+                    .map(|staged| match staged {
+                        Staged::Program(program) => self.program(&program),
+                        Staged::Library(library) => self.library(&library),
+                    })
+            }
             Accepts::Library => contract
                 .admit_library(target, None, directory)
                 .map(|library| self.library(&library)),
@@ -562,7 +571,27 @@ wonder cost TARGET — Program, store Write, leaves Nothing, options --budget --
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder stage core TARGET — Program, store Write, leaves Nothing, options --budget --manifest
+wonder stage core TARGET — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
+  work/app: (none) → program serve
+  work/app: serve → program serve
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: - → loose -
+  work/app: serve.crs → program serve
+  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: bench.crs → program bench
+  work/app: lib.crs → library app through lib.crs
+  work/app: util.crs → library app through util.crs
+  work/app: stray.crs → loose stray.crs unlinked
+  work/app: nested/lib.crs → library nested through nested/lib.crs
+  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
+  work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
+  work/app/serve: (none) → program serve
+  work/app/serve: bench → program bench
+  work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
+  .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
+wonder stage ersd TARGET — Program, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"

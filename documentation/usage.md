@@ -86,7 +86,7 @@ Ten commands, and `wonder`'s five queries — eleven where the compiler was buil
 | [`wonder diagnostics`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
 | [`wonder tests`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
 | [`wonder cost`](#wonder) | a program | — | nothing | reads, files the units it compiled from disk |
-| [`wonder stage`](#wonder) | a program | `<STAGE>`, before the target | nothing | reads, files the units it compiled from disk |
+| [`wonder stage`](#wonder) | a program, or at `text`, `core` and `core-elab` a library's file | `<STAGE>`, before the target | nothing | reads, files the units it compiled from disk |
 | [`wonder server`](#wonder) | — | — | nothing | reads, files the units it compiled from disk |
 | [`profile`](#profile) | — | `<PATH>` | nothing | none |
 
@@ -268,6 +268,8 @@ There is one canonical style and no options to configure it. Formatting is verif
 | `server` | the same questions over the language server protocol, on standard input and output — what an editor integration launches. It takes no target |
 
 No target at all is the governing package entire for `diagnostics` and `tests`, and the sole or `default` executable for `stage` and `cost`, which both need a program and so refuse a file written as a module.
+
+`stage` reprints a library too, selected through one of its files, at the three rungs a unit has: `text` is the parse of the file asked through, `core` the library's lowered declarations, lowered again in the asking process with no store, and `core-elab` its elaborated declarations, compiled over the store as a build compiles them. From `ersd` on a program's entry roots what is printed, and a library is refused as it is by any command that takes a program.
 
 A file a package holds that no `mod` reaches is in no unit, so it is checked on its own — as a program when a final term follows its items, and as a module of its own otherwise — behind a note saying so and naming what would declare it, the `mod` line for a module and the `[[executables]]` row for a program, printed as its message alone after `note: `; a note is no finding, and no exit code counts it. A file no manifest above it claims is loose, with nothing to note. That holds for the standard library's own modules: `/std` is a package like any other, and [the package named `std`](#what-a-package-is-made-of) stands where the archived unit stood rather than beside it, so a question about `curios-std/src/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library.
 

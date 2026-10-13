@@ -3,7 +3,8 @@
 use {
     crate::{Origin, Subject},
     curios_pipeline::DEFAULT_STEP_BUDGET,
-    curios_text::Overlay,
+    curios_text::{Overlay, RootSource},
+    std::path::Path,
 };
 
 /// One rung of `program`, asked for the way the one-shot transport asks: what the asker was handed, beside what the query answered.
@@ -65,4 +66,35 @@ fn a_rung_the_program_never_reached_is_refused() {
 fn a_rung_of_a_program_that_compiles_carries_no_diagnostics() {
     let (_, rendering) = rung("core", "/std/print(\"hi\\n\")").expect("core is reached");
     assert!(rendering.diagnostics.is_empty());
+}
+
+/// A library has the rungs a unit has, each reprinting what the unit holds of it, and no rung past them: from `ersd` on a program's entry roots what is rendered.
+#[test]
+fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
+    const LIBRARY: &str = "use /std/{Nat};\npub let answer: Nat = 42;\n";
+    let file = Path::new("answers.crs");
+    let overlay = Overlay::of([(file.to_path_buf(), LIBRARY.to_string())]);
+    let rung = |name: &str| {
+        let library = RootSource::labelled_module("answers", "answers.crs", LIBRARY)
+            .expect("the text is written as a module");
+        let mut handed = String::new();
+
+        crate::unit_stage(
+            DEFAULT_STEP_BUDGET,
+            vec![library],
+            file,
+            &overlay,
+            None,
+            name,
+            |rung| handed.push_str(rung),
+        )
+        .map(|rendering| (handed, rendering))
+    };
+
+    for name in ["text", "core", "core-elab"] {
+        let (handed, rendering) = rung(name).unwrap_or_else(|_| panic!("{name} is a unit's rung"));
+        assert_eq!(rendering.name, name);
+        assert!(handed.contains("answer"), "{name} reprinted {handed:?}");
+    }
+    assert!(matches!(rung("ersd"), Err(crate::Refusal::Unit)));
 }
