@@ -80,7 +80,8 @@ fn grammar(rules: usize, inner: Inner) -> String {
 }
 
 /// The entry every grammar shares: a runtime-tainted input, so nothing folds the parse away.
-const ENTRY: &str = r#"let input = /std/read()!;
+const ENTRY: &str = r#"let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 match input: (_) => Io({})
 | some(bytes) =>
     match Parse/run(top, bytes): (_) => Io({})

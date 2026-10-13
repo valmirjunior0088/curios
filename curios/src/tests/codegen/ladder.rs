@@ -427,8 +427,9 @@ let work(mode: Str, n: Nat) -> Nat =
     | _ => 0
     end;
 
-let mode = /std/read()!;
-let size = /std/read()!;
+let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+let mode = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let size = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 let answer: Str =
     match mode
     | none() => "0"

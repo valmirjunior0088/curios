@@ -52,7 +52,8 @@ let row(pair: Str) -> Str =
         Int/to_str(Option/unwrap_or(Flt/try_to_int(Int/to_flt(x)), +0)),
     ]);
 
-let input = /std/read()!;
+let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

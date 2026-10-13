@@ -56,7 +56,8 @@ let total(c: Chain, acc: Nat) -> Nat =
     | cons(v, tail) => total(tail, (acc + v) % 1000003)
     end;
 
-let input = /std/read()!;
+let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
@@ -241,7 +242,8 @@ let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
         walk(k, i + 1, y, Map/insert(m, Bytes/of_nat(y), i % 1000003))
     end;
 
-let input = /std/read()!;
+let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

@@ -433,7 +433,7 @@ Diagnostics name it `<stdin>` where they would name a file, keeping line and col
    --> <stdin>:1:19
 ```
 
-The program's own standard input is spent on reading the source, so `/std/read()` reports end-of-input. A program that reads its input wants a file, or a path the shell mints for it — `curios run <(your_generator)` is an ordinary file argument, and leaves standard input alone.
+The program's own standard input is spent on reading the source, so a read of it reports the end of the input. A program that reads its input wants a file, or a path the shell mints for it — `curios run <(your_generator)` is an ordinary file argument, and leaves standard input alone.
 
 ## Where things go
 

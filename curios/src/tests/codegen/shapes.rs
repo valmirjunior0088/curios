@@ -232,7 +232,8 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
             match e | left() => (t + 1) % 1000003 | right() => (t + 2) % 1000003 end))
     end;
 
-let input = /std/read()!;
+let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
@@ -269,7 +270,8 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
             match e | left(v) => (t + v) % 1000003 | right(v) => (t + v + 1) % 1000003 end))
     end;
 
-let input = /std/read()!;
+let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

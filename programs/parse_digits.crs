@@ -18,7 +18,9 @@ let loop(k: Nat, digits: Str, acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     loop(n, Nat/to_str(n), 0);
 
-let input = /std/read()!;
+let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+let input =
+    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

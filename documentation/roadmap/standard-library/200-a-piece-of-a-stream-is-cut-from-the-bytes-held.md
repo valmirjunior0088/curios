@@ -56,7 +56,7 @@ What the tree's rules already fix:
 ## Stages
 
 1. **The reader, its loop and its reads.** `curios-std/src/Io/Reader.crs`, declared in `Io.crs` as `Io/Error` is: `Reader(S)`, `new`, `within`, `Step`, `Stop`, `take`, `held`, `line`, `until`, `exactly` and `rest`, and `Io/Error` gains `too_long()`. Nothing is removed. Check: in `curios-std/src/tests/`, each named read's piece answers alike at every cut of its input into two segments, wants more at every stop short of whole and refuses past a bound, as `tests/http/cuts.crs` holds a message; under the mock host, `curios/src/tests/host/stream_tests.rs`, the four reads answer alike over every cut of one input into `stdin_chunks`, a line under a deadline that passes loses nothing to the read after it, a refusal past the bound leaves `held` as it was, two fibers on one reader each get whole lines, and a program's own stream is read at `Io`.
-2. **Standard input is read through a reader.** `/std/read()` is removed, and `programs/` and the tests that read through it open with `Io/Reader/new(Io/stdin)!` and `Try/run(Io/Reader/line(input))!`; `documentation/usage.md`'s sentence about a program's own standard input is reworded, and `programs/README.md` and `xbench/README.md` name what may have moved. Check: every program of `programs/` compiles and answers as it did over one input, and `curios`'s tests pass.
+2. **Standard input is read through a reader.** `/std/read()` is removed, and `programs/` and the tests that read through it open with `Io/Reader/new(Io/stdin)!` and `Try/run(Io/Reader/line(input))!`; `documentation/usage.md`'s sentence about a program's own standard input is reworded. What a program of `programs/` weighs and takes in the bench's next reading may have moved, and no document holds a figure of either. Check: every program of `programs/` compiles and answers as it did over one input, and `curios`'s tests pass.
 3. **No read takes a byte at a time.** The three reads are removed with their callers, the tests that held them rewritten over the reader. Check: no read of one byte is left in `curios-std/src/`.
 4. **An HTTP message is read through a reader.** `http/stream.crs`, `http/read.crs`'s `Step`, `http/Server.crs` and `http/Client.crs`. Check: `tests/http/` pass with the pieces changed in their type's name alone, and the server's and the client's tests in `curios` pass as they did.
 5. **A terminal's input is read through a reader.** `Tui/Session.crs` and `Tui.crs`. Check: `curios/src/tests/tui.rs`, its session handing on a frame and a size and no input.
@@ -64,7 +64,7 @@ What the tree's rules already fix:
 
 ## Verification
 
-`cargo xtask workspace format` and `cargo xtask workspace lint` after each stage, with `curios-std`'s tests and the stage's own by name; the second stage moves programs many tests compile, so it takes `curios`'s tests whole. At the end, the whole workspace's tests once. A figure in `programs/README.md`, `xbench/README.md` or a measurement test's comment is named as one the change may have moved, and is not retaken.
+`cargo xtask workspace format` and `cargo xtask workspace lint` after each stage, with `curios-std`'s tests and the stage's own by name; the second stage moves programs many tests compile, so it takes `curios`'s tests whole. At the end, the whole workspace's tests once. A figure a measurement test's comment holds is named as one the change may have moved, and is not retaken.
 
 ## Rejected
 

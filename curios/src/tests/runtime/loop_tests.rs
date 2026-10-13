@@ -86,7 +86,8 @@ fn a_collapsed_wrapper_survives_storage_and_retrieval() {
         induct Only : Type
         | only()
         end
-        let input = /std/read()!;
+        let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+        let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
         match input : (_) => Io({})
         | some(bytes) =>
             match Str/of_bytes(bytes) : (_) => Io({})
@@ -144,7 +145,8 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
             | leaf(n) => n % 1000003
             | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
             end;
-        let input = /std/read()!;
+        let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+        let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
         match input : (_) => Io({})
         | some(bytes) =>
             match Str/of_bytes(bytes) : (_) => Io({})
@@ -253,7 +255,8 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
         r#"
         use /std/{Str, Nat, Char, Option, Result, Io};
         use /std/Str/{At};
-        let input = /std/read()!;
+        let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+        let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
         match input: (_) => Io({})
         | some(bytes) =>
             match Str/of_bytes(bytes): (_) => Io({})

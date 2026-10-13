@@ -156,7 +156,7 @@ pub(crate) fn subject_of(program: &Program) -> Subject {
 
 /// The entry program, what its own modules resolve against, and the text it was parsed from: a file when there is one, and otherwise standard input, drained to end.
 ///
-/// Draining is why this is worth naming rather than inlining. The program's own standard input is gone once the compiler has read the source out of it, so `/std/read()` reports end-of-input — unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
+/// Draining is why this is worth naming rather than inlining. The program's own standard input is gone once the compiler has read the source out of it, so a read of it reports the end of the input — unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
 pub(crate) fn open(
     entry: Option<&Path>,
 ) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
