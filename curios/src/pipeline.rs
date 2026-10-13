@@ -13,8 +13,8 @@ use {
     curios_utilities::Source,
     curios_verdicts::Verdicts,
     curios_wasm::Module,
-    curios_wonder::STDIN_LABEL,
-    std::{fmt::Display, fs, io, path::Path, sync::Arc},
+    curios_wonder::{STDIN_LABEL, written_as_a_module},
+    std::{fs, io, path::Path, sync::Arc},
 };
 
 /// Say, ahead of everything a command reports of `program`, that its file is one its package's directory holds and no unit declares, where it is one: the command takes it on its own, which `taken` words, and nothing after would say what it was not compiled against, so a name of the package refused in it reads as a typo. What would declare it follows the form it is written in ([`Unlinked::note`](curios_package::Unlinked::note)), read off the disk: a file that cannot be read is a program's to report.
@@ -166,7 +166,9 @@ pub(crate) fn open(
 
     Entrypoint::opened(path).map_err(|error| match fs::read_to_string(path) {
         // A text written as a module fails the program grammar at its end, where it was never meant to hold a term: say what it is rather than what the grammar expected there.
-        Ok(text) if Form::of(path, &text) == Form::Module => written_as_a_module(path.display()),
+        Ok(text) if Form::of(path, &text) == Form::Module => {
+            CompileError::failure(written_as_a_module(path.display()))
+        }
         _ => CompileError::Failure(vec![error.report()]),
     })
 }
@@ -181,17 +183,10 @@ pub(crate) fn drained() -> Result<String, CompileError> {
 pub(crate) fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
     Entrypoint::supplied(STDIN_LABEL, text).map_err(|error| {
         match Form::of(Path::new(STDIN_LABEL), text) {
-            Form::Module => written_as_a_module(STDIN_LABEL),
+            Form::Module => CompileError::failure(written_as_a_module(STDIN_LABEL)),
             Form::Program => CompileError::Failure(vec![error.report()]),
         }
     })
-}
-
-/// What an entry written as a module, named `label`, is refused with.
-fn written_as_a_module(label: impl Display) -> CompileError {
-    CompileError::failure(format!(
-        "{label} is written as a module, with no final term to compile a program from"
-    ))
 }
 
 /// Compile `entrypoint` against `units` in the order given, narrating each step under a header that names `manifest` when it is not where the invocation stands.

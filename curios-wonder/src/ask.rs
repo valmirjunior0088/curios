@@ -14,7 +14,7 @@ use {
     curios_pipeline::CompileError,
     curios_text::{LoadError, Overlay},
     curios_verdicts::{Session, Verdicts},
-    std::{collections::BTreeSet, fs, io, path::PathBuf},
+    std::{collections::BTreeSet, fmt::Display, fs, io, path::PathBuf},
 };
 
 /// One thing a question can be about, resolved: the subject, and the store it reads and files into.
@@ -226,7 +226,7 @@ pub fn wonder_stage(
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
-    let refusal = written_as_a_module(program.entry());
+    let refusal = written_as_a_module(label_of(program.entry()));
     let asked = Asked::about_program(program).map_err(CompileError::failure)?;
     if let Some(said) = asked.subject.said_unlinked(&overlay, "is compiled") {
         eprintln!("note: {said}");
@@ -273,7 +273,7 @@ pub fn wonder_cost(
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
-    let refusal = written_as_a_module(program.entry());
+    let refusal = written_as_a_module(label_of(program.entry()));
     let asked = Asked::about_program(program).map_err(CompileError::failure)?;
     if let Some(said) = asked.subject.said_unlinked(&overlay, "is compiled") {
         eprintln!("note: {said}");
@@ -336,14 +336,17 @@ pub fn file_target(path: PathBuf) -> Result<PathBuf, String> {
     }
 }
 
-/// What a question that needs a program says about a file written as a module: it has no final term, so there is no program to compile.
-fn written_as_a_module(entry: &Entry) -> String {
-    let label = match entry {
+/// What a command that needs a program says of an entry written as a module, named `label`: it has no final term, so there is no program to compile.
+pub fn written_as_a_module(label: impl Display) -> String {
+    format!("{label} is written as a module, with no final term to compile a program from")
+}
+
+/// How a report names `entry`: its path, or standard input's label.
+fn label_of(entry: &Entry) -> String {
+    match entry {
         Entry::File(path) => path.display().to_string(),
         Entry::Stdin => STDIN_LABEL.to_string(),
-    };
-
-    format!("{label} is written as a module, with no final term to compile a program from")
+    }
 }
 
 /// Standard input, drained to end.
