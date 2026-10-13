@@ -286,6 +286,11 @@ impl NatSplit {
         })
     }
 
+    /// The match's own type: the result at the scrutinee as it stands.
+    pub(super) fn result_type(&self) -> Term {
+        self.result.of(&self.head, &[])
+    }
+
     /// The match over the two arms, the second closed over the binders it was entered under.
     pub(super) fn rebuild(
         self,
@@ -505,6 +510,11 @@ impl SequenceSplit {
         })
     }
 
+    /// The match's own type: the result at the scrutinee as it stands.
+    pub(super) fn result_type(&self) -> Term {
+        self.result.of(&self.head, &[])
+    }
+
     /// The match over the two arms, the second closed over the binders it was entered under.
     pub(super) fn rebuild(
         self,
@@ -692,6 +702,11 @@ impl SwitchSplit {
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
     ) -> Result<Term, Error> {
         body(context, self.result.of(&self.head, &[]))
+    }
+
+    /// The match's own type: the result at the scrutinee as it stands.
+    pub(super) fn result_type(&self) -> Term {
+        self.result.of(&self.head, &[])
     }
 
     /// The match over `cases`, which arrive strictly ascending as `Cases::Switch` states them, and the default.
@@ -901,6 +916,11 @@ impl BoolSplit {
             .map_err(|error| from_arm(context, &self.head, &literal, error))
     }
 
+    /// The match's own type: the result at the scrutinee as it stands.
+    pub(super) fn result_type(&self) -> Term {
+        self.result.of(&self.head, &[])
+    }
+
     /// The match over the two arms.
     pub(super) fn rebuild(self, false_case: Term, true_case: Term) -> (Term, Term) {
         let result_type = self.result.of(&self.head, &[]);
@@ -1071,6 +1091,11 @@ impl NominalSplit {
             proposition,
             pinned,
         })
+    }
+
+    /// The match's own type: the result at the scrutinee's actual indices and the scrutinee itself.
+    pub(super) fn result_type(&self) -> Term {
+        self.result_type.clone()
     }
 
     /// The large-elimination guard, asked before an arm is read: a strict proposition may not be eliminated into a relevant (data) result — observing which inhabitant it was would break proof irrelevance. Permitted only by *empty* elimination (no arm, every constructor ruled out) or by the elimination of a family with one constructor whose every payload its indices pin. `armless` says the match writes no arm and `defaulted` that it writes a catch-all.

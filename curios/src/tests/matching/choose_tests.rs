@@ -92,3 +92,16 @@ fn nested_bind_shares_the_fallthrough() {
     // some([5,..]) → 6; some([]) → 99 (inner cons fails); none() → 99 (outer some fails). 6 + 99 + 99 = 204.
     assert_eq!(run(source), b"204");
 }
+
+// A bind arm's rest is the row that cannot fail of its one-row match: it is read where the ladder stands and at the ladder's own type, however many dispatches of the pattern reach it.
+#[test]
+fn a_nested_bind_arms_rest_is_typed_at_the_ladders_type() {
+    let source = r#"
+        use /std/{Int, Option};
+        let g(m : Option(Option(Int))) -> Int =
+            choose | some(some(x)) = m => x | _ => 0 end;
+        /std/print(Int/to_str(g(Option/some(Option/some(-7))) + g(Option/some(Option/none())) + g(Option/none())))
+        "#;
+
+    assert_eq!(run(source), b"-7");
+}

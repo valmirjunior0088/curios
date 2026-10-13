@@ -196,7 +196,7 @@ pub(super) fn elaborate_rec(
 /// The type a block answers where it ends, from `type_`, its tail's. The block's frame leaves with what each label stands for, so the type names none of them: `values` pairs each label with what it stands for, in binding order. It is how the kernel types a `let`, which reads a term by value (`curios-cert`'s `Scope::by_value`).
 ///
 /// A label the type itself names is read as its value, and so is one in the solution of a metavariable the type holds, which is read as that solution first. One in the spine of an unsolved metavariable is the argument a later solution is read through, which a problem parked in the block may still give: the metavariable is restricted to the binders that remain ([`Context::block_restriction`]). Whatever still names a label, a hole something else fills among it, is read by value where it stands, its spine with it.
-pub(super) fn leaving(context: &mut Context, type_: Term, values: &[(Free, Term)]) -> Term {
+fn leaving(context: &mut Context, type_: Term, values: &[(Free, Term)]) -> Term {
     if !values.iter().any(|(label, _)| type_.mentions_free(label)) {
         return type_;
     }

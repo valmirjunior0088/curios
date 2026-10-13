@@ -4,14 +4,16 @@
 //!
 //! Each dispatch is an eliminator's own, taken a step at a time ([`NominalSplit`] and its kin): the column is resolved as a scrutinee, each case is entered as an arm of it is, with the rows of that case over the columns left as the arm's body, and the match is rebuilt from the arms. So what an arm assumes is stated once, for the tree and for a match written one level deep, and a row's body is elaborated where its last column is read, in the frames its cases opened.
 //!
+//! The row that cannot fail states no case, so it is read where the match stands and at the match's own type, once, after the rows before it: written in place where one leaf reaches it, and bound once as a function of no argument, called from each, where more do.
+//!
 //! Arms have no priority: a binder beside a concrete pattern in one column of one group is refused, and so are two rows alike in every column.
 
 use {
     super::{
         BoolSplit, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit, SwitchSplit,
-        check, elaborate, holds_goal, leaving, payload_fills,
+        check, elaborate, expect, holds_goal, payload_fills,
     },
-    crate::{Context, Error, reduce_with},
+    crate::{Context, Error},
     curios_core::{
         Atom, Bind, Free, InductArm, Many, Matrix, Pattern, Row, Scope, Subterm, Telescope, Term,
     },
@@ -31,7 +33,7 @@ pub(super) fn elaborate_matrix(
         matrix,
         term,
         labels: matrix.rows.iter().map(labels).collect(),
-        default: None,
+        fallthrough: None,
     };
 
     compiler.whole(context, mode)
@@ -65,7 +67,19 @@ struct Compiler<'m> {
     /// Each row's binders, as its body labels them.
     labels: Vec<Vec<Label>>,
     /// What a case no row covers falls through to, the same at every dispatch of one matrix: a headed match's final `_`, or the rest of a bind arm's ladder. `None` is full enumeration, where a nominal match leans on index inversion for a constructor no row names and a carrier requires both of its cases.
-    default: Option<Term>,
+    fallthrough: Option<Fallthrough>,
+}
+
+/// The row that cannot fail, while the rows before it are read.
+struct Fallthrough {
+    /// Its body, as lowering wrote it.
+    body: Term,
+    /// What stands at each leaf that reaches it until it is read.
+    stand_in: Free,
+    /// How many leaves reach it.
+    reached: usize,
+    /// The match's own type, which it is read at, once the outermost dispatch is resolved.
+    stands: Option<Term>,
 }
 
 impl<'m> Compiler<'m> {
@@ -74,64 +88,22 @@ impl<'m> Compiler<'m> {
         let matrix = self.matrix;
         let rows = matrix.rows.len();
 
-        if let Some(rest) = &matrix.fallthrough {
-            let refuted = matrix
-                .rows
-                .iter()
-                .map(|row| refutations(&row.pattern))
-                .sum::<usize>();
-
-            return self.defaulted(context, rows, rest.clone(), refuted > 1, mode);
-        }
-
-        match catch_all(&matrix.rows) {
-            true => {
-                // The final `_` binds nothing its body can name, so its one binder stands for anything.
-                let default = self.body(rows - 1).open(&[&matrix.head]);
-                let shared = !flat(&matrix.rows[..rows - 1]);
-
-                self.defaulted(context, rows - 1, default, shared, mode)
+        let (arms, body) = match &matrix.fallthrough {
+            Some(rest) => (rows, Some(rest.clone())),
+            // The final `_` binds nothing its body can name, so its one binder stands for anything.
+            None if catch_all(&matrix.rows) => {
+                (rows - 1, Some(self.body(rows - 1).open(&[&matrix.head])))
             }
-            false => self.arms(context, rows, mode),
-        }
-    }
+            None => (rows, None),
+        };
+        self.fallthrough = body.map(|body| Fallthrough {
+            body,
+            stand_in: context.fresh(None),
+            reached: 0,
+            stands: None,
+        });
 
-    /// The first `arms` rows with `default` where no row covers a case. Where `shared`, the default is bound once as a function of no argument and called from each dispatch it reaches, so it is written once and evaluated only where a value falls through to it.
-    fn defaulted(
-        &mut self,
-        context: &mut Context,
-        arms: usize,
-        default: Term,
-        shared: bool,
-        mode: Mode,
-    ) -> Result<(Term, Term), Error> {
-        if !shared {
-            self.default = Some(default);
-
-            return self.arms(context, arms, mode);
-        }
-
-        // Bound as a `let` with no type written binds it: at the type it is inferred at, and defined for the rows, whose type leaves the frame as a block's does.
-        let thunk = Term::func(Vec::<(Free, Term)>::new(), default);
-        let (thunk, thunk_type) = elaborate(context, &thunk, Mode::Infer)?;
-
-        context.with_frame(|context| {
-            let fallthrough = context.fresh(None);
-            context.define_assuming(&fallthrough, &thunk_type, &thunk, None);
-            self.default = Some(Term::apply(
-                Term::free_var(&fallthrough),
-                Vec::<Term>::new(),
-            ));
-
-            let (compiled, type_) = self.arms(context, arms, mode)?;
-            let type_ = reduce_with(context, &type_)?;
-            let type_ = leaving(context, type_, &[(fallthrough, thunk.clone())]);
-
-            Ok((
-                Term::let_block(vec![(fallthrough, thunk_type, thunk)], compiled),
-                type_,
-            ))
-        })
+        self.arms(context, arms, mode)
     }
 
     /// The first `arms` rows over the scrutinee. With no row the match is a vacuous elimination, which has no column to read a dispatch off and is the nominal one.
@@ -158,7 +130,7 @@ impl<'m> Compiler<'m> {
         self.columns(context, vec![head], lines, true, mode)
     }
 
-    /// One step: the leftmost column is retired where every row writes a binder, flattened where every row writes a tuple or a struct, and otherwise split by what the rows write. `top` says the column is the scrutinee itself, which is where a written motive attaches, and `mode` is how what the rows come to is read: as the match is at its scrutinee, and against the type of its case beneath a dispatch.
+    /// One step: the leftmost column is retired where every row writes a binder, flattened where every row writes a tuple or a struct, and otherwise split by what the rows write. `top` says no dispatch stands above the column: its dispatch is where a written motive attaches, the scrutinee being what a match that writes one dispatches on, and where what the matrix falls through to is read, and `mode` is how what the rows come to is read: as the match is at its scrutinee, and against the type of its case beneath a dispatch.
     fn columns(
         &mut self,
         context: &mut Context,
@@ -189,7 +161,7 @@ impl<'m> Compiler<'m> {
                 self.bind(context, line, place, scrutinee.clone());
             }
 
-            return recurse(|| self.columns(context, columns, lines, false, mode));
+            return recurse(|| self.columns(context, columns, lines, top, mode));
         }
 
         if lines
@@ -219,7 +191,7 @@ impl<'m> Compiler<'m> {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.fields(context, columns, lines, mode)
+                self.fields(context, columns, lines, top, mode)
             }
             Pattern::Struct { .. } => {
                 if !every(|first, other| {
@@ -234,7 +206,7 @@ impl<'m> Compiler<'m> {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.fields(context, columns, lines, mode)
+                self.fields(context, columns, lines, top, mode)
             }
             Pattern::Bool(_) => {
                 if !every(|_, other| matches!(other, Pattern::Bool(_))) {
@@ -295,14 +267,61 @@ impl<'m> Compiler<'m> {
         }
     }
 
-    /// What a case with no row falls through to, checked where it stands.
-    fn fallen(&self, context: &mut Context, expected: Term) -> Result<Term, Error> {
-        let default = self
-            .default
-            .as_ref()
+    /// What a case with no row falls through to: a stand-in for the row that cannot fail, which is read once the rows before it are ([`Compiler::settled`]). The match's own type, which that row is read at, is held to the type of the case here, where the cases above are in view.
+    fn fallen(&mut self, context: &mut Context, expected: Term) -> Result<Term, Error> {
+        let fallthrough = self
+            .fallthrough
+            .as_mut()
             .expect("a case with no row is refused where nothing stands in for it");
+        fallthrough.reached += 1;
+        let stand_in = Term::free_var(&fallthrough.stand_in);
+        let stands = fallthrough
+            .stands
+            .clone()
+            .expect("a case is entered beneath the outermost dispatch");
+        expect(context, self.term, &stands, &expected)?;
 
-        check(context, default, expected)
+        Ok(stand_in)
+    }
+
+    /// Note the type the match stands at, where its outermost dispatch is resolved.
+    fn stand(&mut self, top: bool, type_: impl FnOnce() -> Term) {
+        if let Some(fallthrough) = self.fallthrough.as_mut().filter(|_| top) {
+            fallthrough.stands = Some(type_());
+        }
+    }
+
+    /// The match a dispatch rebuilt, at the type `type_` it stands at. Beneath another dispatch, and where the matrix falls through to nothing, it is the match as rebuilt. The outermost one takes what the matrix falls through to: the row that cannot fail states no case, so it is typed where the match stands and against the match's own type, once, after the rows before it. It is written in place where one leaf reaches it; where more do, it is bound once as a function of no argument and called from each, so it is written once and evaluated only where a value falls through to it.
+    fn settled(
+        &mut self,
+        context: &mut Context,
+        top: bool,
+        rebuilt: Term,
+        type_: Term,
+    ) -> Result<(Term, Term), Error> {
+        let Some(fallthrough) = self.fallthrough.take_if(|_| top) else {
+            return Ok((rebuilt, type_));
+        };
+        // No leaf reaches it, so nothing holds it.
+        if fallthrough.reached == 0 {
+            return Ok((rebuilt, type_));
+        }
+
+        let body = check(context, &fallthrough.body, type_.clone())?;
+        if fallthrough.reached == 1 {
+            return Ok((rebuilt.substitute(&[(fallthrough.stand_in, body)]), type_));
+        }
+
+        let bound = context.fresh(None);
+        let call = Term::apply(Term::free_var(&bound), Vec::<Term>::new());
+        let thunk_type = Term::func_type(Vec::<(Free, Term)>::new(), type_.clone());
+        let thunk = Term::func(Vec::<(Free, Term)>::new(), body);
+        let rebuilt = Term::let_block(
+            vec![(bound, thunk_type, thunk)],
+            rebuilt.substitute(&[(fallthrough.stand_in, call)]),
+        );
+
+        Ok((rebuilt, type_))
     }
 
     /// Rows grouped by the constructor they name, each group the arm of its case, over the payload's columns and then the columns left. The arms are elaborated in the order the family declares its constructors, as a match written one level deep has them.
@@ -343,11 +362,12 @@ impl<'m> Compiler<'m> {
         let scrutinee = Scrutinee::read(context, &scrutinee)?;
         let motive = self.motive(context, top);
         let term = self.term;
-        let defaulted = self.default.is_some();
+        let defaulted = self.fallthrough.is_some();
 
         context.awaiting(|context| {
             let vacuous = groups.is_empty() && !defaulted;
             let split = NominalSplit::resolve(context, scrutinee, &motive, (term, &mode), vacuous)?;
+            self.stand(top, || split.result_type());
             let undecided = split.admit(context, groups.is_empty(), defaulted)?;
             split.declared(groups.values().map(|(tag, _)| tag))?;
 
@@ -372,7 +392,9 @@ impl<'m> Compiler<'m> {
                 false => None,
             };
 
-            split.rebuild(context, arms, default, undecided, term)
+            let (rebuilt, type_) = split.rebuild(context, arms, default, undecided, term)?;
+
+            self.settled(context, top, rebuilt, type_)
         })
     }
 
@@ -485,7 +507,7 @@ impl<'m> Compiler<'m> {
             }
         }
 
-        if self.default.is_none() {
+        if self.fallthrough.is_none() {
             let missing = match (falses.is_empty(), trues.is_empty()) {
                 (true, _) => Some("false"),
                 (_, true) => Some("true"),
@@ -505,6 +527,7 @@ impl<'m> Compiler<'m> {
 
         context.awaiting(|context| {
             let split = BoolSplit::resolve(context, scrutinee, &motive, term, &mode)?;
+            self.stand(top, || split.result_type());
             let false_case = split.arm(context, false, |context, expected| {
                 self.case(context, rest.clone(), falses, expected)
             })?;
@@ -512,7 +535,9 @@ impl<'m> Compiler<'m> {
                 self.case(context, rest, trues, expected)
             })?;
 
-            Ok(split.rebuild(false_case, true_case))
+            let (rebuilt, type_) = split.rebuild(false_case, true_case);
+
+            self.settled(context, top, rebuilt, type_)
         })
     }
 
@@ -547,7 +572,7 @@ impl<'m> Compiler<'m> {
 
         if successors.is_empty() {
             // No set of literals covers every natural, so a dispatch has a default.
-            if self.default.is_none() {
+            if self.fallthrough.is_none() {
                 return Err(Error::MatrixNatDispatchNeedsDefault);
             }
             let mut groups: BTreeMap<Natural, Vec<Line<'m>>> = BTreeMap::new();
@@ -563,6 +588,7 @@ impl<'m> Compiler<'m> {
 
             return context.awaiting(|context| {
                 let split = SwitchSplit::resolve(context, scrutinee, &motive, term, &mode)?;
+                self.stand(top, || split.result_type());
                 let mut cases = Vec::with_capacity(groups.len());
                 for (value, group) in groups {
                     let arm = split.arm(context, &value, |context, expected| {
@@ -573,14 +599,16 @@ impl<'m> Compiler<'m> {
                 let default =
                     split.default(context, |context, expected| self.fallen(context, expected))?;
 
-                Ok(split.rebuild(cases, default))
+                let (rebuilt, type_) = split.rebuild(cases, default);
+
+                self.settled(context, top, rebuilt, type_)
             });
         }
 
         if !literals.is_empty() {
             return Err(Error::MatrixMixedNatDispatch);
         }
-        if zeros.is_empty() && self.default.is_none() {
+        if zeros.is_empty() && self.fallthrough.is_none() {
             return Err(Error::MatrixIncompleteCarrierMatch {
                 carrier: "Nat",
                 missing: "0",
@@ -594,6 +622,7 @@ impl<'m> Compiler<'m> {
         context.awaiting(|context| {
             let split =
                 NatSplit::resolve(context, scrutinee, &motive, (term, &mode), reads_hypothesis)?;
+            self.stand(top, || split.result_type());
             let zero = split.zero(context, |context, expected| {
                 self.case(context, rest.clone(), zeros, expected)
             })?;
@@ -622,7 +651,9 @@ impl<'m> Compiler<'m> {
                     self.case(context, rest, group, expected)
                 })?;
 
-            Ok(split.rebuild(zero, &predecessor, &hypothesis, successor))
+            let (rebuilt, type_) = split.rebuild(zero, &predecessor, &hypothesis, successor);
+
+            self.settled(context, top, rebuilt, type_)
         })
     }
 
@@ -645,7 +676,7 @@ impl<'m> Compiler<'m> {
             }
         }
 
-        if self.default.is_none() {
+        if self.fallthrough.is_none() {
             let missing = match (empties.is_empty(), conses.is_empty()) {
                 (true, _) => Some("[]"),
                 (_, true) => Some("[head, ..tail]"),
@@ -698,7 +729,7 @@ impl<'m> Compiler<'m> {
         }
         let grain = grain.expect("a column of packed sequences has a row");
 
-        if self.default.is_none() {
+        if self.fallthrough.is_none() {
             // The grain the rows wrote names the carrier, since no surface type is the family of both.
             let (carrier, empty, atom) = match grain {
                 Grain::B => ("Bits", "b[]", "b[head, ..tail]"),
@@ -751,6 +782,7 @@ impl<'m> Compiler<'m> {
                 (term, &mode),
                 reads_hypothesis,
             )?;
+            self.stand(top, || split.result_type());
             let empty = split.empty(context, |context, expected| {
                 self.case(context, rest.clone(), empties, expected)
             })?;
@@ -760,7 +792,9 @@ impl<'m> Compiler<'m> {
                 self.case(context, rest, group, expected)
             })?;
 
-            Ok(split.rebuild(empty, &binders, cons))
+            let (rebuilt, type_) = split.rebuild(empty, &binders, cons);
+
+            self.settled(context, top, rebuilt, type_)
         })
     }
 
@@ -834,6 +868,7 @@ impl<'m> Compiler<'m> {
         context: &mut Context,
         mut columns: Vec<Term>,
         lines: Vec<Line<'m>>,
+        top: bool,
         mode: Mode,
     ) -> Result<(Term, Term), Error> {
         let scrutinee = columns.remove(0);
@@ -879,7 +914,7 @@ impl<'m> Compiler<'m> {
             .collect::<Vec<_>>();
         projections.extend(rest);
 
-        recurse(|| self.columns(context, projections, flattened, false, mode))
+        recurse(|| self.columns(context, projections, flattened, top, mode))
     }
 
     /// The binder a single row's hypothesis is: the row's own where it writes a name, and one of the compiler's where it writes none or writes a pattern, whose leaves are bound to its projections.
@@ -1034,35 +1069,5 @@ fn catch_all(rows: &[Row]) -> bool {
                 && matches!(last.pattern, Pattern::Binder)
         }
         None => false,
-    }
-}
-
-/// Whether every constructor arm binds each payload by a name: such arms reach a default at the scrutinee's dispatch alone.
-fn flat(rows: &[Row]) -> bool {
-    rows.iter().all(|row| match &row.pattern {
-        Pattern::Variant { args, .. } => args.iter().all(|(_, arg)| matches!(arg, Pattern::Binder)),
-        _ => true,
-    })
-}
-
-/// How many dispatches a pattern is refuted at: one for each constructor and each carrier leaf it writes, at any depth.
-fn refutations(pattern: &Pattern) -> usize {
-    match pattern {
-        Pattern::Binder => 0,
-        Pattern::Variant { args, .. } => {
-            1 + args.iter().map(|(_, arg)| refutations(arg)).sum::<usize>()
-        }
-        Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
-            fields.iter().map(|(_, field)| refutations(field)).sum()
-        }
-        Pattern::Bool(_)
-        | Pattern::Zero
-        | Pattern::Succ(_)
-        | Pattern::Literal(_)
-        | Pattern::Character(_)
-        | Pattern::Nil
-        | Pattern::Cons(_)
-        | Pattern::End(_)
-        | Pattern::Atom(..) => 1,
     }
 }

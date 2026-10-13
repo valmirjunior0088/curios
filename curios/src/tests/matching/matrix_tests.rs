@@ -265,3 +265,49 @@ fn an_incomplete_carrier_match_names_the_missing_case() {
         assert!(!error.contains("nested"), "{source:?} reported {error}");
     }
 }
+
+// The row that cannot fail is read where the match stands and at the match's own type, however many dispatches reach it: a numeral in it is realized at the type the match is checked at.
+#[test]
+fn a_default_reached_from_a_nested_dispatch_is_typed_at_the_matchs_type() {
+    let source = r#"
+        use /std/{Int, Option};
+        let f(m : Option(Option(Int))) -> Int =
+            match m | some(some(x)) => x | _ => 0 end;
+        /std/print(Int/to_str(f(Option/some(Option/some(-7))) + f(Option/some(Option/none())) + f(Option/none())))
+        "#;
+
+    assert_eq!(run(source), b"-7");
+}
+
+// And an action in it is sequenced in its region's monad, which the match's type states.
+#[test]
+fn a_default_reached_from_a_nested_dispatch_sequences_in_the_matchs_monad() {
+    let source = r#"
+        use /std/{Io, Nat, Option, print};
+        let h(m : Option(Option(Nat))) -> Io({}) =
+            match m
+            | some(some(_)) => print("deep\n")
+            | _ =>
+                let _ = print("a\n")!;
+                print("b\n")
+            end;
+        let _ = h(Option/some(Option/none()))!;
+        h(Option/some(Option/some(1)))
+        "#;
+
+    assert_eq!(run(source), b"a\nb\ndeep\n");
+}
+
+// With no type to be checked at, it is read once the arms have said what the match answers.
+#[test]
+fn a_default_reached_from_a_nested_dispatch_is_typed_after_the_arms_in_inference() {
+    let source = r#"
+        use /std/{Int, Option};
+        let f(m : Option(Option(Int))) -> Int =
+            let answer = match m | some(some(x)) => x | _ => 0 end;
+            answer;
+        /std/print(Int/to_str(f(Option/some(Option/some(-7))) + f(Option/none())))
+        "#;
+
+    assert_eq!(run(source), b"-7");
+}
