@@ -780,7 +780,8 @@ What closes the program is performed through `/std/Program`, the concept whose `
 
 - an `Io({})` is the program itself, and no other payload has a witness: a tail that computes a result must discard it explicitly rather than have the result dropped for it;
 - a `Try(Io, E, {})` whose `E` has a `Show` witness is run, and a failure is written to standard error as it is shown and ends the program with status `1`;
-- a `/std/Test` is reported as `curios test` reports one, and ends the program with status `1` where it did not hold.
+- a `/std/Test` is reported as `curios test` reports one, and ends the program with status `1` where it did not hold;
+- a `()` is a program that has done what it does by its last `!`.
 
 What closes a program is each tail of its final term: a tail is reached through a local `let` and through a `!` to what follows them, and through a `match` that writes no motive to each of its arms, so two arms may close one program at two types. A `match` whose motive is written is one term of the type it states, and a written goal is asked at `Io({})`. A program that may fail states so on a declaration and closes with its name, the top level being an `Io` region whatever closes it:
 

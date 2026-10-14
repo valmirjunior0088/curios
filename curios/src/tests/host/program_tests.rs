@@ -173,6 +173,16 @@ fn a_description_that_yields_a_value_closes_no_program() {
     );
 }
 
+/// A program may close with `()`, having done what it does by its last `!`.
+#[test]
+fn a_program_that_closes_with_unit_ends_with_what_its_actions_did() {
+    let (code, output, errors) = ended("use /std/{print};\nlet _ = print(\"done\")!;\n()\n", &[]);
+
+    assert_eq!(code, 0);
+    assert_eq!(errors, b"");
+    assert_eq!(output, b"done");
+}
+
 /// A goal that closes a program is asked at the program's own type, which is what most programs close with.
 #[test]
 fn a_goal_that_closes_a_program_is_asked_at_io() {

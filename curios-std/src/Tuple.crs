@@ -1,4 +1,4 @@
-use /std/{Show, Spell, Ord, Ordering, Str, Bool, List};
+use /std/{Show, Spell, Ord, Ordering, Str, Bool, List, Io, Program};
 use /std/ops/{Eql};
 
 let parens(parts: List(Str)) -> Str =
@@ -549,4 +549,9 @@ satisfy (
                                                         then(
                                                             Ord/ord(a.6, b.6),
                                                             (_) => Ord/ord(a.7, b.7)))))))),
+}
+
+--- A program that closes with `()` has done what it does by its last `!`.
+satisfy Program({}) {
+    perform(_) = Io/pure(()),
 }
