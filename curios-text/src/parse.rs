@@ -50,7 +50,7 @@ mod tuples_tests;
 use {
     super::{Doc, Label, Name, Term},
     curios_parse::{
-        Parser, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, mark, not_ahead,
+        Parser, ahead, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, mark, not_ahead,
         obtained, pure, spanned, tagging, take_eof, take_exact, take_n, take_while,
     },
     curios_utilities::{Qualifier, Span, is_identifier_char, is_keyword},
@@ -170,13 +170,10 @@ pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
 
 /// After a comment's opener: a space, consumed, or the line's end, left alone — and anything else refused with `message`, fatally, since the opener was consumed.
 fn comment_spacing<'a>(message: &'static str) -> Parser<'a, ()> {
-    // A zero-width span: the one way to read the source at the current offset through the combinators.
-    spanned(pure(())).flat_map(move |(here, ())| {
-        match here.source.text[here.start..].chars().next() {
-            Some(' ') => take_exact(" "),
-            None | Some('\n') | Some('\r') => pure(()),
-            Some(_) => fail(message),
-        }
+    ahead().flat_map(move |rest| match rest.chars().next() {
+        Some(' ') => take_exact(" "),
+        None | Some('\n') | Some('\r') => pure(()),
+        Some(_) => fail(message),
     })
 }
 
@@ -354,7 +351,7 @@ fn parse_qualified_name<'a>() -> Parser<'a, Name> {
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
     mark()
         .and(take_while(is_identifier_char))
-        .and(look_ahead(take_while(|_| true)))
+        .and(ahead())
         .flat_map(
             move |((start, word), rest)| match (word, expected == word) {
                 (_, true) => pure(()),

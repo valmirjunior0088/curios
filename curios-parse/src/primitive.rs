@@ -74,6 +74,11 @@ where
     Parser::new(move |state| Ok(state.take_while(f)))
 }
 
+/// The input from the current offset to its end, consuming none of it and reading none: what a grammar asks for where a failure says what it found in a token's place, or where the next character alone decides. A slice of the source, so asking costs nothing the input's length sets — where [`look_ahead`](crate::look_ahead) over a [`take_while`] that accepts everything reads every character left, at every position it is tried.
+pub fn ahead<'a>() -> Parser<'a, &'a str> {
+    Parser::new(|state| Ok((state.string, state)))
+}
+
 /// Succeeds (consuming nothing) only when the input is exhausted. Top-level grammars end with this so trailing garbage is a parse error — [`run_parser`](crate::run_parser) itself does not require the input to be fully consumed.
 pub fn take_eof<'a>() -> Parser<'a, ()> {
     Parser::new(|state| match state.is_finished() {
