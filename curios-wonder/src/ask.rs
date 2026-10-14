@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Diagnosed, Diagnosis, Named, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject,
-        Uncosted, Written, cost, declared_tests, diagnosed, stage, unit_stage, written,
+        Declaration, Diagnosed, Diagnosis, Named, Origin, Reached, Refusal, STDIN_LABEL, Severity,
+        Subject, Uncosted, Written, cost, declared_tests, diagnosed, stage, unit_stage, written,
     },
     curios_cont::{Fate, Outcome},
     curios_core::Declared,
@@ -366,7 +366,7 @@ impl FromStr for Place {
     }
 }
 
-/// `wonder at LINE:COLUMN [TARGET]`: the name written at a place of the file `staged` is asked through, one row to stdout — nothing where no name stands there. `unfiled` is told as [`wonder_diagnostics`]' is.
+/// `wonder at LINE:COLUMN [TARGET]`: the name written at a place of the file `staged` is asked through, to stdout — one row, then its declaration's head and prose where its text is held — and nothing where no name stands there. `unfiled` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
@@ -381,6 +381,13 @@ pub fn wonder_at(
 
         if let Some(named) = offset.and_then(|offset| Named::at(names, offset)) {
             println!("{}", row(named));
+            // Beneath the row, a blank line before each: the head as its author wrote it, then the prose above it.
+            if let Some(heading) = named.declaration.as_ref().and_then(Declaration::heading) {
+                println!("\n{}", heading.head);
+                if !heading.prose.is_empty() {
+                    println!("\n{}", heading.prose.join("\n"));
+                }
+            }
         }
     })
 }
@@ -462,7 +469,7 @@ fn row(named: &Named) -> String {
         Declared::Test => "test",
     };
 
-    match &named.declaration {
+    match named.declaration.as_ref().and_then(Declaration::place) {
         Some(place) => format!("{}\t{declared}\t{}", named.name, placed(place)),
         None => format!("{}\t{declared}", named.name),
     }

@@ -276,6 +276,11 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
 #[test]
 fn a_place_answers_the_name_written_there() {
     let root = project("at");
+    write(
+        &root,
+        "util.crs",
+        "--- The word a run prints.\npub let word : /std/Str = \"placed\";\n",
+    );
 
     let answered = curios(&root, &["wonder", "at", "1:20", "app.crs"], "");
 
@@ -284,10 +289,22 @@ fn a_place_answers_the_name_written_there() {
         "{}",
         String::from_utf8_lossy(&answered.stderr)
     );
-    let row = stdout(&answered);
-    let fields = row.trim_end_matches('\n').split('\t').collect::<Vec<_>>();
-    assert_eq!(fields[..2], ["/app/util/word", "definition"], "{row}");
-    assert!(fields[2].ends_with("util.crs:1:9"), "{row}");
+    let answer = stdout(&answered);
+    let (row, stated) = answer
+        .split_once('\n')
+        .expect("a row, then what follows it");
+    let fields = row.split('\t').collect::<Vec<_>>();
+    assert_eq!(fields[..2], ["/app/util/word", "definition"], "{answer}");
+    assert!(fields[2].ends_with("util.crs:2:9"), "{answer}");
+    // Beneath the row, the declaration's head as its author wrote it, and the prose above it.
+    assert_eq!(
+        stated,
+        "\npub let word: /std/Str\n\nThe word a run prints.\n"
+    );
+
+    // Asked again, of the library the first question filed: a unit restored from the store states its declarations as one compiled now does.
+    let again = curios(&root, &["wonder", "at", "1:20", "app.crs"], "");
+    assert_eq!(stdout(&again), answer);
 }
 
 /// What a file declares is one row a definition, and a place where nothing is named is an answer of nothing: both exit 0.
@@ -331,7 +348,10 @@ fn a_program_that_does_not_check_answers_where_a_name_is_declared() {
         "{}",
         String::from_utf8_lossy(&answered.stderr)
     );
-    assert_eq!(stdout(&answered), "/one\tdefinition\t<stdin>:1:5\n");
+    assert_eq!(
+        stdout(&answered),
+        "/one\tdefinition\t<stdin>:1:5\n\nlet one: /std/Nat\n"
+    );
 }
 
 /// A stage that the program does not reach is not an answer: diagnostics on stderr, exit 1, stdout empty.
@@ -817,7 +837,8 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
     let capabilities = editor.receive();
     assert!(
         capabilities.contains(r#""definitionProvider":true"#)
-            && capabilities.contains(r#""documentSymbolProvider":true"#),
+            && capabilities.contains(r#""documentSymbolProvider":true"#)
+            && capabilities.contains(r#""hoverProvider":true"#),
         "{capabilities}"
     );
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
@@ -856,6 +877,17 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
         ),
         "{library}"
     );
+
+    // What each names, as its declaration states it: the head as source, then the prose above it where there is any.
+    let stated = editor.asked(
+        "textDocument/hover",
+        &format!(r#"{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":1,"character":21}}}}"#),
+    );
+    assert!(
+        stated.contains(r#""value":"```curios\nlet one: /std/Str\n```""#),
+        "{stated}"
+    );
+    assert!(stated.contains(r#""kind":"markdown""#), "{stated}");
 
     let outline = editor.asked(
         "textDocument/documentSymbol",

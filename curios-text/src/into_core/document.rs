@@ -2,21 +2,26 @@
 //!
 //! **Built from the compilation that builds the unit: the tables its lowering stored.** Which modules and declarations a page shows is the export view resolution built to a fixed point, so a private declaration is absent rather than hidden and a re-export is listed as a link to the declaration it names — unless the declaration's own module has no page, the facade pattern, where the declaration is read off that module and filed under the re-exporting one, since the re-export is the only way it reaches a consumer. A referent is looked up with the visibility functions the lowering resolves a name with, over the same tables, seeded by the import scopes the lowering recorded per definition — nothing here resolves a name by a rule of its own. Nothing is read from the elaborated module either: every declaration states its signature, so the surface tree the lowering parsed is the whole of what a page prints, and a signature is printed by the printers `curios format` prints it with. Riding on the unit, the record travels wherever the unit does — the prelude image, a verdict slot, the browser bundle — so a unit is documented from its stored form without its sources.
 //!
+//! **What an item states of a definition is read once** ([`stated`]): its head's printer, its prose and its members. A page shows of it what a consumer sees, and a place in a file is answered with whatever is written there ([`heading`]), from the declaration's own text and the same printers.
+//!
 //! **A library is documented for its consumers.** That is the one audience this record knows: a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one; which mount is documented, and with what description, is the resolver's to say.
+
+#[cfg(test)]
+mod tests;
 
 use {
     super::{ModuleInfo, PublicInterface, Scoped, visible_binding, visible_child},
     crate::{
-        ConceptField, Doc, FuncSugarParam, FuncTypeParam, LetSignature, Module, Pattern,
-        StructField, TopCase, TopItem, UseGroup, print_case_head, print_case_result_head,
-        print_concept_field_head, print_concept_head, print_foreign_head, print_induct_head,
-        print_let_head, print_struct_field_head, print_struct_head, print_witness_head,
+        Doc, FuncSugarParam, FuncTypeParam, LetSignature, Module, Pattern, TopItem, UseGroup,
+        print_case_head, print_case_result_head, print_concept_field_head, print_concept_head,
+        print_foreign_head, print_induct_head, print_let_head, print_struct_field_head,
+        print_struct_head, print_test_head, print_witness_head,
     },
     curios_document::{
         Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
     },
     curios_print::{Printer, render_annotated},
-    curios_utilities::{Mount, Qualifier, RootKind},
+    curios_utilities::{Mount, Qualifier, RootKind, Source, Span},
     std::{
         cell::RefCell,
         collections::{BTreeSet, HashMap, HashSet},
@@ -450,7 +455,7 @@ impl Reader<'_> {
 
     /// The member a module exposes beside its owner: a constructor of an inductive, a method of a concept.
     ///
-    /// **The head states what the member takes and what it produces, and the card links to the owner for the rest.** What a consumer reaches through `pub use Option/*` is the value constructor, whose full type also carries the family's parameters implicitly in front of the payload — but *that* is the lowering's rule, and restating it here would put a second statement of it on a page the compiler never checks. The payload and the result are written in the declaration itself, so they are read rather than derived; the parameters are left to the owner's own card, which the source names.
+    /// **The head states what the member takes and what it produces, and the card links to the owner for the rest.** What a consumer reaches through `pub use Option/*` is the value constructor, whose full type also carries the family's parameters implicitly in front of the payload — but *that* is the lowering's rule, and restating it here would put a second statement of it on a page the compiler never checks. The payload and the result are written in the declaration itself, so they are read rather than derived ([`Stated::apart`]); the parameters are left to the owner's own card, which the source names.
     fn member_at(&self, target: &Qualifier) -> Option<Declaration> {
         let owner = target.without_last();
         let declaring = owner.without_last();
@@ -459,49 +464,29 @@ impl Reader<'_> {
         let label = target.last();
         let item = items.iter().find(|item| declares(item, owner.last()))?;
 
-        let (signature, prose) = match item {
-            TopItem::Induct(members) => {
-                let holder = members
-                    .iter()
-                    .find(|member| member.label.as_str() == owner.last())?;
-                let case = holder.cases.iter().find(|case| case.label == label)?;
-                // A payload's label binds for the payloads and the target after it, exactly as it does inside the block.
-                let mut binders = param_binders(&holder.params);
-                binders.extend(case.payload.iter().filter_map(|param| param.label.clone()));
-                (
-                    self.signature(
-                        &declaring,
-                        &imports,
-                        &binders,
-                        print_case_result_head(holder, case),
-                    ),
-                    lines(&case.doc),
-                )
-            }
-            TopItem::Concept(members) => {
-                let holder = members
-                    .iter()
-                    .find(|member| member.label.as_str() == owner.last())?;
-                let field = holder
-                    .fields
-                    .iter()
-                    .find(|field| field.label.as_ref().is_some_and(|name| *name == label))?;
-                (
-                    self.method(&declaring, &imports, &param_binders(&holder.params), field)
-                        .signature,
-                    lines(&field.doc),
-                )
-            }
-            // A struct's fields are projections rather than a namespace a `use` selects from, and nothing else holds members at all.
-            _ => return None,
-        };
+        let holder = stated(item)
+            .into_iter()
+            .find(|stated| stated.name == owner.last())?;
+        // A struct's fields are projections rather than a namespace a `use` selects from, and nothing else holds members at all.
+        if !matches!(holder.kind, Kind::Inductive | Kind::Concept) {
+            return None;
+        }
+        let member = holder
+            .members
+            .into_iter()
+            .find(|member| member.name == label)?;
 
         Some(Declaration {
             name: label.to_string(),
             home: declaring,
             kind: Kind::Definition,
-            signature,
-            prose,
+            signature: self.signature(
+                &declaring,
+                &imports,
+                &member.binders,
+                member.apart.unwrap_or(member.head),
+            ),
+            prose: member.prose,
             members: Vec::new(),
             opaque: false,
             derived: false,
@@ -527,7 +512,7 @@ impl Reader<'_> {
             .find(|declaration| declaration.name == label)
     }
 
-    /// The declarations `item` makes in `home` that a consumer can see, appended to `out`: a `let` group's `pub` members, a `pub` inductive, structure or concept with the members its representation exposes, every witness, a `pub` foreign. A module, an import and a test declare nothing here.
+    /// The declarations `item` makes in `home` that a consumer can see, appended to `out`: of what it states ([`stated`]), each definition written `pub` and every witness, with the members its representation exposes — a concept's methods either way, being reached by name whether or not its representation is sealed.
     fn declare(
         &self,
         home: &Qualifier,
@@ -535,169 +520,32 @@ impl Reader<'_> {
         item: &TopItem,
         out: &mut Vec<Declaration>,
     ) {
-        match item {
-            TopItem::Mod(_) => {}
-            // An import is not a declaration, a test is not part of the interface, and a broken item is read by nobody.
-            TopItem::Use(_) | TopItem::Test(_) | TopItem::Broken(_) => {}
-            TopItem::Let(members) => {
-                for member in members.iter().filter(|member| member.vis_pub) {
-                    let binders = sugar_binders(match &member.signature {
-                        LetSignature::Func { params, .. } => params,
-                        LetSignature::Name { .. } => &[],
-                    });
-                    out.push(Declaration {
-                        name: member.label.to_string(),
-                        home: *home,
-                        kind: Kind::Definition,
-                        signature: self.signature(home, imports, &binders, print_let_head(member)),
-                        prose: lines(&member.doc),
-                        members: Vec::new(),
-                        opaque: false,
-                        derived: false,
-                        source: None,
-                        chip: None,
-                    });
-                }
-            }
-            TopItem::Induct(members) => {
-                for member in members.iter().filter(|member| member.vis_pub) {
-                    let binders = param_binders(&member.params);
-                    // Constructors are the representation: shown exactly when it is public.
-                    let cases = match member.rep_pub {
-                        true => member
-                            .cases
-                            .iter()
-                            .map(|case| self.case(home, imports, &binders, case))
-                            .collect(),
-                        false => Vec::new(),
-                    };
-                    out.push(Declaration {
-                        name: member.label.to_string(),
-                        home: *home,
-                        kind: Kind::Inductive,
-                        signature: self.signature(
-                            home,
-                            imports,
-                            &binders,
-                            print_induct_head(member),
-                        ),
-                        prose: lines(&member.doc),
-                        members: cases,
-                        opaque: !member.rep_pub,
-                        derived: false,
-                        source: None,
-                        chip: None,
-                    });
-                }
-            }
-            TopItem::Struct(members) => {
-                for member in members.iter().filter(|member| member.vis_pub) {
-                    let mut binders = param_binders(&member.params);
-                    let fields = match member.rep_pub {
-                        true => member
-                            .fields
-                            .iter()
-                            .map(|field| {
-                                let shown = self.field(home, imports, &binders, field);
-                                // A field's label binds for the fields after it.
-                                if let Some(label) = &field.param.label {
-                                    binders.insert(label.to_string());
-                                }
-                                shown
-                            })
-                            .collect(),
-                        false => Vec::new(),
-                    };
-                    out.push(Declaration {
-                        name: member.label.to_string(),
-                        home: *home,
-                        kind: Kind::Structure,
-                        signature: self.signature(
-                            home,
-                            imports,
-                            &param_binders(&member.params),
-                            print_struct_head(member),
-                        ),
-                        prose: lines(&member.doc),
-                        members: fields,
-                        opaque: !member.rep_pub,
-                        derived: false,
-                        source: None,
-                        chip: None,
-                    });
-                }
-            }
-            TopItem::Concept(members) => {
-                for member in members.iter().filter(|member| member.vis_pub) {
-                    let binders = param_binders(&member.params);
-                    // A concept's methods are its interface whether or not its representation is sealed: they are reached by name either way.
-                    let fields = member
-                        .fields
-                        .iter()
-                        .map(|field| self.method(home, imports, &binders, field))
-                        .collect();
-                    out.push(Declaration {
-                        name: member.label.to_string(),
-                        home: *home,
-                        kind: Kind::Concept,
-                        signature: self.signature(
-                            home,
-                            imports,
-                            &binders,
-                            print_concept_head(member),
-                        ),
-                        prose: lines(&member.doc),
-                        members: fields,
-                        opaque: !member.rep_pub,
-                        derived: false,
-                        source: None,
-                        chip: None,
-                    });
-                }
-            }
-            TopItem::Witness(members) => {
-                for member in members {
-                    let binders = sugar_binders(&member.params);
-                    out.push(Declaration {
-                        name: String::new(),
-                        home: *home,
-                        kind: Kind::Witness,
-                        signature: self.signature(
-                            home,
-                            imports,
-                            &binders,
-                            print_witness_head(member),
-                        ),
-                        prose: lines(&member.doc),
-                        members: Vec::new(),
-                        opaque: false,
-                        derived: member.body.is_none(),
-                        source: None,
-                        chip: None,
-                    });
-                }
-            }
-            TopItem::Foreign(declaration) => {
-                if declaration.vis_pub {
-                    out.push(Declaration {
-                        name: declaration.label.to_string(),
-                        home: *home,
-                        kind: Kind::Foreign,
-                        signature: self.signature(
-                            home,
-                            imports,
-                            &HashSet::new(),
-                            print_foreign_head(declaration),
-                        ),
-                        prose: lines(&declaration.doc),
-                        members: Vec::new(),
-                        opaque: false,
-                        derived: false,
-                        source: None,
-                        chip: None,
-                    });
-                }
-            }
+        for stated in stated(item).into_iter().filter(|stated| stated.exposed) {
+            let members = match stated.shown {
+                true => stated
+                    .members
+                    .into_iter()
+                    .map(|member| Member {
+                        name: member.name,
+                        signature: self.signature(home, imports, &member.binders, member.head),
+                        prose: member.prose,
+                    })
+                    .collect(),
+                false => Vec::new(),
+            };
+
+            out.push(Declaration {
+                name: stated.name,
+                home: *home,
+                kind: stated.kind,
+                signature: self.signature(home, imports, &stated.binders, stated.head),
+                prose: stated.prose,
+                members,
+                opaque: stated.opaque,
+                derived: stated.derived,
+                source: None,
+                chip: None,
+            });
         }
     }
 
@@ -741,56 +589,6 @@ impl Reader<'_> {
                 }
                 _ => None,
             })
-    }
-
-    fn case(
-        &self,
-        module: &Qualifier,
-        imports: &HashMap<String, Qualifier>,
-        binders: &HashSet<String>,
-        case: &TopCase,
-    ) -> Member {
-        // A payload's label binds for the payloads and the target after it.
-        let mut binders = binders.clone();
-        binders.extend(case.payload.iter().filter_map(|param| param.label.clone()));
-        Member {
-            name: case.label.to_string(),
-            signature: self.signature(module, imports, &binders, print_case_head(case)),
-            prose: lines(&case.doc),
-        }
-    }
-
-    fn field(
-        &self,
-        module: &Qualifier,
-        imports: &HashMap<String, Qualifier>,
-        binders: &HashSet<String>,
-        field: &StructField,
-    ) -> Member {
-        Member {
-            name: field.param.label.as_deref().unwrap_or_default().to_string(),
-            signature: self.signature(module, imports, binders, print_struct_field_head(field)),
-            prose: lines(&field.doc),
-        }
-    }
-
-    fn method(
-        &self,
-        module: &Qualifier,
-        imports: &HashMap<String, Qualifier>,
-        binders: &HashSet<String>,
-        field: &ConceptField,
-    ) -> Member {
-        Member {
-            // A superclass edge has no name, and a page lists it by its signature alone.
-            name: field
-                .label
-                .as_ref()
-                .map(|label| label.to_string())
-                .unwrap_or_default(),
-            signature: self.signature(module, imports, binders, print_concept_field_head(field)),
-            prose: lines(&field.doc),
-        }
     }
 
     /// `head` rendered, with every name in it that resolves marked.
@@ -915,6 +713,264 @@ impl Reader<'_> {
 
         spellings
     }
+}
+
+/// What an item states of one definition it declares: the head it is printed by, the prose above it, and the members stated under it. The one reading of an item's declarations, which a page takes what a consumer sees of ([`Reader::declare`]) and a place is answered from whole ([`heading`]).
+struct Stated<'a> {
+    /// Its name as a page lists it: none for a witness, and none for a member written without one.
+    name: String,
+    /// Where its name is written, a witness's being its head.
+    label: Option<&'a Span>,
+    kind: Kind,
+    /// Whether a consumer sees it: one written `pub`, and every witness.
+    exposed: bool,
+    /// Whether a consumer sees its members: its representation is written `pub`, or it is a concept, whose methods are reached by name either way.
+    shown: bool,
+    /// Whether its representation is kept from a consumer.
+    opaque: bool,
+    /// Whether it is a witness the compiler writes.
+    derived: bool,
+    head: Printer,
+    /// The head it has standing apart from its owner, where that says more than the one its owner's block lists it by: a constructor's, with the family it builds.
+    apart: Option<Printer>,
+    /// The labels its head binds, which shadow a like-named declaration in it.
+    binders: HashSet<String>,
+    prose: Option<Vec<String>>,
+    members: Vec<Stated<'a>>,
+}
+
+impl<'a> Stated<'a> {
+    /// A definition with no member and no representation, stated by `head` under `binders`.
+    fn plain(
+        name: String,
+        label: Option<&'a Span>,
+        kind: Kind,
+        exposed: bool,
+        head: Printer,
+        binders: HashSet<String>,
+        doc: &Option<Doc>,
+    ) -> Self {
+        Self {
+            name,
+            label,
+            kind,
+            exposed,
+            shown: false,
+            opaque: false,
+            derived: false,
+            head,
+            apart: None,
+            binders,
+            prose: lines(doc),
+            members: Vec::new(),
+        }
+    }
+}
+
+/// What `item` states of each definition it declares, in the order they are written, a type's constructors, a structure's fields and a concept's fields each under their owner. A module and an import declare none, and a broken item is read by nobody.
+fn stated(item: &TopItem) -> Vec<Stated<'_>> {
+    match item {
+        TopItem::Mod(_) | TopItem::Use(_) | TopItem::Broken(_) => Vec::new(),
+        TopItem::Let(members) => members
+            .iter()
+            .map(|member| {
+                let binders = sugar_binders(match &member.signature {
+                    LetSignature::Func { params, .. } => params,
+                    LetSignature::Name { .. } => &[],
+                });
+
+                Stated::plain(
+                    member.label.to_string(),
+                    member.label.span(),
+                    Kind::Definition,
+                    member.vis_pub,
+                    print_let_head(member),
+                    binders,
+                    &member.doc,
+                )
+            })
+            .collect(),
+        TopItem::Induct(members) => members
+            .iter()
+            .map(|member| {
+                let binders = param_binders(&member.params);
+                // A payload's label binds for the payloads and the target after it, in the block and apart from it alike.
+                let cases = member.cases.iter().map(|case| {
+                    let mut binders = binders.clone();
+                    binders.extend(case.payload.iter().filter_map(|param| param.label.clone()));
+
+                    Stated {
+                        apart: Some(print_case_result_head(member, case)),
+                        ..Stated::plain(
+                            case.label.to_string(),
+                            case.label.span(),
+                            Kind::Definition,
+                            false,
+                            print_case_head(case),
+                            binders,
+                            &case.doc,
+                        )
+                    }
+                });
+
+                Stated {
+                    // Constructors are the representation: shown exactly when it is public.
+                    shown: member.rep_pub,
+                    opaque: !member.rep_pub,
+                    members: cases.collect(),
+                    ..Stated::plain(
+                        member.label.to_string(),
+                        member.label.span(),
+                        Kind::Inductive,
+                        member.vis_pub,
+                        print_induct_head(member),
+                        binders,
+                        &member.doc,
+                    )
+                }
+            })
+            .collect(),
+        TopItem::Struct(members) => members
+            .iter()
+            .map(|member| {
+                // A field's label binds for the fields after it.
+                let mut binders = param_binders(&member.params);
+                let fields = member
+                    .fields
+                    .iter()
+                    .map(|field| {
+                        let stated = Stated::plain(
+                            field.param.label.as_deref().unwrap_or_default().to_string(),
+                            None,
+                            Kind::Definition,
+                            false,
+                            print_struct_field_head(field),
+                            binders.clone(),
+                            &field.doc,
+                        );
+                        if let Some(label) = &field.param.label {
+                            binders.insert(label.to_string());
+                        }
+
+                        stated
+                    })
+                    .collect();
+
+                Stated {
+                    shown: member.rep_pub,
+                    opaque: !member.rep_pub,
+                    members: fields,
+                    ..Stated::plain(
+                        member.label.to_string(),
+                        member.label.span(),
+                        Kind::Structure,
+                        member.vis_pub,
+                        print_struct_head(member),
+                        param_binders(&member.params),
+                        &member.doc,
+                    )
+                }
+            })
+            .collect(),
+        TopItem::Concept(members) => members
+            .iter()
+            .map(|member| {
+                let binders = param_binders(&member.params);
+                let fields = member.fields.iter().map(|field| {
+                    Stated::plain(
+                        // A superclass edge has no name, and a page lists it by its signature alone.
+                        field
+                            .label
+                            .as_ref()
+                            .map(|label| label.to_string())
+                            .unwrap_or_default(),
+                        field.label.as_ref().and_then(|label| label.span()),
+                        Kind::Definition,
+                        false,
+                        print_concept_field_head(field),
+                        binders.clone(),
+                        &field.doc,
+                    )
+                });
+
+                Stated {
+                    // A concept's methods are its interface whether or not its representation is sealed: they are reached by name either way.
+                    shown: true,
+                    opaque: !member.rep_pub,
+                    members: fields.collect(),
+                    ..Stated::plain(
+                        member.label.to_string(),
+                        member.label.span(),
+                        Kind::Concept,
+                        member.vis_pub,
+                        print_concept_head(member),
+                        binders,
+                        &member.doc,
+                    )
+                }
+            })
+            .collect(),
+        TopItem::Witness(members) => members
+            .iter()
+            .map(|member| Stated {
+                derived: member.body.is_none(),
+                ..Stated::plain(
+                    String::new(),
+                    member.head.as_ref(),
+                    Kind::Witness,
+                    true,
+                    print_witness_head(member),
+                    sugar_binders(&member.params),
+                    &member.doc,
+                )
+            })
+            .collect(),
+        TopItem::Foreign(declaration) => vec![Stated::plain(
+            declaration.label.to_string(),
+            declaration.label.span(),
+            Kind::Foreign,
+            declaration.vis_pub,
+            print_foreign_head(declaration),
+            HashSet::new(),
+            &declaration.doc,
+        )],
+        // A test is no part of an interface, and takes no prose.
+        TopItem::Test(test) => vec![Stated::plain(
+            test.label.to_string(),
+            test.label.span(),
+            Kind::Definition,
+            false,
+            print_test_head(test),
+            HashSet::new(),
+            &None,
+        )],
+    }
+}
+
+/// What a declaration states of one definition: its head as the author wrote it, and the prose above it, a line an entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Heading {
+    pub head: String,
+    pub prose: Vec<String>,
+}
+
+/// What `declaration`, the text of one source declaration, states of the definition whose name is written `label` bytes into it: the head a page would print it by, from the printers a page prints by, with the prose above it, whether or not a consumer sees the definition. A member is stated as it stands apart from its owner, a constructor with the family it builds. `None` where the text does not parse as an item, and where no definition it declares is named there.
+pub fn heading(declaration: &str, label: usize) -> Option<Heading> {
+    let module = Module::parse(&Source::inline(declaration)).ok()?;
+    let named = |stated: &Stated| stated.label.is_some_and(|span| span.start == label);
+
+    module
+        .items
+        .iter()
+        .flat_map(stated)
+        .find_map(|stated| match named(&stated) {
+            true => Some(stated),
+            false => stated.members.into_iter().find(|member| named(member)),
+        })
+        .map(|stated| Heading {
+            head: render_annotated(stated.apart.unwrap_or(stated.head), INDENT, WIDTH).0,
+            prose: stated.prose.unwrap_or_default(),
+        })
 }
 
 /// Whether `item` declares `label` as something a consumer can see — asked of the tree alone, so finding one declaration never costs the printing and resolving of its neighbours.

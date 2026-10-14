@@ -14,6 +14,8 @@
 //!
 //! **Formatting is `curios format` over the overlay, on the protocol thread.** The same `Formatted` the CLI runs, on the text the editor holds, answered as one whole-document edit — the formatter is pure and cheap, parse and print with no prelude, and its output is verified by reparse before it is handed back, so nothing here can hand an editor text the compiler would read differently.
 //!
+//! **A name's head and prose are parsed where they are asked for.** A hover reads the one declaration the name stands for, off the text a check left it written in (`Declaration::heading`): a parse of one declaration, on the protocol thread as formatting's parse of a document is, and of nothing where no hover is asked.
+//!
 //! **A place is answered from what the last check left, by the protocol thread.** Once a check has published, the analyst reads what each text of the document names — the `at` query's own engine, `written` — and leaves it where the protocol thread finds it ([`Answers`]): records, plain data, which is what lets them cross where a unit cannot. A request is answered from them and from the buffer as it is, with no parse and no wait. The buffer is held against the text that was checked by what the two share before their first difference and after their last ([`Standing`]): a declaration lying wholly in what they share stands where it stood, or moved by the difference in length, and one a difference reaches is the one being edited, which is answered after the next check. A document's first check is the one wait: before it nothing is held to answer from.
 //!
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
@@ -30,14 +32,16 @@ use {
         Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeTextDocumentParams,
         DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
         DocumentFormattingParams, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse,
-        GotoDefinitionParams, GotoDefinitionResponse, InitializeParams, Location, LogMessageParams,
-        MessageType, OneOf, Position, PublishDiagnosticsParams, Range, ServerCapabilities,
-        SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
+        GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+        HoverProviderCapability, InitializeParams, Location, LogMessageParams, MarkupContent,
+        MarkupKind, MessageType, OneOf, Position, PublishDiagnosticsParams, Range,
+        ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
+        Uri,
         notification::{
             DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument,
             LogMessage, Notification, PublishDiagnostics,
         },
-        request::{DocumentSymbolRequest, Formatting, GotoDefinition, Request},
+        request::{DocumentSymbolRequest, Formatting, GotoDefinition, HoverRequest, Request},
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -69,6 +73,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
         text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
         document_formatting_provider: Some(OneOf::Left(true)),
         definition_provider: Some(OneOf::Left(true)),
+        hover_provider: Some(HoverProviderCapability::Simple(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
         ..ServerCapabilities::default()
     };
@@ -193,6 +198,12 @@ impl Server {
                         id,
                         serde_json::from_value::<GotoDefinitionParams>(params)
                             .map(|params| valued(serde_json::to_value(self.definition(&params)))),
+                    ),
+                    HoverRequest::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<HoverParams>(params)
+                            .map(|params| valued(serde_json::to_value(self.hover(&params)))),
                     ),
                     DocumentSymbolRequest::METHOD => respond(
                         connection,
@@ -322,8 +333,32 @@ impl Server {
         let (buffer, checked) = self.held(&asked.text_document.uri)?;
         let named = named_at(buffer, &checked, offset_of(buffer, asked.position))?;
 
-        self.located(named.declaration.as_ref()?)
+        self.located(named.declaration.as_ref()?.place()?)
             .map(GotoDefinitionResponse::Scalar)
+    }
+
+    /// What the name at a position of a document names, as its declaration states it: the head, shown as source, and the prose above it. Nothing where [`Server::definition`] has no name to answer for, and for a declaration whose text states none.
+    ///
+    /// **The one declaration's text is parsed here, where it is asked for.** A check leaves where each declaration is written and no head, since a head for every name of a document is a parse for each and a reader asks for few: what a request pays is one declaration's, which is no document's.
+    fn hover(&self, params: &HoverParams) -> Option<Hover> {
+        let asked = &params.text_document_position_params;
+        let (buffer, checked) = self.held(&asked.text_document.uri)?;
+        let named = named_at(buffer, &checked, offset_of(buffer, asked.position))?;
+        let heading = named.declaration.as_ref()?.heading()?;
+
+        let mut value = format!("```curios\n{}\n```", heading.head);
+        if !heading.prose.is_empty() {
+            value.push_str("\n\n");
+            value.push_str(&heading.prose.join("\n"));
+        }
+
+        Some(Hover {
+            contents: HoverContents::Markup(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value,
+            }),
+            range: None,
+        })
     }
 
     /// `span` as a place an editor opens. In a document the editor holds it is where the span stands in the buffer, and nothing where the buffer was edited there since the span was taken; in any other file it is the span's own range.

@@ -217,6 +217,20 @@ impl Anchors {
             .resolved(anchors)
     }
 
+    /// The text `name`'s declaration was written in, and where its name stands in it, each as a span of the source the text was read as. `None` for a definition no name was written for, and for one whose text this table no longer holds.
+    pub fn written(&self, name: &Global) -> Option<(Span, Span)> {
+        let label = self.labels.get(name)?;
+        let sited = self.texts.get(&(label.anchor, label.stamp))?;
+        let (start, end) = (label.start as usize, label.end as usize);
+
+        (start <= end && sited.start + end <= sited.end).then(|| {
+            (
+                Span::new(sited.source.clone(), sited.start, sited.end),
+                Span::new(sited.source.clone(), sited.start + start, sited.start + end),
+            )
+        })
+    }
+
     /// Every definition a name was written for, with where it was written in its declaration's text, in the names' order: what says which definitions a text declares, a label holding its text's anchor and stamp.
     pub fn labels(&self) -> impl Iterator<Item = (&Global, &Extent)> {
         self.labels.iter()

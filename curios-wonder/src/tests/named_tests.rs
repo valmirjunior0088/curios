@@ -1,7 +1,7 @@
 //! What `wonder at` and `wonder declarations` answer: the names a file writes, read off its subject as it was lowered, each with the declaration it names.
 
 use {
-    crate::{Named, Origin, Subject, Written},
+    crate::{Declaration, Named, Origin, Subject, Written},
     curios_core::Declared,
     curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_text::{Overlay, RootSource},
@@ -45,7 +45,11 @@ fn said(named: &Named) -> (&str, Declared, bool, Option<(usize, usize)>) {
         named.name.as_str(),
         named.declared,
         named.declares,
-        named.declaration.as_ref().map(|place| place.line_column()),
+        named
+            .declaration
+            .as_ref()
+            .and_then(Declaration::place)
+            .map(|place| place.line_column()),
     )
 }
 
@@ -157,8 +161,11 @@ fn a_declaration_of_the_compilers_own_library_is_placed_where_its_file_still_hol
     };
 
     let placed = print(&Overlay::default());
-    let place = placed
+    let declaration = placed
         .declaration
+        .expect("the library's `print` is written");
+    let place = declaration
+        .place()
         .expect("the checkout this compiler was built in holds the library's sources");
     let file = place
         .source
@@ -170,7 +177,20 @@ fn a_declaration_of_the_compilers_own_library_is_placed_where_its_file_still_hol
     let moved = Overlay::of([(file, "-- another text\n".to_string())]);
     let unplaced = print(&moved);
     assert_eq!(unplaced.name, placed.name);
-    assert_eq!(unplaced.declaration, None);
+    let unheld = unplaced
+        .declaration
+        .expect("the declaration is read whatever a file holds");
+    assert_eq!(unheld.place(), None);
+
+    // Its head and prose are read off the text its unit holds, whatever a file holds.
+    let heading = unheld.heading().expect("the declaration's text states it");
+    assert!(
+        heading.head.starts_with("pub let print("),
+        "{}",
+        heading.head
+    );
+    assert!(!heading.prose.is_empty());
+    assert_eq!(declaration.heading(), Some(heading));
 }
 
 /// A library is asked through one of its files, and answers as a program does.

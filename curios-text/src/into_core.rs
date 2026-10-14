@@ -41,7 +41,7 @@ mod scoped;
 use scoped::*;
 
 mod document;
-use document::*;
+pub use document::*;
 
 mod head;
 use head::*;

@@ -2140,6 +2140,11 @@ pub(crate) fn print_witness_head(item: &TopWitness) -> Printer {
     flat([pure("satisfy "), witness_signature(params, app)])
 }
 
+/// The head of a `test` declaration: the keyword and its name, without the body.
+pub(crate) fn print_test_head(item: &TopTest) -> Printer {
+    flat([pure("test "), pure(item.label.clone())])
+}
+
 /// The head of a `foreign` declaration, which is the whole of it.
 pub(crate) fn print_foreign_head(item: &TopForeign) -> Printer {
     flat([

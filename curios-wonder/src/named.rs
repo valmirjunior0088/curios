@@ -4,13 +4,15 @@
 //!
 //! **A name is answered with where it is declared, as a place in a file that holds it.** A declaration of the subject's own stands in text this question read, and one of a unit in scope in the text that unit was compiled from, which is what the disk or an editor holds: a store's hit is believed on a re-read of every file, and a session's unit was compiled from the overlay. The units a compiler was built with are believed on no read, so a declaration of one is placed where its file still holds the text it was read in, and is left unplaced otherwise: under an installed release their sources are another machine's.
 //!
+//! **A declaration's head and prose are read off its own text**, which the unit that declares it read and its record still holds ([`Declaration::heading`]): a declaration is answered with them whether or not a file holds it, the library under an installed release included, and whether or not a documentation page shows it.
+//!
 //! **One name stands at an offset** ([`Named::at`]): the narrowest that holds it. The rule is stated here, over the records, since both transports ask it and a server asks it of records alone.
 
 use {
     crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid},
     curios_core::{Anchors, Declared, Global},
     curios_pipeline::{Cache, Fold},
-    curios_text::{Overlay, PreparedText, identity},
+    curios_text::{Heading, Overlay, PreparedText, heading, identity},
     curios_unit::Unit,
     curios_utilities::{Source, Span},
     curios_verdicts::Verdicts,
@@ -35,8 +37,36 @@ pub struct Named {
     pub declared: Declared,
     /// Whether `written` is where the declaration is named, rather than a use of it.
     pub declares: bool,
-    /// Where the declaration's name is written, where a file holds it — see the module documentation.
-    pub declaration: Option<Span>,
+    /// Where the declaration is written, for one a name was written for.
+    pub declaration: Option<Declaration>,
+}
+
+/// Where a declaration is written, in the text the unit that declares it read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Declaration {
+    /// The text of the source declaration that declares it: its own, or its owner's for a constructor or a method.
+    pub text: Span,
+    /// Where its name stands in that text.
+    pub label: Span,
+    /// Whether a file holds that text — see the module documentation. Where none does, the declaration is read and has no place to open.
+    pub held: bool,
+}
+
+impl Declaration {
+    /// Where the declaration's name is written, as a place in a file that holds it.
+    pub fn place(&self) -> Option<&Span> {
+        self.held.then_some(&self.label)
+    }
+
+    /// The declaration's head as its author wrote it, and the prose above it: read off its own text by the printers a documentation page is printed by (`curios_text::heading`), so it is what a page says of it, and is said of a declaration no page shows. Parsed where it is asked for, the one declaration's text.
+    pub fn heading(&self) -> Option<Heading> {
+        let text = &self.text;
+
+        heading(
+            &text.source.text[text.start..text.end],
+            self.label.start.checked_sub(text.start)?,
+        )
+    }
 }
 
 impl Named {
@@ -139,7 +169,14 @@ impl Reading<'_> {
                     .into_iter()
                     .filter_map(|mention| {
                         let (declared, declaration) = match mention.declared {
-                            Some(declared) => (declared, Some(mention.span.clone())),
+                            Some(declared) => (
+                                declared,
+                                Some(Declaration {
+                                    text: passage.span().clone(),
+                                    label: mention.span.clone(),
+                                    held: true,
+                                }),
+                            ),
                             None => self.declaration(scope, text, &mention.name)?,
                         };
 
@@ -169,18 +206,27 @@ impl Reading<'_> {
         scope: &[&Unit],
         own: &PreparedText,
         name: &Global,
-    ) -> Option<(Declared, Option<Span>)> {
+    ) -> Option<(Declared, Option<Declaration>)> {
+        let written = |anchors: &Anchors, held: &dyn Fn(&Span) -> bool| {
+            let (text, label) = anchors.written(name)?;
+            let held = held(&label);
+
+            Some(Declaration { text, label, held })
+        };
+
         if let Some(declared) = own.declared_as(name) {
-            return Some((declared, Anchors::label(&[own.anchors()], name)));
+            return Some((declared, written(own.anchors(), &|_| true)));
         }
 
         let (unit, declared) = scope
             .iter()
             .find_map(|unit| Some((unit, unit.text().declared_as(name)?)))?;
-        let placed = Anchors::label(&[unit.text().anchors()], name)
-            .filter(|span| !unit.fixed() || self.stands(span));
+        let fixed = unit.fixed();
 
-        Some((declared, placed))
+        Some((
+            declared,
+            written(unit.text().anchors(), &|label| !fixed || self.stands(label)),
+        ))
     }
 
     /// Whether `source` is the file asked about.
