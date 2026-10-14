@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Bytes, Nat, Result, Async, Handle};
+use /std/{Monad, Bytes, Nat, Result, Async, Handle, Program};
 use /std/Bool/{Holds};
 
 --- The failure every host operation reports.
@@ -19,6 +19,11 @@ satisfy Monad(Io) {
 --- The identity edge, for a witness whose premise is `Monad/Lift(Io, M)` at `M = Io`.
 satisfy Monad/Lift(Io, Io) {
     lift(@_, m) = m,
+}
+
+--- A description that yields nothing is the program it describes.
+satisfy Program(Io({})) {
+    perform(program) = program,
 }
 
 --- One read's answer: bytes, the end of the stream, or a failure.

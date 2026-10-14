@@ -10,11 +10,6 @@ pub concept Program(T: Type): pub Type {
 
 pub use Program/*;
 
---- A description that yields nothing is the program it describes.
-satisfy Program(Io({})) {
-    perform(program) = program,
-}
-
 --- A description that may fail is run: a failure is written to standard error as it is shown, and the program ends with status `1`.
 satisfy (@E: Type, use Show(E)) => Program(Try(Io, E, {})) {
     perform(program) =
