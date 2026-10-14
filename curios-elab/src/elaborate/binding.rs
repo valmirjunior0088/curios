@@ -2,10 +2,10 @@ use {
     super::{Misaligned, align, check_witness_domain, insert_auto_argument, stands_at},
     crate::{
         BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, Occurrence,
-        ParkedWork, Provenance, Restriction, SlotPositions, check, check_is_sort,
+        ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, check, check_is_sort,
         check_rec_totality, convert, display_mismatch, elaborate, expect, metavar_origins,
-        metavar_spines, read_by_value, reduce_with, resolve_witness_goal, stuck_on_metavar,
-        written_monad, zonk_solved_term_metas,
+        metavar_spines, premise_label, read_by_value, reduce_with, resolve_witness_goal,
+        resolve_witness_goal_or, stuck_on_metavar, written_monad, zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
@@ -604,6 +604,7 @@ pub(super) fn elaborate_bang(
     if region_flex(context, &region) {
         return park_checking(context, term, expected);
     }
+    let owner = context.region_owner();
 
     // Auto-lift, decided before anything elaborates by reading declared shapes: both monads keyable and different means the action is wrapped in `/std/Monad/Lift`'s `lift`, whose `use` slot resolves the declared embedding — or reports the missing edge. An unreadable action stays unwrapped and keeps the ordinary mismatch; the explicit `lift(action)` spelling always remains.
     let region_shape = monad_shape(context, &region)?;
@@ -611,7 +612,7 @@ pub(super) fn elaborate_bang(
     let action = match (region_shape, action_shape) {
         (Some(region_shape), Some(action_shape)) if embeds(&region_shape, &action_shape) => {
             let wrapped = lift_wrapped(context, &bang.action, term.extent());
-            note_embedding_site(context, &wrapped, &bang.action, expected);
+            note_embedding_site(context, &wrapped, &bang.action, expected, owner);
             wrapped
         }
         _ => bang.action.clone(),
@@ -619,22 +620,58 @@ pub(super) fn elaborate_bang(
 
     // The bind's monad is the region's, supplied before any action is checked. Left to the wrapper's own inference, `M` is pinned by whichever side unifies first — the action's type, since arguments elaborate before the result meets the expected type — so an action of another monad the oracle could not read would fix the region to *its* monad, and the mismatch would surface at the outermost `!` of the region, against an action that was never wrong.
     //
-    // **A rigid region the imitation cannot read is refused here, not left to the wrapper.** The region is already reduced and not flex, so its head is a former, a variable or an atom; a variable-headed region — `M(Nat)` under a `use Monad(M)` premise — is exactly what the imitation solves. `None` therefore means the head applies to nothing, `?M(?B)` can never meet it, and the wrapper's inference would have only one outcome: `no witness of Monad(?) found`, against a premise of a call the author never wrote, showing a hole where the region's own type was already known. Refusing here changes no acceptance, only what the reader is told.
+    // **Whether the region is a monad at all is decided here, not left to the wrapper.** The region is already reduced and not flex, so its head is a former, a variable or an atom; a variable-headed region — `M(Nat)` under a `use Monad(M)` premise — is exactly what the imitation solves. `None` therefore means the head applies to nothing and `?M(?B)` can never meet it; a monad read and no witness of it means nothing to sequence through. Left to the wrapper, either would be reported against a premise of a call the author never wrote. Deciding both here changes no acceptance, only what the reader is told.
     let Some(monad) = region_monad(context, &region, term.extent())? else {
-        return Err(Error::bang_region_not_a_monad(region).at_opt(term.extent()));
+        return Err(Error::bang_region_not_a_monad(region, owner).at_opt(term.extent()));
     };
+    let witness = sequencing_witness(context, &monad, region, owner, term)?;
     let head = Term::free_var(&Free::global(context.syntax().monad.bind.qualifier()));
-    let arguments = [
-        (Plicity::Implicit, monad),
-        (Plicity::Explicit, action),
-        (Plicity::Explicit, bang.continuation.clone()),
-    ];
+    let arguments = [(Plicity::Implicit, monad)]
+        .into_iter()
+        .chain(witness.map(|witness| (Plicity::Witness, witness)))
+        .chain([
+            (Plicity::Explicit, action),
+            (Plicity::Explicit, bang.continuation.clone()),
+        ]);
     let app = Term::apply_marked(head, arguments);
     let app = match term.extent() {
         Some(extent) => Term::placed(extent, app),
         None => app,
     };
     elaborate(context, &app, mode)
+}
+
+/// The `Monad` witness a `!` sequences through, resolved where the `!` stands, as an operator resolves the witness it dispatches through ([`infix_method`]): a region whose monad has none is refused as a region that is no monad. `None` where the registry names no `Monad` concept — an embedding elaborating without the prelude — and the wrapper then asks for the witness itself.
+fn sequencing_witness(
+    context: &mut Context,
+    monad: &Term,
+    region: Term,
+    owner: RegionOwner,
+    term: &Term,
+) -> Result<Option<Term>, Error> {
+    let bind = context.syntax().monad.bind.qualifier();
+    let concept_name = Global::Authored(bind.without_last());
+    let Some(concept) = context.concept(&concept_name).cloned() else {
+        return Ok(None);
+    };
+    let occurrence = Occurrence {
+        instantiated: concept_name,
+        extent: term.extent(),
+    };
+    let (_, universes) =
+        context.instantiate_universe_bound(&concept.universe_context, &(), Some(occurrence))?;
+    let goal = Term::struct_type_at(concept_name, universes, vec![monad.clone()]);
+    let provenance = WitnessOrigin {
+        func: CalleeId::Function(Free::global(bind)),
+        binder: premise_label(1),
+    };
+    let (slot, witness) =
+        context.fresh_witness_metavar(goal.clone(), term.extent(), provenance.clone());
+    resolve_witness_goal_or(context, slot, &goal, provenance, term, |_, _| {
+        Error::bang_region_not_a_monad(region, owner)
+    })?;
+
+    Ok(Some(witness))
 }
 
 /// The region's monad as a term — `λx. T(c̄, x)` for a region `T(c̄, v)` — read by unifying `?M(?B)` with the region: the flex-apply imitation commits the right-biased partial application, exactly the solution the wrapper's own instantiation reaches, and the pairwise equation solves `?B` to the region's value slot. The imitation is asked for ([`Context::imitating`]), where a call's waits for its term to complete: the region is the `!`'s expectation, and no part read later says what its monad is. `None` where the imitation does not apply — a region whose head is no nominal or intrinsic former — and the wrapper then infers the monad itself.
@@ -721,7 +758,13 @@ fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Extent>) -> T
 }
 
 /// Record what an auto-lift names as written, for the report on a missing embedding — see [`EmbeddingSite`]. A region that applies no name records nothing: a nominal region, `Job(A)`, is spelled by its reduced form already.
-fn note_embedding_site(context: &mut Context, wrapped: &Term, action: &Term, region: &Term) {
+fn note_embedding_site(
+    context: &mut Context,
+    wrapped: &Term,
+    action: &Term,
+    region: &Term,
+    owner: RegionOwner,
+) {
     let (Some(extent), Some(region)) = (wrapped.extent(), written_monad(region)) else {
         return;
     };
@@ -730,6 +773,7 @@ fn note_embedding_site(context: &mut Context, wrapped: &Term, action: &Term, reg
         EmbeddingSite {
             action: action.clone(),
             region,
+            owner,
         },
     );
 }
@@ -760,7 +804,8 @@ pub(super) fn lift_on_check(
         return Ok(None);
     }
     let wrapped = lift_wrapped(context, term, None);
-    note_embedding_site(context, &wrapped, term, expected);
+    let owner = context.region_owner();
+    note_embedding_site(context, &wrapped, term, expected, owner);
     Ok(Some(wrapped))
 }
 
@@ -1161,6 +1206,7 @@ pub(super) fn elaborate_func_check(
 
         let body = written.body().expect("a cursor past every entry");
         let output = expecting.body().expect("a cursor past every entry");
+        context.open_body();
         check(context, &body, output)
     })?;
 
@@ -1249,8 +1295,10 @@ pub(super) fn elaborate_func_infer(
         (Some(lambda), Some(scope)) => Some((lambda, scope)),
         _ => None,
     };
-    let (body, output) =
-        context.with_frame(|context| walk(context, telescope, plicities, settle, &mut domains))?;
+    let (body, output) = context.with_frame(|context| {
+        context.open_body();
+        walk(context, telescope, plicities, settle, &mut domains)
+    })?;
 
     Ok((
         Term::func_marked(domains.clone(), body),

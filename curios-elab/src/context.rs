@@ -63,8 +63,8 @@ mod tests;
 
 use {
     super::{
-        DeadArm, Error, Occurrence, Provenance, UniverseMark, UniverseSolver, UniverseStateToken,
-        Witness, zonk_universe_levels_scoped,
+        DeadArm, Error, Occurrence, Provenance, RegionOwner, UniverseMark, UniverseSolver,
+        UniverseStateToken, Witness, zonk_universe_levels_scoped,
     },
     crate::{
         Published, Refusal, Sort, hold_at_one_instance, key_spelling, metavar_spines,
@@ -193,6 +193,7 @@ pub struct Context<'s> {
 pub(crate) struct EmbeddingSite {
     pub(crate) action: Term,
     pub(crate) region: Term,
+    pub(crate) owner: RegionOwner,
 }
 
 impl<'s> Context<'s> {
@@ -667,7 +668,22 @@ impl<'s> Context<'s> {
     pub(crate) fn enter_item(&mut self, declaration: Option<Global>) {
         self.underway.credits.begin_item();
         self.underway.scheme_open = true;
+        self.underway.defining = false;
         self.enter_declaration(declaration);
+    }
+
+    /// Elaborate the value of a declaration of `kind` from here on: a definition its author wrote is a region of its own ([`Context::region_owner`]).
+    pub(crate) fn enter_value(&mut self, kind: &DefinitionKind) {
+        self.underway.defining = matches!(kind, DefinitionKind::Authored);
+    }
+
+    /// What the region a `!` sequences in here belongs to: a function's body where a frame that stands opened one, and otherwise the value being elaborated.
+    pub(crate) fn region_owner(&self) -> RegionOwner {
+        match (self.typing.frames.in_body(), self.underway.defining) {
+            (true, _) => RegionOwner::Function,
+            (false, true) => RegionOwner::Definition,
+            (false, false) => RegionOwner::Declaration,
+        }
     }
 
     /// Elaborate `declaration`, a member of the item being elaborated, from here on: whose written binders the locals opened next count among.
@@ -1023,6 +1039,11 @@ impl<'s> Context<'s> {
     /// [`Frames::open_arm`]: say that the frame being elaborated is the arm at `case` of a match on `guard`, so that a bound given up under it is told whether a value reaches the arm.
     pub(crate) fn open_arm(&mut self, guard: &Term, case: &Term) {
         self.typing.frames.open_arm(guard.clone(), case.clone());
+    }
+
+    /// [`Frames::open_body`]: say that the frame being elaborated is a function's body, whose result type is the region a `!` there sequences in.
+    pub(crate) fn open_body(&mut self) {
+        self.typing.frames.open_body();
     }
 
     /// [`Frames::assume`], stamping the write.

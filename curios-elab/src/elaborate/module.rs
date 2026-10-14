@@ -816,6 +816,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     // Before the body: a struct former's body checks its parameters against the registry arity, which is lowered raw. Share the elaborated telescope the type above just produced, so the two sides are one term.
     share_struct_params(context, &def.name, &type_);
 
+    context.enter_value(&def.kind);
     let body = check(context, &def.body, type_.clone())?;
     context.sweep_parked()?;
     // A witness that reads one of its own methods reads that method's term, so its body names itself only where a method reaches itself.
@@ -958,6 +959,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     for ((def, type_), slot) in defs.iter().zip(&types).zip(slots) {
         let outer_site = context.set_checked_site(def.name);
         context.enter_declaration(Some(def.name));
+        context.enter_value(&def.kind);
         let body = check(context, &def.body, type_.clone())?;
         context.restore_checked_site(outer_site);
         context.fill_rec_slot(slot, body.clone());

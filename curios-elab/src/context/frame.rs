@@ -206,6 +206,8 @@ pub(crate) struct Frame {
     pub(super) dead_arm: Option<Rc<DeadArm>>,
     /// The guard and the case of the arm the frame is, where it is an arm that refines its scrutinee to a case — `None` for every other frame. Whether a value reaches such an arm is found by reducing its guard, which nothing does where the arm opens: it is asked where an error leaves the arm, and where a bound nothing discharges under it is given up ([`HeldFrames::arms`]).
     pub(super) arm: Option<(Term, Term)>,
+    /// Whether the frame is a function's body, whose result type is the region a `!` within it sequences in. Known where the body opens, and read where a `!` there is refused, which may be a retry standing on the frame.
+    pub(super) body: bool,
     /// The frame's assumptions in binding order, a companion to `assumptions`, which is keyed by name and loses order.
     pub(super) locals: Vec<(Free, Term)>,
     /// The frame's `use`-plicity binders in binding order, a subset of `locals`: resolution's search space, scanned innermost first.
@@ -225,6 +227,7 @@ impl Frame {
             scrutinee_spellings: Default::default(),
             dead_arm: None,
             arm: None,
+            body: false,
             locals: Vec::new(),
             witnesses: Vec::new(),
         }

@@ -111,6 +111,16 @@ impl<'s> Frames<'s> {
     pub(crate) fn open_arm(&mut self, guard: Term, case: Term) {
         self.innermost().arm = Some((guard, case));
     }
+
+    /// Say that the frame being elaborated is a function's body. It leaves with the frame.
+    pub(crate) fn open_body(&mut self) {
+        self.innermost().body = true;
+    }
+
+    /// Whether a frame that stands is a function's body.
+    pub(crate) fn in_body(&self) -> bool {
+        self.frames.iter().any(|frame| frame.body)
+    }
     /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases), so a binder carries no runtime-multiplicity mark.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.locals_stamp.fresh();

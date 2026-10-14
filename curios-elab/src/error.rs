@@ -103,6 +103,8 @@ pub struct EmbeddingDiagnosis {
     pub chain: Vec<(String, Qualifier)>,
     /// Present where the source is the fallible wrapper the registry names and the target is no instance of it: a failure has no edge into a monad that cannot hold one, so the report names the two ways the action is written instead.
     pub runner: Option<Box<Runner>>,
+    /// What the region the auto-lift sequenced in belongs to, where a site recorded it.
+    pub owner: Option<RegionOwner>,
 }
 
 /// The names a report offers where an action that may fail meets a region with no edge for it, each a global the reader's own imports spell: the wrapper's family, the function that runs one where it stands, and the family of what that hands back.
@@ -578,9 +580,10 @@ pub enum Error {
     BangRegionUndetermined,
     /// A postfix `!` in a region whose type is *known* and is no monad — the rigid twin of [`Error::BangRegionUndetermined`], and the case `documentation/syntax.md` states as "a `(Str, Bool) -> Bool` has nowhere to sequence one".
     ///
-    /// Raised where `elaborate_bang` finds the region rigid and still cannot read a monad from it, which means its head applies to nothing: the `?M(?B)` imitation can never solve, so leaving it to `/std/Monad/bind`'s own inference would report `no witness of Monad(?) found` against a premise of a call the author never wrote, with a hole where the answer was already in hand. Acceptance is unaffected — that path can only fail — and `region` is the type the reader must look at.
+    /// Raised by `elaborate_bang` alone, which reads the region's monad and resolves its `Monad` witness itself: a region whose head applies to nothing has no monad to read, and one whose monad has no witness has nothing to sequence through. Left to `/std/Monad/bind`, either would be reported against a premise of a call the author never wrote. `region` is the type the reader must look at, and `owner` what the region belongs to, which says why it is that type.
     BangRegionNotAMonad {
         region: Box<Term>,
+        owner: RegionOwner,
     },
     /// An infix operator whose concept has no registry entry, so there is nothing to dispatch through — an embedding that elaborates without the prelude (`infix_method`). With the prelude in scope, an operator at a type no witness covers reports [`Error::NoWitness`] instead. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
     OperatorUndefined {
@@ -923,9 +926,10 @@ impl Error {
         Self::BangRegionUndetermined
     }
 
-    pub(crate) fn bang_region_not_a_monad<U: Into<Term>>(region: U) -> Self {
+    pub(crate) fn bang_region_not_a_monad<U: Into<Term>>(region: U, owner: RegionOwner) -> Self {
         Self::BangRegionNotAMonad {
             region: Box::new(region.into()),
+            owner,
         }
     }
 
@@ -2063,6 +2067,17 @@ pub enum ErasedSite {
     Bound { callee: Callee, binder: String },
     /// The bound a built-in operation states of an operand.
     OperandBound(Box<Term>),
+}
+
+/// What the region a `!` sequences in belongs to, which says why the region has the type it has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegionOwner {
+    /// A function's body, whose type is the function's result.
+    Function,
+    /// The value of a definition its author wrote at the top level, whose type is the definition's: a region of its own, not one step of a program.
+    Definition,
+    /// The value of anything else declared — a test, a witness — or a program's final term.
+    Declaration,
 }
 
 /// What a binder written under the wrong mark was a binder of.

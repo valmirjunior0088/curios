@@ -236,6 +236,7 @@ fn diagnose_embedding(
         Some(site) => display_goal(context, &site.region),
         None => display_goal(context, &target_whnf),
     };
+    let owner = written.as_ref().map(|site| site.owner);
     let written_goal = written.and_then(|_| match &*goal {
         Subterm::StructType(struct_type) => {
             let mut struct_type = struct_type.clone();
@@ -264,6 +265,7 @@ fn diagnose_embedding(
         chain,
         goal: written_goal,
         runner,
+        owner,
     })
 }
 
@@ -889,6 +891,25 @@ pub(crate) fn resolve_witness_goal(
     provenance: WitnessOrigin,
     origin: &Term,
 ) -> Result<(), Error> {
+    resolve_witness_goal_or(
+        context,
+        slot,
+        goal,
+        provenance,
+        origin,
+        |context, provenance| no_witness_error(context, goal, provenance, origin.extent().as_ref()),
+    )
+}
+
+/// [`resolve_witness_goal`] for a form that states its own refusal: a definite miss where the goal stands is the error `missing` makes, at `origin`'s extent, rather than the missing witness. A goal that parks and misses later is reported as a parked goal is.
+pub(crate) fn resolve_witness_goal_or(
+    context: &mut Context,
+    slot: MetavarId,
+    goal: &Term,
+    provenance: WitnessOrigin,
+    origin: &Term,
+    missing: impl FnOnce(&mut Context, &WitnessOrigin) -> Error,
+) -> Result<(), Error> {
     if context.metavar_solution(slot).is_some() {
         return Ok(());
     }
@@ -910,12 +931,7 @@ pub(crate) fn resolve_witness_goal(
             Ok(())
         }
         Resolution::Poisoned => Err(Error::Poisoned),
-        Resolution::NoMatch => {
-            Err(
-                no_witness_error(context, goal, &provenance, origin.extent().as_ref())
-                    .at_opt(origin.extent()),
-            )
-        }
+        Resolution::NoMatch => Err(missing(context, &provenance).at_opt(origin.extent())),
     }
 }
 

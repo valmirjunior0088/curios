@@ -749,6 +749,34 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
     }
 }
 
+/// A `!` in the value of a top-level binding written with its type names the rule that made that value a region of its own, whatever the region's type is: no monad at all, a type a monad is read from with no witness declared for it, or a monad the action's does not embed in. The second is refused by the `!` itself, as the first is, and not as a premise of `/std/Monad/bind`.
+#[test]
+fn a_bang_in_a_definitions_value_says_the_definition_is_a_region_of_its_own() {
+    for (binding, refusal) in [
+        (
+            "let n: Nat = Io/pure(3)!;",
+            "this region's type is Nat, which is no monad",
+        ),
+        (
+            "let cell: Cell({}) = Cell/new()!;",
+            "this region's type is Cell({}), which is no monad",
+        ),
+        (
+            "let xs: List(Nat) = Io/pure([1])!;",
+            "no witness of /std/Monad/Lift(Io, List) found",
+        ),
+    ] {
+        let source = format!("use /std/{{Nat, List, Cell, Io}};\n{binding}\n()\n");
+        let error = typecheck(&source).expect_err("a definition's value is no step of the program");
+        assert!(error.contains(refusal), "{error}");
+        assert!(
+            error.contains("a top-level binding written with its type is a definition"),
+            "{error}"
+        );
+        assert!(!error.contains("Monad/bind"), "{error}");
+    }
+}
+
 /// A region whose monad is a telescope binder still sequences: the imitation reads a variable head, so the refusal above cannot fire on one.
 #[test]
 fn a_bang_sequences_in_a_region_whose_monad_is_a_parameter() {

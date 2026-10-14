@@ -8,7 +8,7 @@ mod tests;
 use {
     super::{
         BinderSite, Callee, CycleMember, DeadArm, Declined, Erased, ErasedName, ErasedSite, Error,
-        GoalReport, Need, ShapeDiagnosis, Underivable, Watched,
+        GoalReport, Need, RegionOwner, ShapeDiagnosis, Underivable, Watched,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_algebra::BOOL_ATOM_CAP,
@@ -21,6 +21,9 @@ use {
     curios_utilities::{Plicity, Qualifier},
     std::{collections::HashMap, fmt, rc::Rc},
 };
+
+/// Why a definition's value is a region of its own, which a report on a `!` in one adds: a program's two top-level bindings differ by whether their type is written.
+const DEFINITION_REGION: &str = "a top-level binding written with its type is a definition, and its value a region of its own; in a program, one written without its type is a step of the program";
 
 /// What a report on a dead arm adds: that the arm is never taken and what says so — its own guard, the guard of an arm around it that its case contradicts, or its scrutinee's indices, which also say it may be left out.
 pub(super) fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> String {
@@ -1159,13 +1162,23 @@ impl fmt::Display for Displayed<'_> {
                     "the monad of this region was never determined\n  a '!' sequences in its region's monad, which is read from the region's type\n  annotate the enclosing result type to fix the monad"
                 )
             }
-            Error::BangRegionNotAMonad { region } => {
+            Error::BangRegionNotAMonad { region, owner } => {
                 let region = region.spelled(spelling);
 
                 write!(
                     f,
-                    "this region's type is {region}, which is no monad\n  a '!' sequences in its region's monad, which is read from the region's type\n  a function whose result is not a monad has nowhere to sequence one"
-                )
+                    "this region's type is {region}, which is no monad\n  a '!' sequences in its region's monad, which is read from the region's type"
+                )?;
+                match owner {
+                    RegionOwner::Function => {
+                        write!(
+                            f,
+                            "\n  a function whose result is not a monad has nowhere to sequence one"
+                        )
+                    }
+                    RegionOwner::Definition => write!(f, "\n  {DEFINITION_REGION}"),
+                    RegionOwner::Declaration => Ok(()),
+                }
             }
             Error::OperatorUndefined { symbol, type_ } => {
                 let type_ = type_.spelled(spelling);
@@ -1429,6 +1442,9 @@ impl fmt::Display for Displayed<'_> {
                                 f,
                                 "\n  {source} is not a monad — no Monad witness exists for it, so no embedding out of it can be declared"
                             )?;
+                        }
+                        if diagnosis.owner == Some(RegionOwner::Definition) {
+                            write!(f, "\n  {DEFINITION_REGION}")?;
                         }
                         if !diagnosis.chain.is_empty() {
                             write!(
