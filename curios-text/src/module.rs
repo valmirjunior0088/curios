@@ -7,8 +7,8 @@ use {
     },
     curios_abi::WireSignature,
     curios_parse::{
-        Parsed, Parser, ParserError, ParserState, Recovered, commit, fail, is_blank, lazy, many0,
-        raise, recover, run_parser, spanned, take_eof,
+        Parsed, Parser, ParserError, ParserState, Recovered, commit, fail, is_blank, many0, raise,
+        recover, run_parser, settled, spanned, take_eof,
     },
     curios_print::{flat, pure, run_printer},
     curios_utilities::{Plicity, Report, Source, Span},
@@ -349,11 +349,10 @@ fn parse_items<'a>(strict: bool) -> impl Parser<'a, Vec<Recovered<TopItem>>> {
     move |state: ParserState<'a>| {
         recover(parse_top_item, next_item_anchor)
             .flat_map(move |recovered| {
-                match (strict, first_broken(&recovered)) {
-                    (true, Some(error)) => raise(error).boxed(),
-                    // Qualified: `curios_print::pure` is the printer's, imported for the `Display` impls below.
-                    _ => curios_parse::boxed::pure(recovered).boxed(),
-                }
+                settled(match (strict, first_broken(&recovered)) {
+                    (true, Some(error)) => Err(error),
+                    _ => Ok(recovered),
+                })
             })
             .parse(state)
     }
@@ -449,7 +448,7 @@ fn own_text(span: &Span, comments: &[Span]) -> Span {
 ///
 /// **A bare `take_eof` here would report the wrong thing.** A module has no tail expression, so anything left after the item loop is a failed item — but the loop drops a recoverable item failure (`curios_parse`'s repetition keeps only committed ones), which would leave `take_eof` to invent `Expected 'end-of-file'` at the item's first column. Re-running the item parser recovers the diagnosis it already had; [`Parser::or`] then keeps whichever error reached further, so a genuine trailing token still reports as end-of-input while a malformed item reports at the token that broke it. The alternative never succeeds — the loop stopped here precisely because the item parser failed — so nothing is consumed twice.
 fn parse_items_end<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
-    take_eof().or(lazy(parse_top_item).map(|_| ())).parse(state)
+    take_eof().or(parse_top_item.map(|_| ())).parse(state)
 }
 
 impl Module {
@@ -553,7 +552,7 @@ impl Entrypoint {
                         Some(error) => commit(raise(error)).boxed(),
                         None => fail("Expected a program's final term").boxed(),
                     };
-                    lazy(parse_term)
+                    parse_term
                         .and_drop(parse_program_end)
                         .map(move |tail| Entrypoint::new(into_module(items), tail))
                         .or(swallowed)

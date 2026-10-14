@@ -25,14 +25,6 @@ pub struct Mark {
 }
 
 impl Mark {
-    /// The position `state` stands at.
-    pub(crate) fn at(state: ParserState) -> Self {
-        Self {
-            offset: state.offset,
-            source: state.source.clone(),
-        }
-    }
-
     pub(crate) fn offset(&self) -> usize {
         self.offset
     }

@@ -12,9 +12,8 @@ use {
     },
     curios_num::Grain,
     curios_parse::{
-        Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, lazy, look_ahead, mark,
-        memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, take_exact, take_while,
-        uncommit,
+        Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, mark, memoize,
+        not_ahead, preceded_by_space, pure, sep_by0_trailing, take_exact, take_while, uncommit,
     },
     curios_utilities::Plicity,
     std::iter,
@@ -24,9 +23,9 @@ use {
 fn parse_declared_member<'a>(state: ParserState<'a>) -> Parsed<'a, (Option<String>, Term)> {
     parse_identifier
         .and_drop(parse_literal(":"))
-        .and(lazy(parse_term))
+        .and(parse_term)
         .map(|(label, type_): (&str, Term)| (Some(label.to_string()), type_))
-        .or(lazy(parse_term).map(|type_| (None, type_)))
+        .or(parse_term.map(|type_| (None, type_)))
         .parse(state)
 }
 
@@ -68,7 +67,7 @@ pub(super) fn parse_func_type<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     )
     // Past the arrow this is a function type, so a member it refuses is its own to report.
     .flat_map(members)
-    .and(lazy(parse_term))
+    .and(parse_term)
     .map(|(params, output): (Vec<FuncTypeParam>, Term)| {
         Subterm::FuncType(FuncType {
             params: params.into_iter().collect(),
@@ -95,12 +94,12 @@ pub(super) fn parse_pattern_field_prefix<'a>(state: ParserState<'a>) -> Parsed<'
 // A tuple-pattern / struct-pattern field: `label = pattern` or a bare positional pattern — the literal mirror of `parse_tuple_field`, with `Term` replaced by `Pattern`. Field-punning (`Name { x, y }`) falls out for free: it is just the positional case where the sub-pattern happens to be a binder matching the field.
 pub(super) fn parse_pattern_field<'a>(state: ParserState<'a>) -> Parsed<'a, PatternField> {
     parse_pattern_field_prefix
-        .and(lazy(parse_pattern))
+        .and(parse_pattern)
         .map(|(label, value)| PatternField {
             label: Some(label),
             value,
         })
-        .or(lazy(parse_pattern).map(|value| PatternField { label: None, value }))
+        .or(parse_pattern.map(|value| PatternField { label: None, value }))
         .parse(state)
 }
 
@@ -113,7 +112,7 @@ pub(super) fn parse_tuple_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, Patt
         .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
         .or(parse_literal("(")
             .and_keep(parse_pattern_field_prefix)
-            .and(lazy(parse_pattern))
+            .and(parse_pattern)
             .map(|(label, value)| {
                 vec![PatternField {
                     label: Some(label),
@@ -190,7 +189,7 @@ fn parse_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, Pattern> {
     parse_struct_pattern
         .or(parse_tuple_pattern)
         .or(parse_literal("(")
-            .and_keep(lazy(parse_pattern))
+            .and_keep(parse_pattern)
             .and_drop(parse_literal(")")))
         .or(parse_binder.map(Pattern::Binder))
         .parse(state)
@@ -201,12 +200,12 @@ pub(super) fn parse_match_pattern_field<'a>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPatternField> {
     parse_pattern_field_prefix
-        .and(lazy(parse_match_pattern))
+        .and(parse_match_pattern)
         .map(|(label, value)| MatchPatternField {
             label: Some(label),
             value,
         })
-        .or(lazy(parse_match_pattern).map(|value| MatchPatternField { label: None, value }))
+        .or(parse_match_pattern.map(|value| MatchPatternField { label: None, value }))
         .parse(state)
 }
 
@@ -221,7 +220,7 @@ pub(super) fn parse_tuple_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a
         .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
         .or(parse_literal("(")
             .and_keep(parse_pattern_field_prefix)
-            .and(lazy(parse_match_pattern))
+            .and(parse_match_pattern)
             .map(|(label, value)| {
                 vec![MatchPatternField {
                     label: Some(label),
@@ -261,7 +260,7 @@ pub(super) fn parse_ctor_arg<'a>(state: ParserState<'a>) -> Parsed<'a, (Plicity,
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Witness => commit(fail_from(&start, PATTERN_TAKES_NO_USE)).boxed(),
-            Plicity::Explicit | Plicity::Implicit => lazy(parse_match_pattern)
+            Plicity::Explicit | Plicity::Implicit => parse_match_pattern
                 .map(move |pattern| (plicity, pattern))
                 .boxed(),
         })
@@ -460,7 +459,7 @@ fn parse_match_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPatt
         .or(parse_list_cons_match_pattern)
         .or(parse_tuple_match_pattern)
         .or(parse_literal("(")
-            .and_keep(lazy(parse_match_pattern))
+            .and_keep(parse_match_pattern)
             .and_drop(parse_literal(")")))
         .or(refuse_glued_successor)
         .or(parse_binder.map(MatchPattern::Binder))
@@ -470,7 +469,7 @@ fn parse_match_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPatt
 // The optional `: type` after a binder.
 fn parse_annotation<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Term>> {
     parse_literal(":")
-        .and_keep(lazy(parse_term))
+        .and_keep(parse_term)
         .map(Some)
         .or(pure(None))
         .parse(state)
@@ -492,8 +491,7 @@ fn parse_bound_member<'a, B: 'a>(
                     .and(parse_annotation)
                     .and_drop(member_ends)
                     .map(|(binder, annotation)| Ok((Plicity::Implicit, binder, annotation)))
-                    .or(lazy(parse_term)
-                        .flat_map(move |_| refused(&start, BINDER_FOLLOWS_IMPLICIT)))
+                    .or(parse_term.flat_map(move |_| refused(&start, BINDER_FOLLOWS_IMPLICIT)))
                     .boxed(),
                 Plicity::Explicit => bound
                     .and(parse_annotation)

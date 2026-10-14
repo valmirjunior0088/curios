@@ -1,22 +1,32 @@
 # curios-parse
 
-The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`) and the WAT parser (`curios-wasm`): single-use `Parser` actions, freely backtracking ordered choice that an alternative stops with `commit`, packrat memoization, recovery past a committed failure, and byte-offset errors rendered as caret snippets. Each combinator's contract belongs to the crate rustdoc; why this and `curios-print` are two crates is `curios-print/README.md`'s decision.
+The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`) and the WAT parser (`curios-wasm`): single-use parsers that are functions of the input, freely backtracking ordered choice that an alternative stops with `commit`, packrat memoization, recovery past a committed failure, and byte-offset errors rendered as caret snippets. Each combinator's contract belongs to the crate rustdoc; why this and `curios-print` are two crates is `curios-print/README.md`'s decision.
 
 ## Design
 
-### A parser is a single-use `FnOnce`
+### A parser is a function of the input
 
-**Decision.** `Parser<'a, A>` is a boxed `FnOnce` from an input position to a value and the rest of the input, or an error, so the repetition combinators — `many0`, `sep_by0` and their siblings — take parser-building closures rather than parsers.
+**Decision.** `Parser<'a, A>` is a trait every `FnOnce(ParserState<'a>) -> Parsed<'a, A>` implements: a nonterminal is a plain function of the input, a combinator returns the closure it is, and a parser runs once, so the repetition combinators — `many0`, `sep_by0` and their siblings — take what hands them a parser for each iteration, a function that builds one or a parser that is `Copy`, as a nonterminal is. Where a grammar chooses at run time among parsers of different shapes, each is `boxed`.
 
-**Rationale.** `FnOnce` lets combinators move captured values into results without cloning; a parser cannot run twice, so every iteration builds a fresh one.
+**Rationale.** Nothing is allocated to run a grammar but at a box a choice asks for: a combinator a grammar function builds on the way is a value on that function's stack, and a nonterminal that names itself, or another that names it back, is a function calling a function, so recursion needs no box and no return type states a shape. A parser that runs once moves what it captured into its result without cloning.
 
-### A combinator takes a parser or a nonterminal
+**Rejected.** A boxed `FnOnce` for every application of a combinator that captures anything, which a grammar function built again at every position it was tried at, most of them for an ordered choice to drop unrun. Parsers built once and shared behind `Rc<dyn Fn>`, which keeps a box at every nonterminal and clones whatever a parser hands on of what it captured. Nonterminals written by hand as functions of the input, which restate commitment and the offset tie-break at every site.
 
-**Decision.** Every combinator that holds a parser it may not run takes an `IntoParser`: a `Parser` in hand, or a nonterminal, a function that builds one, which the combinator calls where the parser would run and nowhere else. A grammar hands a combinator its nonterminal, `term.and_drop(parse_whitespace)`, and a parameterized one behind a closure where the parser is rarely reached, `open.or(|| parse_literal("["))`. An operand written as a call is built where the combinator is.
+### A combinator takes a parser or what builds one
 
-**Rationale.** A grammar function answers a parser by building it, a box for every combinator that captures anything, and an ordered choice reaches a fraction of what it is handed: the alternatives after the one that matched, and whatever follows a token that was not there. Built as operands, most of a grammar's parsers are built to be dropped, the whitespace after every token that did not match among them. A function that captures nothing is no allocation, so a nonterminal handed over as itself costs nothing until its combinator gets that far.
+**Decision.** Every combinator that holds a parser it may not run takes an `IntoParser`: a `Parser` in hand, a nonterminal among them, or a function that builds one, which the combinator calls where the parser would run and nowhere else. A grammar hands a combinator its nonterminal, `term.and_drop(parse_whitespace)`, and an operand it would build for nothing behind a closure, `open.or(|| parse_literal("["))`.
 
-**Rejected.** A nonterminal whose body is wrapped in `lazy`, which every grammar function would carry and a reader would read past. An operand that is always a function: a parser made of values in hand, a literal or a prefix already parsed, would be wrapped in a closure that defers nothing. A parser generic over its closure, with no box at all: every grammar function would state its whole shape in its return type, and a recursive grammar needs the boxes back wherever it recurs.
+**Rationale.** An ordered choice reaches a fraction of what it is handed: the alternatives after the one that matched, and whatever follows a token that was not there. A function handed over is built only once its combinator gets that far.
+
+**Rejected.** An operand that is always a function: a parser made of values in hand, a literal or a prefix already parsed, would be wrapped in a closure that defers nothing.
+
+### A grammar function that takes arguments returns one closure
+
+**Decision.** A grammar function that takes arguments answers `impl Parser`, and its body is one closure of the input that builds its chain where it runs: `move |state| take_exact(expected).and_drop(parse_whitespace).parse(state)`.
+
+**Rationale.** A combinator's type is the chain it was built from, and a closure's is what it captures. A function returning its chain returns the chain's whole type, and a function over such a function nests it into the type of every caller, which the compiler's checks of each caller pay for, the borrow checker's most: returned as their chains, the struct and concept members over `declared` over `parse_literal` make the borrow checking of `curios-text` most of its build.
+
+**Rejected.** Boxing what such a function returns, an allocation at every application again. A check of the source refusing a function written as its chain, which reads Rust text for what a type says.
 
 ### A failure is rendered where it is reported
 

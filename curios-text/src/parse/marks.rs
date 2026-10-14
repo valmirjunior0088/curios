@@ -8,8 +8,8 @@ use {
     super::{parse_identifier, parse_keyword, parse_literal},
     crate::{Term, parse_term},
     curios_parse::{
-        Mark, Parsed, Parser, ParserError, ParserState, commit, fail, lazy, look_ahead, pure,
-        raise, refusal,
+        Mark, Parsed, Parser, ParserError, ParserState, commit, fail, look_ahead, pure, raise,
+        refusal,
     },
     curios_utilities::Plicity,
 };
@@ -128,12 +128,12 @@ pub(super) fn parse_premise<'a>(start: Mark) -> impl Parser<'a, Read<Term>> {
     move |state: ParserState<'a>| {
         parse_identifier
             .and_drop(parse_literal(":"))
-            .and_drop(lazy(parse_term))
+            .and_drop(parse_term)
             .flat_map(move |_| refused(&bound, USE_HAS_NO_BINDER))
             .or(parse_wildcard
                 .and_drop(member_ends)
                 .flat_map(move |()| refused(&placed, USE_PLACE_STATES_NO_TYPE)))
-            .or(lazy(parse_term).map(Ok))
+            .or(parse_term.map(Ok))
             .parse(state)
     }
 }
@@ -149,10 +149,10 @@ pub(super) fn parse_place<'a>(start: Mark) -> impl Parser<'a, Read<()>> {
             .or(parse_identifier
                 .and_drop(member_ends)
                 .flat_map(move |_| refused(&named, USE_BINDS_NOTHING)))
-            .or(lazy(parse_term)
+            .or(parse_term
                 .and_drop(
                     parse_literal(":")
-                        .and_keep(lazy(parse_term))
+                        .and_keep(parse_term)
                         .map(|_| ())
                         .or(pure(())),
                 )

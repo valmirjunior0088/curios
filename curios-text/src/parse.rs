@@ -50,8 +50,8 @@ mod tuples_tests;
 use {
     super::{Doc, Label, Name, Term},
     curios_parse::{
-        Parsed, Parser, ParserState, ahead, commit, fail, fail_from, is_blank, lazy, look_ahead,
-        many0, mark, not_ahead, obtained, pure, spanned, tagging, take_eof, take_exact, take_n,
+        Parsed, Parser, ParserState, ahead, commit, fail, fail_from, is_blank, look_ahead, many0,
+        mark, not_ahead, obtained, pure, spanned, tagging, take_eof, take_exact, take_n,
         take_while,
     },
     curios_utilities::{Qualifier, Span, is_identifier_char, is_keyword},
@@ -103,7 +103,7 @@ pub(crate) fn take_comments() -> Vec<Span> {
 
 /// The formatter's optional tail: a whole term when one follows, `None` at end of input. The term comes first so that a tail garbled past its first token commits under [`Parser::or`]'s progress rule and is refused with the term's own message at its own position — what the compiler reports for the same program. A module file's items end at end of input, where the term fails without progress, and the alternative answers `None`.
 pub(crate) fn parse_optional_term<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Term>> {
-    lazy(parse_term)
+    parse_term
         .map(Some)
         .or(take_eof().map(|()| None))
         .parse(state)
@@ -142,7 +142,7 @@ pub(crate) fn parse_program_end<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
             .and_drop(take_exact(";"))
             .flat_map(|start| fail_from(&start, PROGRAM_TAKES_NO_SEMICOLON)))
         .or(mark()
-            .and(look_ahead(lazy(parse_term)).map(|_| true).or(pure(false)))
+            .and(look_ahead(parse_term).map(|_| true).or(pure(false)))
             .flat_map(|(start, begins_a_term)| match begins_a_term {
                 true => take_n(1)
                     .and_keep(fail_from(&start, PROGRAM_CLOSES_WITH_ONE_TERM))

@@ -11,8 +11,8 @@ use {
         reserved_keyword,
     },
     curios_parse::{
-        Parsed, Parser, ParserState, commit, fail, fail_from, lazy, look_ahead, mark, not_ahead,
-        pure, sep_by0_trailing, take_exact,
+        Parsed, Parser, ParserState, commit, fail, fail_from, look_ahead, mark, not_ahead, pure,
+        sep_by0_trailing, take_exact,
     },
     curios_utilities::{Plicity, is_keyword},
     std::iter,
@@ -34,7 +34,7 @@ pub(super) fn parse_intrinsic<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
 
 pub(super) fn parse_parens<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     parse_literal("(")
-        .and_keep(lazy(parse_term))
+        .and_keep(parse_term)
         .and_drop(parse_literal(")"))
         .parse(state)
 }
@@ -58,7 +58,7 @@ pub(super) fn parse_field_member<'a>(state: ParserState<'a>) -> Parsed<'a, Tuple
         // Past the arrow the list is this sugar's, so a member it refuses is its own to report.
         .flat_map(|(label, params)| members(params).map(move |params| (label, params)))
         // A field's type position commits once its introducer is read: past a `->` or a `:` nothing else may stand here, and the unlabeled alternative below would otherwise read the label alone as the whole type and leave the enclosing `}` to complain at the introducer.
-        .and(commit(lazy(parse_term)))
+        .and(commit(parse_term))
         .map(
             |((label, params), output): ((Label, Vec<FuncTypeParam>), Term)| TupleTypeParam {
                 label: Some(label),
@@ -68,13 +68,13 @@ pub(super) fn parse_field_member<'a>(state: ParserState<'a>) -> Parsed<'a, Tuple
         )
         .or(parse_label
             .and_drop(parse_literal(":"))
-            .and(commit(lazy(parse_term)))
+            .and(commit(parse_term))
             .map(|(label, type_): (Label, Term)| TupleTypeParam {
                 label: Some(label),
                 func_params: None,
                 type_,
             }))
-        .or(lazy(parse_term).map(|type_| TupleTypeParam {
+        .or(parse_term.map(|type_| TupleTypeParam {
             label: None,
             func_params: None,
             type_,
@@ -161,13 +161,13 @@ pub(super) fn parse_tuple_field_prefix<'a>(state: ParserState<'a>) -> Parsed<'a,
 pub(super) fn parse_tuple_field<'a>(state: ParserState<'a>) -> Parsed<'a, TupleField> {
     parse_tuple_field_prefix
         // Past a guarded `=` the value must follow: no positional field can hold one at its top level, so the field owns the diagnosis rather than falling back to the positional reading and leaving the enclosing `}` or `)` to complain at the label.
-        .and(commit(lazy(parse_term)))
+        .and(commit(parse_term))
         .map(|((label, func_params), value)| TupleField {
             label: Some(label),
             func_params,
             value,
         })
-        .or(lazy(parse_term).map(|value| TupleField {
+        .or(parse_term.map(|value| TupleField {
             label: None,
             func_params: None,
             value,
@@ -185,7 +185,7 @@ pub(super) fn parse_tuple<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
         .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
         .or(parse_literal("(")
             .and_keep(parse_tuple_field_prefix)
-            .and(lazy(parse_term))
+            .and(parse_term)
             .map(|((label, func_params), value)| {
                 vec![TupleField {
                     label: Some(label),
@@ -202,10 +202,10 @@ pub(super) fn parse_tuple<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
 // A struct-literal entry: a `..base` spread (no term begins with `..` — a leading-dot float has a single dot — so the prefix commits), a `use <term>` fill for a concept's `use`-marked field (the call-site argument form — a mark can never begin a field label or value), or a field, plain or under `@`: after the mark comes the field as a plain one is written, `label = value` or the value alone, and `@_` holds a hidden field's place. Spread position and multiplicity are core elaboration's job.
 pub(super) fn parse_struct_entry<'a>(state: ParserState<'a>) -> Parsed<'a, StructLitEntry> {
     parse_literal("..")
-        .and_keep(lazy(parse_term))
+        .and_keep(parse_term)
         .map(StructLitEntry::Spread)
         .or(parse_mark.flat_map(|plicity| match plicity {
-            Plicity::Witness => lazy(parse_term).map(StructLitEntry::Use).boxed(),
+            Plicity::Witness => parse_term.map(StructLitEntry::Use).boxed(),
             Plicity::Implicit => parse_tuple_field.map(StructLitEntry::Implicit).boxed(),
             Plicity::Explicit => parse_tuple_field.map(StructLitEntry::Field).boxed(),
         }))

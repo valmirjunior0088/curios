@@ -15,9 +15,9 @@ use {
     },
     curios_abi::{WireLeaf, WireResults, WireReturn, WireSignature, WireType},
     curios_parse::{
-        Boxed, Mark, Parsed, Parser, ParserError, ParserState, commit, fail, fail_from, lazy,
-        look_ahead, many0, mark, not_ahead, pure, raise, refusal, sep_by0_trailing,
-        sep_by1_trailing, spanned, tagging, take_exact,
+        Boxed, Mark, Parsed, Parser, ParserError, ParserState, commit, fail, fail_from, look_ahead,
+        many0, mark, not_ahead, pure, raise, refusal, sep_by0_trailing, sep_by1_trailing, spanned,
+        tagging, take_exact,
     },
     curios_utilities::{Plicity, Qualifier, is_keyword},
     std::iter,
@@ -84,7 +84,7 @@ pub(super) fn parse_top_test<'a>(vis_pub: bool) -> impl Parser<'a, TopItem> {
         }
         .and_keep(declared(commit(
             parse_literal("=")
-                .and_keep(lazy(parse_term))
+                .and_keep(parse_term)
                 .and_drop(parse_literal(";")),
         )))
         .map(|(label, body)| TopItem::Test(TopTest { label, body })))
@@ -320,7 +320,7 @@ pub(super) fn parse_wire_signature<'a>(state: ParserState<'a>) -> Parsed<'a, Wir
         .and_keep(sep_by0_trailing(parse_wire_type, || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("->"))
-        .and(lazy(parse_wire_return))
+        .and(parse_wire_return)
         .map(|(params, returns)| WireSignature { params, returns })
         .parse(state)
 }
@@ -488,9 +488,9 @@ pub(super) fn parse_induct_payload_field<'a>(
             Plicity::Witness => commit(fail_from(&start, PAYLOAD_TAKES_NO_USE)).boxed(),
             Plicity::Explicit | Plicity::Implicit => parse_identifier
                 .and_drop(parse_literal(":"))
-                .and(lazy(parse_term))
+                .and(parse_term)
                 .map(|(name, type_): (&str, Term)| (Some(name.to_string()), type_))
-                .or(lazy(parse_term).map(|type_| (None, type_)))
+                .or(parse_term.map(|type_| (None, type_)))
                 .map(move |(label, type_)| CasePayloadParam {
                     plicity,
                     label,
@@ -536,7 +536,7 @@ pub(super) fn parse_top_induct_case<'a>(state: ParserState<'a>) -> Parsed<'a, To
                             .and_keep(
                                 parse_literal("(")
                                     .and_keep(sep_by0_trailing(
-                                        || lazy(parse_term),
+                                        || parse_term,
                                         || parse_literal(","),
                                     ))
                                     .and_drop(parse_literal(")")),
@@ -572,7 +572,7 @@ pub(super) fn parse_induct_param<'a>(state: ParserState<'a>) -> Parsed<'a, FuncT
                 .boxed(),
             Plicity::Explicit | Plicity::Implicit => parse_identifier
                 .and_drop(parse_literal(":"))
-                .and(lazy(parse_term))
+                .and(parse_term)
                 .map(move |(name, type_): (&str, Term)| FuncTypeParam {
                     plicity,
                     label: Some(name.to_string()),
@@ -601,9 +601,9 @@ pub(super) fn parse_induct_index<'a>(state: ParserState<'a>) -> Parsed<'a, (Opti
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Explicit => parse_identifier
                 .and_drop(parse_literal(":"))
-                .and(lazy(parse_term))
+                .and(parse_term)
                 .map(|(name, ty): (&str, Term)| (Some(name.to_string()), ty))
-                .or(lazy(parse_term).map(|ty| (None, ty)))
+                .or(parse_term.map(|ty| (None, ty)))
                 .boxed(),
             Plicity::Implicit | Plicity::Witness => {
                 commit(fail_from(&start, INDEX_TAKES_NO_MARK)).boxed()
@@ -715,7 +715,7 @@ pub(super) fn parse_top_induct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Pars
     }
 }
 
-/// A universe sort: exactly `Type` or `Prop`. The result sort of a struct or an inductive head is always one of these two — the only universes — so the sort position parses this targeted form rather than a generic `lazy(parse_term)`. A generic term parser is both too loose and, for a struct, greedily eats the `{` opening the field block.
+/// A universe sort: exactly `Type` or `Prop`. The result sort of a struct or an inductive head is always one of these two — the only universes — so the sort position parses this targeted form rather than a generic `parse_term`. A generic term parser is both too loose and, for a struct, greedily eats the `{` opening the field block.
 pub(super) fn parse_sort<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     parse_prop.or(parse_type).parse(state)
 }
@@ -813,10 +813,10 @@ pub(super) fn parse_concept_field<'a>(state: ParserState<'a>) -> Parsed<'a, Conc
                 // Past the arrow the list is this sugar's, so a member it refuses is its own to report.
                 .flat_map(members)
                 // As in `parse_tuple_type_field`: past the `->` or the `:` a type must follow, so the refusal is this one rather than the `}` the field list falls back to.
-                .and(commit(lazy(parse_term)))
+                .and(commit(parse_term))
                 .map(|(params, output): (Vec<FuncTypeParam>, Term)| (Some(params), output))
                 .or(parse_literal(":")
-                    .and_keep(commit(lazy(parse_term)))
+                    .and_keep(commit(parse_term))
                     .map(|type_| (None, type_))),
         )
         .map(|(label, (func_params, type_)): (Label, _)| ConceptField {
@@ -908,7 +908,7 @@ pub(super) fn parse_top_concept<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Par
 pub(super) fn parse_witness_field<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessField> {
     parse_tuple_field_prefix
         // As in `parse_tuple_field`: past the `=` the implementation must follow, so a mistake in it is the diagnosis rather than the `}` the entry list falls back to.
-        .and(commit(lazy(parse_term)))
+        .and(commit(parse_term))
         .map(|((label, func_params), value)| WitnessField {
             label,
             func_params,

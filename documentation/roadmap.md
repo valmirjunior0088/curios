@@ -121,7 +121,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Surface
 
-- [ ] [A parse allocates for what it builds](roadmap/surface/201-a-parse-allocates-for-what-it-builds.md) — not refined yet; a parser is boxed for every application of a combinator, at every position a grammar function is tried at, and a file an edit touched is parsed whole
+- [x] [A parser is a function of the input](../curios-parse/README.md#a-parser-is-a-function-of-the-input): a nonterminal is a plain function and a combinator the closure it returns, so a parse allocates for a parser only where a choice among shapes boxes one
 - [x] [A hidden member takes no position](design/theory/a-hidden-member-takes-no-position.md), on data as on a function: a constructor's payload and a structure's field declare `@`, left out where the value is built, where an arm opens it and where a position reads it, and a fact wherever it is in scope
 - [x] `struct` and `induct` declarations with independent nominal and representation visibility; structure, concept and witness groups
 - [x] [Privacy scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md), with sealed representations and an exact private-item-in-public-interface audit

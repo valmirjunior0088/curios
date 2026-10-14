@@ -231,11 +231,6 @@ pub fn tagging<'a, T, M>(
     }
 }
 
-/// Defers building the parser until it is run: a nonterminal handed over as the function that builds it. A function of the input needs none of it, being run where it is reached.
-pub fn lazy<'a, T, M>(parser: impl IntoParser<'a, T, M>) -> impl Parser<'a, T> {
-    move |state: ParserState<'a>| parser.into_parser().parse(state)
-}
-
 /// Runs the parser and hands its output back at the position it started from, consuming nothing. A positive look-ahead — the dual of [`not_ahead`](crate::not_ahead) — for a grammar that must inspect the next word before choosing among alternatives none of which may be denied their turn at it.
 pub fn look_ahead<'a, T, M>(parser: impl IntoParser<'a, T, M>) -> impl Parser<'a, T> {
     move |state: ParserState<'a>| {

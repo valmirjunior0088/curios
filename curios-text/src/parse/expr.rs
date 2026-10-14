@@ -12,8 +12,8 @@ use {
         parse_whitespace,
     },
     curios_parse::{
-        Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, lazy, look_ahead, many0,
-        many1, mark, memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, shown, spanned,
+        Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, many0, many1,
+        mark, memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, shown, spanned,
         take_eof, take_exact, take_n, take_while, unseen,
     },
     curios_utilities::{InfixOp, Plicity, Span, is_identifier_char, is_keyword},
@@ -87,7 +87,7 @@ pub(super) fn parse_func_sugar_param<'a>(
                 .boxed(),
             Plicity::Explicit | Plicity::Implicit => parse_pattern
                 .and_drop(parse_literal(":"))
-                .and(lazy(parse_term))
+                .and(parse_term)
                 .map(move |(binder, type_)| {
                     Ok(FuncSugarParam::Bound {
                         implicit: plicity == Plicity::Implicit,
@@ -95,8 +95,7 @@ pub(super) fn parse_func_sugar_param<'a>(
                         type_,
                     })
                 })
-                .or(lazy(parse_term)
-                    .flat_map(move |_| refused(&start, DEFINITION_NAMES_ITS_MEMBERS)))
+                .or(parse_term.flat_map(move |_| refused(&start, DEFINITION_NAMES_ITS_MEMBERS)))
                 .boxed(),
         })
         .parse(state)
@@ -113,7 +112,7 @@ pub(super) fn parse_func_let_signature<'a>(owns_body: bool) -> impl Parser<'a, L
             .and_drop(parse_literal("->").map_err(DEFINITION_STATES_ITS_RESULT))
             // Past the arrow this is the definition sugar, so a member it refuses is its own to report.
             .flat_map(members)
-            .and(lazy(parse_term))
+            .and(parse_term)
             .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
             .and_drop(parse_literal("="))
             .and(body(owns_body))
@@ -131,7 +130,7 @@ pub(super) fn parse_required_name_signature<'a>(owns_body: bool) -> impl Parser<
     move |state: ParserState<'a>| {
         refusing(":=", DEFINITION_TAKES_EQUALS)
             .and_keep(parse_literal(":"))
-            .and_keep(lazy(parse_term))
+            .and_keep(parse_term)
             .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
             .and_drop(parse_literal("="))
             .and(body(owns_body))
@@ -147,8 +146,8 @@ pub(super) fn parse_required_name_signature<'a>(owns_body: bool) -> impl Parser<
 fn body<'a>(owned: bool) -> impl Parser<'a, Term> {
     move |state: ParserState<'a>| {
         (match owned {
-            true => commit(lazy(parse_term)).boxed(),
-            false => lazy(parse_term).boxed(),
+            true => commit(parse_term).boxed(),
+            false => parse_term.boxed(),
         })
         .parse(state)
     }
@@ -161,13 +160,13 @@ pub(super) fn parse_optional_name_signature<'a>(
     refusing(":=", DEFINITION_TAKES_EQUALS)
         .and_keep(
             parse_literal(":")
-                .and_keep(lazy(parse_term))
+                .and_keep(parse_term)
                 .map(Some)
                 .or(pure(None)),
         )
         .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
         .and_drop(parse_literal("="))
-        .and(lazy(parse_term))
+        .and(parse_term)
         .map(|(type_, body)| LetSignature::Name { type_, body })
         .parse(state)
 }
@@ -198,7 +197,7 @@ pub(super) fn parse_local_let_signature<'a>(state: ParserState<'a>) -> Parsed<'a
 // `many1` parses the whole run of `let` statements in a loop, then the tail once, and they become a single flat `Let` block — one node for the whole run, not a right-nested chain — so nothing downstream (clone, lowering) recurses once per binding. The leading `mark` on the first statement and the trailing `mark` after the tail span the block.
 pub(super) fn parse_let<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     many1(|| mark().and(parse_let_group))
-        .and(lazy(parse_term).and(mark))
+        .and(parse_term.and(mark))
         .map(|(statements, (tail, end))| {
             // `many1` guarantees at least one statement, so the span start is defined.
             let span = statements[0].0.to(&end);
@@ -237,7 +236,7 @@ pub(super) enum Suffix {
 // A call-site argument under its mark: `use <term>` fills a witness slot, `@<term>` an implicit slot, a plain term an explicit slot. Neither mark can begin a plain-argument term.
 pub(super) fn parse_apply_argument<'a>(state: ParserState<'a>) -> Parsed<'a, Argument> {
     parse_mark
-        .and(lazy(parse_term))
+        .and(parse_term)
         .map(|(plicity, term)| Argument { term, plicity })
         .parse(state)
 }

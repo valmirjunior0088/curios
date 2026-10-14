@@ -8,8 +8,8 @@ use {
         parse_whitespace,
     },
     curios_parse::{
-        Parsed, Parser, ParserState, commit, fail, fail_from, lazy, look_ahead, many0, mark,
-        not_ahead, pure, sep_by0_trailing, spanned, take_exact,
+        Parsed, Parser, ParserState, commit, fail, fail_from, look_ahead, many0, mark, not_ahead,
+        pure, sep_by0_trailing, spanned, take_exact,
     },
 };
 
@@ -22,7 +22,7 @@ pub(super) fn parse_func<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
         .and_drop(parse_literal("=>"))
         // Past the arrow this is a lambda and nothing else, so a parameter it refuses and its body own the diagnosis. Left to backtrack, the parameter list would be re-read as a tuple or a parenthesized term and the arrow itself would become the complaint.
         .flat_map(members)
-        .and(commit(lazy(parse_term)))
+        .and(commit(parse_term))
         .map(|(params, body)| Subterm::Func(Func { params, body }).into())
         .parse(state)
 }
@@ -56,11 +56,11 @@ fn refuse_braced_match<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 pub(super) fn parse_match_prefix<'a>(state: ParserState<'a>) -> Parsed<'a, (Term, Option<Term>)> {
     parse_keyword("match")
         .and_keep(refuse_braced_match)
-        .and_keep(lazy(parse_term))
+        .and_keep(parse_term)
         .and(
             parse_literal(":")
                 // The `:` is what introduces a motive, so past it a term must follow. Recoverable, a malformed motive would be read as no motive at all and the arms' `end` would complain at the colon.
-                .and_keep(commit(lazy(parse_term)))
+                .and_keep(commit(parse_term))
                 .map(Some)
                 .or(pure(None)),
         )
@@ -73,7 +73,7 @@ pub(super) fn parse_induct_match_branch<'a>(state: ParserState<'a>) -> Parsed<'a
         .and_keep(commit(
             spanned(parse_match_pattern)
                 .and_drop(parse_literal("=>"))
-                .and(lazy(parse_term)),
+                .and(parse_term),
         ))
         .map(|((span, pattern), body)| MatrixArm {
             pattern,
@@ -102,9 +102,9 @@ pub(super) fn parse_bind_arm<'a>(state: ParserState<'a>) -> Parsed<'a, ChooseArm
                 .and_drop(not_ahead(">")),
         )
         .and_drop(parse_whitespace)
-        .and(lazy(parse_term_before_arrow))
+        .and(parse_term_before_arrow)
         .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
+        .and(parse_term)
         .map(|((pattern, value), body)| ChooseArm {
             test: ChooseTest::Bind { pattern, value },
             body,
@@ -115,7 +115,7 @@ pub(super) fn parse_bind_arm<'a>(state: ParserState<'a>) -> Parsed<'a, ChooseArm
 // A choose condition arm `| cond => body`. The catch spans through `=>` so a condition term that merely *starts* like the default backtracks cleanly. A bare `_` parses as an ordinary `Name` term, so the choose's `| _ =>` default would otherwise be swallowed here; the `flat_map` guard rejects a lone `_` condition, letting `many0` stop and hand the default to `parse_choose_default`. A condition that merely *begins* with `_` (e.g. `_ready`) has a longer head and passes the guard, parsing as an ordinary condition.
 pub(super) fn parse_cond_arm<'a>(state: ParserState<'a>) -> Parsed<'a, ChooseArm> {
     parse_literal("|")
-        .and_keep(lazy(parse_term_before_arrow))
+        .and_keep(parse_term_before_arrow)
         .flat_map(|cond| match cond.as_subterm() {
             Subterm::Name(name) if name.is_single() && name.head() == "_" => {
                 fail("the `| _ =>` default is not a condition arm").boxed()
@@ -123,7 +123,7 @@ pub(super) fn parse_cond_arm<'a>(state: ParserState<'a>) -> Parsed<'a, ChooseArm
             _ => pure(cond).boxed(),
         })
         .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
+        .and(parse_term)
         .map(|(condition, body)| ChooseArm {
             test: ChooseTest::Cond(condition),
             body,
@@ -143,8 +143,8 @@ pub(super) fn parse_choose_default<'a>(state: ParserState<'a>) -> Parsed<'a, Ter
     parse_literal("|")
         .and_keep(parse_literal("_"))
         .and_drop(parse_literal("=>"))
-        .and_keep(lazy(parse_term))
-        .or(lazy(parse_choose_arm).map(|arm| arm.body))
+        .and_keep(parse_term)
+        .or(parse_choose_arm.map(|arm| arm.body))
         .parse(state)
 }
 

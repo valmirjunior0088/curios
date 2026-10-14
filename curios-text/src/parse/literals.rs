@@ -6,8 +6,8 @@ use {
     },
     curios_num::{Floating, Grain, Natural},
     curios_parse::{
-        Mark, Parsed, Parser, ParserState, commit, expecting, fail, fail_from, lazy, look_ahead,
-        many0, mark, not_ahead, pure, sep_by0_trailing, take_exact, take_n, take_while,
+        Mark, Parsed, Parser, ParserState, commit, expecting, fail, fail_from, look_ahead, many0,
+        mark, not_ahead, pure, sep_by0_trailing, take_exact, take_n, take_while,
     },
     curios_utilities::Sign,
 };
@@ -514,9 +514,9 @@ fn common_prefix<'s>(a: &'s str, b: &str) -> &'s str {
 // One entry of a `Bits`/`Bytes` literal, mirroring `parse_list_entry`: a `..` spread contributing a whole packed value, or a plain term contributing a single atom. A constant atom has no spelling of its own — `1` in a `Bits` literal and `0x48` in a `Bytes` literal are ordinary numeral terms realized at `Bool` and `Byte` by elaboration, and lowering folds adjacent constants into a packed run rather than a chain of appends (see `into_core`'s `lower_bin_literal`).
 fn parse_bin_entry<'a>(state: ParserState<'a>) -> Parsed<'a, BinSegment> {
     parse_literal("..")
-        .and_keep(lazy(parse_term))
+        .and_keep(parse_term)
         .map(BinSegment::Spread)
-        .or(lazy(parse_term).map(BinSegment::Atom))
+        .or(parse_term.map(BinSegment::Atom))
         .parse(state)
 }
 
@@ -544,9 +544,9 @@ fn parse_bin_literal_grain<'a>(grain: Grain, prefix: &'static str) -> impl Parse
 // One entry of a `List` literal: a `..` spread contributing a whole list, or a plain element. Unlike a `Bits`/`Bytes` literal, brackets and commas delimit, so spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
 pub(super) fn parse_list_entry<'a>(state: ParserState<'a>) -> Parsed<'a, ListEntry> {
     parse_literal("..")
-        .and_keep(lazy(parse_term))
+        .and_keep(parse_term)
         .map(ListEntry::Spread)
-        .or(lazy(parse_term).map(ListEntry::Elem))
+        .or(parse_term.map(ListEntry::Elem))
         .parse(state)
 }
 

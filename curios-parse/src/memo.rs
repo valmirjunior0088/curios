@@ -5,26 +5,11 @@ use {
 };
 
 /// One cached parse at a given grammar key and start offset: either the produced value (type-erased, since the table is shared across the memoized parsers) paired with the end offset to resume at, or the verbatim error the parser failed with.
-pub(crate) type MemoEntry = Result<(Rc<dyn Any>, usize), ParserError>;
+type MemoEntry = Result<(Rc<dyn Any>, usize), ParserError>;
 
 thread_local! {
     /// Packrat cache for [`memoize`]d parsers, keyed by `(grammar key, byte offset)`. Cleared at the start of every [`run_parser`] so offsets never collide across independent parses. Per-thread, so concurrent parses (e.g. the test suite) don't share it.
     static MEMO: RefCell<HashMap<(u32, usize), MemoEntry>> = RefCell::new(HashMap::new());
-}
-
-/// What the table holds for `key` at `offset`, where a parse has been there.
-pub(crate) fn remembered(key: u32, offset: usize) -> Option<MemoEntry> {
-    MEMO.with(|memo| memo.borrow().get(&(key, offset)).cloned())
-}
-
-/// Hold `entry` for `key` at `offset`.
-pub(crate) fn remember(key: u32, offset: usize, entry: MemoEntry) {
-    MEMO.with(|memo| memo.borrow_mut().insert((key, offset), entry));
-}
-
-/// Empty the table.
-pub(crate) fn forget() {
-    MEMO.with(|memo| memo.borrow_mut().clear());
 }
 
 /// Wraps a parser so its result at each start offset is computed once and reused. This is what makes the term grammar linear instead of exponential: the same position is probed by several overlapping alternatives (a `(` is tried as a dependent function type, then a non-dependent one, then a lambda, then parens), and without memoization each retry re-parses the whole nested subterm.
@@ -37,7 +22,7 @@ where
     move |state: ParserState<'a>| {
         let offset = state.offset;
 
-        if let Some(entry) = remembered(key, offset) {
+        if let Some(entry) = MEMO.with(|memo| memo.borrow().get(&(key, offset)).cloned()) {
             return match entry {
                 Ok((value, end)) => {
                     let value = value
@@ -58,7 +43,7 @@ where
             Err(error) => Err(error.clone()),
         };
 
-        remember(key, offset, entry);
+        MEMO.with(|memo| memo.borrow_mut().insert((key, offset), entry));
 
         result
     }
@@ -69,7 +54,7 @@ pub fn run_parser<'a, A>(
     parser: impl Parser<'a, A>,
     source: &'a Arc<Source>,
 ) -> Result<A, ParserError> {
-    forget();
+    MEMO.with(|memo| memo.borrow_mut().clear());
 
     // One span per parse, named by what is being parsed: a test that parses several sources otherwise reads as one undifferentiated stream of choices.
     curios_profile::profile!("run_parser", group = %source.path.as_deref().unwrap_or(std::path::Path::new("<text>")).display());
@@ -77,7 +62,7 @@ pub fn run_parser<'a, A>(
     let result = parser.parse(ParserState::new(source)).map(|(item, _)| item);
 
     // Clear on the way out too, not only on the next entry: cached entries share the parsed tree (`Rc`-backed values), and leaving them alive until the thread-local's own destructor would drop a deep tree at thread teardown, where the guard page is all the stack that's left.
-    forget();
+    MEMO.with(|memo| memo.borrow_mut().clear());
 
     result
 }
