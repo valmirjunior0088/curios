@@ -10,16 +10,16 @@ use {
         TupleType, TupleTypeParam, parse_identifier_raw, parse_term, parse_whitespace,
         reserved_keyword,
     },
-    curios_parse::boxed::{
-        Parser, commit, fail, fail_from, lazy, look_ahead, mark, not_ahead, pure, sep_by0_trailing,
-        take_exact,
+    curios_parse::{
+        Parsed, Parser, ParserState, commit, fail, fail_from, lazy, look_ahead, mark, not_ahead,
+        pure, sep_by0_trailing, take_exact,
     },
     curios_utilities::{Plicity, is_keyword},
     std::iter,
 };
 
-pub(super) fn parse_intrinsic<'a>() -> Parser<'a, Term> {
-    parse_bool_intrinsic()
+pub(super) fn parse_intrinsic<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+    parse_bool_intrinsic
         // A numeral's dangling dot is refused ahead of both numeral forms, and a number reads its decimal form first: `5.0` is a `Flt`, not the integer `5` projected.
         .or(refuse_dangling_dot)
         .or(parse_number)
@@ -29,22 +29,24 @@ pub(super) fn parse_intrinsic<'a>() -> Parser<'a, Term> {
         .or(parse_string_literal)
         .or(parse_bin_literal)
         .or(parse_list_literal)
+        .parse(state)
 }
 
-pub(super) fn parse_parens<'a>() -> Parser<'a, Term> {
+pub(super) fn parse_parens<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     parse_literal("(")
         .and_keep(lazy(parse_term))
         .and_drop(parse_literal(")"))
+        .parse(state)
 }
 
 // A tuple type's field: [`parse_field_member`], and a mark refused where none of its forms read the field.
-pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
-    parse_field_member().or(refuse_field_mark)
+pub(super) fn parse_tuple_type_field<'a>(state: ParserState<'a>) -> Parsed<'a, TupleTypeParam> {
+    parse_field_member.or(refuse_field_mark).parse(state)
 }
 
 // A Σ-type / struct-declaration field, past whatever mark its site takes: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
-pub(super) fn parse_field_member<'a>() -> Parser<'a, TupleTypeParam> {
-    parse_label()
+pub(super) fn parse_field_member<'a>(state: ParserState<'a>) -> Parsed<'a, TupleTypeParam> {
+    parse_label
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_func_type_param, || {
@@ -64,7 +66,7 @@ pub(super) fn parse_field_member<'a>() -> Parser<'a, TupleTypeParam> {
                 type_: output,
             },
         )
-        .or(parse_label()
+        .or(parse_label
             .and_drop(parse_literal(":"))
             .and(commit(lazy(parse_term)))
             .map(|(label, type_): (Label, Term)| TupleTypeParam {
@@ -78,35 +80,38 @@ pub(super) fn parse_field_member<'a>() -> Parser<'a, TupleTypeParam> {
             type_,
         }))
         .or(refuse_keyword_field_label)
+        .parse(state)
 }
 
 // A mark written where a tuple type's field is declared. Tried last, as the keyword refusal is and for its reason: no field form begins with `@` or with `use`, so reaching this means none read the field, and neither can begin a term, so the refusal commits.
-fn refuse_field_mark<'a>() -> Parser<'a, TupleTypeParam> {
+fn refuse_field_mark<'a>(state: ParserState<'a>) -> Parsed<'a, TupleTypeParam> {
     mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
-            Plicity::Explicit => fail("not a mark written on a field"),
+            Plicity::Explicit => fail("not a mark written on a field").boxed(),
             Plicity::Implicit | Plicity::Witness => {
-                commit(fail_from(&start, TUPLE_FIELD_TAKES_NO_MARK))
+                commit(fail_from(&start, TUPLE_FIELD_TAKES_NO_MARK)).boxed()
             }
         })
+        .parse(state)
 }
 
 // A keyword written where a field is labelled. Tried last, so reaching it means none of the three real forms could read this field, and it commits: `parse_label` refuses a keyword uncommittedly — it has to, since a positional field is a term and a term may open with one — and the refusal would then be discarded for the enclosing `}`, which reports `Expected '}', obtained 'e'` for a field written `end : Nat`.
 //
 // The introducer is required, and is what keeps this from claiming a positional field that merely opens with a keyword: `{ match b | true => T end }` reaches here only if the term failed, and its `match` is followed by a scrutinee rather than by `:` or `(`, so the arm's own diagnosis stands. A term that *is* `<keyword> (` — a `let` over a tuple pattern — parses as the positional form and never reaches this alternative at all.
-fn refuse_keyword_field_label<'a>() -> Parser<'a, TupleTypeParam> {
+fn refuse_keyword_field_label<'a>(state: ParserState<'a>) -> Parsed<'a, TupleTypeParam> {
     mark()
         .and(parse_identifier_raw)
         .and_drop(parse_whitespace)
         .and_drop(look_ahead(parse_literal(":").or(parse_literal("("))))
         .flat_map(|(start, word)| match is_keyword(word) {
-            true => commit(fail_from(&start, reserved_keyword(word))),
-            false => fail("not a keyword written as a field label"),
+            true => commit(fail_from(&start, reserved_keyword(word))).boxed(),
+            false => fail("not a keyword written as a field label").boxed(),
         })
+        .parse(state)
 }
 
-pub(super) fn parse_tuple_type<'a>() -> Parser<'a, Term> {
+pub(super) fn parse_tuple_type<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     parse_literal("{")
         .and_keep(sep_by0_trailing(parse_tuple_type_field, || {
             parse_literal(",")
@@ -118,14 +123,15 @@ pub(super) fn parse_tuple_type<'a>() -> Parser<'a, Term> {
             })
         })
         .map(Into::into)
+        .parse(state)
 }
 
 // A parsed labeled-field prefix: the label and, for the definition sugar, the written lambda-parameter list.
 type TupleFieldPrefix = (String, Option<Vec<(Plicity, Label, Option<Term>)>>);
 
 // The committing prefix of a labeled tuple/struct-literal field: `label =` or the definition sugar `label(params) =`. It fails recoverably, so a positional field that merely starts with an identifier or an application backtracks cleanly; the `=` is guarded against `==` and `=>` via `not_ahead`, mirroring the bind arm's idiom, since `(a == b, 2)` is a positional field whose value begins with a name and must not be read as the label `a`. The sugar's list is a call's as far as its closing parenthesis — `f(@A, use dict, x)` is both — so a member the sugar refuses is held until the `=` and raised past it.
-pub(super) fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
-    parse_identifier()
+pub(super) fn parse_tuple_field_prefix<'a>(state: ParserState<'a>) -> Parsed<'a, TupleFieldPrefix> {
+    parse_identifier
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_func_param, || parse_literal(",")))
@@ -142,15 +148,18 @@ pub(super) fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
         .flat_map(|(label, func_params): (&str, _)| {
             let label = label.to_string();
             match func_params {
-                Some(params) => members(params).map(move |params| (label, Some(params))),
-                None => pure((label, None)),
+                Some(params) => members(params)
+                    .map(move |params| (label, Some(params)))
+                    .boxed(),
+                None => pure((label, None)).boxed(),
             }
         })
+        .parse(state)
 }
 
 // A tuple-literal / struct-literal field: `label = value`, the definition sugar `label(params) = value` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar — or a positional value.
-pub(super) fn parse_tuple_field<'a>() -> Parser<'a, TupleField> {
-    parse_tuple_field_prefix()
+pub(super) fn parse_tuple_field<'a>(state: ParserState<'a>) -> Parsed<'a, TupleField> {
+    parse_tuple_field_prefix
         // Past a guarded `=` the value must follow: no positional field can hold one at its top level, so the field owns the diagnosis rather than falling back to the positional reading and leaving the enclosing `}` or `)` to complain at the label.
         .and(commit(lazy(parse_term)))
         .map(|((label, func_params), value)| TupleField {
@@ -163,9 +172,10 @@ pub(super) fn parse_tuple_field<'a>() -> Parser<'a, TupleField> {
             func_params: None,
             value,
         }))
+        .parse(state)
 }
 
-pub(super) fn parse_tuple<'a>() -> Parser<'a, Term> {
+pub(super) fn parse_tuple<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     // Two committing prefixes distinguish a tuple literal from a parenthesized term: a first field followed by a comma (`(x,` / `(a = 1,`), or a named first field alone (`(a = 1)` / `(f(x) = e)` — the `=` already disambiguates, so the one-element form needs no trailing comma).
 
     parse_literal("(")
@@ -186,23 +196,25 @@ pub(super) fn parse_tuple<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(")"))
         .map(|fields| Subterm::Tuple(Tuple { fields }))
         .map(Into::into)
+        .parse(state)
 }
 
 // A struct-literal entry: a `..base` spread (no term begins with `..` — a leading-dot float has a single dot — so the prefix commits), a `use <term>` fill for a concept's `use`-marked field (the call-site argument form — a mark can never begin a field label or value), or a field, plain or under `@`: after the mark comes the field as a plain one is written, `label = value` or the value alone, and `@_` holds a hidden field's place. Spread position and multiplicity are core elaboration's job.
-pub(super) fn parse_struct_entry<'a>() -> Parser<'a, StructLitEntry> {
+pub(super) fn parse_struct_entry<'a>(state: ParserState<'a>) -> Parsed<'a, StructLitEntry> {
     parse_literal("..")
         .and_keep(lazy(parse_term))
         .map(StructLitEntry::Spread)
-        .or(parse_mark().flat_map(|plicity| match plicity {
-            Plicity::Witness => lazy(parse_term).map(StructLitEntry::Use),
-            Plicity::Implicit => parse_tuple_field().map(StructLitEntry::Implicit),
-            Plicity::Explicit => parse_tuple_field().map(StructLitEntry::Field),
+        .or(parse_mark.flat_map(|plicity| match plicity {
+            Plicity::Witness => lazy(parse_term).map(StructLitEntry::Use).boxed(),
+            Plicity::Implicit => parse_tuple_field.map(StructLitEntry::Implicit).boxed(),
+            Plicity::Explicit => parse_tuple_field.map(StructLitEntry::Field).boxed(),
         }))
+        .parse(state)
 }
 
 // A struct literal: `Name { … }` or `Name(args) { … }`, where a list with nothing written, `Name() { … }`, is kept as the application it is and not read as the bare name. The trailing `{` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are a call's, marks included, since an applied head is an application of the type former.
-pub(super) fn parse_struct_lit<'a>() -> Parser<'a, Term> {
-    parse_name()
+pub(super) fn parse_struct_lit<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+    parse_name
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_apply_argument, || {
@@ -225,4 +237,5 @@ pub(super) fn parse_struct_lit<'a>() -> Parser<'a, Term> {
             })
             .into()
         })
+        .parse(state)
 }

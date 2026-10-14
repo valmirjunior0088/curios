@@ -6,9 +6,9 @@ use {
         parse_top_item, print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
-    curios_parse::boxed::{
-        Parser, ParserError, Recovered, commit, fail, is_blank, lazy, many0, raise, recover,
-        run_parser, spanned, take_eof,
+    curios_parse::{
+        Parsed, Parser, ParserError, ParserState, Recovered, commit, fail, is_blank, lazy, many0,
+        raise, recover, run_parser, spanned, take_eof,
     },
     curios_print::{flat, pure, run_printer},
     curios_utilities::{Plicity, Report, Source, Span},
@@ -345,12 +345,12 @@ fn begins_item(line: &str) -> bool {
 }
 
 /// The item loop, recovering past a broken item ([`recover`]) or, when `strict`, refusing at the first one with its own error: the whole-or-nothing reading `str::parse` gives.
-fn parse_items<'a>(strict: bool) -> Parser<'a, Vec<Recovered<TopItem>>> {
+fn parse_items<'a>(strict: bool) -> impl Parser<'a, Vec<Recovered<TopItem>>> {
     recover(parse_top_item, next_item_anchor).flat_map(move |recovered| {
         match (strict, first_broken(&recovered)) {
-            (true, Some(error)) => raise(error),
+            (true, Some(error)) => raise(error).boxed(),
             // Qualified: `curios_print::pure` is the printer's, imported for the `Display` impls below.
-            _ => curios_parse::boxed::pure(recovered),
+            _ => curios_parse::boxed::pure(recovered).boxed(),
         }
     })
 }
@@ -444,8 +444,8 @@ fn own_text(span: &Span, comments: &[Span]) -> Span {
 /// End of a module's item sequence: the input is exhausted, or the item parser explains why it is not.
 ///
 /// **A bare `take_eof` here would report the wrong thing.** A module has no tail expression, so anything left after the item loop is a failed item — but the loop drops a recoverable item failure (`curios_parse`'s repetition keeps only committed ones), which would leave `take_eof` to invent `Expected 'end-of-file'` at the item's first column. Re-running the item parser recovers the diagnosis it already had; [`Parser::or`] then keeps whichever error reached further, so a genuine trailing token still reports as end-of-input while a malformed item reports at the token that broke it. The alternative never succeeds — the loop stopped here precisely because the item parser failed — so nothing is consumed twice.
-fn parse_items_end<'a>() -> Parser<'a, ()> {
-    take_eof().or(lazy(parse_top_item).map(|_| ()))
+fn parse_items_end<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
+    take_eof().or(lazy(parse_top_item).map(|_| ())).parse(state)
 }
 
 impl Module {
@@ -465,7 +465,7 @@ impl Module {
         clear_comments();
         curios_profile::profile!("parse", group = "module");
         let module = run_parser(
-            parse_file_head()
+            parse_file_head
                 .and_keep(parse_items(strict))
                 .and_drop(parse_items_end)
                 .map(into_module),
@@ -542,12 +542,12 @@ impl Entrypoint {
         clear_comments();
         curios_profile::profile!("parse", group = "entrypoint");
         let entrypoint = run_parser(
-            parse_file_head()
+            parse_file_head
                 .and_keep(parse_items(strict))
                 .flat_map(|items| {
                     let swallowed = match first_broken(&items) {
-                        Some(error) => commit(raise(error)),
-                        None => fail("Expected a program's final term"),
+                        Some(error) => commit(raise(error)).boxed(),
+                        None => fail("Expected a program's final term").boxed(),
                     };
                     lazy(parse_term)
                         .and_drop(parse_program_end)
@@ -582,7 +582,7 @@ pub(crate) fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, Pars
     clear_comments();
     curios_profile::profile!("parse", group = "format");
     let (module, item_spans, tail) = run_parser(
-        parse_file_head()
+        parse_file_head
             .and_keep(many0(|| spanned(parse_top_item)))
             .and(parse_optional_term)
             .and_drop(parse_program_end)

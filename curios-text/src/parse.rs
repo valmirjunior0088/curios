@@ -49,9 +49,10 @@ mod tuples_tests;
 
 use {
     super::{Doc, Label, Name, Term},
-    curios_parse::boxed::{
-        Parser, ahead, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, mark, not_ahead,
-        obtained, pure, spanned, tagging, take_eof, take_exact, take_n, take_while,
+    curios_parse::{
+        Parsed, Parser, ParserState, ahead, commit, fail, fail_from, is_blank, lazy, look_ahead,
+        many0, mark, not_ahead, obtained, pure, spanned, tagging, take_eof, take_exact, take_n,
+        take_while,
     },
     curios_utilities::{Qualifier, Span, is_identifier_char, is_keyword},
     std::{cell::RefCell, collections::BTreeMap, iter},
@@ -101,8 +102,11 @@ pub(crate) fn take_comments() -> Vec<Span> {
 }
 
 /// The formatter's optional tail: a whole term when one follows, `None` at end of input. The term comes first so that a tail garbled past its first token commits under [`Parser::or`]'s progress rule and is refused with the term's own message at its own position — what the compiler reports for the same program. A module file's items end at end of input, where the term fails without progress, and the alternative answers `None`.
-pub(crate) fn parse_optional_term<'a>() -> Parser<'a, Option<Term>> {
-    lazy(parse_term).map(Some).or(take_eof().map(|()| None))
+pub(crate) fn parse_optional_term<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Term>> {
+    lazy(parse_term)
+        .map(Some)
+        .or(take_eof().map(|()| None))
+        .parse(state)
 }
 
 /// What refuses a `--` glued to what follows it: the plain comment is `-- `, with the space, or a bare `--` ending its line.
@@ -131,7 +135,7 @@ const PROGRAM_TAKES_NO_SEMICOLON: &str = "a program closes with one term, the de
 /// The end of a program: its input exhausted past the final term. What stands there in its place is refused as what it is, rather than left for `take_eof` to report as a token the grammar did not expect: a documentation block, which documents nothing; a `;`, which closes a declaration and no term; and a second term, where a program has one.
 ///
 /// The last two consume what they refuse, so each stands past the choice point and outranks `take_eof` in [`Parser::or`]'s tie-break, with its caret on what it read. Whether a term stands there is probed and the probe's own failure dropped: what begins no term is still a token the end of input was expected in place of, and not a term that was wanted.
-pub(crate) fn parse_program_end<'a>() -> Parser<'a, ()> {
+pub(crate) fn parse_program_end<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     take_eof()
         .or(look_ahead(take_exact("---")).and_keep(commit(fail(DOC_BEFORE_NOTHING))))
         .or(mark()
@@ -140,19 +144,23 @@ pub(crate) fn parse_program_end<'a>() -> Parser<'a, ()> {
         .or(mark()
             .and(look_ahead(lazy(parse_term)).map(|_| true).or(pure(false)))
             .flat_map(|(start, begins_a_term)| match begins_a_term {
-                true => take_n(1).and_keep(fail_from(&start, PROGRAM_CLOSES_WITH_ONE_TERM)),
-                false => take_eof(),
+                true => take_n(1)
+                    .and_keep(fail_from(&start, PROGRAM_CLOSES_WITH_ONE_TERM))
+                    .boxed(),
+                false => take_eof().boxed(),
             }))
+        .parse(state)
 }
 
 /// The head of a file: a byte-order mark where one leads it, then blanks and comments. The mark is no part of the program, so it is passed over where it stands and every span keeps the file's own offsets; nothing writes one back, and a mark anywhere else is a character the grammar does not take.
-pub(crate) fn parse_file_head<'a>() -> Parser<'a, ()> {
+pub(crate) fn parse_file_head<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     take_exact("\u{FEFF}")
         .or(pure(()))
         .and_keep(parse_whitespace)
+        .parse(state)
 }
 
-pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
+pub(crate) fn parse_whitespace<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     // A `many0` loop over comment-then-whitespace runs, not recursion per comment line: an N-line comment banner would otherwise nest N native frames.
     take_while(is_blank)
         .and(many0(|| {
@@ -166,26 +174,27 @@ pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
             .and_drop(take_while(is_blank))
         }))
         .map(|_| ())
+        .parse(state)
 }
 
 /// After a comment's opener: a space, consumed, or the line's end, left alone — and anything else refused with `message`, fatally, since the opener was consumed.
-fn comment_spacing<'a>(message: &'static str) -> Parser<'a, ()> {
+fn comment_spacing<'a>(message: &'static str) -> impl Parser<'a, ()> {
     ahead().flat_map(move |rest| match rest.chars().next() {
-        Some(' ') => take_exact(" "),
-        None | Some('\n') | Some('\r') => pure(()),
-        Some(_) => fail(message),
+        Some(' ') => take_exact(" ").boxed(),
+        None | Some('\n') | Some('\r') => pure(()).boxed(),
+        Some(_) => fail(message).boxed(),
     })
 }
 
 /// One line of a documentation comment: `---` at the start of its line, its separator, the text to the line's end, and the line break with the indentation of the next line — so the next `---` is read as the same block only when it is on the very next line.
-fn parse_doc_line<'a>() -> Parser<'a, String> {
+fn parse_doc_line<'a>(state: ParserState<'a>) -> Parsed<'a, String> {
     spanned(take_exact("---"))
         .flat_map(|(span, ())| {
             let text = &span.source.text;
             let line_start = text[..span.start].rfind('\n').map_or(0, |index| index + 1);
             match text[line_start..span.start].chars().all(is_blank) {
-                true => pure(()),
-                false => commit(fail(DOC_TRAILING)),
+                true => pure(()).boxed(),
+                false => commit(fail(DOC_TRAILING)).boxed(),
             }
         })
         .and_drop(commit(comment_spacing(DOC_SPACING)))
@@ -194,6 +203,7 @@ fn parse_doc_line<'a>() -> Parser<'a, String> {
         )
         .and_drop(take_exact("\n").or(take_eof))
         .and_drop(take_while(|char| char == ' ' || char == '\t'))
+        .parse(state)
 }
 
 /// The source from the head a documentation block runs up to.
@@ -228,13 +238,13 @@ fn word_at(text: &str) -> (&str, &str) {
 /// The documentation comment above what comes next, or `None` when there is none: consecutive `---` lines, then the whitespace and plain comments up to the documented head. A second block before that head is refused, so a stray block far above can never be silently absorbed into a declaration's prose.
 ///
 /// The head itself is not parsed here. Every caller reads it next and decides what a block may precede, committing the failure when there was a block: a documentation comment followed by nothing it may document is the diagnosis, never a reason to backtrack.
-pub(crate) fn parse_doc<'a>() -> Parser<'a, Option<Doc>> {
+pub(crate) fn parse_doc<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Doc>> {
     mark()
         .and(many0(parse_doc_line))
         .flat_map(|(start, lines)| match lines.is_empty() {
-            true => pure(None),
+            true => pure(None).boxed(),
             // Committed: a block has been read, so a second one before the head is the diagnosis, and backtracking would hand the first to the term grammar, whose decimal reader takes `---` for a literal's head.
-            false => parse_whitespace()
+            false => parse_whitespace
                 .and_keep(commit(not_ahead("---").map_err(DOC_TWICE)))
                 .and_keep(mark)
                 .map(move |end| {
@@ -242,24 +252,28 @@ pub(crate) fn parse_doc<'a>() -> Parser<'a, Option<Doc>> {
                         lines,
                         span: Some(start.to(&end)),
                     })
-                }),
+                })
+                .boxed(),
         })
+        .parse(state)
 }
 
-fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
+fn parse_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
     take_exact(expected).and_drop(parse_whitespace)
 }
 
 // The identifier characters alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bits`/`Bytes` literal's `\..` spread operand.
-pub(super) fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
-    take_while(is_identifier_char).flat_map(|identifier| match identifier.is_empty() {
-        true => fail("Expected identifier"),
-        false => pure(identifier),
-    })
+pub(super) fn parse_identifier_raw<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
+    take_while(is_identifier_char)
+        .flat_map(|identifier| match identifier.is_empty() {
+            true => fail("Expected identifier").boxed(),
+            false => pure(identifier).boxed(),
+        })
+        .parse(state)
 }
 
-fn parse_identifier<'a>() -> Parser<'a, &'a str> {
-    parse_identifier_raw().and_drop(parse_whitespace)
+fn parse_identifier<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
+    parse_identifier_raw.and_drop(parse_whitespace).parse(state)
 }
 
 // An identifier at a declaring position, carrying the span of the word alone: the trailing whitespace is consumed after the span closes, so a report about the declaration underlines the name and nothing after it.
@@ -267,33 +281,33 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 // A keyword is refused here for the reason `parse_name` refuses one in a path (`name_from_segments`): the declaring and the referring side have to agree on what a name is, or a declaration binds a word no reference can spell. Accepted, `let match : Nat = 1;` would be unreachable — every later `match` is the keyword, so the binding would report only as unused, and in expression position the tail would read as a match with no scrutinee.
 //
 // Safe as the last alternative of a choice because every keyword-valued spelling the grammar does admit is parsed by an earlier one: `parse_bool_match_pattern` precedes `parse_binder` in `parse_match_pattern_inner`, exactly as it already precedes `parse_name`'s identical refusal.
-fn parse_label<'a>() -> Parser<'a, Label> {
-    parse_label_owning(false)
+fn parse_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
+    parse_label_owning(false).parse(state)
 }
 
 // A *declaration's own* name — the word after `let`, `mod`, `induct`, `struct`, `concept`, `foreign` or `test`, and each selector of a `use` group. [`parse_label`] with its keyword refusal committed: these positions sit past the prefix that discriminates them, so the refusal is the branch's diagnosis rather than a guess, and `Parser::or` must not discard it for a sibling that happened to read further before giving up.
 //
 // Uncommitted, it would be discarded every time: `let match : Nat = 1;` would report at second hand through the struct-pattern alternative, as `path 'match' contains a reserved keyword` with the caret past the word, and `use /std/{match}` as `Expected '}', obtained 'm'`, which names the brace for a mistake about a name.
-pub(super) fn parse_declared_label<'a>() -> Parser<'a, Label> {
-    parse_label_owning(true)
+pub(super) fn parse_declared_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
+    parse_label_owning(true).parse(state)
 }
 
 /// A declared label and what follows it, the failure of the rest named for the label ([`tagging`]): what lets a loop recovering past the item say which declaration broke.
-pub(super) fn declared<'a, T: 'a>(rest: Parser<'a, T>) -> Parser<'a, (Label, T)> {
-    parse_declared_label().flat_map(move |label| {
+pub(super) fn declared<'a, T: 'a>(rest: impl Parser<'a, T>) -> impl Parser<'a, (Label, T)> {
+    parse_declared_label.flat_map(move |label| {
         tagging(Some(label.to_string()), rest).map(move |rest| (label, rest))
     })
 }
 
-fn parse_label_owning<'a>(owns_the_fault: bool) -> Parser<'a, Label> {
+fn parse_label_owning<'a>(owns_the_fault: bool) -> impl Parser<'a, Label> {
     mark()
         .and(spanned(parse_identifier_raw))
         .flat_map(move |(start, (span, text))| {
             match (is_keyword(text), owns_the_fault) {
-                (false, _) => pure(Label::spanned(text, span)),
+                (false, _) => pure(Label::spanned(text, span)).boxed(),
                 // Reported where the word begins, as `parse_keyword` reports a misspelled one, so the caret stands on the name rather than after it. Only the committed side may rewind: an uncommitted error that gives back the offset it read loses `Parser::or`'s tie-break to every sibling, which is how this refusal reached no reader at all.
-                (true, true) => commit(fail_from(&start, reserved_keyword(text))),
-                (true, false) => fail(reserved_keyword(text)),
+                (true, true) => commit(fail_from(&start, reserved_keyword(text))).boxed(),
+                (true, false) => fail(reserved_keyword(text)).boxed(),
             }
         })
         .and_drop(parse_whitespace)
@@ -303,26 +317,24 @@ pub(super) fn reserved_keyword(word: &str) -> String {
     format!("'{word}' is a reserved keyword, so it cannot be a name")
 }
 
-fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> Parser<'a, Name> {
+fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> impl Parser<'a, Name> {
     match segments.iter().any(|segment| is_keyword(segment)) {
         true => fail(format!(
             "path '{}' contains a reserved keyword",
             segments.join("/")
-        )),
-        false => pure(Name::new(is_abs, Qualifier::from(segments))),
+        ))
+        .boxed(),
+        false => pure(Name::new(is_abs, Qualifier::from(segments))).boxed(),
     }
 }
 
-fn parse_name<'a>() -> Parser<'a, Name> {
+fn parse_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
     // A path is whitespace-free: every separator touches both of its neighbors. That tightness is the whole disambiguation against division — the operator grammar requires whitespace on both sides of `/` (`parse_infix_op`), so `a/b` is only ever a path and `a / b` only ever a division, and the asymmetric spellings satisfy neither grammar. Trailing whitespace is consumed once, after the whole name, keeping the span tight.
     spanned(
         take_exact("/")
             .map(|()| true)
             .or(pure(false))
-            .and(
-                parse_identifier_raw()
-                    .and(many0(|| take_exact("/").and_keep(parse_identifier_raw))),
-            )
+            .and(parse_identifier_raw.and(many0(|| take_exact("/").and_keep(parse_identifier_raw))))
             .flat_map(|(is_abs, (first, rest))| {
                 let segments = iter::once(first)
                     .chain(rest)
@@ -334,13 +346,16 @@ fn parse_name<'a>() -> Parser<'a, Name> {
     )
     .map(|(span, name)| name.with_span(span))
     .and_drop(parse_whitespace)
+    .parse(state)
 }
 
-fn parse_qualified_name<'a>() -> Parser<'a, Name> {
-    parse_name().flat_map(|name| match name.is_single() {
-        true => fail("expected a qualified path"),
-        false => pure(name),
-    })
+fn parse_qualified_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
+    parse_name
+        .flat_map(|name| match name.is_single() {
+            true => fail("expected a qualified path").boxed(),
+            false => pure(name).boxed(),
+        })
+        .parse(state)
 }
 
 // The word is read *raw* and the whitespace after it consumed only once it matched, so a mismatch is reported against the word rather than wherever that whitespace ended — which for a line-final keyword is the next line, or past the end of the file. `end` and `and` are habitually written line-final, so reading the whitespace first would put a misspelled one's caret on the innocent declaration below it. `parse_top_item` reads its head raw for the same reason.
@@ -348,22 +363,24 @@ fn parse_qualified_name<'a>() -> Parser<'a, Name> {
 // Commitment is unchanged: `parse_identifier_raw` rejects an empty run, so a mismatch has consumed at least one character and stays fatal past the choice point, while the empty case fails *at* the choice point either way.
 //
 // Where no word begins at all — a `;` or a `/` standing where `end` belongs — the word run is empty and the report names the keyword and the character found, in `take_exact`'s style. Left to `parse_identifier_raw`, the report would be its bare `Expected identifier`, which names neither. The empty run consumes nothing, so the failure stays recoverable at the choice point exactly as the identifier parser's is.
-fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
+fn parse_keyword<'a>(expected: &'static str) -> impl Parser<'a, ()> {
     mark()
         .and(take_while(is_identifier_char))
         .and(ahead())
         .flat_map(
             move |((start, word), rest)| match (word, expected == word) {
-                (_, true) => pure(()),
+                (_, true) => pure(()).boxed(),
                 ("", false) => fail(format!(
                     "Expected keyword '{expected}', obtained {}",
                     obtained(rest, 1)
-                )),
+                ))
+                .boxed(),
                 // The report spans the word, so the caret underlines it rather than standing after it.
                 (word, false) => fail_from(
                     &start,
                     format!("Expected keyword '{expected}', obtained '{word}'"),
-                ),
+                )
+                .boxed(),
             },
         )
         .and_drop(parse_whitespace)

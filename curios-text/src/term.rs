@@ -4,7 +4,7 @@ use {
         print_term,
     },
     curios_num::{Grain, Natural},
-    curios_parse::boxed::{ParserError, run_parser, take_eof},
+    curios_parse::{Parser, ParserError, run_parser, take_eof},
     curios_print::run_printer,
     curios_utilities::{InfixOp, Plicity, Sign, Source, Span},
     std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
@@ -45,7 +45,7 @@ impl Term {
     fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
         curios_profile::profile!("parse", group = "term");
         run_parser(
-            parse_whitespace().and_keep(parse_term).and_drop(take_eof),
+            parse_whitespace.and_keep(parse_term).and_drop(take_eof),
             source,
         )
     }
