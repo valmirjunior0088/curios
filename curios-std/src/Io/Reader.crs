@@ -208,19 +208,15 @@ pub let line_text(
     use Async/Read(M, S),
     r: Reader(S),
 ) -> Try(M, Error, Option(Str)) =
-    let read() -> M(Result(Error, Option(Str))) =
-        let found = Try/run(line(r))!;
-        Monad/pure(
-            match found
-            | failure(why) => Result/failure(why)
-            | success(none()) => Result/success(Option/none())
-            | success(some(bytes)) =>
-                match Str/of_bytes(bytes)
-                | success(text) => Result/success(Option/some(text))
-                | failure(valid) => Result/failure(Error/not_text(valid))
-                end
-            end);
-    Try/attempt(read());
+    let found = line(r)!;
+    match found
+    | none() => Try/pure(Option/none())
+    | some(bytes) =>
+        match Str/of_bytes(bytes)
+        | success(text) => Try/pure(Option/some(text))
+        | failure(valid) => Try/raise(Error/not_text(valid))
+        end
+    end;
 
 --- The bytes before the first `delimiter`, which is taken and dropped, and whether it was met: where the stream ends first, what is held and `false`. Bytes past `r`'s bound with no delimiter among them are `too_long`, and stay held.
 pub let until(

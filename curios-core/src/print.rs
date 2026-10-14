@@ -1,10 +1,10 @@
 use {
     super::{
-        Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor, Field,
-        Free, Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label, Let, Match,
-        MatchResult, Matrix, Nat, NumLit, Pattern, Proj, Quality, Rec, Row, Scope, Spellings,
-        Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two,
-        Universes, Var, Variant,
+        Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor,
+        Declared, Field, Free, Func, FuncType, Global, HeadKey, InductArm, InductType, Infix,
+        Intrinsic, Item, Items, Keying, Label, Let, Match, MatchResult, Matrix, Nat, NumLit,
+        Pattern, Proj, Quality, Rec, Row, Scope, Spellings, Struct, StructType, Subterm, Telescope,
+        Term, Three, Transient, Tuple, TupleType, Two, Universes, Var, Variant, Written,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
@@ -100,6 +100,8 @@ pub struct Spelling {
     reader: ReaderPosition,
     /// Each unit's structure fields and constructor payloads, the reader's own unit first: the marks and labels a field, a literal's entry and a constructor's argument are written by.
     members: Vec<Rc<Members>>,
+    /// Each unit's declarations, the reader's own unit first: what a name stands for where two types are told apart ([`Spelling::written_head`]).
+    declarations: Vec<Rc<Declarations>>,
     /// The reader's printer: a term shown to a reader is printed by it where it can be, and by this printer where it declines.
     printer: Option<Rc<dyn ReaderPrinter>>,
     /// Whether the reader's printer declined a term this spelling rendered. Shared by a spelling's copies and begun anew where a reader is placed ([`Spelling::for_reader`]), so it is one report's to read.
@@ -187,6 +189,32 @@ pub struct Lexicon {
     pub(crate) plicities: Rc<BTreeMap<Global, Vec<Plicity>>>,
     pub(crate) witnesses: Rc<WitnessSpelling>,
     pub(crate) members: Rc<Members>,
+    pub(crate) declarations: Rc<Declarations>,
+}
+
+/// One unit's declarations as a report reads a name through them: what each name is declared as, with no item read, and the body of a definition, the one item read where it is asked for and restored where the module was stored. A report asks of the names it compares two types by, which are few, so what it reads does not follow what its scope holds.
+#[derive(Default)]
+pub(crate) struct Declarations {
+    pub(crate) items: Items,
+    /// Where each name is declared: the item's place, and the name's place among those the item declares.
+    pub(crate) located: HashMap<Global, (usize, usize)>,
+}
+
+impl Declarations {
+    /// What `name` is declared as, as far as a key reads it ([`Written`]), where this unit declares it.
+    fn written(&self, name: &Global) -> Option<Written> {
+        let &(place, member) = self.located.get(name)?;
+        let declared = *self.items.declared(place).get(member)?;
+        let body = match (declared, self.items.is_group(place)) {
+            (Declared::Authored, false) => match &self.items[place] {
+                Item::Let(definition) => Some(&definition.body),
+                Item::Rec(_) => None,
+            },
+            _ => None,
+        };
+
+        Some(Written::of(declared, body))
+    }
 }
 
 /// What axis (h) spells a witness against: each concept's fields — a method's wrapper and the operator dispatching to it, or the concept a superclass edge reaches — beside its record, which says what an edge reaches for a witness at given arguments, and each global witness's declared type, whose terminal is the concept application it answers. Built per unit by [`Module::lexicon`](crate::Module::lexicon) and merged across a render's scope, as the plicity marks are.
@@ -426,6 +454,10 @@ impl Spelling {
             .chain(scope.iter().copied())
             .map(|unit| Rc::clone(&unit.members))
             .collect();
+        self.declarations = std::iter::once(own)
+            .chain(scope.iter().copied())
+            .map(|unit| Rc::clone(&unit.declarations))
+            .collect();
         self
     }
 
@@ -463,11 +495,28 @@ impl Spelling {
             })
     }
 
-    /// Whether `name` is a nominal family of this spelling's table: a type former, which converts with nothing but itself at converting arguments.
-    pub fn is_nominal(&self, name: &Global) -> bool {
-        self.nominal_plicities
-            .iter()
-            .any(|unit| unit.contains_key(name))
+    /// The type former `term` is headed by as it is written, by the key the witness table files it under: the reading that spells a witness's key ([`Keying::head`]), over the declarations of the reader's scope, a name read through its definition, the one item read for it. `None` for a term whose head only reduction decides, and for a name no unit of the scope declares.
+    pub fn written_head(&self, term: &Term) -> Option<HeadKey> {
+        let written = |name: &Global| {
+            self.declarations
+                .iter()
+                .find_map(|unit| unit.written(name))
+                .unwrap_or(Written::Opaque)
+        };
+        // A concept's parameter marks, which a head is not read by: asked of the table for what a key is.
+        let marks = |name: &Global| {
+            self.witness_table()?.fields(name)?;
+            self.nominal_plicities
+                .iter()
+                .find_map(|unit| unit.get(name))
+                .cloned()
+        };
+
+        Keying {
+            written: &written,
+            marks: &marks,
+        }
+        .head(term)
     }
 
     /// The declared plicities of `name`'s arguments — parameters then indices, in the order a use site supplies them — or `None` when the declaration is not in this spelling's table, in which case an applied family renders unmarked.

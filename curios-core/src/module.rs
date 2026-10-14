@@ -8,11 +8,11 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, ConceptSpelling, Enter, FieldSpelling, Free, FuncType, Global,
-        InductDecl, Items, Lexicon, Many, Members, Outline, Place, Places, Polarity, RecGroup,
-        RecMemberScopes, Scope, Sharing, Spelling, StructDecl, StructType, Subterm, Symbols,
-        Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId, WitnessSpelling,
-        build_shorten,
+        Atom, Bound, ConceptDecl, ConceptSpelling, Declarations, Enter, FieldSpelling, Free,
+        FuncType, Global, InductDecl, Items, Lexicon, Many, Members, Outline, Place, Places,
+        Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, StructType,
+        Subterm, Symbols, Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId,
+        WitnessSpelling, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -1035,6 +1035,10 @@ impl Module {
             plicities: Rc::new(self.nominal_plicities(&located)),
             witnesses: Rc::new(self.witness_spelling(&located, syntax)),
             members: Rc::new(self.members(&located)),
+            declarations: Rc::new(Declarations {
+                items: self.items.clone(),
+                located,
+            }),
         }
     }
 

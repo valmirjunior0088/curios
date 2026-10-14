@@ -177,6 +177,103 @@ fn a_type_alias_over_a_global_witness_reads_back() {
 }
 
 #[test]
+fn a_table_witness_reads_back_past_a_binder_at_another_argument() {
+    // `Wrap(Nat)` under `use Show(A)`: the binder is a `Show` of `A` and answers no goal at `Nat`, so resolution goes to the table, as it does where no binder stands.
+    let source = r#"
+        use /std/{Nat, Show};
+        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
+        pub let v(@A: Type, use Show(A), x: Wrap(Nat)) -> Nat = 0;
+        pub let t: ? = v;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_table_witness_reads_back_past_a_superclass_at_another_argument() {
+    // `Ord(A)` reaches `Eql` through its edge, at `A`: no path in scope answers `Eql(Nat)`, and one at `A` itself is still the binder's own.
+    for wrapped in ["Nat", "A"] {
+        let source = format!(
+            r#"
+            use /std/{{Nat, Ord}};
+            use /std/ops/{{Eql}};
+            pub let Wrap(A: Type, use Eql(A)) -> Type = {{A}};
+            pub let v(@A: Type, use Ord(A), x: Wrap({wrapped})) -> Nat = 0;
+            pub let t: ? = v;
+            /std/print("")
+        "#
+        );
+
+        reads_back(&source).unwrap_or_else(|error| panic!("{wrapped}: {error}"));
+    }
+}
+
+#[test]
+fn a_table_witness_reads_back_past_a_binder_of_a_type_constructor() {
+    // `Io` is a name `/sys` binds to its type former, and `M` a binder: a `Monad` of the one answers no goal at the other, whichever of the two the binder is of.
+    for (binders, wrapped) in [("use Monad(M)", "Io"), ("use Monad(M), use Monad(Io)", "M")] {
+        let source = format!(
+            r#"
+            use /std/{{Nat, Monad, Io}};
+            pub let Wrap(M: (Type) -> Type, use Monad(M)) -> Type = M(Nat);
+            pub let v(@M: (Type) -> Type, {binders}, x: Wrap({wrapped})) -> Nat = 0;
+            pub let t: ? = v;
+            /std/print("")
+        "#
+        );
+
+        reads_back(&source).unwrap_or_else(|error| panic!("{binders}, {wrapped}: {error}"));
+    }
+}
+
+#[test]
+fn an_edge_at_a_type_constructor_is_passed_over_for_the_one_at_the_binder() {
+    // `Lift(Io, M)` reaches `Monad` twice, at `Io` and at `M`: the goal at `M` is the second edge's, the first being a `Monad` of a type former.
+    let source = r#"
+        use /std/{Nat, Monad, Io};
+        use /std/Monad/{Lift};
+        pub let Wrap(M: (Type) -> Type, use Monad(M)) -> Type = M(Nat);
+        pub let v(@M: (Type) -> Type, use Lift(Io, M), x: Wrap(M)) -> Nat = 0;
+        pub let t: ? = v;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_binder_at_an_alias_of_a_type_is_read_by_what_the_alias_names() {
+    // `Text` is a definition bound to `Str`, so a `Show` of it answers no goal at `Nat`.
+    let source = r#"
+        use /std/{Nat, Str, Show};
+        pub let Text: Type = Str;
+        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
+        pub let v(use Show(Text), x: Wrap(Nat)) -> Nat = 0;
+        pub let t: ? = v;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_binder_at_an_argument_that_computes_keeps_the_table_witness_written() {
+    // `Same(A)` is `A` once it is reduced, which the translation does not do: whether the binder answers the goal at `Nat` is not known to it, so the witness is written, and the report says a term is shown as the compiler holds it.
+    let source = r#"
+        use /std/{Nat, Show};
+        pub let Same(A: Type) -> Type = A;
+        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
+        pub let v(@A: Type, use Show(Same(A)), x: Wrap(Nat)) -> Nat = 0;
+        pub let t: ? = v;
+        /std/print("")
+    "#;
+
+    let rewritten = pasted(source).unwrap();
+    assert!(rewritten.contains("witness@"), "{rewritten}");
+}
+
+#[test]
 fn two_edges_of_one_binder_to_one_concept_are_told_by_what_each_reaches() {
     // `Both(A, B)` reaches `Show` twice, at `A` and at `B`: two paths of one length, of which the goal's is one.
     for wrapped in ["A", "B"] {

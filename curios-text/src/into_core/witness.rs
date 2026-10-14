@@ -17,11 +17,10 @@ use {
 type Keyed<'a> = (curios_core::Declared, Option<&'a curios_core::Term>);
 
 /// What a declaration is, as far as a key reads it: a type former, a definition with its body, or anything a key is not read through.
-fn written<'a>(declared: Option<Keyed<'a>>) -> curios_core::Written<'a> {
+fn written(declared: Option<Keyed<'_>>) -> curios_core::Written {
     match declared {
-        Some((declared, _)) if declared.is_former() => curios_core::Written::Former,
-        Some((curios_core::Declared::Authored, Some(body))) => curios_core::Written::Defined(body),
-        _ => curios_core::Written::Opaque,
+        Some((declared, body)) => curios_core::Written::of(declared, body),
+        None => curios_core::Written::Opaque,
     }
 }
 

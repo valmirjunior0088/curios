@@ -1318,23 +1318,24 @@ fn differ(this: &curios_core::Term, that: &curios_core::Term, frame: Frame) -> b
     )
 }
 
-/// The rigid head of `term`, where it has one. It is read through a function to what the function answers and down an application to what is applied, on a name as on the type it names, so two spellings of one type constructor — `M` and `(A) => M(A)`, `Option` and `(A) => Option(A)` — have one head and are never told apart. A local definition stands for its value and a global one for its body, so neither is a head; a term that computes has none.
+/// The rigid head of `term`, where it has one: the binder it is headed by, read through a function to what the function answers and down an application to what is applied, or the type former its spelling is keyed by ([`curios_core::Spelling::written_head`]), the reading a witness's own key is spelled by. Both read a name as the type it names, so two spellings of one type constructor — `M` and `(A) => M(A)`, `Io` and `(A) => Io(A)` — have one head and are never told apart. A local definition stands for its value, so it is no binder, and a term whose head only reduction decides has none.
 fn rigid_head(term: &curios_core::Term, frame: Frame) -> Option<Head> {
+    match local_head(term) {
+        Some(local) => (!frame.defines(local)).then_some(Head::Binder(*local)),
+        None => frame.spelling.written_head(term).map(Head::Former),
+    }
+}
+
+/// The local name `term` is headed by, under its binders and at the head of its applications.
+fn local_head(term: &curios_core::Term) -> Option<&curios_core::Free> {
     use curios_core::Subterm as Core;
 
     match &**term {
-        Core::Func(function) => rigid_head(function.telescope.terminal(), frame),
-        Core::Apply(application) => rigid_head(&application.head, frame),
-        Core::InductType(_) | Core::StructType(_) | Core::Intrinsic(_) | Core::TupleType(_) => {
-            curios_core::HeadKey::of_whnf(term).map(Head::Former)
-        }
-        Core::Var(_) | Core::Instance(_) => match term.head_name()? {
-            curios_core::Free::Global(name) => frame
-                .spelling
-                .is_nominal(name)
-                .then_some(Head::Former(curios_core::HeadKey::Nominal(*name))),
-            local => (!frame.defines(local)).then_some(Head::Binder(*local)),
-        },
+        Core::Func(function) => local_head(function.telescope.terminal()),
+        Core::Apply(application) => local_head(&application.head),
+        Core::Var(variable) => variable
+            .as_free()
+            .filter(|name| matches!(name, curios_core::Free::Local(_))),
         _ => None,
     }
 }

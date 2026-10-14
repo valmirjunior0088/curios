@@ -49,7 +49,7 @@ impl Unit {
     /// The key the witness declared at `type_` is spelled at.
     fn key(&self, type_: &Term) -> Option<(Global, WitnessKey)> {
         let written = |name: &Global| match self.definitions.get(name) {
-            Some(body) => Written::Defined(body),
+            Some(body) => Written::Defined(body.clone()),
             None if ["Option", "State", "Show", "Named", "Lift"]
                 .map(named)
                 .contains(name) =>

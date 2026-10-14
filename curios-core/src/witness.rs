@@ -13,7 +13,9 @@ mod keying_tests;
 mod tests;
 
 use {
-    crate::{Free, Func, Global, Intrinsic, Spelling, Subterm, Telescope, Term, TupleType},
+    crate::{
+        Declared, Free, Func, Global, Intrinsic, Spelling, Subterm, Telescope, Term, TupleType,
+    },
     curios_num::Grain,
     curios_utilities::{Plicity, Qualifier, Table, intern},
     std::{
@@ -356,19 +358,30 @@ impl fmt::Display for WitnessId {
 }
 
 /// What a name is declared as, as far as a key reads it.
-pub enum Written<'a> {
+pub enum Written {
     /// A type former: an inductive type, a struct or a concept.
     Former,
     /// A definition, with the body it is bound to.
-    Defined(&'a Term),
+    Defined(Term),
     /// Anything a key is not read through.
     Opaque,
+}
+
+impl Written {
+    /// What a name declared as `declared` is, `body` being its body where it is a definition written on its own: a member of a recursive group is closed over its group, which a key is not read through.
+    pub fn of(declared: Declared, body: Option<&Term>) -> Self {
+        match (declared, body) {
+            (declared, _) if declared.is_former() => Written::Former,
+            (Declared::Authored, Some(body)) => Written::Defined(body.clone()),
+            _ => Written::Opaque,
+        }
+    }
 }
 
 /// The reading of one unit's witness signatures.
 pub struct Keying<'a> {
     /// What each name is declared as: the unit's own by its lowered form, another unit's by what it published.
-    pub written: &'a dyn Fn(&Global) -> Written<'a>,
+    pub written: &'a dyn Fn(&Global) -> Written,
     /// The marks the concept `name` declares its parameters under, where it is one.
     pub marks: &'a dyn Fn(&Global) -> Option<Vec<Plicity>>,
 }
@@ -386,7 +399,7 @@ impl Keying<'_> {
         }
         let heads = apply
             .params()
-            .map(|param| self.head(param, 0, &mut Vec::new()))
+            .map(|param| self.head(param))
             .collect::<Option<Vec<_>>>()?;
 
         Some((concept, WitnessKey::from(heads)))
@@ -399,23 +412,30 @@ impl Keying<'_> {
             Written::Former => (self.marks)(&name).map(|_| name),
             Written::Defined(body) if !seen.contains(&name) => {
                 seen.push(name);
-                self.concept(body, seen)
+                self.concept(&body, seen)
             }
             Written::Defined(_) | Written::Opaque => None,
         }
     }
 
+    /// The head `term` is spelled by: a key's, one parameter at a time, and what a report tells two types apart by ([`Spelling::written_head`]). `None` where the spelling decides it no further than reduction would.
+    pub fn head(&self, term: &Term) -> Option<HeadKey> {
+        self.applied(term, 0, &mut Vec::new())
+    }
+
     /// The head `term` is spelled by where it stands applied to `applied` arguments.
-    fn head(&self, term: &Term, applied: usize, seen: &mut Vec<Global>) -> Option<HeadKey> {
+    fn applied(&self, term: &Term, applied: usize, seen: &mut Vec<Global>) -> Option<HeadKey> {
         match &**term {
-            Subterm::Apply(apply) => self.head(&apply.head, applied + apply.arguments.len(), seen),
+            Subterm::Apply(apply) => {
+                self.applied(&apply.head, applied + apply.arguments.len(), seen)
+            }
             Subterm::Var(_) | Subterm::Instance(_) => {
                 let name = named(term)?;
                 match (self.written)(&name) {
                     Written::Former => Some(HeadKey::Nominal(name)),
                     Written::Defined(body) if !seen.contains(&name) => {
                         seen.push(name);
-                        self.head(body, applied, seen)
+                        self.applied(&body, applied, seen)
                     }
                     Written::Defined(_) | Written::Opaque => None,
                 }
@@ -430,7 +450,7 @@ impl Keying<'_> {
                         .all(|plicity| matches!(plicity, Plicity::Explicit)) =>
                 {
                     let rest = applied - func.telescope.len();
-                    self.head(func.telescope.terminal(), rest, seen)
+                    self.applied(func.telescope.terminal(), rest, seen)
                 }
                 _ => None,
             },
@@ -455,7 +475,7 @@ impl Keying<'_> {
                 let name = *body.head_name().and_then(Free::as_global)?;
                 match (self.written)(&name) {
                     Written::Former => Some(HeadKey::Nominal(name)),
-                    Written::Defined(defined) => match &**defined {
+                    Written::Defined(defined) => match &*defined {
                         Subterm::Func(former) => match &**innermost(former) {
                             Subterm::Intrinsic(intrinsic) => HeadKey::of_intrinsic(intrinsic),
                             _ => None,
