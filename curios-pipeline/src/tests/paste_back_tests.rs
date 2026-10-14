@@ -177,6 +177,67 @@ fn a_type_alias_over_a_global_witness_reads_back() {
 }
 
 #[test]
+fn two_edges_of_one_binder_to_one_concept_are_told_by_what_each_reaches() {
+    // `Both(A, B)` reaches `Show` twice, at `A` and at `B`: two paths of one length, of which the goal's is one.
+    for wrapped in ["A", "B"] {
+        let source = format!(
+            r#"
+            use /std/{{Nat, Show}};
+            pub concept Both(A: Type, B: Type): pub Type {{
+                use Show(A),
+                use Show(B),
+            }}
+            pub let Wrap(A: Type, use Show(A)) -> Type = {{A}};
+            pub let v(@A: Type, @B: Type, use Both(A, B), x: Wrap({wrapped})) -> Nat = 0;
+            pub let t: ? = v;
+            /std/print("")
+        "#
+        );
+
+        reads_back(&source).unwrap_or_else(|error| panic!("{wrapped}: {error}"));
+    }
+}
+
+#[test]
+fn an_edge_of_the_programs_own_concept_reads_back() {
+    // `One` is declared by the program the report is of, whose lexicon is read off the module as it was lowered: the elaborator has recorded no edge there yet, and the edge is read off the field that declares it.
+    let source = r#"
+        use /std/{Nat, Show};
+        pub concept One(A: Type): pub Type {
+            use Show(A),
+        }
+        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
+        pub let v(@A: Type, use One(A), x: Wrap(A)) -> Nat = 0;
+        pub let t: ? = v;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_method_reached_through_the_inner_of_two_binders_is_written_as_its_call() {
+    // `Key(K)` and `Key(J)` each reach `Hash` by an edge: the goal at `J` is the inner binder's, and its path the one resolution takes.
+    let error = compile(
+        r#"
+        use /std/{Nat, Bytes, Hash, Eq, Io};
+        use /std/Map/{Key};
+        pub let outer(@K: Type, use Key(K), k: K) -> Nat =
+            let inner(@J: Type, use Key(J), j: J) -> Nat =
+                let p: Eq()(Hash/hash(j), x[]) = Eq/refl();
+                0;
+            0;
+        Io/pure(())
+        "#,
+    )
+    .map(|_| ())
+    .unwrap_err();
+
+    assert!(error.contains("Hash/hash(j)"), "{error}");
+    assert!(!error.contains("as the compiler holds it"), "{error}");
+}
+
+#[test]
 fn a_method_whose_type_names_an_earlier_field_reads_back() {
     // `Tot/div`'s `@ok` is typed by the concept's own `Ok`, a projection off the wrapper's witness, which prints as the call a program writes.
     let source = r#"

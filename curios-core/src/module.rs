@@ -8,10 +8,11 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Items,
-        Lexicon, Many, Members, Outline, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope,
-        Sharing, Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
-        UniverseContext, UniverseError, Variance, WitnessId, WitnessSpelling, build_shorten,
+        Atom, Bound, ConceptDecl, ConceptSpelling, Enter, FieldSpelling, Free, FuncType, Global,
+        InductDecl, Items, Lexicon, Many, Members, Outline, Place, Places, Polarity, RecGroup,
+        RecMemberScopes, Scope, Sharing, Spelling, StructDecl, StructType, Subterm, Symbols,
+        Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId, WitnessSpelling,
+        build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -258,6 +259,26 @@ impl DefinitionKind {
             DefinitionKind::Test => Declared::Test,
         }
     }
+}
+
+/// Each field of `fields` under the witness mark as its position beside the name its type applies, read where the field is written: a concept's superclass edges, where the elaborator has not recorded what they reach. A field whose type applies no name is left out.
+fn written_edges(fields: &Telescope<()>) -> Vec<(usize, Global)> {
+    let mut edges = Vec::new();
+    let mut position = 0;
+    let mut rest = fields;
+    while let Telescope::Cons(mark, type_, after) = rest {
+        let applied = match &**type_ {
+            Subterm::StructType(applied) => Some(applied.name),
+            _ => type_.head_name().and_then(Free::as_global).copied(),
+        };
+        if let (Plicity::Witness, Some(applied)) = (mark, applied) {
+            edges.push((position, applied));
+        }
+        position += 1;
+        rest = after.body();
+    }
+
+    edges
 }
 
 /// What a name is declared as: a [`DefinitionKind`] without the entry a former's carries, so it is read and compared with no declaration in hand.
@@ -1050,7 +1071,7 @@ impl Module {
         members
     }
 
-    /// What a report spells this unit's witnesses against (axis (h)): each concept's fields — a superclass edge's concept, or a method's wrapper, whether that wrapper takes the method's own parameters in its group, and the operator `syntax` names for it — and each witness's declared type. `syntax` is the registry's because this crate may not spell a prelude declaration.
+    /// What a report spells this unit's witnesses against (axis (h)): each concept's fields — a superclass edge's concept, or a method's wrapper, whether that wrapper takes the method's own parameters in its group, and the operator `syntax` names for it — beside its record, and each witness's declared type. `syntax` is the registry's because this crate may not spell a prelude declaration.
     fn witness_spelling(&self, located: &Located, syntax: &SyntaxRegistry) -> WitnessSpelling {
         let mut spelling = WitnessSpelling::default();
         for name in &self.declared_as(|declared| declared == Declared::Concept) {
@@ -1064,7 +1085,11 @@ impl Module {
                 continue;
             };
             let parameters = concept.params.len();
-            let edges = concept.edges(record.fields());
+            // What an edge reaches is the elaborator's to record, so a module as it was lowered holds none: there an edge is a field under the witness mark, read by the name its type applies, which the table takes for a concept only where it knows it as one.
+            let edges = match concept.supers.is_empty() {
+                false => concept.edges(record.fields()),
+                true => written_edges(record.fields()),
+            };
             let fields = concept
                 .fields
                 .iter()
@@ -1086,7 +1111,13 @@ impl Module {
                     }
                 })
                 .collect();
-            spelling.concepts.insert(*name, fields);
+            spelling.concepts.insert(
+                *name,
+                ConceptSpelling {
+                    fields,
+                    arity: record.arity.clone(),
+                },
+            );
         }
 
         // Which definitions are witnesses is what each place says it declares, as which are type formers is.

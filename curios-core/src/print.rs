@@ -189,13 +189,19 @@ pub struct Lexicon {
     pub(crate) members: Rc<Members>,
 }
 
-/// What axis (h) spells a witness against: each concept's fields — a method's wrapper and the operator dispatching to it, or the concept a superclass edge reaches — and each global witness's declared type, whose terminal is the concept application it answers. Built per unit by [`Module::lexicon`](crate::Module::lexicon) and merged across a render's scope, as the plicity marks are.
+/// What axis (h) spells a witness against: each concept's fields — a method's wrapper and the operator dispatching to it, or the concept a superclass edge reaches — beside its record, which says what an edge reaches for a witness at given arguments, and each global witness's declared type, whose terminal is the concept application it answers. Built per unit by [`Module::lexicon`](crate::Module::lexicon) and merged across a render's scope, as the plicity marks are.
 #[derive(Default)]
 pub struct WitnessSpelling {
-    pub(crate) concepts: BTreeMap<Global, Vec<FieldSpelling>>,
+    pub(crate) concepts: BTreeMap<Global, ConceptSpelling>,
     pub(crate) witnesses: BTreeMap<Global, Term>,
     /// The tables of the units of a reader's scope, where this is the table a render reads ([`WitnessSpelling::over`]): each where its unit keeps it, read after this one's own entries.
     units: Vec<Rc<WitnessSpelling>>,
+}
+
+/// One concept as a report spells against it: its fields by position, and its record's parameters ending in its field telescope, the one statement of what each superclass field is a witness of.
+pub(crate) struct ConceptSpelling {
+    pub(crate) fields: Vec<FieldSpelling>,
+    pub(crate) arity: Telescope<Telescope<()>>,
 }
 
 /// One field of a concept, by position.
@@ -207,7 +213,7 @@ pub enum FieldSpelling {
         merged: bool,
         operator: Option<InfixOp>,
     },
-    /// A superclass edge, to the concept it reaches.
+    /// A superclass edge, to the concept it reaches, or, in a module as it was lowered, to the name its field's type applies, which is a concept only where a table knows it as one.
     Super(Global),
 }
 
@@ -222,9 +228,32 @@ impl WitnessSpelling {
 
     /// The fields of `concept`, by position, where a unit of the table declares it.
     pub fn fields(&self, concept: &Global) -> Option<&Vec<FieldSpelling>> {
+        self.concept(concept).map(|entry| &entry.fields)
+    }
+
+    /// The entry of `concept`, where a unit of the table declares it.
+    fn concept(&self, concept: &Global) -> Option<&ConceptSpelling> {
         self.concepts
             .get(concept)
-            .or_else(|| self.units.iter().find_map(|unit| unit.fields(concept)))
+            .or_else(|| self.units.iter().find_map(|unit| unit.concept(concept)))
+    }
+
+    /// The concept application the superclass field at `index` of `concept` holds, for `witness`, a witness of the concept at `arguments`: the field's type read off the concept's record ([`Telescope::field_type_from`]), as resolution reads a projection's, so an edge whose type names an earlier field names that witness's. `None` where the record is not at hand, takes other arguments, or the field's type names no concept this table knows.
+    pub fn reached(
+        &self,
+        concept: &Global,
+        arguments: &[Term],
+        witness: &Term,
+        index: usize,
+    ) -> Option<(Global, Vec<Term>)> {
+        let entry = self.concept(concept)?;
+        if entry.arity.len() != arguments.len() {
+            return None;
+        }
+        let fields = entry.arity.open(&arguments.iter().collect::<Vec<_>>());
+        let type_ = fields.field_type_from(witness, &Field::Struct(*concept, index))?;
+
+        self.application(&type_)
     }
 
     /// The declared type of the global witness `witness`, where a unit of the table declares it.
@@ -432,6 +461,13 @@ impl Spelling {
                 Some(hint) => hint.to_string(),
                 None => name.faithful().to_string(),
             })
+    }
+
+    /// Whether `name` is a nominal family of this spelling's table: a type former, which converts with nothing but itself at converting arguments.
+    pub fn is_nominal(&self, name: &Global) -> bool {
+        self.nominal_plicities
+            .iter()
+            .any(|unit| unit.contains_key(name))
     }
 
     /// The declared plicities of `name`'s arguments — parameters then indices, in the order a use site supplies them — or `None` when the declaration is not in this spelling's table, in which case an applied family renders unmarked.

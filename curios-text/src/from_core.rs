@@ -4,6 +4,8 @@
 //!
 //! **A translation is whole or it is none.** [`from_core`] hands back a surface term, or `None`: the term is past what a report prints ([`curios_core::Minting::elides`]), or holds a form no program spells — a witness resolution would not put back, a hidden member with no label read off a value, a handle the host minted. The surface tree gains no node for what is left out, and a report that is handed `None` shows the term as the compiler holds it and says so.
 //!
+//! **A witness is left out where resolution would put it back, decided over what each candidate is a witness of.** [`restorable`] runs resolution's three rules at the reader's position ([`resolved`]): a binder, or a superclass path off one, answers a goal where its application is the goal's, is passed over where the two certainly differ — a rigid head on each side, and not one head ([`rigid_head`]) — and stops the walk where neither is known, the witness then being written. The walk reduces nothing, so a difference is known by heads alone, and it does not hold what an enclosing arm's pattern solved.
+//!
 //! **It reads what the Core printer reads**: the reader's [`curios_core::Spelling`], which names each global as resolution finds it from where the reader stands and each binder as the report's rename spells it, and the lexicons of the units in scope, for a nominal family's marks, a structure's fields, a constructor's payload and a concept's methods. Binders are labelled through the render's [`curios_core::Minting`] in the order this walk opens them, which is the order its dry run opened them in.
 
 use {
@@ -59,6 +61,7 @@ pub fn from_core(
         spelling,
         mint,
         witnesses: None,
+        definitions: None,
         inferred: false,
     };
 
@@ -72,6 +75,8 @@ struct Frame<'a> {
     mint: &'a curios_core::Minting,
     /// The innermost witness binder in scope, chained outward. Each node lives on the stack of the arm that opened its binder.
     witnesses: Option<&'a WitnessNode<'a>>,
+    /// The innermost group of local definitions in scope, chained outward as the witness binders are.
+    definitions: Option<&'a Definitions<'a>>,
     /// Whether the term this frame is handed stands where no expected type reaches it: the head of a call or of a projection, a scrutinee. What a checked position would supply is then written, a lambda's parameter types and a match's motive. Read by the node the frame is handed to and by none below it ([`sub`], [`unchecked`]).
     inferred: bool,
 }
@@ -86,8 +91,29 @@ impl<'a> Frame<'a> {
             spelling: self.spelling,
             mint: self.mint,
             witnesses: Some(node),
+            definitions: self.definitions,
             inferred: self.inferred,
         }
+    }
+
+    /// This frame with `group` innermost among its local definitions.
+    fn with_definitions<'b>(self, group: &'b Definitions<'b>) -> Frame<'b>
+    where
+        'a: 'b,
+    {
+        Frame {
+            spelling: self.spelling,
+            mint: self.mint,
+            witnesses: self.witnesses,
+            definitions: Some(group),
+            inferred: self.inferred,
+        }
+    }
+
+    /// Whether `label` is a local definition in scope, and so no binder.
+    fn defines(&self, label: &curios_core::Free) -> bool {
+        std::iter::successors(self.definitions, |group| group.parent)
+            .any(|group| group.labels.contains(label))
     }
 
     fn table(&self) -> Option<&'a curios_core::WitnessSpelling> {
@@ -118,9 +144,21 @@ impl<'a> WitnessNode<'a> {
         }
     }
 
-    fn concept(&self) -> Option<&curios_core::Global> {
-        self.concept.as_ref().map(|(concept, _)| concept)
+    /// What this binder answers, where the table knows its concept.
+    fn answered(&self) -> Option<Answered> {
+        let (concept, arguments) = self.concept.clone()?;
+
+        Some(Answered {
+            concept,
+            arguments: Some(arguments),
+        })
     }
+}
+
+/// The names one `let` or recursive group binds, and the group outside it: what tells a local definition, which stands for its value, from a binder.
+struct Definitions<'a> {
+    labels: &'a [curios_core::Free],
+    parent: Option<&'a Definitions<'a>>,
 }
 
 /// The witness binders in scope, innermost first.
@@ -409,6 +447,11 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         Core::Match(elimination) => written_match(elimination, frame)?,
         Core::Let(curios_core::Let { bindings, tail, .. }) => {
             let labels = frame.mint.scope_labels(&tail);
+            let group = Definitions {
+                labels: &labels,
+                parent: frame.definitions,
+            };
+            let frame = frame.with_definitions(&group);
             let terms = labels
                 .iter()
                 .map(curios_core::Term::free_var)
@@ -438,6 +481,11 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         // A recursive group is the `let … and …;` whose members see one another.
         Core::Rec(curios_core::Rec { group, tail }) => {
             let labels = frame.mint.scope_labels(&tail);
+            let defined = Definitions {
+                labels: &labels,
+                parent: frame.definitions,
+            };
+            let frame = frame.with_definitions(&defined);
             let terms = labels
                 .iter()
                 .map(curios_core::Term::free_var)
@@ -994,19 +1042,23 @@ fn written_flt(value: Floating, frame: Frame) -> Option<Term> {
     ))
 }
 
+/// A concept application as the walk holds one: the concept, and the arguments it is applied at where they could be read.
+#[derive(Clone)]
+struct Answered {
+    concept: curios_core::Global,
+    arguments: Option<Vec<curios_core::Term>>,
+}
+
 /// What a witness argument is, as resolution sees one.
 enum WitnessForm<'a> {
-    /// A binder in scope, or a superclass path off one `depth` edges long, reaching `concept`.
+    /// A binder in scope, or a superclass path off one: the fields the path projects, the first off the binder, and what it answers.
     Local {
         node: &'a WitnessNode<'a>,
-        concept: curios_core::Global,
-        depth: usize,
+        path: Vec<usize>,
+        answered: Answered,
     },
-    /// A witness of the global table, answering `concept` at `arguments` (empty where its declared telescope could not be opened).
-    Global {
-        concept: curios_core::Global,
-        arguments: Vec<curios_core::Term>,
-    },
+    /// A witness of the global table, and what it answers, its arguments unread where its declared telescope could not be opened.
+    Global(Answered),
     /// A witness goal still open, which resolution is what it waits on.
     Pending,
 }
@@ -1039,8 +1091,8 @@ fn witness_form<'a>(term: &curios_core::Term, frame: Frame<'a>) -> Option<Witnes
 
             Some(WitnessForm::Local {
                 node,
-                concept: *node.concept()?,
-                depth: 0,
+                path: Vec::new(),
+                answered: node.answered()?,
             })
         }
         Core::Proj(curios_core::Proj {
@@ -1049,18 +1101,21 @@ fn witness_form<'a>(term: &curios_core::Term, frame: Frame<'a>) -> Option<Witnes
         }) => match witness_form(head, frame)? {
             WitnessForm::Local {
                 node,
-                concept,
-                depth,
+                mut path,
+                answered,
             } => {
-                let (_, reached) = table.supers(&concept).find(|(field, _)| field == index)?;
+                let Edge::Reached(answered) = edge(table, &answered, head, *index)? else {
+                    return None;
+                };
+                path.push(*index);
 
                 Some(WitnessForm::Local {
                     node,
-                    concept: *reached,
-                    depth: depth + 1,
+                    path,
+                    answered,
                 })
             }
-            WitnessForm::Global { .. } | WitnessForm::Pending => None,
+            WitnessForm::Global(_) | WitnessForm::Pending => None,
         },
         Core::Var(_) | Core::Instance(_) | Core::Apply(_) => {
             let curios_core::Free::Global(witness @ curios_core::Global::Witness(_)) =
@@ -1070,101 +1125,218 @@ fn witness_form<'a>(term: &curios_core::Term, frame: Frame<'a>) -> Option<Witnes
             };
             let (concept, arguments) = table.answers(witness, &spine_arguments(term))?;
 
-            Some(WitnessForm::Global { concept, arguments })
+            Some(WitnessForm::Global(Answered {
+                concept,
+                // A concept takes a parameter, so no arguments are arguments unread.
+                arguments: (!arguments.is_empty()).then_some(arguments),
+            }))
         }
         _ => None,
     }
 }
 
-/// Whether resolution, at the reader's position, would put `argument` back if it were left out — the only case a `use` argument may be, following `documentation/syntax.md`'s order: the local witnesses innermost first, then their superclass projections breadth-first, then the global table. A binder whose concept the table does not know restores nothing and shadows nothing.
+/// What a superclass edge is known to reach.
+enum Edge {
+    /// A concept application, its arguments unread where the witness's own are, or where the concept's record does not give them.
+    Reached(Answered),
+    /// A name the table does not know as a concept: an edge the elaborator has yet to record, written through a definition. What it answers is not known, so neither is what resolution does with it.
+    Unread,
+}
+
+/// What the superclass edge at field `index` of `from`'s concept reaches, for `witness`, a witness of that application: `None` where the field is no edge.
+fn edge(
+    table: &curios_core::WitnessSpelling,
+    from: &Answered,
+    witness: &curios_core::Term,
+    index: usize,
+) -> Option<Edge> {
+    let (_, reached) = table
+        .supers(&from.concept)
+        .find(|(field, _)| *field == index)?;
+    if table.fields(reached).is_none() {
+        return Some(Edge::Unread);
+    }
+    let arguments = from
+        .arguments
+        .as_ref()
+        .and_then(|arguments| table.reached(&from.concept, arguments, witness, index))
+        .filter(|(concept, _)| concept == reached)
+        .map(|(_, arguments)| arguments);
+
+    Some(Edge::Reached(Answered {
+        concept: *reached,
+        arguments,
+    }))
+}
+
+/// Whether resolution, at the reader's position, would put `argument` back if it were left out — the only case a `use` argument may be: the witness resolution answers its application with ([`resolved`]) is the argument itself.
 fn restorable(argument: &curios_core::Term, frame: Frame) -> bool {
     let Some(table) = frame.table() else {
         return false;
     };
-    match witness_form(argument, frame) {
-        None => false,
-        Some(WitnessForm::Pending) => true,
-        // A direct match: the first binder of its concept the goal meets, innermost out, is the one resolution takes. A binder of the concept at another argument answers another goal and is passed over ([`apart`]).
+    let (goal, taken) = match witness_form(argument, frame) {
+        None => return false,
+        Some(WitnessForm::Pending) => return true,
         Some(WitnessForm::Local {
             node,
-            concept,
-            depth: 0,
-        }) => chain(frame.witnesses)
-            .filter(|candidate| candidate.concept() == Some(&concept))
-            .find(|candidate| std::ptr::eq(*candidate, node) || !apart(candidate, node))
-            .is_some_and(|first| std::ptr::eq(first, node)),
-        // A superclass path: no binder of the concept itself, and this the one route of the least length.
-        Some(WitnessForm::Local {
-            node,
-            concept,
-            depth,
-        }) => {
-            !chain(frame.witnesses).any(|candidate| candidate.concept() == Some(&concept))
-                && routes(table, frame, &concept).is_some_and(|(least, routes)| {
-                    least == depth && matches!(routes[..], [only] if std::ptr::eq(only, node))
-                })
+            path,
+            answered,
+        }) => (answered, Some((node, path))),
+        Some(WitnessForm::Global(answered)) => (answered, None),
+    };
+
+    match resolved(table, frame, &goal) {
+        Resolved::Unknown => false,
+        Resolved::Local(node, path) => {
+            taken.is_some_and(|(taken, along)| std::ptr::eq(taken, node) && along == path)
         }
-        // A global witness: coherence makes the table's answer this one, so long as nothing in scope answers first.
-        Some(WitnessForm::Global { concept, .. }) => {
-            routes(table, frame, &concept).is_none()
-                && !chain(frame.witnesses).any(|candidate| candidate.concept() == Some(&concept))
-        }
+        // Coherence makes the table's answer the one witness it holds for the application.
+        Resolved::Table => taken.is_none(),
     }
 }
 
-/// Whether two binders of one concept answer goals no term makes one: their applications differ at an argument where each holds a binder of its own, which nothing unifies. `Ord(A)` and `Ord(E)` under `(@A, @E, use Ord(A), use Ord(E))` are apart, and a call at `A` is answered by the first whichever stands innermost.
-fn apart(this: &WitnessNode, that: &WitnessNode) -> bool {
-    let binder = |term: &curios_core::Term| {
-        matches!(
-            &**term,
-            curios_core::Subterm::Var(var)
-                if matches!(var.as_free(), Some(curios_core::Free::Local(_)))
-        )
-    };
-    let (Some((_, these)), Some((_, those))) = (&this.concept, &that.concept) else {
-        return false;
-    };
-
-    these.len() == those.len()
-        && these
-            .iter()
-            .zip(those)
-            .any(|(this, that)| binder(this) && binder(that) && this != that)
+/// Who resolution answers a goal with, where the walk can tell.
+enum Resolved<'a> {
+    /// A binder in scope, or the superclass path off it the fields name.
+    Local(&'a WitnessNode<'a>, Vec<usize>),
+    /// The global table, nothing in scope answering first.
+    Table,
+    /// A candidate met on the way is neither the goal's application nor certainly another, or two are the goal's at one depth, which resolution refuses as ambiguous.
+    Unknown,
 }
 
-/// The least superclass depth at which any binder in scope reaches `concept`, beside every binder reaching it there — one entry per path, so a diamond counts twice. `None` when no binder reaches it through a superclass.
-fn routes<'a>(
+/// Who resolution answers `goal` with at the reader's position, following `documentation/syntax.md`'s order over what each candidate is a witness of ([`meets`]): the binders in scope innermost first, the first whose application is the goal's; then their superclass projections a depth at a time, the one of a depth that is; then the global table. A binder whose concept the table does not know answers nothing and shadows nothing.
+fn resolved<'a>(
     table: &curios_core::WitnessSpelling,
     frame: Frame<'a>,
-    concept: &curios_core::Global,
-) -> Option<(usize, Vec<&'a WitnessNode<'a>>)> {
+    goal: &Answered,
+) -> Resolved<'a> {
+    // Each candidate: the binder it is a path off, the path, the witness as a term, and what it answers.
     let mut level = chain(frame.witnesses)
-        .filter_map(|node| node.concept().map(|reached| (node, *reached)))
+        .filter_map(|node| {
+            Some((
+                node,
+                Vec::new(),
+                curios_core::Term::free_var(&node.label),
+                node.answered()?,
+            ))
+        })
         .collect::<Vec<_>>();
-    let mut depth = 0;
+    let mut direct = true;
     // The superclass graph is acyclic (checked where the registries are seeded), so the walk ends once every path has run out.
     while !level.is_empty() {
-        depth += 1;
-        level = level
-            .into_iter()
-            .flat_map(|(node, reached)| {
-                table
-                    .supers(&reached)
-                    .map(move |(_, super_)| (node, *super_))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        let found = level
-            .iter()
-            .filter(|(_, reached)| reached == concept)
-            .map(|(node, _)| *node)
-            .collect::<Vec<_>>();
-        if !found.is_empty() {
-            return Some((depth, found));
+        let mut found = Vec::new();
+        for (node, path, _, answered) in &level {
+            match meets(answered, goal, frame) {
+                Meets::Same => found.push((*node, path.clone())),
+                Meets::Apart => {}
+                Meets::Unknown => return Resolved::Unknown,
+            }
+            // Among the binders themselves the first match wins, as a name shadows.
+            if direct && !found.is_empty() {
+                break;
+            }
         }
+        match (found.pop(), found.is_empty()) {
+            (Some((node, path)), true) => return Resolved::Local(node, path),
+            (Some(_), false) => return Resolved::Unknown,
+            (None, _) => {}
+        }
+
+        direct = false;
+        let mut next = Vec::new();
+        for (node, path, witness, answered) in level {
+            for (index, _) in table.supers(&answered.concept) {
+                let reached = match edge(table, &answered, &witness, index) {
+                    Some(Edge::Reached(reached)) => reached,
+                    Some(Edge::Unread) => return Resolved::Unknown,
+                    None => continue,
+                };
+                let mut along = path.clone();
+                along.push(index);
+                let projected =
+                    curios_core::Term::from(curios_core::Subterm::Proj(curios_core::Proj {
+                        head: witness.clone(),
+                        field: curios_core::Field::Struct(answered.concept, index),
+                    }));
+                next.push((node, along, projected, reached));
+            }
+        }
+        level = next;
     }
 
-    None
+    Resolved::Table
+}
+
+/// What a candidate's application is to a goal's.
+enum Meets {
+    /// One application: the candidate answers the goal.
+    Same,
+    /// Certainly another: resolution passes over the candidate.
+    Apart,
+    /// Neither is known, so neither is what resolution does with the candidate.
+    Unknown,
+}
+
+/// What `candidate` is to `goal`: another concept's, or one differing at an argument ([`differ`]), is passed over; one spelled as the goal is answers it; and anything else, an application whose arguments could not be read among them, is not known.
+fn meets(candidate: &Answered, goal: &Answered, frame: Frame) -> Meets {
+    if candidate.concept != goal.concept {
+        return Meets::Apart;
+    }
+    let (Some(these), Some(those)) = (&candidate.arguments, &goal.arguments) else {
+        return Meets::Unknown;
+    };
+    if these.len() != those.len() {
+        return Meets::Unknown;
+    }
+    if these
+        .iter()
+        .zip(those)
+        .any(|(this, that)| differ(this, that, frame))
+    {
+        return Meets::Apart;
+    }
+
+    match these == those {
+        true => Meets::Same,
+        false => Meets::Unknown,
+    }
+}
+
+/// What a term is headed by where no reduction changes it: a binder, which converts with nothing but itself, or a type former, by the key the witness table files it under.
+#[derive(PartialEq, Eq)]
+enum Head {
+    Binder(curios_core::Free),
+    Former(curios_core::HeadKey),
+}
+
+/// Whether two terms are certainly not one: each has a rigid head and the heads differ.
+fn differ(this: &curios_core::Term, that: &curios_core::Term, frame: Frame) -> bool {
+    matches!(
+        (rigid_head(this, frame), rigid_head(that, frame)),
+        (Some(this), Some(that)) if this != that
+    )
+}
+
+/// The rigid head of `term`, where it has one. It is read through a function to what the function answers and down an application to what is applied, on a name as on the type it names, so two spellings of one type constructor — `M` and `(A) => M(A)`, `Option` and `(A) => Option(A)` — have one head and are never told apart. A local definition stands for its value and a global one for its body, so neither is a head; a term that computes has none.
+fn rigid_head(term: &curios_core::Term, frame: Frame) -> Option<Head> {
+    use curios_core::Subterm as Core;
+
+    match &**term {
+        Core::Func(function) => rigid_head(function.telescope.terminal(), frame),
+        Core::Apply(application) => rigid_head(&application.head, frame),
+        Core::InductType(_) | Core::StructType(_) | Core::Intrinsic(_) | Core::TupleType(_) => {
+            curios_core::HeadKey::of_whnf(term).map(Head::Former)
+        }
+        Core::Var(_) | Core::Instance(_) => match term.head_name()? {
+            curios_core::Free::Global(name) => frame
+                .spelling
+                .is_nominal(name)
+                .then_some(Head::Former(curios_core::HeadKey::Nominal(*name))),
+            local => (!frame.defines(local)).then_some(Head::Binder(*local)),
+        },
+        _ => None,
+    }
 }
 
 /// The operator a call of the method a projection off `witness` stands for is written as: the one dispatching to that method, when the call passes it exactly two plain arguments — an open witness goal's the operator it was inserted for.
@@ -1199,7 +1371,7 @@ fn method_operator(
 
             return Some(op);
         }
-        WitnessForm::Local { concept, .. } | WitnessForm::Global { concept, .. } => concept,
+        WitnessForm::Local { answered, .. } | WitnessForm::Global(answered) => answered.concept,
     };
     match table.fields(&concept)?.get(index)? {
         curios_core::FieldSpelling::Method { operator, .. } => *operator,
@@ -1234,22 +1406,16 @@ fn method(
     let (concept, parameters) = match witness_form(witness, frame)? {
         // An open witness goal carries only the operator it was inserted for, which spells it or nothing does.
         WitnessForm::Pending => return None,
-        WitnessForm::Local {
-            node,
-            concept,
-            depth,
-        } => {
-            let parameters = match depth {
-                0 => node
-                    .concept
-                    .as_ref()
-                    .map(|(_, arguments)| arguments.clone()),
-                _ => None,
+        // A path off a binder is written by its method alone, as it was before its application could be read.
+        WitnessForm::Local { path, answered, .. } => {
+            let parameters = match path.is_empty() {
+                true => answered.arguments,
+                false => None,
             };
 
-            (concept, parameters.unwrap_or_default())
+            (answered.concept, parameters.unwrap_or_default())
         }
-        WitnessForm::Global { concept, arguments } => (concept, arguments),
+        WitnessForm::Global(answered) => (answered.concept, answered.arguments.unwrap_or_default()),
     };
 
     let curios_core::FieldSpelling::Method {
