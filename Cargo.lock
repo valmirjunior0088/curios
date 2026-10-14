@@ -937,6 +937,7 @@ name = "curios-wonder"
 version = "0.16.0"
 dependencies = [
  "curios-cont",
+ "curios-core",
  "curios-document",
  "curios-package",
  "curios-pipeline",

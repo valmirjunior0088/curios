@@ -15,6 +15,22 @@ fn line_column_is_one_based_and_counts_scalars() {
 }
 
 #[test]
+fn an_offset_is_found_by_the_line_and_column_it_is_named_by() {
+    let source = Source::inline("first\nsécond line\n\nlast");
+
+    for offset in (0..=source.text.len()).filter(|offset| source.text.is_char_boundary(*offset)) {
+        let (line, column) = Span::new(Arc::clone(&source), offset, offset).line_column();
+        assert_eq!(source.offset_of(line, column), Some(offset));
+    }
+
+    // A column past a line's end, a line past the last and a count from zero name nothing.
+    assert_eq!(source.offset_of(1, 7), None);
+    assert_eq!(source.offset_of(5, 1), None);
+    assert_eq!(source.offset_of(0, 1), None);
+    assert_eq!(source.offset_of(1, 0), None);
+}
+
+#[test]
 fn caret_aligns_by_scalar_count_on_non_ascii_lines() {
     let source = Source::inline("sécond line\n");
 

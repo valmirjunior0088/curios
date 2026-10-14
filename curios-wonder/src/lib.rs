@@ -34,6 +34,9 @@ pub use document::*;
 mod stage;
 pub use stage::*;
 
+mod named;
+pub use named::*;
+
 mod cost;
 pub use cost::*;
 

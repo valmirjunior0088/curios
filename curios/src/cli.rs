@@ -1,9 +1,13 @@
 //! The clap command-line surface: the `Cli` root and its `Mode` subcommands. Parsing only — the dispatch on the parsed value lives in `main.rs`, and what a TARGET's help says is computed from its command's contract, so the help cannot describe an argument its command admits another way.
 
 use {
-    crate::{COMPILE, COST, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, RUN, STAGE, TEST, TESTS},
+    crate::{
+        AT, COMPILE, COST, DECLARATIONS, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, RUN, STAGE, TEST,
+        TESTS,
+    },
     clap::{ArgGroup, Args, Parser, Subcommand, builder::PossibleValuesParser},
     curios_pipeline::Stage,
+    curios_wonder::Place,
     std::{ffi::OsString, path::PathBuf, sync::LazyLock},
 };
 
@@ -354,6 +358,35 @@ pub(crate) enum Query {
         name: String,
 
         #[arg(value_name = "TARGET", help = STAGE.target_help())]
+        target: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
+    },
+
+    /// Asked of the lowering, which resolves a written name, so a file that does not check answers as one that does.
+    #[command(
+        about = "The name written at a place of a file: its declaration, what it is declared as, and where"
+    )]
+    At {
+        #[arg(
+            value_name = "LINE:COLUMN",
+            help = "The place, as a diagnostic prints one: a line and a column, each from one"
+        )]
+        place: Place,
+
+        #[arg(value_name = "TARGET", help = AT.target_help())]
+        target: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
+    },
+
+    #[command(
+        about = "Every definition a file declares, one row per line, in the order they are written"
+    )]
+    Declarations {
+        #[arg(value_name = "TARGET", help = DECLARATIONS.target_help())]
         target: Option<String>,
 
         #[command(flatten)]

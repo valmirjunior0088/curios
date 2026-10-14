@@ -20,7 +20,7 @@ use {
     curios_ersd::lower_to_cont,
     curios_text::{
         BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, Translation,
-        UnitSource, into_core_entry, into_core_unit, into_core_with_prelude,
+        UnitSource, into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{Qualifier, Report, SyntaxRegistry, recurse},
@@ -840,22 +840,14 @@ where
         .expect("a program is entered from the source that carries its entrypoint");
     observe(Stage::Text(entrypoint));
 
-    let hit = curios_profile::profile!("cache::get" => cache.and_then(|cache| cache.get(source)));
-    // A baseline is asked for only on a miss, as the fold asks for a unit's.
-    let baseline = match hit {
-        Some(_) => None,
-        None => curios_profile::profile!(
-            "cache::baseline" => cache.and_then(|cache| cache.baseline(source, None))
-        ),
-    };
-
-    // Lowered on every compile, over whatever earlier unit there is: the final term is no part of a unit, and a declaration whose text and resolutions stand is the earlier one's.
-    let text = predecessors.text();
-    let earlier = hit
-        .as_ref()
-        .or(baseline.as_ref().map(|earlier| &earlier.unit));
-    let (lowered, mut written) = into_core_entry(source, &text, syntax, earlier.map(Unit::text))
-        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+    let (hit, baseline) = held(source, None, cache);
+    let (lowered, mut written) = lower_program(
+        predecessors,
+        syntax,
+        source,
+        hit.as_ref()
+            .or(baseline.as_ref().map(|earlier| &earlier.unit)),
+    )?;
 
     // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let cores = predecessors.cores();
@@ -1342,8 +1334,7 @@ where
 
     for (source, offered) in sources {
         // Announced *after* the cache is consulted and *before* the work, so a reported operation is one that is actually about to happen and its timing starts where it does.
-        let hit =
-            curios_profile::profile!("cache::get" => cache.and_then(|cache| cache.get(source)));
+        let (hit, baseline) = held(source, *offered, cache);
         if let Some(unit) = hit {
             progress(Progress::Reused(&source.prefix()));
             answered(source, &unit)?;
@@ -1351,10 +1342,6 @@ where
             continue;
         }
 
-        // A baseline is asked for only on a miss: a hit is the empty case of a recompile, where nothing changed and everything is reused.
-        let baseline = curios_profile::profile!(
-            "cache::baseline" => cache.and_then(|cache| cache.baseline(source, *offered))
-        );
         let prefix = source.prefix();
         progress(match &baseline {
             Some(_) => Progress::Recompiling(&prefix),
@@ -1396,6 +1383,76 @@ where
     }
 
     Ok(produced)
+}
+
+/// What a compilation of `source` starts from: the unit `cache` holds for it, or the baseline `cache` compiles it over, `offered` being what whoever assembled the fold offers for the source. A baseline is asked for only on a miss: a hit is the empty case of a recompile, where nothing changed and everything is reused.
+fn held(
+    source: &UnitSource<'_>,
+    offered: Option<&Unit>,
+    cache: Option<&dyn Cache>,
+) -> (Option<Unit>, Option<Earlier>) {
+    let hit = curios_profile::profile!("cache::get" => cache.and_then(|cache| cache.get(source)));
+    let baseline = match hit {
+        Some(_) => None,
+        None => curios_profile::profile!(
+            "cache::baseline" => cache.and_then(|cache| cache.baseline(source, offered))
+        ),
+    };
+
+    (hit, baseline)
+}
+
+/// The program `source` is, lowered over `earlier`, the unit [`held`] of its declarations: on every compile, over whatever earlier unit there is, the final term being no part of a unit and a declaration whose text and resolutions stand being the earlier one's.
+fn lower_program(
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+    source: &UnitSource<'_>,
+    earlier: Option<&Unit>,
+) -> Result<(PreparedText, curios_core::Entrypoint), CompileError> {
+    into_core_entry(
+        source,
+        &predecessors.text(),
+        syntax,
+        earlier.map(Unit::text),
+    )
+    .map_err(|error| CompileError::Failure(vec![error.report()]))
+}
+
+/// `source` lowered over `predecessors` and no further, handed to `then`: the unit's text stage, and beside it the term a program closes with, as the lowering wrote it, where `source` is one. A mounted unit `cache` holds is read as it stands; any other source is lowered over what `cache` holds or offers for it, a declaration whose text and resolutions stand being the earlier unit's.
+///
+/// **What a question about what is written reads.** A written name is resolved where it is lowered, so nothing here elaborates, judges or erases, nothing is handed to `cache`, and a subject that would be refused answers as one that checks: the outer refusal is a subject that did not lower.
+pub(crate) fn lower_subject<T>(
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+    source: &UnitSource<'_>,
+    offered: Option<&Unit>,
+    cache: Option<&dyn Cache>,
+    then: impl FnOnce(&PreparedText, Option<&curios_core::Entrypoint>) -> T,
+) -> Result<T, CompileError> {
+    let (hit, baseline) = held(source, offered, cache);
+    if source.is_entry() {
+        let earlier = hit
+            .as_ref()
+            .or(baseline.as_ref().map(|earlier| &earlier.unit));
+        let (lowered, entry) = lower_program(predecessors, syntax, source, earlier)?;
+
+        return Ok(then(&lowered, Some(&entry)));
+    }
+
+    let text = predecessors.text();
+    Ok(match (hit, baseline) {
+        (Some(unit), _) => then(unit.text(), None),
+        (None, Some(earlier)) => then(
+            &into_core_unit_over(source, &text, syntax, earlier.unit.text())
+                .map_err(|error| CompileError::Failure(vec![error.report()]))?,
+            None,
+        ),
+        (None, None) => then(
+            &into_core_unit(source, &text, syntax)
+                .map_err(|error| CompileError::Failure(vec![error.report()]))?,
+            None,
+        ),
+    })
 }
 
 /// Hold what `source`'s package says a module answers to the rows `unit` declares, a unit compiled now or restored alike.

@@ -6,15 +6,23 @@
 
 use {
     crate::{
-        Diagnosed, Diagnosis, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject, Uncosted,
-        cost, declared_tests, diagnosed, stage, unit_stage,
+        Diagnosed, Diagnosis, Named, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject,
+        Uncosted, Written, cost, declared_tests, diagnosed, stage, unit_stage, written,
     },
     curios_cont::{Fate, Outcome},
+    curios_core::Declared,
     curios_package::{Entry, Library, Program, Selection},
     curios_pipeline::CompileError,
     curios_text::{LoadError, Overlay},
+    curios_utilities::Span,
     curios_verdicts::{Session, Verdicts},
-    std::{collections::BTreeSet, fmt::Display, fs, io, path::PathBuf},
+    std::{
+        collections::BTreeSet,
+        fmt::Display,
+        fs, io,
+        path::{Path, PathBuf},
+        str::FromStr,
+    },
 };
 
 /// One thing a question can be about, resolved: the subject, and the store it reads and files into.
@@ -117,6 +125,19 @@ impl Asked {
         let fates = cost(budget, self.subject, overlay, cache);
 
         (fates, refused(cache))
+    }
+
+    /// What `file` of the subject writes, text by text, beside why its store took nothing, where it could not.
+    pub fn written(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        file: &Path,
+    ) -> (Result<Vec<Written>, Vec<Diagnosis>>, Option<String>) {
+        let cache = self.store.as_ref();
+        let texts = written(budget, self.subject, file, overlay, cache);
+
+        (texts, refused(cache))
     }
 }
 
@@ -279,16 +300,7 @@ fn library_stage(
     overlay: &Overlay,
     unfiled: impl FnOnce(String),
 ) -> Result<(), CompileError> {
-    let file = match &library.through {
-        Some(file) => file.clone(),
-        // The header leads the files a library is written in.
-        None => library
-            .declared_files()
-            .map_err(CompileError::failure)?
-            .into_iter()
-            .next()
-            .unwrap_or_default(),
-    };
+    let file = asked_through(&library)?;
     let store = Verdicts::at(library.root);
 
     let reached = unit_stage(
@@ -312,6 +324,158 @@ fn library_stage(
     }
 
     answered
+}
+
+/// The file of `library` a question about one file is about: the one it was selected through, or its header, which leads the files a library is written in.
+fn asked_through(library: &Library) -> Result<PathBuf, CompileError> {
+    match &library.through {
+        Some(file) => Ok(file.clone()),
+        None => Ok(library
+            .declared_files()
+            .map_err(CompileError::failure)?
+            .into_iter()
+            .next()
+            .unwrap_or_default()),
+    }
+}
+
+/// A place in a file as a diagnostic prints one and a question is asked of one: a line and a column, each counted from one, the column in scalar values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Place {
+    pub line: usize,
+    pub column: usize,
+}
+
+impl FromStr for Place {
+    type Err = String;
+
+    fn from_str(written: &str) -> Result<Self, String> {
+        let counted = |number: &str| number.parse::<usize>().ok().filter(|number| *number > 0);
+
+        written
+            .split_once(':')
+            .and_then(|(line, column)| {
+                Some(Place {
+                    line: counted(line)?,
+                    column: counted(column)?,
+                })
+            })
+            .ok_or_else(|| {
+                format!("{written:?} is no place: write a line and a column, each from one, as in `12:5`")
+            })
+    }
+}
+
+/// `wonder at LINE:COLUMN [TARGET]`: the name written at a place of the file `staged` is asked through, one row to stdout — nothing where no name stands there. `unfiled` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_at(
+    budget: u64,
+    staged: Staged,
+    place: Place,
+    unfiled: impl FnOnce(String),
+) -> Result<(), CompileError> {
+    for_names(budget, staged, unfiled, |texts| {
+        let names = texts.iter().flat_map(|text| &text.names);
+        let offset = texts
+            .first()
+            .and_then(|text| text.text.source.offset_of(place.line, place.column));
+
+        if let Some(named) = offset.and_then(|offset| Named::at(names, offset)) {
+            println!("{}", row(named));
+        }
+    })
+}
+
+/// `wonder declarations [TARGET]`: every definition the file `staged` is asked through declares, one row per line to stdout, in the order they are written. `unfiled` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_declarations(
+    budget: u64,
+    staged: Staged,
+    unfiled: impl FnOnce(String),
+) -> Result<(), CompileError> {
+    for_names(budget, staged, unfiled, |texts| {
+        for named in texts
+            .iter()
+            .flat_map(|text| &text.names)
+            .filter(|named| named.declares)
+        {
+            println!("{}", row(named));
+        }
+    })
+}
+
+/// What the file `staged` is asked through writes, handed to `answer`: the one it was selected through, a program's own entry, or a library's header. A subject with nothing to read stops as a build does, what stopped it going to stderr.
+fn for_names(
+    budget: u64,
+    staged: Staged,
+    unfiled: impl FnOnce(String),
+    answer: impl FnOnce(&[Written]),
+) -> Result<(), CompileError> {
+    let overlay = Overlay::default();
+
+    let (asked, file) = match staged {
+        Staged::Program(program) => {
+            let file = match (program.through(), program.entry()) {
+                (Some(module), _) => module.to_path_buf(),
+                (None, Entry::File(entry)) => entry.clone(),
+                (None, Entry::Stdin) => PathBuf::from(STDIN_LABEL),
+            };
+
+            (
+                Asked::about_program(program).map_err(CompileError::failure)?,
+                file,
+            )
+        }
+        Staged::Library(library) => {
+            let file = asked_through(&library)?;
+
+            (Asked::about_library(library), file)
+        }
+    };
+    if let Some(said) = asked.subject.said_unlinked(&overlay, "is read") {
+        eprintln!("note: {said}");
+    }
+
+    let (texts, unstored) = asked.written(budget, &overlay, &file);
+    let answered = match texts {
+        Ok(texts) => {
+            answer(&texts);
+            Ok(())
+        }
+        Err(diagnostics) => Err(stopped(diagnostics)),
+    };
+    if let Some(unstored) = unstored {
+        unfiled(unstored);
+    }
+
+    answered
+}
+
+/// One name as a row: the declaration's path, what it is declared as, and where its name is written, a tab between each — the place left out where no file holds it.
+fn row(named: &Named) -> String {
+    let declared = match named.declared {
+        Declared::Authored => "definition",
+        Declared::Inductive => "inductive",
+        Declared::Struct => "structure",
+        Declared::Concept => "concept",
+        Declared::Constructor => "constructor",
+        Declared::Method => "method",
+        Declared::Witness => "witness",
+        Declared::Test => "test",
+    };
+
+    match &named.declaration {
+        Some(place) => format!("{}\t{declared}\t{}", named.name, placed(place)),
+        None => format!("{}\t{declared}", named.name),
+    }
+}
+
+/// Where `span` begins, as a diagnostic's header names it: the file, the line and the column.
+fn placed(span: &Span) -> String {
+    let (line, column) = span.line_column();
+
+    match &span.source.path {
+        Some(path) => format!("{}:{line}:{column}", path.display()),
+        None => format!("{line}:{column}"),
+    }
 }
 
 /// What asking for a rung the pipeline has none of is refused with.

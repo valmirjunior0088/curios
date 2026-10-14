@@ -50,6 +50,21 @@ impl Source {
 
         Ok(Self::new(path, text))
     }
+
+    /// The byte offset of the 1-based `line` and `column`, the coordinate [`Span::line_column`] names a place by, so a place a diagnostic prints is one that can be asked about: columns count Unicode scalar values, and the column past a line's last is its end. `None` for a place the text does not hold.
+    pub fn offset_of(&self, line: usize, column: usize) -> Option<usize> {
+        let start = match line.checked_sub(1)? {
+            0 => 0,
+            before => 1 + self.text.match_indices('\n').nth(before - 1)?.0,
+        };
+        let written = self.text[start..].split('\n').next().unwrap_or_default();
+        let within = column.checked_sub(1)?;
+
+        match written.char_indices().nth(within) {
+            Some((offset, _)) => Some(start + offset),
+            None => (within == written.chars().count()).then_some(start + written.len()),
+        }
+    }
 }
 
 /// A half-open byte range `[start, end)` into a shared [`Source`] — how every pipeline stage points a diagnostic back at the text that caused it. Equality and hashing identify the source by pointer rather than content, so spans from separately loaded sources never alias even when their texts match, and hashing never walks the text.

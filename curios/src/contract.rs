@@ -227,6 +227,24 @@ pub(crate) const STAGE_OF_A_UNIT: Contract = Contract {
     product: Product::Nothing,
 };
 
+/// A question about one file: a program's, named by its own file or through one of its modules, or a library's.
+pub(crate) const AT: Contract = Contract {
+    command: "wonder at",
+    accepts: Accepts::ProgramOrLibrary,
+    own_file_only: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
+/// A question about one file, as [`AT`] is.
+pub(crate) const DECLARATIONS: Contract = Contract {
+    command: "wonder declarations",
+    accepts: Accepts::ProgramOrLibrary,
+    own_file_only: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
 pub(crate) const SERVER: Contract = Contract {
     command: "wonder server",
     accepts: Accepts::Nothing,
@@ -256,6 +274,8 @@ impl Mode {
                 Query::Cost { .. } => &COST,
                 Query::Stage { name, .. } if Stage::of_a_unit(name) => &STAGE_OF_A_UNIT,
                 Query::Stage { .. } => &STAGE,
+                Query::At { .. } => &AT,
+                Query::Declarations { .. } => &DECLARATIONS,
                 Query::Server { .. } => &SERVER,
             },
             #[cfg(feature = "profile")]
@@ -276,7 +296,9 @@ impl Mode {
                 Query::Diagnostics { target, .. }
                 | Query::Tests { target, .. }
                 | Query::Cost { target, .. }
-                | Query::Stage { target, .. } => target.as_deref(),
+                | Query::Stage { target, .. }
+                | Query::At { target, .. }
+                | Query::Declarations { target, .. } => target.as_deref(),
                 Query::Server { .. } => None,
             },
             // A directory to create is an argument, and no target. So is a filed stream to read.
@@ -336,6 +358,8 @@ impl Mode {
                 | Query::Tests { elaboration, .. }
                 | Query::Cost { elaboration, .. }
                 | Query::Stage { elaboration, .. }
+                | Query::At { elaboration, .. }
+                | Query::Declarations { elaboration, .. }
                 | Query::Server { elaboration } => Some(elaboration),
             },
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } | Mode::Format { .. } => None,

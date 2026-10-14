@@ -15,6 +15,8 @@ workspace = true
 [dependencies]
 curios-utilities = { workspace = true }
 curios-document = { workspace = true }
+# For what a name is declared as and where its declaration's name is written, which `at` and `declarations` answer in the lowering's own terms.
+curios-core = { workspace = true }
 curios-text = { workspace = true }
 curios-unit = { workspace = true }
 curios-wasm = { workspace = true }

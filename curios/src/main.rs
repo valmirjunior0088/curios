@@ -38,8 +38,8 @@ use {
     curios_text::Formatted,
     curios_utilities::Source,
     curios_wonder::{
-        Linted, STDIN_LABEL, Staged, lint, serve, std_documentation, wonder_cost,
-        wonder_diagnostics, wonder_stage, wonder_tests,
+        Linted, STDIN_LABEL, Staged, lint, serve, std_documentation, wonder_at, wonder_cost,
+        wonder_declarations, wonder_diagnostics, wonder_stage, wonder_tests,
     },
     std::{
         collections::BTreeSet,
@@ -563,6 +563,19 @@ fn dispatch() -> Result<(), Failure> {
                 |module| {
                     optimize(&module, true, |stage| println!("{stage}"));
                 },
+                unfiled,
+            )?,
+            Query::At {
+                place, elaboration, ..
+            } => wonder_at(
+                elaboration.budget,
+                contract.admit_staged(target, manifest, &here()?)?,
+                place,
+                unfiled,
+            )?,
+            Query::Declarations { elaboration, .. } => wonder_declarations(
+                elaboration.budget,
+                contract.admit_staged(target, manifest, &here()?)?,
                 unfiled,
             )?,
             Query::Server { elaboration } => serve(elaboration.budget, manifest)?,

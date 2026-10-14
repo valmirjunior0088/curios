@@ -272,6 +272,68 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     assert_eq!(named, "");
 }
 
+/// A place answers the name written there as one row on stdout: the declaration's path, what it is declared as, and where its name is written, a tab between each.
+#[test]
+fn a_place_answers_the_name_written_there() {
+    let root = project("at");
+
+    let answered = curios(&root, &["wonder", "at", "1:20", "app.crs"], "");
+
+    assert!(
+        answered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    let row = stdout(&answered);
+    let fields = row.trim_end_matches('\n').split('\t').collect::<Vec<_>>();
+    assert_eq!(fields[..2], ["/app/util/word", "definition"], "{row}");
+    assert!(fields[2].ends_with("util.crs:1:9"), "{row}");
+}
+
+/// What a file declares is one row a definition, and a place where nothing is named is an answer of nothing: both exit 0.
+#[test]
+fn a_files_declarations_are_listed_and_a_place_naming_nothing_answers_nothing() {
+    let root = project("declarations");
+
+    let listed = curios(&root, &["wonder", "declarations", "util.crs"], "");
+    assert!(
+        listed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&listed.stderr)
+    );
+    let rows = stdout(&listed);
+    assert!(
+        rows.starts_with("/app/util/word\tdefinition\t") && rows.ends_with("util.crs:1:9\n"),
+        "{rows}"
+    );
+    assert_eq!(rows.lines().count(), 1, "{rows}");
+
+    // The `pub` a declaration opens with names nothing.
+    let nothing = curios(&root, &["wonder", "at", "1:1", "util.crs"], "");
+    assert!(nothing.status.success());
+    assert_eq!(stdout(&nothing), "");
+}
+
+/// A written name is resolved where it is lowered, so a program whose first declaration is a type mismatch still answers where a name is declared.
+#[test]
+fn a_program_that_does_not_check_answers_where_a_name_is_declared() {
+    let root = temporary("at-refused");
+    fs::create_dir_all(&root).unwrap();
+
+    let answered = curios(
+        &root,
+        &["wonder", "at", "2:21", "-"],
+        "let one: /std/Nat = true;\nlet two: /std/Nat = one;\n/std/print(\"\")\n",
+    );
+
+    assert!(
+        answered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    assert_eq!(stdout(&answered), "/one\tdefinition\t<stdin>:1:5\n");
+}
+
 /// A stage that the program does not reach is not an answer: diagnostics on stderr, exit 1, stdout empty.
 #[test]
 fn an_unreached_stage_leaves_stdout_empty() {

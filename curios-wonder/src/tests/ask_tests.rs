@@ -70,3 +70,22 @@ fn a_file_target_the_disk_does_not_hold_is_refused_before_it_is_placed() {
         "{refusal}"
     );
 }
+
+/// A place is written as a diagnostic prints one, and anything else is refused in words that show the form.
+#[test]
+fn a_place_is_a_line_and_a_column_each_from_one() {
+    assert_eq!(
+        "12:5".parse::<crate::Place>(),
+        Ok(crate::Place {
+            line: 12,
+            column: 5
+        })
+    );
+
+    for written in ["12", "0:1", "1:0", "a:b", "1:2:3", ""] {
+        let refusal = written
+            .parse::<crate::Place>()
+            .expect_err("no line and column, each from one");
+        assert!(refusal.contains("as in `12:5`"), "{refusal}");
+    }
+}

@@ -9,12 +9,13 @@ use {
     crate::{
         Cache, Checked, CompileError, EntryTail, Examined, Progress, Refused, Stage, TestRecord,
         Typechecked, check_entrypoint, compile_entrypoint, compile_unit_as_tests, compile_units,
-        declared_test_paths, examine_entrypoint, recheck, recheck_measured, typecheck_entrypoint,
+        declared_test_paths, examine_entrypoint, lower_subject, recheck, recheck_measured,
+        typecheck_entrypoint,
     },
     curios_abi::ForeignStore,
     curios_document::Documentation,
     curios_prelude::with_prelude,
-    curios_text::{RootSource, SYNTAX, UnitSource, document_unit},
+    curios_text::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit},
     curios_unit::{Predecessors, Unit},
     curios_utilities::Qualifier,
 };
@@ -162,6 +163,69 @@ impl<'a> Fold<'a> {
         self.scoped(progress, |prelude, _, produced, _| then(prelude, &produced))
     }
 
+    /// The program `entrypoint` is, lowered on top of the fold and no further (`lower_subject`), handed to `then` with the term it closes with and the units in scope, the prelude's roots first: what a question about what a program writes reads, asked of no checker, so a program that would be refused answers.
+    pub fn lowered<P, T>(
+        self,
+        entrypoint: &curios_text::Entrypoint,
+        loader: &RootSource,
+        progress: P,
+        then: impl FnOnce(&[&Unit], &PreparedText, &curios_core::Entrypoint) -> T,
+    ) -> Result<T, CompileError>
+    where
+        P: FnMut(Progress<'_>),
+    {
+        self.scoped(progress, |prelude, _, produced, _| {
+            let scope = prelude
+                .iter()
+                .copied()
+                .chain(produced.iter())
+                .collect::<Vec<_>>();
+
+            lower_subject(
+                Predecessors::over(&scope),
+                &SYNTAX,
+                &UnitSource::entry(entrypoint, loader),
+                None,
+                self.cache,
+                |text, entry| {
+                    let entry = entry.expect("a program's lowering holds the term it closes with");
+
+                    then(&scope, text, entry)
+                },
+            )
+        })
+    }
+
+    /// The last unit lowered on top of the ones before it and no further (`lower_subject`), handed to `then` with the units in scope, the prelude's roots first: [`Fold::lowered`] for a library, whose units before the last are compiled as any fold compiles them and whose last is asked of no checker.
+    pub fn lowered_unit<P, T>(
+        self,
+        progress: P,
+        then: impl FnOnce(&[&Unit], &PreparedText) -> T,
+    ) -> Result<T, CompileError>
+    where
+        P: FnMut(Progress<'_>),
+    {
+        self.scoped_before(1, progress, |prelude, sources, produced, _| {
+            let (source, offered) = sources
+                .last()
+                .ok_or_else(|| CompileError::failure("nothing to read: the scope holds no unit"))?;
+            let scope = prelude
+                .iter()
+                .copied()
+                .chain(produced.iter())
+                .collect::<Vec<_>>();
+
+            lower_subject(
+                Predecessors::over(&scope),
+                &SYNTAX,
+                source,
+                *offered,
+                self.cache,
+                |text, _| then(&scope, text),
+            )
+        })
+    }
+
     /// The interface of the last unit — a package's library, compiled against everything before it — for its consumers. The same fold [`Fold::check_units`] runs, the kernel included, so a library that does not check is not documented and reports what stopped it as `run` would. The record is then made from the unit's stored tables and its sources ([`document_unit`]), whether the unit was compiled now or reused from the store: no unit carries one.
     ///
     /// **The prelude's records are the ones handed over.** A unit adopts a root no consumer can name, and the prelude holds the only one: `/sys`, which a package named `std` adopts as the archived `/std` does.
@@ -225,9 +289,27 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// The standard predecessors, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, each unit's source as it was compiled, the units produced, and the progress reporter for whatever follows. The one spelling of them this type exists to write once; the methods differ only in what they do with it.
+    /// The standard predecessors, every unit compiled — see [`Fold::scoped_before`].
     fn scoped<P, T>(
         self,
+        progress: P,
+        then: impl FnOnce(
+            &[&Unit],
+            &[(UnitSource<'_>, Option<&Unit>)],
+            Vec<Unit>,
+            &mut P,
+        ) -> Result<T, CompileError>,
+    ) -> Result<T, CompileError>
+    where
+        P: FnMut(Progress<'_>),
+    {
+        self.scoped_before(0, progress, then)
+    }
+
+    /// The standard predecessors, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, each unit's source as it is compiled, the units produced, and the progress reporter for whatever follows. The one spelling of them this type exists to write once; the methods differ only in what they do with it. The last `left` units are given their sources and not compiled, for a method that does something else with its subject.
+    fn scoped_before<P, T>(
+        self,
+        left: usize,
         mut progress: P,
         then: impl FnOnce(
             &[&Unit],
@@ -271,7 +353,7 @@ impl<'a> Fold<'a> {
                 budget,
                 Predecessors::over(&roots),
                 &SYNTAX,
-                &sources,
+                &sources[..sources.len().saturating_sub(left)],
                 cache,
                 &mut progress,
             )?;
