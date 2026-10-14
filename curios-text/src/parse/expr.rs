@@ -33,16 +33,19 @@ pub(super) const LAMBDA_TAKES_PARENTHESES: &str =
 
 /// `refusal` where `literal` stands, and nothing where it does not: the literal is consumed, so the refusal is past the choice point and outranks the token the form around it wanted there, with its caret on the literal.
 pub(super) fn refusing<'a>(literal: &'static str, refusal: &'static str) -> impl Parser<'a, ()> {
-    look_ahead(take_exact(literal))
-        .map(|()| true)
-        .or(pure(false))
-        .flat_map(move |stands| match stands {
-            true => mark()
-                .and_drop(take_exact(literal))
-                .flat_map(move |start| fail_from(&start, refusal))
-                .boxed(),
-            false => pure(()).boxed(),
-        })
+    move |state: ParserState<'a>| {
+        look_ahead(take_exact(literal))
+            .map(|()| true)
+            .or(pure(false))
+            .flat_map(move |stands| match stands {
+                true => mark()
+                    .and_drop(take_exact(literal))
+                    .flat_map(move |start| fail_from(&start, refusal))
+                    .boxed(),
+                false => pure(()).boxed(),
+            })
+            .parse(state)
+    }
 }
 
 // A plain-label binding with a mandatory type: every top-level member, and every member of a local group after the first.
@@ -101,44 +104,53 @@ pub(super) fn parse_func_sugar_param<'a>(
 
 // The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the type-required and the local (type-optional) signature parsers.
 pub(super) fn parse_func_let_signature<'a>(owns_body: bool) -> impl Parser<'a, LetSignature> {
-    parse_literal("(")
-        .and_keep(sep_by0_trailing(parse_func_sugar_param, || {
-            parse_literal(",")
-        }))
-        .and_drop(parse_literal(")"))
-        .and_drop(parse_literal("->").map_err(DEFINITION_STATES_ITS_RESULT))
-        // Past the arrow this is the definition sugar, so a member it refuses is its own to report.
-        .flat_map(members)
-        .and(lazy(parse_term))
-        .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
-        .and_drop(parse_literal("="))
-        .and(body(owns_body))
-        .map(|((params, output), body)| LetSignature::Func {
-            params,
-            output,
-            body,
-        })
+    move |state: ParserState<'a>| {
+        parse_literal("(")
+            .and_keep(sep_by0_trailing(parse_func_sugar_param, || {
+                parse_literal(",")
+            }))
+            .and_drop(parse_literal(")"))
+            .and_drop(parse_literal("->").map_err(DEFINITION_STATES_ITS_RESULT))
+            // Past the arrow this is the definition sugar, so a member it refuses is its own to report.
+            .flat_map(members)
+            .and(lazy(parse_term))
+            .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
+            .and_drop(parse_literal("="))
+            .and(body(owns_body))
+            .map(|((params, output), body)| LetSignature::Func {
+                params,
+                output,
+                body,
+            })
+            .parse(state)
+    }
 }
 
 // The plain `: T = body` form with a mandatory type.
 pub(super) fn parse_required_name_signature<'a>(owns_body: bool) -> impl Parser<'a, LetSignature> {
-    refusing(":=", DEFINITION_TAKES_EQUALS)
-        .and_keep(parse_literal(":"))
-        .and_keep(lazy(parse_term))
-        .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
-        .and_drop(parse_literal("="))
-        .and(body(owns_body))
-        .map(|(type_, body)| LetSignature::Name {
-            type_: Some(type_),
-            body,
-        })
+    move |state: ParserState<'a>| {
+        refusing(":=", DEFINITION_TAKES_EQUALS)
+            .and_keep(parse_literal(":"))
+            .and_keep(lazy(parse_term))
+            .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
+            .and_drop(parse_literal("="))
+            .and(body(owns_body))
+            .map(|(type_, body)| LetSignature::Name {
+                type_: Some(type_),
+                body,
+            })
+            .parse(state)
+    }
 }
 
 /// A definition's body, committed when the signature before it could have been nothing but a declaration's: past `let name : T =` or `let name(params) -> T =` the local reading is the same text failing the same way, so a mistake in the body is the item's own diagnosis rather than a reason to try the tail — which is what lets the item loop recover past it. A local `let` keeps its body recoverable, since the term grammar around it decides its diagnoses.
 fn body<'a>(owned: bool) -> impl Parser<'a, Term> {
-    match owned {
-        true => commit(lazy(parse_term)).boxed(),
-        false => lazy(parse_term).boxed(),
+    move |state: ParserState<'a>| {
+        (match owned {
+            true => commit(lazy(parse_term)).boxed(),
+            false => lazy(parse_term).boxed(),
+        })
+        .parse(state)
     }
 }
 
@@ -279,7 +291,11 @@ pub(super) fn parse_empty_tuple<'a>(state: ParserState<'a>) -> Parsed<'a, Term> 
 }
 
 pub(super) fn with_span<'a>(parser: impl Parser<'a, Term>) -> impl Parser<'a, Term> {
-    spanned(parser).map(|(span, term)| term.with_span(trimmed(span)))
+    move |state: ParserState<'a>| {
+        spanned(parser)
+            .map(|(span, term)| term.with_span(trimmed(span)))
+            .parse(state)
+    }
 }
 
 /// The span cut back to the term's own text, which every span a term is stamped with passes through — the wrapper's, a postfix chain's and a `let` block's alike. Every atom parser consumes the whitespace after it, so a span built from where the parse stopped would run on to the next operator or delimiter, and a caret underline the blanks after an operand; the same run, comment included, is what the `?` oracle, the language server and the test runner's body slice read. A comment is stepped over through the table `parse_whitespace` records it in, complete for everything the parser consumed by the time this runs. The formatter, which needs the far end — a comment past a separator is paid onto its line by the term that reaches it — recovers it from the source text in `print_term` rather than from the span.
@@ -336,7 +352,7 @@ pub(super) fn parse_atomic_term_inner<'a>(state: ParserState<'a>) -> Parsed<'a, 
 // The fixed set of overloaded infix operators, recognised by maximal munch (two-character symbols before their one-character prefixes).
 pub(super) fn parse_infix_symbol<'a>(state: ParserState<'a>) -> Parsed<'a, InfixOp> {
     fn symbol<'a>(text: &'static str, op: InfixOp) -> impl Parser<'a, InfixOp> {
-        take_exact(text).map(move |()| op)
+        move |state: ParserState<'a>| take_exact(text).map(move |()| op).parse(state)
     }
 
     symbol("==", InfixOp::Eql)
@@ -387,11 +403,15 @@ pub(super) fn parse_infix_op<'a>(state: ParserState<'a>) -> Parsed<'a, InfixOp> 
 
 // Precedence-climbing over applied atoms: parse a left operand, then fold in every following operator whose precedence is at least `min_prec`. The right operand of an operator at precedence `p` is parsed at `p + 1` (left-associativity).
 pub(super) fn parse_infix_expr<'a>(min_prec: u8) -> impl Parser<'a, Term> {
-    parse_atomic_term.flat_map(move |left| parse_infix_rest(left, min_prec))
+    move |state: ParserState<'a>| {
+        parse_atomic_term
+            .flat_map(move |left| parse_infix_rest(left, min_prec))
+            .parse(state)
+    }
 }
 
 pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> impl Parser<'a, Term> {
-    // One `many0` loop per precedence level, folded by move. Recursing once per operator and deep-cloning the accumulated left spine at every link would cost an N-operator chain N native frame nests and O(N²) cloned nodes — the per-element-recursion class the flat `let` block in `parse_let` avoids. Native depth is bounded by the precedence table's height (each `parse_infix_expr(precedence + 1)` descends one level), never by chain length, and the left operand is cloned zero times.
+    move |state: ParserState<'a>| // One `many0` loop per precedence level, folded by move. Recursing once per operator and deep-cloning the accumulated left spine at every link would cost an N-operator chain N native frame nests and O(N²) cloned nodes — the per-element-recursion class the flat `let` block in `parse_let` avoids. Native depth is bounded by the precedence table's height (each `parse_infix_expr(precedence + 1)` descends one level), never by chain length, and the left operand is cloned zero times.
     many0(move || {
         parse_infix_op.flat_map(move |op| {
             let precedence = op_precedence(op);
@@ -411,7 +431,7 @@ pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> impl Parser<'a, 
         pairs.into_iter().fold(left, |left, (op, right)| {
             Subterm::Infix(Infix { op, left, right }).into()
         })
-    })
+    }).parse(state)
 }
 
 // What begins an operand, as far as this probe needs to tell one from punctuation: a name, a literal, a bracket, a plicity mark. `->`, `--` and `<-` all fail it, so a term followed by one keeps its own report.
@@ -566,18 +586,21 @@ fn term<'a>(probed: bool) -> impl Parser<'a, Term> {
         false => pure(()).boxed(),
     };
 
-    with_span(
-        refuse_declaration_head.and_keep(
-            // At end of input there is no character for [`refuse_non_term`] to consume, so every alternative below declines at the same offset and the tie-break reports the first of them. This stands ahead of them so that tie names the input instead.
-            look_ahead(take_eof)
-                .and_keep(fail("expected a term, obtained 'end-of-file'"))
-                .or(parse_let)
-                .or(parse_func_type)
-                .or(parse_func)
-                .or(parse_infix_expr(0).and_drop(juxtaposed))
-                .or(refuse_non_term),
-        ),
-    )
+    move |state: ParserState<'a>| {
+        with_span(
+            refuse_declaration_head.and_keep(
+                // At end of input there is no character for [`refuse_non_term`] to consume, so every alternative below declines at the same offset and the tie-break reports the first of them. This stands ahead of them so that tie names the input instead.
+                look_ahead(take_eof)
+                    .and_keep(fail("expected a term, obtained 'end-of-file'"))
+                    .or(parse_let)
+                    .or(parse_func_type)
+                    .or(parse_func)
+                    .or(parse_infix_expr(0).and_drop(juxtaposed))
+                    .or(refuse_non_term),
+            ),
+        )
+        .parse(state)
+    }
 }
 
 // The last resort, for a position that begins no term at all. Every alternative above declines at the choice point, and [`Parser::or`]'s tie-break then reports the first of them — `Expected keyword 'let'`, which names the chain's order rather than the reader's mistake. Consuming the offending character puts this failure one past that point, where it outranks them. It stays uncommitted, so a speculative caller still backtracks past it: the trailing comma of `(a, b,)`, whose `parse_term` at the `)` must fail recoverably for the separator to be read as trailing, above all. A word needs none of this — `parse_keyword` consumes the identifier run before refusing it, so a word already fails past the choice point, and the only words that begin no term are the six [`refuse_declaration_head`] names.

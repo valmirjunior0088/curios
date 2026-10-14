@@ -136,17 +136,20 @@ const UNCLOSED_STRUCT_PATTERN: &str =
 
 // A struct pattern's field: [`parse_pattern_field`], under no mark. A hidden field takes no position in a pattern, so a mark there has nothing to claim, and is refused by that rule where `committed` says the text is a struct pattern's alone.
 fn parse_struct_pattern_field<'a>(committed: bool) -> impl Parser<'a, PatternField> {
-    mark()
-        .and(parse_mark)
-        .flat_map(move |(start, plicity)| match (plicity, committed) {
-            (Plicity::Explicit, _) => parse_pattern_field.boxed(),
-            (Plicity::Implicit | Plicity::Witness, true) => {
-                commit(fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK)).boxed()
-            }
-            (Plicity::Implicit | Plicity::Witness, false) => {
-                fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK).boxed()
-            }
-        })
+    move |state: ParserState<'a>| {
+        mark()
+            .and(parse_mark)
+            .flat_map(move |(start, plicity)| match (plicity, committed) {
+                (Plicity::Explicit, _) => parse_pattern_field.boxed(),
+                (Plicity::Implicit | Plicity::Witness, true) => {
+                    commit(fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK)).boxed()
+                }
+                (Plicity::Implicit | Plicity::Witness, false) => {
+                    fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK).boxed()
+                }
+            })
+            .parse(state)
+    }
 }
 
 // [`parse_struct_pattern`], committed past `Name {` where `committed` says the brace discriminates it. Uncommitted it keeps the token's own refusal, since it is then one guess among the alternatives a sibling may improve on.
@@ -164,10 +167,13 @@ fn struct_pattern<'a>(committed: bool) -> impl Parser<'a, Pattern> {
         false => fields().and_drop(parse_literal("}")).boxed(),
     };
 
-    parse_name
-        .and_drop(parse_literal("{"))
-        .and(rest)
-        .map(|(head, fields)| Pattern::Struct { head, fields })
+    move |state: ParserState<'a>| {
+        parse_name
+            .and_drop(parse_literal("{"))
+            .and(rest)
+            .map(|(head, fields)| Pattern::Struct { head, fields })
+            .parse(state)
+    }
 }
 
 // A `let`'s binder: [`parse_pattern`], with a struct pattern committed once `Name {` is read. Nothing but a pattern follows `let`, so the brace discriminates it and an unclosed one is reported as itself rather than as the signature the plain binder `Name` would have opened. A lambda's parameters, and the definition sugar's, share the prefix with a struct literal a term may hold there — `(Name { x = 1 })`, `f(Name { x = 1 })` — and go on backtracking.
@@ -414,21 +420,24 @@ fn parse_bin_cons_match_pattern<'a>(
     grain: Grain,
     prefix: &'static str,
 ) -> impl Parser<'a, MatchPattern> {
-    parse_literal(prefix)
-        .and_keep(parse_label)
-        .and_drop(parse_literal(","))
-        .and_drop(parse_literal(".."))
-        .and(parse_label)
-        .and_drop(parse_literal("]"))
-        .and(parse_cons_ih)
-        .map(move |((head_label, tail_label), ih)| {
-            MatchPattern::Bin(BinPattern::Atom {
-                grain,
-                head_label,
-                tail_label,
-                ih,
+    move |state: ParserState<'a>| {
+        parse_literal(prefix)
+            .and_keep(parse_label)
+            .and_drop(parse_literal(","))
+            .and_drop(parse_literal(".."))
+            .and(parse_label)
+            .and_drop(parse_literal("]"))
+            .and(parse_cons_ih)
+            .map(move |((head_label, tail_label), ih)| {
+                MatchPattern::Bin(BinPattern::Atom {
+                    grain,
+                    head_label,
+                    tail_label,
+                    ih,
+                })
             })
-        })
+            .parse(state)
+    }
 }
 
 // A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat`/`List`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `b[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for the successor leaf (`parse_nat_succ_match_pattern`) specifically, before `Binder` (see its own doc comment). The packed cons leaf is tried before the packed empty leaf so `b[` commits to the longer form and backtracks to `b[]` only when no binder follows. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
@@ -472,23 +481,27 @@ fn parse_bound_member<'a, B: 'a>(
     bound: impl Parser<'a, B> + Copy + 'a,
     wildcard: fn() -> B,
 ) -> impl Parser<'a, Read<(Plicity, B, Option<Term>)>> {
-    mark()
-        .and(parse_mark)
-        .flat_map(move |(start, plicity)| match plicity {
-            Plicity::Witness => parse_place(start)
-                .map(move |read| read.map(|()| (Plicity::Witness, wildcard(), None)))
-                .boxed(),
-            Plicity::Implicit => bound
-                .and(parse_annotation)
-                .and_drop(member_ends)
-                .map(|(binder, annotation)| Ok((Plicity::Implicit, binder, annotation)))
-                .or(lazy(parse_term).flat_map(move |_| refused(&start, BINDER_FOLLOWS_IMPLICIT)))
-                .boxed(),
-            Plicity::Explicit => bound
-                .and(parse_annotation)
-                .map(|(binder, annotation)| Ok((Plicity::Explicit, binder, annotation)))
-                .boxed(),
-        })
+    move |state: ParserState<'a>| {
+        mark()
+            .and(parse_mark)
+            .flat_map(move |(start, plicity)| match plicity {
+                Plicity::Witness => parse_place(start)
+                    .map(move |read| read.map(|()| (Plicity::Witness, wildcard(), None)))
+                    .boxed(),
+                Plicity::Implicit => bound
+                    .and(parse_annotation)
+                    .and_drop(member_ends)
+                    .map(|(binder, annotation)| Ok((Plicity::Implicit, binder, annotation)))
+                    .or(lazy(parse_term)
+                        .flat_map(move |_| refused(&start, BINDER_FOLLOWS_IMPLICIT)))
+                    .boxed(),
+                Plicity::Explicit => bound
+                    .and(parse_annotation)
+                    .map(|(binder, annotation)| Ok((Plicity::Explicit, binder, annotation)))
+                    .boxed(),
+            })
+            .parse(state)
+    }
 }
 
 // One parameter of the definition sugar `label(params) = value` (tuple, struct, and witness fields). Like a lambda binder it retains its mark — `@name`, or `use _` — which is copied onto the generated function value's slot, so a hidden-binder field type (`pure : (@A, x) -> M(A)`) can be implemented as `pure(@A, x) = …` rather than losing the mark.

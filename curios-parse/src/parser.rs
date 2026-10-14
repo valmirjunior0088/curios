@@ -9,6 +9,8 @@ pub type Parsed<'a, A> = Result<(A, ParserState<'a>), ParserError>;
 /// A single-use parser: anything that is run once at an input position and answers a value with the rest of the input, or a [`ParserError`]. Being single-use lets a combinator move what it captured into its result without cloning, and is why the repetition combinators ([`many0`](crate::many0), [`sep_by0`](crate::sep_by0), ...) take what hands them a parser for each iteration ([`Repeated`](crate::Repeated)).
 ///
 /// **Every function of the input is one**, so a nonterminal is a plain function — `fn term<'a>(state: ParserState<'a>) -> Parsed<'a, Term>` — whose body builds its combinators as values of its own and runs them, and a combinator returns the closure it is. Nothing is boxed: a grammar function is compiled once and run at every position, a combinator it builds on the way is a value on its stack, and a nonterminal that names itself, or another that names it back, is a function calling a function.
+///
+/// **A grammar function that takes arguments returns one closure of the input**, which builds its chain where it runs — `move |state| take_exact(expected).and_drop(parse_whitespace).parse(state)` — so its type is what it captures. Returned as the chain itself, its type is the chain's, and a function over such a function nests it into the type of every caller, which the compiler's checks of each caller pay for, the borrow checker's most.
 pub trait Parser<'a, A>: Sized {
     /// Run at `state`.
     fn parse(self, state: ParserState<'a>) -> Parsed<'a, A>;

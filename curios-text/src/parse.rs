@@ -179,11 +179,15 @@ pub(crate) fn parse_whitespace<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 
 /// After a comment's opener: a space, consumed, or the line's end, left alone — and anything else refused with `message`, fatally, since the opener was consumed.
 fn comment_spacing<'a>(message: &'static str) -> impl Parser<'a, ()> {
-    ahead().flat_map(move |rest| match rest.chars().next() {
-        Some(' ') => take_exact(" ").boxed(),
-        None | Some('\n') | Some('\r') => pure(()).boxed(),
-        Some(_) => fail(message).boxed(),
-    })
+    move |state: ParserState<'a>| {
+        ahead()
+            .flat_map(move |rest| match rest.chars().next() {
+                Some(' ') => take_exact(" ").boxed(),
+                None | Some('\n') | Some('\r') => pure(()).boxed(),
+                Some(_) => fail(message).boxed(),
+            })
+            .parse(state)
+    }
 }
 
 /// One line of a documentation comment: `---` at the start of its line, its separator, the text to the line's end, and the line break with the indentation of the next line — so the next `---` is read as the same block only when it is on the very next line.
@@ -259,7 +263,7 @@ pub(crate) fn parse_doc<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Doc>> {
 }
 
 fn parse_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
-    take_exact(expected).and_drop(parse_whitespace)
+    move |state: ParserState<'a>| take_exact(expected).and_drop(parse_whitespace).parse(state)
 }
 
 // The identifier characters alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bits`/`Bytes` literal's `\..` spread operand.
@@ -294,23 +298,30 @@ pub(super) fn parse_declared_label<'a>(state: ParserState<'a>) -> Parsed<'a, Lab
 
 /// A declared label and what follows it, the failure of the rest named for the label ([`tagging`]): what lets a loop recovering past the item say which declaration broke.
 pub(super) fn declared<'a, T: 'a>(rest: impl Parser<'a, T>) -> impl Parser<'a, (Label, T)> {
-    parse_declared_label.flat_map(move |label| {
-        tagging(Some(label.to_string()), rest).map(move |rest| (label, rest))
-    })
+    move |state: ParserState<'a>| {
+        parse_declared_label
+            .flat_map(move |label| {
+                tagging(Some(label.to_string()), rest).map(move |rest| (label, rest))
+            })
+            .parse(state)
+    }
 }
 
 fn parse_label_owning<'a>(owns_the_fault: bool) -> impl Parser<'a, Label> {
-    mark()
-        .and(spanned(parse_identifier_raw))
-        .flat_map(move |(start, (span, text))| {
-            match (is_keyword(text), owns_the_fault) {
-                (false, _) => pure(Label::spanned(text, span)).boxed(),
-                // Reported where the word begins, as `parse_keyword` reports a misspelled one, so the caret stands on the name rather than after it. Only the committed side may rewind: an uncommitted error that gives back the offset it read loses `Parser::or`'s tie-break to every sibling, which is how this refusal reached no reader at all.
-                (true, true) => commit(fail_from(&start, reserved_keyword(text))).boxed(),
-                (true, false) => fail(reserved_keyword(text)).boxed(),
-            }
-        })
-        .and_drop(parse_whitespace)
+    move |state: ParserState<'a>| {
+        mark()
+            .and(spanned(parse_identifier_raw))
+            .flat_map(move |(start, (span, text))| {
+                match (is_keyword(text), owns_the_fault) {
+                    (false, _) => pure(Label::spanned(text, span)).boxed(),
+                    // Reported where the word begins, as `parse_keyword` reports a misspelled one, so the caret stands on the name rather than after it. Only the committed side may rewind: an uncommitted error that gives back the offset it read loses `Parser::or`'s tie-break to every sibling, which is how this refusal reached no reader at all.
+                    (true, true) => commit(fail_from(&start, reserved_keyword(text))).boxed(),
+                    (true, false) => fail(reserved_keyword(text)).boxed(),
+                }
+            })
+            .and_drop(parse_whitespace)
+            .parse(state)
+    }
 }
 
 pub(super) fn reserved_keyword(word: &str) -> String {
@@ -318,13 +329,16 @@ pub(super) fn reserved_keyword(word: &str) -> String {
 }
 
 fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> impl Parser<'a, Name> {
-    match segments.iter().any(|segment| is_keyword(segment)) {
-        true => fail(format!(
-            "path '{}' contains a reserved keyword",
-            segments.join("/")
-        ))
-        .boxed(),
-        false => pure(Name::new(is_abs, Qualifier::from(segments))).boxed(),
+    move |state: ParserState<'a>| {
+        (match segments.iter().any(|segment| is_keyword(segment)) {
+            true => fail(format!(
+                "path '{}' contains a reserved keyword",
+                segments.join("/")
+            ))
+            .boxed(),
+            false => pure(Name::new(is_abs, Qualifier::from(segments))).boxed(),
+        })
+        .parse(state)
     }
 }
 
@@ -364,24 +378,27 @@ fn parse_qualified_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
 //
 // Where no word begins at all — a `;` or a `/` standing where `end` belongs — the word run is empty and the report names the keyword and the character found, in `take_exact`'s style. Left to `parse_identifier_raw`, the report would be its bare `Expected identifier`, which names neither. The empty run consumes nothing, so the failure stays recoverable at the choice point exactly as the identifier parser's is.
 fn parse_keyword<'a>(expected: &'static str) -> impl Parser<'a, ()> {
-    mark()
-        .and(take_while(is_identifier_char))
-        .and(ahead())
-        .flat_map(
-            move |((start, word), rest)| match (word, expected == word) {
-                (_, true) => pure(()).boxed(),
-                ("", false) => fail(format!(
-                    "Expected keyword '{expected}', obtained {}",
-                    obtained(rest, 1)
-                ))
-                .boxed(),
-                // The report spans the word, so the caret underlines it rather than standing after it.
-                (word, false) => fail_from(
-                    &start,
-                    format!("Expected keyword '{expected}', obtained '{word}'"),
-                )
-                .boxed(),
-            },
-        )
-        .and_drop(parse_whitespace)
+    move |state: ParserState<'a>| {
+        mark()
+            .and(take_while(is_identifier_char))
+            .and(ahead())
+            .flat_map(
+                move |((start, word), rest)| match (word, expected == word) {
+                    (_, true) => pure(()).boxed(),
+                    ("", false) => fail(format!(
+                        "Expected keyword '{expected}', obtained {}",
+                        obtained(rest, 1)
+                    ))
+                    .boxed(),
+                    // The report spans the word, so the caret underlines it rather than standing after it.
+                    (word, false) => fail_from(
+                        &start,
+                        format!("Expected keyword '{expected}', obtained '{word}'"),
+                    )
+                    .boxed(),
+                },
+            )
+            .and_drop(parse_whitespace)
+            .parse(state)
+    }
 }

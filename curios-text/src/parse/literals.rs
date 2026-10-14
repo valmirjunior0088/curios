@@ -70,16 +70,19 @@ pub(super) fn parse_number<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
 
 // A polymorphic integer literal's magnitude (decimal, `0x`, or `0b`) under the sign it was written with. Its concrete type (`Nat`/`Int`/`Flt`) is chosen by elaboration — a written sign rules out `Nat`.
 fn parse_num_lit<'a>(sign: Sign) -> impl Parser<'a, Term> {
-    parse_nat_digits
-        .map(move |lit| {
-            let NatLiteral(magnitude, radix) = lit;
-            Subterm::NumLit(NumLit {
-                magnitude,
-                radix,
-                sign,
+    move |state: ParserState<'a>| {
+        parse_nat_digits
+            .map(move |lit| {
+                let NatLiteral(magnitude, radix) = lit;
+                Subterm::NumLit(NumLit {
+                    magnitude,
+                    radix,
+                    sign,
+                })
             })
-        })
-        .map(Into::into)
+            .map(Into::into)
+            .parse(state)
+    }
 }
 
 // `5.` refused by the rule, rather than read as the numeral `5` — or the name `5`, since a digit is an identifier character — with a `.` left over for the enclosing form to report as the token it did not expect. A dot followed by a digit is a float literal; anything else after a numeral's dot is nothing the grammar spells. Tried before the float and the numeral, since a committed refusal that ties a caught sibling on offset loses [`Parser::or`]'s tie-break to it, and the dot is consumed so the failure is past the choice point, with the caret on it.
@@ -136,12 +139,20 @@ pub(super) fn parse_radix<'a>(
     radix: u32,
     tag: fn(usize) -> Radix,
 ) -> impl Parser<'a, NatLiteral> {
-    take_exact(prefix).and_keep(take_while(move |char: char| char.is_digit(radix)).flat_map(
-        move |digits| match Natural::parse_bytes(digits.as_bytes(), radix) {
-            Some(value) => pure(NatLiteral(value, tag(digits.len()))).boxed(),
-            None => fail(format!("expected base-{radix} digits after '{prefix}'")).boxed(),
-        },
-    ))
+    move |state: ParserState<'a>| {
+        take_exact(prefix)
+            .and_keep(
+                take_while(move |char: char| char.is_digit(radix)).flat_map(move |digits| {
+                    match Natural::parse_bytes(digits.as_bytes(), radix) {
+                        Some(value) => pure(NatLiteral(value, tag(digits.len()))).boxed(),
+                        None => {
+                            fail(format!("expected base-{radix} digits after '{prefix}'")).boxed()
+                        }
+                    }
+                }),
+            )
+            .parse(state)
+    }
 }
 
 pub(super) fn parse_nat_digits<'a>(state: ParserState<'a>) -> Parsed<'a, NatLiteral> {
@@ -161,15 +172,18 @@ pub(super) fn parse_nat_digits<'a>(state: ParserState<'a>) -> Parsed<'a, NatLite
 
 /// `+inf.0`, `-inf.0`, `+nan.0` and `-nan.0`, past their sign: the values of `Flt` no decimal spells, in R7RS Scheme's spelling. The sign is required, since `inf.0` bare is field `0` of a binder named `inf`, and nothing may be glued after the `.0`. `+nan.0` is the default quiet NaN and `-nan.0` the same with its sign set; any other NaN has no literal and is built from its bytes with `Flt/of_le_bytes`, which is how a report spells one.
 fn parse_non_finite_flt<'a>(negative: bool) -> impl Parser<'a, Floating> {
-    take_exact("inf.0")
-        .map(|()| Floating::infinite(false))
-        .or(take_exact("nan.0").map(|()| Floating::nan()))
-        .and_drop(not_ahead_word)
-        .and_drop(parse_whitespace)
-        .map(move |value| match negative {
-            true => value.copysign(Floating::infinite(true)),
-            false => value,
-        })
+    move |state: ParserState<'a>| {
+        take_exact("inf.0")
+            .map(|()| Floating::infinite(false))
+            .or(take_exact("nan.0").map(|()| Floating::nan()))
+            .and_drop(not_ahead_word)
+            .and_drop(parse_whitespace)
+            .map(move |value| match negative {
+                true => value.copysign(Floating::infinite(true)),
+                false => value,
+            })
+            .parse(state)
+    }
 }
 
 // Succeeds, consuming nothing, when the input does not go on with a character an identifier or a numeral could continue with.
@@ -186,41 +200,46 @@ fn not_ahead_word<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 
 /// A finite `Flt` literal past its sign: a decimal with a dot and at least one digit after it, optionally scaled by an exponent. `start` is where the literal began, its sign included.
 fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> impl Parser<'a, Floating> {
-    take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
-        .flat_map::<Floating, _>(move |digits| {
-            let has_dot = digits.contains('.');
+    move |state: ParserState<'a>| {
+        take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
+            .flat_map::<Floating, _>(move |digits| {
+                let has_dot = digits.contains('.');
 
-            let has_decimal = digits
-                .split_once('.')
-                .map(|(_, suffix)| {
-                    suffix
-                        .chars()
-                        .next()
-                        .is_some_and(|char| char.is_ascii_digit())
-                })
-                .unwrap_or(false);
+                let has_decimal = digits
+                    .split_once('.')
+                    .map(|(_, suffix)| {
+                        suffix
+                            .chars()
+                            .next()
+                            .is_some_and(|char| char.is_ascii_digit())
+                    })
+                    .unwrap_or(false);
 
-            if !has_dot || !has_decimal {
-                return fail("Expected float literal with dot and decimal").boxed();
-            }
+                if !has_dot || !has_decimal {
+                    return fail("Expected float literal with dot and decimal").boxed();
+                }
 
-            // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f64>` is correctly rounded and gives the same bits on every input, so the two agree; what the model adds is that the answer does not depend on the machine the compiler runs on.
-            let value = match decimal_parts(digits) {
-                Some((value, scale)) => Floating::of_decimal(sign == Sign::Negative, &value, scale),
-                None => return fail("Expected float literal").boxed(),
-            };
+                // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f64>` is correctly rounded and gives the same bits on every input, so the two agree; what the model adds is that the answer does not depend on the machine the compiler runs on.
+                let value = match decimal_parts(digits) {
+                    Some((value, scale)) => {
+                        Floating::of_decimal(sign == Sign::Negative, &value, scale)
+                    }
+                    None => return fail("Expected float literal").boxed(),
+                };
 
-            // An overflowing magnitude rounds to the infinity of its sign, which is refused rather than taken: a decimal that overflows is almost certainly a mistake, and the infinity has literals of its own. Committed, since a dot between digits is the prefix that discriminates the literal: uncommitted, the refusal loses to the numeral, which reads the integer part and takes the `.0` after it for a projection.
-            match value.is_finite() {
-                true => pure(value).boxed(),
-                false => commit(fail_from(
-                    &start,
-                    "Float literal overflows Flt; an infinity is written `+inf.0` or `-inf.0`",
-                ))
-                .boxed(),
-            }
-        })
-        .and_drop(parse_whitespace)
+                // An overflowing magnitude rounds to the infinity of its sign, which is refused rather than taken: a decimal that overflows is almost certainly a mistake, and the infinity has literals of its own. Committed, since a dot between digits is the prefix that discriminates the literal: uncommitted, the refusal loses to the numeral, which reads the integer part and takes the `.0` after it for a projection.
+                match value.is_finite() {
+                    true => pure(value).boxed(),
+                    false => commit(fail_from(
+                        &start,
+                        "Float literal overflows Flt; an infinity is written `+inf.0` or `-inf.0`",
+                    ))
+                    .boxed(),
+                }
+            })
+            .and_drop(parse_whitespace)
+            .parse(state)
+    }
 }
 
 /// Split a float literal's digits into the numeral they spell and the power of ten scaling it: `12.5e3` is `125` scaled by `2`. The grammar has already established a dot with at least one digit after it, so what is left to refuse is a malformed exponent or a stray character the character class admitted.
@@ -509,13 +528,17 @@ pub(super) fn parse_bin_literal<'a>(state: ParserState<'a>) -> Parsed<'a, Term> 
 }
 
 fn parse_bin_literal_grain<'a>(grain: Grain, prefix: &'static str) -> impl Parser<'a, Term> {
-    parse_literal(prefix)
-        // The glued grain letter and bracket are the discriminating prefix — `b [1]` is a binder and a list, `b[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry would send the grammar back to reading the letter as a bare name, which succeeds and throws the entry's report away: the enclosing form's own complaint would then stand at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
-        .and_keep(commit(
-            sep_by0_trailing(parse_bin_entry, || parse_literal(",")).and_drop(parse_literal("]")),
-        ))
-        .map(move |segments| Subterm::Literal(Literal::Bin(grain, segments)))
-        .map(Into::into)
+    move |state: ParserState<'a>| {
+        parse_literal(prefix)
+            // The glued grain letter and bracket are the discriminating prefix — `b [1]` is a binder and a list, `b[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry would send the grammar back to reading the letter as a bare name, which succeeds and throws the entry's report away: the enclosing form's own complaint would then stand at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
+            .and_keep(commit(
+                sep_by0_trailing(parse_bin_entry, || parse_literal(","))
+                    .and_drop(parse_literal("]")),
+            ))
+            .map(move |segments| Subterm::Literal(Literal::Bin(grain, segments)))
+            .map(Into::into)
+            .parse(state)
+    }
 }
 
 // One entry of a `List` literal: a `..` spread contributing a whole list, or a plain element. Unlike a `Bits`/`Bytes` literal, brackets and commas delimit, so spreads take full terms and `[.. xs]` may be spaced (as in struct spread).

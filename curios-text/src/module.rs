@@ -346,13 +346,17 @@ fn begins_item(line: &str) -> bool {
 
 /// The item loop, recovering past a broken item ([`recover`]) or, when `strict`, refusing at the first one with its own error: the whole-or-nothing reading `str::parse` gives.
 fn parse_items<'a>(strict: bool) -> impl Parser<'a, Vec<Recovered<TopItem>>> {
-    recover(parse_top_item, next_item_anchor).flat_map(move |recovered| {
-        match (strict, first_broken(&recovered)) {
-            (true, Some(error)) => raise(error).boxed(),
-            // Qualified: `curios_print::pure` is the printer's, imported for the `Display` impls below.
-            _ => curios_parse::boxed::pure(recovered).boxed(),
-        }
-    })
+    move |state: ParserState<'a>| {
+        recover(parse_top_item, next_item_anchor)
+            .flat_map(move |recovered| {
+                match (strict, first_broken(&recovered)) {
+                    (true, Some(error)) => raise(error).boxed(),
+                    // Qualified: `curios_print::pure` is the printer's, imported for the `Display` impls below.
+                    _ => curios_parse::boxed::pure(recovered).boxed(),
+                }
+            })
+            .parse(state)
+    }
 }
 
 fn first_broken(recovered: &[Recovered<TopItem>]) -> Option<ParserError> {

@@ -81,18 +81,24 @@ pub(super) fn refused<'a, T: 'a>(
 
 /// The members a site read, or the first report among them raised as the site's own. Called past the token that makes the text this site's, which is what lets the report commit.
 pub(super) fn members<'a, T: 'a>(read: Vec<Read<T>>) -> impl Parser<'a, Vec<T>> {
-    match read.into_iter().collect::<Result<Vec<_>, _>>() {
-        Ok(members) => pure(members).boxed(),
-        Err(report) => commit(raise(report)).boxed(),
+    move |state: ParserState<'a>| {
+        (match read.into_iter().collect::<Result<Vec<_>, _>>() {
+            Ok(members) => pure(members).boxed(),
+            Err(report) => commit(raise(report)).boxed(),
+        })
+        .parse(state)
     }
 }
 
 /// One read raised where it stands, for a site no other grammar reads.
 pub(super) fn raised<'a, T: 'a>(read: impl Parser<'a, Read<T>>) -> impl Parser<'a, T> {
-    read.flat_map(|read| match read {
-        Ok(member) => pure(member).boxed(),
-        Err(report) => commit(raise(report)).boxed(),
-    })
+    move |state: ParserState<'a>| {
+        read.flat_map(|read| match read {
+            Ok(member) => pure(member).boxed(),
+            Err(report) => commit(raise(report)).boxed(),
+        })
+        .parse(state)
+    }
 }
 
 /// Whether a member ends here: at the separator, or at the bracket that closes its list.
@@ -119,32 +125,38 @@ fn parse_wildcard<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 pub(super) fn parse_premise<'a>(start: Mark) -> impl Parser<'a, Read<Term>> {
     let (bound, placed) = (start.clone(), start);
 
-    parse_identifier
-        .and_drop(parse_literal(":"))
-        .and_drop(lazy(parse_term))
-        .flat_map(move |_| refused(&bound, USE_HAS_NO_BINDER))
-        .or(parse_wildcard
-            .and_drop(member_ends)
-            .flat_map(move |()| refused(&placed, USE_PLACE_STATES_NO_TYPE)))
-        .or(lazy(parse_term).map(Ok))
+    move |state: ParserState<'a>| {
+        parse_identifier
+            .and_drop(parse_literal(":"))
+            .and_drop(lazy(parse_term))
+            .flat_map(move |_| refused(&bound, USE_HAS_NO_BINDER))
+            .or(parse_wildcard
+                .and_drop(member_ends)
+                .flat_map(move |()| refused(&placed, USE_PLACE_STATES_NO_TYPE)))
+            .or(lazy(parse_term).map(Ok))
+            .parse(state)
+    }
 }
 
 /// What follows `use` where the site binds: `_`, the member's place. A name or a type there is read whole and reported; `start` is where the mark was written.
 pub(super) fn parse_place<'a>(start: Mark) -> impl Parser<'a, Read<()>> {
     let (named, typed) = (start.clone(), start);
 
-    parse_wildcard
-        .and_drop(member_ends)
-        .map(Ok)
-        .or(parse_identifier
+    move |state: ParserState<'a>| {
+        parse_wildcard
             .and_drop(member_ends)
-            .flat_map(move |_| refused(&named, USE_BINDS_NOTHING)))
-        .or(lazy(parse_term)
-            .and_drop(
-                parse_literal(":")
-                    .and_keep(lazy(parse_term))
-                    .map(|_| ())
-                    .or(pure(())),
-            )
-            .flat_map(move |_| refused(&typed, BINDER_STATES_NO_USE_TYPE)))
+            .map(Ok)
+            .or(parse_identifier
+                .and_drop(member_ends)
+                .flat_map(move |_| refused(&named, USE_BINDS_NOTHING)))
+            .or(lazy(parse_term)
+                .and_drop(
+                    parse_literal(":")
+                        .and_keep(lazy(parse_term))
+                        .map(|_| ())
+                        .or(pure(())),
+                )
+                .flat_map(move |_| refused(&typed, BINDER_STATES_NO_USE_TYPE)))
+            .parse(state)
+    }
 }
