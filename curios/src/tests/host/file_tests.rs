@@ -41,12 +41,34 @@ fn read_all_of_a_missing_path_is_not_found() {
             | not_directory() => /std/print("not a directory")
             | reset() => /std/print("reset")
             | too_long() => /std/print("too long")
+            | not_text(_) => /std/print("not text")
             | other(_) => /std/print("other")
             end
         end
         "#;
 
     assert_eq!(run(source), b"not found");
+}
+
+/// A file read as text is its text, and one whose bytes are not text is refused with the length of their longest prefix that is.
+#[test]
+fn read_all_text_answers_text_and_refuses_bytes_that_are_none() {
+    for (contents, said) in [
+        (&b"caf\xc3\xa9"[..], "caf\u{e9}"),
+        (&b"ab\xffcd"[..], "not_text(2)"),
+    ] {
+        let source = r#"
+            use /std/{File, Path, Show, Try, Io, print};
+            match Try/run(File/read_all_text(Path/of_str("data.txt")))!
+            | success(text) => print(text)
+            | failure(why) => print(Show/show(why))
+            end
+            "#;
+
+        let (system, io) = MockHost::builder().files([("data.txt", contents)]).build();
+        run_text(source, system).expect("expected result");
+        assert_eq!(String::from_utf8_lossy(&io.output()), said);
+    }
 }
 
 #[test]

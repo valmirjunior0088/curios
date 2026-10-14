@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Byte, Bool, Option, Result, Spell, Monad, Io, Async, Try};
+use /std/{Nat, Bytes, Byte, Bool, Str, Option, Result, Spell, Monad, Io, Async, Try};
 use /std/ops/{Eql};
 use /std/Io/{Error};
 use /std/Async/{Channel};
@@ -197,6 +197,29 @@ pub let line(
                 | true => Option/none()
                 | false => Option/some(last)
                 end);
+    Try/attempt(read());
+
+--- One line as text: `line`, its bytes read as UTF-8. A line that is not text is `not_text` with the length of its longest prefix that is, and is taken as the bytes it was.
+pub let line_text(
+    @M: (Type) -> Type,
+    @S: Type,
+    use Monad(M),
+    use Monad/Lift(Io, M),
+    use Async/Read(M, S),
+    r: Reader(S),
+) -> Try(M, Error, Option(Str)) =
+    let read() -> M(Result(Error, Option(Str))) =
+        let found = Try/run(line(r))!;
+        Monad/pure(
+            match found
+            | failure(why) => Result/failure(why)
+            | success(none()) => Result/success(Option/none())
+            | success(some(bytes)) =>
+                match Str/of_bytes(bytes)
+                | success(text) => Result/success(Option/some(text))
+                | failure(valid) => Result/failure(Error/not_text(valid))
+                end
+            end);
     Try/attempt(read());
 
 --- The bytes before the first `delimiter`, which is taken and dropped, and whether it was met: where the stream ends first, what is held and `false`. Bytes past `r`'s bound with no delimiter among them are `too_long`, and stay held.

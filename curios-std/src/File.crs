@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Path, Try, Async, Io, Handle};
+use /std/{Bytes, Nat, Str, Path, Try, Async, Io, Handle};
 use /std/Bool/{Holds};
 
 --- An open file.
@@ -107,6 +107,14 @@ let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
 --- The whole file at `path`.
 pub let read_all(path: Path) -> Try(Io, Io/Error, Bytes) =
     with(path, Mode/read(), read_to_end);
+
+--- The whole file at `path` as text: `read_all`, its bytes read as UTF-8. Bytes that are not text are `not_text` with the length of their longest prefix that is.
+pub let read_all_text(path: Path) -> Try(Io, Io/Error, Str) =
+    let bytes = read_all(path)!;
+    match Str/of_bytes(bytes)
+    | success(text) => Try/pure(text)
+    | failure(valid) => Try/raise(Io/Error/not_text(valid))
+    end;
 
 --- `b` as the whole file at `path`: created if absent, replaced if present.
 pub let write_all(path: Path, b: Bytes) -> Try(Io, Io/Error, {}) =

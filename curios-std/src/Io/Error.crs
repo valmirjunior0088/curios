@@ -25,6 +25,8 @@ pub induct Error: pub Type
 | reset()
 --- What was read is past the bound its reader states.
 | too_long()
+--- What was read is not text: the length of its longest prefix that is.
+| not_text(Nat)
 --- Anything else, carrying the host's own code.
 | other(Nat)
 end
@@ -58,6 +60,7 @@ satisfy Show(Error) {
         | not_directory() => "not_directory"
         | reset() => "reset"
         | too_long() => "too_long"
+        | not_text(valid) => Str/flatten(["not_text(", Nat/to_str(valid), ")"])
         | other(n) => Str/flatten(["other(", Nat/to_str(n), ")"])
         end,
 }

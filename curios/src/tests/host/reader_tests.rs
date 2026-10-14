@@ -187,3 +187,35 @@ fn two_fibers_on_one_reader_each_get_a_whole_line() {
 
     assert_eq!(lines, ["<aaaaaa>", "<b>"], "{output:?}");
 }
+
+/// A line read as text is the text of its bytes, `none` once the input has ended, and a refusal where the bytes are not text, with the length of their longest prefix that is: the line is taken all the same, so the read after it is of the next.
+#[test]
+fn a_line_is_read_as_text_or_refused_where_it_is_none() {
+    let (system, io) = MockHost::builder()
+        .stdin_chunks(vec![&b"h\xc3\xa9llo\nab\xff\xfecd\nlast"[..]])
+        .build();
+    run_text(
+        r#"
+        use /std/{Str, Option, Result, Show, Try, Io, print};
+        let said(read: Result(Io/Error, Option(Str))) -> Str =
+            match read
+            | success(some(text)) => text
+            | success(none()) => "<end>"
+            | failure(why) => Show/show(why)
+            end;
+        let input = Io/Reader/new(Io/stdin)!;
+        let a = Try/run(Io/Reader/line_text(input))!;
+        let b = Try/run(Io/Reader/line_text(input))!;
+        let c = Try/run(Io/Reader/line_text(input))!;
+        let d = Try/run(Io/Reader/line_text(input))!;
+        print(Str/join("|", [said(a), said(b), said(c), said(d)]))
+        "#,
+        system,
+    )
+    .expect("the program runs");
+
+    assert_eq!(
+        String::from_utf8_lossy(&io.output()),
+        "h\u{e9}llo|not_text(2)|last|<end>"
+    );
+}

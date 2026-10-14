@@ -3,12 +3,12 @@
 use {
     crate::{run_wasm, tests::typecheck},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
-    curios_runtime::{ForeignBindings, MockHost},
+    curios_runtime::{ForeignBindings, MockHost, MockHostBuilder},
     curios_text::{Entrypoint, RootSource},
 };
 
-/// What a program came to under a host that holds `files`: the status it ended with, everything it wrote, and the standard error half of that.
-fn ended(source: &str, files: &[(&str, &str)]) -> (u8, Vec<u8>, Vec<u8>) {
+/// What a program came to under `host`: the status it ended with, everything it wrote, and the standard error half of that.
+fn ended_under(source: &str, host: MockHostBuilder) -> (u8, Vec<u8>, Vec<u8>) {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
@@ -20,11 +20,16 @@ fn ended(source: &str, files: &[(&str, &str)]) -> (u8, Vec<u8>, Vec<u8>) {
     )
     .expect("compile succeeded");
 
-    let (system, io) = MockHost::builder().files(files.iter().copied()).build();
+    let (system, io) = host.build();
     let code =
         run_wasm(&module, foreigns, system, ForeignBindings::empty()).expect("execution succeeded");
 
     (code, io.output(), io.errors())
+}
+
+/// [`ended_under`] a host that holds `files` and nothing else.
+fn ended(source: &str, files: &[(&str, &str)]) -> (u8, Vec<u8>, Vec<u8>) {
+    ended_under(source, MockHost::builder().files(files.iter().copied()))
 }
 
 /// A program over a file it reads and prints the length of, closed by a description that may fail.
@@ -174,4 +179,34 @@ fn a_goal_that_closes_a_program_is_asked_at_io() {
     let error = typecheck("use /std/{Io};\n?\n").expect_err("a goal never compiles");
 
     assert!(error.contains("? : Io({})"), "{error}");
+}
+
+/// The first program past printing: a line read as text, a number made of it and its double printed, under one `match`, with a line that is not text ending the program by itself.
+#[test]
+fn a_program_reads_a_number_and_prints_its_double() {
+    const DOUBLES: &str = r#"
+        use /std/{Nat, Str, Option, Io, Try, print};
+        use /std/Io/{Reader};
+        let main: Try(Io, Io/Error, {}) =
+            let input = Reader/new(Io/stdin)!;
+            let line = Reader/line_text(input)!;
+            match Option/bind(line, Nat/of_str)
+            | some(n) => print(Nat/to_str(n * 2))
+            | none() => print("not a number")
+            end;
+        main
+        "#;
+
+    for (typed, status, written) in [
+        (vec![&b"21\n"[..]], 0, "42"),
+        (vec![&b"many\n"[..]], 0, "not a number"),
+        (vec![], 0, "not a number"),
+        (vec![&b"2\xff1\n"[..]], 1, "not_text(1)\n"),
+    ] {
+        let host = MockHost::builder().stdin_chunks(typed.clone());
+        let (code, output, _) = ended_under(DOUBLES, host);
+
+        assert_eq!(code, status, "{typed:?}");
+        assert_eq!(String::from_utf8_lossy(&output), written, "{typed:?}");
+    }
 }
