@@ -1,6 +1,6 @@
 -- Thread a counter through N steps using the `State` monad, and print it.
 -- The paired `state_manual.crs` computes the identical result by threading the state by hand, so the two differ in abstraction and in nothing else: whatever separates their emitted code is what the `State` abstraction costs.
--- N is read from stdin so the loop survives constant folding; output is 3N.
+-- N is read from the command line so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, State, Io};
 
 let loop(n: Nat) -> State(Nat, {}) =
@@ -14,9 +14,8 @@ let loop(n: Nat) -> State(Nat, {}) =
 let total(n: Nat) -> Nat =
     State/run(loop(n), 0).1;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

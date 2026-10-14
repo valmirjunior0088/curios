@@ -31,7 +31,7 @@ Taking a reading needs a checkout, `cargo`, and the `wasmtime` CLI at the versio
 
 | Contestant | What it is | What it tells you |
 | --- | --- | --- |
-| **Curios** | a self-contained executable, reading its size on standard input | the subject |
+| **Curios** | a self-contained executable, reading its size from its arguments | the subject |
 | **Rust** | `rustc -O`, native | the ceiling |
 | **Rust → wasm** | the same source, `--target wasm32-wasip2`, under the `wasmtime` CLI | what WebAssembly itself costs |
 

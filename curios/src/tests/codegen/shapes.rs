@@ -209,7 +209,7 @@ fn field_shape_census() {
     }
 }
 
-/// The dynamic price of one always-boxed scalar field, isolated: two folds over a resting 65 536-element list, identical but for whether the family's constructors carry a `Nat` payload — so the delta per element is the cost of reading one boxed field (the `ref.cast (ref i31)` + `i31.get_u` pair, plus the store's `ref.i31`) and nothing else. The rounds count arrives on stdin so nothing constant-folds; the slope between 100 and 300 rounds cancels the build and the fixed phases.
+/// The dynamic price of one always-boxed scalar field, isolated: two folds over a resting 65 536-element list, identical but for whether the family's constructors carry a `Nat` payload — so the delta per element is the cost of reading one boxed field (the `ref.cast (ref i31)` + `i31.get_u` pair, plus the store's `ref.i31`) and nothing else. The rounds count arrives as the program's argument so nothing constant-folds; the slope between 100 and 300 rounds cancels the build and the fixed phases.
 const FOLD_BARE: &str = r#"
 use /std/{Str, Nat, List, Io};
 
@@ -232,8 +232,8 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
             match e | left() => (t + 1) % 1000003 | right() => (t + 2) % 1000003 end))
     end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
@@ -270,8 +270,8 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
             match e | left(v) => (t + v) % 1000003 | right(v) => (t + v + 1) % 1000003 end))
     end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

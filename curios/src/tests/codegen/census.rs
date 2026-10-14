@@ -1279,8 +1279,8 @@ const WORKLOADS: [(&str, &str); 3] = [
 pub(in crate::tests) const TOML_DRIVER: &str = r#"
 use /std/{Str, Nat, Map, Toml, Option, Result, Io};
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
@@ -1384,8 +1384,8 @@ fn death_birth_classifier_pins_the_canonical_pair() {
             | nil() => acc
             | cons(v, tail) => total(tail, (acc + v) % 1000003)
             end;
-        let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-        let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+        let arguments = /std/proc/args()!;
+        let input = /std/List/try_get(arguments, 1);
         match input: (_) => Io({})
         | some(bytes) =>
             match Str/of_bytes(bytes): (_) => Io({})

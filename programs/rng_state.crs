@@ -1,6 +1,6 @@
 -- A realistic monadic workload: N steps of an LCG whose seed is threaded through `State`, summing the sequence. Unlike `state_monad.crs` and the `monad_*.crs` set -- which bind trivial work and so measure sequencing overhead in isolation -- each step here does real arithmetic (a multiply, two remainders, an add) around a genuine `get`/`put` pair. That is the ratio worth deciding an optimization on: microbenchmarks maximize the visible overhead by construction, and this does not.
 --
--- `rng_manual.crs` computes the identical sum with the seed as an ordinary parameter. N is read from stdin; output is the sum mod 1000003.
+-- `rng_manual.crs` computes the identical sum with the seed as an ordinary parameter. N is read from the command line; output is the sum mod 1000003.
 use /std/{Str, Nat, State, Io};
 
 let next() -> State(Nat, Nat) =
@@ -20,9 +20,8 @@ let run(k: Nat, acc: Nat) -> State(Nat, Nat) =
 let total(n: Nat) -> Nat =
     State/run(run(n, 0), 1).0;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

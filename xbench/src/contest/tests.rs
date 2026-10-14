@@ -39,18 +39,16 @@ fn with_nothing_expected_the_contestants_are_held_to_each_other() {
     assert!(agreement(&differing, None).is_err());
 }
 
-/// Curios reads its size on standard input and Rust on the command line, and the same spelling is what the agreement check runs and what is timed.
+/// Every contestant reads its size on the command line, and the same spelling is what the agreement check runs and what is timed.
 #[test]
-fn each_contestant_is_given_its_size_the_way_it_reads_one() {
+fn each_contestant_is_given_its_size_as_its_argument() {
     let root = Path::new("/w");
     let workload = &WORKLOADS[0];
 
     let curios = invocation("curios", workload, 8, root);
-    assert_eq!(curios.input.as_deref(), Some("8\n"));
-    assert!(curios.arguments.is_empty());
+    assert_eq!(curios.arguments, ["8"]);
 
     let rust = invocation("rust", workload, 8, root);
-    assert_eq!(rust.input, None);
     assert_eq!(rust.arguments, ["8"]);
 
     let wasm = invocation("rust-wasm", workload, 8, root);

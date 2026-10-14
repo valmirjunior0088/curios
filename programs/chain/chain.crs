@@ -5,7 +5,7 @@
 -- Each round reverses the order, which the final sum ignores, so a contestant is
 -- free to walk the chain either way; the reverse-accumulate spelling is used
 -- everywhere because it is the one that is tail-recursive in every language.
--- K is read from stdin; the seed is derived from it so nothing is a closed term.
+-- K is read from the command line; the seed is derived from it so nothing is a closed term.
 use /std/{Str, Nat, Io};
 
 induct Chain: Type
@@ -36,9 +36,8 @@ let rounds(k: Nat, c: Chain) -> Chain =
 let total(c: Chain, acc: Nat) -> Nat =
     match c: (_) => Nat | nil() => acc | cons(v, tail) => total(tail, (acc + v) % 1000003) end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

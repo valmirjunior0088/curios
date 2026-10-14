@@ -56,8 +56,8 @@ let total(c: Chain, acc: Nat) -> Nat =
     | cons(v, tail) => total(tail, (acc + v) % 1000003)
     end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
@@ -96,7 +96,9 @@ fn compiled_of(source: &str) -> Compiled {
 
 /// One run: milliseconds around it — instantiate, and the whole call — and what the program printed.
 fn run(compiled: &Compiled, k: u64) -> (f64, Vec<u8>) {
-    let (host, io) = MockHost::builder().stdin_lines([k.to_string()]).build();
+    let (host, io) = MockHost::builder()
+        .args(["program".to_string(), k.to_string()])
+        .build();
     let start = Instant::now();
     let code = compiled
         .run(host, ForeignBindings::empty())
@@ -242,8 +244,8 @@ let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
         walk(k, i + 1, y, Map/insert(m, Bytes/of_nat(y), i % 1000003))
     end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

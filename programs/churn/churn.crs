@@ -5,7 +5,7 @@
 -- Perceus reuse, Curios reconstructs. The written pair rotates over three
 -- phases so every field keeps circulating, and each phase reads only fields
 -- outside its own pair, so simultaneous and sequential update agree and no
--- field is dead or loop-invariant. N is read from stdin; the seed derives from
+-- field is dead or loop-invariant. N is read from the command line; the seed derives from
 -- N so nothing is a closed term.
 use /std/{Str, Nat, Io};
 
@@ -36,9 +36,8 @@ let walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
         end
     end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

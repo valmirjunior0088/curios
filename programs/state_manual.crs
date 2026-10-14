@@ -1,6 +1,6 @@
 -- The control for `state_monad.crs`: the same counter threaded through N steps by hand, with the state as an ordinary accumulator parameter. Same input,
 -- same output, no monad — so a diff of the two emitted IRs is a measurement of what `State` costs after the optimizer has had its say.
--- N is read from stdin so the loop survives constant folding; output is 3N.
+-- N is read from the command line so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, Io};
 
 let loop(n: Nat, s: Nat) -> Nat =
@@ -9,9 +9,8 @@ let loop(n: Nat, s: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     loop(n, 0);
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

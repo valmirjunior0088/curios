@@ -1,4 +1,4 @@
--- spines: N LCG-keyed inserts into /std/Map, then fold the values — death-birth churn on a persistent map's spine, under a live set that plateaus at the LCG's key population (at most 65536 entries) while inserts keep rebuilding root-to-leaf paths that die with the operation. The table compares map algorithms as much as memory management (a crit-bit trie here, hash maps in the imperative contestants, balanced trees in the functional ones), so it orients rather than proves. Keys enter as the Nat they are, as every contestant's enter as its machine integer; the runs published through 09 keyed through Bytes/of_nat instead, and the next benchmark run mentions the change. N is read from stdin; the seed derives from N so nothing is a closed term. Values are the step index, so later writes to a returning key are observable in the printed sum.
+-- spines: N LCG-keyed inserts into /std/Map, then fold the values — death-birth churn on a persistent map's spine, under a live set that plateaus at the LCG's key population (at most 65536 entries) while inserts keep rebuilding root-to-leaf paths that die with the operation. The table compares map algorithms as much as memory management (a crit-bit trie here, hash maps in the imperative contestants, balanced trees in the functional ones), so it orients rather than proves. Keys enter as the Nat they are, as every contestant's enter as its machine integer; the runs published through 09 keyed through Bytes/of_nat instead, and the next benchmark run mentions the change. N is read from the command line; the seed derives from N so nothing is a closed term. Values are the step index, so later writes to a returning key are observable in the printed sum.
 use /std/{Str, Nat, Map, Io};
 
 let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
@@ -9,9 +9,8 @@ let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
         walk(k, i + 1, y, Map/insert(m, y, i % 1000003))
     end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

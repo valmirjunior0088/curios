@@ -84,7 +84,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// # The regime
 ///
-/// N is read from stdin and the string decoded is `Nat/to_str(n)`, so at N = 1 000 000 these programs decode a **seven-character** string a million times — seven million characters through a seven-link chain, not one walk over a million. Per-call overhead amortizes differently in the two regimes, so a per-character figure derived here does not transfer to a long string without saying so.
+/// N is read from the command line and the string decoded is `Nat/to_str(n)`, so at N = 1 000 000 these programs decode a **seven-character** string a million times — seven million characters through a seven-link chain, not one walk over a million. Per-call overhead amortizes differently in the two regimes, so a per-character figure derived here does not transfer to a long string without saying so.
 ///
 /// # What it last printed
 ///
@@ -372,7 +372,7 @@ fn walk_mirror_attribution_measurements() {
         // A round over the whole family, so a disturbance during the sitting reaches every member alike.
         for (member, (label, _, raw, optimized)) in prepared.iter().enumerate() {
             for (kind, compiled) in [(0, raw), (1, optimized)] {
-                let (system, io) = MockHost::builder().stdin_lines([input]).build();
+                let (system, io) = MockHost::builder().args(["program", input]).build();
                 let start = Instant::now();
                 compiled
                     .run(system, ForeignBindings::empty())
@@ -427,9 +427,9 @@ let work(mode: Str, n: Nat) -> Nat =
     | _ => 0
     end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let mode = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-let size = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let mode = /std/List/try_get(arguments, 1);
+let size = /std/List/try_get(arguments, 2);
 let answer: Str =
     match mode
     | none() => "0"
@@ -474,7 +474,7 @@ fn decoder_doubling_slope() {
         for (decoder, mode) in DECODERS.iter().enumerate() {
             for (index, size) in SIZES.iter().enumerate() {
                 let (system, io) = MockHost::builder()
-                    .stdin_lines([mode.to_string(), size.to_string()])
+                    .args(["program".to_string(), mode.to_string(), size.to_string()])
                     .build();
                 let start = Instant::now();
                 compiled

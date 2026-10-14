@@ -17,7 +17,7 @@ cargo run --package curios -- run programs/hello_world.crs
 echo 1000000 | cargo run --package curios -- run programs/parse_digits.crs
 ```
 
-Every program except `hello_world.crs` and `dependent_vectors.crs` reads its workload size from stdin. That is not a convenience: a closed program is constant-folded away, so an instrument that does not read its input measures nothing.
+Every program except `hello_world.crs` and `dependent_vectors.crs` reads its workload size from its first argument. That is not a convenience: a closed program is constant-folded away, so an instrument that does not read its input measures nothing.
 
 ## The Curios-only instruments
 

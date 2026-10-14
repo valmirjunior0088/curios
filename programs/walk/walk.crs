@@ -1,8 +1,8 @@
 -- walk: fold a mixed-width UTF-8 text N times into a rolling hash, each fold seeded by the last.
 -- The text carries 1-, 2-, 3- and 4-byte characters, so the walk leaves the ASCII arm of `/std/Str/fold` and its continuation obligations run once per continuation byte rather than never.
 -- Each fold starts from the accumulator the fold before it produced, so the walk is a dependency chain: no implementation may hoist it out of the loop and walk the text once, which is what separates this from the ladder's `parse_multibyte.crs`.
--- The text is derived from stdin rather than written as a literal, so closed-term evaluation cannot fold the walk away.
--- N is read from stdin so the loop survives constant folding; `a * 31 + c` stays under 33M against a modulus of 1000003, well inside i31.
+-- The text is derived from the command line rather than written as a literal, so closed-term evaluation cannot fold the walk away.
+-- N is read from the command line so the loop survives constant folding; `a * 31 + c` stays under 33M against a modulus of 1000003, well inside i31.
 use /std/{Str, Char, Nat, Io};
 
 let loop(k: Nat, text: Str, acc: Nat) -> Nat =
@@ -14,9 +14,8 @@ let loop(k: Nat, text: Str, acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     loop(n, Str/concat(Nat/to_str(n), Str/repeat("é→𝄞", 16)), 0);
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

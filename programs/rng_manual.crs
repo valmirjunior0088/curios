@@ -1,5 +1,5 @@
 -- The control for `rng_state.crs`: the same LCG sum with the seed threaded as an ordinary parameter. Identical arithmetic, identical output, no monad.
--- N is read from stdin; output is the sum mod 1000003.
+-- N is read from the command line; output is the sum mod 1000003.
 use /std/{Str, Nat, Io};
 
 let run(k: Nat, s: Nat, acc: Nat) -> Nat =
@@ -13,9 +13,8 @@ let run(k: Nat, s: Nat, acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     run(n, 1, 0);
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

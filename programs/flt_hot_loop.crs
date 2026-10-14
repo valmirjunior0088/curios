@@ -1,5 +1,5 @@
 -- flt_hot_loop: N rounds of ties-to-even float arithmetic that never meets a NaN — a multiply, two adds, a square root and a divide per round on a value that stays positive — so every instruction's NaN check is taken and never fires. The instrument for what that check costs on the hot path, which `curios-emit`'s README records.
--- N is read from stdin; output is the final value's shortest decimal.
+-- N is read from the command line; output is the final value's shortest decimal.
 use /std/{Str, Nat, Flt, Io};
 
 let run(k: Nat, x: Flt) -> Flt =
@@ -8,9 +8,8 @@ let run(k: Nat, x: Flt) -> Flt =
     | m + 1 => run(m, Flt/sqrt(x * +1.0000001 + +0.5) / +0.999 + +0.25)
     end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

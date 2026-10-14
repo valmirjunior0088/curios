@@ -1,7 +1,7 @@
 -- binary-trees: build a perfect tree of depth D with unique per-node payloads (heap-numbered: root 1, children 2v / 2v+1), then sum every payload.
 -- The distinct payloads make every node structurally unique, so Curios's pure
 -- IR cannot share/CSE the two subtrees -> 2^(D+1)-1 real allocations.
--- D is read from stdin; output is the payload sum mod 1000003 (bounded to i31).
+-- D is read from the command line; output is the payload sum mod 1000003 (bounded to i31).
 use /std/{Str, Nat, Io};
 
 induct Tree: Type
@@ -21,9 +21,8 @@ let sum(t: Tree) -> Nat =
     | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
     end;
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

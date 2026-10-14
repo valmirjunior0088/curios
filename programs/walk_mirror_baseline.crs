@@ -1,6 +1,6 @@
 -- The faithful baseline of the five walk mirrors: suffix matching, a `{Nat, Nat}` accumulator tuple, a step function returning a fresh scan state, and the cont arm rebuilding the scan argument it already holds — arm for arm the shape of `/std/Str/fold`'s `go`.
 -- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
--- N is read from stdin so the loop survives constant folding; output stays bounded well inside i31.
+-- N is read from the command line so the loop survives constant folding; output stays bounded well inside i31.
 use /std/{Str, Nat, Byte, Bytes, Bool, Io};
 
 induct MClass: Type
@@ -88,9 +88,8 @@ let iterate(k: Nat, b: Bytes, acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     iterate(n, text_of(n), 0);
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})

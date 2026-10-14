@@ -10,8 +10,7 @@ mod tests;
 use {
     crate::{Captured, capture, held, table},
     std::{
-        env, fs,
-        io::{self, Write},
+        env, fs, io,
         path::{Path, PathBuf},
         process::{Command, Stdio},
         time::Instant,
@@ -143,17 +142,16 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
-/// How a contestant is run: a program, its arguments, and the size where it is read from standard input rather than the command line.
+/// How a contestant is run: a program and its arguments, the size among them.
 #[derive(Debug)]
 struct Invocation {
     program: PathBuf,
     arguments: Vec<String>,
-    input: Option<String>,
 }
 
 /// How `contestant` runs `workload` at `size`.
 ///
-/// Curios reads its size on standard input, which is its proven input path; Rust reads argv. The same spelling is what the agreement check runs and what is timed, so the two cannot run different things.
+/// Every contestant reads its size from its arguments. The same spelling is what the agreement check runs and what is timed, so the two cannot run different things.
 /// Where the bench's build of `contestant` on `workload` lands. The one place the layout is spelled, so what is run and what is weighed cannot name different files.
 fn artifact(contestant: &str, workload: &Workload, root: &Path) -> PathBuf {
     let built = root
@@ -173,15 +171,9 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
     let artifact = artifact(contestant, workload, root);
 
     match contestant {
-        "curios" => Invocation {
-            program: artifact,
-            arguments: Vec::new(),
-            input: Some(format!("{size}\n")),
-        },
-        "rust" => Invocation {
+        "curios" | "rust" => Invocation {
             program: artifact,
             arguments: vec![size.to_string()],
-            input: None,
         },
         // The module is not the program: the engine on the path runs it, and the pin holds it to the one Curios embeds.
         _ => Invocation {
@@ -191,7 +183,6 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
                 artifact.display().to_string(),
                 size.to_string(),
             ],
-            input: None,
         },
     }
 }
@@ -221,28 +212,15 @@ fn once(invocation: &Invocation) -> Result<(String, f64), String> {
     let named = invocation.program.display().to_string();
 
     let started = Instant::now();
-    let mut child = Command::new(&invocation.program)
+    let child = Command::new(&invocation.program)
         .args(&invocation.arguments)
         .env_clear()
         .env("PATH", path)
-        .stdin(Stdio::piped())
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|error| format!("{named} did not start: {error}"))?;
-
-    {
-        let mut standard_input = child
-            .stdin
-            .take()
-            .ok_or_else(|| format!("{named} took no standard input"))?;
-
-        if let Some(input) = &invocation.input {
-            standard_input
-                .write_all(input.as_bytes())
-                .map_err(|error| format!("{named} would not read its size: {error}"))?;
-        }
-    }
 
     let produced = child
         .wait_with_output()

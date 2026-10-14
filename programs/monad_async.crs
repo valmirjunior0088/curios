@@ -3,7 +3,7 @@
 -- the arm that says whether the cost follows the written carrier or the one erasure ends up with.
 --
 -- The fiber is its own item rather than an argument written inline at the `Async/run` call: a call argument does not begin a sequencing region, so a `!` written there would belong to the enclosing `Io` region and ask for a `Monad/Lift(Async, Io)` that does not and should not exist. An item's value body is a region, which is what gives the `!`s below their `Async`.
--- N is read from stdin so the loop survives constant folding; output is 3N.
+-- N is read from the command line so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, Async, Io};
 
 let loop(n: Nat, acc: Nat) -> Async(Nat) =
@@ -19,9 +19,8 @@ let fiber(n: Nat) -> Async({}) =
     let _ = /std/print(Str/concat(Nat/to_str(total), "\n"))!;
     Async/pure(());
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input =
-    /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
