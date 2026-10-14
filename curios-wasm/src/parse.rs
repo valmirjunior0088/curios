@@ -10,26 +10,28 @@ use {
         RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
         TableType, TypeName, ValType,
     },
-    curios_parse::boxed::{
-        Parser, ParserError, fail, many0, many1, pure, run_parser, take_eof, take_exact, take_while,
+    curios_parse::{
+        Parsed, Parser, ParserError, ParserState, fail, many0, many1, pure, run_parser, take_eof,
+        take_exact, take_while,
     },
     curios_utilities::Source,
     std::str::FromStr,
 };
 
-fn parse_whitespace<'a>() -> Parser<'a, &'a str> {
-    take_while(|char| char.is_whitespace())
+fn parse_whitespace<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
+    take_while(|char| char.is_whitespace()).parse(state)
 }
 
-fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
-    take_exact(expected).and_drop(parse_whitespace)
+fn parse_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
+    move |state: ParserState<'a>| take_exact(expected).and_drop(parse_whitespace).parse(state)
 }
 
-fn parse_string<'a>() -> Parser<'a, &'a str> {
+fn parse_string<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
     take_exact("\"")
         .and_keep(take_while(|char| char != '"'))
         .and_drop(take_exact("\""))
         .and_drop(parse_whitespace)
+        .parse(state)
 }
 
 // `$` is only a sigil, never a delimiter: emitted names carry interior `$`s (data segments are `{value-name}${index}`, hints are `$`-separated), and printed names are always whitespace- or paren-terminated.
@@ -38,74 +40,77 @@ fn is_delimiter(char: char) -> bool {
 }
 
 /// Parses any `FromStr` numeric type from a delimiter-bounded token, failing with the type's own name (via `type_name`, which for an intrinsic like `u32`/`f64` is exactly that name) when the token doesn't parse — the one shape every numeric literal (`u32`, `i32`, `i64`, `f32`, `f64`) parses by.
-fn parse_number<'a, T>() -> Parser<'a, T>
+fn parse_number<'a, T>(state: ParserState<'a>) -> Parsed<'a, T>
 where
     T: FromStr + 'a,
 {
     take_while(|char| !is_delimiter(char))
         .flat_map(|value| match T::from_str(value) {
-            Ok(value) => pure(value),
+            Ok(value) => pure(value).boxed(),
             Err(_) => fail(format!(
                 "Expected '{}', obtained '{value}'",
                 std::any::type_name::<T>()
-            )),
+            ))
+            .boxed(),
         })
         .and_drop(parse_whitespace)
+        .parse(state)
 }
 
-fn parse_name<'a>() -> Parser<'a, &'a str> {
+fn parse_name<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
     take_exact("$")
         .and_keep(take_while(|char| !is_delimiter(char)))
         .flat_map(|string| match string.is_empty() {
-            true => fail("Expected 'non-empty name'"),
-            false => pure(string),
+            true => fail("Expected 'non-empty name'").boxed(),
+            false => pure(string).boxed(),
         })
         .and_drop(parse_whitespace)
+        .parse(state)
 }
 
-fn parse_type_name<'a>() -> Parser<'a, TypeName> {
-    parse_name().map(TypeName::from)
+fn parse_type_name<'a>(state: ParserState<'a>) -> Parsed<'a, TypeName> {
+    parse_name.map(TypeName::from).parse(state)
 }
 
-fn parse_label_name<'a>() -> Parser<'a, LabelName> {
-    parse_name().map(LabelName::from)
+fn parse_label_name<'a>(state: ParserState<'a>) -> Parsed<'a, LabelName> {
+    parse_name.map(LabelName::from).parse(state)
 }
 
-fn parse_local_name<'a>() -> Parser<'a, LocalName> {
-    parse_name().map(LocalName::from)
+fn parse_local_name<'a>(state: ParserState<'a>) -> Parsed<'a, LocalName> {
+    parse_name.map(LocalName::from).parse(state)
 }
 
-fn parse_global_name<'a>() -> Parser<'a, GlobalName> {
-    parse_name().map(GlobalName::from)
+fn parse_global_name<'a>(state: ParserState<'a>) -> Parsed<'a, GlobalName> {
+    parse_name.map(GlobalName::from).parse(state)
 }
 
-fn parse_func_name<'a>() -> Parser<'a, FuncName> {
-    parse_name().map(FuncName::from)
+fn parse_func_name<'a>(state: ParserState<'a>) -> Parsed<'a, FuncName> {
+    parse_name.map(FuncName::from).parse(state)
 }
 
-fn parse_field_name<'a>() -> Parser<'a, FieldName> {
-    parse_name().map(FieldName::from)
+fn parse_field_name<'a>(state: ParserState<'a>) -> Parsed<'a, FieldName> {
+    parse_name.map(FieldName::from).parse(state)
 }
 
-fn parse_table_name<'a>() -> Parser<'a, TableName> {
-    parse_name().map(TableName::from)
+fn parse_table_name<'a>(state: ParserState<'a>) -> Parsed<'a, TableName> {
+    parse_name.map(TableName::from).parse(state)
 }
 
-fn parse_elem_name<'a>() -> Parser<'a, ElemName> {
-    parse_name().map(ElemName::from)
+fn parse_elem_name<'a>(state: ParserState<'a>) -> Parsed<'a, ElemName> {
+    parse_name.map(ElemName::from).parse(state)
 }
 
-fn parse_mem_name<'a>() -> Parser<'a, MemName> {
-    parse_name().map(MemName::from)
+fn parse_mem_name<'a>(state: ParserState<'a>) -> Parsed<'a, MemName> {
+    parse_name.map(MemName::from).parse(state)
 }
 
-fn parse_data_name<'a>() -> Parser<'a, DataName> {
-    parse_name().map(DataName::from)
+fn parse_data_name<'a>(state: ParserState<'a>) -> Parsed<'a, DataName> {
+    parse_name.map(DataName::from).parse(state)
 }
 
-fn parse_bytes<'a>() -> Parser<'a, Vec<u8>> {
+fn parse_bytes<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<u8>> {
     take_exact("\"")
-        .and_keep(take_while(|c| c != '"').flat_map(|s: &str| {
+        .and_keep(take_while(|c| c != '"').and_then(|s: &str| {
             let mut bytes = Vec::new();
             let mut chars = s.chars();
 
@@ -114,11 +119,11 @@ fn parse_bytes<'a>() -> Parser<'a, Vec<u8>> {
                     '\\' => {
                         let hi = match chars.next().and_then(|c| c.to_digit(16)) {
                             Some(d) => d,
-                            None => return fail("expected hex digit after '\\'"),
+                            None => return Err("expected hex digit after '\\'"),
                         };
                         let lo = match chars.next().and_then(|c| c.to_digit(16)) {
                             Some(d) => d,
-                            None => return fail("expected second hex digit"),
+                            None => return Err("expected second hex digit"),
                         };
                         bytes.push((hi * 16 + lo) as u8);
                     }
@@ -129,24 +134,28 @@ fn parse_bytes<'a>() -> Parser<'a, Vec<u8>> {
                 }
             }
 
-            pure(bytes)
+            Ok(bytes)
         }))
         .and_drop(take_exact("\""))
         .and_drop(parse_whitespace)
+        .parse(state)
 }
 
-fn parse_num_type<'a>() -> Parser<'a, NumType> {
+fn parse_num_type<'a>(state: ParserState<'a>) -> Parsed<'a, NumType> {
     (parse_literal("i32").map(|()| NumType::I32))
         .or(parse_literal("i64").map(|()| NumType::I64))
         .or(parse_literal("f32").map(|()| NumType::F32))
         .or(parse_literal("f64").map(|()| NumType::F64))
+        .parse(state)
 }
 
-fn parse_is_nullable<'a>() -> Parser<'a, bool> {
-    (parse_literal("null").map(|()| true)).or(pure(false))
+fn parse_is_nullable<'a>(state: ParserState<'a>) -> Parsed<'a, bool> {
+    (parse_literal("null").map(|()| true))
+        .or(pure(false))
+        .parse(state)
 }
 
-fn parse_abs_heap_type<'a>() -> Parser<'a, AbsHeapType> {
+fn parse_abs_heap_type<'a>(state: ParserState<'a>) -> Parsed<'a, AbsHeapType> {
     (parse_literal("nofunc").map(|()| AbsHeapType::NoFunc))
         .or(parse_literal("noextern").map(|()| AbsHeapType::NoExtern))
         .or(parse_literal("none").map(|()| AbsHeapType::None))
@@ -157,13 +166,16 @@ fn parse_abs_heap_type<'a>() -> Parser<'a, AbsHeapType> {
         .or(parse_literal("i31").map(|()| AbsHeapType::I31))
         .or(parse_literal("struct").map(|()| AbsHeapType::Struct))
         .or(parse_literal("array").map(|()| AbsHeapType::Array))
+        .parse(state)
 }
 
-fn parse_heap_type<'a>() -> Parser<'a, HeapType> {
-    (parse_abs_heap_type().map(HeapType::Abstract)).or(parse_type_name().map(HeapType::Concrete))
+fn parse_heap_type<'a>(state: ParserState<'a>) -> Parsed<'a, HeapType> {
+    (parse_abs_heap_type.map(HeapType::Abstract))
+        .or(parse_type_name.map(HeapType::Concrete))
+        .parse(state)
 }
 
-fn parse_ref_type<'a>() -> Parser<'a, RefType> {
+fn parse_ref_type<'a>(state: ParserState<'a>) -> Parsed<'a, RefType> {
     parse_literal("(")
         .and_drop(parse_literal("ref"))
         .and_keep(parse_is_nullable)
@@ -173,22 +185,28 @@ fn parse_ref_type<'a>() -> Parser<'a, RefType> {
             is_nullable,
             heap_type,
         })
+        .parse(state)
 }
 
-fn parse_val_type<'a>() -> Parser<'a, ValType> {
-    (parse_num_type().map(ValType::Num)).or(parse_ref_type().map(ValType::Ref))
+fn parse_val_type<'a>(state: ParserState<'a>) -> Parsed<'a, ValType> {
+    (parse_num_type.map(ValType::Num))
+        .or(parse_ref_type.map(ValType::Ref))
+        .parse(state)
 }
 
-fn parse_packed_type<'a>() -> Parser<'a, PackedType> {
+fn parse_packed_type<'a>(state: ParserState<'a>) -> Parsed<'a, PackedType> {
     (parse_literal("i8").map(|()| PackedType::I8))
         .or(parse_literal("i16").map(|()| PackedType::I16))
+        .parse(state)
 }
 
-fn parse_storage_type<'a>() -> Parser<'a, StorageType> {
-    (parse_val_type().map(StorageType::Val)).or(parse_packed_type().map(StorageType::Packed))
+fn parse_storage_type<'a>(state: ParserState<'a>) -> Parsed<'a, StorageType> {
+    (parse_val_type.map(StorageType::Val))
+        .or(parse_packed_type.map(StorageType::Packed))
+        .parse(state)
 }
 
-fn parse_field_type<'a>() -> Parser<'a, FieldType> {
+fn parse_field_type<'a>(state: ParserState<'a>) -> Parsed<'a, FieldType> {
     (parse_literal("(")
         .and_drop(parse_literal("mut"))
         .and_keep(parse_storage_type)
@@ -198,61 +216,70 @@ fn parse_field_type<'a>() -> Parser<'a, FieldType> {
             storage_type,
             mutability: Mutability::Var,
         }))
-    .or(parse_storage_type().map(|storage_type| FieldType {
+    .or(parse_storage_type.map(|storage_type| FieldType {
         storage_type,
         mutability: Mutability::Const,
     }))
+    .parse(state)
 }
 
-fn parse_result_type<'a>(keyword: &'static str) -> Parser<'a, ResultType> {
-    parse_literal("(")
-        .and_drop(parse_literal(keyword))
-        .and_keep(many0(parse_val_type))
-        .and_drop(parse_literal(")"))
-        .map(ResultType::from)
+fn parse_result_type<'a>(keyword: &'static str) -> impl Parser<'a, ResultType> {
+    move |state: ParserState<'a>| {
+        parse_literal("(")
+            .and_drop(parse_literal(keyword))
+            .and_keep(many0(parse_val_type))
+            .and_drop(parse_literal(")"))
+            .map(ResultType::from)
+            .parse(state)
+    }
 }
 
-fn parse_func_type<'a>() -> Parser<'a, FuncType> {
+fn parse_func_type<'a>(state: ParserState<'a>) -> Parsed<'a, FuncType> {
     parse_literal("(")
         .and_drop(parse_literal("func"))
         .and_keep(parse_result_type("param").or(pure(ResultType::from([]))))
         .and(parse_result_type("result").or(pure(ResultType::from([]))))
         .and_drop(parse_literal(")"))
         .map(|(inputs, outputs)| FuncType { inputs, outputs })
+        .parse(state)
 }
 
-fn parse_array_type<'a>() -> Parser<'a, ArrayType> {
+fn parse_array_type<'a>(state: ParserState<'a>) -> Parsed<'a, ArrayType> {
     parse_literal("(")
         .and_drop(parse_literal("array"))
         .and_keep(parse_field_type)
         .and_drop(parse_literal(")"))
         .map(|field_type| ArrayType { field_type })
+        .parse(state)
 }
 
-fn parse_field<'a>() -> Parser<'a, (FieldName, FieldType)> {
+fn parse_field<'a>(state: ParserState<'a>) -> Parsed<'a, (FieldName, FieldType)> {
     parse_literal("(")
         .and_drop(parse_literal("field"))
         .and_keep(parse_field_name)
         .and(parse_field_type)
         .and_drop(parse_literal(")"))
         .map(|(field_name, field_type)| (field_name, field_type))
+        .parse(state)
 }
 
-fn parse_struct_type<'a>() -> Parser<'a, StructType> {
+fn parse_struct_type<'a>(state: ParserState<'a>) -> Parsed<'a, StructType> {
     parse_literal("(")
         .and_drop(parse_literal("struct"))
         .and_keep(many0(parse_field))
         .and_drop(parse_literal(")"))
         .map(StructType::from)
+        .parse(state)
 }
 
-fn parse_comp_type<'a>() -> Parser<'a, CompType> {
-    (parse_func_type().map(CompType::Func))
-        .or(parse_struct_type().map(CompType::Struct))
-        .or(parse_array_type().map(CompType::Array))
+fn parse_comp_type<'a>(state: ParserState<'a>) -> Parsed<'a, CompType> {
+    (parse_func_type.map(CompType::Func))
+        .or(parse_struct_type.map(CompType::Struct))
+        .or(parse_array_type.map(CompType::Array))
+        .parse(state)
 }
 
-fn parse_sub_type<'a>() -> Parser<'a, SubType> {
+fn parse_sub_type<'a>(state: ParserState<'a>) -> Parsed<'a, SubType> {
     (parse_literal("(")
         .and_drop(parse_literal("sub"))
         .and_keep(
@@ -266,32 +293,35 @@ fn parse_sub_type<'a>() -> Parser<'a, SubType> {
             super_types,
             comp_type,
         }))
-    .or(parse_comp_type().map(|comp_type| SubType {
+    .or(parse_comp_type.map(|comp_type| SubType {
         is_final: true,
         super_types: Vec::new(),
         comp_type,
     }))
+    .parse(state)
 }
 
-fn parse_type_def<'a>() -> Parser<'a, (TypeName, SubType)> {
+fn parse_type_def<'a>(state: ParserState<'a>) -> Parsed<'a, (TypeName, SubType)> {
     parse_literal("(")
         .and_drop(parse_literal("type"))
         .and_keep(parse_type_name)
         .and(parse_sub_type)
         .and_drop(parse_literal(")"))
         .map(|(type_name, sub_type)| (type_name, sub_type))
+        .parse(state)
 }
 
-fn parse_rec_type<'a>() -> Parser<'a, RecType> {
+fn parse_rec_type<'a>(state: ParserState<'a>) -> Parsed<'a, RecType> {
     (parse_literal("(")
         .and_drop(parse_literal("rec"))
         .and_keep(many1(parse_type_def))
         .and_drop(parse_literal(")"))
         .map(RecType::from))
-    .or(parse_type_def().map(|(type_name, sub_type)| RecType::from([(type_name, sub_type)])))
+    .or(parse_type_def.map(|(type_name, sub_type)| RecType::from([(type_name, sub_type)])))
+    .parse(state)
 }
 
-fn parse_global_type<'a>() -> Parser<'a, GlobalType> {
+fn parse_global_type<'a>(state: ParserState<'a>) -> Parsed<'a, GlobalType> {
     (parse_literal("(")
         .and_drop(parse_literal("mut"))
         .and_keep(parse_val_type)
@@ -300,26 +330,29 @@ fn parse_global_type<'a>() -> Parser<'a, GlobalType> {
             val_type,
             mutability: Mutability::Var,
         }))
-    .or(parse_val_type().map(|val_type| GlobalType {
+    .or(parse_val_type.map(|val_type| GlobalType {
         val_type,
         mutability: Mutability::Const,
     }))
+    .parse(state)
 }
 
-fn parse_address_type<'a>() -> Parser<'a, AddressType> {
+fn parse_address_type<'a>(state: ParserState<'a>) -> Parsed<'a, AddressType> {
     (parse_literal("i32").map(|()| AddressType::I32))
         .or(parse_literal("i64").map(|()| AddressType::I64))
+        .parse(state)
 }
 
 /// A minimum and an optional maximum. The maximum's absence is read off the next token failing to be a number, which is why every construct spelling limits puts something that is not one — a reference type, or a closing paren — immediately after them.
-fn parse_limits<'a>() -> Parser<'a, Limits> {
-    parse_number::<u64>()
-        .and(parse_number::<u64>().map(Some).or(pure(None)))
+fn parse_limits<'a>(state: ParserState<'a>) -> Parsed<'a, Limits> {
+    parse_number::<u64>
+        .and(parse_number::<u64>.map(Some).or(pure(None)))
         .map(|(min, max)| Limits { min, max })
+        .parse(state)
 }
 
-fn parse_table_type<'a>() -> Parser<'a, TableType> {
-    parse_address_type()
+fn parse_table_type<'a>(state: ParserState<'a>) -> Parsed<'a, TableType> {
+    parse_address_type
         .and(parse_limits)
         .and(parse_ref_type)
         .map(|((address_type, limits), ref_type)| TableType {
@@ -327,51 +360,58 @@ fn parse_table_type<'a>() -> Parser<'a, TableType> {
             ref_type,
             limits,
         })
+        .parse(state)
 }
 
-fn parse_mem_type<'a>() -> Parser<'a, MemType> {
-    parse_address_type()
+fn parse_mem_type<'a>(state: ParserState<'a>) -> Parsed<'a, MemType> {
+    parse_address_type
         .and(parse_limits)
         .map(|(address_type, limits)| MemType {
             address_type,
             limits,
         })
+        .parse(state)
 }
 
 /// An `align=` byte count, as the log2 exponent the model carries. The text form spells bytes because that is what a wasm reader expects to see; anything but a power of two is a text the printer could not have produced.
-fn parse_align<'a>() -> Parser<'a, u32> {
+fn parse_align<'a>(state: ParserState<'a>) -> Parsed<'a, u32> {
     take_exact("align=")
-        .and_keep(parse_number::<u64>())
+        .and_keep(parse_number::<u64>)
         .flat_map(|bytes| match bytes.is_power_of_two() {
-            true => pure(bytes.trailing_zeros()),
-            false => fail(format!("Expected 'a power of two', obtained '{bytes}'")),
+            true => pure(bytes.trailing_zeros()).boxed(),
+            false => fail(format!("Expected 'a power of two', obtained '{bytes}'")).boxed(),
         })
+        .parse(state)
 }
 
 /// A load or store's immediate, in the order the printer writes it: the memory, then an offset defaulting to zero, then an alignment defaulting to the access width's natural one.
-fn parse_mem_arg<'a>(natural_align: u32) -> Parser<'a, MemArg> {
-    parse_mem_name()
-        .and((take_exact("offset=").and_keep(parse_number::<u64>())).or(pure(0)))
-        .and(parse_align().or(pure(natural_align)))
-        .map(|((mem_name, offset), align)| MemArg {
-            mem_name,
-            align,
-            offset,
-        })
+fn parse_mem_arg<'a>(natural_align: u32) -> impl Parser<'a, MemArg> {
+    move |state: ParserState<'a>| {
+        parse_mem_name
+            .and((take_exact("offset=").and_keep(parse_number::<u64>)).or(pure(0)))
+            .and(parse_align.or(pure(natural_align)))
+            .map(|((mem_name, offset), align)| MemArg {
+                mem_name,
+                align,
+                offset,
+            })
+            .parse(state)
+    }
 }
 
 /// Any load or store: one delimiter-bounded token looked up in the memory-access table beside `Instr`, then its immediate — whole-token dispatch, so no spelling can prefix-shadow another the way an ordered chain of literal probes can.
-fn parse_mem_access_instr<'a>() -> Parser<'a, Instr> {
+fn parse_mem_access_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     take_while(|char| !is_delimiter(char))
         .flat_map(|token| match Instr::from_mem_mnemonic(token) {
-            Some(access) => pure(access),
-            None => fail(format!("Expected 'memory instruction', obtained '{token}'")),
+            Some(access) => pure(access).boxed(),
+            None => fail(format!("Expected 'memory instruction', obtained '{token}'")).boxed(),
         })
         .and_drop(parse_whitespace)
         .flat_map(|(natural_align, build)| parse_mem_arg(natural_align).map(build))
+        .parse(state)
 }
 
-fn parse_memory_instr<'a>() -> Parser<'a, Instr> {
+fn parse_memory_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     (parse_literal("memory.size")
         .and_keep(parse_mem_name)
         .map(|mem_name| Instr::MemorySize { mem_name }))
@@ -398,9 +438,10 @@ fn parse_memory_instr<'a>() -> Parser<'a, Instr> {
     .or(parse_literal("data.drop")
         .and_keep(parse_data_name)
         .map(|data_name| Instr::DataDrop { data_name }))
+    .parse(state)
 }
 
-fn parse_block_type<'a>() -> Parser<'a, BlockType> {
+fn parse_block_type<'a>(state: ParserState<'a>) -> Parsed<'a, BlockType> {
     (parse_literal("(")
         .and_drop(parse_literal("result"))
         .and_keep(parse_val_type)
@@ -412,19 +453,21 @@ fn parse_block_type<'a>() -> Parser<'a, BlockType> {
         .and_drop(parse_literal(")"))
         .map(BlockType::Concrete))
     .or(pure(BlockType::Empty))
+    .parse(state)
 }
 
 /// Any operand-less instruction: one delimiter-bounded token, looked up in the mnemonic table beside `Instr`. Whole-token equality means no mnemonic can prefix-shadow another, unlike the literal probes below, whose order matters. The `catch` keeps a miss recoverable — the token was consumed before the lookup could reject it, and the operand-carrying alternatives still deserve their probe.
-fn parse_plain_instr<'a>() -> Parser<'a, Instr> {
+fn parse_plain_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     take_while(|char| !is_delimiter(char))
         .flat_map(|token| match Instr::from_mnemonic(token) {
-            Some(instr) => pure(instr),
-            None => fail(format!("Expected 'instruction', obtained '{token}'")),
+            Some(instr) => pure(instr).boxed(),
+            None => fail(format!("Expected 'instruction', obtained '{token}'")).boxed(),
         })
         .and_drop(parse_whitespace)
+        .parse(state)
 }
 
-fn parse_control_instr<'a>() -> Parser<'a, Instr> {
+fn parse_control_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     (parse_literal("block")
         .and_keep(parse_label_name)
         .and(parse_block_type)
@@ -528,9 +571,10 @@ fn parse_control_instr<'a>() -> Parser<'a, Instr> {
     .or(parse_literal("call")
         .and_keep(parse_func_name)
         .map(|func_name| Instr::Call { func_name }))
+    .parse(state)
 }
 
-fn parse_table_instr<'a>() -> Parser<'a, Instr> {
+fn parse_table_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     (parse_literal("table.get")
         .and_keep(parse_table_name)
         .map(|table_name| Instr::TableGet { table_name }))
@@ -563,9 +607,10 @@ fn parse_table_instr<'a>() -> Parser<'a, Instr> {
     .or(parse_literal("elem.drop")
         .and_keep(parse_elem_name)
         .map(|elem_name| Instr::ElemDrop { elem_name }))
+    .parse(state)
 }
 
-fn parse_reference_instr<'a>() -> Parser<'a, Instr> {
+fn parse_reference_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     (parse_literal("ref.null")
         .and_keep(parse_heap_type)
         .map(|heap_type| Instr::RefNull { heap_type }))
@@ -578,9 +623,10 @@ fn parse_reference_instr<'a>() -> Parser<'a, Instr> {
     .or(parse_literal("ref.cast")
         .and_keep(parse_ref_type)
         .map(|ref_type| Instr::RefCast { ref_type }))
+    .parse(state)
 }
 
-fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
+fn parse_aggregate_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     (parse_literal("struct.new_default")
         .and_keep(parse_type_name)
         .map(|type_name| Instr::StructNewDefault { type_name }))
@@ -617,7 +663,7 @@ fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
         }))
     .or(parse_literal("array.new_fixed")
         .and_keep(parse_type_name)
-        .and(parse_number::<u32>())
+        .and(parse_number::<u32>)
         .map(|(type_name, length)| Instr::ArrayNewFixed { type_name, length }))
     .or(parse_literal("array.new_data")
         .and_keep(parse_type_name)
@@ -675,19 +721,23 @@ fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
             type_name,
             elem_name,
         }))
+    .parse(state)
 }
 
-fn parse_select_result<'a>() -> Parser<'a, Vec<ValType>> {
-    (parse_result_type("result").map(|ResultType { val_types }| val_types)).or(pure(vec![]))
+fn parse_select_result<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<ValType>> {
+    (parse_result_type("result").map(|ResultType { val_types }| val_types))
+        .or(pure(vec![]))
+        .parse(state)
 }
 
-fn parse_select_instr<'a>() -> Parser<'a, Instr> {
+fn parse_select_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     parse_literal("select")
         .and_keep(parse_select_result)
         .map(|val_types| Instr::Select { val_types })
+        .parse(state)
 }
 
-fn parse_variable_instr<'a>() -> Parser<'a, Instr> {
+fn parse_variable_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     (parse_literal("local.get")
         .and_keep(parse_local_name)
         .map(|local_name| Instr::LocalGet { local_name }))
@@ -703,25 +753,27 @@ fn parse_variable_instr<'a>() -> Parser<'a, Instr> {
     .or(parse_literal("global.set")
         .and_keep(parse_global_name)
         .map(|global_name| Instr::GlobalSet { global_name }))
+    .parse(state)
 }
 
-fn parse_const_instr<'a>() -> Parser<'a, Instr> {
+fn parse_const_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
     (parse_literal("i32.const")
-        .and_keep(parse_number::<i32>())
+        .and_keep(parse_number::<i32>)
         .map(|value| Instr::I32Const { value }))
     .or(parse_literal("i64.const")
-        .and_keep(parse_number::<i64>())
+        .and_keep(parse_number::<i64>)
         .map(|value| Instr::I64Const { value }))
     .or(parse_literal("f32.const")
-        .and_keep(parse_number::<f32>())
+        .and_keep(parse_number::<f32>)
         .map(|value| Instr::F32Const { value }))
     .or(parse_literal("f64.const")
-        .and_keep(parse_number::<f64>())
+        .and_keep(parse_number::<f64>)
         .map(|value| Instr::F64Const { value }))
+    .parse(state)
 }
 
-fn parse_instr<'a>() -> Parser<'a, Instr> {
-    parse_plain_instr()
+fn parse_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
+    parse_plain_instr
         .or(parse_const_instr)
         .or(parse_reference_instr)
         .or(parse_aggregate_instr)
@@ -731,12 +783,13 @@ fn parse_instr<'a>() -> Parser<'a, Instr> {
         .or(parse_select_instr)
         .or(parse_variable_instr)
         .or(parse_control_instr)
+        .parse(state)
 }
-fn parse_expr<'a>() -> Parser<'a, Expr> {
-    many0(parse_instr).map(Expr::from)
+fn parse_expr<'a>(state: ParserState<'a>) -> Parsed<'a, Expr> {
+    many0(parse_instr).map(Expr::from).parse(state)
 }
 
-fn parse_func_import_desc<'a>() -> Parser<'a, Import> {
+fn parse_func_import_desc<'a>(state: ParserState<'a>) -> Parsed<'a, Import> {
     parse_literal("(")
         .and_drop(parse_literal("func"))
         .and_keep(parse_func_name)
@@ -751,9 +804,10 @@ fn parse_func_import_desc<'a>() -> Parser<'a, Import> {
             func_name,
             type_name,
         })
+        .parse(state)
 }
 
-fn parse_table_import_desc<'a>() -> Parser<'a, Import> {
+fn parse_table_import_desc<'a>(state: ParserState<'a>) -> Parsed<'a, Import> {
     parse_literal("(")
         .and_drop(parse_literal("table"))
         .and_keep(parse_table_name)
@@ -763,18 +817,20 @@ fn parse_table_import_desc<'a>() -> Parser<'a, Import> {
             table_name,
             table_type,
         })
+        .parse(state)
 }
 
-fn parse_memory_import_desc<'a>() -> Parser<'a, Import> {
+fn parse_memory_import_desc<'a>(state: ParserState<'a>) -> Parsed<'a, Import> {
     parse_literal("(")
         .and_drop(parse_literal("memory"))
         .and_keep(parse_mem_name)
         .and(parse_mem_type)
         .and_drop(parse_literal(")"))
         .map(|(mem_name, mem_type)| Import::Memory { mem_name, mem_type })
+        .parse(state)
 }
 
-fn parse_global_import_desc<'a>() -> Parser<'a, Import> {
+fn parse_global_import_desc<'a>(state: ParserState<'a>) -> Parsed<'a, Import> {
     parse_literal("(")
         .and_drop(parse_literal("global"))
         .and_keep(parse_global_name)
@@ -784,40 +840,44 @@ fn parse_global_import_desc<'a>() -> Parser<'a, Import> {
             global_name,
             global_type,
         })
+        .parse(state)
 }
 
-fn parse_import<'a>() -> Parser<'a, (String, String, Import)> {
+fn parse_import<'a>(state: ParserState<'a>) -> Parsed<'a, (String, String, Import)> {
     parse_literal("(")
         .and_drop(parse_literal("import"))
-        .and_keep(parse_string().map(str::to_string))
-        .and(parse_string().map(str::to_string))
+        .and_keep(parse_string.map(str::to_string))
+        .and(parse_string.map(str::to_string))
         .and(
-            (parse_func_import_desc())
+            (parse_func_import_desc)
                 .or(parse_table_import_desc)
                 .or(parse_memory_import_desc)
                 .or(parse_global_import_desc),
         )
         .and_drop(parse_literal(")"))
         .map(|((module_name, name), import)| (module_name, name, import))
+        .parse(state)
 }
 
-fn parse_param<'a>() -> Parser<'a, LocalName> {
+fn parse_param<'a>(state: ParserState<'a>) -> Parsed<'a, LocalName> {
     parse_literal("(")
         .and_drop(parse_literal("param"))
         .and_keep(parse_local_name)
         .and_drop(parse_val_type)
         .and_drop(parse_literal(")"))
+        .parse(state)
 }
 
-fn parse_local<'a>() -> Parser<'a, (LocalName, ValType)> {
+fn parse_local<'a>(state: ParserState<'a>) -> Parsed<'a, (LocalName, ValType)> {
     parse_literal("(")
         .and_drop(parse_literal("local"))
         .and_keep(parse_local_name)
         .and(parse_val_type)
         .and_drop(parse_literal(")"))
+        .parse(state)
 }
 
-fn parse_func<'a>() -> Parser<'a, (FuncName, Func)> {
+fn parse_func<'a>(state: ParserState<'a>) -> Parsed<'a, (FuncName, Func)> {
     parse_literal("(")
         .and_drop(parse_literal("func"))
         .and_keep(parse_func_name)
@@ -843,9 +903,10 @@ fn parse_func<'a>() -> Parser<'a, (FuncName, Func)> {
                 },
             )
         })
+        .parse(state)
 }
 
-fn parse_table<'a>() -> Parser<'a, (TableName, Table)> {
+fn parse_table<'a>(state: ParserState<'a>) -> Parsed<'a, (TableName, Table)> {
     parse_literal("(")
         .and_drop(parse_literal("table"))
         .and_keep(parse_table_name)
@@ -861,17 +922,21 @@ fn parse_table<'a>() -> Parser<'a, (TableName, Table)> {
                 },
             )
         })
+        .parse(state)
 }
 
 /// A parenthesized constant expression in an operand position — `(offset …)` or `(item …)`, holding a flat instruction sequence like every other body.
-fn parse_const_expr<'a>(keyword: &'static str) -> Parser<'a, Expr> {
-    parse_literal("(")
-        .and_drop(parse_literal(keyword))
-        .and_keep(parse_expr)
-        .and_drop(parse_literal(")"))
+fn parse_const_expr<'a>(keyword: &'static str) -> impl Parser<'a, Expr> {
+    move |state: ParserState<'a>| {
+        parse_literal("(")
+            .and_drop(parse_literal(keyword))
+            .and_keep(parse_expr)
+            .and_drop(parse_literal(")"))
+            .parse(state)
+    }
 }
 
-fn parse_elem_mode<'a>() -> Parser<'a, ElemMode> {
+fn parse_elem_mode<'a>(state: ParserState<'a>) -> Parsed<'a, ElemMode> {
     (parse_literal("passive").map(|()| ElemMode::Passive))
         .or(parse_literal("declare").map(|()| ElemMode::Declarative))
         .or(parse_literal("(")
@@ -880,18 +945,20 @@ fn parse_elem_mode<'a>() -> Parser<'a, ElemMode> {
             .and_drop(parse_literal(")"))
             .and(parse_const_expr("offset"))
             .map(|(table_name, offset)| ElemMode::Active { table_name, offset }))
+        .parse(state)
 }
 
-fn parse_elem_list<'a>() -> Parser<'a, ElemList> {
+fn parse_elem_list<'a>(state: ParserState<'a>) -> Parsed<'a, ElemList> {
     (parse_literal("func")
         .and_keep(many0(parse_func_name))
         .map(ElemList::Funcs))
-    .or(parse_ref_type()
+    .or(parse_ref_type
         .and(many0(|| parse_const_expr("item")))
         .map(|(ref_type, exprs)| ElemList::Exprs(ref_type, exprs)))
+    .parse(state)
 }
 
-fn parse_elem_segment<'a>() -> Parser<'a, (ElemName, ElemSegment)> {
+fn parse_elem_segment<'a>(state: ParserState<'a>) -> Parsed<'a, (ElemName, ElemSegment)> {
     parse_literal("(")
         .and_drop(parse_literal("elem"))
         .and_keep(parse_elem_name)
@@ -899,26 +966,30 @@ fn parse_elem_segment<'a>() -> Parser<'a, (ElemName, ElemSegment)> {
         .and(parse_elem_list)
         .and_drop(parse_literal(")"))
         .map(|((elem_name, mode), list)| (elem_name, ElemSegment { mode, list }))
+        .parse(state)
 }
 
-fn parse_memory<'a>() -> Parser<'a, (MemName, MemType)> {
+fn parse_memory<'a>(state: ParserState<'a>) -> Parsed<'a, (MemName, MemType)> {
     parse_literal("(")
         .and_drop(parse_literal("memory"))
         .and_keep(parse_mem_name)
         .and(parse_mem_type)
         .and_drop(parse_literal(")"))
+        .parse(state)
 }
 
-fn parse_data_mode<'a>() -> Parser<'a, DataMode> {
-    (parse_literal("passive").map(|()| DataMode::Passive)).or(parse_literal("(")
-        .and_drop(parse_literal("memory"))
-        .and_keep(parse_mem_name)
-        .and_drop(parse_literal(")"))
-        .and(parse_const_expr("offset"))
-        .map(|(mem_name, offset)| DataMode::Active { mem_name, offset }))
+fn parse_data_mode<'a>(state: ParserState<'a>) -> Parsed<'a, DataMode> {
+    (parse_literal("passive").map(|()| DataMode::Passive))
+        .or(parse_literal("(")
+            .and_drop(parse_literal("memory"))
+            .and_keep(parse_mem_name)
+            .and_drop(parse_literal(")"))
+            .and(parse_const_expr("offset"))
+            .map(|(mem_name, offset)| DataMode::Active { mem_name, offset }))
+        .parse(state)
 }
 
-fn parse_data_segment<'a>() -> Parser<'a, (DataName, DataSegment)> {
+fn parse_data_segment<'a>(state: ParserState<'a>) -> Parsed<'a, (DataName, DataSegment)> {
     parse_literal("(")
         .and_drop(parse_literal("data"))
         .and_keep(parse_data_name)
@@ -926,9 +997,10 @@ fn parse_data_segment<'a>() -> Parser<'a, (DataName, DataSegment)> {
         .and(parse_bytes)
         .and_drop(parse_literal(")"))
         .map(|((data_name, mode), bytes)| (data_name, DataSegment { mode, bytes }))
+        .parse(state)
 }
 
-fn parse_global<'a>() -> Parser<'a, (GlobalName, Global)> {
+fn parse_global<'a>(state: ParserState<'a>) -> Parsed<'a, (GlobalName, Global)> {
     parse_literal("(")
         .and_drop(parse_literal("global"))
         .and_keep(parse_global_name)
@@ -936,58 +1008,65 @@ fn parse_global<'a>() -> Parser<'a, (GlobalName, Global)> {
         .and(parse_expr)
         .and_drop(parse_literal(")"))
         .map(|((global_name, global_type), expr)| (global_name, Global { global_type, expr }))
+        .parse(state)
 }
 
-fn parse_func_export_desc<'a>() -> Parser<'a, Export> {
+fn parse_func_export_desc<'a>(state: ParserState<'a>) -> Parsed<'a, Export> {
     parse_literal("(")
         .and_drop(parse_literal("func"))
         .and_keep(parse_func_name)
         .and_drop(parse_literal(")"))
         .map(Export::Func)
+        .parse(state)
 }
 
-fn parse_global_export_desc<'a>() -> Parser<'a, Export> {
+fn parse_global_export_desc<'a>(state: ParserState<'a>) -> Parsed<'a, Export> {
     parse_literal("(")
         .and_drop(parse_literal("global"))
         .and_keep(parse_global_name)
         .and_drop(parse_literal(")"))
         .map(Export::Global)
+        .parse(state)
 }
 
-fn parse_table_export_desc<'a>() -> Parser<'a, Export> {
+fn parse_table_export_desc<'a>(state: ParserState<'a>) -> Parsed<'a, Export> {
     parse_literal("(")
         .and_drop(parse_literal("table"))
         .and_keep(parse_table_name)
         .and_drop(parse_literal(")"))
         .map(Export::Table)
+        .parse(state)
 }
 
-fn parse_memory_export_desc<'a>() -> Parser<'a, Export> {
+fn parse_memory_export_desc<'a>(state: ParserState<'a>) -> Parsed<'a, Export> {
     parse_literal("(")
         .and_drop(parse_literal("memory"))
         .and_keep(parse_mem_name)
         .and_drop(parse_literal(")"))
         .map(Export::Memory)
+        .parse(state)
 }
 
-fn parse_export<'a>() -> Parser<'a, (String, Export)> {
+fn parse_export<'a>(state: ParserState<'a>) -> Parsed<'a, (String, Export)> {
     parse_literal("(")
         .and_drop(parse_literal("export"))
-        .and_keep(parse_string().map(str::to_string))
+        .and_keep(parse_string.map(str::to_string))
         .and(
-            (parse_func_export_desc())
+            (parse_func_export_desc)
                 .or(parse_table_export_desc)
                 .or(parse_global_export_desc)
                 .or(parse_memory_export_desc),
         )
         .and_drop(parse_literal(")"))
+        .parse(state)
 }
 
-fn parse_start<'a>() -> Parser<'a, FuncName> {
+fn parse_start<'a>(state: ParserState<'a>) -> Parsed<'a, FuncName> {
     parse_literal("(")
         .and_drop(parse_literal("start"))
         .and_keep(parse_func_name)
         .and_drop(parse_literal(")"))
+        .parse(state)
 }
 
 enum ModuleItem {
@@ -1003,24 +1082,25 @@ enum ModuleItem {
     Start(FuncName),
 }
 
-fn parse_module_item<'a>() -> Parser<'a, ModuleItem> {
-    parse_rec_type()
+fn parse_module_item<'a>(state: ParserState<'a>) -> Parsed<'a, ModuleItem> {
+    parse_rec_type
         .map(ModuleItem::RecType)
-        .or(parse_import()
+        .or(parse_import
             .map(|(module_name, name, import)| ModuleItem::Import(module_name, name, import)))
-        .or(parse_func().map(|(func_name, func)| ModuleItem::Func(func_name, func)))
-        .or(parse_table().map(|(table_name, table)| ModuleItem::Table(table_name, table)))
-        .or(parse_memory().map(|(mem_name, mem_type)| ModuleItem::Memory(mem_name, mem_type)))
-        .or(parse_global().map(|(global_name, global)| ModuleItem::Global(global_name, global)))
-        .or(parse_elem_segment()
+        .or(parse_func.map(|(func_name, func)| ModuleItem::Func(func_name, func)))
+        .or(parse_table.map(|(table_name, table)| ModuleItem::Table(table_name, table)))
+        .or(parse_memory.map(|(mem_name, mem_type)| ModuleItem::Memory(mem_name, mem_type)))
+        .or(parse_global.map(|(global_name, global)| ModuleItem::Global(global_name, global)))
+        .or(parse_elem_segment
             .map(|(elem_name, elem_segment)| ModuleItem::ElemSegment(elem_name, elem_segment)))
-        .or(parse_data_segment()
+        .or(parse_data_segment
             .map(|(data_name, data_segment)| ModuleItem::DataSegment(data_name, data_segment)))
-        .or(parse_export().map(|(name, export)| ModuleItem::Export(name, export)))
-        .or(parse_start().map(ModuleItem::Start))
+        .or(parse_export.map(|(name, export)| ModuleItem::Export(name, export)))
+        .or(parse_start.map(ModuleItem::Start))
+        .parse(state)
 }
 
-fn parse_module<'a>() -> Parser<'a, Module> {
+fn parse_module<'a>(state: ParserState<'a>) -> Parsed<'a, Module> {
     parse_literal("(")
         .and_drop(parse_literal("module"))
         .and_keep(parse_name)
@@ -1053,6 +1133,7 @@ fn parse_module<'a>() -> Parser<'a, Module> {
             module
         })
         .and_drop(parse_literal(")"))
+        .parse(state)
 }
 
 impl FromStr for Module {
@@ -1060,7 +1141,7 @@ impl FromStr for Module {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         run_parser(
-            parse_whitespace().and_keep(parse_module).and_drop(take_eof),
+            parse_whitespace.and_keep(parse_module).and_drop(take_eof),
             &Source::inline(input),
         )
     }
