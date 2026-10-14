@@ -49,7 +49,7 @@ mod tuples_tests;
 
 use {
     super::{Doc, Label, Name, Term},
-    curios_parse::{
+    curios_parse::boxed::{
         Parser, ahead, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, mark, not_ahead,
         obtained, pure, spanned, tagging, take_eof, take_exact, take_n, take_while,
     },

@@ -1,15 +1,12 @@
 use {
-    super::{IntoParser, Parser},
+    super::{IntoParser, Parser, ParserState},
     curios_utilities::{Source, Span},
     std::sync::Arc,
 };
 
 /// Pairs the parser's output with the [`Span`] covering exactly the bytes it consumed — how surface parsers attach source locations, so wrap the whole construct rather than its pieces.
-pub fn spanned<'a, T>(parser: impl IntoParser<'a, T> + 'a) -> Parser<'a, (Span, T)>
-where
-    T: 'a,
-{
-    Parser::new(move |state| {
+pub fn spanned<'a, T, M>(parser: impl IntoParser<'a, T, M>) -> impl Parser<'a, (Span, T)> {
+    move |state: ParserState<'a>| {
         let start = state.offset;
         let (item, state) = parser.into_parser().parse(state)?;
 
@@ -17,7 +14,7 @@ where
             (Span::new(state.source.clone(), start, state.offset), item),
             state,
         ))
-    })
+    }
 }
 
 /// A bookmarked parse position, for building a [`Span`] after the fact from two positions captured at different points in a grammar — [`spanned`] only covers what its one wrapped parser itself consumes, so a node whose span should reach further (e.g. through a tail parsed by a separate step) needs this instead.
@@ -28,6 +25,14 @@ pub struct Mark {
 }
 
 impl Mark {
+    /// The position `state` stands at.
+    pub(crate) fn at(state: ParserState) -> Self {
+        Self {
+            offset: state.offset,
+            source: state.source.clone(),
+        }
+    }
+
     pub(crate) fn offset(&self) -> usize {
         self.offset
     }
@@ -44,8 +49,8 @@ impl Mark {
 }
 
 /// The current parse position as a value, for later use with [`Mark::to`]. Consumes no input.
-pub fn mark<'a>() -> Parser<'a, Mark> {
-    Parser::new(|state| {
+pub fn mark<'a>() -> impl Parser<'a, Mark> {
+    |state: ParserState<'a>| {
         Ok((
             Mark {
                 offset: state.offset,
@@ -53,5 +58,5 @@ pub fn mark<'a>() -> Parser<'a, Mark> {
             },
             state,
         ))
-    })
+    }
 }

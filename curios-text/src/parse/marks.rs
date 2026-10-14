@@ -7,7 +7,7 @@
 use {
     super::{parse_identifier, parse_keyword, parse_literal},
     crate::{Term, parse_term},
-    curios_parse::{
+    curios_parse::boxed::{
         Mark, Parser, ParserError, commit, fail, lazy, look_ahead, pure, raise, refusal,
     },
     curios_utilities::Plicity,

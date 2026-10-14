@@ -5,7 +5,7 @@ use {
         Term, parse_term, parse_whitespace,
     },
     curios_num::{Floating, Grain, Natural},
-    curios_parse::{
+    curios_parse::boxed::{
         Mark, Parser, commit, expecting, fail, fail_from, lazy, look_ahead, many0, mark, not_ahead,
         pure, sep_by0_trailing, take_exact, take_n, take_while,
     },

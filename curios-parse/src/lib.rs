@@ -3,7 +3,7 @@
 //! Why a parser is a single-use `FnOnce`, why choice backtracks until an alternative commits, and why memoization is packrat keyed by nonterminal and offset are `README.md`'s decisions. This and `curios-print` are separate crates rather than two modules of one, so that [`curios_parse::pure`](pure) and `curios_print::pure` are unambiguous at every use site and each crate stays flat like every other; `curios-print/README.md` states that decision and what it rejected.
 
 mod state;
-pub(crate) use state::*;
+pub use state::*;
 
 mod error;
 pub use error::*;
@@ -22,3 +22,5 @@ pub use span::*;
 
 mod repeat;
 pub use repeat::*;
+
+pub mod boxed;

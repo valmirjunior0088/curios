@@ -10,7 +10,7 @@ use {
         RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
         TableType, TypeName, ValType,
     },
-    curios_parse::{
+    curios_parse::boxed::{
         Parser, ParserError, fail, many0, many1, pure, run_parser, take_eof, take_exact, take_while,
     },
     curios_utilities::Source,

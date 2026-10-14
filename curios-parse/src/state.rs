@@ -1,7 +1,8 @@
 use {curios_utilities::Source, std::sync::Arc};
 
+/// Where a parse stands in its input: what a parser is a function of. Opaque to a grammar, which hands it on.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct ParserState<'a> {
+pub struct ParserState<'a> {
     pub(crate) offset: usize,
     pub(crate) string: &'a str,
     pub(crate) source: &'a Arc<Source>,

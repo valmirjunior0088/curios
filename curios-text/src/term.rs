@@ -4,7 +4,7 @@ use {
         print_term,
     },
     curios_num::{Grain, Natural},
-    curios_parse::{ParserError, run_parser, take_eof},
+    curios_parse::boxed::{ParserError, run_parser, take_eof},
     curios_print::run_printer,
     curios_utilities::{InfixOp, Plicity, Sign, Source, Span},
     std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},

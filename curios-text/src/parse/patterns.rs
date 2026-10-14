@@ -11,7 +11,7 @@ use {
         parse_term, parse_whitespace,
     },
     curios_num::Grain,
-    curios_parse::{
+    curios_parse::boxed::{
         Parser, commit, fail, fail_from, is_blank, lazy, look_ahead, mark, memoize, not_ahead,
         preceded_by_space, pure, sep_by0_trailing, take_exact, take_while, uncommit,
     },

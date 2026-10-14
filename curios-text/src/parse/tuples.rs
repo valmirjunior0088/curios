@@ -10,7 +10,7 @@ use {
         TupleType, TupleTypeParam, parse_identifier_raw, parse_term, parse_whitespace,
         reserved_keyword,
     },
-    curios_parse::{
+    curios_parse::boxed::{
         Parser, commit, fail, fail_from, lazy, look_ahead, mark, not_ahead, pure, sep_by0_trailing,
         take_exact,
     },

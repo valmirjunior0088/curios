@@ -6,7 +6,7 @@ use {
         parse_top_item, print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
-    curios_parse::{
+    curios_parse::boxed::{
         Parser, ParserError, Recovered, commit, fail, is_blank, lazy, many0, raise, recover,
         run_parser, spanned, take_eof,
     },
@@ -350,7 +350,7 @@ fn parse_items<'a>(strict: bool) -> Parser<'a, Vec<Recovered<TopItem>>> {
         match (strict, first_broken(&recovered)) {
             (true, Some(error)) => raise(error),
             // Qualified: `curios_print::pure` is the printer's, imported for the `Display` impls below.
-            _ => curios_parse::pure(recovered),
+            _ => curios_parse::boxed::pure(recovered),
         }
     })
 }

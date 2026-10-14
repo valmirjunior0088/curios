@@ -14,7 +14,7 @@ use {
         reserved_keyword, text_after, word_after,
     },
     curios_abi::{WireLeaf, WireResults, WireReturn, WireSignature, WireType},
-    curios_parse::{
+    curios_parse::boxed::{
         Mark, Parser, ParserError, commit, fail, fail_from, lazy, look_ahead, many0, mark,
         not_ahead, pure, raise, refusal, sep_by0_trailing, sep_by1_trailing, spanned, tagging,
         take_exact,

@@ -11,7 +11,7 @@ use {
         LetSignature, Pattern, Proj, Subterm, Term, Tuple, declared, parse_identifier_raw,
         parse_whitespace,
     },
-    curios_parse::{
+    curios_parse::boxed::{
         Parser, commit, fail, fail_from, is_blank, lazy, look_ahead, many0, many1, mark, memoize,
         not_ahead, preceded_by_space, pure, sep_by0_trailing, shown, spanned, take_eof, take_exact,
         take_n, take_while, unseen,

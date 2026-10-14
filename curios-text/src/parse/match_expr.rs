@@ -7,7 +7,7 @@ use {
         Choose, ChooseArm, ChooseTest, Func, Match, MatrixArm, Pattern, Subterm, Term, parse_term,
         parse_whitespace,
     },
-    curios_parse::{
+    curios_parse::boxed::{
         Parser, commit, fail, fail_from, lazy, look_ahead, many0, mark, not_ahead, pure,
         sep_by0_trailing, spanned, take_exact,
     },
