@@ -319,11 +319,19 @@ fn a_tls_stream_ended_without_its_alert_reads_as_a_failure() {
     );
     assert_eq!(host.handle_finish(server.clone()), Ok(()));
 
-    let ready = host
-        .handle_poll(vec![client.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
-    assert_eq!(host.handle_read(client.clone(), 8), Err(Failure::TlsError));
+    // Driven as a fiber drives it: with the client hello still unsent, the poll wakes on the socket's writability as well, so a read can come before the peer's end has arrived and answer `WouldBlock`, and the fiber polls again.
+    let read = loop {
+        let ready = host
+            .handle_poll(vec![client.clone()], vec![], 5_000)
+            .unwrap();
+        assert_ne!(ready.readable[0].bits() & event::READY, 0);
+
+        match host.handle_read(client.clone(), 8) {
+            Err(Failure::WouldBlock) => continue,
+            read => break read,
+        }
+    };
+    assert_eq!(read, Err(Failure::TlsError));
 
     host.handle_close(server);
     host.handle_close(client);
