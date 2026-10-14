@@ -122,7 +122,6 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 ## Surface
 
 - [ ] [A parse allocates for what it builds](roadmap/surface/201-a-parse-allocates-for-what-it-builds.md) — not refined yet; a parser is boxed for every application of a combinator, at every position a grammar function is tried at, and a file an edit touched is parsed whole
-- [ ] [Plicity on a telescope's members](roadmap/surface/202-plicity-on-a-telescopes-members.md) — a `use` member is refused on a constructor's payload and on a structure's field, `@` on a concept's field, and any mark on a tuple type's field
 - [x] [A hidden member takes no position](design/theory/a-hidden-member-takes-no-position.md), on data as on a function: a constructor's payload and a structure's field declare `@`, left out where the value is built, where an arm opens it and where a position reads it, and a fact wherever it is in scope
 - [x] `struct` and `induct` declarations with independent nominal and representation visibility; structure, concept and witness groups
 - [x] [Privacy scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md), with sealed representations and an exact private-item-in-public-interface audit
