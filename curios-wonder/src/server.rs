@@ -14,10 +14,13 @@
 //!
 //! **Formatting is `curios format` over the overlay, on the protocol thread.** The same `Formatted` the CLI runs, on the text the editor holds, answered as one whole-document edit — the formatter is pure and cheap, parse and print with no prelude, and its output is verified by reparse before it is handed back, so nothing here can hand an editor text the compiler would read differently.
 //!
+//! **A place is answered from what the last check left, by the protocol thread.** Once a check has published, the analyst reads what each text of the document names — the `at` query's own engine, `written` — and leaves it where the protocol thread finds it ([`Answers`]): records, plain data, which is what lets them cross where a unit cannot. A request is answered from them and from the buffer as it is, with no parse and no wait. The buffer is held against the text that was checked by what the two share before their first difference and after their last ([`Standing`]): a declaration lying wholly in what they share stands where it stood, or moved by the difference in length, and one a difference reaches is the one being edited, which is answered after the next check. A document's first check is the one wait: before it nothing is held to answer from.
+//!
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
 
 use {
-    crate::{Asked, Diagnosed, Diagnosis, Severity},
+    crate::{Asked, Diagnosed, Diagnosis, Named, Severity, Written},
+    curios_core::Declared,
     curios_package::{Selection, Spelling},
     curios_text::{Formatted, Overlay},
     curios_utilities::{Report, Source, Span},
@@ -26,20 +29,21 @@ use {
     lsp_types::{
         Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeTextDocumentParams,
         DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
-        DocumentFormattingParams, InitializeParams, Location, LogMessageParams, MessageType, OneOf,
-        Position, PublishDiagnosticsParams, Range, ServerCapabilities, TextDocumentSyncCapability,
-        TextDocumentSyncKind, TextEdit, Uri,
+        DocumentFormattingParams, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse,
+        GotoDefinitionParams, GotoDefinitionResponse, InitializeParams, Location, LogMessageParams,
+        MessageType, OneOf, Position, PublishDiagnosticsParams, Range, ServerCapabilities,
+        SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
         notification::{
             DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument,
             LogMessage, Notification, PublishDiagnostics,
         },
-        request::{Formatting, Request},
+        request::{DocumentSymbolRequest, Formatting, GotoDefinition, Request},
     },
     std::{
         collections::{BTreeMap, BTreeSet},
         path::{Path, PathBuf},
         str::FromStr,
-        sync::mpsc,
+        sync::{Arc, Mutex, PoisonError, mpsc},
         thread,
         time::{Duration, Instant},
     },
@@ -64,6 +68,8 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
     let capabilities = ServerCapabilities {
         text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
         document_formatting_provider: Some(OneOf::Left(true)),
+        definition_provider: Some(OneOf::Left(true)),
+        document_symbol_provider: Some(OneOf::Left(true)),
         ..ServerCapabilities::default()
     };
     let initialization = connection
@@ -73,8 +79,10 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
         serde_json::from_value(initialization).map_err(|error| error.to_string())?;
 
     let (jobs, inbox) = mpsc::channel();
+    let answers = Answers::default();
     let analyst = {
         let mut analyst = Analyst {
+            answers: Arc::clone(&answers),
             budget,
             manifest: manifest.map(Path::to_path_buf),
             published: BTreeMap::new(),
@@ -92,6 +100,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
 
     let mut server = Server {
         documents: BTreeMap::new(),
+        answers,
         jobs,
     };
 
@@ -151,10 +160,16 @@ enum Raised {
     Warming,
 }
 
-/// The protocol thread's state: the overlay, and the channel to the analyst.
+/// What the last check of each document left to answer a place from: every text of the document, with the names written in it.
+///
+/// Written by the analyst once a check has published and read by the protocol thread, each holding the lock for an insertion or a pointer's copy. Bounded by the documents a session has open: an entry is replaced by the next check of its document and dropped when the document closes, and a check that ends after its document closed leaves one until the document is opened again.
+type Answers = Arc<Mutex<BTreeMap<PathBuf, Arc<Vec<Written>>>>>;
+
+/// The protocol thread's state: the overlay, what the last checks left, and the channel to the analyst.
 struct Server {
     /// Every open document's current text, by path — the overlay.
     documents: BTreeMap<PathBuf, String>,
+    answers: Answers,
     jobs: mpsc::Sender<Job>,
 }
 
@@ -165,29 +180,26 @@ impl Server {
             Message::Request(request) => {
                 let lsp_server::Request { id, method, params } = request;
                 match method.as_str() {
-                    Formatting::METHOD => {
-                        // One request the editor got wrong is that request failing, with the protocol's own code for it — never the session ending, which costs every open document its diagnostics until the editor restarts the server.
-                        let response =
-                            match serde_json::from_value::<DocumentFormattingParams>(params) {
-                                Err(error) => Response::new_err(
-                                    id,
-                                    lsp_server::ErrorCode::InvalidParams as i32,
-                                    error.to_string(),
-                                ),
-                                Ok(params) => match self.format(&params.text_document.uri) {
-                                    Ok(edits) => Response::new_ok(id, edits),
-                                    Err(message) => Response::new_err(
-                                        id,
-                                        lsp_server::ErrorCode::RequestFailed as i32,
-                                        message,
-                                    ),
-                                },
-                            };
-                        connection
-                            .sender
-                            .send(Message::Response(response))
-                            .map_err(|error| error.to_string())
-                    }
+                    Formatting::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<DocumentFormattingParams>(params).map(|params| {
+                            self.format(&params.text_document.uri)
+                                .and_then(|edits| valued(serde_json::to_value(edits)))
+                        }),
+                    ),
+                    GotoDefinition::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<GotoDefinitionParams>(params)
+                            .map(|params| valued(serde_json::to_value(self.definition(&params)))),
+                    ),
+                    DocumentSymbolRequest::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<DocumentSymbolParams>(params)
+                            .map(|params| valued(serde_json::to_value(self.symbols(&params)))),
+                    ),
                     // Every other request is declined in the capabilities, so one that arrives anyway gets the protocol's "not found" rather than silence.
                     _ => reply_unhandled(connection, id, &method),
                 }
@@ -258,6 +270,10 @@ impl Server {
                 };
                 if let Some(path) = path_of(&params.text_document.uri) {
                     self.documents.remove(&path);
+                    self.answers
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .remove(&path);
                 }
             }
             _ => {}
@@ -285,10 +301,236 @@ impl Server {
             }]),
         }
     }
+
+    /// The document `uri` names as the editor holds it, beside what its last check left. `None` for a document that is not open, and for one nothing has checked yet.
+    fn held(&self, uri: &Uri) -> Option<(&str, Arc<Vec<Written>>)> {
+        let path = path_of(uri)?;
+        let buffer = self.documents.get(&path)?;
+        let checked = self
+            .answers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&path)
+            .cloned()?;
+
+        Some((buffer.as_str(), checked))
+    }
+
+    /// Where the name at a position of a document is declared. Nothing where no name stands there, where the declaration it stands in was edited since the document's last check, and where no file holds the declaration it names.
+    fn definition(&self, params: &GotoDefinitionParams) -> Option<GotoDefinitionResponse> {
+        let asked = &params.text_document_position_params;
+        let (buffer, checked) = self.held(&asked.text_document.uri)?;
+        let named = named_at(buffer, &checked, offset_of(buffer, asked.position))?;
+
+        self.located(named.declaration.as_ref()?)
+            .map(GotoDefinitionResponse::Scalar)
+    }
+
+    /// `span` as a place an editor opens. In a document the editor holds it is where the span stands in the buffer, and nothing where the buffer was edited there since the span was taken; in any other file it is the span's own range.
+    fn located(&self, span: &Span) -> Option<Location> {
+        let path = curios_text::identity(span.source.path.as_deref()?);
+        let range = match self.documents.get(&path) {
+            Some(buffer) => {
+                let moved = Standing::of(&span.source.text, buffer).moved(span)?;
+
+                Range {
+                    start: position_of(buffer, span.start.checked_add_signed(moved)?),
+                    end: position_of(buffer, span.end.checked_add_signed(moved)?),
+                }
+            }
+            None => range_of(span),
+        };
+
+        Some(Location {
+            uri: uri_of(&path)?,
+            range,
+        })
+    }
+
+    /// What a document declares, as an outline: none for a document nothing has checked yet.
+    fn symbols(&self, params: &DocumentSymbolParams) -> DocumentSymbolResponse {
+        DocumentSymbolResponse::Nested(
+            self.held(&params.text_document.uri)
+                .map(|(buffer, checked)| outline(buffer, &checked))
+                .unwrap_or_default(),
+        )
+    }
 }
 
-/// The analysis thread's state: the compiler's inputs, what it last published, and the way back to the editor.
+/// A request's answer as the value its response carries, or why it could not be written as one.
+fn valued(value: serde_json::Result<serde_json::Value>) -> Result<serde_json::Value, String> {
+    value.map_err(|error| error.to_string())
+}
+
+/// Answer the request `id` with `answered`: the value, or what refused it. One request the editor got wrong is that request failing, with the protocol's own code for it — never the session ending, which costs every open document its diagnostics until the editor restarts the server.
+fn respond(
+    connection: &Connection,
+    id: RequestId,
+    answered: Result<Result<serde_json::Value, String>, serde_json::Error>,
+) -> Result<(), String> {
+    let response = match answered {
+        Err(error) => Response::new_err(
+            id,
+            lsp_server::ErrorCode::InvalidParams as i32,
+            error.to_string(),
+        ),
+        Ok(Ok(value)) => Response::new_ok(id, value),
+        Ok(Err(message)) => {
+            Response::new_err(id, lsp_server::ErrorCode::RequestFailed as i32, message)
+        }
+    };
+
+    connection
+        .sender
+        .send(Message::Response(response))
+        .map_err(|error| error.to_string())
+}
+
+/// How a buffer stands against the text it was last checked as: what the two share at their starts and what they share at their ends, in bytes.
+///
+/// **Each is taken whole, so the two may overlap.** Text typed above a declaration that opens as the declaration does — a `let` above a `let` — reads from the start as an insertion inside it, a few bytes in, and from the end as the insertion above it that it is. A span standing under either reading stands.
+struct Standing<'a> {
+    checked: &'a str,
+    held: &'a str,
+    before: usize,
+    after: usize,
+}
+
+impl<'a> Standing<'a> {
+    fn of(checked: &'a str, held: &'a str) -> Self {
+        let same = |(one, other): &(u8, u8)| one == other;
+
+        Self {
+            checked,
+            held,
+            before: checked.bytes().zip(held.bytes()).take_while(same).count(),
+            after: checked
+                .bytes()
+                .rev()
+                .zip(held.bytes().rev())
+                .take_while(same)
+                .count(),
+        }
+    }
+
+    /// How far `span`, taken in the checked text, has moved in the buffer, where it stands there: not at all in what the two share at their starts, and by the difference in length in what they share at their ends. `None` for a span a difference reaches, which is text being edited, and for one a difference touches with a character that reads on as part of a path: a name a keystroke is extending is no longer the name that was checked.
+    fn moved(&self, span: &Span) -> Option<isize> {
+        let grown = self.held.len().cast_signed() - self.checked.len().cast_signed();
+        let joins = |character: Option<char>| {
+            character.is_some_and(|character| {
+                character.is_alphanumeric() || character == '_' || character == '/'
+            })
+        };
+
+        // What follows the span in each text is the same character, or in neither one that joins it.
+        let follows = |text: &str| text[span.end..].chars().next();
+        if span.end < self.before
+            || (span.end == self.before
+                && !joins(follows(self.checked))
+                && !joins(follows(self.held)))
+        {
+            return Some(0);
+        }
+
+        // And what precedes it, where it stands by the texts' ends.
+        let shared = self.checked.len() - self.after;
+        let precedes = |text: &str, start: usize| text[..start].chars().next_back();
+        let stands = span.start > shared
+            || (span.start == shared
+                && !joins(precedes(self.checked, span.start))
+                && !joins(precedes(self.held, span.start.checked_add_signed(grown)?)));
+
+        stands.then_some(grown)
+    }
+}
+
+/// The name standing at `offset` of `buffer`, by what the buffer's last check left: the name [`Named::at`] finds in the text that holds the offset, where that text stands in the buffer as it was checked.
+fn named_at<'a>(buffer: &str, checked: &'a [Written], offset: usize) -> Option<&'a Named> {
+    let standing = Standing::of(&checked.first()?.text.source.text, buffer);
+
+    checked.iter().find_map(|written| {
+        let moved = standing.moved(&written.text)?;
+
+        Named::at(&written.names, offset.checked_add_signed(-moved)?)
+    })
+}
+
+/// What `buffer` declares, by what its last check left: each definition of each text that stands in the buffer as it was checked, a constructor under its type and a method under its concept.
+fn outline(buffer: &str, checked: &[Written]) -> Vec<DocumentSymbol> {
+    let Some(first) = checked.first() else {
+        return Vec::new();
+    };
+    let standing = Standing::of(&first.text.source.text, buffer);
+
+    let mut symbols = Vec::<DocumentSymbol>::new();
+    for written in checked {
+        let Some(moved) = standing.moved(&written.text) else {
+            continue;
+        };
+        let range = |span: &Span| Range {
+            start: position_of(buffer, span.start.saturating_add_signed(moved)),
+            end: position_of(buffer, span.end.saturating_add_signed(moved)),
+        };
+
+        // The definition of this text the members after it are shown under.
+        let mut owner = None;
+        for named in written.names.iter().filter(|named| named.declares) {
+            let (kind, member) = match named.declared {
+                Declared::Authored | Declared::Test => (SymbolKind::FUNCTION, false),
+                Declared::Inductive => (SymbolKind::ENUM, false),
+                Declared::Struct => (SymbolKind::STRUCT, false),
+                Declared::Concept => (SymbolKind::INTERFACE, false),
+                Declared::Witness => (SymbolKind::OBJECT, false),
+                Declared::Constructor => (SymbolKind::ENUM_MEMBER, true),
+                Declared::Method => (SymbolKind::METHOD, true),
+            };
+            // A witness is known by its head as written, and every other definition by the last segment of its path.
+            let name = match named.declared {
+                Declared::Witness => named.name.as_str(),
+                _ => named.name.rsplit('/').next().unwrap_or_default(),
+            };
+            let label = range(&named.written);
+
+            match owner.filter(|_| member) {
+                Some(owner) => {
+                    let owner: &mut DocumentSymbol = &mut symbols[owner];
+                    owner
+                        .children
+                        .get_or_insert_default()
+                        .push(symbol(name, kind, label, label));
+                }
+                None => {
+                    owner = Some(symbols.len());
+                    symbols.push(symbol(name, kind, range(&written.text), label));
+                }
+            }
+        }
+    }
+
+    symbols
+}
+
+/// One entry of an outline: `name`, over `range`, selected at `label`.
+#[expect(
+    deprecated,
+    reason = "the protocol's symbol still declares the `deprecated` field its `tags` replaced, and a struct with no default is built by naming every field"
+)]
+fn symbol(name: &str, kind: SymbolKind, range: Range, label: Range) -> DocumentSymbol {
+    DocumentSymbol {
+        name: name.to_string(),
+        detail: None,
+        kind,
+        tags: None,
+        deprecated: None,
+        range,
+        selection_range: label,
+        children: None,
+    }
+}
+
+/// The analysis thread's state: the compiler's inputs, what it last published, what it leaves for a place to be answered from, and the way back to the editor.
 struct Analyst {
+    answers: Answers,
     budget: u64,
     manifest: Option<PathBuf>,
     /// For each document checked, every path it last published diagnostics to — so a diagnostic that moved or vanished is cleared where it was.
@@ -425,7 +667,38 @@ impl Analyst {
         }
         self.published.insert(document.to_path_buf(), placed);
 
+        // After the publish, so what a check says waits on nothing a request may ask later.
+        self.leave(document, overlay, session);
+
         Ok(())
+    }
+
+    /// Leave what `document` names for the protocol thread to answer a place from — see [`Answers`]. A document whose subject has nothing to read leaves none, which answers every place of it with nothing.
+    fn leave(&self, document: &Path, overlay: &Overlay, session: &Session) {
+        let asked = Selection::of(
+            Spelling::File(document.to_path_buf()),
+            self.manifest.as_deref(),
+            document.parent().unwrap_or(document),
+            overlay,
+        )
+        .and_then(Asked::every);
+        // A file selects one subject: the unit that declares it, or itself.
+        let texts = asked
+            .ok()
+            .and_then(|asked| asked.into_iter().next())
+            .and_then(|asked| {
+                let (texts, _) = asked
+                    .reusing(session)
+                    .written(self.budget, overlay, document);
+
+                texts.ok()
+            })
+            .unwrap_or_default();
+
+        self.answers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(document.to_path_buf(), Arc::new(texts));
     }
 
     /// Tell the client, once a session, that the store took nothing of what a check compiled, and why.
@@ -577,6 +850,28 @@ fn position_of(text: &str, offset: usize) -> Position {
         line: line as u32,
         character: character as u32,
     }
+}
+
+/// The byte offset of a protocol position in `text`, the inverse of [`position_of`]: a position past a line's end is the line's end, and one past the last line the text's.
+fn offset_of(text: &str, position: Position) -> usize {
+    let start = text
+        .split_inclusive('\n')
+        .take(position.line as usize)
+        .map(str::len)
+        .sum::<usize>();
+    let line = text[start..].split('\n').next().unwrap_or_default();
+
+    let mut units = 0;
+    let mut within = line.len();
+    for (offset, character) in line.char_indices() {
+        if units >= position.character as usize {
+            within = offset;
+            break;
+        }
+        units += character.len_utf16();
+    }
+
+    start + within
 }
 
 fn publish(

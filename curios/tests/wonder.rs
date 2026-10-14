@@ -424,6 +424,32 @@ impl Editor {
         String::from_utf8(body).unwrap()
     }
 
+    /// The response to the request `id`, whatever the server sent ahead of it.
+    fn response(&mut self, id: u32) -> String {
+        loop {
+            let message = self.receive();
+            if message.contains(&format!(r#""id":{id},"#)) {
+                return message;
+            }
+        }
+    }
+
+    /// The answer to `method` asked of `params`, asked again while it is nothing: what a document's check leaves for a place to be answered from is left once its diagnostics are published, so a request sent on the publish may find nothing held yet.
+    fn asked(&mut self, method: &str, params: &str) -> String {
+        for id in 100..300 {
+            self.send(&format!(
+                r#"{{"jsonrpc":"2.0","id":{id},"method":"{method}","params":{params}}}"#
+            ));
+            let answer = self.response(id);
+            if !answer.contains(r#""result":null"#) && !answer.contains(r#""result":[]"#) {
+                return answer;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+
+        panic!("{method} was never answered from a check")
+    }
+
     fn finish(mut self) -> Output {
         self.send(r#"{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}"#);
         // Looked for rather than assumed to be next: the analyst answers on its own thread, so a publish a test had no reason to read can still be ahead of the response.
@@ -772,6 +798,126 @@ fn formatting_answers_with_the_canonical_text() {
         formatted.contains(r#""end":{"character":0,"line":2}"#),
         "{formatted}"
     );
+
+    let output = editor.finish();
+    assert!(output.status.success());
+}
+
+/// A place is answered from what the document's last check left: where the name there is declared, in the document itself and in another file of its package, and what the document declares, as an outline.
+#[test]
+fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
+    let root = project("places");
+    let path = root.join("app.crs");
+    let uri = format!("file://{}", path.display());
+    let text =
+        r#"let one: /std/Str = /app/util/word;\nlet two: /std/Str = one;\n/std/print(two)\n"#;
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    let capabilities = editor.receive();
+    assert!(
+        capabilities.contains(r#""definitionProvider":true"#)
+            && capabilities.contains(r#""documentSymbolProvider":true"#),
+        "{capabilities}"
+    );
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"{text}"}}}}}}"#
+    ));
+
+    // `one`, used on the second line: declared on the first, in this document.
+    let own = editor.asked(
+        "textDocument/definition",
+        &format!(r#"{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":1,"character":21}}}}"#),
+    );
+    assert!(own.contains(&format!(r#""uri":"{uri}""#)), "{own}");
+    assert!(
+        own.contains(
+            r#""range":{"end":{"character":7,"line":0},"start":{"character":4,"line":0}}"#
+        ),
+        "{own}"
+    );
+
+    // `/app/util/word`, on the first line: declared in the library's module.
+    let library = editor.asked(
+        "textDocument/definition",
+        &format!(r#"{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":0,"character":30}}}}"#),
+    );
+    assert!(
+        library.contains(&format!(
+            r#""uri":"file://{}""#,
+            root.join("util.crs").display()
+        )),
+        "{library}"
+    );
+    assert!(
+        library.contains(
+            r#""range":{"end":{"character":12,"line":0},"start":{"character":8,"line":0}}"#
+        ),
+        "{library}"
+    );
+
+    let outline = editor.asked(
+        "textDocument/documentSymbol",
+        &format!(r#"{{"textDocument":{{"uri":"{uri}"}}}}"#),
+    );
+    assert!(
+        outline.contains(r#""name":"one""#) && outline.contains(r#""name":"two""#),
+        "{outline}"
+    );
+
+    let output = editor.finish();
+    assert!(output.status.success());
+}
+
+/// A place is never behind a compile: asked right after an edit of another declaration, it is answered from what the last check left, where the declaration it stands in now stands, before that edit's diagnostics are published.
+#[test]
+fn a_place_is_answered_while_a_check_is_running() {
+    let root = temporary("placed-at-once");
+    fs::create_dir_all(&root).unwrap();
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", root.join("scratch.crs").display());
+    let opened = r#"let one: /std/Nat = 1;\nlet two: /std/Nat = one;\n/std/print(\"\")\n"#;
+    let edited = r#"let zero: /std/Nat = ?;\n\nlet one: /std/Nat = 1;\nlet two: /std/Nat = one;\n/std/print(\"\")\n"#;
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"{opened}"}}}}}}"#
+    ));
+    // Asked until the open's check has left something, which also reads past its publish.
+    editor.asked(
+        "textDocument/definition",
+        &format!(r#"{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":1,"character":21}}}}"#),
+    );
+
+    // The edit starts a check, two lines above what is asked about; the request follows it immediately.
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"{edited}"}}]}}}}"#
+    ));
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":3,"character":21}}}}}}"#
+    ));
+
+    let first = editor.receive();
+    let second = editor.receive();
+    assert!(
+        first.contains(r#""id":2,"#),
+        "the answer comes first: {first}"
+    );
+    assert!(
+        first.contains(
+            r#""range":{"end":{"character":7,"line":2},"start":{"character":4,"line":2}}"#
+        ),
+        "where the declaration now stands: {first}"
+    );
+    assert!(
+        second.contains("publishDiagnostics"),
+        "then the check: {second}"
+    );
+    assert!(second.contains("goal `?`"), "{second}");
 
     let output = editor.finish();
     assert!(output.status.success());
