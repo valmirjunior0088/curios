@@ -49,6 +49,9 @@ use head::*;
 mod witness;
 use witness::*;
 
+mod mention;
+pub use mention::*;
+
 use {
     crate::{
         Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
@@ -563,6 +566,11 @@ impl PreparedText {
             .find_map(|(held, nominal)| (held == name).then_some(nominal))
     }
 
+    /// What this unit declares `name` as, with nothing read. `None` for a name the unit does not declare.
+    pub fn declared_as(&self, name: &curios_core::Global) -> Option<curios_core::Declared> {
+        self.declared.get(name).map(|declared| declared.declared)
+    }
+
     /// The item this unit's lowering declares `name` by, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit does not declare.
     pub fn lowered(&self, name: &curios_core::Global) -> Option<&curios_core::Item> {
         self.declared
@@ -937,6 +945,8 @@ fn scan_module_info(heads: &[Headed]) -> Result<ModuleInfo, Error> {
 
 // The surface concept application `C(args)` for a witness's declared type: the witnessed concept applied to the annotation's arguments under the marks they were written with, as any application is — a list with nothing written included, which is the application `C()` and not the bare name.
 //
+// **The head holds where it was written**, as a name written as a term does: what the lowering resolved at a place is read off the variable it lowers to.
+//
 // **Spanned over the written `C(args)`, because this is the only thing a `satisfy` refusal can point at.** A witness is anonymous, so nothing else in its declaration names it: `elaborate_module_let` locates a registration failure with `error.at_opt(def.type_.span())`, and this synthesized node is that type. Left spanless, every duplicate, orphan, unkeyable and irregular-premise refusal would arrive with no line at all — and a duplicate between two witnesses of one module would name that module twice and nothing else, which a reader cannot act on. `written` is the head as the parser read it, through the parenthesis that closes its arguments; `Term::with_span` keeps an innermost span already present, so the arguments are untouched.
 fn witness_concept_application(
     concept: &Name,
@@ -944,6 +954,10 @@ fn witness_concept_application(
     written: Option<&Span>,
 ) -> Term {
     let head: Term = Subterm::Name(concept.clone()).into();
+    let head = match concept.span() {
+        Some(span) => head.with_span(span.clone()),
+        None => head,
+    };
     let applied: Term = match args {
         Some(args) => Subterm::Apply(Apply {
             head,

@@ -217,6 +217,21 @@ impl Anchors {
             .resolved(anchors)
     }
 
+    /// Every definition a name was written for, with where it was written in its declaration's text, in the names' order: what says which definitions a text declares, a label holding its text's anchor and stamp.
+    pub fn labels(&self) -> impl Iterator<Item = (&Global, &Extent)> {
+        self.labels.iter()
+    }
+
+    /// Every text this table holds, by its anchor and stamp, with the span it lies on: in the table's order, which is no source's.
+    pub fn texts(&self) -> impl Iterator<Item = ((Anchor, u32), Span)> {
+        self.texts.iter().map(|(key, sited)| {
+            (
+                *key,
+                Span::new(sited.source.clone(), sited.start, sited.end),
+            )
+        })
+    }
+
     /// Record that `span` covers a text of `anchor`, and hand back that text as a lowering takes extents within it. A text recorded again lies where it was recorded last.
     pub fn site(&mut self, anchor: Anchor, span: &Span) -> Within {
         let stamp = stamp(&span.source.text[span.start..span.end]);

@@ -722,6 +722,13 @@ impl Item {
             Item::Rec(rec) => rec.definitions(),
         }
     }
+
+    /// Every term this item holds, offered to `visit`: the positions a module is validated over (`item_positions`), each read as the terms it is made of. What a read of the item as it was written goes over, a term holding where it was written.
+    pub fn each_term(&self, mut visit: impl FnMut(&Term)) {
+        item_positions(self, &|_| false, &mut |_, carried: &dyn Carried| {
+            carried.terms(&mut visit)
+        });
+    }
 }
 
 /// A program's entrypoint: the expression it closes with, with the type it is judged at. One type rather than two fields, so a type without an entry — a type for no expression — is unspellable rather than asserted away.
@@ -1450,15 +1457,45 @@ fn payload_reaches(signature: &Telescope<Vec<Term>>) -> BTreeSet<Global> {
         .collect()
 }
 
+/// What sits at a module position, read as the terms it is made of: a term is itself, a list each of its own, and a telescope each entry's type and then what it ends in.
+trait Terms {
+    fn terms(&self, visit: &mut dyn FnMut(&Term));
+}
+
+impl Terms for Term {
+    fn terms(&self, visit: &mut dyn FnMut(&Term)) {
+        visit(self);
+    }
+}
+
+impl Terms for Vec<Term> {
+    fn terms(&self, visit: &mut dyn FnMut(&Term)) {
+        self.iter().for_each(visit);
+    }
+}
+
+impl Terms for () {
+    fn terms(&self, _: &mut dyn FnMut(&Term)) {}
+}
+
+impl<B: Bound + Terms> Terms for Telescope<B> {
+    fn terms(&self, visit: &mut dyn FnMut(&Term)) {
+        let (types, done) = entries(self);
+        types.into_iter().for_each(&mut *visit);
+        done.terms(visit);
+    }
+}
+
 /// One question a walk asks of whatever sits at a module position.
 ///
-/// A [`Bound`] behind a trait object rather than a generic parameter, so [`module_positions`] can offer one list of positions to more than one collector. Two reads, because two identities are findable by looking at a term: the local binder indices it mentions, and whether a metavariable node survives in it.
+/// A [`Bound`] behind a trait object rather than a generic parameter, so [`item_positions`] can offer one list of positions to more than one collector. Three reads: the two identities findable by looking at a term, which are the local binder indices it mentions and whether a metavariable node survives in it, and the terms themselves, for a read that asks where each was written.
 trait Carried {
     fn free_vars(&self) -> BTreeSet<Free>;
     fn has_metavar(&self) -> bool;
+    fn terms(&self, visit: &mut dyn FnMut(&Term));
 }
 
-impl<B: Bound> Carried for B {
+impl<B: Bound + Terms> Carried for B {
     fn free_vars(&self) -> BTreeSet<Free> {
         Bound::free_vars(self)
     }
@@ -1466,56 +1503,58 @@ impl<B: Bound> Carried for B {
     fn has_metavar(&self) -> bool {
         Bound::has_metavar(self)
     }
+
+    fn terms(&self, visit: &mut dyn FnMut(&Term)) {
+        Terms::terms(self, visit);
+    }
 }
 
-/// Every position in `module` that can hold a bound value, offered to `visit` with the top-level name owning it, skipping whatever `in_scope` already answers for.
+/// Every position of `item` that can hold a bound value, offered to `visit` with the top-level name owning it, skipping whatever `in_scope` already answers for: each definition's type and body, a recursive group's opened against its members' names, then what the entry of each former it declares carries.
 ///
-/// One list, read by every walk that asks what a module carries — the kernel's free-local refusal below it and the storage refusal beside that. A second copy is how a position quietly stops being covered, which is the failure the enumeration exists to prevent, so a new question about a module's contents is a new `visit` and never a new walk. `None` is the entrypoint, which belongs to the module rather than to any name it declares.
-fn module_positions(
-    module: &Module,
-    in_scope: impl Fn(&Global) -> bool,
-    mut visit: impl FnMut(Option<&Global>, &dyn Carried),
+/// One list, read by every walk that asks what a module or one item of it carries — the kernel's free-local refusal below it, the storage refusal beside that, and the read of an item's terms as they were written ([`Item::each_term`]). A second copy is how a position quietly stops being covered, which is the failure the enumeration exists to prevent, so a new question about an item's contents is a new `visit` and never a new walk.
+fn item_positions(
+    item: &Item,
+    in_scope: &impl Fn(&Global) -> bool,
+    visit: &mut impl FnMut(Option<&Global>, &dyn Carried),
 ) {
-    let covered = |names: Vec<&Global>| !names.is_empty() && names.into_iter().all(&in_scope);
-
-    for item in module
-        .items
-        .iter()
-        .filter(|item| !covered(item.declared_names()))
-    {
+    let names = item.declared_names();
+    if names.is_empty() || !names.into_iter().all(in_scope) {
         for definition in item.definitions() {
             visit(Some(&definition.name), &definition.type_);
             visit(Some(&definition.name), &definition.body);
         }
     }
 
-    for (name, declaration) in module
-        .induct_decls()
+    for (name, nominal) in item
+        .nominals()
         .into_iter()
         .filter(|(name, _)| !in_scope(name))
     {
-        visit(Some(&name), &declaration.arity);
-        visit(Some(&name), &declaration.result_sort);
-        for (_, constructor) in &declaration.constructors {
-            visit(Some(&name), &constructor.telescope);
+        if let Some(declaration) = nominal.inductive() {
+            visit(Some(name), &declaration.arity);
+            visit(Some(name), &declaration.result_sort);
+            for (_, constructor) in &declaration.constructors {
+                visit(Some(name), &constructor.telescope);
+            }
+        }
+        if let Some(record) = nominal.record() {
+            visit(Some(name), &record.arity);
+            visit(Some(name), &record.result_sort);
+        }
+        if let Some(concept) = nominal.concept() {
+            visit(Some(name), &concept.params);
         }
     }
+}
 
-    for (name, declaration) in module
-        .struct_decls()
-        .into_iter()
-        .filter(|(name, _)| !in_scope(name))
-    {
-        visit(Some(&name), &declaration.arity);
-        visit(Some(&name), &declaration.result_sort);
-    }
-
-    for (name, concept) in module
-        .concepts()
-        .into_iter()
-        .filter(|(name, _)| !in_scope(name))
-    {
-        visit(Some(&name), &concept.params);
+/// Every position in `module` that can hold a bound value, item by item — see [`item_positions`]. `None` is the entrypoint, which belongs to the module rather than to any name it declares.
+fn module_positions(
+    module: &Module,
+    in_scope: impl Fn(&Global) -> bool,
+    mut visit: impl FnMut(Option<&Global>, &dyn Carried),
+) {
+    for item in module.items.iter() {
+        item_positions(item, &in_scope, &mut visit);
     }
 }
 
