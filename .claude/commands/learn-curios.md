@@ -51,7 +51,7 @@ Steer around these, and where they hit one say the gap is the language's, not th
 - A name is bound once and never assigned: `x = x + 1` is refused as `Expected ';'`, with no word of `let` (`documentation/syntax.md`, "Local `let`").
 - An effect before the last is sequenced as `let _ = …!;` (`documentation/syntax.md`, "Sequencing and effects").
 - A format takes one call a place, `Fmt/print("% of %\n")(a)(b)` (`curios-std/src/Fmt.crs`).
-- No `+` joins two `Str`, and input and arguments arrive as bytes (`documentation/roadmap/standard-library/201-a-program-reads-text-and-may-fail.md`).
+- A program's arguments arrive as bytes (`curios-std/src/proc.crs`).
 - `3 - 5` is `0` (`documentation/design/arithmetic/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md`).
 - A mismatch prints both sides as the compiler holds them, so `n + n` reads `2 * n` (`documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`).
 

@@ -501,7 +501,7 @@ Postfix `!` is not allowed in types. The token `!=` is an infix operator and is 
 
 Every operation that touches the host — writing a handle, reading a clock, calling a `foreign` function, exiting — has result type `Io(T)`: a *description* of a computation yielding a `T`, not the `T`. Guest cell and channel operations also return `Io(T)`, since they allocate or observe state within the guest instance. Calling one performs nothing, so `let greeting: Io({}) = print("hello");` has printed nothing.
 
-**There is no operation taking an `Io(T)` to a `T`** ([Effects are descriptions, and the carrier has no eliminator](design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
+**There is no operation taking an `Io(T)` to a `T`** ([Effects are descriptions, and the carrier has no eliminator](design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). A description is performed only by closing the program, where the emitted entrypoint forces once what `/std/Program` makes of it ([Declarations and modules](#declarations-and-modules)). So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
 
 `Io/pure` wraps a value as a description performing nothing and `Io/bind` sequences one into another, but postfix `!` reaches `Io` through its `Monad` witness like any other monad. Binding a description does not perform it, and forcing one twice performs it twice:
 
@@ -774,7 +774,24 @@ Each selected arm receives the same definitional refinement that an equivalent n
 
 ## Declarations and modules
 
-An entrypoint consists of zero or more top-level items followed by exactly one final term — the description the program performs. That term has type `Io({})`: a program describes doing something and yielding nothing, so a tail that computes a result must discard it explicitly rather than have the result dropped for it. A module file consists of top-level items only and has no final term.
+An entrypoint consists of zero or more top-level items followed by exactly one final term — the description the program performs. Its top level is an `Io({})` region: a program describes doing something and yielding nothing, and an action sequenced there with `!` is an `Io` action. A module file consists of top-level items only and has no final term.
+
+What closes the program is performed through `/std/Program`, the concept whose `perform` says what a value of a type does as a whole program, so it is a term of any type with a witness there:
+
+- an `Io({})` is the program itself, and no other payload has a witness: a tail that computes a result must discard it explicitly rather than have the result dropped for it;
+- a `Try(Io, E, {})` whose `E` has a `Show` witness is run, and a failure is written to standard error as it is shown and ends the program with status `1`;
+- a `/std/Test` is reported as `curios test` reports one, and ends the program with status `1` where it did not hold.
+
+What closes a program is each tail of its final term: a tail is reached through a local `let` and through a `!` to what follows them, and through a `match` that writes no motive to each of its arms, so two arms may close one program at two types. A `match` whose motive is written is one term of the type it states, and a written goal is asked at `Io({})`. A program that may fail states so on a declaration and closes with its name, the top level being an `Io` region whatever closes it:
+
+```crs
+use /std/{Io, Try, File, Path, print};
+let main: Try(Io, Io/Error, {}) =
+    let text = File/read_all_text(Path/of_str("notes.txt"))!;
+    print(text);
+
+main
+```
 
 ### Top-level definitions
 

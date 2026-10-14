@@ -2,7 +2,7 @@
 
 Working specification for `/learn-curios`, the command that teaches the language inside an agent's session. It meets a developer where the language first answers one: at a program that would have crashed in the language they know, refused with the input that breaks it and accepted once a guard is written. The guard is a proof, and the learner hears so after writing it. It is a slash command of a checkout, for the few people the maintainer picks and instructs. The command is written to that shape and the tree sets its session up; what is left is what sessions show of it.
 
-It is independent of every other spec. [A program reads text and may fail](../standard-library/201-a-program-reads-text-and-may-fail.md) removes lines of what the command steers its learner around.
+It is independent of every other spec.
 
 ## What this builds on
 
@@ -60,7 +60,7 @@ Each settled on 2026-10-13.
 - **The opening is an index guarded one short of its bound.**
 - **The compiler's fits are part of what is taught.** A `?` and what it offers is how a developer asks the compiler, and no report is withheld to keep an answer back.
 - **What holds the command is the learners' own sessions and a few dry runs**, not a cohort of simulated learners.
-- **A learner runs the release cut after this arc.** The maintainer cuts one once this spec and [A program reads text and may fail](../standard-library/201-a-program-reads-text-and-may-fail.md) have landed, so the command, the reference and the compiler are one version; the command asks `./target/release/curios` where the tree has built one and `curios` otherwise.
+- **A learner runs the release cut after this arc.** The maintainer cuts one once this spec has landed, so the command, the reference and the compiler are one version; the command asks `./target/release/curios` where the tree has built one and `curios` otherwise.
 - **The leave to probe is the compiler's `run`, `test` and `wonder`**, under both spellings, and writing under `.learn/`, allowed in the tree's settings for every session of the checkout.
 - **The Curios rule reaches the sources the tree tracks**, and the command names the sections of the reference a teacher reads.
 - **The teacher's list is in the command**, while it is under a dozen lines.

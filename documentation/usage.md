@@ -104,7 +104,7 @@ Everything after the target belongs to the program, not to `curios`, and reaches
 
 A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` argument to a `foreign` function past what the wire carries, a value past what the runtime can hold, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names. A call the runtime refuses where it crosses to what answers it is no panic: `execution failed:` and a sentence naming the declaration and what was wrong, as when a module answers `256` to a `foreign` declared `-> Byte`, or a host cannot answer a call that has no failure to report.
 
-A running program's own exit code passes through untouched.
+A running program's own exit code passes through untouched. A program that closes with a description that may fail, and fails, writes the failure on stderr and exits 1, and one that closes with a test that did not hold reports it and exits 1 ([`documentation/syntax.md`](syntax.md#declarations-and-modules)).
 
 ## `compile`
 
