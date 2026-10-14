@@ -954,7 +954,8 @@ fn suspension_name(operation: SuspensionOperation) -> &'static str {
         SuspensionOperation::Build => "Suspension/build",
         SuspensionOperation::Is => "Suspension/is",
         SuspensionOperation::On => "Suspension/on",
-        SuspensionOperation::Abandon => "Suspension/abandon",
+        SuspensionOperation::Filled => "Suspension/filled",
+        SuspensionOperation::Cancel => "Suspension/cancel",
         SuspensionOperation::Next => "Suspension/next",
         SuspensionOperation::Frames => "Suspension/frames",
     }

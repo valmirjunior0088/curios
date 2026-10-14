@@ -228,7 +228,8 @@ impl Semantics {
                 | SuspensionOperation::Build => LocalBehavior::alloc(Allocation::Immutable),
                 SuspensionOperation::Is
                 | SuspensionOperation::On
-                | SuspensionOperation::Abandon
+                | SuspensionOperation::Filled
+                | SuspensionOperation::Cancel
                 | SuspensionOperation::Next
                 | SuspensionOperation::Frames => LocalBehavior::pure(),
             },

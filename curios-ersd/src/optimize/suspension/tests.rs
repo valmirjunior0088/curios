@@ -21,6 +21,7 @@ fn tested_entry(suspends: bool) -> Module {
                 operation: SuspensionOperation::New,
                 operands: vec![
                     Atom::Value(on),
+                    Atom::Value(on),
                     Atom::Function(description),
                     Atom::Function(description),
                 ],
@@ -54,7 +55,7 @@ fn tested_entry(suspends: bool) -> Module {
         None,
         Rhs::Suspension {
             operation: SuspensionOperation::Build,
-            operands: vec![Atom::Value(answer); 4],
+            operands: vec![Atom::Value(answer); 5],
         },
     );
     let if_true = builder.seal_block(Terminator::Return(Atom::Value(carried)));

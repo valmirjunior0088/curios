@@ -462,7 +462,7 @@ use /std/time/{Instant, Duration};
 let _ = print("slept ")!;
 let start = Instant/now()!;
 let timer = Instant/timer(Instant/add(start, Duration/of_millis(20)))!;
-let woke = Io/suspend([timer], Handle/close(timer), Io/pure(7))!;
+let woke = Io/suspend([timer], [], Handle/close(timer), Io/pure(7))!;
 let slept = Duration/to_millis(Instant/diff(Instant/now()!, start));
 print(Str/concat(Nat/to_str(woke), match slept >= 20 | true => "" | false => " early" end))
 `,
@@ -472,10 +472,10 @@ print(Str/concat(Nat/to_str(woke), match slept >= 20 | true => "" | false => " e
   assert.deepEqual([exitCode, stdout, ticked], [0, "slept 7", true]);
 });
 
-test("a program suspended on no handle runs its abandon, reports the deadlock and ends with code 1", async () => {
+test("a program suspended on no handle runs its cancel, reports the deadlock and ends with code 1", async () => {
   const { exitCode, stdout, stderr } = await execute(`
 use /std/{Io, print};
-let _ = Io/suspend([], print("abandoned"), print("resumed"))!;
+let _ = Io/suspend([], [], print("abandoned"), print("resumed"))!;
 print("after")
 `);
 

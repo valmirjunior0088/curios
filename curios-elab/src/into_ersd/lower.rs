@@ -112,7 +112,8 @@ fn force_entry(
         },
     ));
 
-    Ok(Outcome::Emitted(lowering.yield_to_host(answer)))
+    let polled = lowering.polled(context)?;
+    Ok(Outcome::Emitted(lowering.yield_to_host(answer, polled)))
 }
 
 impl<'s> Lowering<'s> {

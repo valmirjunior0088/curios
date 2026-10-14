@@ -114,16 +114,22 @@ impl Module {
         self.suspension
     }
 
-    /// The suspension's row, registered on first use: the handles waited on, the abandon, what runs first on resuming and the frames, in that order.
+    /// The suspension's row, registered on first use: the handles and the cells waited on, the cancel, what runs first on resuming and the frames, in that order.
     ///
-    /// The handles and the frames are lists, so their slots name the rope base the readers take. The other two stay uniform: what runs first is a description or a nested suspension, and nothing on the suspended path is hot enough to pay for typing the abandon.
+    /// The handles, the cells and the frames are lists, so their slots name the rope base the readers take. The other two stay uniform: what runs first is a description or a nested suspension, and nothing on the suspended path is hot enough to pay for typing the cancel.
     pub fn suspension_row(&mut self) -> RowId {
         if let Some(row) = self.suspension {
             return row;
         }
         let row = self.add_row(Row {
             debug_name: Some("suspension".to_string()),
-            slots: vec![Slot::List, Slot::Opaque, Slot::Opaque, Slot::List],
+            slots: vec![
+                Slot::List,
+                Slot::List,
+                Slot::Opaque,
+                Slot::Opaque,
+                Slot::List,
+            ],
         });
         self.suspension = Some(row);
         row

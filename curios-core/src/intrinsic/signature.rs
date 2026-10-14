@@ -596,17 +596,18 @@ impl Intrinsic {
                 ],
                 io_type(to.clone()),
             ),
-            // A suspension: the handles it waits on, what abandoning it performs, and the rest of it.
+            // A suspension: the handles and the cells it waits on, what cancelling it performs, and the rest of it.
             Self::IoSuspend { result, .. } => sig(
                 vec![
                     Operand::IsType,
                     Operand::At(list_type(handle_type())),
+                    Operand::At(list_type(cell_type(unit()))),
                     Operand::At(io_type(unit())),
                     Operand::At(io_type(result.clone())),
                 ],
                 io_type(result.clone()),
             ),
-            // The one handler of a suspension: `done` takes the action's value, `suspended` its handles, its abandon and its rest.
+            // The one handler of a suspension: `done` takes the action's value, `suspended` its `on`, `filled`, `cancel` and `rest`.
             Self::IoAdvance { from, to, .. } => sig(
                 vec![
                     Operand::IsType,
@@ -619,6 +620,7 @@ impl Intrinsic {
                     Operand::Function {
                         domains: vec![
                             list_type(handle_type()),
+                            list_type(cell_type(unit())),
                             io_type(unit()),
                             io_type(from.clone()),
                         ],

@@ -1,6 +1,6 @@
 //! A program that can suspend, run to its end: its turns advanced one after another, and the host's wait between them.
 //!
-//! The entry answers the first turn and [`ADVANCE`] every later one, each turn the five values [`ADVANCE`] states. What crosses from one turn to the next — the rest, and the abandon a deadlock runs — is held as an owned root, and everything else a turn hands back is read inside a root scope of its own, so a run of any length holds what its present suspension needs and nothing it has finished with.
+//! The entry answers the first turn and [`ADVANCE`] every later one, each turn the five values [`ADVANCE`] states. What crosses from one turn to the next — the rest, and the cancel a deadlock runs — is held as an owned root, and everything else a turn hands back is read inside a root scope of its own, so a run of any length holds what its present suspension needs and nothing it has finished with.
 
 use {
     super::ExitTrap,
@@ -23,19 +23,19 @@ type Turn = (
 /// The advance, taking the description it forces.
 type Advance = TypedFunc<Option<Rooted<AnyRef>>, Turn>;
 
-/// What a turn leaves to do: hand back what the program yielded, or wait on handles before advancing the rest — or the abandon, where nothing can wake it.
+/// What a turn leaves to do: hand back what the program yielded, or wait on handles before advancing the rest — or the cancel, where nothing can wake it.
 enum Turned {
     Yielded(Option<OwnedRooted<AnyRef>>),
     Suspended {
         on: Vec<Handle>,
-        abandon: Option<OwnedRooted<AnyRef>>,
+        cancel: Option<OwnedRooted<AnyRef>>,
         rest: Option<OwnedRooted<AnyRef>>,
     },
 }
 
 /// Run `entry` turn by turn under `host`, answering what the program yielded.
 ///
-/// A suspension on no handle can never be advanced, since no wait could end: its abandon is run to its end, [`DEADLOCK`] is reported on standard error, and the run ends with code `1`, as an exit does.
+/// A suspension on no handle can never be advanced, since no wait could end: its cancel is run to its end, [`DEADLOCK`] is reported on standard error, and the run ends with code `1`, as an exit does.
 pub(super) fn run_turns(
     store: &mut Store<()>,
     instance: &Instance,
@@ -57,8 +57,8 @@ pub(super) fn run_turns(
             Turned::Yielded(value) => {
                 return Ok(value.map(|value| value.to_rooted(&mut *store)));
             }
-            Turned::Suspended { on, abandon, .. } if on.is_empty() => {
-                finish(store, &advance, abandon, host)?;
+            Turned::Suspended { on, cancel, .. } if on.is_empty() => {
+                finish(store, &advance, cancel, host)?;
                 // The report is the host's last word on the run, and a stream that refuses it leaves nothing to say why.
                 let _ = host.handle_write(Handle::Stderr, DEADLOCK.as_bytes().to_vec());
 
@@ -85,14 +85,14 @@ fn step(
     took(&mut scope, turn)
 }
 
-/// Run `abandon` to its end, waiting where it suspends. One that suspends on no handle in turn is left where it stands, since nothing could wake it either.
+/// Run `cancel` to its end, waiting where it suspends. One that suspends on no handle in turn is left where it stands, since nothing could wake it either.
 fn finish(
     store: &mut Store<()>,
     advance: &Advance,
-    abandon: Option<OwnedRooted<AnyRef>>,
+    cancel: Option<OwnedRooted<AnyRef>>,
     host: &(dyn HostOps + Send + Sync),
 ) -> Result<(), wasmtime::Error> {
-    let mut turned = step(store, advance, abandon)?;
+    let mut turned = step(store, advance, cancel)?;
 
     loop {
         turned = match turned {
@@ -114,7 +114,7 @@ fn waited(host: &(dyn HostOps + Send + Sync), on: Vec<Handle>) -> Result<(), was
 /// What `turn` leaves to do, its references owned past the scope it was read in.
 fn took(
     scope: &mut RootScope<&mut Store<()>>,
-    (suspended, value, on, abandon, rest): Turn,
+    (suspended, value, on, cancel, rest): Turn,
 ) -> Result<Turned, wasmtime::Error> {
     let mut owned = |reference: Option<Rooted<AnyRef>>| {
         reference
@@ -125,12 +125,12 @@ fn took(
     match suspended {
         0 => Ok(Turned::Yielded(owned(value)?)),
         _ => {
-            let abandon = owned(abandon)?;
+            let cancel = owned(cancel)?;
             let rest = owned(rest)?;
 
             Ok(Turned::Suspended {
                 on: handles(&mut *scope, on)?,
-                abandon,
+                cancel,
                 rest,
             })
         }

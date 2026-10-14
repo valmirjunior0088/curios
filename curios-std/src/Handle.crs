@@ -148,10 +148,10 @@ let finishing(h: Handle) -> Io(Result(Nat, {})) =
         | false => Result/failure(status)
         end);
 
---- Until `h` is ready for `interest`, or has failed or hung up: a suspension on a watch of it, the watch closed whether the wait ends or is abandoned.
+--- Until `h` is ready for `interest`, or has failed or hung up: a suspension on a watch of it, the watch closed whether the wait ends or is cancelled.
 let awaited(h: Handle, interest: Interest) -> Io({}) =
     let w = watch(h, interest)!;
-    Io/suspend([w], close(w), close(w));
+    Io/suspend([w], [], close(w), close(w));
 
 --- Up to `n` bytes, waited for on this program's own behalf: a host that would block is waited on until it would not.
 let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =

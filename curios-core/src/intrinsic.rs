@@ -421,16 +421,17 @@ pub enum Intrinsic<T = Term> {
         action: T,
         continuation: T,
     },
-    // (@A, on : List(Handle), abandon : Io({}), rest : Io(A)) -> Io(A): the description that suspends until one of `on` may be ready and then goes on as `rest`, and that whoever drops it instead cleans up by performing `abandon`.
+    // (@A, on : List(Handle), filled : List(Cell({})), cancel : Io({}), rest : Io(A)) -> Io(A): the description that suspends until a handle of `on` may be ready or a cell of `filled` is filled and then goes on as `rest`, and that whoever drops it instead cleans up by performing `cancel`.
     //
-    // A suspension waits on nothing itself: whoever advances the description decides what it means — the host waits on `on`, a combinator runs something else first. Inert like the rest: it reduces its operands and rebuilds.
+    // A suspension waits on nothing itself: whoever advances the description decides what it means — the host waits on `on`, a combinator runs something else first. Only the program fills a cell, so the host, which waits while nothing of the program runs, never reads one. Inert like the rest: it reduces its operands and rebuilds.
     IoSuspend {
         result: T,
         on: T,
-        abandon: T,
+        filled: T,
+        cancel: T,
         rest: T,
     },
-    // (@A, @R, action : Io(A), done : (A) -> Io(R), suspended : (List(Handle), Io({}), Io(A)) -> Io(R)) -> Io(R): the description that performs `action` and hands its value to `done`, or, where `action` suspends, its handles, its abandon and its rest to `suspended`.
+    // (@A, @R, action : Io(A), done : (A) -> Io(R), suspended : (List(Handle), List(Cell({})), Io({}), Io(A)) -> Io(R)) -> Io(R): the description that performs `action` and hands its value to `done`, or, where `action` suspends, its `on`, `filled`, `cancel` and `rest` to `suspended`.
     //
     // The one place a suspension is caught rather than passed out. It eliminates nothing: what it answers is an `Io`.
     IoAdvance {
@@ -802,18 +803,20 @@ impl Intrinsic {
         }
     }
 
-    /// An `IoSuspend` node from a term-shaped result type, the handles it waits on, its abandon, and its rest.
-    pub fn io_suspend<A, O, B, R>(a: A, on: O, abandon: B, rest: R) -> Self
+    /// An `IoSuspend` node from a term-shaped result type, the handles and the cells it waits on, its cancel, and its rest.
+    pub fn io_suspend<A, O, W, B, R>(a: A, on: O, filled: W, cancel: B, rest: R) -> Self
     where
         A: Into<Term>,
         O: Into<Term>,
+        W: Into<Term>,
         B: Into<Term>,
         R: Into<Term>,
     {
         Self::IoSuspend {
             result: a.into(),
             on: on.into(),
-            abandon: abandon.into(),
+            filled: filled.into(),
+            cancel: cancel.into(),
             rest: rest.into(),
         }
     }
@@ -1022,12 +1025,6 @@ impl Intrinsic {
                 to: b,
                 action: c,
                 continuation: d,
-            }
-            | Intrinsic::IoSuspend {
-                result: a,
-                on: b,
-                abandon: c,
-                rest: d,
             } => {
                 visit(a);
                 visit(b);
@@ -1035,7 +1032,14 @@ impl Intrinsic {
                 visit(d);
             }
 
-            Intrinsic::IoAdvance {
+            Intrinsic::IoSuspend {
+                result: a,
+                on: b,
+                filled: c,
+                cancel: d,
+                rest: e,
+            }
+            | Intrinsic::IoAdvance {
                 from: a,
                 to: b,
                 action: c,
@@ -1695,12 +1699,14 @@ impl Intrinsic {
             Intrinsic::IoSuspend {
                 result,
                 on,
-                abandon,
+                filled,
+                cancel,
                 rest,
             } => Intrinsic::IoSuspend {
                 result: visit.visit_subterm(result),
                 on: visit.visit_subterm(on),
-                abandon: visit.visit_subterm(abandon),
+                filled: visit.visit_subterm(filled),
+                cancel: visit.visit_subterm(cancel),
                 rest: visit.visit_subterm(rest),
             },
             Intrinsic::IoAdvance {
@@ -2144,12 +2150,14 @@ impl<T> Intrinsic<T> {
             Intrinsic::IoSuspend {
                 result,
                 on,
-                abandon,
+                filled,
+                cancel,
                 rest,
             } => Intrinsic::IoSuspend {
                 result: operand(result)?,
                 on: operand(on)?,
-                abandon: operand(abandon)?,
+                filled: operand(filled)?,
+                cancel: operand(cancel)?,
                 rest: operand(rest)?,
             },
             Intrinsic::IoAdvance {

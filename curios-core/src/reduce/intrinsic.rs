@@ -2248,15 +2248,17 @@ pub fn reduce_intrinsic(
         Intrinsic::IoSuspend {
             result,
             on,
-            abandon,
+            filled,
+            cancel,
             rest,
         } => {
             let result = reducer.reduce(result.clone())?;
             let on = reducer.reduce(on.clone())?;
-            let abandon = reducer.reduce(abandon.clone())?;
+            let filled = reducer.reduce(filled.clone())?;
+            let cancel = reducer.reduce(cancel.clone())?;
             let rest = reducer.reduce(rest.clone())?;
             Ok(Subterm::Intrinsic(Intrinsic::io_suspend(
-                result, on, abandon, rest,
+                result, on, filled, cancel, rest,
             )))
         }
         Intrinsic::IoAdvance {

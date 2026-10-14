@@ -1137,9 +1137,10 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::IoSuspend {
             result,
             on,
-            abandon,
+            filled,
+            cancel,
             rest,
-        } => print_intrinsic_call("Io/suspend", vec![result], vec![on, abandon, rest]),
+        } => print_intrinsic_call("Io/suspend", vec![result], vec![on, filled, cancel, rest]),
         Intrinsic::IoAdvance {
             from,
             to,

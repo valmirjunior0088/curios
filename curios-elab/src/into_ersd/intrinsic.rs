@@ -65,7 +65,7 @@ pub(super) fn demanded_type(context: &mut Retyping, demand: &Operand) -> Term {
 
 impl Lowering<'_> {
     /// Resolve an outcome through the declaration's ordinary registered layout.
-    fn outcome_constructor(
+    pub(super) fn outcome_constructor(
         &mut self,
         context: &mut Retyping,
         family: SyntaxName,
@@ -512,16 +512,17 @@ pub(super) fn erase_intrinsic(
                 ))
             })
         }
-        // The description that suspends on `on`: its performance is the suspension, and whatever forced it decides what happens next.
+        // The description that suspends on `on` and `filled`: its performance is the suspension, and whatever forced it decides what happens next.
         Intrinsic::IoSuspend { .. } => {
-            let [on, abandon, rest] = places(computed(context, intrinsic));
+            let [on, filled, cancel, rest] = places(computed(context, intrinsic));
             let on = emitted!(lowering.demanded(context, &on)?);
-            let abandon = emitted!(lowering.demanded(context, &abandon)?);
+            let filled = emitted!(lowering.demanded(context, &filled)?);
+            let cancel = emitted!(lowering.demanded(context, &cancel)?);
             let rest = emitted!(lowering.demanded(context, &rest)?);
 
             lowering.thunk(hint.or(Some("io/suspend")), move |lowering| {
                 Ok(Outcome::Emitted(
-                    lowering.perform_suspend(on, abandon, rest),
+                    lowering.perform_suspend(on, filled, cancel, rest),
                 ))
             })
         }

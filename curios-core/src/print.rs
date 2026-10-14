@@ -2149,12 +2149,13 @@ pub fn intrinsic_form(intrinsic: Intrinsic, grouped: bool) -> IntrinsicForm {
         Intrinsic::IoSuspend {
             result,
             on,
-            abandon,
+            filled,
+            cancel,
             rest,
         } => IntrinsicForm::Call {
             path: "Io/suspend".into(),
             implicits: vec![result],
-            explicits: vec![on, abandon, rest],
+            explicits: vec![on, filled, cancel, rest],
         },
         Intrinsic::IoAdvance {
             from,

@@ -4,7 +4,19 @@
 //!
 //! The resume loop has no definition a description could name, so it is emitted where it is needed: beside each `Io/advance`, and once beside the entry, which hands the host a suspension it can advance without knowing its frames. A program that never builds a suspension never reaches either, since `curios-ersd` takes the value arm of every test in it before anything is optimized.
 
-use super::Lowering;
+use {
+    super::{Error, Lowering, Retyping},
+    curios_abi::stdio,
+    curios_core::Global,
+};
+
+/// What a cell's poll answers: `/std/Option`'s family, with `some` where the cell is filled and `none` where it is not.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Polled {
+    family: curios_ersd::FamilyId,
+    some: curios_ersd::ConstructorId,
+    none: curios_ersd::ConstructorId,
+}
 
 impl Lowering<'_> {
     /// Bind `rhs` in the innermost open block and hand back its value.
@@ -63,24 +75,27 @@ impl Lowering<'_> {
         })
     }
 
-    /// The wait and the abandon of `suspension`, read in that order.
-    fn waiting(&mut self, suspension: curios_ersd::Atom) -> [curios_ersd::Atom; 2] {
+    /// The handles, the cells and the cancel of `suspension`, read in that order.
+    fn waiting(&mut self, suspension: curios_ersd::Atom) -> [curios_ersd::Atom; 3] {
         [
-            self.suspension(curios_ersd::SuspensionOperation::On, vec![suspension]),
-            self.suspension(curios_ersd::SuspensionOperation::Abandon, vec![suspension]),
+            curios_ersd::SuspensionOperation::On,
+            curios_ersd::SuspensionOperation::Filled,
+            curios_ersd::SuspensionOperation::Cancel,
         ]
+        .map(|operation| self.suspension(operation, vec![suspension]))
     }
 
-    /// The performance of `Io/suspend(on, abandon, rest)`: the suspension itself.
+    /// The performance of `Io/suspend(on, filled, cancel, rest)`: the suspension itself.
     pub(super) fn perform_suspend(
         &mut self,
         on: curios_ersd::Atom,
-        abandon: curios_ersd::Atom,
+        filled: curios_ersd::Atom,
+        cancel: curios_ersd::Atom,
         rest: curios_ersd::Atom,
     ) -> curios_ersd::Atom {
         self.suspension(
             curios_ersd::SuspensionOperation::New,
-            vec![on, abandon, rest],
+            vec![on, filled, cancel, rest],
         )
     }
 
@@ -106,7 +121,7 @@ impl Lowering<'_> {
         )
     }
 
-    /// The performance of `Io/advance(action, done, suspended)`: force the action and hand its value to `done`, or the wait, the abandon and a description resuming it to `suspended`, forcing the description either makes in tail position.
+    /// The performance of `Io/advance(action, done, suspended)`: force the action and hand its value to `done`, or the handles, the cells, the cancel and a description resuming it to `suspended`, forcing the description either makes in tail position.
     pub(super) fn perform_advance(
         &mut self,
         action: curios_ersd::Atom,
@@ -118,11 +133,11 @@ impl Lowering<'_> {
             answer,
             |lowering| {
                 let resume = lowering.resumption();
-                let [on, abandon] = lowering.waiting(answer);
+                let [on, filled, cancel] = lowering.waiting(answer);
                 let rest = lowering.description("io/rest", |lowering| {
                     lowering.applied(curios_ersd::Atom::Function(resume), vec![answer])
                 });
-                let next = lowering.applied(suspended, vec![on, abandon, rest]);
+                let next = lowering.applied(suspended, vec![on, filled, cancel, rest]);
                 lowering.forced(next)
             },
             |lowering| {
@@ -132,17 +147,90 @@ impl Lowering<'_> {
         )
     }
 
-    /// What the entry hands the host for `answer`, the forced program: its value, or a suspension the host advances without knowing its frames.
-    pub(super) fn yield_to_host(&mut self, answer: curios_ersd::Atom) -> curios_ersd::Atom {
+    /// What the entry hands the host for `answer`, the forced program: its value, or a suspension the host advances without knowing its frames or reading its cells. `polled` is how a cell's poll answers.
+    pub(super) fn yield_to_host(
+        &mut self,
+        answer: curios_ersd::Atom,
+        polled: Polled,
+    ) -> curios_ersd::Atom {
         self.on_suspension(
             answer,
             |lowering| {
                 let resume = lowering.resumption();
-                let surface = lowering.surfacing(resume);
+                let surface = lowering.surfacing(resume, polled);
                 lowering.applied(curios_ersd::Atom::Function(surface), vec![answer])
             },
             |_| answer,
         )
+    }
+
+    /// The family of `/std/Option` and its two constructors, which a cell's poll answers.
+    pub(super) fn polled(&mut self, context: &mut Retyping) -> Result<Polled, Error> {
+        let syntax = context.syntax().option;
+        Ok(Polled {
+            family: self
+                .induct_row(context, &Global::Authored(syntax.family.qualifier()))?
+                .family,
+            some: self.outcome_constructor(context, syntax.family, syntax.some)?,
+            none: self.outcome_constructor(context, syntax.family, syntax.none)?,
+        })
+    }
+
+    /// `answer`, or where it is a suspension, what `surface` makes of it.
+    fn surfaced(
+        &mut self,
+        surface: curios_ersd::FunctionId,
+        answer: curios_ersd::Atom,
+    ) -> curios_ersd::Atom {
+        self.on_suspension(
+            answer,
+            |lowering| lowering.applied(curios_ersd::Atom::Function(surface), vec![answer]),
+            |_| answer,
+        )
+    }
+
+    /// Whether a cell of `cells` is filled: a fold over them, polling each.
+    fn any_filled(&mut self, cells: curios_ersd::Atom, polled: Polled) -> curios_ersd::Atom {
+        let element = self.builder.value(None);
+        let suffix = self.builder.value(None);
+        let accumulator = self.builder.value(None);
+        let empty = self.block(|lowering| lowering.boolean(false));
+        let block = self.block(|lowering| {
+            let poll = lowering.let_atom(curios_ersd::Rhs::Cell {
+                operation: curios_ersd::CellOperation::Poll {
+                    some: polled.some,
+                    none: polled.none,
+                },
+                operands: vec![curios_ersd::Atom::Value(element)],
+            });
+            let unfilled = lowering.block(|_| curios_ersd::Atom::Value(accumulator));
+            let filled = lowering.block(|lowering| lowering.boolean(true));
+            lowering.let_atom(curios_ersd::Rhs::MatchVariant {
+                family: polled.family,
+                scrutinee: poll,
+                arms: vec![curios_ersd::VariantArm {
+                    constructor: polled.none,
+                    bindings: Vec::new(),
+                    block: unfilled,
+                }],
+                default: Some(filled),
+            })
+        });
+        self.let_atom(curios_ersd::Rhs::FoldSequence {
+            grain: curios_ersd::SequenceGrain::List,
+            scrutinee: cells,
+            empty,
+            step: curios_ersd::FoldSequenceStep {
+                element,
+                suffix,
+                accumulator,
+                block,
+            },
+        })
+    }
+
+    fn boolean(&mut self, value: bool) -> curios_ersd::Atom {
+        curios_ersd::Atom::Constant(self.builder.constant(curios_ersd::Constant::Bool(value)))
     }
 
     /// Define a description named `name` in the innermost open block, its performance what `body` computes, and hand it back.
@@ -200,10 +288,16 @@ impl Lowering<'_> {
                 lowering.on_suspension(
                     answered,
                     |lowering| {
-                        let [on, abandon] = lowering.waiting(answered);
+                        let [on, filled, cancel] = lowering.waiting(answered);
                         lowering.suspension(
                             curios_ersd::SuspensionOperation::Build,
-                            vec![on, abandon, answered, curios_ersd::Atom::Value(pending)],
+                            vec![
+                                on,
+                                filled,
+                                cancel,
+                                answered,
+                                curios_ersd::Atom::Value(pending),
+                            ],
                         )
                     },
                     |lowering| {
@@ -239,28 +333,52 @@ impl Lowering<'_> {
         resume
     }
 
-    /// Define `surface(suspension)` in the innermost open block: the suspension's wait and abandon around no frames, with a rest that resumes it through `resume` and surfaces in turn whatever suspension that answers.
-    fn surfacing(&mut self, resume: curios_ersd::FunctionId) -> curios_ersd::FunctionId {
+    /// Define `surface(suspension)` in the innermost open block: the suspension around no frames, with a rest that resumes it through `resume` and a cancel that performs its own, each surfacing in turn whatever suspension it answers.
+    ///
+    /// The host reads no cell, so a suspension whose cell is already filled is surfaced on the ready token alone: nothing of the program runs while the host waits, so a cell still empty stays so, and one filled means the rest can go on at once.
+    fn surfacing(
+        &mut self,
+        resume: curios_ersd::FunctionId,
+        polled: Polled,
+    ) -> curios_ersd::FunctionId {
         let surface = self.builder.reserve_function();
         let suspension = self.builder.value(None);
         let held = curios_ersd::Atom::Value(suspension);
         let body = self.block(|lowering| {
             let rest = lowering.description("io/rest", |lowering| {
                 let answer = lowering.applied(curios_ersd::Atom::Function(resume), vec![held]);
-                lowering.on_suspension(
-                    answer,
-                    |lowering| lowering.applied(curios_ersd::Atom::Function(surface), vec![answer]),
-                    |_| answer,
-                )
+                lowering.surfaced(surface, answer)
             });
-            let [on, abandon] = lowering.waiting(held);
+            let [on, filled, cancel] = lowering.waiting(held);
+            let cancel = lowering.description("io/cancel", |lowering| {
+                let answer = lowering.forced(cancel);
+                lowering.surfaced(surface, answer)
+            });
+            let woken = lowering.any_filled(filled, polled);
+            let waiting = lowering.block(|_| on);
+            let ready = lowering.block(|lowering| {
+                let token = curios_ersd::Atom::Constant(
+                    lowering
+                        .builder
+                        .constant(curios_ersd::Constant::Handle(stdio::READY)),
+                );
+                lowering.let_atom(curios_ersd::Rhs::Sequence {
+                    operation: curios_ersd::SequenceOp::ListBuild,
+                    operands: vec![token],
+                })
+            });
+            let on = lowering.let_atom(curios_ersd::Rhs::SwitchBool {
+                scrutinee: woken,
+                if_false: waiting,
+                if_true: ready,
+            });
             let none = lowering.let_atom(curios_ersd::Rhs::Sequence {
                 operation: curios_ersd::SequenceOp::ListBuild,
                 operands: Vec::new(),
             });
             lowering.suspension(
                 curios_ersd::SuspensionOperation::Build,
-                vec![on, abandon, rest, none],
+                vec![on, filled, cancel, rest, none],
             )
         });
         self.builder.define_function(

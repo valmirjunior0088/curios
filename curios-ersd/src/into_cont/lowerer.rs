@@ -786,7 +786,8 @@ impl Lowerer<'_> {
         let continuation = module.add_value(None);
         let built = module.add_value(None);
         let appended = module.add_value(None);
-        let parts = [(); 4].map(|()| module.add_value(None));
+        let parts = [(); 5].map(|()| module.add_value(None));
+        let [kept @ .., frames] = parts;
 
         let returned = self
             .emitter
@@ -796,12 +797,10 @@ impl Lowerer<'_> {
             result: built,
             value: curios_cont::ValueExpr::Row(
                 row,
-                vec![
-                    curios_cont::Atom::Value(parts[0]),
-                    curios_cont::Atom::Value(parts[1]),
-                    curios_cont::Atom::Value(parts[2]),
-                    curios_cont::Atom::Value(appended),
-                ],
+                kept.into_iter()
+                    .chain([appended])
+                    .map(curios_cont::Atom::Value)
+                    .collect(),
             ),
             next: returned,
         });
@@ -809,7 +808,7 @@ impl Lowerer<'_> {
             result: appended,
             op: curios_cont::Intrinsic::ListAppend,
             args: vec![
-                curios_cont::Atom::Value(parts[3]),
+                curios_cont::Atom::Value(frames),
                 curios_cont::Atom::Value(continuation),
             ],
             next: rebuilt,
@@ -882,9 +881,10 @@ impl Lowerer<'_> {
             }
             SuspensionOperation::Is => curios_cont::Intrinsic::IsRow(row),
             SuspensionOperation::On => curios_cont::Intrinsic::RowGet(row, 0),
-            SuspensionOperation::Abandon => curios_cont::Intrinsic::RowGet(row, 1),
-            SuspensionOperation::Next => curios_cont::Intrinsic::RowGet(row, 2),
-            SuspensionOperation::Frames => curios_cont::Intrinsic::RowGet(row, 3),
+            SuspensionOperation::Filled => curios_cont::Intrinsic::RowGet(row, 1),
+            SuspensionOperation::Cancel => curios_cont::Intrinsic::RowGet(row, 2),
+            SuspensionOperation::Next => curios_cont::Intrinsic::RowGet(row, 3),
+            SuspensionOperation::Frames => curios_cont::Intrinsic::RowGet(row, 4),
         };
         self.straight(site, move |result, next| curios_cont::Node::LetIntrinsic {
             result,

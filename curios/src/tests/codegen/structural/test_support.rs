@@ -356,15 +356,17 @@ pub(in crate::tests::codegen) fn user_allocations<'a>(wat: &'a str, needle: &str
 
 /// The names of the user's own emitted functions whose bodies contain `needle`.
 ///
-/// The counterpart to [`user_allocations`] for everything an instruction does not name itself. Three kinds of function are the effect boundary rather than the user's code: one carrying the `$io/…` hint of the thunk it was minted for, `$func/main`, which forces the program's own description exactly once because a program *is* a description, and an `$async/…` export of a program that can suspend, which forces the description the host hands back.
+/// The counterpart to [`user_allocations`] for everything an instruction does not name itself. Three kinds of function are the effect boundary rather than the user's code: one carrying the `$io/…` hint of the thunk it was minted for, `$func/main`, which forces the program's own description exactly once because a program *is* a description, and a turn of a program that can suspend — `$suspension/main` and `$suspension/advance`, which force the description the host hands back, and `$suspension/turn`, which takes apart what it answered.
 pub(super) fn user_functions_with<'a>(functions: &'a [Function<'a>], needle: &str) -> Vec<&'a str> {
     functions
         .iter()
         .filter(|function| function.body.contains(needle))
         .filter(|function| {
             !function.name.contains("$io/")
-                && function.name != "$func/main"
-                && !function.name.starts_with("$async/")
+                && !matches!(
+                    function.name,
+                    "$func/main" | "$suspension/main" | "$suspension/advance" | "$suspension/turn"
+                )
         })
         .map(|function| function.name)
         .collect()

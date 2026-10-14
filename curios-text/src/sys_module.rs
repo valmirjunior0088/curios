@@ -973,25 +973,26 @@ fn io_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         ),
         documented(
             &[
-                "The description that suspends until one of `on` may be ready, then goes on as `rest`; whoever drops it instead performs `abandon`.",
+                "The description that suspends until a handle of `on` may be ready or a cell of `filled` is filled, then goes on as `rest`; whoever drops it instead performs `cancel`.",
                 "",
-                "It waits on nothing itself: whoever advances it decides what a suspension means. The host waits on `on` and advances `rest`; a combinator runs something else first, or drops it after performing `abandon`. An empty `on` waits until something else has run.",
+                "It waits on nothing itself: whoever advances it decides what a suspension means. The host waits on `on` and advances `rest`; a combinator runs something else first, or drops it after performing `cancel`. A cell is filled by the program alone, so the host, which waits while nothing of the program runs, never reads one: a suspension on no handle that reaches it is a deadlock.",
             ],
             operation(
                 "suspend",
-                &["T", "on", "abandon", "rest"],
+                &["T", "on", "filled", "cancel", "rest"],
                 syntax,
                 Intrinsic::IoSuspend {
                     result: name("T"),
                     on: name("on"),
-                    abandon: name("abandon"),
+                    filled: name("filled"),
+                    cancel: name("cancel"),
                     rest: name("rest"),
                 },
             ),
         ),
         documented(
             &[
-                "The description that performs `m` and hands its value to `done`, or, where `m` suspends, its handles, its abandon and its rest to `suspended`: the one place a suspension is caught rather than passed out.",
+                "The description that performs `m` and hands its value to `done`, or, where `m` suspends, its `on`, `filled`, `cancel` and `rest` to `suspended`: the one place a suspension is caught rather than passed out.",
             ],
             operation(
                 "advance",

@@ -6,7 +6,7 @@
 //
 // The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. The only handles it mints are watches and timers, what a program suspends on. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
 //
-// A program that can suspend exports `func/advance` beside its entry, and both answer turns: whether it suspended, what it yielded, the handles it waits on, its abandon and its rest. The run advances turn after turn, awaiting a timer between them, so the event loop runs while the program sleeps.
+// A program that can suspend exports `func/advance` beside its entry, and both answer turns: whether it suspended, what it yielded, the handles it waits on, its cancel and its rest. The run advances turn after turn, awaiting a timer between them, so the event loop runs while the program sleeps.
 
 /** Thrown by the `proc_exit` import to unwind the wasm stack with an exit code. */
 export class ExitSignal extends Error {
@@ -181,7 +181,7 @@ export async function run(config) {
     tls_start: denied,
     tls_server_config: deniedHandle,
     tls_start_server: denied,
-    // Readiness in the playground: the standard streams are always ready — stdin is at its end, which a read answers at once, and the output streams accept everything — and any other handle names nothing, so it reports its failure in whichever list it stands, which wakes whatever waits on it into the call that says why.
+    // Readiness in the playground: the standard streams are always ready — stdin is at its end, which a read answers at once, and the output streams accept everything — and any other handle names nothing, so it reports its failure in whichever list it stands, which filled whatever waits on it into the call that says why.
     // A list's reports cross as one byte per handle, in the list's order.
     handle_poll: (readers, writers, _timeout) => {
       const reported = (handles) => {
@@ -577,9 +577,9 @@ export async function run(config) {
     }
   };
 
-  // Run an abandon to its end, waiting where it suspends — but not where it suspends on no handle in turn, since nothing could wake it either.
-  const finished = async (advance, abandon) => {
-    let turn = advance(abandon);
+  // Run a cancel to its end, waiting where it suspends — but not where it suspends on no handle in turn, since nothing could wake it either.
+  const finished = async (advance, cancel) => {
+    let turn = advance(cancel);
 
     while (turn[0] === 1) {
       const on = waits(turn[2]);
@@ -610,7 +610,7 @@ export async function run(config) {
     const advance = instance.exports["func/advance"];
     let turn = instance.exports["func/main"]();
 
-    // A program that cannot suspend answers what it yields, which nothing here reads. One that can is advanced until it yields; where it suspends on no handle, its abandon runs to its end and the deadlock is reported, ending the run as an exit with code 1 would.
+    // A program that cannot suspend answers what it yields, which nothing here reads. One that can is advanced until it yields; where it suspends on no handle, its cancel runs to its end and the deadlock is reported, ending the run as an exit with code 1 would.
     while (advance !== undefined && turn[0] === 1) {
       const on = waits(turn[2]);
 
