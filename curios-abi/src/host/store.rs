@@ -314,8 +314,17 @@ pub const PANIC: &str = "panic";
 
 /// The one export both ends link on: the entrypoint the emitter exports and the runtime looks up to run a program. It spells the entry function's own name under the compiler's naming scheme, so a module dump reads as it links — but the name is a contract stated here, not a consequence of that scheme or of the hint the entry happens to carry, so no debug name decides a wire string.
 ///
-/// The entry takes nothing and hands back what the program's description yields, as one reference. A program's yields the unit, which no host reads. A test program's yields a `Bool`, whether every test it ran held, as the reference a `Bool` is boxed into: the i31 `0` or `1`.
+/// The entry takes nothing and hands back what the program's description yields, as one reference. A program's yields the unit, which no host reads. A test program's yields a `Bool`, whether every test it ran held, as the reference a `Bool` is boxed into: the i31 `0` or `1`. A program that can suspend answers its first turn here instead, as [`ADVANCE`] states.
 pub const ENTRY: &str = "func/main";
+
+/// The export a program that can suspend is advanced through, beside [`ENTRY`]: it takes a description the host was handed — a suspension's rest or its abandon — forces it, and answers the next turn.
+///
+/// A program that can suspend answers turns at both: five values, whether it suspended (an `i32`, `1` when it did), what the program yielded (null when it suspended), the handles it waits on as the flat payload a `List(Handle)` crosses the boundary as, the description abandoning it and the description resuming it (the last three null when it did not suspend). A program that cannot exports [`ENTRY`] alone, answering one reference as it always has.
+pub const ADVANCE: &str = "func/advance";
+
+/// What a host reports on standard error when a program that can suspend suspends on no handle at the top — waiting for something beside it to run, where nothing is beside it — once it has run the suspension's abandon to its end. The run then ends with code `1`.
+pub const DEADLOCK: &str =
+    "deadlock: the program is waiting on no handle, and nothing else can wake it\n";
 
 impl Namespace {
     /// The wasm import string: what the emitter stamps on the import and the runtime linker matches.

@@ -1,6 +1,6 @@
 //! The Ersd transformations — the ones whose leverage is semantic, and nothing else.
 //!
-//! Pruning, compile-time partial evaluation with literal-spine specialization beside it, and the monoid worker/wrapper rebase. All structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to Cont, which runs after the lowering; Ersd's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base what would exhaust the runtime stack (worker/wrapper).
+//! Pruning, the fold of suspension tests in a program that cannot suspend, compile-time partial evaluation with literal-spine specialization beside it, and the monoid worker/wrapper rebase. All structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to Cont, which runs after the lowering; Ersd's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base what would exhaust the runtime stack (worker/wrapper).
 
 mod prune;
 use prune::*;
@@ -11,12 +11,15 @@ pub(crate) use evaluate::*;
 mod rebase;
 use rebase::*;
 
+mod suspension;
+use suspension::*;
+
 use super::{Analysis, Mark, Module};
 
 /// The rounds a fold of closed applications runs at most. A curried chain folds one application per round. A cap the loop reaches, not a bound it stays under: every program in `programs/` installs replacements in all of them, because each reified closure copy carries closed applications of its own into the next round.
 const ROUNDS: usize = 8;
 
-/// Run the Ersd transformations in place: prune, evaluate, specialize, rebase, and prune again (evaluation and specialization strand the code they collapse). The module must verify on entry; the compaction after the final prune re-verifies on exit. Taking a match arm during specialization orphans the untaken arms' values until that final prune tombstones them, so no intermediate verify runs after specialization.
+/// Run the Ersd transformations in place: prune, fold the suspension tests of a program that cannot suspend and prune what they alone reached, evaluate, specialize, rebase, and prune again (evaluation and specialization strand the code they collapse). The module must verify on entry; the compaction after the final prune re-verifies on exit. Taking a match arm during specialization orphans the untaken arms' values until that final prune tombstones them, so no intermediate verify runs after specialization.
 ///
 /// Each prune is followed by a compaction whose [`Compaction`](super::Compaction) is dropped, so this must run on a module nothing else indexes into: the pipeline hands it the module `ErasedProgram::into_module` released, a linked program no fragment holds an identity of.
 pub fn optimize(module: &mut Module) {
@@ -35,6 +38,12 @@ pub fn optimize_verified(module: &mut Module) {
     let analysis = Analysis::analyze(module);
     prune_unreachable(module, &analysis);
     compact(module);
+    // Before anything reads the arms a fold orphans: the evaluation's own verification refuses an orphan, and its budgets would count one.
+    if fold_suspension_tests(module) {
+        let analysis = Analysis::analyze(module);
+        prune_unreachable(module, &analysis);
+        compact(module);
+    }
     // What keeps the rounds from multiplying the module is each round's reification drawing on one shared node pool, and the prune after the loop drops the copies nothing kept.
     for _ in 0..ROUNDS {
         if !evaluate_closed_terms(module) {

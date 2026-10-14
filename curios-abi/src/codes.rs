@@ -188,6 +188,8 @@ code_sets! {
         STDOUT = 1;
         /// Standard error.
         STDERR = 2;
+        /// The handle that is always ready: no host mints it or files anything under it, so every wait on it ends at once. What a description suspends on to let what waits beside it run.
+        READY = 3;
     }
 
     /// The errnos named here rather than passed through from an operating system, each the value both release targets give it: what a host with no operating system of its own — the mock host, the browser — answers in one's place, and what the standard library raises for an argument it refuses before the call. `/sys/errno` mirrors the one the standard library raises, so that failure is one status whichever side names it.

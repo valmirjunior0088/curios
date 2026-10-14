@@ -23,7 +23,8 @@ impl Rhs {
             | Self::Cell { operands, .. }
             | Self::Channel { operands, .. }
             | Self::Foreign { operands, .. }
-            | Self::Intrinsic { operands, .. } => operands.clone(),
+            | Self::Intrinsic { operands, .. }
+            | Self::Suspension { operands, .. } => operands.clone(),
             Self::Product { fields, .. } | Self::Construct { fields, .. } => fields.clone(),
             Self::Project { product, .. } => vec![*product],
             Self::MatchVariant { scrutinee, .. }
@@ -48,7 +49,8 @@ impl Rhs {
             | Self::Cell { .. }
             | Self::Channel { .. }
             | Self::Foreign { .. }
-            | Self::Intrinsic { .. } => Vec::new(),
+            | Self::Intrinsic { .. }
+            | Self::Suspension { .. } => Vec::new(),
             Self::MatchVariant { arms, default, .. } => {
                 arms.iter().map(|arm| arm.block).chain(*default).collect()
             }

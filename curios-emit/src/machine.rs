@@ -168,6 +168,8 @@ pub(crate) struct MachineModule {
     function_hints: BTreeMap<curios_cont::FunctionId, String>,
     /// Every nominal row the Cont module declared, with its debug name and slot carriers — carried whole rather than collected from constructions, so a row whose constructions were all optimized away still declares a type for the projections that may outlive them.
     rows: Vec<(curios_cont::RowId, curios_cont::Row)>,
+    /// The row a suspension is built as, where the program can suspend — the IR module's own word for it.
+    suspension: Option<curios_cont::RowId>,
 }
 
 impl MachineModule {
@@ -178,6 +180,10 @@ impl MachineModule {
 
     pub(crate) fn rows(&self) -> &[(curios_cont::RowId, curios_cont::Row)] {
         &self.rows
+    }
+
+    pub(crate) fn suspension(&self) -> Option<curios_cont::RowId> {
+        self.suspension
     }
 }
 
@@ -270,6 +276,7 @@ pub(crate) fn lower(source: &curios_cont::Module) -> MachineModule {
         entry: source.entry().unwrap(),
         function_hints,
         rows,
+        suspension: source.suspension(),
     };
     module.verify().expect("invalid closed machine CFG");
     module

@@ -18,7 +18,10 @@ pub(crate) fn contify_calls(module: &mut Module) -> bool {
     let mut admitted = Vec::new();
 
     for (callee, function) in module.live_functions() {
-        if Some(callee) == module.entry() || analysis.escaping.contains(&callee) {
+        if Some(callee) == module.entry()
+            || analysis.escaping.contains(&callee)
+            || module.is_out_of_line(callee)
+        {
             continue;
         }
 

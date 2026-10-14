@@ -133,6 +133,7 @@ pub(crate) enum StructuralRule {
     ChannelArity,
     ForeignArity,
     IntrinsicArity,
+    SuspensionArity,
     MapperArity,
     ProductWidth,
     ConstructorWidth,
@@ -761,6 +762,24 @@ impl<'m> Verifier<'m> {
                             ),
                         ));
                     }
+                }
+                for atom in operands {
+                    self.check_atom(id, atom)?;
+                }
+            }
+            Rhs::Suspension {
+                operation,
+                operands,
+            } => {
+                if operands.len() != operation.arity() {
+                    return Err(fault(
+                        StructuralRule::SuspensionArity,
+                        format!(
+                            "statement {id} gives {operation:?} {} operands; its arity is {}",
+                            operands.len(),
+                            operation.arity()
+                        ),
+                    ));
                 }
                 for atom in operands {
                     self.check_atom(id, atom)?;

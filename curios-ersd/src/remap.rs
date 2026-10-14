@@ -311,6 +311,13 @@ impl Remap<'_> {
                 intrinsic: *intrinsic,
                 operands: atoms(operands),
             },
+            Rhs::Suspension {
+                operation,
+                operands,
+            } => Rhs::Suspension {
+                operation: *operation,
+                operands: atoms(operands),
+            },
         }
     }
 

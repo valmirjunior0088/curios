@@ -9,7 +9,7 @@ use {
     crate::{
         Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId, FreeValues,
         FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,
-        Statement, Terminator, UnconsSequenceStep, ValueId, VariantArm,
+        Statement, SuspensionOperation, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     curios_num::{Grain, Natural},
     std::{
@@ -370,6 +370,15 @@ impl<'m> Evaluator<'m> {
             },
             // A cell operation's identity is its program point: never residualized, never folded.
             Rhs::Cell { .. } | Rhs::Channel { .. } => Outcome::Bail(Bail::Effect),
+            // Building a suspension is a wait, which only run time performs; so no value held here is one, and every test answers no.
+            Rhs::Suspension {
+                operation: SuspensionOperation::Is,
+                operands,
+            } => match self.eval_operands(operands, frame) {
+                Ok(_) => Outcome::Done(Value::Bool(false)),
+                Err(bail) => Outcome::Bail(bail),
+            },
+            Rhs::Suspension { .. } => Outcome::Bail(Bail::Effect),
             Rhs::Intrinsic {
                 intrinsic: Intrinsic::ListMap,
                 operands,

@@ -21,6 +21,7 @@ use {
 pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
     let mut output = EmissionModule::new();
     output.set_rows(machine.rows().to_vec());
+    output.set_suspension(machine.suspension());
     for (function, wrapper) in &machine.wrappers {
         output.add_clsr(
             wrapper_name(machine, *function),

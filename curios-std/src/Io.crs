@@ -1,5 +1,5 @@
 pub use /sys/{Io};
-pub use /sys/Io/{pure, bind};
+pub use /sys/Io/{pure, bind, suspend, advance};
 use /std/{Monad, Bytes, Nat, Result, Async, Handle, Program};
 use /std/Bool/{Holds};
 

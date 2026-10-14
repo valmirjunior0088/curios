@@ -261,7 +261,7 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
         else {
             continue;
         };
-        if Some(*callee) == module.entry() {
+        if Some(*callee) == module.entry() || module.is_out_of_line(*callee) {
             continue;
         }
         let params = &module.function(*callee).unwrap().params;

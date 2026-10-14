@@ -121,6 +121,8 @@ pub(crate) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         }))),
         // The identity on the value, so a literal operand is the answer. Reached only when the dispatch above already folded to the immediate side.
         Intrinsic::ImmediateGet => Some(literals[0].clone()),
+        // No literal is a row's struct: a `Nat` or `Int` is an i31 or a magnitude, an `Flt` its box and a `Bin` a rope.
+        Intrinsic::IsRow(_) => bool_(false),
         _ => None,
     }
 }

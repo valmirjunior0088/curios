@@ -34,7 +34,7 @@ pub enum Operand {
     IsType,
     /// Check the operand against `(x₁: domain₁, …, xₙ: domainₙ) -> codomain`.
     ///
-    /// Spelled as its halves rather than as the function type itself because the binders have to be minted, and a signature is a pure function of the node with no name source of its own. The three operations that need it — `ListMap`, `IoBind` and `ListFold` — are all non-dependent, so which names the walker picks cannot matter.
+    /// Spelled as its halves rather than as the function type itself because the binders have to be minted, and a signature is a pure function of the node with no name source of its own. The operations that need it — `ListMap`, `IoBind`, `IoAdvance` and `ListFold` — are all non-dependent, so which names the walker picks cannot matter.
     Function { domains: Vec<Term>, codomain: Term },
 }
 
@@ -564,7 +564,7 @@ impl Intrinsic {
                 io_type(nat_type()),
             ),
 
-            // The two constructors of the opaque effect carrier. There is no third: nothing anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
+            // The constructors of the opaque effect carrier — `IoPure`, `IoBind` and `IoSuspend` below, beside the cell and channel operations — and its one handler, `IoAdvance`, which answers an `Io` too. Nothing anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
             Self::IoPure { result, .. } => sig(
                 vec![Operand::IsType, Operand::At(result.clone())],
                 io_type(result.clone()),
@@ -591,6 +591,37 @@ impl Intrinsic {
                     Operand::At(io_type(from.clone())),
                     Operand::Function {
                         domains: vec![from.clone()],
+                        codomain: io_type(to.clone()),
+                    },
+                ],
+                io_type(to.clone()),
+            ),
+            // A suspension: the handles it waits on, what abandoning it performs, and the rest of it.
+            Self::IoSuspend { result, .. } => sig(
+                vec![
+                    Operand::IsType,
+                    Operand::At(list_type(handle_type())),
+                    Operand::At(io_type(unit())),
+                    Operand::At(io_type(result.clone())),
+                ],
+                io_type(result.clone()),
+            ),
+            // The one handler of a suspension: `done` takes the action's value, `suspended` its handles, its abandon and its rest.
+            Self::IoAdvance { from, to, .. } => sig(
+                vec![
+                    Operand::IsType,
+                    Operand::IsType,
+                    Operand::At(io_type(from.clone())),
+                    Operand::Function {
+                        domains: vec![from.clone()],
+                        codomain: io_type(to.clone()),
+                    },
+                    Operand::Function {
+                        domains: vec![
+                            list_type(handle_type()),
+                            io_type(unit()),
+                            io_type(from.clone()),
+                        ],
                         codomain: io_type(to.clone()),
                     },
                 ],

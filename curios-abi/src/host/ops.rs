@@ -75,6 +75,12 @@ macro_rules! for_each_host_op {
             /// The readiness oracle. Wait until a handle of `readers` is ready to read or one of `writers` to write, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Answers a report for each handle of each list, in the list's order: whether it is ready for what its list waits on, and, asked or not, that it failed or that its peer hung up. A handle that is unknown — closed, say — has no descriptor, or names a descriptor the system calls invalid reports its failure, so its waiter wakes into the call that says why. A handle may stand in both lists and in either more than once: each distinct descriptor is polled once, and each standing is answered for its own list. An interruption is retried against a deadline taken at the call, and a poll the system refuses outright refuses the call, naming the error.
             HandlePoll: fn handle_poll(readers: Vec<Handle>, writers: Vec<Handle>, timeout: i64) -> Result<Polled, Refusal> { module: Handle }
 
+            /// A handle that is ready once `h` is ready to read where `readable` asks, to write where `writable` asks, or has failed or hung up: what a description suspends on to wait for a stream. A watch of a handle that names nothing a wait can watch — closed, say — is ready at once, so its waiter wakes into the call that says why. Closing the watch leaves `h` as it is.
+            HandleWatch: fn handle_watch(h: Handle, readable: bool, writable: bool) -> Handle { module: Handle }
+
+            /// Whether each handle of `on` is ready now, without waiting: one byte for each, in the list's order, [`event::READY`](crate::event::READY) or nothing. A watch is ready as its handle is, a timer once its instant has passed, and any other handle at once, the ready token among them, since nothing would hold a wait on it.
+            HandleReady: fn handle_ready(on: Vec<Handle>) -> Vec<u8> { module: Handle }
+
             /// Close `h`. Closing an unknown handle is a no-op.
             HandleClose: fn handle_close(h: Handle) -> () { module: Handle }
 
@@ -83,6 +89,9 @@ macro_rules! for_each_host_op {
 
             /// Read the monotonic clock. `(secs, nanos)` elapsed since a fixed origin; only differences are meaningful.
             ClockMono: fn clock_mono() -> Timestamp { module: time/Instant }
+
+            /// A handle that is ready once the monotonic clock, as `clock_mono` reads it, reaches `secs` seconds and `nanos` nanoseconds: what a description suspends on to sleep. An instant already passed is ready at once, and nanoseconds past a second carry into the seconds.
+            ClockTimer: fn clock_timer(secs: u64, nanos: u64) -> Handle { module: time/Instant }
 
             /// Exactly `n` random bytes. A host that cannot find the memory or the entropy for them refuses the call, naming why, rather than answer fewer.
             RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> { module: rand }
@@ -200,6 +209,9 @@ macro_rules! declare_host_rows {
         /// The host's side of its rows: one method per row, typed as the row is written. Operands arrive owned, so a host may keep a buffer without copying it; a reply is its row's outcome, which the adapter encodes. One shared `Arc<H>` backs every import closure, so methods take `&self` and implementations synchronize internally. Implemented by `OsHost` over real OS resources and by `MockHost` over scripted in-memory ones.
         pub trait HostOps {
             $($(#[doc = $doc])* fn $name(&self, $($p: $t),*) -> $r;)*
+
+            /// Wait until a handle of `on` is ready, as `handle_ready` would report it — at once where one already is, and never before: a sleep the system ends early is slept again. No program calls it: a program suspends on `on`, and the host's loop waits here before advancing it, so the rest it advances finds what it waited for. A system that refuses the wait refuses the run, naming why. `on` is never empty, which is a program waiting on nothing the host holds, and the loop's to report.
+            fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal>;
         }
     };
 }

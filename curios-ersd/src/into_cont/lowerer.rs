@@ -10,7 +10,7 @@ use {
         StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm, cell_op,
         operation_intrinsic, sequence_census, sequence_intrinsic, sequence_len_op,
     },
-    crate::{Allocation, CellOperation, ChannelOperation, Intrinsic, Summary},
+    crate::{Allocation, CellOperation, ChannelOperation, Intrinsic, Summary, SuspensionOperation},
     curios_abi::ForeignFunction,
     curios_num::Natural,
     curios_utilities::recurse,
@@ -29,6 +29,8 @@ pub(super) struct Lowerer<'a> {
     emitter: Emitter<'a>,
     /// What every nominal shape's Cont heap type is and what it is called, memoized across the lowering.
     layout: Layout<'a>,
+    /// The step every bind's suspension arm calls, built at the first and bound at the top of the entry.
+    carry: Option<curios_cont::FunctionId>,
 }
 
 /// Where a `let` stands in its block: the value it binds, and what follows it — the statements after it, the terminator closing the block and the continuation the block delivers to. What a binding becomes is read off all four together: one nothing follows but its own return delivers straight to the target, and every other opens a continuation for the rest.
@@ -50,6 +52,7 @@ impl<'a> Lowerer<'a> {
             facts: sequence_census(source),
             emitter: Emitter::new(source),
             layout: Layout::new(source),
+            carry: None,
         }
     }
 
@@ -66,7 +69,14 @@ impl<'a> Lowerer<'a> {
         let entry = self.source.block(entry).expect("live entry block").clone();
         let mut statements: Vec<StatementId> = self.source.items().to_vec();
         statements.extend(&entry.statements);
-        let body = self.lower_statements(&statements, &entry.terminator, return_cont);
+        let mut body = self.lower_statements(&statements, &entry.terminator, return_cont);
+        // It closes over nothing, so binding it ahead of everything puts it in scope of every bind.
+        if let Some(carry) = self.carry {
+            body = self.emitter.module.add_node(curios_cont::Node::LetFun {
+                functions: vec![carry],
+                body,
+            });
+        }
         self.emitter.module.define_function(
             main,
             curios_cont::Function {
@@ -757,7 +767,131 @@ impl Lowerer<'_> {
                     return_to,
                 })
             }
+            Rhs::Suspension {
+                operation,
+                operands,
+            } => self.lower_suspension(*operation, operands, site),
         }
+    }
+
+    /// The function a bind's suspension arm calls: `carry(suspension, continuation)` answers the suspension with the continuation appended to its frames. Built on first use and kept out of line, so every bind shares the one path it rarely takes, and the path it does take stays small enough to inline — the bind-inlining with a shared slow path of Xie and Leijen's evidence passing, whose `yield_extend` this is.
+    fn carry(&mut self, row: curios_cont::RowId) -> curios_cont::FunctionId {
+        if let Some(carry) = self.carry {
+            return carry;
+        }
+        let module = &mut self.emitter.module;
+        let carry = module.reserve_function();
+        let return_cont = module.reserve_continuation();
+        let suspension = module.add_value(None);
+        let continuation = module.add_value(None);
+        let built = module.add_value(None);
+        let appended = module.add_value(None);
+        let parts = [(); 4].map(|()| module.add_value(None));
+
+        let returned = self
+            .emitter
+            .jump(return_cont, vec![curios_cont::Atom::Value(built)]);
+        let module = &mut self.emitter.module;
+        let rebuilt = module.add_node(curios_cont::Node::LetValue {
+            result: built,
+            value: curios_cont::ValueExpr::Row(
+                row,
+                vec![
+                    curios_cont::Atom::Value(parts[0]),
+                    curios_cont::Atom::Value(parts[1]),
+                    curios_cont::Atom::Value(parts[2]),
+                    curios_cont::Atom::Value(appended),
+                ],
+            ),
+            next: returned,
+        });
+        let mut body = module.add_node(curios_cont::Node::LetIntrinsic {
+            result: appended,
+            op: curios_cont::Intrinsic::ListAppend,
+            args: vec![
+                curios_cont::Atom::Value(parts[3]),
+                curios_cont::Atom::Value(continuation),
+            ],
+            next: rebuilt,
+        });
+        for (slot, part) in parts.into_iter().enumerate().rev() {
+            body = module.add_node(curios_cont::Node::LetIntrinsic {
+                result: part,
+                op: curios_cont::Intrinsic::RowGet(row, slot),
+                args: vec![curios_cont::Atom::Value(suspension)],
+                next: body,
+            });
+        }
+        module.define_function(
+            carry,
+            curios_cont::Function {
+                debug_name: Some("suspension/carry".into()),
+                params: vec![suspension, continuation],
+                return_cont,
+                body,
+                // It reads and builds, and nothing else: a carry nothing reads may simply not happen.
+                droppable: true,
+            },
+        );
+        module.keep_out_of_line(carry);
+        self.carry = Some(carry);
+        carry
+    }
+
+    /// Lower a suspension operation over the module's suspension row: a construction, a test against the row's type, or a read of one of its slots. A new suspension's frames are the empty list, and a carry is a call of the one out-of-line [`carry`](Self::carry).
+    fn lower_suspension(
+        &mut self,
+        operation: SuspensionOperation,
+        operands: &[Atom],
+        site: Site<'_>,
+    ) -> curios_cont::NodeId {
+        let row = self.emitter.module.suspension_row();
+        let mut args = operands
+            .iter()
+            .map(|&atom| self.emitter.lower_atom(atom))
+            .collect::<Vec<_>>();
+        let op = match operation {
+            SuspensionOperation::New => {
+                let frames = self.emitter.module.add_value(None);
+                args.push(curios_cont::Atom::Value(frames));
+                let built = self.straight(site, move |result, next| curios_cont::Node::LetValue {
+                    result,
+                    value: curios_cont::ValueExpr::Row(row, args),
+                    next,
+                });
+                return self.emitter.module.add_node(curios_cont::Node::LetValue {
+                    result: frames,
+                    value: curios_cont::ValueExpr::List(Vec::new()),
+                    next: built,
+                });
+            }
+            SuspensionOperation::Carry => {
+                let carry = self.carry(row);
+                return self.split(1, site, |return_to| curios_cont::Node::ApplyFun {
+                    callee: curios_cont::Callee::Known(carry),
+                    args,
+                    return_to,
+                });
+            }
+            SuspensionOperation::Build => {
+                return self.straight(site, move |result, next| curios_cont::Node::LetValue {
+                    result,
+                    value: curios_cont::ValueExpr::Row(row, args),
+                    next,
+                });
+            }
+            SuspensionOperation::Is => curios_cont::Intrinsic::IsRow(row),
+            SuspensionOperation::On => curios_cont::Intrinsic::RowGet(row, 0),
+            SuspensionOperation::Abandon => curios_cont::Intrinsic::RowGet(row, 1),
+            SuspensionOperation::Next => curios_cont::Intrinsic::RowGet(row, 2),
+            SuspensionOperation::Frames => curios_cont::Intrinsic::RowGet(row, 3),
+        };
+        self.straight(site, move |result, next| curios_cont::Node::LetIntrinsic {
+            result,
+            op,
+            args,
+            next,
+        })
     }
 
     /// Lower a scalar operation to a straight-line `LetIntrinsic`. `Byte` and `Nat` share the runtime carrier, so `ByteToNat` is the identity and `NatToByte` masks to a byte.

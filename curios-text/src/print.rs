@@ -1081,10 +1081,11 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             vec![list, init, function],
         ),
         Intrinsic::HandleType => pure("Handle"),
-        // The three `/sys/Handle` constants are the only handles a `/sys` body plants; the last arm spells a token no source can write rather than fail the print.
+        // The four `/sys/Handle` constants are the only handles a `/sys` body plants; the last arm spells a token no source can write rather than fail the print.
         Intrinsic::Handle(stdio::STDIN) => pure("Handle/stdin"),
         Intrinsic::Handle(stdio::STDOUT) => pure("Handle/stdout"),
         Intrinsic::Handle(stdio::STDERR) => pure("Handle/stderr"),
+        Intrinsic::Handle(stdio::READY) => pure("Handle/ready"),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
         Intrinsic::CellType(elem) => print_intrinsic_call("Cell", vec![], vec![elem]),
         Intrinsic::ChannelType(elem) => print_intrinsic_call("Channel", vec![], vec![elem]),
@@ -1133,6 +1134,19 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             action,
             continuation: f,
         } => print_intrinsic_call("Io/bind", vec![from, to], vec![action, f]),
+        Intrinsic::IoSuspend {
+            result,
+            on,
+            abandon,
+            rest,
+        } => print_intrinsic_call("Io/suspend", vec![result], vec![on, abandon, rest]),
+        Intrinsic::IoAdvance {
+            from,
+            to,
+            action,
+            done,
+            suspended,
+        } => print_intrinsic_call("Io/advance", vec![from, to], vec![action, done, suspended]),
     }
 }
 

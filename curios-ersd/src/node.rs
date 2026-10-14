@@ -102,6 +102,11 @@ pub enum Rhs {
         intrinsic: Intrinsic,
         operands: Vec<Atom>,
     },
+    /// A suspension operation (see [`SuspensionOperation`]): what a forced description answers in place of its value when it waits, and the test and reads its forcer tells one apart by. None performs anything — a suspension is data, built by the description that suspends and read by whoever forced it.
+    Suspension {
+        operation: SuspensionOperation,
+        operands: Vec<Atom>,
+    },
 }
 
 /// One arm of a [`Rhs::MatchVariant`]: the constructor it matches, the value binders receiving its payload (one per payload field, in order), and the block evaluated when it matches.
@@ -204,6 +209,38 @@ impl ChannelOperation {
             | Self::Closed
             | Self::Count
             | Self::Capacity => 1,
+        }
+    }
+}
+
+/// What a forced description answers when it suspends, and how its forcer reads one.
+///
+/// A suspension holds the handles it waits on, the description that abandons it, what runs first when it resumes — the rest of the description that suspended, or a suspension nested in it — and the frames: the continuations of the binds it passed on its way out, innermost first, each applied to what the one before it yields. A bind that forces a suspension appends its continuation rather than wrapping the rest in a new description, so resuming walks the frames in a loop, and a chain of binds pays once for its depth however often its innermost action suspends.
+///
+/// `New` takes the handles, the abandon and the rest, and builds a suspension with no frames. `Carry` takes a suspension and a bind's continuation and answers the suspension with the continuation appended to its frames: what a bind answers of a suspension its action answered, as one step the lowering keeps out of line, so the path a bind takes when nothing suspends stays small. `Build` takes all four parts, and is how resuming carries a suspension on — a nested one wrapped, its frames still to run. `Is` takes anything a description may answer and answers whether it is a suspension, a `Bool`; `On`, `Abandon`, `Next` and `Frames` take a suspension and read that part.
+///
+/// `New` is kept apart from `Carry` and `Build` because it is the only operation that makes a suspension where none existed: a program whose reachable code holds no `New` holds no suspension at all, which is what lets every `Is` in it fold to false.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum SuspensionOperation {
+    New,
+    Carry,
+    Build,
+    Is,
+    On,
+    Abandon,
+    Next,
+    Frames,
+}
+
+impl SuspensionOperation {
+    /// The exact operand count of this operation.
+    pub fn arity(self) -> usize {
+        match self {
+            Self::New => 3,
+            Self::Carry => 2,
+            Self::Build => 4,
+            Self::Is | Self::On | Self::Abandon | Self::Next | Self::Frames => 1,
         }
     }
 }

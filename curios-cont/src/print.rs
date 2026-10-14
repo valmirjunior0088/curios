@@ -68,7 +68,7 @@ impl Reach {
                     ValueExpr::Literal(_) | ValueExpr::List(_) | ValueExpr::Tuple(_) => {}
                 },
                 Node::LetIntrinsic { op, .. } => {
-                    if let Intrinsic::RowGet(row, _) = op {
+                    if let Intrinsic::RowGet(row, _) | Intrinsic::IsRow(row) = op {
                         work.push(*row);
                     }
                 }
@@ -720,6 +720,7 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::WindowExtent => "Window/extent",
         Intrinsic::IsImmediate => "Immediate/is",
         Intrinsic::ImmediateGet => "Immediate/get",
+        Intrinsic::IsRow(row) => return format!("Row/is({row})"),
         Intrinsic::BinLen(grain) => return format!("{}/len", grain_carrier(*grain)),
         Intrinsic::BinEql(grain) => return format!("{}/eql", grain_carrier(*grain)),
         Intrinsic::BinGet(grain) => return format!("{}/get", grain_carrier(*grain)),

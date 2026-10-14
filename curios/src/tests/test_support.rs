@@ -85,6 +85,11 @@ macro_rules! declare_lying_host {
                     }
                 }
             )*
+
+            // No row answers the wait, so there is nothing to lie about.
+            fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal> {
+                self.inner.wait(on)
+            }
         }
     };
 }

@@ -212,6 +212,8 @@ pub(crate) struct EmissionModule {
     entry: Option<EmissionFunctionName>,
     /// The nominal rows this module constructs and reads, each with its debug name and slot carriers. See [`EmissionData::Row`].
     rows: Vec<(curios_cont::RowId, curios_cont::Row)>,
+    /// The row a suspension is built as, where the program can suspend: what gives the module its turn exports.
+    suspension: Option<curios_cont::RowId>,
 }
 
 impl EmissionModule {
@@ -226,6 +228,14 @@ impl EmissionModule {
 
     pub(crate) fn set_rows(&mut self, rows: Vec<(curios_cont::RowId, curios_cont::Row)>) {
         self.rows = rows;
+    }
+
+    pub(crate) fn suspension(&self) -> Option<curios_cont::RowId> {
+        self.suspension
+    }
+
+    pub(crate) fn set_suspension(&mut self, suspension: Option<curios_cont::RowId>) {
+        self.suspension = suspension;
     }
 
     pub(crate) fn consts(&self) -> &[(EmissionValueName, EmissionData)] {
@@ -275,6 +285,11 @@ impl EmissionModule {
                     arities.insert(*arity);
                 }
             }
+        }
+
+        // A program that can suspend is advanced by forcing a description the host hands back, which dispatches at no arguments whatever the module's own calls do.
+        if self.suspension.is_some() {
+            arities.insert(0);
         }
 
         for (_, clsr) in &self.clsrs {

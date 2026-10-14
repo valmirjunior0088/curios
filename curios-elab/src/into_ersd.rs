@@ -56,6 +56,8 @@ mod recursion;
 mod intrinsic;
 use intrinsic::*;
 
+mod suspension;
+
 mod typed;
 
 #[cfg(test)]

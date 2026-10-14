@@ -405,7 +405,7 @@ pub enum Intrinsic<T = Term> {
     },
     // The opaque carrier of a host effect: `Io(T)` is a *description* of a computation that yields a `T`, never the `T` itself.
     //
-    // There is deliberately no eliminator from `Io(T)` to `T`, and there never may be. That absence is the whole of the referential-transparency story: a closure that performs an effect can only be given an `Io`-returning type, so every term of non-`Io` type denotes one value, and a scrutinee's spelling fixes it. The only consumer of an `Io(A)` is `IoBind`, which returns an `Io(B)`; nothing lowers the carrier to its content but the emitted entrypoint boundary, which forces the program's whole description exactly once.
+    // There is deliberately no eliminator from `Io(T)` to `T`, and there never may be. That absence is the whole of the referential-transparency story: a closure that performs an effect can only be given an `Io`-returning type, so every term of non-`Io` type denotes one value, and a scrutinee's spelling fixes it. The consumers of an `Io(A)` are `IoBind` and `IoAdvance`, each of which returns an `Io`; nothing lowers the carrier to its content but the emitted entrypoint boundary, which forces the program's description and the rest of each suspension it answers.
     IoType(T),
     // (@T, x : T) -> Io(T): the description that performs nothing and yields `x`.
     IoPure {
@@ -420,6 +420,25 @@ pub enum Intrinsic<T = Term> {
         to: T,
         action: T,
         continuation: T,
+    },
+    // (@A, on : List(Handle), abandon : Io({}), rest : Io(A)) -> Io(A): the description that suspends until one of `on` may be ready and then goes on as `rest`, and that whoever drops it instead cleans up by performing `abandon`.
+    //
+    // A suspension waits on nothing itself: whoever advances the description decides what it means — the host waits on `on`, a combinator runs something else first. Inert like the rest: it reduces its operands and rebuilds.
+    IoSuspend {
+        result: T,
+        on: T,
+        abandon: T,
+        rest: T,
+    },
+    // (@A, @R, action : Io(A), done : (A) -> Io(R), suspended : (List(Handle), Io({}), Io(A)) -> Io(R)) -> Io(R): the description that performs `action` and hands its value to `done`, or, where `action` suspends, its handles, its abandon and its rest to `suspended`.
+    //
+    // The one place a suspension is caught rather than passed out. It eliminates nothing: what it answers is an `Io`.
+    IoAdvance {
+        from: T,
+        to: T,
+        action: T,
+        done: T,
+        suspended: T,
     },
 }
 
@@ -783,6 +802,40 @@ impl Intrinsic {
         }
     }
 
+    /// An `IoSuspend` node from a term-shaped result type, the handles it waits on, its abandon, and its rest.
+    pub fn io_suspend<A, O, B, R>(a: A, on: O, abandon: B, rest: R) -> Self
+    where
+        A: Into<Term>,
+        O: Into<Term>,
+        B: Into<Term>,
+        R: Into<Term>,
+    {
+        Self::IoSuspend {
+            result: a.into(),
+            on: on.into(),
+            abandon: abandon.into(),
+            rest: rest.into(),
+        }
+    }
+
+    /// An `IoAdvance` node from term-shaped action result type, answer type, action, and the two continuations.
+    pub fn io_advance<A, R, M, D, S>(a: A, r: R, action: M, done: D, suspended: S) -> Self
+    where
+        A: Into<Term>,
+        R: Into<Term>,
+        M: Into<Term>,
+        D: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::IoAdvance {
+            from: a.into(),
+            to: r.into(),
+            action: action.into(),
+            done: done.into(),
+            suspended: suspended.into(),
+        }
+    }
+
     /// This operation's term operands, in the same order `for_each_operand` visits them — which is the order [`signature`](Self::signature) states their types in.
     ///
     /// Collected rather than visited because the checking walks zip it against that table, and a `zip` needs a sequence. Not for the hot paths: `reach` and `any_metavar` keep the visiting form precisely so they allocate nothing.
@@ -969,11 +1022,31 @@ impl Intrinsic {
                 to: b,
                 action: c,
                 continuation: d,
+            }
+            | Intrinsic::IoSuspend {
+                result: a,
+                on: b,
+                abandon: c,
+                rest: d,
             } => {
                 visit(a);
                 visit(b);
                 visit(c);
                 visit(d);
+            }
+
+            Intrinsic::IoAdvance {
+                from: a,
+                to: b,
+                action: c,
+                done: d,
+                suspended: e,
+            } => {
+                visit(a);
+                visit(b);
+                visit(c);
+                visit(d);
+                visit(e);
             }
 
             // The bounded operations walk their proof beside their value operands, and must: substitution reaches a term only through this walk, and a bound's proposition mentions the very operands around it. Congruence still declines to compare the proof *structurally* — it enqueues it at that proposition instead, where irrelevance applies (see [`Intrinsic::signature`]).
@@ -1619,6 +1692,30 @@ impl Intrinsic {
                 action: visit.visit_subterm(action),
                 continuation: visit.visit_subterm(f),
             },
+            Intrinsic::IoSuspend {
+                result,
+                on,
+                abandon,
+                rest,
+            } => Intrinsic::IoSuspend {
+                result: visit.visit_subterm(result),
+                on: visit.visit_subterm(on),
+                abandon: visit.visit_subterm(abandon),
+                rest: visit.visit_subterm(rest),
+            },
+            Intrinsic::IoAdvance {
+                from,
+                to,
+                action,
+                done,
+                suspended,
+            } => Intrinsic::IoAdvance {
+                from: visit.visit_subterm(from),
+                to: visit.visit_subterm(to),
+                action: visit.visit_subterm(action),
+                done: visit.visit_subterm(done),
+                suspended: visit.visit_subterm(suspended),
+            },
         }
     }
 }
@@ -2043,6 +2140,30 @@ impl<T> Intrinsic<T> {
                 to: operand(b)?,
                 action: operand(action)?,
                 continuation: operand(f)?,
+            },
+            Intrinsic::IoSuspend {
+                result,
+                on,
+                abandon,
+                rest,
+            } => Intrinsic::IoSuspend {
+                result: operand(result)?,
+                on: operand(on)?,
+                abandon: operand(abandon)?,
+                rest: operand(rest)?,
+            },
+            Intrinsic::IoAdvance {
+                from,
+                to,
+                action,
+                done,
+                suspended,
+            } => Intrinsic::IoAdvance {
+                from: operand(from)?,
+                to: operand(to)?,
+                action: operand(action)?,
+                done: operand(done)?,
+                suspended: operand(suspended)?,
             },
         })
     }

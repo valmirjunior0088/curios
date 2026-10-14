@@ -254,6 +254,8 @@ impl Module {
     /// This is what the distinct [`ValueExpr::Row`] buys over an annotation on `Tuple`. A row value read at a structural projection, or a construction one slot short of its row, would be a `ref.cast` trap in emitted code far from the pass that caused it; here it is a verifier failure at the boundary that produced it. Padding is the door's job, so a mismatch is always a compiler bug rather than a program's.
     ///
     /// The last clause covers direct operands — a value constructed by a `LetValue` in this module and read by a `TupleGet` or `RowGet` in it — which is every case a pass's own rebuild can produce: `split_returns` rebuilding a resume's `Tuple` for a class returning an `Option` row, read by a `RowGet` that casts `$tuple/2` to the row's final type, would otherwise surface only as a trap far downstream. A value that arrives through a parameter is the emitter's cast to decide.
+    ///
+    /// A read of the suspension's row is the one the clause leaves alone. The door emits one only in the arm where a row test answered yes, so a construction it visibly reads — a forced description's value, once inlining has made it visible — is one that test answered no for, and the read never runs.
     fn verify_rows(&self) -> Result<(), VerifyError> {
         // What every visible construction built, so a read can be checked against the vocabulary its operand was actually minted in rather than only against the row's own width.
         let mut built = BTreeMap::<ValueId, Option<RowId>>::new();
@@ -276,6 +278,7 @@ impl Module {
                 && let Some(&minted) = built.get(operand)
             {
                 let read = match op {
+                    Intrinsic::RowGet(row, _) if Some(*row) == self.suspension() => None,
                     Intrinsic::RowGet(row, _) => Some(Some(*row)),
                     Intrinsic::TupleGet(_) => Some(None),
                     _ => None,
@@ -315,6 +318,14 @@ impl Module {
                             definition.width(),
                         )));
                     }
+                }
+                Node::LetIntrinsic {
+                    op: Intrinsic::IsRow(row),
+                    ..
+                } if self.defined_row(*row).is_none() => {
+                    return Err(VerifyError(format!(
+                        "row test names {row}, which was not minted by this module"
+                    )));
                 }
                 Node::LetIntrinsic {
                     op: Intrinsic::RowGet(row, index),

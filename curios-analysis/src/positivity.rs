@@ -813,7 +813,9 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::ChannelCount { .. }
             | Intrinsic::ChannelCapacity { .. }
             | Intrinsic::IoPure { .. }
-            | Intrinsic::IoBind { .. } => self.opaque(term),
+            | Intrinsic::IoBind { .. }
+            | Intrinsic::IoSuspend { .. }
+            | Intrinsic::IoAdvance { .. } => self.opaque(term),
         }
     }
 }

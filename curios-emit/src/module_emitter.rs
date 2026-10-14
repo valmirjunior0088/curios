@@ -2,9 +2,9 @@ use {
     super::{
         BigEmitter, BigHelper, Context, EmissionClosure, EmissionClosureName, EmissionData,
         EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter,
-        FltEmitter, FltHelper, ImmediateLayout, RopeEmitter, Table, big_sub_type, bytes_sub_type,
-        cell_sub_type, channel_sub_type, elems_sub_type, flt_sub_type, longs_sub_type,
-        refusal_data_name, refusal_message, rope_base_sub_type, rope_leaf_sub_type,
+        FltEmitter, FltHelper, ImmediateLayout, RopeEmitter, Table, TurnEmitter, big_sub_type,
+        bytes_sub_type, cell_sub_type, channel_sub_type, elems_sub_type, flt_sub_type,
+        longs_sub_type, refusal_data_name, refusal_message, rope_base_sub_type, rope_leaf_sub_type,
         rope_node_sub_type, rope_view_sub_type, words_sub_type,
     },
     curios_abi::{ENTRY, Namespace, PANIC, WireType},
@@ -966,11 +966,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.emit_let_func(name, func);
         }
 
-        // The entrypoint is the module's sole export — the value the host invokes, under the wire name `curios-abi` states rather than under whatever the naming scheme spelled the function. Every other function, closure, and const is reached only internally.
+        // The entrypoint is what the host invokes, under the wire name `curios-abi` states rather than under whatever the naming scheme spelled the function. A program that can suspend exports its turns instead, the advance beside the entry; every other function, closure, and const is reached only internally.
         if let Some(name) = module.entry() {
             let func_name = self.table.find_func(name).func_name();
-            self.module
-                .add_export(ENTRY, curios_wasm::Export::Func(func_name));
+            match module.suspension() {
+                None => self
+                    .module
+                    .add_export(ENTRY, curios_wasm::Export::Func(func_name)),
+                Some(row) => TurnEmitter::new(self.table, self.module).emit_turns(func_name, row),
+            }
         }
 
         self.emit_rope_funcs();

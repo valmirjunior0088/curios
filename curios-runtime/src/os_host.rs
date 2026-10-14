@@ -86,6 +86,126 @@ enum OsResource {
     ServerTls(Box<StreamOwned<ServerConnection, Socket>>),
     /// An opaque server TLS configuration minted by `tls_server_config`, held in the table as a handle and consumed by `tls_start_server`.
     TlsConfig(Arc<ServerConfig>),
+    /// A watch minted by `handle_watch`: the handle it watches and the flags it asks of that handle's descriptor. It holds no descriptor of its own — the watched handle's is resolved wherever the watch is waited on — so a watched handle closed under it leaves a watch that is ready at once.
+    Watch {
+        target: Handle,
+        asked: PollFlags,
+    },
+    /// A timer minted by `clock_timer`: the instant it is ready at, or none for an instant past what an `Instant` holds, which never comes.
+    Timer(Option<Instant>),
+}
+
+/// The standard streams' owners, kept alive while a poll borrows their descriptors.
+type Streams = (io::Stdin, io::Stdout, io::Stderr);
+
+/// The descriptor a wait on `handle` polls, and the flags polled on its behalf for `asked`: a standard stream's own, a filed resource's, and none for a handle that names nothing a poll can watch — closed, a config token, a watch or a timer — so its waiter wakes at once into the call that says why.
+fn descriptor<'a>(
+    table: &'a Table<OsResource>,
+    streams: &'a Streams,
+    handle: &Handle,
+    asked: PollFlags,
+) -> Option<(BorrowedFd<'a>, PollFlags)> {
+    match handle {
+        Handle::Stdin => Some((streams.0.as_fd(), asked)),
+        Handle::Stdout => Some((streams.1.as_fd(), asked)),
+        Handle::Stderr => Some((streams.2.as_fd(), asked)),
+        Handle::Other(_) => table.get(handle).and_then(|resource| match resource {
+            OsResource::File(file) => Some((file.as_fd(), asked)),
+            // A connecting socket is ready to write once the connect has settled either way, which is what the kernel reports.
+            OsResource::Connected(socket)
+            | OsResource::Connecting(socket)
+            | OsResource::Unconnected(socket)
+            | OsResource::Listener(socket) => Some((socket.as_fd(), asked)),
+            // The lookup's pipe read end: ready to read once the worker has written its wakeup byte, which is the completion signal.
+            OsResource::Resolving { done, .. } => Some((done.as_fd(), asked)),
+            OsResource::Descriptor(fd) => Some((fd.as_fd(), asked)),
+            OsResource::Serial(port) => Some((port.as_fd(), asked)),
+            // The reaper's pipe read end: ready to read once the child's end is recorded, which is when `proc_wait` answers.
+            OsResource::Child { running, .. } => Some((running.done.as_fd(), asked)),
+            // A TLS stream is watched through its socket, for what `rustls` itself needs while the handshake is under way and for the guest's own interest afterwards.
+            OsResource::ClientTls(stream) => {
+                Some((stream.sock.as_fd(), tls_watch(&stream.conn, asked)))
+            }
+            OsResource::ServerTls(stream) => {
+                Some((stream.sock.as_fd(), tls_watch(&stream.conn, asked)))
+            }
+            OsResource::TlsConfig(_) | OsResource::Watch { .. } | OsResource::Timer(_) => None,
+        }),
+    }
+}
+
+/// What a wait on some handles holds out for: each watch's descriptor polled for what it asks, beside the watch's place among the handles, and the earliest instant one of the timers fires at.
+struct Waits<'a> {
+    polls: Vec<PollFd<'a>>,
+    places: Vec<usize>,
+    deadline: Option<Instant>,
+}
+
+impl<'a> Waits<'a> {
+    /// The waits `on` holds out for at `now`, beside a report for each handle that is ready already: a timer past its instant, a watch of a handle no poll can watch, and every handle that is neither a watch nor a timer, which nothing would hold.
+    fn of(
+        table: &'a Table<OsResource>,
+        streams: &'a Streams,
+        on: &[Handle],
+        now: Instant,
+    ) -> (Self, Vec<u8>) {
+        let mut waits = Self {
+            polls: Vec::new(),
+            places: Vec::new(),
+            deadline: None,
+        };
+        let mut reports = vec![0; on.len()];
+
+        for (place, handle) in on.iter().enumerate() {
+            match table.get(handle) {
+                Some(OsResource::Watch { target, asked }) => {
+                    match descriptor(table, streams, target, *asked) {
+                        Some((fd, watch)) => {
+                            waits.polls.push(PollFd::from_borrowed_fd(fd, watch));
+                            waits.places.push(place);
+                        }
+                        None => reports[place] = event::READY,
+                    }
+                }
+                Some(OsResource::Timer(Some(at))) if *at <= now => reports[place] = event::READY,
+                Some(OsResource::Timer(Some(at))) => {
+                    waits.deadline = Some(waits.deadline.map_or(*at, |soonest| soonest.min(*at)));
+                }
+                Some(OsResource::Timer(None)) => {}
+                _ => reports[place] = event::READY,
+            }
+        }
+
+        (waits, reports)
+    }
+
+    /// Poll the watches until one fires or the deadline passes — at once where `deadline` is `now` — and say which watch fired by its handle's place. An interruption is not readiness, so the poll resumes for what is left of the wait; any other failure is the system refusing the poll, which the caller decides how to answer.
+    fn poll(&mut self, deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
+        loop {
+            let timeout = deadline.map(|deadline| {
+                let left = deadline.saturating_duration_since(Instant::now());
+
+                Timespec {
+                    tv_sec: left.as_secs() as _,
+                    tv_nsec: left.subsec_nanos() as _,
+                }
+            });
+
+            match poll(&mut self.polls, timeout.as_ref()) {
+                Ok(_) => break,
+                Err(Errno::INTR) => {}
+                Err(errno) => return Err(errno),
+            }
+        }
+
+        Ok(self
+            .polls
+            .iter()
+            .zip(&self.places)
+            .filter(|(poll, _)| !poll.revents().is_empty())
+            .map(|(_, place)| *place)
+            .collect())
+    }
 }
 
 /// The native-OS `Host`: stdio passes straight through, and every other handle — files, plain and TLS sockets, listeners, in-flight DNS lookups, TLS configs — lives in one token-keyed table so the BSD-style lifecycle can transition a handle in place. This is the host the CLI's `run` and a bundled executable execute under; tests reach for `MockHost` instead. Each instance is self-contained: its own table, monotonic clock origin, `args`, and lazily-started resolver pool.
@@ -483,7 +603,7 @@ impl HostOps for OsHost {
         let table = self.table.lock().unwrap();
 
         // Keep the stdio owners alive for the duration of the borrow: each `PollFd` holds a `BorrowedFd` into one of these (or into the table).
-        let (in_handle, out_handle, err_handle) = (stdin(), stdout(), stderr());
+        let streams = (stdin(), stdout(), stderr());
 
         // One entry per distinct descriptor, watched for the union of what every standing of it asks, so a descriptor several handles name is polled once and never counts against the system's limit twice.
         let mut watched: Vec<(BorrowedFd<'_>, PollFlags)> = Vec::new();
@@ -499,35 +619,7 @@ impl HostOps for OsHost {
             (true, PollFlags::OUT, &writers),
         ] {
             for (slot, handle) in handles.iter().enumerate() {
-                let resolved = match handle {
-                    Handle::Stdin => Some((in_handle.as_fd(), asked)),
-                    Handle::Stdout => Some((out_handle.as_fd(), asked)),
-                    Handle::Stderr => Some((err_handle.as_fd(), asked)),
-                    Handle::Other(_) => table.get(handle).and_then(|resource| match resource {
-                        OsResource::File(file) => Some((file.as_fd(), asked)),
-                        // A connecting socket is ready to write once the connect has settled either way, which is what the kernel reports.
-                        OsResource::Connected(socket)
-                        | OsResource::Connecting(socket)
-                        | OsResource::Unconnected(socket)
-                        | OsResource::Listener(socket) => Some((socket.as_fd(), asked)),
-                        // The lookup's pipe read end: ready to read once the worker has written its wakeup byte, which is the completion signal.
-                        OsResource::Resolving { done, .. } => Some((done.as_fd(), asked)),
-                        OsResource::Descriptor(fd) => Some((fd.as_fd(), asked)),
-                        OsResource::Serial(port) => Some((port.as_fd(), asked)),
-                        // The reaper's pipe read end: ready to read once the child's end is recorded, which is when `proc_wait` answers.
-                        OsResource::Child { running, .. } => Some((running.done.as_fd(), asked)),
-                        // A TLS stream is watched through its socket, for what `rustls` itself needs while the handshake is under way and for the guest's own interest afterwards; the config token has no descriptor.
-                        OsResource::ClientTls(stream) => {
-                            Some((stream.sock.as_fd(), tls_watch(&stream.conn, asked)))
-                        }
-                        OsResource::ServerTls(stream) => {
-                            Some((stream.sock.as_fd(), tls_watch(&stream.conn, asked)))
-                        }
-                        OsResource::TlsConfig(_) => None,
-                    }),
-                };
-
-                let Some((fd, watch)) = resolved else {
+                let Some((fd, watch)) = descriptor(&table, &streams, handle, asked) else {
                     let reports = match writing {
                         true => &mut polled.writable,
                         false => &mut polled.readable,
@@ -596,6 +688,54 @@ impl HostOps for OsHost {
         }
 
         Ok(polled)
+    }
+
+    fn handle_watch(&self, h: Handle, readable: bool, writable: bool) -> Handle {
+        let mut asked = PollFlags::empty();
+        asked.set(PollFlags::IN, readable);
+        asked.set(PollFlags::OUT, writable);
+
+        self.mint(OsResource::Watch { target: h, asked })
+    }
+
+    fn handle_ready(&self, on: Vec<Handle>) -> Vec<u8> {
+        let table = self.table.lock().unwrap();
+        let streams = (stdin(), stdout(), stderr());
+        let (mut waits, mut reports) = Waits::of(&table, &streams, &on, Instant::now());
+
+        // A poll the system refuses says nothing of any watch, so each reports ready, and its waiter wakes into the call that says why.
+        let fired = waits
+            .poll(Some(Instant::now()))
+            .unwrap_or_else(|_| waits.places.clone());
+        for place in fired {
+            reports[place] = event::READY;
+        }
+
+        reports
+    }
+
+    fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal> {
+        let table = self.table.lock().unwrap();
+        let streams = (stdin(), stdout(), stderr());
+
+        // A poll ends at a watch's event or at the soonest timer's instant; one the system ends before either is polled again.
+        loop {
+            let (mut waits, reports) = Waits::of(&table, &streams, &on, Instant::now());
+            if reports.contains(&event::READY) {
+                return Ok(());
+            }
+
+            let deadline = waits.deadline;
+            let fired = waits.poll(deadline).map_err(|errno| {
+                Refusal(format!(
+                    "the system refused the wait: {}",
+                    Error::from(errno)
+                ))
+            })?;
+            if !fired.is_empty() {
+                return Ok(());
+            }
+        }
     }
 
     fn handle_close(&self, io: Handle) {
@@ -738,6 +878,14 @@ impl HostOps for OsHost {
             secs: elapsed.as_secs(),
             nanos: u64::from(elapsed.subsec_nanos()),
         }
+    }
+
+    fn clock_timer(&self, secs: u64, nanos: u64) -> Handle {
+        let at = Duration::from_secs(secs)
+            .checked_add(Duration::from_nanos(nanos))
+            .and_then(|elapsed| self.start.checked_add(elapsed));
+
+        self.mint(OsResource::Timer(at))
     }
 
     fn rand_bytes(&self, count: u64) -> Result<Vec<u8>, Refusal> {

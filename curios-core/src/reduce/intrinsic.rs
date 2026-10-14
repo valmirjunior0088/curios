@@ -2244,6 +2244,37 @@ pub fn reduce_intrinsic(
             let f = reducer.reduce(f.clone())?;
             Ok(Subterm::Intrinsic(Intrinsic::io_bind(from, to, action, f)))
         }
+        // Inert as the other two: no type ever advances a description, so a suspension and its handler only rebuild.
+        Intrinsic::IoSuspend {
+            result,
+            on,
+            abandon,
+            rest,
+        } => {
+            let result = reducer.reduce(result.clone())?;
+            let on = reducer.reduce(on.clone())?;
+            let abandon = reducer.reduce(abandon.clone())?;
+            let rest = reducer.reduce(rest.clone())?;
+            Ok(Subterm::Intrinsic(Intrinsic::io_suspend(
+                result, on, abandon, rest,
+            )))
+        }
+        Intrinsic::IoAdvance {
+            from,
+            to,
+            action,
+            done,
+            suspended,
+        } => {
+            let from = reducer.reduce(from.clone())?;
+            let to = reducer.reduce(to.clone())?;
+            let action = reducer.reduce(action.clone())?;
+            let done = reducer.reduce(done.clone())?;
+            let suspended = reducer.reduce(suspended.clone())?;
+            Ok(Subterm::Intrinsic(Intrinsic::io_advance(
+                from, to, action, done, suspended,
+            )))
+        }
     }
 }
 

@@ -28,6 +28,9 @@ pub use optimize::*;
 mod origin;
 pub(crate) use origin::*;
 
+mod row_flow;
+pub(crate) use row_flow::*;
+
 mod print;
 
 mod represent;

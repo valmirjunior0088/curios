@@ -2043,10 +2043,11 @@ pub fn intrinsic_form(intrinsic: Intrinsic, grouped: bool) -> IntrinsicForm {
             explicits: vec![list, init, function],
         },
         Intrinsic::HandleType => IntrinsicForm::Named("Handle"),
-        // The three `/sys/Handle` constants are the only handles a term ever holds: every other handle is minted by the host at run time, behind an `Io` no reduction enters. The last arm names a token no source can spell, and spells the token rather than abort the diagnostic it is inside.
+        // The four `/sys/Handle` constants are the only handles a term ever holds: every other handle is minted by the host at run time, behind an `Io` no reduction enters. The last arm names a token no source can spell, and spells the token rather than abort the diagnostic it is inside.
         Intrinsic::Handle(stdio::STDIN) => IntrinsicForm::Named("Handle/stdin"),
         Intrinsic::Handle(stdio::STDOUT) => IntrinsicForm::Named("Handle/stdout"),
         Intrinsic::Handle(stdio::STDERR) => IntrinsicForm::Named("Handle/stderr"),
+        Intrinsic::Handle(stdio::READY) => IntrinsicForm::Named("Handle/ready"),
         Intrinsic::Handle(token) => IntrinsicForm::Handle(token),
         Intrinsic::CellType(elem) => IntrinsicForm::Call {
             path: "Cell".into(),
@@ -2144,6 +2145,27 @@ pub fn intrinsic_form(intrinsic: Intrinsic, grouped: bool) -> IntrinsicForm {
             path: "Io/bind".into(),
             implicits: vec![a, b],
             explicits: vec![action, f],
+        },
+        Intrinsic::IoSuspend {
+            result,
+            on,
+            abandon,
+            rest,
+        } => IntrinsicForm::Call {
+            path: "Io/suspend".into(),
+            implicits: vec![result],
+            explicits: vec![on, abandon, rest],
+        },
+        Intrinsic::IoAdvance {
+            from,
+            to,
+            action,
+            done,
+            suspended,
+        } => IntrinsicForm::Call {
+            path: "Io/advance".into(),
+            implicits: vec![from, to],
+            explicits: vec![action, done, suspended],
         },
     }
 }

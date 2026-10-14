@@ -267,6 +267,10 @@ fn head(module: &Module, rhs: &Rhs) -> String {
             intrinsic,
             operands,
         } => format!("Intrinsic {intrinsic:?} {}", atoms(module, operands)),
+        Rhs::Suspension {
+            operation,
+            operands,
+        } => format!("Suspension {operation:?} {}", atoms(module, operands)),
     }
 }
 
@@ -358,7 +362,8 @@ fn bodies(module: &Module, out: &mut String, depth: usize, rhs: &Rhs) {
         | Rhs::Cell { .. }
         | Rhs::Channel { .. }
         | Rhs::Foreign { .. }
-        | Rhs::Intrinsic { .. } => {}
+        | Rhs::Intrinsic { .. }
+        | Rhs::Suspension { .. } => {}
     }
 }
 

@@ -274,7 +274,8 @@ fn rhs_atoms(rhs: &Rhs) -> Vec<&Atom> {
         | Rhs::Cell { operands, .. }
         | Rhs::Channel { operands, .. }
         | Rhs::Foreign { operands, .. }
-        | Rhs::Intrinsic { operands, .. } => operands.iter().collect(),
+        | Rhs::Intrinsic { operands, .. }
+        | Rhs::Suspension { operands, .. } => operands.iter().collect(),
         Rhs::Product { fields, .. } | Rhs::Construct { fields, .. } => fields.iter().collect(),
         Rhs::Project { product, .. } => vec![product],
         Rhs::MatchVariant { scrutinee, .. }

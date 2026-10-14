@@ -10,7 +10,7 @@ mod tests;
 use {
     super::{
         CellOperation, ChannelOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp,
-        Terminator,
+        SuspensionOperation, Terminator,
     },
     curios_num::{Binary, Floating, Grain, Integer, Natural, ScalarTrap},
 };
@@ -221,6 +221,17 @@ impl Semantics {
             Rhs::Channel { operation, .. } => Self::channel(*operation),
             Rhs::Foreign { .. } => LocalBehavior::host(),
             Rhs::Intrinsic { intrinsic, .. } => Self::intrinsic(*intrinsic),
+            // A suspension is data: building one allocates an immutable value, and the test and the reads are total and allocation-free.
+            Rhs::Suspension { operation, .. } => match operation {
+                SuspensionOperation::New
+                | SuspensionOperation::Carry
+                | SuspensionOperation::Build => LocalBehavior::alloc(Allocation::Immutable),
+                SuspensionOperation::Is
+                | SuspensionOperation::On
+                | SuspensionOperation::Abandon
+                | SuspensionOperation::Next
+                | SuspensionOperation::Frames => LocalBehavior::pure(),
+            },
             // Building an aggregate allocates an immutable value; a sequence fold materializes suffix views.
             Rhs::Product { .. }
             | Rhs::Construct { .. }

@@ -423,7 +423,9 @@ impl Intrinsic {
             | Intrinsic::ChannelCapacity { .. }
             | Intrinsic::IoType { .. }
             | Intrinsic::IoPure { .. }
-            | Intrinsic::IoBind { .. } => Declaration::Opaque,
+            | Intrinsic::IoBind { .. }
+            | Intrinsic::IoSuspend { .. }
+            | Intrinsic::IoAdvance { .. } => Declaration::Opaque,
         }
     }
 

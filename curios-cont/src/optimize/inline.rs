@@ -25,7 +25,10 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
                 continue;
             };
             let (callee, args, return_to) = (*callee, args.clone(), *return_to);
-            if Some(callee) == module.entry() || analysis.recursive.contains(&callee) {
+            if Some(callee) == module.entry()
+                || analysis.recursive.contains(&callee)
+                || module.is_out_of_line(callee)
+            {
                 continue;
             }
             if !analysis.node_owners.contains_key(&node_id) {

@@ -15,4 +15,5 @@ mod program_tests;
 mod reader_tests;
 mod serial_tests;
 mod stream_tests;
+mod suspension_tests;
 mod tty_tests;

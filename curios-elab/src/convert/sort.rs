@@ -266,6 +266,8 @@ impl Sort {
                 | Intrinsic::IntSign(..)
                 | Intrinsic::IoBind { .. }
                 | Intrinsic::IoPure { .. }
+                | Intrinsic::IoSuspend { .. }
+                | Intrinsic::IoAdvance { .. }
                 | Intrinsic::List { .. }
                 | Intrinsic::ListAppend { .. }
                 | Intrinsic::ListConcat { .. }

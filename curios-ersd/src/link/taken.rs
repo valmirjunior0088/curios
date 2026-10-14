@@ -137,7 +137,8 @@ impl Named {
             | Rhs::FoldNat { .. }
             | Rhs::FoldSequence { .. }
             | Rhs::UnconsSequence { .. }
-            | Rhs::Intrinsic { .. } => {}
+            | Rhs::Intrinsic { .. }
+            | Rhs::Suspension { .. } => {}
         }
 
         Some(())

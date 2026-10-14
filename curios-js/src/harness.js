@@ -4,7 +4,9 @@
 //
 // A handle crosses as its token's bytes, and this harness keys a token on the hex of exactly those bytes, never on a number decoded from them: the empty token is not stdin's `00`, a padded `0100` is not stdout's `01`, and a token longer than any number stays itself.
 //
-// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
+// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. The only handles it mints are watches and timers, what a program suspends on. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
+//
+// A program that can suspend exports `func/advance` beside its entry, and both answer turns: whether it suspended, what it yielded, the handles it waits on, its abandon and its rest. The run advances turn after turn, awaiting a timer between them, so the event loop runs while the program sleeps.
 
 /** Thrown by the `proc_exit` import to unwind the wasm stack with an exit code. */
 export class ExitSignal extends Error {
@@ -53,7 +55,7 @@ const describe = (value) => {
  * Run a compiled program. `config` carries:
  * - `compiled`: what `compile` returned — `program`, the module bytes, and `foreigns`, the program's own `foreign` rows as `{ name, params, results }`, `never: true` in place of `results` for a row that does not return;
  * - `bridge`: the bridge module's bytes, from `bridge_bytes`;
- * - `status`, `event`, `stdio`: the wire code tables and the standard streams' tokens from `abi`;
+ * - `status`, `event`, `stdio`, `seed`, `deadlock`: the wire code tables, the standard streams' tokens, the first token this host may mint and the report of a program suspended on nothing, from `abi`;
  * - `rows`: from `abi` too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
  * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each receiving a copy of every write as a `Uint8Array`; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does.
  *
@@ -100,6 +102,26 @@ export async function run(config) {
   const { status, event } = config;
   const { STDIN, STDOUT, STDERR } = config.stdio;
   const standard = new Set([STDIN, STDOUT, STDERR]);
+
+  // The handles this host mints — watches and timers — keyed as every token is, each beside whether it is ready now and, for a timer, the instant it is ready at. A token is the minimal little-endian bytes of a count from `seed` up, as every host mints them, so it collides with no constant token.
+  const minted = new Map();
+  let next = BigInt(config.seed);
+
+  const mint = (entry) => {
+    const token = [];
+
+    for (let count = next; count > 0n || token.length === 0; count >>= 8n) {
+      token.push(Number(count & 0xffn));
+    }
+
+    next += 1n;
+    minted.set(hex(token), entry);
+
+    return encodeBytes(Uint8Array.from(token));
+  };
+
+  // A handle is ready unless it is a timer whose instant has not passed: a watch is, since the standard streams always are and nothing else here is a stream, and so is any other handle, which nothing would hold.
+  const ready = (key) => minted.get(key)?.ready() ?? true;
 
   const output = { stdout: [], stderr: [] };
 
@@ -177,7 +199,23 @@ export async function run(config) {
 
       return [reported(readers), reported(writers)];
     },
-    handle_close: () => {},
+    // A watch is ready at once, as every handle a watch could name here is.
+    handle_watch: () => mint({ ready: () => true }),
+    // A byte for each handle, ready or not, in the list's order.
+    handle_ready: (on) => {
+      const count = bridge.list_len(on);
+      const reports = new Uint8Array(count);
+
+      for (let i = 0; i < count; i += 1) {
+        reports[i] = ready(keyOf(bridge.list_get(on, i))) ? event.READY : 0;
+      }
+
+      return encodeBytes(reports);
+    },
+    // Closing a watch or a timer forgets it; closing anything else does nothing, as closing an unknown handle does on every host.
+    handle_close: (handle) => {
+      minted.delete(keyOf(handle));
+    },
     // Nothing is held back in the playground — every write is delivered as it is made — so a standard stream's flush has nothing to drain, and no other handle exists here.
     handle_flush: (handle) =>
       standard.has(keyOf(handle)) ? status.OK : status.NOT_FOUND,
@@ -199,6 +237,12 @@ export async function run(config) {
         BigInt(Math.floor(millis / 1000)),
         BigInt(Math.floor((millis % 1000) * 1_000_000)),
       ];
+    },
+    // A timer at an instant of the clock `clock_mono` reads.
+    clock_timer: (secs, nanos) => {
+      const at = Number(secs) * 1000 + Number(nanos) / 1_000_000;
+
+      return mint({ ready: () => performance.now() >= at, at });
     },
     // Exactly `count` bytes, or a refusal where this host cannot hold that many — never fewer.
     rand_bytes: (count) => {
@@ -506,6 +550,49 @@ export async function run(config) {
     return bytes;
   };
 
+  // The handles a turn waits on, by key.
+  const waits = (list) =>
+    Array.from({ length: bridge.list_len(list) }, (_, i) =>
+      keyOf(bridge.list_get(list, i)),
+    );
+
+  // Hold out until a handle of `on` is ready: at once where one is, and otherwise until the soonest of its timers, the one thing here that becomes ready with time — asking again after each sleep, since a timeout may fire before the clock `clock_mono` reads has reached its instant. A wait with no timer could never end, and is refused.
+  const waited = async (on) => {
+    while (!on.some(ready)) {
+      const instants = on
+        .map((key) => minted.get(key)?.at)
+        .filter((at) => at !== undefined);
+
+      if (instants.length === 0) {
+        throw new Error(
+          "the program waits on handles nothing in this host can ready",
+        );
+      }
+
+      const soonest = Math.min(...instants);
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, Math.max(0, soonest - performance.now()));
+      });
+    }
+  };
+
+  // Run an abandon to its end, waiting where it suspends — but not where it suspends on no handle in turn, since nothing could wake it either.
+  const finished = async (advance, abandon) => {
+    let turn = advance(abandon);
+
+    while (turn[0] === 1) {
+      const on = waits(turn[2]);
+
+      if (on.length === 0) {
+        return;
+      }
+
+      await waited(on);
+      turn = advance(turn[4]);
+    }
+  };
+
   const result = () => ({
     stdout: concat(output.stdout),
     stderr: concat(output.stderr),
@@ -520,7 +607,26 @@ export async function run(config) {
       ffi: ffiEnv(module),
     });
 
-    instance.exports["func/main"]();
+    const advance = instance.exports["func/advance"];
+    let turn = instance.exports["func/main"]();
+
+    // A program that cannot suspend answers what it yields, which nothing here reads. One that can is advanced until it yields; where it suspends on no handle, its abandon runs to its end and the deadlock is reported, ending the run as an exit with code 1 would.
+    while (advance !== undefined && turn[0] === 1) {
+      const on = waits(turn[2]);
+
+      if (on.length === 0) {
+        await finished(advance, turn[3]);
+
+        const report = new TextEncoder().encode(config.deadlock);
+        output.stderr.push(report);
+        hooks.onStderr?.(report.slice());
+
+        return { ...result(), exitCode: 1 };
+      }
+
+      await waited(on);
+      turn = advance(turn[4]);
+    }
 
     return result();
   } catch (error) {

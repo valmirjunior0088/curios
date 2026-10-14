@@ -2,7 +2,7 @@
 
 use {
     crate::set,
-    curios_abi::{CodeCarrier, Failure, Handle, HostOp, code_sets, errno},
+    curios_abi::{CodeCarrier, DEADLOCK, Failure, Handle, HostOp, code_sets, errno},
     js_sys::Object,
     wasm_bindgen::JsValue,
 };
@@ -57,7 +57,7 @@ fn rows() -> Object {
     object
 }
 
-/// The wire codes as a JS object: the `status`/`file_kind`/`stdio_mode` code tables as `BigInt`s, the `event` masks as numbers, the `stdio` tokens as hex, and `rows`, the name the standard library declares each host row under beside the method that answers it.
+/// The wire codes as a JS object: the `status`/`file_kind`/`stdio_mode` code tables as `BigInt`s, the `event` masks as numbers, the `stdio` tokens as hex, `seed`, the first token a host may mint, as a number, `deadlock`, what a host reports of a program suspended on nothing, and `rows`, the name the standard library declares each host row under beside the method that answers it.
 pub(crate) fn abi() -> Object {
     let object = Object::new();
 
@@ -100,6 +100,12 @@ pub(crate) fn abi() -> Object {
             ("STDERR", Handle::Stderr),
         ]),
     );
+    set(
+        &object,
+        "seed",
+        &JsValue::from_f64(f64::from(Handle::HANDLE_SEED)),
+    );
+    set(&object, "deadlock", &JsValue::from_str(DEADLOCK));
     set(&object, "rows", &rows());
 
     object

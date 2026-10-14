@@ -419,6 +419,16 @@ enum MockResource {
     /// A server TLS config token minted by `tls_server_config`. The scripted host runs cleartext, so it carries no real configuration — it only marks the handle so `tls_start_server` can recognise it.
     TlsConfig,
     Serial(MockSerial),
+    /// A watch minted by `handle_watch`: the handle it watches and what it asks of it.
+    Watch {
+        target: Handle,
+        readable: bool,
+        writable: bool,
+    },
+    /// A timer minted by `clock_timer`. Nothing but the program moves a script, so its instant has passed once a wait has been asked to hold out for it: the clock jumps to the timer a wait would sleep until.
+    Timer {
+        due: bool,
+    },
 }
 
 /// The scripted, in-memory `Host` used by the test suite — the mirror of `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and read what the run produced through the [`MockIo`] handle `build` returns.
@@ -547,6 +557,84 @@ impl MockHost {
     /// Mint a fresh handle for `resource` under the table lock (see [`Table::mint`]).
     fn mint(&self, resource: MockResource) -> Handle {
         self.table.lock().unwrap().mint(resource)
+    }
+
+    /// What a poll reports of `handle` waited on to read.
+    fn read_report(&self, table: &mut Table<MockResource>, handle: &Handle) -> Readiness {
+        let ready = Readiness::from_bits(event::READY);
+        let report = |answers: bool| match answers {
+            true => ready,
+            false => Readiness::none(),
+        };
+
+        match handle {
+            // Standard input is armed like a scripted stream, so one `handle_poll` is one chunk of progress and a fiber parked on `WouldBlock` resumes into the next chunk.
+            Handle::Stdin => {
+                self.input.lock().unwrap().arm();
+
+                ready
+            }
+            // The output streams answer a read at once, with the refusal a stream open only to write gives.
+            Handle::Stdout | Handle::Stderr => ready,
+            Handle::Other(_) => match table.get_mut(handle) {
+                Some(MockResource::Outbound(stream) | MockResource::Piped(stream)) => {
+                    report(stream.arm())
+                }
+                Some(MockResource::Inbound(conn)) => report(conn.bytes.arm()),
+                Some(MockResource::Serial(port)) => {
+                    port.bytes.arm();
+
+                    ready
+                }
+                // A connect settles as readiness to write, and a socket still connecting has nothing to read.
+                Some(MockResource::Connecting { .. }) => Readiness::none(),
+                // A child is readable once it has ended, which is when `proc_wait` answers.
+                Some(MockResource::Child(child)) => report(child.exit.is_some()),
+                Some(_) => ready,
+                // An unknown handle — closed, say — reports its failure, as the native host does, so a waiter wakes into the call that reports why.
+                None => Readiness::from_bits(event::ERR),
+            },
+        }
+    }
+
+    /// What a poll reports of `handle` waited on to write.
+    fn write_report(table: &mut Table<MockResource>, handle: &Handle) -> Readiness {
+        let ready = Readiness::from_bits(event::READY);
+
+        match handle {
+            Handle::Stdin | Handle::Stdout | Handle::Stderr => ready,
+            Handle::Other(_) => match table.get_mut(handle) {
+                // The connect is due once it has been waited on, and the wait is answered at once: the next `socket_finish_connect` settles it.
+                Some(MockResource::Connecting { due, .. }) => {
+                    *due = true;
+
+                    ready
+                }
+                // A child's handle is waited on for its end alone, and is never written.
+                Some(MockResource::Child(_)) => Readiness::none(),
+                // Nothing a script holds refuses a write for want of room.
+                Some(_) => ready,
+                None => Readiness::from_bits(event::ERR),
+            },
+        }
+    }
+
+    /// Whether `handle` is ready now, as `handle_ready` reports it: a watch as a poll of its handle for what it asks would report it, a timer once a wait has passed its instant, and anything else at once.
+    fn ready(&self, table: &mut Table<MockResource>, handle: &Handle) -> bool {
+        match table.get(handle) {
+            Some(MockResource::Watch {
+                target,
+                readable,
+                writable,
+            }) => {
+                let (target, readable, writable) = (target.clone(), *readable, *writable);
+
+                readable && self.read_report(table, &target).is_any()
+                    || writable && Self::write_report(table, &target).is_any()
+            }
+            Some(MockResource::Timer { due }) => *due,
+            _ => true,
+        }
     }
 }
 
@@ -713,62 +801,15 @@ impl HostOps for MockHost {
     ) -> Result<Polled, Refusal> {
         // Readiness is what the script says is due, and never a wait. Each standing answers for its own list and no other: a handle waited on to read is ready where a read of it now answers, one waited on to write where a write does, and a handle that names nothing reports its failure in whichever list it stands.
         let mut table = self.table.lock().unwrap();
-        let ready = Readiness::from_bits(event::READY);
-        let report = |answers: bool| match answers {
-            true => ready,
-            false => Readiness::none(),
-        };
 
         let readable = readers
             .iter()
-            .map(|handle| match handle {
-                // Standard input is armed like a scripted stream, so one `handle_poll` is one chunk of progress and a fiber parked on `WouldBlock` resumes into the next chunk.
-                Handle::Stdin => {
-                    self.input.lock().unwrap().arm();
-
-                    ready
-                }
-                // The output streams answer a read at once, with the refusal a stream open only to write gives.
-                Handle::Stdout | Handle::Stderr => ready,
-                Handle::Other(_) => match table.get_mut(handle) {
-                    Some(MockResource::Outbound(stream) | MockResource::Piped(stream)) => {
-                        report(stream.arm())
-                    }
-                    Some(MockResource::Inbound(conn)) => report(conn.bytes.arm()),
-                    Some(MockResource::Serial(port)) => {
-                        port.bytes.arm();
-
-                        ready
-                    }
-                    // A connect settles as readiness to write, and a socket still connecting has nothing to read.
-                    Some(MockResource::Connecting { .. }) => Readiness::none(),
-                    // A child is readable once it has ended, which is when `proc_wait` answers.
-                    Some(MockResource::Child(child)) => report(child.exit.is_some()),
-                    Some(_) => ready,
-                    // An unknown handle — closed, say — reports its failure, as the native host does, so a waiter wakes into the call that reports why.
-                    None => Readiness::from_bits(event::ERR),
-                },
-            })
+            .map(|handle| self.read_report(&mut table, handle))
             .collect::<Vec<_>>();
 
         let writable = writers
             .iter()
-            .map(|handle| match handle {
-                Handle::Stdin | Handle::Stdout | Handle::Stderr => ready,
-                Handle::Other(_) => match table.get_mut(handle) {
-                    // The connect is due once it has been waited on, and the wait is answered at once: the next `socket_finish_connect` settles it.
-                    Some(MockResource::Connecting { due, .. }) => {
-                        *due = true;
-
-                        ready
-                    }
-                    // A child's handle is waited on for its end alone, and is never written.
-                    Some(MockResource::Child(_)) => Readiness::none(),
-                    // Nothing a script holds refuses a write for want of room.
-                    Some(_) => ready,
-                    None => Readiness::from_bits(event::ERR),
-                },
-            })
+            .map(|handle| Self::write_report(&mut table, handle))
             .collect::<Vec<_>>();
 
         // A native poll with no timeout sleeps until a handle is ready. Nothing moves a script but the program, so one that reports nothing would be asked again without end: the call is refused, which ends the test saying what it waited on.
@@ -842,6 +883,50 @@ impl HostOps for MockHost {
 
                 Err(Failure::WouldBlock)
             }
+        }
+    }
+
+    fn handle_watch(&self, h: Handle, readable: bool, writable: bool) -> Handle {
+        self.mint(MockResource::Watch {
+            target: h,
+            readable,
+            writable,
+        })
+    }
+
+    fn handle_ready(&self, on: Vec<Handle>) -> Vec<u8> {
+        let mut table = self.table.lock().unwrap();
+
+        on.iter()
+            .map(|handle| match self.ready(&mut table, handle) {
+                true => event::READY,
+                false => 0,
+            })
+            .collect()
+    }
+
+    fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal> {
+        let mut table = self.table.lock().unwrap();
+
+        if on.iter().any(|handle| self.ready(&mut table, handle)) {
+            return Ok(());
+        }
+
+        // The wait sleeps until the soonest timer, which the script has no clock for: every timer it holds out for is due.
+        let mut slept = false;
+        for handle in &on {
+            if let Some(MockResource::Timer { due }) = table.get_mut(handle) {
+                *due = true;
+                slept = true;
+            }
+        }
+
+        match slept {
+            true => Ok(()),
+            // A native wait on watches alone sleeps until one is ready, and nothing moves a script but the program: one that readies none would be waited on without end, so the run is refused saying so.
+            false => Err(Refusal(
+                "the script readies none of the handles this wait holds out for".to_string(),
+            )),
         }
     }
 
@@ -949,6 +1034,10 @@ impl HostOps for MockHost {
 
     fn clock_wall(&self) -> Timestamp {
         reading(self.clock_wall_seq.lock().unwrap().pop_front())
+    }
+
+    fn clock_timer(&self, _: u64, _: u64) -> Handle {
+        self.mint(MockResource::Timer { due: false })
     }
 
     fn clock_mono(&self) -> Timestamp {

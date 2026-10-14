@@ -131,7 +131,7 @@ impl Lowering<'_> {
     ///
     /// `body` runs with a fresh block open, so whatever it erases lands inside the thunk rather than at the construction site — which is what makes an `Io` a description: bound once and forced twice, it performs twice, and substituting a definition for its name never changes behavior. Its `Outcome` seals the block, so a diverging body (a process exit) keeps its own terminator instead of returning.
     ///
-    /// What belongs inside is the *performance*, not the operands. `IoPure` erases its value eagerly and hands the closure an atom to return; `IoBind` puts the two forces and the continuation's application inside, because those are what must not happen until the description is run.
+    /// What belongs inside is the *performance*, not the operands. `IoPure` erases its value eagerly and hands the closure an atom to return; `IoBind` puts the two forces and the continuation's application inside, because those are what must not happen until the description is run (see the `suspension` module).
     pub(super) fn thunk(
         &mut self,
         hint: Option<&str>,
@@ -153,17 +153,6 @@ impl Lowering<'_> {
         self.builder.let_functions(vec![function]);
 
         Ok(Outcome::Emitted(curios_ersd::Atom::Function(function)))
-    }
-
-    /// Force a description: apply the closure it erased to at zero arguments.
-    fn force(&mut self, action: curios_ersd::Atom) -> Outcome {
-        self.bind(
-            None,
-            curios_ersd::Rhs::Apply {
-                callee: action,
-                arguments: Vec::new(),
-            },
-        )
     }
 
     /// The sequence-family counterpart of [`operation`](Self::operation).
@@ -511,23 +500,42 @@ pub(super) fn erase_intrinsic(
                 Ok(Outcome::Emitted(value))
             })
         }
-        // The description that performs `action`, then the description `continuation` computes from its result. The operands erase at the construction site like the rest of the roster (see `thunk`'s placement rule); the two forces and the continuation's application are the performance, and only they stay inside.
+        // The description that performs `action`, then the description `continuation` computes from its result. The operands erase at the construction site like the rest of the roster (see `thunk`'s placement rule); the two forces, the test between them and the continuation's application are the performance, and only they stay inside.
         Intrinsic::IoBind { .. } => {
             let [action, continuation] = places(computed(context, intrinsic));
-            let action_atom = emitted!(lowering.demanded(context, &action)?);
-            let continuation_atom = emitted!(lowering.demanded(context, &continuation)?);
+            let action = emitted!(lowering.demanded(context, &action)?);
+            let continuation = emitted!(lowering.demanded(context, &continuation)?);
 
             lowering.thunk(hint.or(Some("io/bind")), move |lowering| {
-                let result = emitted!(lowering.force(action_atom));
-                let next = emitted!(lowering.bind(
-                    None,
-                    curios_ersd::Rhs::Apply {
-                        callee: continuation_atom,
-                        arguments: vec![result],
-                    },
-                ));
+                Ok(Outcome::Emitted(
+                    lowering.perform_bind(action, continuation),
+                ))
+            })
+        }
+        // The description that suspends on `on`: its performance is the suspension, and whatever forced it decides what happens next.
+        Intrinsic::IoSuspend { .. } => {
+            let [on, abandon, rest] = places(computed(context, intrinsic));
+            let on = emitted!(lowering.demanded(context, &on)?);
+            let abandon = emitted!(lowering.demanded(context, &abandon)?);
+            let rest = emitted!(lowering.demanded(context, &rest)?);
 
-                Ok(lowering.force(next))
+            lowering.thunk(hint.or(Some("io/suspend")), move |lowering| {
+                Ok(Outcome::Emitted(
+                    lowering.perform_suspend(on, abandon, rest),
+                ))
+            })
+        }
+        // The description that performs `action` and goes on into `done` with its value or into `suspended` with its suspension.
+        Intrinsic::IoAdvance { .. } => {
+            let [action, done, suspended] = places(computed(context, intrinsic));
+            let action = emitted!(lowering.demanded(context, &action)?);
+            let done = emitted!(lowering.demanded(context, &done)?);
+            let suspended = emitted!(lowering.demanded(context, &suspended)?);
+
+            lowering.thunk(hint.or(Some("io/advance")), move |lowering| {
+                Ok(Outcome::Emitted(
+                    lowering.perform_advance(action, done, suspended),
+                ))
             })
         }
     }

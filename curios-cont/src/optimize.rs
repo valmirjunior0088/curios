@@ -99,6 +99,7 @@ pub fn optimize(module: &mut Module) {
                 "cont::forward_aggregate_projections",
                 forward_aggregate_projections(module)
             )
+            | pass!("cont::answer_row_tests", answer_row_tests(module))
             | pass!("cont::dedupe_intrinsics", dedupe_intrinsics(module))
             | pass!("cont::simplify_nodes", simplify_nodes(module))
             | pass!(

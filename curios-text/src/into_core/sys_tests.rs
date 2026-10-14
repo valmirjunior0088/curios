@@ -187,7 +187,7 @@ fn allows_pub_root_module_via_absolute_path() {
     "#);
 }
 
-/// `/sys` offers no way out of `Io`: the effect module exports its carrier and its two monad operations, and no `/sys` function anywhere takes an `Io` to something that is not one.
+/// `/sys` offers no way out of `Io`: the effect module exports its carrier, its two monad operations and the two that suspend a description and advance one, each answering an `Io`, and no `/sys` function anywhere takes an `Io` to something that is not one.
 ///
 /// This *narrows* `documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md`; it does not discharge it. That decision rests on there being no operation from `Io(T)` to `T`, and the surface an eliminator could enter through is two Rust tables rather than the whole library: a foreign row cannot introduce one, because every row's call is typed by `curios_core::foreign_produced`, which the lowering and both checkers read and which answers an `Io`, and `WireType` is a closed enum with no case that could name an `Io` in a domain; and no `.crs` can define one without already having one. So what is checkable is the roster below, and that is what is checked — the general property remains argued.
 #[test]
@@ -232,7 +232,7 @@ fn the_sys_io_roster_offers_no_eliminator() {
     let names = exported.iter().map(|(label, _)| *label).collect::<Vec<_>>();
     assert_eq!(
         names,
-        ["Io", "pure", "bind"],
+        ["Io", "pure", "bind", "suspend", "advance"],
         "/sys/Io's roster changed; an entry here is a new way into or out of the effect type"
     );
 

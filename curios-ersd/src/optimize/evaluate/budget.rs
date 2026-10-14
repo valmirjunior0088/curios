@@ -19,10 +19,10 @@ pub(super) const MAX_CALL_DEPTH: usize = 256;
 pub(super) const MAX_REIFY_NODES: usize = 2_048;
 pub(super) const MAX_REIFY_BYTES: usize = 65_536;
 
-/// The heaviest copy a description closure may reify. A performance is small by construction — a write is one foreign call, a bind two forces, a pure a return — so a description whose copy extent runs past this is carrying program code: a sequencing chain's continuation drags its whole suffix along as extent, and copying that per level per round is the compounding this cap exists to stop. The staged-formatter residuals the collapse pins protect weigh a few dozen nodes; a chain's first link weighs its program.
+/// The heaviest copy a description closure may reify. A performance is small by construction — a write is one foreign call, a bind two forces, the test between them and its carry, a pure a return — so a description whose copy extent runs past this is carrying program code: a sequencing chain's continuation drags its whole suffix along as extent, and copying that per level per round is the compounding this cap exists to stop. The staged-formatter residuals the collapse pins protect weigh a few dozen nodes; a chain's first link weighs its program.
 ///
 /// One performance is not small: the library's write is a loop that waits and resends, and it is the heaviest description a constant `print` copies. `curios`'s `tests::fmt::a_constant_prints_descriptions_are_copied_within_the_evaluators_cap` holds it under this cap, so an edit to that loop which crosses the cap fails there by this constant's name, where the collapses it breaks name only what they lost.
-pub(crate) const DESCRIPTION_COPY_NODE_LIMIT: usize = 128;
+pub(crate) const DESCRIPTION_COPY_NODE_LIMIT: usize = 160;
 
 /// Shared node pool for a whole reification pass — the growth analogue of [`PASS_BUDGET`].
 ///

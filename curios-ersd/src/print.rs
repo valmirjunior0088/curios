@@ -17,8 +17,8 @@ use {
     super::{
         Analysis, Atom, BlockId, CellOperation, ChannelOperation, Constant, ConstructorId,
         FamilyId, Field, FieldShape, ForeignId, FunctionId, Intrinsic, Module, Operation,
-        ProductId, RecValue, Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
-        ValueId,
+        ProductId, RecValue, Rhs, SequenceGrain, SequenceOp, Statement, StatementId,
+        SuspensionOperation, Terminator, ValueId,
     },
     curios_abi::Namespace,
     curios_num::{Grain, Rounding},
@@ -172,7 +172,8 @@ impl Reach {
             | Rhs::FoldNat { .. }
             | Rhs::FoldSequence { .. }
             | Rhs::UnconsSequence { .. }
-            | Rhs::Intrinsic { .. } => {}
+            | Rhs::Intrinsic { .. }
+            | Rhs::Suspension { .. } => {}
         }
     }
 
@@ -520,6 +521,12 @@ impl Printer<'_, '_, '_, '_> {
                         operands,
                     } => {
                         format!("{}({})", intrinsic_name(*intrinsic), self.atoms(operands))
+                    }
+                    Rhs::Suspension {
+                        operation,
+                        operands,
+                    } => {
+                        format!("{}({})", suspension_name(*operation), self.atoms(operands))
                     }
 
                     // The eliminators: `let x =`, then an indented `match … end;`.
@@ -937,6 +944,19 @@ fn cell_name(operation: CellOperation) -> &'static str {
 fn intrinsic_name(intrinsic: Intrinsic) -> &'static str {
     match intrinsic {
         Intrinsic::ListMap => "List/map",
+    }
+}
+
+fn suspension_name(operation: SuspensionOperation) -> &'static str {
+    match operation {
+        SuspensionOperation::New => "Suspension/new",
+        SuspensionOperation::Carry => "Suspension/carry",
+        SuspensionOperation::Build => "Suspension/build",
+        SuspensionOperation::Is => "Suspension/is",
+        SuspensionOperation::On => "Suspension/on",
+        SuspensionOperation::Abandon => "Suspension/abandon",
+        SuspensionOperation::Next => "Suspension/next",
+        SuspensionOperation::Frames => "Suspension/frames",
     }
 }
 

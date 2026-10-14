@@ -1,5 +1,5 @@
 pub use /sys/{Handle};
-pub use /sys/Handle/{stdin, stdout, stderr};
+pub use /sys/Handle/{stdin, stdout, stderr, ready};
 use /std/{Bool, Byte, Bytes, Nat, Int, List, Option, Result, Io, Async};
 use /std/Bool/{Holds};
 
@@ -71,6 +71,28 @@ foreign handle_poll(List(Handle), List(Handle), Int) -> {readable: Bytes, writab
 pub let poll(waits: List({Handle, Interest}), timeout: Int) -> Io(List(Readiness)) =
     let polled = handle_poll(readers(waits), writers(waits), timeout)!;
     Io/pure(reports(waits, polled.readable, polled.writable));
+
+--- A handle ready once the handle is ready to read where the first flag asks, to write where the second does, or has failed or hung up.
+foreign handle_watch(Handle, Bool, Bool) -> Handle;
+
+--- A handle ready once `h` is ready for what `interest` asks, or has failed or hung up: what a description suspends on to wait for `h`. Closing it leaves `h` as it is.
+pub let watch(h: Handle, interest: Interest) -> Io(Handle) =
+    handle_watch(h, interest.readable, interest.writable);
+
+--- A byte for each handle, in the list's order: `event/ready` where it is ready now.
+foreign handle_ready(List(Handle)) -> Bytes;
+
+--- Whether each report says ready, in their order.
+let each_ready(reports: Bytes) -> List(Bool) =
+    match reports
+    | x[] => []
+    | x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)]
+    end;
+
+--- Whether each handle of `on` is ready now, in its order, without waiting: a watch as its handle is, a timer once its instant has passed, and any other handle at once.
+pub let ready_now(on: List(Handle)) -> Io(List(Bool)) =
+    let reports = handle_ready(on)!;
+    Io/pure(each_ready(reports));
 
 --- A successful read's bytes as the chunk they are, or the end of the stream where there are none: a read of a positive count that answers nothing is the end, as a zero-byte `read(2)` is.
 let answered(b: Bytes) -> Io/Chunk =

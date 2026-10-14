@@ -163,6 +163,23 @@ fn known_call_inlining_admits_a_capture_the_owner_never_mentions() {
     assert!(!still_called, "the capturing helper is inlined:\n{module}");
 }
 
+/// The same helper, kept out of line: it fits the budget as before, and its call stays a call.
+#[test]
+fn known_call_inlining_leaves_a_function_kept_out_of_line_called() {
+    let (mut module, helper, _) = capture_unmentioned_by_owner();
+    module.keep_out_of_line(helper);
+
+    inline_known_calls(&mut module);
+    module.verify().unwrap();
+    let still_called = module.nodes().iter().flatten().any(|node| {
+        matches!(
+            node,
+            Node::ApplyFun { callee: Callee::Known(callee), .. } if *callee == helper
+        )
+    });
+    assert!(still_called, "the helper is still called:\n{module}");
+}
+
 #[test]
 fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting() {
     // `callee(p) = p()`, called as `callee(filler)`. A filler reaches an argument position from `split_workers`' padding and from dead-parameter elimination, and it is no more nameable as a callee than a literal is — so the pre-minting bail must decline this call rather than let `map_callee` meet it after the copy has reserved values, nodes and continuations. The arena counts are the assertion: a declined attempt leaves nothing behind.

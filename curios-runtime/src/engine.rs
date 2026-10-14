@@ -23,6 +23,9 @@ use {
 #[cfg(test)]
 mod tests;
 
+mod turns;
+use turns::*;
+
 /// Reject a malformed module, against the same engine that will run it.
 ///
 /// Here rather than in the crate that links a compiler: validation is a wasmparser pass over the bytes, not a compilation, so a build with no backend can decide it. That is what lets the check live beside the engine whose feature set decides what counts as valid.
@@ -593,7 +596,8 @@ impl Compiled {
             &self.module,
             &self.foreigns,
             bindings,
-            host_rows(host),
+            host_rows(Arc::clone(&host)),
+            host,
         )
     }
 
@@ -610,20 +614,22 @@ impl Compiled {
             &self.module,
             &self.foreigns,
             bindings,
-            host_rows(host),
+            host_rows(Arc::clone(&host)),
+            host,
         )
     }
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` the answers a module or an embedder gives, and `host` the ones the host gives itself.
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` the answers a module or an embedder gives, `host` the ones the host gives itself, and `waiter` the host that waits between a suspending program's turns.
 pub(crate) fn instantiate<E: Ended>(
     engine: &Engine,
     module: &Module,
     foreigns: &ForeignStore,
     bindings: ForeignBindings,
     host: Answers,
+    waiter: Arc<dyn HostOps + Send + Sync>,
 ) -> Result<E, String> {
-    on_guest_stack(move || entered(engine, module, foreigns, bindings, host))?
+    on_guest_stack(move || entered(engine, module, foreigns, bindings, host, &*waiter))?
 }
 
 /// [`instantiate`], on the thread it is called on.
@@ -633,6 +639,7 @@ fn entered<E: Ended>(
     foreigns: &ForeignStore,
     bindings: ForeignBindings,
     host: Answers,
+    waiter: &(dyn HostOps + Send + Sync),
 ) -> Result<E, String> {
     let mut store = Store::new(engine, ());
 
@@ -700,11 +707,19 @@ fn entered<E: Ended>(
         .instantiate(&mut store, module)
         .map_err(|error| format!("failed to instantiate module: {error}"))?;
 
-    let function = instance
-        .get_typed_func::<(), Option<Rooted<AnyRef>>>(&mut store, ENTRY)
-        .map_err(|error| format!("failed to access {ENTRY}: {error}"))?;
+    let entry = instance
+        .get_func(&mut store, ENTRY)
+        .ok_or_else(|| format!("failed to access {ENTRY}: the module exports none"))?;
+    // A program that can suspend answers turns, advanced until it yields; one that cannot answers what it yields at once.
+    let ended = match entry.ty(&store).results().len() {
+        1 => entry
+            .typed::<(), Option<Rooted<AnyRef>>>(&store)
+            .map_err(|error| format!("failed to access {ENTRY}: {error}"))?
+            .call(&mut store, ()),
+        _ => run_turns(&mut store, &instance, entry, waiter),
+    };
 
-    match function.call(&mut store, ()) {
+    match ended {
         Ok(result) => E::returned(&store, result),
         Err(error) => match error.downcast_ref::<ExitTrap>() {
             Some(ExitTrap(code)) => Ok(E::exited(*code)),

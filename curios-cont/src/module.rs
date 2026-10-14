@@ -32,6 +32,10 @@ pub struct Module {
     field_groups: BTreeMap<ContinuationId, Vec<FieldGroup>>,
     /// The nominal rows this module's [`ValueExpr::Row`](super::ValueExpr::Row)s belong to, appended by the Ersd door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
     rows: Vec<Option<Row>>,
+    /// The row a forced description's suspension is built as, registered by the door at the first suspension operation it lowers. Its presence is the module saying it can suspend, which is what gives the entry the shape a host advances.
+    suspension: Option<RowId>,
+    /// The functions no pass copies into a caller — not the inliner, contification or specialization — so a call of one stays a call. What a caller reaches only on a path it rarely takes belongs here: the path it does take stays small enough for the caller itself to be copied where it is called.
+    out_of_line: BTreeSet<FunctionId>,
     entry: Option<FunctionId>,
 }
 
@@ -93,6 +97,36 @@ impl Module {
 
     pub fn entry(&self) -> Option<FunctionId> {
         self.entry
+    }
+
+    /// Keep `function` out of line: no pass copies its body into a caller.
+    pub fn keep_out_of_line(&mut self, function: FunctionId) {
+        self.out_of_line.insert(function);
+    }
+
+    /// Whether `function` is kept out of line.
+    pub fn is_out_of_line(&self, function: FunctionId) -> bool {
+        self.out_of_line.contains(&function)
+    }
+
+    /// The row a suspension is built as, where the program can suspend.
+    pub fn suspension(&self) -> Option<RowId> {
+        self.suspension
+    }
+
+    /// The suspension's row, registered on first use: the handles waited on, the abandon, what runs first on resuming and the frames, in that order.
+    ///
+    /// The handles and the frames are lists, so their slots name the rope base the readers take. The other two stay uniform: what runs first is a description or a nested suspension, and nothing on the suspended path is hot enough to pay for typing the abandon.
+    pub fn suspension_row(&mut self) -> RowId {
+        if let Some(row) = self.suspension {
+            return row;
+        }
+        let row = self.add_row(Row {
+            debug_name: Some("suspension".to_string()),
+            slots: vec![Slot::List, Slot::Opaque, Slot::Opaque, Slot::List],
+        });
+        self.suspension = Some(row);
+        row
     }
 
     /// The recorded fields representations, by continuation.

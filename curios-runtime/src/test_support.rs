@@ -300,5 +300,6 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
         &compiled.foreigns,
         bindings,
         answers,
+        host,
     )
 }

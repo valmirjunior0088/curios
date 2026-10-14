@@ -1,7 +1,8 @@
 use {
     crate::{
         Atom, Callee, ContinuationId, Demand, Edge, Intrinsic, Literal, Module, Node, NodeId,
-        RowId, UseTarget, ValueExpr, ValueId, atoms, demand_of, demands, evaluate, visit_atoms_mut,
+        RowId, UseTarget, ValueExpr, ValueId, atoms, demand_of, demands, evaluate, rows_reaching,
+        visit_atoms_mut,
     },
     curios_num::{Grain, Integer, Natural},
     std::collections::{BTreeMap, BTreeSet},
@@ -830,12 +831,14 @@ pub(crate) fn flatten_indexed_lists(module: &mut Module) -> bool {
     changed
 }
 
-/// Forward every projection of a visible construction to the field it reads, in one sweep.
+/// Forward every projection of a visible construction to the field it reads, and answer every row test of one, in one sweep.
 ///
 /// One snapshot of the module's constructions admits every forwardable projection; the replacements are then collapsed through each other, as `known_values` collapses its substitutions, so a projection of a construction whose field is itself a forwarded projection resolves to what that one forwards rather than to a value this sweep deletes. One `rewrite_atoms` walk then substitutes them all, and the dead projection nodes are spliced out in one pass. One projection per call — rescan, rebuild the construction map with every field vector cloned, rewrite the whole module, repeat — would cost a large share of the fixpoint's first round on a `Toml/decode` compile, as `fixpoint_pass_measurements` shows, and grow with every projection a split sweep lands.
 pub(crate) fn forward_aggregate_projections(module: &mut Module) -> bool {
     // Keyed by the vocabulary the construction was built in, so a read only ever forwards through a matching construction — a `RowGet` never folds through a structural tuple, nor a `TupleGet` through a row's.
     let mut aggregates = BTreeMap::<(ValueId, Option<RowId>), &[Atom]>::new();
+    // The vocabulary each visible construction was built in, which a row test answers from.
+    let mut built = BTreeMap::<ValueId, Option<RowId>>::new();
     for (_, node) in module.live_nodes() {
         match node {
             Node::LetValue {
@@ -844,6 +847,7 @@ pub(crate) fn forward_aggregate_projections(module: &mut Module) -> bool {
                 ..
             } => {
                 aggregates.insert((*result, None), fields);
+                built.insert(*result, None);
             }
             Node::LetValue {
                 result,
@@ -851,6 +855,7 @@ pub(crate) fn forward_aggregate_projections(module: &mut Module) -> bool {
                 ..
             } => {
                 aggregates.insert((*result, Some(*row)), fields);
+                built.insert(*result, Some(*row));
             }
             _ => {}
         }
@@ -868,13 +873,23 @@ pub(crate) fn forward_aggregate_projections(module: &mut Module) -> bool {
         else {
             continue;
         };
+        let [Atom::Value(tuple)] = args.as_slice() else {
+            continue;
+        };
         let (row, field) = match op {
             Intrinsic::TupleGet(field) => (None, *field),
             Intrinsic::RowGet(row, field) => (Some(*row), *field),
+            // A construction is a value of exactly the vocabulary it was built in, so the test answers whether that is the row it asks for.
+            Intrinsic::IsRow(asked) => {
+                let Some(&vocabulary) = built.get(tuple) else {
+                    continue;
+                };
+                let answer = Natural::from(u32::from(vocabulary == Some(*asked)));
+                forwarded.insert(*result, Atom::Literal(Literal::Nat(answer)));
+                redirect.insert(id, *next);
+                continue;
+            }
             _ => continue,
-        };
-        let [Atom::Value(tuple)] = args.as_slice() else {
-            continue;
         };
         let Some(replacement) = aggregates
             .get(&(*tuple, row))
@@ -916,6 +931,59 @@ pub(crate) fn forward_aggregate_projections(module: &mut Module) -> bool {
     }
     true
 }
+/// Answer no for every row test whose operand no flow reaching it builds that row for ([`rows_reaching`]), in one sweep.
+///
+/// A module with no row test pays nothing: the analysis is whole-module, so it runs only where a test stands for it to answer.
+pub(crate) fn answer_row_tests(module: &mut Module) -> bool {
+    let asks = module.live_nodes().any(|(_, node)| {
+        matches!(
+            node,
+            Node::LetIntrinsic {
+                op: Intrinsic::IsRow(_),
+                ..
+            }
+        )
+    });
+    if !asks {
+        return false;
+    }
+
+    let rows = rows_reaching(module);
+    let mut answered = BTreeMap::<ValueId, Atom>::new();
+    let mut redirect = BTreeMap::<NodeId, NodeId>::new();
+    for (id, node) in module.live_nodes() {
+        let Node::LetIntrinsic {
+            result,
+            op: Intrinsic::IsRow(row),
+            args,
+            next,
+        } = node
+        else {
+            continue;
+        };
+        let [Atom::Value(value)] = args.as_slice() else {
+            continue;
+        };
+        if rows.get(value).is_some_and(|rows| !rows.may_be(*row)) {
+            answered.insert(*result, Atom::Literal(Literal::Nat(Natural::zero())));
+            redirect.insert(id, *next);
+        }
+    }
+    if answered.is_empty() {
+        return false;
+    }
+
+    rewrite_atoms(module, &answered);
+    splice_dead_nodes(module, &redirect);
+    for &node in redirect.keys() {
+        module.remove_node(node);
+    }
+    for &result in answered.keys() {
+        module.remove_value(result);
+    }
+    true
+}
+
 /// Delete a known call only when its carried proof permits omission and every result is unread. A bodyless return sentinel has no local result demand, so a tail call is kept.
 ///
 /// The jump retains the resume's arity with fillers: the emitter supplies null or the receiving register's zero, and no result reads either. Taking one demand snapshot is sufficient because deleting these calls can only remove demands; newly dead results are found in the next optimizer round.

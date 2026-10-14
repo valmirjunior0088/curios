@@ -1079,7 +1079,7 @@ const UNPROVED: [&str; 1] = [
 ];
 
 /// The `let`s of the library whose printed form or whose proof elaboration accepts and the kernel refuses, each a finding of `documentation/roadmap/soundness/000-findings.md`.
-const UNCERTIFIED: [&str; 14] = [
+const UNCERTIFIED: [&str; 16] = [
     // Each runs an effect: the kernel holds no two such definitions to be one, whatever they unfold to.
     "/std/Async/poll_ready",
     "/std/Command/Pipe/close",
@@ -1093,11 +1093,13 @@ const UNCERTIFIED: [&str; 14] = [
     "/std/Flt/to_str",
     // Each runs an effect, as the first three do.
     "/std/Handle/close",
+    "/std/Handle/watch",
     "/std/Serial/close",
     "/std/proc/args",
     "/std/rand/bytes",
     "/std/tcp/Listener/close",
     "/std/tcp/Socket/close",
+    "/std/time/Instant/timer",
 ];
 
 /// One `#[test]` per part the library is read back in, and the number of parts [`parts_of`] deals its files into, declared from one list so the two cannot disagree.

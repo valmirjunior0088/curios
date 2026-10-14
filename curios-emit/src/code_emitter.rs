@@ -2738,6 +2738,18 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Null));
                 self.emit_store(dest, &op.result_repr());
             }
+            // One test against the row's final type, which answers no for null as for every other reference.
+            curios_cont::Intrinsic::IsRow(row) => {
+                let row_type = self.context.table().find_row_type(row);
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Null));
+                self.emit_instr(curios_wasm::Instr::RefTest {
+                    ref_type: curios_wasm::RefType {
+                        is_nullable: false,
+                        heap_type: curios_wasm::HeapType::Concrete(row_type),
+                    },
+                });
+                self.emit_store(dest, &op.result_repr());
+            }
         }
     }
 }

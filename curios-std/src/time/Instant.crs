@@ -1,4 +1,4 @@
-use /std/{Bool, Io};
+use /std/{Bool, Io, Handle};
 use /std/time/{Duration};
 
 --- A reading of the monotonic clock.
@@ -8,6 +8,13 @@ pub struct Instant: Type {
 
 --- The monotonic clock: seconds since a fixed origin, and the nanoseconds within the second.
 foreign clock_mono() -> {secs: Nat, nanos: Nat};
+
+--- A handle ready once the clock reaches so many seconds and nanoseconds.
+foreign clock_timer(Nat, Nat) -> Handle;
+
+--- A handle ready once the clock reaches `at`: what a description suspends on to sleep until then. One already passed is ready at once.
+pub let timer(at: Instant) -> Io(Handle) =
+    clock_timer(Duration/secs(at.elapsed), Duration/nanos(at.elapsed));
 
 --- The clock now.
 pub let now() -> Io(Instant) =

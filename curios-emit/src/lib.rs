@@ -56,6 +56,9 @@ use big_emitter::*;
 mod flt_emitter;
 use flt_emitter::*;
 
+mod turn_emitter;
+use turn_emitter::*;
+
 mod shorthand;
 use shorthand::*;
 

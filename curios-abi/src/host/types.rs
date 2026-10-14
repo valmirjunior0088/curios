@@ -22,10 +22,12 @@ impl Handle {
     const STDIN: u32 = stdio::STDIN;
     /// The well-known stdout handle token.
     const STDOUT: u32 = stdio::STDOUT;
-    /// The well-known stderr handle token, the last before [`HANDLE_SEED`](Self::HANDLE_SEED).
+    /// The well-known stderr handle token.
     const STDERR: u32 = stdio::STDERR;
-    /// The first handle token a host mints, one past the stdio tokens so a minted file or socket handle never collides with stdin/stdout/stderr; each host counts up from here with a [`TokenMint`].
-    pub const HANDLE_SEED: u32 = Self::STDERR + 1;
+    /// The ready token, the last before [`HANDLE_SEED`](Self::HANDLE_SEED). No variant names it: a host files nothing under it, which is all that makes a wait on it end at once.
+    const READY: u32 = stdio::READY;
+    /// The first handle token a host mints, one past the constant tokens so a minted file or socket handle never collides with a standard stream or the ready token; each host counts up from here with a [`TokenMint`].
+    pub const HANDLE_SEED: u32 = Self::READY + 1;
 
     /// The canonical byte encoding of a token: its little-endian [`Natural`] bytes — one zero byte for zero, never the empty string, and never padded to a fixed width. This is the one place the convention is spelled: [`TokenMint`] mints through it, hosts key their tables on the bytes it returns, and the `ersd → cont` lowering calls it for the stdio constants `Handle(0/1/2)` — so the three ends cannot drift.
     pub fn encode(token: &Natural) -> Vec<u8> {
@@ -75,7 +77,7 @@ impl PartialEq for Handle {
 
 impl Eq for Handle {}
 
-/// The monotonic source a host mints handle tokens from, seeded one past the stdio band so a minted token never collides with stdin/stdout/stderr.
+/// The monotonic source a host mints handle tokens from, seeded one past the constant tokens so a minted token never collides with a standard stream or the ready token.
 ///
 /// It lives beside [`Handle`] rather than in the host that drives it because the token encoding is wire contract, not host policy: [`Handle::bytes`] reads back the same little-endian convention this writes. A host owns *when* to mint and what to file under the result; it does not get its own opinion about what a token looks like.
 ///

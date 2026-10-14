@@ -114,6 +114,8 @@ pub enum Intrinsic {
     ///
     /// Representationally the identity, and that is the whole point: it exists so the payload has a *definition* instead of being aliased to the scrutinee. The representation analysis fixes a value's carrier from whatever produced it, so a payload with no producer of its own carries its uses' raw demand back onto the scrutinee — which on the boxed path is a tuple, not a scalar. That is not a missed optimization but a miscompile: an arm's `NatAdd` demanding the raw carrier would reach the scrutinee's own definition, and the emitter would coerce a `struct.new` with a `ref.cast` to `i31`. Answering `Repr::Ref` makes this definition's offer `Never`, so the demand coerces at the use where it belongs and the scrutinee is never demanded raw.
     ImmediateGet,
+    /// `(value) -> Bool`: whether the operand is a value of the given row. A row's heap type is final and shares its recursion group with every other row, so no other row, tuple or carrier answers yes, and the test is exact over every value. What tells a forced description's suspension, a row the door registers for it, from the value the description yields.
+    IsRow(RowId),
 }
 
 /// The representation a value is read or produced at — the carrier, not the type.
@@ -172,8 +174,8 @@ impl Intrinsic {
             }
             (Self::FltOfLeBytes, _) => Repr::Bin(Grain::X),
             (Self::WindowExtent, _) => Repr::Nat,
-            // The whole point of the test is to look at the reference uncoerced, and the read that follows it hands that same reference on.
-            (Self::IsImmediate | Self::ImmediateGet, _) => Repr::Ref,
+            // The whole point of a test is to look at the reference uncoerced, and the read that follows the immediate one hands that same reference on.
+            (Self::IsImmediate | Self::ImmediateGet | Self::IsRow(_), _) => Repr::Ref,
             (Self::ListConcat(_) | Self::ListLen | Self::ListSettle | Self::ListFlat(_), _) => {
                 Repr::List
             }
@@ -356,8 +358,8 @@ impl Intrinsic {
             | Self::IntToFlt(_)
             | Self::FltOfLeBytes => Repr::Flt,
 
-            // `IsImmediate` joins the predicates: it answers a `Bool`, whose carrier is a `Nat`.
-            Self::BinGet(_) | Self::IsImmediate => Repr::Nat,
+            // The two tests join the predicates: each answers a `Bool`, whose carrier is a `Nat`.
+            Self::BinGet(_) | Self::IsImmediate | Self::IsRow(_) => Repr::Nat,
             Self::BinSlice(grain)
             | Self::BinRest(grain)
             | Self::BinAppend(grain)
@@ -420,6 +422,7 @@ impl Intrinsic {
             | Self::RowGet(..)
             | Self::IsImmediate
             | Self::ImmediateGet
+            | Self::IsRow(_)
             | Self::ListSettle => 1,
             Self::NatEql
             | Self::NatNeq
@@ -585,12 +588,109 @@ impl Intrinsic {
             | Self::BinEql(_)
             | Self::ListLen
             | Self::IsImmediate
-            | Self::ImmediateGet => IntrinsicEffect::Total,
+            | Self::ImmediateGet
+            | Self::IsRow(_) => IntrinsicEffect::Total,
         }
     }
 
     pub fn is_total(self) -> bool {
         self.effect() == IntrinsicEffect::Total
+    }
+
+    /// Whether this operation's result is a reference it reads out of a value — a row's or a tuple's slot, a list's element, an immediate arm's payload — rather than one it computes. Such a result may be any value at all, a row's struct among them; every other result is a number, a word, a float or a sequence, which no row test answers yes for.
+    ///
+    /// Exhaustive on purpose, for [`Intrinsic::effect`]'s reason: a wildcard answering no would let a new read pass every row test it reaches as the struct it never is.
+    pub fn reads_reference(self) -> bool {
+        match self {
+            Self::ListGet | Self::TupleGet(_) | Self::RowGet(_, _) | Self::ImmediateGet => true,
+            Self::NatEql
+            | Self::NatNeq
+            | Self::NatAdd
+            | Self::NatSub
+            | Self::NatMul
+            | Self::NatLt
+            | Self::NatDiv
+            | Self::NatRem
+            | Self::NatLe
+            | Self::NatAnd
+            | Self::NatOr
+            | Self::NatXor
+            | Self::NatMin
+            | Self::NatMax
+            | Self::NatShl
+            | Self::NatPow
+            | Self::NatShr
+            | Self::NatEqz
+            | Self::NatToInt
+            | Self::NatToFlt(_)
+            | Self::IntEql
+            | Self::IntNeq
+            | Self::IntAdd
+            | Self::IntSub
+            | Self::IntMul
+            | Self::IntDiv
+            | Self::IntRem
+            | Self::IntLt
+            | Self::IntLe
+            | Self::IntAnd
+            | Self::IntOr
+            | Self::IntXor
+            | Self::IntMin
+            | Self::IntMax
+            | Self::IntAbs
+            | Self::IntSign
+            | Self::IntShl
+            | Self::IntShr
+            | Self::IntEqz
+            | Self::IntToNat
+            | Self::IntToFlt(_)
+            | Self::FltAdd(_)
+            | Self::FltSub(_)
+            | Self::FltMul(_)
+            | Self::FltDiv(_)
+            | Self::FltFma(_)
+            | Self::FltRem
+            | Self::FltEql
+            | Self::FltNeq
+            | Self::FltLt
+            | Self::FltLe
+            | Self::FltMin
+            | Self::FltMax
+            | Self::FltNeg
+            | Self::FltAbs
+            | Self::FltSqrt(_)
+            | Self::FltRoundIntegral(_)
+            | Self::FltCopysign
+            | Self::FltToNat
+            | Self::FltToLeBytes
+            | Self::FltOfLeBytes
+            | Self::FltToInt
+            | Self::FltMantissa
+            | Self::FltExponent
+            | Self::BinLen(_)
+            | Self::BinEql(_)
+            | Self::BinGet(_)
+            | Self::BinSlice(_)
+            | Self::BinRest(_)
+            | Self::BinAppend(_)
+            | Self::BinConcat(_, _)
+            | Self::BinReplicate(_)
+            | Self::BinReinterp(_)
+            | Self::BinAnd(_)
+            | Self::BinOr(_)
+            | Self::BinXor(_)
+            | Self::BinChunk(_, _)
+            | Self::ListLen
+            | Self::ListSlice
+            | Self::ListRest
+            | Self::ListAppend
+            | Self::ListConcat(_)
+            | Self::ListSettle
+            | Self::ListFlat(_)
+            | Self::WindowExtent
+            | Self::IsImmediate
+            | Self::IsRow(_) => false,
+        }
     }
 
     pub fn may_trap(self) -> bool {
