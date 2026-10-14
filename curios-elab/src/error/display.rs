@@ -8,7 +8,7 @@ mod tests;
 use {
     super::{
         BinderSite, Callee, CycleMember, DeadArm, Declined, Erased, ErasedName, ErasedSite, Error,
-        GoalReport, ShapeDiagnosis, Underivable, Watched,
+        GoalReport, Need, ShapeDiagnosis, Underivable, Watched,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_algebra::BOOL_ATOM_CAP,
@@ -1373,14 +1373,14 @@ impl fmt::Display for Displayed<'_> {
                 goal,
                 callee,
                 binder,
-                embedding,
+                need,
                 shape,
             } => {
-                let goal = embedding
-                    .as_ref()
-                    .and_then(|diagnosis| diagnosis.goal.as_deref())
-                    .unwrap_or(goal)
-                    .spelled(spelling);
+                let written = match need {
+                    Some(Need::Embedding(diagnosis)) => diagnosis.goal.as_deref(),
+                    _ => None,
+                };
+                let goal = written.unwrap_or(goal).spelled(spelling);
                 write!(f, "no witness of {goal} found")?;
                 if let Some(diagnosis) = shape {
                     let ShapeDiagnosis { wanted, bare } = &**diagnosis;
@@ -1390,9 +1390,14 @@ impl fmt::Display for Displayed<'_> {
                         "\n  labels are part of the type: the witness for {bare} does not cover {wanted}\n  name a struct for the labeled product, or declare the witness for this shape"
                     )?;
                 }
-                match embedding {
+                match need {
                     None => write!(f, "\n  needed by {} for {binder}", callee.phrase(spelling)),
-                    Some(diagnosis) => {
+                    Some(Need::Closing(type_)) => write!(
+                        f,
+                        "\n  a program closes with a term whose type has one, and this one's type is {}",
+                        type_.spelled(spelling)
+                    ),
+                    Some(Need::Embedding(diagnosis)) => {
                         let source = diagnosis.source.spelled(spelling).to_string();
                         let target = diagnosis.target.spelled(spelling);
                         let article = match source.trim_start_matches('/').chars().next() {

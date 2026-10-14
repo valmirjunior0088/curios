@@ -6,7 +6,7 @@ use {
         AwaitId, Beside, Binders, Choice, Context, DeadArm, Error, HeldConversion, HeldFrames,
         Mode, Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
         Rejected, Sort, Spines, Watched, answer_witness, answers_differ, callee, convert,
-        diagnose_embedding, diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines,
+        diagnose_need, diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines,
         is_monad, monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome,
         reduce_forced, refold_recs, region_flex, retry_discharge, retry_witness, settle_qualities,
         shallow_scrutinee, subsume_outcome, synth_neutral, zonk_solved_term_metas,
@@ -1072,7 +1072,7 @@ impl Context<'_> {
                                 .or_else(|| self.witness_hole(&goal.that))
                             {
                                 Some((origin, witness_goal)) => {
-                                    let embedding = diagnose_embedding(
+                                    let need = diagnose_need(
                                         self,
                                         &witness_goal,
                                         parked_origin.extent().as_ref(),
@@ -1082,7 +1082,7 @@ impl Context<'_> {
                                         resolved_for_display(self, &witness_goal),
                                         callee(self, &origin.func),
                                         origin.binder,
-                                        embedding,
+                                        need,
                                         shape,
                                     )
                                     .at_opt(parked_origin.extent())
@@ -1118,14 +1118,13 @@ impl Context<'_> {
                         ParkedWork::Witness {
                             goal, provenance, ..
                         } => {
-                            let embedding =
-                                diagnose_embedding(self, &goal, parked_origin.extent().as_ref());
+                            let need = diagnose_need(self, &goal, parked_origin.extent().as_ref());
                             let shape = diagnose_shape(self, &goal);
                             Error::no_witness(
                                 resolved_for_display(self, &goal),
                                 callee(self, &provenance.func),
                                 provenance.binder,
-                                embedding,
+                                need,
                                 shape,
                             )
                             .at_opt(parked_origin.extent())

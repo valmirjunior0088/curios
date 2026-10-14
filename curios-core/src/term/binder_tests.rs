@@ -84,6 +84,35 @@ fn close_open_preserves_nested_bind() {
     assert_eq!(var, &Var::free(z));
 }
 
+/// A telescope's final payload is rewritten where it lies: its binders, their domains and their marks stand, and a variable the payload reads is still the binder it read.
+#[test]
+fn a_telescope_maps_its_terminal_under_its_binders() {
+    let x = Free::local(0, Some("x"));
+    let y = Free::local(1, Some("y"));
+    let over = |body: Term| {
+        Term::func_marked(
+            [
+                (Plicity::Implicit, x, Term::type_ground()),
+                (Plicity::Explicit, y, Term::free_var(&x)),
+            ],
+            body,
+        )
+    };
+    let function = over(Term::free_var(&y));
+    let Subterm::Func(func) = &*function else {
+        panic!("unexpected `{function:?}`")
+    };
+
+    let mapped = func
+        .telescope
+        .map_terminal(|body| Term::tuple([body.clone(), body.clone()]));
+
+    assert_eq!(
+        Term::from(Subterm::Func(Func { telescope: mapped })),
+        over(Term::tuple([Term::free_var(&y), Term::free_var(&y)]))
+    );
+}
+
 #[test]
 fn implicit_marks_print_and_default_to_explicit() {
     let binder_0 = Free::local(0, Some("T"));

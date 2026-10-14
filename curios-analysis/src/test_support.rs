@@ -10,8 +10,8 @@ use {
     curios_utilities::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-        OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, ResultSyntax,
-        SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+        OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
+        ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
     },
     std::{collections::BTreeMap, convert::Infallible},
 };
@@ -85,6 +85,9 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     test: TestSyntax {
         test_type: name(&["std", "Test", "Test"]),
         main: name(&["std", "Test", "main"]),
+    },
+    program: ProgramSyntax {
+        perform: field(&["std", "Program"], "perform"),
     },
     derivations: DerivationSyntax {
         spell: SpellDerivation {

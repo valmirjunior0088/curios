@@ -7,9 +7,9 @@ use {
     curios_utilities::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-        OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, Qualifier,
-        ResultSyntax, RootKind, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
-        TestSyntax, test_support::Temporary,
+        OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
+        Qualifier, ResultSyntax, RootKind, SpellDerivation, StringSyntax, SyntaxName,
+        SyntaxRegistry, TestSyntax, test_support::Temporary,
     },
     std::{fs, path::Path},
 };
@@ -86,6 +86,9 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     test: TestSyntax {
         test_type: registry_name(&["std", "Test", "Test"]),
         main: registry_name(&["std", "Test", "main"]),
+    },
+    program: ProgramSyntax {
+        perform: registry_field(&["std", "Program"], "perform"),
     },
     // These spellings are load-bearing for `lint_tests`, which declares them as source and asserts the references that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
     derivations: DerivationSyntax {

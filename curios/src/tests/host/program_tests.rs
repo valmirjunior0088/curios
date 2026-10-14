@@ -1,7 +1,7 @@
-//! What closes a program: each type `/std/Program` performs, by what the program wrote and the status it ended with.
+//! What closes a program: each type `/std/Program` performs, by what the program wrote and the status it ended with, and what a term nothing performs is told.
 
 use {
-    crate::run_wasm,
+    crate::{run_wasm, tests::typecheck},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
@@ -29,12 +29,12 @@ fn ended(source: &str, files: &[(&str, &str)]) -> (u8, Vec<u8>, Vec<u8>) {
 
 /// A program over a file it reads and prints the length of, closed by a description that may fail.
 const READS_A_FILE: &str = r#"
-    use /std/{Nat, Bytes, Io, Try, File, Path, Program, print};
-    let work: Try(Io, Io/Error, {}) =
+    use /std/{Nat, Bytes, Io, Try, File, Path, print};
+    let main: Try(Io, Io/Error, {}) =
         let held = File/read_all(Path/of_str("notes.txt"))!;
         print(Nat/to_str(Bytes/len(held)));
     let _ = print("before|")!;
-    Program/perform(work)
+    main
     "#;
 
 #[test]
@@ -59,15 +59,15 @@ fn a_description_that_may_fail_and_does_not_ends_its_program_with_status_zero() 
 fn a_failure_of_the_programs_own_type_is_written_as_that_type_is_shown() {
     let (code, _, errors) = ended(
         r#"
-        use /std/{Str, Show, Io, Try, Program};
+        use /std/{Str, Show, Io, Try};
         induct Broke: Type
         | broke()
         end
         satisfy Show(Broke) {
             show(_) = "it broke",
         }
-        let work: Try(Io, Broke, {}) = Try/raise(Broke/broke());
-        Program/perform(work)
+        let main: Try(Io, Broke, {}) = Try/raise(Broke/broke());
+        main
         "#,
         &[],
     );
@@ -86,12 +86,92 @@ fn a_test_that_closes_a_program_is_reported_and_decides_its_status() {
             "program: failed\n  the condition was false\n",
         ),
     ] {
-        let source =
-            format!("use /std/{{Nat, Test, Program}};\nProgram/perform(Test/assert({claim}))\n");
+        let source = format!("use /std/{{Nat, Test}};\nTest/assert({claim})\n");
         let (code, output, errors) = ended(&source, &[]);
 
         assert_eq!(code, status, "{claim}");
         assert_eq!(output, report.as_bytes(), "{claim}");
         assert_eq!(errors, b"", "{claim}");
     }
+}
+
+/// Each way a program closes is performed at its own type: an arm that prints and an arm that may fail stand in one `match`, which states no type for both.
+#[test]
+fn the_arms_of_a_match_that_closes_a_program_are_each_performed() {
+    for (choice, status, written) in [(0, 0, "usage"), (1, 1, "not_found\n")] {
+        let source = format!(
+            r#"
+            use /std/{{Nat, Str, Io, Try, File, Path, print}};
+            let read(name: Str) -> Try(Io, Io/Error, {{}}) =
+                let _ = File/read_all(Path/of_str(name))!;
+                print("read");
+            let choice: Nat = {choice};
+            match choice
+            | 0 => print("usage")
+            | _ =>
+                let name = Io/pure("notes.txt")!;
+                read(name)
+            end
+            "#
+        );
+        let (code, output, _) = ended(&source, &[]);
+
+        assert_eq!(code, status, "{choice}");
+        assert_eq!(output, written.as_bytes(), "{choice}");
+    }
+}
+
+/// The top level is an `Io` region whatever closes it: a step that may fail is refused there, as it is in any `Io` region.
+#[test]
+fn a_step_that_may_fail_is_refused_at_the_top_level_of_a_program_that_closes_in_a_try() {
+    let error = typecheck(
+        r#"
+        use /std/{Io, Try, File, Path, print};
+        let main: Try(Io, Io/Error, {}) = print("read");
+        let _ = File/read_all(Path/of_str("notes.txt"))!;
+        main
+        "#,
+    )
+    .expect_err("a `Try` has no edge into `Io`");
+
+    assert!(
+        error.contains("no witness of") && error.contains("Lift"),
+        "expected the missing edge, got: {error}"
+    );
+}
+
+/// A term of a type nothing performs is told so as what closes the program, not as the premise of a call its author never wrote.
+#[test]
+fn a_term_nothing_performs_is_refused_as_what_closes_the_program() {
+    for (closing, type_) in [("7", "Nat"), ("() => print(\"x\")", "() -> Io({})")] {
+        let source = format!("use /std/{{Nat, Io, print}};\n{closing}\n");
+        let error = typecheck(&source).expect_err("nothing performs it");
+
+        assert!(
+            error.contains(&format!(
+                "a program closes with a term whose type has one, and this one's type is {type_}"
+            )),
+            "{closing}: {error}"
+        );
+        assert!(!error.contains("needed by"), "{closing}: {error}");
+    }
+}
+
+/// A description that yields a value closes no program: `Io` is performed at `{}` alone, and the refusal is the payload's.
+#[test]
+fn a_description_that_yields_a_value_closes_no_program() {
+    let error = typecheck("use /std/{Nat, Io};\nIo/pure(3)\n").expect_err("an `Io(Nat)`");
+
+    assert!(
+        error.contains("Nat") && error.contains("{}"),
+        "expected the payload's mismatch, got: {error}"
+    );
+}
+
+/// A goal that closes a program is asked at the program's own type, which is what most programs close with.
+#[test]
+fn a_goal_that_closes_a_program_is_asked_at_io() {
+    let error = typecheck("use /std/{Io};\n?\n").expect_err("a goal never compiles");
+
+    assert!(error.contains("? : Io({})"), "{error}");
 }

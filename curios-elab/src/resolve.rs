@@ -13,8 +13,8 @@
 
 use {
     super::{
-        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Occurrence, Outcome, ParkedWork,
-        ShapeDiagnosis, Witness, attempt_discharge, convert_outcome, reduce_with,
+        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Need, Occurrence, Outcome,
+        ParkedWork, ShapeDiagnosis, Witness, attempt_discharge, convert_outcome, reduce_with,
         resolved_for_display,
     },
     crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
@@ -82,13 +82,13 @@ fn no_witness_error(
     provenance: &WitnessOrigin,
     site: Option<&Extent>,
 ) -> Error {
-    let embedding = diagnose_embedding(context, goal, site);
+    let need = diagnose_need(context, goal, site);
     let shape = diagnose_shape(context, goal);
     Error::no_witness(
         display_goal(context, goal),
         callee(context, &provenance.func),
         provenance.binder.clone(),
-        embedding,
+        need,
         shape,
     )
 }
@@ -128,8 +128,36 @@ pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<S
     }))
 }
 
+/// What the missing witness of `goal` was needed for, where its concept is one the compiler resolves for a form of its own ([`Need`]): an embedding, or what closes a program. `site` is where the goal was inserted, which an embedding's report reads what was written from.
+pub(crate) fn diagnose_need(
+    context: &mut Context,
+    goal: &Term,
+    site: Option<&Extent>,
+) -> Option<Need> {
+    diagnose_embedding(context, goal, site)
+        .map(Need::Embedding)
+        .or_else(|| diagnose_closing(context, goal).map(Need::Closing))
+}
+
+/// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form: the type of a term that closes a program, which no witness performs.
+fn diagnose_closing(context: &mut Context, goal: &Term) -> Option<Box<Term>> {
+    let goal = reduce_with(context, goal).ok()?;
+    let (concept_name, _, params) = as_concept_app(context, &goal)?;
+    let Global::Authored(concept_path) = &concept_name else {
+        return None;
+    };
+    if *concept_path != context.syntax().program.perform.concept.qualifier() {
+        return None;
+    }
+    let [closing] = params.as_slice() else {
+        return None;
+    };
+
+    Some(Box::new(display_goal(context, closing)))
+}
+
 /// When `goal` is an application of the registry's `Lift` concept, the embedding-specific diagnosis its missing-witness report carries: the two monads in display form, whether the source is a monad at all, and any chain of declared edges between the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table. Where the goal came from an auto-lift at `site`, the monads are the ones it named as written ([`EmbeddingSite`](crate::EmbeddingSite)), and so is the goal the report leads with. Error-path only; a diagnosis that cannot be computed is simply absent.
-pub(crate) fn diagnose_embedding(
+fn diagnose_embedding(
     context: &mut Context,
     goal: &Term,
     site: Option<&Extent>,

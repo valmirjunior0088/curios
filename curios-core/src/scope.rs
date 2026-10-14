@@ -729,7 +729,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     /// Rebuild this scope with `f` applied to its body, preserving arity and binder names. The body keeps its de Bruijn structure, so `f` must be a transformation that does not disturb loose indices — e.g. zonking, which only replaces closed metavariable nodes by closed solutions, or a canonicalization, which replaces a node by a structurally equal one.
     ///
     /// Rewriting here rather than opening and re-closing is what keeps a term's memoized derivations: `open` and `close` each rebuild every node they touch, so the round trip discards all of them to arrive where this arrives without moving.
-    pub(crate) fn map_body(&self, f: impl FnOnce(&B) -> B) -> Self {
+    pub fn map_body(&self, f: impl FnOnce(&B) -> B) -> Self {
         Self {
             arity: self.arity,
             labels: self.labels.clone(),

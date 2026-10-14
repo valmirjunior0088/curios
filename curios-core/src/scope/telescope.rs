@@ -122,6 +122,18 @@ impl<B: Bound> Telescope<B> {
         matches!(self, Telescope::Done(_))
     }
 
+    /// This telescope with `f` applied to its final payload, every binder as it stands. The payload keeps its de Bruijn structure, so `f` must not disturb loose indices ([`Scope::map_body`]).
+    pub fn map_terminal(&self, f: impl FnOnce(&B) -> B) -> Self {
+        match self {
+            Telescope::Done(body) => Telescope::Done(Box::new(f(body))),
+            Telescope::Cons(plicity, domain, rest) => Telescope::Cons(
+                *plicity,
+                domain.clone(),
+                rest.map_body(|inner| inner.map_terminal(f)),
+            ),
+        }
+    }
+
     /// The final payload beneath every binder, without opening the telescope or substituting for any of its bound variables.
     pub fn terminal(&self) -> &B {
         let mut current = self;

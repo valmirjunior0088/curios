@@ -3,11 +3,14 @@
 use super::test_support::*;
 
 #[test]
-fn an_entry_that_describes_nothing_is_a_type_mismatch() {
-    // A program describes doing something and yielding nothing, so its entry is checked against `Io({})` and no caller states another type for it. A `Str` literal, because a numeral does not serve: numerals are the packed literals' constant-atom spelling, so the mismatch needs a shape no expectation can absorb.
+fn an_entry_that_describes_nothing_closes_no_program() {
+    // What closes a program is performed through `/std/Program`, and no caller states another contract for it: a `Str` describes nothing to perform, so it is refused as what closes the program, by its type.
     let error = compile(r#""zero""#).unwrap_err();
 
-    assert!(error.contains("type mismatch"));
+    assert!(
+        error.contains("a program closes with a term whose type has one") && error.contains("Str"),
+        "unexpected report: {error}"
+    );
 }
 
 #[test]

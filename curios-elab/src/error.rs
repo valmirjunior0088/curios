@@ -103,6 +103,15 @@ pub struct EmbeddingDiagnosis {
     pub chain: Vec<(String, Qualifier)>,
 }
 
+/// What a missing witness was needed for, where its goal's concept is one the compiler resolves for a form of its own: the report then says what that form wanted, in place of the premise of a call the author never wrote.
+#[derive(Debug)]
+pub enum Need {
+    /// To carry an action into its region: the goal is the registry's `Lift`.
+    Embedding(EmbeddingDiagnosis),
+    /// To perform what closes a program: the goal is the registry's `Program`, at this type.
+    Closing(Box<Term>),
+}
+
 /// The shape-specific half of a missing-witness report, computed when the unresolved goal keys on a *labeled* tuple shape and the same key with every label dropped does have a witness. Labels are part of a tuple type's identity, which is the surprise an anonymous-shape key has; a reader who meets it deserves the rule rather than a bare miss.
 #[derive(Debug)]
 pub struct ShapeDiagnosis {
@@ -599,8 +608,8 @@ pub enum Error {
         /// Boxed for the reason `shape` is: a witness callee's concept and key inline would push this variant, already the roster's largest, past what `result_large_err` admits.
         callee: Box<Callee>,
         binder: String,
-        /// Present when the goal is the registry's `Lift`: the embedding-specific half of the report.
-        embedding: Option<EmbeddingDiagnosis>,
+        /// Present when the goal's concept is one the compiler resolves for a form of its own: what that form needed the witness for.
+        need: Option<Need>,
         /// Present when the goal keys on a labeled tuple shape whose bare twin is registered: the shape-specific half of the report. Boxed because two [`WitnessKey`]s inline push this variant — already the roster's largest — past what `result_large_err` admits.
         shape: Option<Box<ShapeDiagnosis>>,
     },
@@ -1296,14 +1305,14 @@ impl Error {
         goal: T,
         callee: Callee,
         binder: String,
-        embedding: Option<EmbeddingDiagnosis>,
+        need: Option<Need>,
         shape: Option<Box<ShapeDiagnosis>>,
     ) -> Self {
         Self::NoWitness {
             goal: Box::new(goal.into()),
             callee: Box::new(callee),
             binder,
-            embedding,
+            need,
             shape,
         }
     }
@@ -1938,13 +1947,15 @@ impl Error {
                 out.push(candidate);
                 error.collect_terms(out);
             }
-            Self::NoWitness {
-                goal, embedding, ..
-            } => {
+            Self::NoWitness { goal, need, .. } => {
                 out.push(goal);
-                if let Some(diagnosis) = embedding {
-                    out.push(&diagnosis.source);
-                    out.push(&diagnosis.target);
+                match need {
+                    Some(Need::Embedding(diagnosis)) => {
+                        out.push(&diagnosis.source);
+                        out.push(&diagnosis.target);
+                    }
+                    Some(Need::Closing(type_)) => out.push(type_),
+                    None => {}
                 }
             }
             Self::Goal {

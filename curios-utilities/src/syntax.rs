@@ -59,6 +59,7 @@ pub struct SyntaxRegistry {
     pub string: StringSyntax,
     pub proof: ProofSyntax,
     pub test: TestSyntax,
+    pub program: ProgramSyntax,
     pub derivations: DerivationSyntax,
     pub entailment: EntailmentSyntax,
 }
@@ -79,6 +80,7 @@ impl SyntaxRegistry {
             string,
             proof,
             test,
+            program,
             derivations,
             entailment,
         } = self;
@@ -94,13 +96,14 @@ impl SyntaxRegistry {
             .chain(string.targets())
             .chain(proof.targets())
             .chain(test.targets())
+            .chain(program.targets())
             .chain(derivations.targets())
             .chain(entailment.targets())
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only three groups hold concept methods; the other nine are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only four groups hold concept methods; the other nine are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let Self {
             option: _,
@@ -113,6 +116,7 @@ impl SyntaxRegistry {
             string: _,
             proof: _,
             test: _,
+            program,
             derivations,
             entailment: _,
         } = self;
@@ -120,6 +124,7 @@ impl SyntaxRegistry {
         operator
             .concept_fields()
             .chain([lift.lift])
+            .chain([program.perform])
             .chain(derivations.concept_fields())
     }
 }
@@ -518,6 +523,20 @@ impl OrderSyntax {
             min_of_ge, max_of_le, max_of_ge,
         ]
         .into_iter()
+    }
+}
+
+/// What closes a program is performed through: `/std/Program`'s `perform` method, projected from the witness the closing term's type resolves. Written by `curios-pipeline` around each tail of an authored entry's final term, and read by the elaborator to say what a missing witness of it was needed for.
+#[derive(Debug, Clone, Copy)]
+pub struct ProgramSyntax {
+    pub perform: ConceptField,
+}
+
+impl ProgramSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self { perform } = self;
+
+        [perform.concept].into_iter()
     }
 }
 
