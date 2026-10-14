@@ -533,3 +533,96 @@ fn a_closure_whose_uncovered_free_value_is_block_bound_is_not_reified() {
         "expected no copy of `inner`:\n{module}"
     );
 }
+
+/// `describe(x)` answers a description over `x`, bound as an item: one whose performance answers `x` where it ends, and one that forces `describe(x)` again where it loops, as a write that resends does through its bind's continuation.
+fn define_describer(builder: &mut ErsdBuilder, loops: bool) -> FunctionId {
+    let describe = builder.reserve_function();
+    let performance = builder.reserve_function();
+    let x = builder.value(Some("x".into()));
+
+    builder.open_block();
+    let answer = match loops {
+        true => {
+            let again = builder.let_value(
+                None,
+                Rhs::Apply {
+                    callee: Atom::Function(describe),
+                    arguments: vec![Atom::Value(x)],
+                },
+            );
+            builder.let_value(
+                None,
+                Rhs::Apply {
+                    callee: Atom::Value(again),
+                    arguments: vec![],
+                },
+            )
+        }
+        false => x,
+    };
+    let performance_body = builder.seal_block(Terminator::Return(Atom::Value(answer)));
+    builder.define_function(
+        performance,
+        Some("performance".into()),
+        vec![],
+        performance_body,
+    );
+    builder.mark_description(performance);
+
+    builder.open_block();
+    builder.let_functions(vec![performance]);
+    let describe_body = builder.seal_block(Terminator::Return(Atom::Function(performance)));
+    builder.define_function(describe, Some("describe".into()), vec![x], describe_body);
+    builder.item_functions(vec![describe]);
+    describe
+}
+
+/// A module whose one candidate is `describe(1)`, inside a host of its own.
+fn a_described_candidate(loops: bool) -> Module {
+    let mut builder = ErsdBuilder::new();
+    let describe = define_describer(&mut builder, loops);
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
+    define_host(&mut builder, describe, one, "host");
+
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    builder.set_entry(entry);
+    builder.finalize().expect("the fixture verifies")
+}
+
+/// A loop's description is not copied: the copy would hold the closed call `describe(1)` its performance forces again, which the next round would fold into another copy, a level a round. The candidate stays the call it was.
+#[test]
+fn a_description_whose_performance_calls_its_function_again_stays_the_call() {
+    let mut module = a_described_candidate(true);
+    let before = live_functions(&module);
+
+    assert!(
+        !evaluate_closed_terms(&mut module),
+        "the candidate must stay a call:\n{module}"
+    );
+    module.verify().expect("the untouched module verifies");
+    assert_eq!(
+        live_functions(&module),
+        before,
+        "nothing is copied:\n{module}"
+    );
+}
+
+/// A description whose performance ends still folds, to one copy of its performance.
+#[test]
+fn a_description_whose_performance_ends_still_folds() {
+    let mut module = a_described_candidate(false);
+    let before = live_functions(&module);
+
+    assert!(
+        evaluate_closed_terms(&mut module),
+        "the candidate folds:\n{module}"
+    );
+    module.verify().expect("the folded module verifies");
+    assert_eq!(
+        live_functions(&module) - before,
+        1,
+        "one copy of the performance:\n{module}"
+    );
+}

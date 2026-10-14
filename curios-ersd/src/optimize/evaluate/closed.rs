@@ -29,6 +29,8 @@ struct Planned {
     statement: StatementId,
     result: ValueId,
     owner: Owner,
+    /// The function the candidate calls, where it calls one by name.
+    callee: Option<FunctionId>,
     kind: Kind,
 }
 
@@ -58,6 +60,11 @@ impl Planned {
                 None => (self.statement, self.owner, None),
             },
         }
+    }
+
+    /// The function a copy for this replacement must not reach again ([`ReifyScope::reaches_candidate`]): the one the candidate calls, where its replacement holds a description.
+    fn looping(&self, module: &Module) -> Option<FunctionId> {
+        self.callee.filter(|_| self.contains_description(module))
     }
 
     /// Whether the replacement holds a description anywhere ([`Value::contains_description`]).
@@ -135,7 +142,7 @@ pub(crate) fn description_copy_charges(module: &Module) -> Vec<usize> {
         .filter(|plan| plan.contains_description(module))
         .filter_map(|plan| {
             let (_, _, position) = plan.splice_point(&block_items, &item_positions);
-            scope.begin_replacement(position, plan.block());
+            scope.begin_replacement(position, plan.block(), plan.looping(module));
             let mut probe = ReifyBudget::new();
 
             plan.materializes(module, &mut probe, &mut scope)
@@ -201,10 +208,15 @@ fn plan(
                 continue;
             }
         };
+        let callee = match callee {
+            Atom::Function(function) => Some(*function),
+            Atom::Value(_) | Atom::Constant(_) => None,
+        };
         planned.push(Ok(Planned {
             statement,
             result: *result,
             owner,
+            callee,
             kind,
         }));
     }
@@ -253,7 +265,7 @@ fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usiz
             plan.splice_point(&block_items, &item_positions);
         let hoisting = plan.owner != splice_owner;
         // Before the dry run, which reads the candidate's block through the same gates the real run does.
-        scope.begin_replacement(position, plan.block());
+        scope.begin_replacement(position, plan.block(), plan.looping(module));
         // A candidate holding a description gets the tight cap: a big description-bearing replacement is a sequencing chain's suffix, and copying it per link per round is the compounding the cap stops; the small staged residuals pass untouched. Probe and real run share the cap, or a plan the probe admits would strand at the tighter gate.
         let contains_description = plan.contains_description(module);
         let capped = |pool: usize| {

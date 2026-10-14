@@ -53,7 +53,9 @@ pub(super) fn reify_check(
             if closure.env.borrow().is_empty() && scope.is_item_bound(module, closure.function) {
                 return Ok(());
             }
-            if scope.escapes_knot(module, closure.function) {
+            if scope.escapes_knot(module, closure.function)
+                || scope.reaches_candidate(module, closure.function)
+            {
                 return Err(Bail::Unsupported);
             }
             // Captures first, then the copy, in `reify_closure`'s order. The real run pays a subset of these charges, so charging the same amounts *in the same sequence* is what makes "the probe fits" imply "the real run fits". The order is the real run's, not this one's: a memo key cannot be formed until the captures have atoms.
@@ -171,8 +173,10 @@ fn reify_closure(
     if captures.is_empty() && scope.is_item_bound(module, closure.function) {
         return Ok(Atom::Function(closure.function));
     }
-    // A knot's own function stays in its initializer — see `ReifyScope::escapes_knot`.
-    if scope.escapes_knot(module, closure.function) {
+    // A knot's own function stays in its initializer, and a loop's continuation stays the call it was — see `ReifyScope::escapes_knot` and `ReifyScope::reaches_candidate`.
+    if scope.escapes_knot(module, closure.function)
+        || scope.reaches_candidate(module, closure.function)
+    {
         return Err(Bail::Unsupported);
     }
     let mut substitution = BTreeMap::new();
@@ -219,6 +223,9 @@ pub(super) fn reify_all(
     Ok(atoms)
 }
 
+/// What a region names and does not bind: its free functions, then its free values ([`free_references`]).
+type Free = (BTreeSet<FunctionId>, BTreeSet<ValueId>);
+
 /// One closure copy's identity: the source function and the captures already reduced to atoms. Equal keys deep-copy to functions that differ only in their fresh identities.
 type Specialization = (FunctionId, Vec<(ValueId, Atom)>);
 
@@ -231,8 +238,8 @@ pub(super) struct ReifyScope {
     item_bound: Option<BTreeSet<FunctionId>>,
     /// The values top-level items bind, computed on first use like [`ReifyScope::item_bound`]. See [`ReifyScope::free_values_settled`].
     item_values: Option<BTreeSet<ValueId>>,
-    /// Each region's free values, computed once per pass. See [`ReifyScope::free_values_settled`].
-    free_values: BTreeMap<FunctionId, Option<BTreeSet<ValueId>>>,
+    /// Each region's free functions and values, computed once per pass. See [`ReifyScope::free_values_settled`] and [`ReifyScope::reaches_candidate`].
+    free: BTreeMap<FunctionId, Option<Free>>,
     weights: BTreeMap<FunctionId, Option<usize>>,
     outward: BTreeMap<FunctionId, bool>,
     local: HashMap<Specialization, Atom>,
@@ -244,6 +251,10 @@ pub(super) struct ReifyScope {
     init_regions: BTreeMap<BlockId, BTreeSet<BlockId>>,
     /// The block the current candidate stands in, or `None` at item level.
     owner: Option<BlockId>,
+    /// The function whose call the current candidate folds, where its replacement holds a description. See [`ReifyScope::reaches_candidate`].
+    candidate: Option<FunctionId>,
+    /// Whether each function's region reaches each candidate's function, computed once per pair a pass asks about.
+    reaches: BTreeMap<(FunctionId, FunctionId), bool>,
 }
 
 impl ReifyScope {
@@ -252,7 +263,7 @@ impl ReifyScope {
         Self {
             item_bound: None,
             item_values: None,
-            free_values: BTreeMap::new(),
+            free: BTreeMap::new(),
             weights: BTreeMap::new(),
             outward: BTreeMap::new(),
             local: HashMap::new(),
@@ -261,16 +272,68 @@ impl ReifyScope {
             knot_inits: None,
             init_regions: BTreeMap::new(),
             owner: None,
+            candidate: None,
+            reaches: BTreeMap::new(),
         }
     }
 
     /// Drop the previous replacement's copies before reifying the next one's value.
     ///
-    /// The memo is scoped to one replacement because a copy is bound where it is spliced: the `Functions` statement goes immediately before *its* candidate, so the function it binds is in scope for that candidate and for nothing that does not follow it. Carrying an atom into the next replacement would name a function bound in a block that need not dominate it. The pass-stable facts above are untouched. `owner` is the block the candidate stands in, which [`ReifyScope::escapes_knot`] reads.
-    pub(super) fn begin_replacement(&mut self, position: Option<usize>, owner: Option<BlockId>) {
+    /// The memo is scoped to one replacement because a copy is bound where it is spliced: the `Functions` statement goes immediately before *its* candidate, so the function it binds is in scope for that candidate and for nothing that does not follow it. Carrying an atom into the next replacement would name a function bound in a block that need not dominate it. The pass-stable facts above are untouched. `owner` is the block the candidate stands in, which [`ReifyScope::escapes_knot`] reads, and `candidate` the function whose call it folds where its replacement holds a description, which [`ReifyScope::reaches_candidate`] reads.
+    pub(super) fn begin_replacement(
+        &mut self,
+        position: Option<usize>,
+        owner: Option<BlockId>,
+        candidate: Option<FunctionId>,
+    ) {
         self.local.clear();
         self.position = position;
         self.owner = owner;
+        self.candidate = candidate;
+    }
+
+    /// Whether copying `function` for the current candidate would copy a call back to the function the candidate calls.
+    ///
+    /// A description that loops — a write resent until the stream has taken it all, a read retried until bytes arrive — calls its own function again from its bind's continuation, a closure the description captures. Folding a closed call of such a function and copying the description it answers copies that call too, closed, so the next round folds it into another copy: the loop is unrolled a level a round, for as many rounds as the evaluator runs, and the stage after deletes the copies. A copy whose region reaches the candidate's function, directly or through the functions it calls, is therefore declined, and the loop stays the call it was. A copy that never comes back to it still folds: the description a constant `print` answers reaches the write loop without being a call of `print`.
+    pub(super) fn reaches_candidate(&mut self, module: &Module, function: FunctionId) -> bool {
+        let Some(candidate) = self.candidate else {
+            return false;
+        };
+        if let Some(&known) = self.reaches.get(&(candidate, function)) {
+            return known;
+        }
+
+        let mut seen = BTreeSet::new();
+        let mut work = vec![function];
+        let mut reached = false;
+        while let Some(next) = work.pop() {
+            if !seen.insert(next) {
+                continue;
+            }
+            // A region holding a tombstone says nothing of where it leads, so it is taken to lead back.
+            let Some((functions, _)) = self.free(module, next) else {
+                reached = true;
+                break;
+            };
+            if functions.contains(&candidate) {
+                reached = true;
+                break;
+            }
+            work.extend(functions.iter().copied());
+        }
+
+        self.reaches.insert((candidate, function), reached);
+        reached
+    }
+
+    /// The functions and values `function`'s region names and does not bind, computed once per pass.
+    ///
+    /// Cached because it walks the whole region and is asked on the probe and again on the real run for every closure; reification only appends, so a region's free references do not move within a pass. Uncached, it triples a hello-world compile's wall clock.
+    fn free(&mut self, module: &Module, function: FunctionId) -> Option<&Free> {
+        self.free
+            .entry(function)
+            .or_insert_with(|| free_references(module, function))
+            .as_ref()
     }
 
     /// Whether copying `function` for the current candidate would carry it out of the knot initializer it is bound in.
@@ -334,12 +397,7 @@ impl ReifyScope {
     ///
     /// **The assumption [`reify_closure`] states, checked.** A free value the captures do not cover is kept verbatim on the reasoning that it is a top-level identity — and when it is not, the copy leaves the block that bound it still naming it. The source module verifies, so such a value is in scope *there*; the copy is spliced at the group's splice point and may be reused from any later candidate, and neither has to be inside that block. `outward_ok` asks this question about functions and deliberately not about values, because a free value is ordinarily substituted away; this asks it about the ones that are not.
     pub(super) fn free_values_settled(&mut self, module: &Module, closure: &Closure) -> bool {
-        // Cached per function like [`ReifyScope::outward_ok`]'s answer and for the same reason: this walks the whole region, it is asked on the probe and again on the real run for every closure, and reification only appends, so a region's free set does not move within a pass. Uncached, it triples a hello-world compile's wall clock.
-        let free = self
-            .free_values
-            .entry(closure.function)
-            .or_insert_with(|| free_references(module, closure.function).map(|(_, values)| values));
-        let Some(free) = free else {
+        let Some((_, free)) = self.free(module, closure.function) else {
             return false;
         };
         if free.is_empty() {
@@ -461,10 +519,7 @@ pub(super) fn item_bound_functions(module: &Module) -> BTreeSet<FunctionId> {
 /// [`outward_functions_item_bound`] answers the same question about functions alone and is what gates a reification at all; this answers it about both, and is what decides whether an emitted group can be *bound at item level*. The two are separate because a free value is ordinarily covered by the closure's captures and substituted away, so the reification gate has no business refusing one — while a copy that came out still naming a value bound in some block cannot be lifted out of it.
 ///
 /// `None` when the region reaches a tombstoned entity, which the caller treats as unsafe.
-pub(super) fn free_references(
-    module: &Module,
-    root: FunctionId,
-) -> Option<(BTreeSet<FunctionId>, BTreeSet<ValueId>)> {
+pub(super) fn free_references(module: &Module, root: FunctionId) -> Option<Free> {
     let mut region = BTreeSet::new();
     let mut bound = BTreeSet::new();
     let mut functions = BTreeSet::new();
