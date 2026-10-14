@@ -600,6 +600,62 @@ fn embeddings_do_not_chain_through_a_middle_monad() {
     );
 }
 
+/// An action that may fail has no edge into a monad that cannot hold a failure, so no witness is to be declared: the refusal names the function that hands the outcome back where the action stands, and that a region which is itself a `Try` sequences it.
+#[test]
+fn a_try_sequenced_in_a_region_with_no_edge_for_it_is_told_what_is_written_instead() {
+    let error = typecheck(
+        r#"
+        use /std/{Result, Io, Try, File, Path, print};
+        let text = File/read_all(Path/of_str("notes.txt"))!;
+        print("read")
+        "#,
+    )
+    .expect_err("a `Try` has no edge into `Io`");
+
+    assert!(
+        error.contains("needed to sequence a (x) => Try(Io, Io/Error, x) action in this Io region"),
+        "expected the missing edge, got: {error}"
+    );
+    assert!(
+        error.contains(
+            "Try/run hands the action's Result back to this region, and a region whose own type is a Try sequences it"
+        ),
+        "expected what is written instead, got: {error}"
+    );
+}
+
+/// The same refusal between two monads neither of which is a `Try` offers no runner: an edge between them is the reader's to declare.
+#[test]
+fn a_missing_edge_between_monads_that_hold_no_failure_offers_no_runner() {
+    let error = typecheck(
+        r#"
+        use /std/{Monad, Io, Async};
+        pub struct Job(A: Type): pub Type {
+            Io(A),
+        }
+        pub let jpure(@A: Type, a: A) -> Job(A) =
+            Job { Io/pure(a) };
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+            Job { Io/bind(m.0, (a) => f(a).0) };
+        satisfy Monad(Job) {
+            pure = jpure,
+            bind = jbind,
+        }
+        pub let job: Job({}) =
+            let _ = Async/yield_now()!;
+            jpure(());
+        job.0
+        "#,
+    )
+    .expect_err("no Async-into-Job edge exists");
+
+    assert!(
+        error.contains("no witness of") && error.contains("Lift"),
+        "expected the missing edge, got: {error}"
+    );
+    assert!(!error.contains("hands the action's"), "{error}");
+}
+
 /// Strict postponement: a bang in an inference-position region is refused rather than letting the action elect the monad. The parameter is annotated, so the region's monad is the one thing left undetermined.
 #[test]
 fn a_bang_in_an_inference_position_region_is_refused() {

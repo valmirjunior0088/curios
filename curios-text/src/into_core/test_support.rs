@@ -8,7 +8,7 @@ use {
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
         OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
-        Qualifier, ResultSyntax, RootKind, SpellDerivation, StringSyntax, SyntaxName,
+        Qualifier, ReportSyntax, ResultSyntax, RootKind, SpellDerivation, StringSyntax, SyntaxName,
         SyntaxRegistry, TestSyntax, test_support::Temporary,
     },
     std::{fs, path::Path},
@@ -89,6 +89,12 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     program: ProgramSyntax {
         perform: registry_field(&["std", "Program"], "perform"),
+    },
+    report: ReportSyntax {
+        try_type: registry_name(&["std", "Try"]),
+        try_run: registry_name(&["std", "Try", "run"]),
+        str_concat: registry_name(&["std", "Str", "concat"]),
+        fmt_render: registry_name(&["std", "Fmt", "render"]),
     },
     // These spellings are load-bearing for `lint_tests`, which declares them as source and asserts the references that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
     derivations: DerivationSyntax {

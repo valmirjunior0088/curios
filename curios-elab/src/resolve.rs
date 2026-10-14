@@ -13,9 +13,9 @@
 
 use {
     super::{
-        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Need, Occurrence, Outcome,
-        ParkedWork, ShapeDiagnosis, Witness, attempt_discharge, convert_outcome, reduce_with,
-        resolved_for_display,
+        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Joining, Need, Occurrence, Outcome,
+        ParkedWork, Runner, ShapeDiagnosis, Witness, attempt_discharge, convert_outcome,
+        reduce_with, resolved_for_display,
     },
     crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
     curios_core::{
@@ -23,7 +23,7 @@ use {
         ImplicitOrigin, Instance, InstanceHead, Metavar, MetavarId, StructType, Subterm, Term,
         UniverseContext, Universes, WitnessKey, WitnessOrigin,
     },
-    curios_utilities::{Mount, Plicity, Qualifier},
+    curios_utilities::{Mount, Plicity, Qualifier, SyntaxName},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 };
 
@@ -137,6 +137,37 @@ pub(crate) fn diagnose_need(
     diagnose_embedding(context, goal, site)
         .map(Need::Embedding)
         .or_else(|| diagnose_closing(context, goal).map(Need::Closing))
+        .or_else(|| diagnose_joining(context, goal).map(Need::Joining))
+}
+
+/// The global `name` is, as a term a report spells by its reader's imports.
+fn global(name: SyntaxName) -> Term {
+    Term::free_var(&Free::global(name.qualifier()))
+}
+
+/// When `goal` is the registry's `Add` at `/std/Str`, the two functions that join text, for the report to name: `+` is no operator of text.
+fn diagnose_joining(context: &mut Context, goal: &Term) -> Option<Box<Joining>> {
+    let goal = reduce_with(context, goal).ok()?;
+    let (concept_name, _, params) = as_concept_app(context, &goal)?;
+    let syntax = context.syntax();
+    let Global::Authored(concept_path) = &concept_name else {
+        return None;
+    };
+    if *concept_path != syntax.operator.add.concept.qualifier() {
+        return None;
+    }
+    let [operand] = params.as_slice() else {
+        return None;
+    };
+    let operand = reduce_with(context, operand).ok()?;
+    let text = HeadKey::Nominal(Global::Authored(syntax.string.string.qualifier()));
+
+    (HeadKey::of_whnf(&operand)? == text).then(|| {
+        Box::new(Joining {
+            concat: global(syntax.report.str_concat),
+            render: global(syntax.report.fmt_render),
+        })
+    })
 }
 
 /// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form: the type of a term that closes a program, which no witness performs.
@@ -214,12 +245,25 @@ fn diagnose_embedding(
         _ => None,
     });
 
+    // An action that may fail has no edge into a monad that cannot hold a failure, so no witness is to be declared: the report names what is written instead.
+    let syntax = context.syntax();
+    let fallible = HeadKey::Nominal(Global::Authored(syntax.report.try_type.qualifier()));
+    let runner = (source_key.as_ref() == Some(&fallible) && target_key.as_ref() != Some(&fallible))
+        .then(|| {
+            Box::new(Runner {
+                family: global(syntax.report.try_type),
+                run: global(syntax.report.try_run),
+                result: global(syntax.result.family),
+            })
+        });
+
     Some(EmbeddingDiagnosis {
         source: Box::new(source),
         target: Box::new(target),
         source_is_monad,
         chain,
         goal: written_goal,
+        runner,
     })
 }
 

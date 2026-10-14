@@ -4,7 +4,8 @@ use curios_utilities::{
     ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
     EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
     OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
-    ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
+    TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -81,6 +82,12 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     program: ProgramSyntax {
         perform: field(&["std", "Program", "Program"], "perform"),
+    },
+    report: ReportSyntax {
+        try_type: name(&["std", "Try", "Try"]),
+        try_run: name(&["std", "Try", "run"]),
+        str_concat: name(&["std", "Str", "concat"]),
+        fmt_render: name(&["std", "Fmt", "render"]),
     },
     derivations: DerivationSyntax {
         spell: SpellDerivation {

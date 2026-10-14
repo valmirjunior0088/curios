@@ -1392,6 +1392,13 @@ impl fmt::Display for Displayed<'_> {
                 }
                 match need {
                     None => write!(f, "\n  needed by {} for {binder}", callee.phrase(spelling)),
+                    Some(Need::Joining(joining)) => write!(
+                        f,
+                        "\n  needed by {} for {binder}\n  {} joins two texts, and {} builds one from a format",
+                        callee.phrase(spelling),
+                        joining.concat.spelled(spelling),
+                        joining.render.spelled(spelling)
+                    ),
                     Some(Need::Closing(type_)) => write!(
                         f,
                         "\n  a program closes with a term whose type has one, and this one's type is {}",
@@ -1408,6 +1415,15 @@ impl fmt::Display for Displayed<'_> {
                             f,
                             "\n  needed to sequence {article} {source} action in this {target} region"
                         )?;
+                        if let Some(runner) = &diagnosis.runner {
+                            write!(
+                                f,
+                                "\n  {} hands the action's {} back to this region, and a region whose own type is a {} sequences it",
+                                runner.run.spelled(spelling),
+                                runner.result.spelled(spelling),
+                                runner.family.spelled(spelling)
+                            )?;
+                        }
                         if !diagnosis.source_is_monad {
                             write!(
                                 f,

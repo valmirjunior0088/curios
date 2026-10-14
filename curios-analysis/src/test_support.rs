@@ -11,7 +11,8 @@ use {
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
         OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
-        ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+        ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
+        TestSyntax,
     },
     std::{collections::BTreeMap, convert::Infallible},
 };
@@ -88,6 +89,12 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     program: ProgramSyntax {
         perform: field(&["std", "Program"], "perform"),
+    },
+    report: ReportSyntax {
+        try_type: name(&["std", "Try"]),
+        try_run: name(&["std", "Try", "run"]),
+        str_concat: name(&["std", "Str", "concat"]),
+        fmt_render: name(&["std", "Fmt", "render"]),
     },
     derivations: DerivationSyntax {
         spell: SpellDerivation {

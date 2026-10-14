@@ -60,6 +60,7 @@ pub struct SyntaxRegistry {
     pub proof: ProofSyntax,
     pub test: TestSyntax,
     pub program: ProgramSyntax,
+    pub report: ReportSyntax,
     pub derivations: DerivationSyntax,
     pub entailment: EntailmentSyntax,
 }
@@ -81,6 +82,7 @@ impl SyntaxRegistry {
             proof,
             test,
             program,
+            report,
             derivations,
             entailment,
         } = self;
@@ -97,13 +99,14 @@ impl SyntaxRegistry {
             .chain(proof.targets())
             .chain(test.targets())
             .chain(program.targets())
+            .chain(report.targets())
             .chain(derivations.targets())
             .chain(entailment.targets())
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only four groups hold concept methods; the other nine are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only four groups hold concept methods; the other ten are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let Self {
             option: _,
@@ -117,6 +120,7 @@ impl SyntaxRegistry {
             proof: _,
             test: _,
             program,
+            report: _,
             derivations,
             entailment: _,
         } = self;
@@ -537,6 +541,28 @@ impl ProgramSyntax {
         let Self { perform } = self;
 
         [perform.concept].into_iter()
+    }
+}
+
+/// What a report names for its reader to write in place of a form that is refused: `/std/Try` and its `run`, where an action that may fail meets a region it has no edge into, and `/std/Str/concat` and `/std/Fmt/render`, where `+` meets a `Str`. Read by the elaborator's reports alone: no stage builds a term the program holds from them.
+#[derive(Debug, Clone, Copy)]
+pub struct ReportSyntax {
+    pub try_type: SyntaxName,
+    pub try_run: SyntaxName,
+    pub str_concat: SyntaxName,
+    pub fmt_render: SyntaxName,
+}
+
+impl ReportSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            try_type,
+            try_run,
+            str_concat,
+            fmt_render,
+        } = self;
+
+        [try_type, try_run, str_concat, fmt_render].into_iter()
     }
 }
 

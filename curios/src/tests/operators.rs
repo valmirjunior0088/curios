@@ -479,3 +479,41 @@ fn infix_under_a_guard_takes_its_witness_where_it_stands() {
 
     typecheck_within(120_000, source).unwrap();
 }
+
+/// `+` is no operator of text, and the refusal says what is: the function that joins two, and the one that builds a text from a format.
+#[test]
+fn adding_two_texts_is_told_what_joins_them() {
+    let refusal = error(
+        r#"
+        use /std/{Str, Fmt, print};
+        let name = "world";
+        print("Hello, " + name + "!\n")
+        "#,
+    );
+
+    assert!(
+        refusal.contains("no witness of") && refusal.contains("Add(Str)"),
+        "expected the missing witness, got: {refusal}"
+    );
+    assert!(
+        refusal.contains("Str/concat joins two texts, and Fmt/render builds one from a format"),
+        "expected what is written instead, got: {refusal}"
+    );
+}
+
+/// The same operator at a type of the program's own names no function of text: what joins two of them is its author's to say.
+#[test]
+fn adding_two_values_of_another_type_names_no_function_of_text() {
+    let refusal = error(
+        r#"
+        use /std/{Io};
+        struct Point: Type { x: /std/Nat }
+        let p = Point { x = 1 };
+        let q = p + p;
+        Io/pure(())
+        "#,
+    );
+
+    assert!(refusal.contains("no witness of"), "{refusal}");
+    assert!(!refusal.contains("joins two texts"), "{refusal}");
+}

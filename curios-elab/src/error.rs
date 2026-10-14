@@ -101,6 +101,23 @@ pub struct EmbeddingDiagnosis {
     pub goal: Option<Box<Term>>,
     /// A chain of declared edges from source to target, each hop `(key display, declaring module)`. Non-empty means the embeddings exist but were never composed — embeddings never chain automatically. The module rides as its [`Qualifier`] so rendering stays with `declaring_module`, the one spelling of "declared in …".
     pub chain: Vec<(String, Qualifier)>,
+    /// Present where the source is the fallible wrapper the registry names and the target is no instance of it: a failure has no edge into a monad that cannot hold one, so the report names the two ways the action is written instead.
+    pub runner: Option<Box<Runner>>,
+}
+
+/// The names a report offers where an action that may fail meets a region with no edge for it, each a global the reader's own imports spell: the wrapper's family, the function that runs one where it stands, and the family of what that hands back.
+#[derive(Debug)]
+pub struct Runner {
+    pub family: Term,
+    pub run: Term,
+    pub result: Term,
+}
+
+/// The functions a report names where `+` meets text, each a global the reader's own imports spell: the one that joins two, and the one that builds a text from a format.
+#[derive(Debug)]
+pub struct Joining {
+    pub concat: Term,
+    pub render: Term,
 }
 
 /// What a missing witness was needed for, where its goal's concept is one the compiler resolves for a form of its own: the report then says what that form wanted, in place of the premise of a call the author never wrote.
@@ -110,6 +127,8 @@ pub enum Need {
     Embedding(EmbeddingDiagnosis),
     /// To perform what closes a program: the goal is the registry's `Program`, at this type.
     Closing(Box<Term>),
+    /// To add two texts: the goal is the registry's `Add` at `/std/Str`, which is no operator's carrier.
+    Joining(Box<Joining>),
 }
 
 /// The shape-specific half of a missing-witness report, computed when the unresolved goal keys on a *labeled* tuple shape and the same key with every label dropped does have a witness. Labels are part of a tuple type's identity, which is the surprise an anonymous-shape key has; a reader who meets it deserves the rule rather than a bare miss.
@@ -1955,7 +1974,7 @@ impl Error {
                         out.push(&diagnosis.target);
                     }
                     Some(Need::Closing(type_)) => out.push(type_),
-                    None => {}
+                    Some(Need::Joining(_)) | None => {}
                 }
             }
             Self::Goal {
