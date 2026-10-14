@@ -1,4 +1,4 @@
-use /std/{Monad, Result, Io, Async};
+use /std/{Monad, Result, Io, Async, Program, Show, Str, print_err, proc};
 
 --- An `M(Result(E, A))` sequenced so that a failure stops the region.
 pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type {
@@ -104,4 +104,16 @@ satisfy (
     use Monad/Lift(M, N),
 ) => Monad/Lift((A: Type) => Try(M, E, A), (A: Type) => Try(N, E, A)) {
     lift(@_, m) = Try { Monad/lift(m.0) },
+}
+
+--- A description that may fail is run: a failure is written to standard error as it is shown, and the program ends with status `1`.
+satisfy (@E: Type, use Show(E)) => Program(Try(Io, E, {})) {
+    perform(program) =
+        let outcome = run(program)!;
+        match outcome
+        | success(_) => Io/pure(())
+        | failure(why) =>
+            let _ = print_err(Str/concat(Show/show(why), "\n"))!;
+            proc/exit(1)
+        end,
 }
