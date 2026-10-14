@@ -1,7 +1,8 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind, suspend, advance};
-use /std/{Monad, Bytes, Nat, Result, Async, Handle, Program};
+use /std/{Monad, Bytes, Nat, List, Result, Async, Handle, Program};
 use /std/Bool/{Holds};
+use /std/time/{Duration, Instant};
 
 --- The failure every host operation reports.
 pub mod Error;
@@ -25,6 +26,36 @@ satisfy Monad/Lift(Io, Io) {
 satisfy Program(Io({})) {
     perform(program) = program,
 }
+
+--- Until a handle of `on` is ready: a suspension that abandons nothing and goes on with nothing. On no handle, until what waits beside it has moved — and at the top of a program, where nothing waits beside it, a deadlock the host reports.
+pub let wait(on: List(Handle)) -> Io({}) =
+    suspend(on, pure(()), pure(()));
+
+--- Until `d` has passed, on a timer closed whether the sleep ends or is abandoned.
+pub let sleep(d: Duration) -> Io({}) =
+    let start = Instant/now()!;
+    let timer = Instant/timer(Instant/add(start, d))!;
+    suspend([timer], Handle/close(timer), Handle/close(timer));
+
+--- Let what waits beside this run, and go on: a suspension on the handle that is always ready, so at the top of a program it waits on nothing.
+pub let yield() -> Io({}) =
+    wait([Handle/ready]);
+
+--- How a body that `using` brackets ended.
+pub induct Ended: pub Type
+--- It ran to its end.
+| finished()
+--- What advanced it dropped it while it waited.
+| cancelled()
+end
+
+--- `body`, and then `fin` told how it ended: `finished` where it ran to its end, and `cancelled` where whatever advances it drops it while it waits, which `fin` hears as the abandon of every suspension the body passes out.
+pub let using(@A: Type, fin: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
+    advance(
+        body,
+        (a) => bind(fin(Ended/finished()), (_) => pure(a)),
+        (on, abandon, rest) =>
+            suspend(on, bind(abandon, (_) => fin(Ended/cancelled())), using(fin, rest)));
 
 --- One read's answer: bytes, the end of the stream, or a failure.
 ---

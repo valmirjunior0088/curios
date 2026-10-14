@@ -1,0 +1,49 @@
+-- Waiting in `Io`: what a suspension `Io/advance` catches holds, and what a bracket tells its finalizer.
+use /std/{Bool, List, Io, Handle, Test};
+use /std/Async/{Channel};
+use /std/time/{Duration};
+
+-- A finalizer that leaves how its body ended where a take finds it.
+let told(sender: Channel/Sender(Io/Ended), ended: Io/Ended) -> Io({}) =
+    let _ = Channel/try_send(sender, ended)!;
+    Io/pure(());
+
+-- Whether the next take is `finished`, where `finished` says so, or `cancelled` otherwise.
+let heard(receiver: Channel/Receiver(Io/Ended), finished: Bool) -> Io(Bool) =
+    let taken = Channel/try_recv(receiver)!;
+    Io/pure(
+        match taken
+        | item(ended) =>
+            match ended | finished() => finished | cancelled() => Bool/not(finished) end
+        | _ => false
+        end);
+
+test a_yield_at_the_top_of_a_program_goes_on =
+    Test/perform(() =>
+        let _ = Io/yield()!;
+        Io/pure(Test/assert(true)));
+
+test a_sleep_suspends_on_one_timer_its_duration_has_not_reached =
+    Test/perform(() =>
+        Io/advance(
+            Io/sleep(Duration/of_secs(3600)),
+            (_) => Io/pure(Test/assert(false)),
+            (on, abandon, _) =>
+                let ready = Handle/ready_now(on)!;
+                let _ = abandon!;
+                Io/pure(Test/assert(List/eql(ready, [false])))));
+
+test using_tells_its_finalizer_a_body_ran_to_its_end =
+    Test/perform(() =>
+        let ends = Channel/new(@Io/Ended, 1)!;
+        let n = Io/using((ended) => told(ends.0, ended), Io/pure(3))!;
+        let finished = heard(ends.1, true)!;
+        Io/pure(Test/assert(n == 3 && finished)));
+
+test using_tells_its_finalizer_a_body_was_dropped_while_it_waited =
+    Test/perform(() =>
+        let ends = Channel/new(@Io/Ended, 1)!;
+        let body = Io/using((ended) => told(ends.0, ended), Io/bind(Io/yield(), (_) => Io/pure(3)));
+        let _ = Io/advance(body, (_) => Io/pure(()), (_, abandon, _) => abandon)!;
+        let cancelled = heard(ends.1, false)!;
+        Io/pure(Test/assert(cancelled)));

@@ -318,30 +318,54 @@ pub(in crate::tests::codegen) fn wat(source: &str) -> String {
     compile_raw(source).to_string()
 }
 
-/// The lines allocating `needle` that are not the `Io` carrier's own.
+/// The lines allocating `needle` that are not the `Io` carrier's own, nor the suspension path's, nor built once in `start`.
 ///
 /// Every program's tail is a description, and a description erases to a zero-argument closure — so an effect boundary allocates a closure and forces it through an indirect call no matter how the *user's* code is written. Those carry the `$io/…` hint their thunk was minted with (`io/pure`, `io/bind`, `io/write`, …), which is what lets a claim about user code stay a claim about user code. A test that dropped the distinction would either fail on every program or assert nothing.
 ///
-/// **The separation is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the arity's table and type instead: `call_indirect $clsr/0 $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
+/// **The suspension path's allocations are the other exception, and they are separated by where they stand.** A bind whose action may suspend hands the suspension out with its continuation appended, through `suspension/carry`, so the continuation's closure — and the close of the watch it waits on — is built on the arm that calls `carry`, in the straight run of instructions that ends in that call, and nowhere else: a block boundary ends the run, and a run that ends in no such call is kept. A closure `start` builds is a module constant, built once whatever it closes over, so nothing there is built per call either.
+///
+/// **The separation of the carrier is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the arity's table and type instead: `call_indirect $clsr/0 $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
 pub(in crate::tests::codegen) fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
     assert!(
         needle.starts_with("struct.new") || needle.starts_with("array.new"),
         "`{needle}` names no definition of its own, so the `$io/` hint cannot separate carrier from user code — use `user_functions_with`",
     );
-    wat.lines()
-        .map(str::trim)
-        .filter(|line| line.contains(needle) && !line.contains("$io/"))
-        .collect()
+    let mut found = Vec::new();
+    let mut run = Vec::new();
+    let mut in_start = false;
+    for line in wat.lines() {
+        if line.starts_with("    (func ") {
+            found.append(&mut run);
+            in_start = line.starts_with("    (func $start");
+        }
+        let line = line.trim();
+        if line.contains("suspension/carry") && line.contains("call ") {
+            run.clear();
+        } else if ["end", "else", "block", "loop", "if", "br", "return"]
+            .iter()
+            .any(|boundary| line.starts_with(boundary))
+        {
+            found.append(&mut run);
+        } else if line.contains(needle) && !line.contains("$io/") && !in_start {
+            run.push(line);
+        }
+    }
+    found.append(&mut run);
+    found
 }
 
 /// The names of the user's own emitted functions whose bodies contain `needle`.
 ///
-/// The counterpart to [`user_allocations`] for everything an instruction does not name itself. Two functions are the effect boundary rather than the user's code: one carrying the `$io/…` hint of the thunk it was minted for, and `$func/main`, which forces the program's own description exactly once because a program *is* a description.
+/// The counterpart to [`user_allocations`] for everything an instruction does not name itself. Three kinds of function are the effect boundary rather than the user's code: one carrying the `$io/…` hint of the thunk it was minted for, `$func/main`, which forces the program's own description exactly once because a program *is* a description, and an `$async/…` export of a program that can suspend, which forces the description the host hands back.
 pub(super) fn user_functions_with<'a>(functions: &'a [Function<'a>], needle: &str) -> Vec<&'a str> {
     functions
         .iter()
         .filter(|function| function.body.contains(needle))
-        .filter(|function| !function.name.contains("$io/") && function.name != "$func/main")
+        .filter(|function| {
+            !function.name.contains("$io/")
+                && function.name != "$func/main"
+                && !function.name.starts_with("$async/")
+        })
         .map(|function| function.name)
         .collect()
 }

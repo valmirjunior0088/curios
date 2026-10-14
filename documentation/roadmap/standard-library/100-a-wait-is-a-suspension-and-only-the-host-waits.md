@@ -74,8 +74,8 @@ Each settled on 2026-10-14.
 ## Stages
 
 1. **A description suspends, and the host advances it.** `IoSuspend` and `IoAdvance`, their erasure, the `$suspension` test and its folding, the two exports, the native, browser and mock loops, `timer`, `watch`, `handle_ready` and the ready token. `hello_world` and a corpus program compile to the function count and size they have before it.
-2. **Waiting in `Io`.** `wait`, `sleep`, `yield`, `using`, reads and writes over `watch`, the gated standard output write, `Read(S)`, `Write(S)` and `Reader` over `Io`.
-3. **Fibers over suspensions.** `/std/Async`'s combinators, futures, channels and selection in `Io`, every user of the `Async` type and every test moved to `Io`, and the type retired.
+2. **Waiting in `Io`.** `wait`, `sleep`, `yield`, `using`, reads and writes over `watch`, and the gated standard output write.
+3. **Fibers over suspensions.** `/std/Async`'s combinators, futures, channels and selection in `Io`, `Read(S)`, `Write(S)` and `Reader` over `Io`, every user of the `Async` type and every test moved to `Io`, and the type retired. The concepts move with the fibers rather than before them: a `Reader` over `Io` alone would read inside a fiber as a lifted action, which holds every fiber while it waits.
 4. **The host stops lending a sleep.** `handle_poll` leaves the table.
 5. **A `foreign` row may be answered later.** The pending lane, `define_async`, `blocking`, promises in the browser, name lookup and a serial drain.
 6. **A pipe or a device opens without blocking.** `file_open` reads the file's kind; macOS through CI.

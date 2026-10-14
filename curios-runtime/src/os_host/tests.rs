@@ -147,6 +147,28 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
     assert!(closed);
 }
 
+/// The standard output gate, exercised on a pipe of its own: a pipe with room takes a write, one its writer has filled does not until its reader drains it, and a pipe's writes are bounded where a device's are not.
+#[test]
+fn writable_now_follows_a_pipe_end_as_its_reader_drains_it() {
+    let (mut reader, writer) = std::io::pipe().expect("a pipe");
+
+    assert!(writable_now(writer.as_fd()));
+    assert!(pipe_or_socket(writer.as_fd()));
+    let device = std::fs::File::open("/dev/null").expect("the null device");
+    assert!(!pipe_or_socket(device.as_fd()));
+
+    // Filled through a write end switched non-blocking, so the fill stops where the pipe is full instead of waiting there.
+    rustix::fs::fcntl_setfl(&writer, OFlags::NONBLOCK).expect("the write end switched");
+    let chunk = [0u8; 4096];
+    while rustix::io::write(&writer, &chunk).is_ok() {}
+    assert!(!writable_now(writer.as_fd()));
+
+    let mut drained = vec![0u8; 1 << 20];
+    let read = reader.read(&mut drained).expect("the pipe drains");
+    assert!(read > 0);
+    assert!(writable_now(writer.as_fd()));
+}
+
 /// A listener bound and listening through the host at a loopback port the kernel picked, with the canonical `ip:port` blob `dns_resolve` would mint for it.
 ///
 /// Bound at port zero and read back, never probed and released: a released port is free only until the next probe takes it, and the two tests that need one run in parallel, so a probe-and-release helper would have the second test bind the port the first is about to.

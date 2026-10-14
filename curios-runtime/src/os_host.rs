@@ -10,6 +10,7 @@ use {
     rustix::{
         event::{PollFd, PollFlags, Timespec, poll},
         io::Errno,
+        pipe::PIPE_BUF,
         termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
     },
     rustls::{
@@ -220,6 +221,8 @@ pub struct OsHost {
     resolver: OnceLock<OsResolver>,
     /// The termios of every descriptor `tty_raw` switched, keyed by the handle's token, so `tty_raw(h, false)` and [`Drop`] restore exactly what the program found. Host state with an exit obligation: a terminal left raw outlives the process that switched it.
     termios: Mutex<Vec<(Vec<u8>, Termios)>>,
+    /// Whether standard output and standard error are a pipe or a socket, read on the first write to each: a gated write to one is bounded by what it takes without blocking. See [`OsHost::write_standard`].
+    bounded: [OnceLock<bool>; 2],
 }
 
 impl OsHost {
@@ -235,7 +238,29 @@ impl OsHost {
             args,
             resolver: OnceLock::new(),
             termios: Mutex::new(Vec::new()),
+            bounded: [OnceLock::new(), OnceLock::new()],
         }
+    }
+
+    /// One write to standard output or standard error, gated as standard input's read is.
+    ///
+    /// The descriptor is the process's, shared with whatever else writes to it, so its flags are never touched: a zero-timeout poll asks whether it would take bytes now, and `WouldBlock` answers where it would not, which a program suspends on a watch of and resends. A ready pipe or socket is only sure to take `PIPE_BUF` bytes without blocking, so a write to one hands it at most that; a terminal or a file takes the whole.
+    fn write_standard(
+        &self,
+        stream: usize,
+        fd: BorrowedFd<'_>,
+        bytes: &[u8],
+    ) -> Result<u64, Failure> {
+        if !writable_now(fd) {
+            return Err(Failure::WouldBlock);
+        }
+        let bounded = *self.bounded[stream].get_or_init(|| pipe_or_socket(fd));
+        let taken = match bounded {
+            true => &bytes[..bytes.len().min(PIPE_BUF)],
+            false => bytes,
+        };
+
+        write_once(|| rustix::io::write(fd, taken).map_err(Error::from))
     }
 
     /// Run `apply` over the descriptor behind `handle` — a standard stream's, or an open file's, pipe's or serial port's out of the table. `None` for a handle with no descriptor a terminal `ioctl` could address, which the callers report as `NotFound`.
@@ -808,12 +833,8 @@ impl HostOps for OsHost {
 
         match io {
             // The standard output streams are written through their raw descriptors, one attempt per call as every other handle is: `std`'s own buffer would hold what the guest wrote where neither the other stream's writes nor a flush can reach it, and the guest's output would arrive out of the order it was written in.
-            Handle::Stdout => {
-                return write_once(|| rustix::io::write(stdout(), &bytes).map_err(Error::from));
-            }
-            Handle::Stderr => {
-                return write_once(|| rustix::io::write(stderr(), &bytes).map_err(Error::from));
-            }
+            Handle::Stdout => return self.write_standard(0, stdout().as_fd(), &bytes),
+            Handle::Stderr => return self.write_standard(1, stderr().as_fd(), &bytes),
             // Standard input is open to read only, as a descriptor opened to read is.
             Handle::Stdin => return Err(bad_descriptor()),
             Handle::Other(_) => {}
@@ -1145,6 +1166,32 @@ impl HostOps for OsHost {
             _ => Err(Failure::NotFound),
         }
     }
+}
+
+/// Whether `fd` would take a write now, as [`readable_now`] asks of a read; a poll the system refuses answers yes, so the write that follows says why.
+fn writable_now(fd: BorrowedFd<'_>) -> bool {
+    let mut polls = [PollFd::from_borrowed_fd(fd, PollFlags::OUT)];
+    let now = Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+
+    match poll(&mut polls, Some(&now)) {
+        Ok(_) => polls[0]
+            .revents()
+            .intersects(PollFlags::OUT | PollFlags::HUP | PollFlags::ERR),
+        Err(_) => true,
+    }
+}
+
+/// Whether `fd` is a pipe or a socket, the descriptors a ready poll promises only `PIPE_BUF` bytes of room on; one whose kind cannot be read is taken to be one, which only bounds its writes.
+fn pipe_or_socket(fd: BorrowedFd<'_>) -> bool {
+    rustix::fs::fstat(fd).map_or(true, |stat| {
+        matches!(
+            rustix::fs::FileType::from_raw_mode(stat.st_mode),
+            rustix::fs::FileType::Fifo | rustix::fs::FileType::Socket
+        )
+    })
 }
 
 /// Whether `fd` has input to read right now: a zero-timeout poll for `IN`, with a hang-up or an error counting as readable, since a read then answers at once with the end of the stream or the fault. A failed poll answers `true`, so the read runs and reports the fault itself.
