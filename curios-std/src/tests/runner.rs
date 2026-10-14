@@ -43,7 +43,7 @@ pub(super) fn outcomes(unit: &str, mounted: RootSource) -> (usize, String) {
         .tests(
             &entrypoint,
             &loader,
-            EntryTail::LastUnitTests,
+            EntryTail::Test { last_unit: true },
             |_| {},
             |_| {},
         )

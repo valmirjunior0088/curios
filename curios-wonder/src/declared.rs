@@ -39,7 +39,7 @@ pub fn declared_tests(
             })?;
             let units = overlaid(units, overlay);
             let program = Fold::new(budget, &units, cache)
-                .check(&entrypoint, &loader, EntryTail::Authored, |_| {})?
+                .check(&entrypoint, &loader, EntryTail::Program, |_| {})?
                 .verdict?;
 
             declared_test_paths(&program.module)

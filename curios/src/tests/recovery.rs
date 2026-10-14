@@ -24,7 +24,7 @@ fn tests_error(source: &str) -> String {
         .tests(
             &entrypoint,
             &RootSource::none(),
-            EntryTail::Tests,
+            EntryTail::Test { last_unit: false },
             |_| {},
             |_| {},
         )
@@ -186,7 +186,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
         .tests(
             &Entrypoint::trivial(),
             &RootSource::none(),
-            EntryTail::LastUnitTests,
+            EntryTail::Test { last_unit: true },
             |_| {},
             |_| {},
         )

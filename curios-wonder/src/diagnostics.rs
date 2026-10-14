@@ -222,7 +222,7 @@ pub fn diagnosed(
                 let checked = Fold::new(budget, &units, through).check(
                     &entrypoint,
                     &loader,
-                    EntryTail::Authored,
+                    EntryTail::Program,
                     |_| {},
                 );
                 answered(checked)

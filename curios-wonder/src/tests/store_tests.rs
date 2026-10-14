@@ -740,7 +740,7 @@ fn a_program_no_package_declares_is_compiled_over_what_its_session_kept() {
         let (entrypoint, loader) =
             crate::open(Origin::File(file.clone()), None, overlay).expect("the program parses");
         Fold::new(DEFAULT_STEP_BUDGET, &[], Some(&noting))
-            .check(&entrypoint, &loader, EntryTail::Authored, |_| {})
+            .check(&entrypoint, &loader, EntryTail::Program, |_| {})
             .expect("the program lowers")
             .verdict
             .expect("the program checks");

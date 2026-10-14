@@ -69,7 +69,7 @@ pub(super) fn typecheck(source: &str) -> Result<(), String> {
             &SYNTAX,
             &entrypoint,
             &RootSource::none(),
-            crate::EntryTail::Authored,
+            crate::EntryTail::Program,
             &mut |_| {},
         )
     })
@@ -89,7 +89,7 @@ pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
             &SYNTAX,
             &entrypoint,
             &RootSource::none(),
-            crate::EntryTail::Authored,
+            crate::EntryTail::Program,
             &mut |_| {},
         )
     })

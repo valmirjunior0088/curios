@@ -149,7 +149,7 @@ fn run_tests_program(source: &str) -> Vec<u8> {
         .tests(
             &entrypoint,
             &RootSource::none(),
-            EntryTail::Tests,
+            EntryTail::Test { last_unit: false },
             |_| {},
             |_| {},
         )
@@ -176,7 +176,7 @@ fn ersd_optm_tests(source: &str) -> curios_ersd::Module {
         .tests(
             &entrypoint,
             &RootSource::none(),
-            EntryTail::Tests,
+            EntryTail::Test { last_unit: false },
             |stage| {
                 if let Stage::ErsdOptm(module) = stage {
                     captured = Some(module.clone());

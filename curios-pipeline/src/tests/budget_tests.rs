@@ -100,7 +100,7 @@ fn checks(source: &str, budget: u64, scope: &[&Unit]) -> bool {
         &SYNTAX,
         &UnitSource::entry(&entrypoint, &RootSource::none()),
         None,
-        EntryTail::Authored,
+        EntryTail::Program,
     )
     .is_ok()
 }
@@ -117,7 +117,7 @@ fn erases(source: &str, budget: u64) -> bool {
             &SYNTAX,
             &entrypoint,
             &RootSource::none(),
-            EntryTail::Authored,
+            EntryTail::Program,
             &mut |_| {},
         )
         .expect("the program elaborates");

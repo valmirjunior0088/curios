@@ -328,7 +328,7 @@ pub fn typecheck_entrypoint(
         &established,
         predecessors,
         lowered,
-        EntryTail::Authored,
+        EntryTail::Program,
         &mut |_| {},
     )?;
 
@@ -342,16 +342,16 @@ pub fn typecheck_entrypoint(
 /// Put `entry` to what `tail` judges an authored entry at: the program contract, with what closes the program performed ([`performed`]), or the empty proposition where it is put as a proof. A test program's entry is left as it stands: its tail is the elaborator's to synthesize and to state the type of.
 fn state(entry: &mut curios_core::Entrypoint, tail: EntryTail, syntax: &SyntaxRegistry) {
     match tail {
-        EntryTail::Authored => {
+        EntryTail::Program => {
             entry.body = performed(&entry.body, syntax);
             entry.type_ = Some(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())));
         }
-        EntryTail::Proof => {
+        EntryTail::False => {
             let empty = Global::Authored(syntax.proof.false_type.qualifier());
 
             entry.type_ = Some(Term::free_var(&Free::from(&empty)));
         }
-        EntryTail::Tests | EntryTail::LastUnitTests => {}
+        EntryTail::Test { .. } => {}
     }
 }
 
@@ -424,17 +424,49 @@ fn closing(function: &Term, syntax: &SyntaxRegistry) -> Term {
 /// Why a program's elaborated entry is present wherever it is read: elaboration withholds an entry, recording no refusal, only when it reaches an item the lowering could not read, and `with_broken` turns any such item into a failure first.
 const WITHHELD_ONLY_WHEN_BROKEN: &str = "an entry is withheld only for reaching an item that did not parse, which fails the compile first";
 
-/// Which final term a compilation checks, and what it is judged at: the one the author wrote, as a program or as a proof, or the test tail synthesized from a unit's registered tests. A policy rather than a boolean at each call site, so the program shapes a unit can compile to are named where they diverge — and the whole of what an entry can be judged at, since nothing else states its type.
+/// Which final term a compilation checks, and what it is judged at: the one the author wrote, as a program or at `False`, or the test tail synthesized from a unit's registered tests. A policy rather than a boolean at each call site, so the program shapes a unit can compile to are named where they diverge — and the whole of what an entry can be judged at, since nothing else states its type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryTail {
-    /// The authored entrypoint as the ordinary program: judged at `Io({})`, with what closes it performed through `/std/Program`.
-    Authored,
-    /// The authored entrypoint as an alleged proof of the empty proposition, judged at `False`: how the soundness board puts a witness, through [`examine_entrypoint`].
-    Proof,
-    /// The synthesized `Test/main([...])` over the entry unit's own registered tests, replacing an executable's authored tail. A unit with no tests gets `Test/main([])`, which runs nothing and answers that every test held.
-    Tests,
-    /// The same synthesized tail over the last mounted unit's registered tests — the library-under-test case, where the entry is an empty program and the subject is the last predecessor.
-    LastUnitTests,
+    /// The authored entrypoint as a program: judged at `Io({})`, each of its tails run through `/std/Program`.
+    Program,
+    /// The authored entrypoint as an alleged proof of the empty proposition, judged at `/sys/Bool/False`: how the soundness board puts a witness, through [`examine_entrypoint`].
+    False,
+    /// The synthesized `Test/main([...])` over the entry unit's own registered tests, replacing an executable's authored tail, or, where `last_unit` is set, over the last mounted unit's — the library-under-test case, where the entry is an empty program and the subject is the last predecessor. A unit with no tests gets `Test/main([])`, which runs nothing and answers that every test held.
+    Test { last_unit: bool },
+}
+
+impl EntryTail {
+    /// Which tests the tail schedules: those of `own`, the entry's unit, or, for a library under test, those of the last unit in `scope`; a program and an entry at `False` schedule none.
+    ///
+    /// A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
+    fn scheduled(
+        self,
+        own: &curios_core::Module,
+        scope: &[&curios_core::Module],
+    ) -> Vec<curios_elab::ScheduledTest> {
+        let module = match self {
+            EntryTail::Program | EntryTail::False => return Vec::new(),
+            EntryTail::Test { last_unit: false } => own,
+            EntryTail::Test { last_unit: true } => match scope.last() {
+                Some(last) => last,
+                None => return Vec::new(),
+            },
+        };
+
+        scheduled_tests(&module.tests, &module.items)
+    }
+
+    /// What the elaborator closes the program with: the authored `entry`, or the test tail over `scheduled`, which the elaborator synthesizes and states the type of.
+    fn closing<'t>(
+        self,
+        entry: &'t curios_core::Entrypoint,
+        scheduled: &'t [curios_elab::ScheduledTest],
+    ) -> Tail<'t> {
+        match self {
+            EntryTail::Program | EntryTail::False => Tail::Entry(entry),
+            EntryTail::Test { .. } => Tail::Tests(scheduled),
+        }
+    }
 }
 
 /// One registered test, as the runner reports it: the path that names it, and its body as written — sliced from where the anchors in hand place the extent its authored body carries, empty where it carries none (a unit restored from a store may carry none) or none of them holds its declaration.
@@ -618,15 +650,7 @@ where
     // Made by the first report that spells a name, and by no elaboration that reports nothing.
     let spellings = LazyCell::new(|| Rc::new(names.spellings(&scope)));
 
-    // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; the elaborator states the synthesized entry's `Io({})` type, as this stage states an authored entry's below. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
-    let scheduled = match tail {
-        EntryTail::Authored | EntryTail::Proof => Vec::new(),
-        EntryTail::Tests => scheduled_tests(&lowered.module.tests, &lowered.module.items),
-        EntryTail::LastUnitTests => match cores.last() {
-            Some(core) => scheduled_tests(&core.tests, &core.items),
-            None => Vec::new(),
-        },
-    };
+    let scheduled = tail.scheduled(&lowered.module, cores);
     let records = match scheduled.is_empty() {
         true => Vec::new(),
         false => test_records(&scheduled, &anchors),
@@ -638,10 +662,7 @@ where
     //
     // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, which would leave the contract a post-hoc head test on the inferred type. What closes a program is of any type `/std/Program` performs, and that costs the contract nothing: the dispatch is a call inside the entry, at each of its tails, and the call answers `Io({})`.
     state(&mut lowered.entry, tail, syntax);
-    let elab_tail = match tail {
-        EntryTail::Authored | EntryTail::Proof => Tail::Entry(&lowered.entry),
-        EntryTail::Tests | EntryTail::LastUnitTests => Tail::Tests(&scheduled),
-    };
+    let elab_tail = tail.closing(&lowered.entry, &scheduled);
 
     context.set_imports(names.imports().clone());
     context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
@@ -849,16 +870,7 @@ where
             .or(baseline.as_ref().map(|earlier| &earlier.unit)),
     )?;
 
-    // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
-    let cores = predecessors.cores();
-    let scheduled = match tail {
-        EntryTail::Authored | EntryTail::Proof => Vec::new(),
-        EntryTail::Tests => scheduled_tests(&lowered.core().tests, &lowered.core().items),
-        EntryTail::LastUnitTests => match cores.last() {
-            Some(core) => scheduled_tests(&core.tests, &core.items),
-            None => Vec::new(),
-        },
-    };
+    let scheduled = tail.scheduled(lowered.core(), &predecessors.cores());
     let records = match scheduled.is_empty() {
         true => Vec::new(),
         false => test_records(&scheduled, &anchors_of(&lowered, predecessors)),
@@ -870,10 +882,7 @@ where
         module: lowered.core().clone(),
         entry: written.clone(),
     }));
-    let closing = match tail {
-        EntryTail::Authored | EntryTail::Proof => Tail::Entry(&written),
-        EntryTail::Tests | EntryTail::LastUnitTests => Tail::Tests(&scheduled),
-    };
+    let closing = tail.closing(&written, &scheduled);
 
     let mut findings = None;
     let closed = match (hit, baseline) {
@@ -1084,7 +1093,7 @@ pub fn examine_entrypoint(
         predecessors,
         syntax,
         lowered,
-        EntryTail::Proof,
+        EntryTail::False,
         &mut |_| {},
     );
     let ((program, _, _, _), obligations) = elaborated?;
@@ -1521,7 +1530,7 @@ where
         syntax,
         source,
         cache,
-        EntryTail::Authored,
+        EntryTail::Program,
         observe,
     )
     .map(|(module, foreigns, _records)| (module, foreigns))

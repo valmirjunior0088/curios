@@ -263,7 +263,7 @@ struct Run<'a> {
 }
 
 impl Run<'_> {
-    /// A library's tests. It has no written entry, so it is compiled through the trivial one: the subject is the scope's final unit, and `EntryTail::LastUnitTests` replaces that entry with the tail scheduling the unit's tests. `LIBRARY_KEY` stands in for the entry text the payload is keyed on — a built entry has none, and the library's own content rides in through the unit chain regardless.
+    /// A library's tests. It has no written entry, so it is compiled through the trivial one: the subject is the scope's final unit, and `EntryTail::Test { last_unit: true }` replaces that entry with the tail scheduling the unit's tests. `LIBRARY_KEY` stands in for the entry text the payload is keyed on — a built entry has none, and the library's own content rides in through the unit chain regardless.
     fn library(
         &mut self,
         units: &[RootSource],
@@ -281,7 +281,7 @@ impl Run<'_> {
                 loader: &RootSource::none(),
                 text: LIBRARY_KEY,
                 entry: &library,
-                tail: EntryTail::LastUnitTests,
+                tail: EntryTail::Test { last_unit: true },
             },
             Filing {
                 store: store.as_ref(),
@@ -326,7 +326,7 @@ impl Run<'_> {
                 loader: &loader,
                 text: &source.text,
                 entry,
-                tail: EntryTail::Tests,
+                tail: EntryTail::Test { last_unit: false },
             },
             Filing {
                 store: store.as_ref(),
@@ -363,7 +363,7 @@ impl Run<'_> {
                 loader: &RootSource::none(),
                 text: LIBRARY_KEY,
                 entry: invoked,
-                tail: EntryTail::LastUnitTests,
+                tail: EntryTail::Test { last_unit: true },
             },
             Filing::nowhere(subject),
         )?;
@@ -387,7 +387,7 @@ impl Run<'_> {
                 loader: &loader,
                 text: &source.text,
                 entry: invoked,
-                tail: EntryTail::Tests,
+                tail: EntryTail::Test { last_unit: false },
             },
             Filing::nowhere(subject),
         )?;

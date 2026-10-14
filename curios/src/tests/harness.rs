@@ -359,7 +359,7 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
         .tests(
             &entrypoint,
             &RootSource::none(),
-            EntryTail::Tests,
+            EntryTail::Test { last_unit: false },
             |_| {},
             |_| {},
         )
