@@ -2568,7 +2568,7 @@ pub fn into_core(
 
 /// The interface of the unit `unit` was lowered into from `source`, for its consumers, or `None` where the source marks no mount as documented: an entry program, which has no consumer.
 ///
-/// **Built where a command asks for it, and carried by no unit.** Two commands read a record, so no compilation builds one and no image holds one. What a page shows is still read off the compilation that built the library: the direct interface, the export view and each definition's import scope are the ones `unit`'s lowering stored, and the surface tree is discovery's, read again through `source`, which parses a text once for each thread, so a command that lowered the unit a moment ago parses nothing twice.
+/// **Built where a command asks for it, and carried by no unit.** Two commands read a record, so no compilation builds one and no image holds one. What a page shows is still read off the compilation that built the library: the direct interface, the export view and what each written name resolved to are the ones `unit`'s lowering stored, and the surface tree is discovery's, read again through `source`, which parses a text once for each thread, so a command that lowered the unit a moment ago parses nothing twice.
 ///
 /// `predecessors` are the units `unit` was lowered against, in that order. `records` are the records of the ones this unit adopts a root of — a root a consumer cannot name and this unit can, whose declarations reach a consumer only through it. An adopted root is another unit, read from another source, so its record is made by this door before its adopter's is.
 ///
@@ -2622,12 +2622,26 @@ pub fn document_unit(
         .map(|earlier| &earlier.public)
         .chain([&unit.public])
         .collect::<Vec<_>>();
+    // What each written name resolved to, read off the lowered items as an editor's go-to-definition reads it: the one resolution a page links by.
+    let mentions = unit
+        .texts(None, |_| true)
+        .iter()
+        .flat_map(|text| text.mentions())
+        .filter_map(|mention| {
+            let curios_core::Global::Authored(referent) = mention.name else {
+                return None;
+            };
+            let span = mention.span;
+
+            Some(((span.source.path.clone(), span.start, span.end), referent))
+        })
+        .collect();
 
     Ok(Some(document(
         &modules,
         &Scoped::over(&tables),
         &Scoped::over(&exports),
-        unit.imports(),
+        &mentions,
         &prefix,
         &unit.visible,
         records,

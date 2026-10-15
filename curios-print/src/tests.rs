@@ -249,7 +249,7 @@ fn a_name_respelled_before_rendering_is_laid_out_at_its_new_width() {
         deferred(|| named("/long/path/b")),
     ]));
     let mut seen = Vec::new();
-    each_named(&mut document, |text| {
+    each_named(&mut document, |text, _| {
         seen.push(text.clone());
         *text = text.trim_start_matches("/long/path/").to_string();
     });

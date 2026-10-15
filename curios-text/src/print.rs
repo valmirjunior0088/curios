@@ -15,8 +15,8 @@ use {
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
     curios_num::{Floating, Grain, Natural},
     curios_print::{
-        Printer, ends, fill, flat, group, hard_line, if_break, indent, line, named, pure, reached,
-        sep_flat, soft_line,
+        Printer, ends, fill, flat, group, hard_line, if_break, indent, line, named, named_at, pure,
+        reached, sep_flat, soft_line,
     },
     curios_utilities::{Plicity, recurse},
 };
@@ -678,13 +678,18 @@ fn print_suffix_head(term: Term) -> Printer {
 }
 
 fn print_term_inner(term: Term) -> Printer {
+    // Where a name was written, which a page asks the lowering about instead of resolving the text again.
+    let written = term.span().map(|span| span.start..span.end);
     match term.into_subterm() {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
         Subterm::Sort => pure("Sort"),
         Subterm::Literal(literal) => print_literal(literal),
         Subterm::Intrinsic(intrinsic) => print_intrinsic(intrinsic),
-        Subterm::Name(name) => named(name.join()),
+        Subterm::Name(name) => match written {
+            Some(written) => named_at(name.join(), written),
+            None => named(name.join()),
+        },
         // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),
         // Never parsed: the witness lowering mints it, and a `satisfy` prints its `;` from the declaration, not from here.

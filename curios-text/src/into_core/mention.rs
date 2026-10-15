@@ -1,4 +1,4 @@
-//! What a unit's text names, place by place: the read an answer about a position in a file is made from.
+//! What a unit's text names, place by place: the read an answer about a position in a file is made from, and what a documentation page links a written name to.
 //!
 //! **Nothing is recorded for it.** A written name lowers to a variable holding the declaration it resolved to and the extent it was written at (`Lowerer::term`), and the unit's anchors hold where each definition's own name was written (`curios_core::Anchors::labels`). So what a text names is read off the lowered items of the declaration written in it, that declaration's alone, where it is asked.
 //!

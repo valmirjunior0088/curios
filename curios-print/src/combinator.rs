@@ -1,6 +1,6 @@
 //! The public builders: every document is made by composing these.
 
-use super::Printer;
+use {super::Printer, std::ops::Range};
 
 /// Emits a literal string. Not a raw write: any newline it contains arms the pending-indentation logic, so multi-line literals indent correctly under [`indent`].
 pub fn pure<A>(a: A) -> Printer
@@ -102,7 +102,18 @@ pub fn if_break(flat: impl Into<String>, broken: impl Into<String>) -> Printer {
 
 /// Literal text that names something — see [`Printer::Named`]. Prints exactly as [`pure`] does.
 pub fn named(text: impl Into<String>) -> Printer {
-    Printer::Named(text.into())
+    Printer::Named {
+        text: text.into(),
+        written: None,
+    }
+}
+
+/// [`named`], for a name read from the bytes `written` of an original.
+pub fn named_at(text: impl Into<String>, written: Range<usize>) -> Printer {
+    Printer::Named {
+        text: text.into(),
+        written: Some(written),
+    }
 }
 
 /// Note that the document holds its original up to `offset` — see [`Printer::Mark`]. Zero width and no output.

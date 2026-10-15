@@ -323,6 +323,21 @@ fn an_adopted_signature_marks_its_carriers_and_operations() {
     );
 }
 
+/// **A written name links what the lowering resolved it to.** `begins` names `Str/At/starts` through `Str`, which its module imports, and `At`, a child of that module: a page that resolved the text again by its own reading of the imports found only what a `use` brings in one level deep, and left the path plain. Read off the lowered unit at the place it was written, it is the declaration the compiler took it for.
+#[test]
+fn a_written_name_links_what_the_lowering_resolved_it_to() {
+    let documentation = standard_library();
+
+    let (text, begins) = card(&documentation, "std/Str/Valid", "begins");
+    assert!(text.contains("Holds(Str/At/starts(b))"), "{text}");
+    assert!(
+        begins
+            .iter()
+            .any(|referent| referent == "/std/Str/At/starts"),
+        "{begins:?}"
+    );
+}
+
 /// **A path the compiler wrote is spelled as a consumer writes it, and laid out as it is spelled.** `/sys` names what its declarations build on by absolute `/sys` paths, which no consumer may write; an adopted card shows each by its path below `/sys`, which `/std` re-exports it under, rather than in full beside names an author chose. The spelling is decided before the line is laid out, so `get` stays on the one line its shown text fits.
 #[test]
 fn an_adopted_signature_spells_its_names_below_their_root() {

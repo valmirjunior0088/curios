@@ -1,6 +1,6 @@
 //! The document type: what to emit, as data, plus the iterative destructor its depth demands.
 
-use std::mem;
+use std::{mem, ops::Range};
 
 /// A pretty-printing document: what to emit, as data.
 ///
@@ -13,7 +13,12 @@ pub enum Printer {
     /// Literal text. Newlines inside it arm the pending-indent logic, so a multi-line literal indents correctly under [`indent`](crate::indent).
     Text(String),
     /// Literal text that names something: emitted exactly as [`Printer::Text`], and additionally reported — with the output range it landed on — to a renderer collecting names through [`render_annotated`](crate::render_annotated), so a consumer can attach a link to a name without re-lexing the text. Every other renderer treats it as text, and it measures as text.
-    Named(String),
+    ///
+    /// `written` is the byte range of the original the name was read from, where it was read from one: what tells a consumer which written name this is, so it can ask the compilation what that name resolved to rather than resolve the text again.
+    Named {
+        text: String,
+        written: Option<Range<usize>>,
+    },
     /// Emitted in order.
     Concat(Vec<Printer>),
     /// Emitted one indentation level deeper.
@@ -55,7 +60,7 @@ impl Printer {
     /// Whether this node's children are already gone, so dropping it cannot reach another node.
     fn is_dismantled(&self) -> bool {
         match self {
-            Printer::Text(_) | Printer::Named(_) | Printer::Mark(_) | Printer::Ends => true,
+            Printer::Text(_) | Printer::Named { .. } | Printer::Mark(_) | Printer::Ends => true,
             Printer::Concat(parts) | Printer::Fill(parts) => parts.is_empty(),
             Printer::Indent(inner) | Printer::Group(inner) => {
                 matches!(**inner, Printer::Text(_))
@@ -82,7 +87,7 @@ impl Drop for Printer {
 
         while let Some(mut printer) = pending.pop() {
             match &mut printer {
-                Printer::Text(_) | Printer::Named(_) => {}
+                Printer::Text(_) | Printer::Named { .. } => {}
                 Printer::Concat(parts) | Printer::Fill(parts) => pending.extend(mem::take(parts)),
                 Printer::Indent(inner) | Printer::Group(inner) => pending.push(inner.take()),
                 Printer::Deferred(_) => {}

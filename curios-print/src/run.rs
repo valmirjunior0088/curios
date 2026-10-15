@@ -11,6 +11,7 @@ use {
         collections::VecDeque,
         fmt::{self, Write},
         mem,
+        ops::Range,
     },
 };
 
@@ -436,12 +437,13 @@ impl Cursor {
     }
 }
 
-/// One [`Printer::Named`] as rendered: the byte range of the output it occupies, and the name it carries.
+/// One [`Printer::Named`] as rendered: the byte range of the output it occupies, the name it carries, and where in its original that name was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Annotation {
     pub start: usize,
     pub end: usize,
     pub name: String,
+    pub written: Option<Range<usize>>,
 }
 
 /// One node of [`fits`]'s walk, with the facts about its surroundings its verdict depends on.
@@ -529,7 +531,7 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
         }
 
         match &mut *node {
-            Printer::Text(text) | Printer::Named(text) => {
+            Printer::Text(text) | Printer::Named { text, .. } => {
                 if let Some(found) = visible(text) {
                     return Some(found);
                 }
@@ -662,7 +664,7 @@ fn fits(
         };
 
         match &mut *node {
-            Printer::Text(text) | Printer::Named(text) => {
+            Printer::Text(text) | Printer::Named { text, .. } => {
                 if let Some(verdict) = measure(text, &mut used) {
                     return verdict;
                 }
@@ -791,13 +793,14 @@ fn run<'b, 'c>(
         match step {
             Step::Print(mut printer, flat) => match &mut printer {
                 Printer::Text(text) => state.text(text)?,
-                Printer::Named(text) => {
+                Printer::Named { text, written } => {
                     let start = state.written;
                     state.text(text)?;
                     state.annotations.push(Annotation {
                         start,
                         end: state.written,
                         name: mem::take(text),
+                        written: written.take(),
                     });
                 }
                 // Reversed, because the stack pops last-in first.
@@ -947,8 +950,11 @@ pub fn render_annotated(
     (text, rendering.annotations.into_inner())
 }
 
-/// Hand every [`Printer::Named`] in `printer` to `visit`, in the order a render emits them, before anything measures them: what a name prints as is the caller's to decide there, so the layout is the one its final text takes. Forces every [`Printer::Deferred`] it reaches in place, as a render would, and iteratively, like every other walk over this type.
-pub fn each_named(printer: &mut Printer, mut visit: impl FnMut(&mut String)) {
+/// Hand every [`Printer::Named`] in `printer` to `visit` — its text, and where it was written — in the order a render emits them, before anything measures them: what a name prints as is the caller's to decide there, so the layout is the one its final text takes. Forces every [`Printer::Deferred`] it reaches in place, as a render would, and iteratively, like every other walk over this type.
+pub fn each_named(
+    printer: &mut Printer,
+    mut visit: impl FnMut(&mut String, Option<&Range<usize>>),
+) {
     let mut stack = vec![printer];
 
     while let Some(node) = stack.pop() {
@@ -962,7 +968,7 @@ pub fn each_named(printer: &mut Printer, mut visit: impl FnMut(&mut String)) {
         }
 
         match node {
-            Printer::Named(text) => visit(text),
+            Printer::Named { text, written } => visit(text, written.as_ref()),
             Printer::Concat(parts) | Printer::Fill(parts) => stack.extend(parts.iter_mut().rev()),
             Printer::Indent(inner) | Printer::Group(inner) => stack.push(inner),
             Printer::Text(_)

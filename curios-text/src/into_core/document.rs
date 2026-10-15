@@ -1,6 +1,6 @@
 //! The builder of a unit's [`Documentation`] record — `curios-document`'s plain data: one record per module the unit exposes, each declaration's head printed as the author wrote it with every name it mentions resolved, and the prose attached to each — built where a command asks for it, by `document_unit`, and carried by no unit.
 //!
-//! **Built from the compilation that builds the unit: the tables its lowering stored.** Which modules and declarations a page shows is the export view resolution built to a fixed point, so a private declaration is absent rather than hidden and a re-export is listed as a link to the declaration it names — unless the declaration's own module has no page, the facade pattern, where the declaration is read off that module and filed under the re-exporting one, since the re-export is the only way it reaches a consumer. A referent is looked up with the visibility functions the lowering resolves a name with, over the same tables, seeded by the import scopes the lowering recorded per definition — nothing here resolves a name by a rule of its own. Nothing is read from the elaborated module either: every declaration states its signature, so the surface tree the lowering parsed is the whole of what a page prints, and a signature is printed by the printers `curios format` prints it with. Riding on the unit, the record travels wherever the unit does — the prelude image, a verdict slot, the browser bundle — so a unit is documented from its stored form without its sources.
+//! **Built from the compilation that builds the unit: the tables its lowering stored.** Which modules and declarations a page shows is the export view resolution built to a fixed point, so a private declaration is absent rather than hidden and a re-export is listed as a link to the declaration it names — unless the declaration's own module has no page, the facade pattern, where the declaration is read off that module and filed under the re-exporting one, since the re-export is the only way it reaches a consumer. A written name's referent is the one the lowering resolved it to, read off the lowered unit at the place it was written ([`crate::Text::mentions`]), and a name the printer wrote, which has no place, is looked up with the visibility functions the lowering resolves a name with, over the same tables — nothing here resolves a name by a rule of its own. Nothing is read from the elaborated module either: every declaration states its signature, so the surface tree the lowering parsed is the whole of what a page prints, and a signature is printed by the printers `curios format` prints it with.
 //!
 //! **What an item states of a definition is read once** ([`stated`]): its head's printer, its prose and its members. A page shows of it what a consumer sees, and a place in a file is answered with whatever is written there ([`heading`]), from the declaration's own text and the same printers.
 //!
@@ -12,10 +12,10 @@ mod tests;
 use {
     super::{ModuleInfo, PublicInterface, Scoped, visible_binding, visible_child},
     crate::{
-        Doc, FuncSugarParam, FuncTypeParam, LetSignature, Module, Pattern, TopItem, UseGroup,
-        print_case_head, print_case_result_head, print_concept_field_head, print_concept_head,
-        print_foreign_head, print_induct_head, print_let_head, print_struct_field_head,
-        print_struct_head, print_test_head, print_witness_head,
+        Doc, Module, TopItem, UseGroup, print_case_head, print_case_result_head,
+        print_concept_field_head, print_concept_head, print_foreign_head, print_induct_head,
+        print_let_head, print_struct_field_head, print_struct_head, print_test_head,
+        print_witness_head,
     },
     curios_document::{
         Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
@@ -23,11 +23,15 @@ use {
     curios_print::{Printer, each_named, render_annotated},
     curios_utilities::{Mount, Qualifier, RootKind, Source, Span},
     std::{
-        cell::RefCell,
-        collections::{BTreeSet, HashMap, HashSet},
+        collections::{HashMap, HashSet},
+        path::PathBuf,
         rc::Rc,
+        sync::Arc,
     },
 };
+
+/// Where a name is written: the path of the file it lies in, and its byte range there — what a name a signature prints is found by among the unit's mentions.
+pub(super) type Written = (Option<PathBuf>, usize, usize);
 
 /// The width a signature is rendered within — the formatter's, so a page and a file agree on where a long telescope breaks.
 const WIDTH: usize = 100;
@@ -59,7 +63,7 @@ fn chip(prefix: &Qualifier) -> Option<String> {
     }
 }
 
-/// The interface of the unit mounted at `prefix`, read off the tables its lowering built: `modules` are the file-backed modules discovery parsed, `table` and `public` the direct interface and the export view over the whole scope, and `imports` what each definition's `use` lines brought into scope.
+/// The interface of the unit mounted at `prefix`, read off the tables its lowering built: `modules` are the file-backed modules discovery parsed, `table` and `public` the direct interface and the export view over the whole scope, and `mentions` what each name written in the unit resolved to, where it was written.
 ///
 /// Infallible, because every module it visits is one discovery loaded a moment ago: a prefix without a module in the map is a broken invariant of this stage, not a condition a caller can meet.
 ///
@@ -74,7 +78,7 @@ pub(super) fn document(
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &Scoped<'_, ModuleInfo>,
     public: &Scoped<'_, PublicInterface>,
-    imports: &curios_core::Imports,
+    mentions: &HashMap<Written, Qualifier>,
     prefix: &Qualifier,
     mounts: &[Mount],
     records: &[&Documentation],
@@ -99,13 +103,12 @@ pub(super) fn document(
         modules,
         table,
         public,
-        imports,
+        mentions,
         prefix,
         adopted: &adopted,
         internal: &internal,
         records,
         public_names: HashMap::new(),
-        spellings: RefCell::new(HashMap::new()),
     };
     // Read before the walk, because a signature anywhere in the unit may name an adopted declaration, and taken through the reader because knowing which modules have pages is its own rule.
     reader.public_names = reader.exposed_names();
@@ -125,7 +128,8 @@ struct Reader<'a> {
     modules: &'a HashMap<Qualifier, Rc<Module>>,
     table: &'a Scoped<'a, ModuleInfo>,
     public: &'a Scoped<'a, PublicInterface>,
-    imports: &'a curios_core::Imports,
+    /// What each name written in the unit resolved to, where it was written: the lowering's own answer, the one an editor's go-to-definition reads ([`crate::Text::mentions`]).
+    mentions: &'a HashMap<Written, Qualifier>,
     prefix: &'a Qualifier,
     /// The unit's own roots that no consumer may name — its internal mounts. Their declarations reach a consumer only through a `pub use` in the documented mount, so a page shows them and no page names where they were written.
     adopted: &'a [(Qualifier, Option<String>)],
@@ -137,8 +141,6 @@ struct Reader<'a> {
     records: &'a [&'a Documentation],
     /// What a consumer calls each declaration that no page of its own shows: its declaration site, to the path of the page that exposes it. One entry per declaration a private child or an adopted root holds and a page re-exports.
     public_names: HashMap<Qualifier, Qualifier>,
-    /// What [`Reader::imports_of`] has answered, by module: a page asks once for itself and once for every declaration it shows out of another module, and a facade shows many out of one.
-    spellings: RefCell<HashMap<Qualifier, Rc<HashMap<String, Qualifier>>>>,
 }
 
 impl Reader<'_> {
@@ -334,7 +336,6 @@ impl Reader<'_> {
         items: &[TopItem],
         out: &mut Vec<ModuleDocumentation>,
     ) {
-        let imports = self.imports_of(&qualifier);
         let mut page = ModuleDocumentation {
             path: qualifier,
             prose,
@@ -366,7 +367,7 @@ impl Reader<'_> {
                 // Every other item is a declaration of this module, or nothing.
                 item => {
                     let before = page.declarations.len();
-                    self.declare(&qualifier, &imports, item, &mut page.declarations);
+                    self.declare(&qualifier, item, &mut page.declarations);
                     for declaration in &page.declarations[before..] {
                         placed.insert(declaration.name.clone());
                     }
@@ -474,13 +475,13 @@ impl Reader<'_> {
         let owner = target.without_last();
         let declaring = owner.without_last();
         let items = self.items_of(&declaring)?;
-        let imports = self.imports_of(&declaring);
         let label = target.last();
         let item = items.iter().find(|item| declares(item, owner.last()))?;
 
         let holder = stated(item)
             .into_iter()
             .find(|stated| stated.name == owner.last())?;
+        let source = holder.label.map(|label| &label.source);
         // A struct's fields are projections rather than a namespace a `use` selects from, and nothing else holds members at all.
         if !matches!(holder.kind, Kind::Inductive | Kind::Concept) {
             return None;
@@ -494,12 +495,7 @@ impl Reader<'_> {
             name: label.to_string(),
             home: declaring,
             kind: Kind::Definition,
-            signature: self.signature(
-                &declaring,
-                &imports,
-                &member.binders,
-                member.apart.unwrap_or(member.head),
-            ),
+            signature: self.signature(&declaring, source, member.apart.unwrap_or(member.head)),
             prose: member.prose,
             members: Vec::new(),
             opaque: false,
@@ -515,33 +511,28 @@ impl Reader<'_> {
     fn declaration_at(&self, target: &Qualifier) -> Option<Declaration> {
         let declaring = target.without_last();
         let items = self.items_of(&declaring)?;
-        let imports = self.imports_of(&declaring);
         let label = target.last();
 
         let item = items.iter().find(|item| declares(item, label))?;
         let mut found = Vec::new();
-        self.declare(&declaring, &imports, item, &mut found);
+        self.declare(&declaring, item, &mut found);
         found
             .into_iter()
             .find(|declaration| declaration.name == label)
     }
 
     /// The declarations `item` makes in `home` that a consumer can see, appended to `out`: of what it states ([`stated`]), each definition written `pub` and every witness, with the members its representation exposes — a concept's methods either way, being reached by name whether or not its representation is sealed.
-    fn declare(
-        &self,
-        home: &Qualifier,
-        imports: &HashMap<String, Qualifier>,
-        item: &TopItem,
-        out: &mut Vec<Declaration>,
-    ) {
+    fn declare(&self, home: &Qualifier, item: &TopItem, out: &mut Vec<Declaration>) {
         for stated in stated(item).into_iter().filter(|stated| stated.exposed) {
+            // The file the item is written in, which its members share: what a written name is looked up in.
+            let source = stated.label.map(|label| &label.source);
             let members = match stated.shown {
                 true => stated
                     .members
                     .into_iter()
                     .map(|member| Member {
                         name: member.name,
-                        signature: self.signature(home, imports, &member.binders, member.head),
+                        signature: self.signature(home, source, member.head),
                         prose: member.prose,
                     })
                     .collect(),
@@ -552,7 +543,7 @@ impl Reader<'_> {
                 name: stated.name,
                 home: *home,
                 kind: stated.kind,
-                signature: self.signature(home, imports, &stated.binders, stated.head),
+                signature: self.signature(home, source, stated.head),
                 prose: stated.prose,
                 members,
                 opaque: stated.opaque,
@@ -605,20 +596,27 @@ impl Reader<'_> {
             })
     }
 
-    /// `head` rendered, with every name in it that resolves marked.
+    /// `head`, written in `module` in the file `source`, rendered with every name in it that resolves marked.
+    ///
+    /// **A written name names what the lowering resolved it to** ([`Reader::mentions`]), read at the place it was written, so a page links exactly what the compiler took it for: a binder, a name that did not resolve and one no lowered term holds have no answer there, and stay plain text. A name the printer wrote, which has no place — one `/sys` generates, a family a constructor's own head names — is resolved by [`Reader::resolve`].
     ///
     /// **Each name is resolved and spelled before the layout is decided** ([`each_named`]), so the signature breaks where the text it shows does. A render emits the names in the order the walk met them, which is what pairs each with its referent.
     fn signature(
         &self,
         module: &Qualifier,
-        imports: &HashMap<String, Qualifier>,
-        binders: &HashSet<String>,
+        source: Option<&Arc<Source>>,
         mut head: Printer,
     ) -> Signature {
         curios_profile::profile!("document::signature");
         let mut referents = Vec::new();
-        each_named(&mut head, |text| {
-            let referent = self.resolve(text, module, imports, binders);
+        each_named(&mut head, |text, written| {
+            let referent = match written {
+                Some(written) => source.and_then(|source| {
+                    let place = (source.path.clone(), written.start, written.end);
+                    self.mentions.get(&place).copied()
+                }),
+                None => self.resolve(text, module),
+            };
             if referent.is_some() {
                 *text = self.shown(text);
             }
@@ -649,14 +647,8 @@ impl Reader<'_> {
         Signature { text, marks }
     }
 
-    /// The declaration `spelling` names as written in `module`, by the lowering's own rule: an absolute path walks the public tree from the root; a relative one is what a `use` in this module brought into scope under that spelling, else — when its head is no binder of the declaration — the module's own declaration, or a path through its own children. `None` is a binder, a name that does not resolve, or one out of view, and a page leaves each of those as plain text.
-    fn resolve(
-        &self,
-        spelling: &str,
-        module: &Qualifier,
-        imports: &HashMap<String, Qualifier>,
-        binders: &HashSet<String>,
-    ) -> Option<Qualifier> {
+    /// The declaration a name the printer wrote — one with no place, so no mention — names from `module`, by the lowering's visibility functions: an absolute path walks the public tree from the root, and a relative one is the module's own declaration or a path through its own children. No `use` brought it into scope, since nobody wrote it. `None` is a name that does not resolve or is out of view, which a page leaves as plain text.
+    fn resolve(&self, spelling: &str, module: &Qualifier) -> Option<Qualifier> {
         let absolute = spelling.starts_with('/');
         let segments = spelling
             .trim_start_matches('/')
@@ -672,57 +664,11 @@ impl Reader<'_> {
             return visible_binding(self.public, self.table, module, &current, last);
         }
 
-        if let Some(target) = imports.get(spelling) {
-            return Some(*target);
-        }
-        if binders.contains(segments[0]) {
-            return None;
-        }
-
         let mut current = *module;
         for segment in parents {
             current = visible_child(self.public, self.table, module, &current, segment)?;
         }
         visible_binding(self.public, self.table, module, &current, last)
-    }
-
-    /// Every spelling a `use` in `module` brought into scope, with what it resolved to — the union over the module's declarations of the scopes the lowering recorded for them. `use` is point-of-use, so two declarations may differ in what they see, but a spelling that resolves two ways in one module is a program nobody writes, and the first recorded wins.
-    ///
-    /// **The union is over every declaration, which is what makes a concept-only module resolve at all.** A union over `let`s and `test`s alone would leave a module whose declarations are a concept, an inductive or a structure nothing to union, and every name in its signatures would render as plain text — `/std/Show`'s `show(A) -> Str` beside `/std/Spell`'s identical method, which links only because `Spell` declares `let`s importing the same name.
-    fn imports_of(&self, module: &Qualifier) -> Rc<HashMap<String, Qualifier>> {
-        if let Some(spellings) = self.spellings.borrow().get(module) {
-            return Rc::clone(spellings);
-        }
-
-        // The `use`s some declaration of the module has in scope, each once and in the order they were written: a module's declarations mostly share them, and a module they import is expanded where it is read.
-        let mut written = BTreeSet::new();
-        for (owner, in_scope) in &self.imports.by_item {
-            // A witness is anonymous, so it is placed by the module its identity names rather than by a qualifier it does not have; every other declaration is placed by the module its own name lies in.
-            let declaring = match owner {
-                curios_core::Global::Authored(owner) => owner.without_last(),
-                curios_core::Global::Witness(id) => *id.module(),
-            };
-            if declaring == *module {
-                written.extend(in_scope.iter().copied());
-            }
-        }
-
-        let mut spellings = HashMap::new();
-        for imported in written
-            .into_iter()
-            .flat_map(|index| self.imports.brought(&self.imports.entries[index]))
-        {
-            let curios_core::Global::Authored(target) = imported.global else {
-                continue;
-            };
-            spellings.entry(imported.spelling()).or_insert(target);
-        }
-        let spellings = Rc::new(spellings);
-        self.spellings
-            .borrow_mut()
-            .insert(*module, Rc::clone(&spellings));
-
-        spellings
     }
 }
 
@@ -744,21 +690,18 @@ struct Stated<'a> {
     head: Printer,
     /// The head it has standing apart from its owner, where that says more than the one its owner's block lists it by: a constructor's, with the family it builds.
     apart: Option<Printer>,
-    /// The labels its head binds, which shadow a like-named declaration in it.
-    binders: HashSet<String>,
     prose: Option<Vec<String>>,
     members: Vec<Stated<'a>>,
 }
 
 impl<'a> Stated<'a> {
-    /// A definition with no member and no representation, stated by `head` under `binders`.
+    /// A definition with no member and no representation, stated by `head`.
     fn plain(
         name: String,
         label: Option<&'a Span>,
         kind: Kind,
         exposed: bool,
         head: Printer,
-        binders: HashSet<String>,
         doc: &Option<Doc>,
     ) -> Self {
         Self {
@@ -771,7 +714,6 @@ impl<'a> Stated<'a> {
             derived: false,
             head,
             apart: None,
-            binders,
             prose: lines(doc),
             members: Vec::new(),
         }
@@ -785,18 +727,12 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
         TopItem::Let(members) => members
             .iter()
             .map(|member| {
-                let binders = sugar_binders(match &member.signature {
-                    LetSignature::Func { params, .. } => params,
-                    LetSignature::Name { .. } => &[],
-                });
-
                 Stated::plain(
                     member.label.to_string(),
                     member.label.span(),
                     Kind::Definition,
                     member.vis_pub,
                     print_let_head(member),
-                    binders,
                     &member.doc,
                 )
             })
@@ -804,24 +740,16 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
         TopItem::Induct(members) => members
             .iter()
             .map(|member| {
-                let binders = param_binders(&member.params);
-                // A payload's label binds for the payloads and the target after it, in the block and apart from it alike.
-                let cases = member.cases.iter().map(|case| {
-                    let mut binders = binders.clone();
-                    binders.extend(case.payload.iter().filter_map(|param| param.label.clone()));
-
-                    Stated {
-                        apart: Some(print_case_result_head(member, case)),
-                        ..Stated::plain(
-                            case.label.to_string(),
-                            case.label.span(),
-                            Kind::Definition,
-                            false,
-                            print_case_head(case),
-                            binders,
-                            &case.doc,
-                        )
-                    }
+                let cases = member.cases.iter().map(|case| Stated {
+                    apart: Some(print_case_result_head(member, case)),
+                    ..Stated::plain(
+                        case.label.to_string(),
+                        case.label.span(),
+                        Kind::Definition,
+                        false,
+                        print_case_head(case),
+                        &case.doc,
+                    )
                 });
 
                 Stated {
@@ -835,7 +763,6 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                         Kind::Inductive,
                         member.vis_pub,
                         print_induct_head(member),
-                        binders,
                         &member.doc,
                     )
                 }
@@ -844,26 +771,18 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
         TopItem::Struct(members) => members
             .iter()
             .map(|member| {
-                // A field's label binds for the fields after it.
-                let mut binders = param_binders(&member.params);
                 let fields = member
                     .fields
                     .iter()
                     .map(|field| {
-                        let stated = Stated::plain(
+                        Stated::plain(
                             field.param.label.as_deref().unwrap_or_default().to_string(),
                             None,
                             Kind::Definition,
                             false,
                             print_struct_field_head(field),
-                            binders.clone(),
                             &field.doc,
-                        );
-                        if let Some(label) = &field.param.label {
-                            binders.insert(label.to_string());
-                        }
-
-                        stated
+                        )
                     })
                     .collect();
 
@@ -877,7 +796,6 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                         Kind::Structure,
                         member.vis_pub,
                         print_struct_head(member),
-                        param_binders(&member.params),
                         &member.doc,
                     )
                 }
@@ -886,7 +804,6 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
         TopItem::Concept(members) => members
             .iter()
             .map(|member| {
-                let binders = param_binders(&member.params);
                 let fields = member.fields.iter().map(|field| {
                     Stated::plain(
                         // A superclass edge has no name, and a page lists it by its signature alone.
@@ -899,7 +816,6 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                         Kind::Definition,
                         false,
                         print_concept_field_head(field),
-                        binders.clone(),
                         &field.doc,
                     )
                 });
@@ -915,7 +831,6 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                         Kind::Concept,
                         member.vis_pub,
                         print_concept_head(member),
-                        binders,
                         &member.doc,
                     )
                 }
@@ -931,7 +846,6 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                     Kind::Witness,
                     true,
                     print_witness_head(member),
-                    sugar_binders(&member.params),
                     &member.doc,
                 )
             })
@@ -942,7 +856,6 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
             Kind::Foreign,
             declaration.vis_pub,
             print_foreign_head(declaration),
-            HashSet::new(),
             &declaration.doc,
         )],
         // A test is no part of an interface, and takes no prose.
@@ -952,7 +865,6 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
             Kind::Definition,
             false,
             print_test_head(test),
-            HashSet::new(),
             &None,
         )],
     }
@@ -1013,30 +925,4 @@ fn declares(item: &TopItem, label: &str) -> bool {
 /// A documentation comment's lines, or `None` when there is none.
 fn lines(doc: &Option<Doc>) -> Option<Vec<String>> {
     doc.as_ref().map(|doc| doc.lines.clone())
-}
-
-/// The labels a telescope of function-sugar parameters binds — what shadows a like-named declaration in the signature they open.
-fn sugar_binders(params: &[FuncSugarParam]) -> HashSet<String> {
-    params
-        .iter()
-        .filter_map(|param| match param {
-            FuncSugarParam::Bound {
-                binder: Pattern::Binder(label),
-                ..
-            } => Some(label.to_string()),
-            FuncSugarParam::Bound {
-                binder: Pattern::Tuple(_) | Pattern::Struct { .. },
-                ..
-            }
-            | FuncSugarParam::Premise(_) => None,
-        })
-        .collect()
-}
-
-/// The labels a declaration's parameter telescope binds.
-fn param_binders(params: &[FuncTypeParam]) -> HashSet<String> {
-    params
-        .iter()
-        .filter_map(|param| param.label.clone())
-        .collect()
 }
