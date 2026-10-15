@@ -1000,3 +1000,77 @@ fn a_look_answers_each_handle_in_its_order() {
     host.handle_close(passed);
     host.handle_close(later);
 }
+
+/// A FIFO at a fresh path under `dir`, made by the system's own tool, which every platform the host runs on has.
+fn fifo(dir: &Path) -> Vec<u8> {
+    let path = dir.join("fifo");
+    let made = std::process::Command::new("mkfifo")
+        .arg(&path)
+        .status()
+        .expect("mkfifo runs");
+    assert!(made.success(), "mkfifo made {}", path.display());
+
+    path.into_os_string().into_vec()
+}
+
+/// A FIFO opened to read opens with no writer, and reads nothing, rather than its end, until a writer has opened it: a watch of it is ready once the writer's bytes are there, and its end is read once the writer has closed.
+#[test]
+fn a_fifo_opened_to_read_waits_for_a_writer() {
+    let host = OsHost::with_args(vec![]);
+    let dir = Temporary::new("runtime-fifo", "read");
+    fs::create_dir(&dir).expect("a fresh temporary directory");
+    let path = fifo(&dir);
+
+    let reader = host.file_open(path.clone(), Mode::Read).unwrap();
+    assert_eq!(
+        host.handle_read(reader.clone(), 8),
+        Err(Failure::WouldBlock)
+    );
+    assert!(!watched(&host, &reader, true, false));
+
+    let mut writer = fs::OpenOptions::new()
+        .write(true)
+        .open(OsStr::from_bytes(&path))
+        .expect("the reader holds the FIFO open");
+    writer.write_all(b"ok").expect("the FIFO takes two bytes");
+    assert!(awaited(&host, &reader, true, false));
+    assert_eq!(
+        host.handle_read(reader.clone(), 8),
+        Ok(Some(b"ok".to_vec()))
+    );
+
+    drop(writer);
+    assert!(awaited(&host, &reader, true, false));
+    assert_eq!(host.handle_read(reader.clone(), 8), Ok(None));
+
+    host.handle_close(reader);
+}
+
+/// A FIFO opened to write with no reader is refused at once with the system's `ENXIO`, rather than waiting for a reader to open it.
+#[test]
+fn a_fifo_opened_to_write_with_no_reader_is_refused() {
+    const ENXIO: u32 = 6;
+
+    let host = OsHost::with_args(vec![]);
+    let dir = Temporary::new("runtime-fifo", "write");
+    fs::create_dir(&dir).expect("a fresh temporary directory");
+
+    assert_eq!(
+        host.file_open(fifo(&dir), Mode::Write),
+        Err(Failure::Other(ENXIO))
+    );
+}
+
+/// A device opened by path is served as a stream: the null device reads its end at once and takes every write whole.
+#[test]
+fn the_null_device_reads_its_end_and_takes_every_write() {
+    let host = OsHost::with_args(vec![]);
+    let reader = host.file_open(b"/dev/null".to_vec(), Mode::Read).unwrap();
+    let writer = host.file_open(b"/dev/null".to_vec(), Mode::Write).unwrap();
+
+    assert_eq!(host.handle_read(reader.clone(), 8), Ok(None));
+    assert_eq!(host.handle_write(writer.clone(), b"gone".to_vec()), Ok(4));
+
+    host.handle_close(reader);
+    host.handle_close(writer);
+}

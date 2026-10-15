@@ -8,6 +8,7 @@ use {
     curios_abi::event,
     rustix::{
         event::{PollFd, PollFlags, Timespec, poll},
+        fs::{OFlags, fcntl_getfl, fcntl_setfl},
         io::Errno,
         pipe::PIPE_BUF,
         termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
@@ -25,7 +26,10 @@ use {
         net::{Shutdown, SocketAddr},
         os::{
             fd::{AsFd, BorrowedFd, OwnedFd},
-            unix::ffi::{OsStrExt, OsStringExt},
+            unix::{
+                ffi::{OsStrExt, OsStringExt},
+                fs::{FileTypeExt, OpenOptionsExt},
+            },
         },
         sync::{Arc, LazyLock, Mutex, OnceLock},
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -54,9 +58,9 @@ static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
     )
 });
 
-/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `file_open` files a `File`; `socket_open` mints an `Unconnected` socket, `socket_connect` turns it into a `Connected` one at once or into a `Connecting` one that `socket_finish_connect` settles (`socket_accept` mints a `Connected` one directly), and `socket_listen` mints a `Listener`. `tls_start` / `tls_start_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token; `serial_open` files a `Serial` port. `handle_read`/`handle_write` serve `File`, `Connected`, both TLS streams, a `Descriptor` and a `Serial` port alike; `handle_close` drops any kind, releasing its descriptor.
+/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `file_open` files a `File`; `socket_open` mints an `Unconnected` socket, `socket_connect` turns it into a `Connected` one at once or into a `Connecting` one that `socket_finish_connect` settles (`socket_accept` mints a `Connected` one directly), and `socket_listen` mints a `Listener`. `tls_start` / `tls_start_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token; `serial_open` files a `Serial` port, and `file_open` a `Fifo` or a `Descriptor` where the path names no regular file or directory. `handle_read`/`handle_write` serve `File`, `Connected`, both TLS streams, a `Descriptor`, a `Fifo` and a `Serial` port alike; `handle_close` drops any kind, releasing its descriptor.
 ///
-/// Every kind on which a peer decides — a socket in any state, an accepted stream, a pipe to a child, a serial port — is filed non-blocking at the moment it is minted, so no row waits on a peer: a `handle_read`, `handle_write`, `socket_connect` or `socket_accept` that cannot progress answers `WouldBlock` and the host's wait between turns is the one place it sleeps. A regular file is synchronous, since the disk rather than a peer answers it.
+/// Every kind on which a peer decides — a socket in any state, an accepted stream, a pipe to a child, a FIFO or a device opened by path, a serial port — is filed non-blocking at the moment it is minted, so no row waits on a peer: a `handle_read`, `handle_write`, `socket_connect` or `socket_accept` that cannot progress answers `WouldBlock` and the host's wait between turns is the one place it sleeps. A regular file is synchronous, since the disk rather than a peer answers it.
 enum OsResource {
     File(File),
     /// An in-flight asynchronous name lookup minted by `dns_lookup`. `done` is the read end of a pipe a worker thread writes one byte to once it has filled `slot` with the `getaddrinfo` result; that write makes `done` poll-`READ` readable, waking the scheduler. `dns_resolve` then drains `slot` and drops the handle (closing `done`). A watch waits on `done` like any other fd.
@@ -64,8 +68,10 @@ enum OsResource {
         done: OwnedFd,
         slot: Slot,
     },
-    /// A bare owned descriptor — one end of a pipe to a child, filed by `proc_spawn`, or the pipe a serial drain ends, filed by `serial_drain`. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one makes it so through `fcntl` first, so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `handle_read`, `handle_write`, `handle_watch` and `handle_close` serve it as they serve a file.
+    /// A bare owned descriptor — one end of a pipe to a child, filed by `proc_spawn`, the pipe a serial drain ends, filed by `serial_drain`, or a device opened by path, filed by `file_open`. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one makes it so first, so a reader suspends on `WouldBlock` instead of blocking the run, while `handle_read`, `handle_write`, `handle_watch` and `handle_close` serve it as they serve a file.
     Descriptor(OwnedFd),
+    /// A FIFO opened by `file_open`, non-blocking from its open. It is served as a `Descriptor` is, except that a read waits for a writer: a FIFO no writer has opened reads as its end, so its read asks first whether anything is there.
+    Fifo(OwnedFd),
     /// A serial port filed by `serial_open`, non-blocking from its open. The stream rows serve it as they serve a `Descriptor`, it is the one kind `serial_control` and `serial_drain` serve, and dropping it discards its unsent output before its descriptor closes.
     Serial(SerialPort),
     /// A running child minted by `proc_spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the end, `proc_wait` answers it, and `proc_kill` addresses its pid while it runs. Its piped streams are `Descriptor`s of their own, handed back beside it, so closing the child leaves them filed, and the reaper still reaps the process.
@@ -118,7 +124,7 @@ fn descriptor<'a>(
             | OsResource::Listener(socket) => Some((socket.as_fd(), asked)),
             // The lookup's pipe read end: ready to read once the worker has written its wakeup byte, which is the completion signal.
             OsResource::Resolving { done, .. } => Some((done.as_fd(), asked)),
-            OsResource::Descriptor(fd) => Some((fd.as_fd(), asked)),
+            OsResource::Descriptor(fd) | OsResource::Fifo(fd) => Some((fd.as_fd(), asked)),
             OsResource::Serial(port) => Some((port.as_fd(), asked)),
             // The reaper's pipe read end: ready to read once the child's end is recorded, which is when `proc_wait` answers.
             OsResource::Child { running, .. } => Some((running.done.as_fd(), asked)),
@@ -270,7 +276,7 @@ impl OsHost {
             Handle::Stderr => Some(apply(stderr().as_fd())),
             Handle::Other(_) => match self.table.lock().unwrap().get(handle)? {
                 OsResource::File(file) => Some(apply(file.as_fd())),
-                OsResource::Descriptor(fd) => Some(apply(fd.as_fd())),
+                OsResource::Descriptor(fd) | OsResource::Fifo(fd) => Some(apply(fd.as_fd())),
                 OsResource::Serial(port) => Some(apply(port.as_fd())),
                 _ => None,
             },
@@ -290,6 +296,7 @@ impl OsHost {
                     | OsResource::ClientTls(_)
                     | OsResource::ServerTls(_)
                     | OsResource::Descriptor(_)
+                    | OsResource::Fifo(_)
                     | OsResource::Serial(_),
                 ) => Ok(()),
                 _ => Err(Failure::NotFound),
@@ -355,10 +362,29 @@ impl HostOps for OsHost {
             Mode::Append => options.append(true).create(true),
         };
 
-        options
+        // Opened without blocking, so the open waits on no peer: a FIFO's other end, a device's carrier. What the path turns out to name decides how it is filed.
+        let file = options
+            .custom_flags(OFlags::NONBLOCK.bits().cast_signed())
             .open(path)
-            .map(|file| self.mint(OsResource::File(file)))
-            .map_err(failure_from_error)
+            .map_err(failure_from_error)?;
+        let kind = file.metadata().map_err(failure_from_error)?.file_type();
+
+        // A regular file or a directory is answered by the disk, which no peer decides on, so it is read and written synchronously.
+        if kind.is_file() || kind.is_dir() {
+            let flags = fcntl_getfl(&file)
+                .map_err(Error::from)
+                .map_err(failure_from_error)?;
+            fcntl_setfl(&file, flags - OFlags::NONBLOCK)
+                .map_err(Error::from)
+                .map_err(failure_from_error)?;
+
+            return Ok(self.mint(OsResource::File(file)));
+        }
+
+        Ok(self.mint(match kind.is_fifo() {
+            true => OsResource::Fifo(OwnedFd::from(file)),
+            false => OsResource::Descriptor(OwnedFd::from(file)),
+        }))
     }
 
     fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Result<Handle, Failure> {
@@ -707,6 +733,16 @@ impl HostOps for OsHost {
 
                         return read_outcome(result.map_err(Error::from), buffer);
                     }
+                    // A FIFO no writer has opened reads as its end, so it is read only once a poll finds a writer's bytes or its close there.
+                    Some(OsResource::Fifo(fd)) => {
+                        if !readable_now(fd.as_fd()) {
+                            return Err(Failure::WouldBlock);
+                        }
+
+                        let result = rustix::io::read(&*fd, &mut buffer[..]);
+
+                        return read_outcome(result.map_err(Error::from), buffer);
+                    }
                     Some(OsResource::Serial(port)) => {
                         let result = rustix::io::read(&*port, &mut buffer[..]);
 
@@ -746,7 +782,7 @@ impl HostOps for OsHost {
             // A TLS write completes the pending handshake first and accepts no plaintext until it has, so `WouldBlock` here reports nothing accepted and the caller resends. Once established it takes plaintext into `rustls`'s records, as much as its buffer holds, and pushes them to the socket as far as the socket allows; what the socket did not take waits for the next read, write or `handle_flush` of the handle, and a `handle_close` drops it.
             Some(OsResource::ClientTls(tls)) => tls_write(|| tls.write(&bytes)),
             Some(OsResource::ServerTls(tls)) => tls_write(|| tls.write(&bytes)),
-            Some(OsResource::Descriptor(fd)) => {
+            Some(OsResource::Descriptor(fd) | OsResource::Fifo(fd)) => {
                 write_once(|| rustix::io::write(&*fd, &bytes).map_err(Error::from))
             }
             Some(OsResource::Serial(port)) => {

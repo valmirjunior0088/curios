@@ -1,4 +1,4 @@
-//! A program that suspends: the host's turn loop advancing it — through a timer, through a cell already filled, through the binds a suspension passes out of, through `Io/advance`, through an abandon that suspends in turn — and what it reports of one suspended on nothing it can wait for.
+//! A program that suspends: the host's turn loop advancing it — through a timer, through a cell already filled, through the binds a suspension passes out of, through `Io/advance`, through an abandon that suspends in turn, through a FIFO a branch waits on — and what it reports of one suspended on nothing it can wait for.
 
 use {
     crate::run_wasm,
@@ -180,6 +180,63 @@ fn the_real_host_sleeps_a_suspension_on_a_timer_until_its_instant() {
 
     let written = std::fs::read(&report).expect("the program wrote its report");
     assert_eq!(written, b"slept");
+}
+
+// A FIFO opened by path waits on no writer: one branch reads it while the other writes a marker file, which the writer outside the program waits for before it opens the FIFO, so the read can end only where the other branch ran while it waited.
+#[test]
+fn the_real_host_runs_a_branch_while_another_waits_on_a_fifo() {
+    let root = curios_utilities::test_support::Temporary::new("host", "suspension-fifo");
+    std::fs::create_dir_all(&root).expect("a directory of its own");
+    let (fifo, marker, report) = (root.join("fifo"), root.join("marker"), root.join("report"));
+    let made = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .expect("mkfifo runs");
+    assert!(made.success(), "mkfifo made the FIFO");
+
+    let writer = {
+        let (fifo, marker) = (fifo.clone(), marker.clone());
+        std::thread::spawn(move || {
+            // Bounded, so a read that holds the whole program fails the test rather than holding it.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while !marker.exists() && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            let marked = marker.exists();
+            let mut end = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&fifo)
+                .expect("the reader holds the FIFO open");
+            std::io::Write::write_all(&mut end, b"data").expect("the FIFO takes four bytes");
+
+            marked
+        })
+    };
+
+    let spelled =
+        |path: &std::path::Path| path.to_str().expect("a UTF-8 temporary path").to_string();
+    let (fifo, marker, report) = (spelled(&fifo), spelled(&marker), spelled(&report));
+    let source = format!(
+        r#"
+        use /std/{{Io, Str, Path, File, Try}};
+        let main: Try(Io, Io/Error, {{}}) =
+            let (read, marked) = Io/both(Try/run(File/read_all(Path/of_str("{fifo}"))), Try/run(File/write_all(Path/of_str("{marker}"), Str/to_bytes("ran"))))!;
+            let _ = marked!;
+            let bytes = read!;
+            File/write_all(Path/of_str("{report}"), bytes);
+        main
+        "#
+    );
+
+    assert_eq!(status(&source, OsHost::with_args(vec![])), 0);
+    assert!(
+        writer.join().expect("the writer ends"),
+        "the marker was written while the read waited"
+    );
+    assert_eq!(
+        std::fs::read(&report).expect("the program wrote its report"),
+        b"data"
+    );
 }
 
 // Every turn allocates beside what one turn holds for the next, so collections run while the loop holds the rest and the abandon as owned roots: what crosses a turn must come back as it went.
