@@ -224,20 +224,21 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
 
     // One carrier per `/sys` type former the standard library re-exports, at the module a program reaches it through.
     let carriers = [
-        ("std/Nat", "Nat"),
-        ("std/Byte", "Byte"),
-        ("std/Int", "Int"),
-        ("std/Flt", "Flt"),
-        ("std/Bool", "Bool"),
-        ("std/Handle", "Handle"),
-        ("std/List", "List"),
-        ("std/Cell", "Cell"),
-        ("std/Io", "Io"),
+        ("/std/Nat", "Nat"),
+        ("/std/Byte", "Byte"),
+        ("/std/Int", "Int"),
+        ("/std/Flt", "Flt"),
+        ("/std/Bool", "Bool"),
+        ("/std/Handle", "Handle"),
+        ("/std/List", "List"),
+        ("/std/Cell", "Cell"),
+        ("/std/Io", "Io"),
     ];
 
     let mut missing = Vec::new();
     for (module, label) in carriers {
-        let path = Qualifier::from(module.split('/'));
+        let relative = module.strip_prefix('/').expect("an absolute path");
+        let path = Qualifier::from(relative.split('/'));
         let found = documentation
             .modules
             .iter()
@@ -253,12 +254,12 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
             Some(declaration) => {
                 if declaration.chip.as_deref() != Some("intrinsic") {
                     missing.push(format!(
-                        "/{module}/{label} is shown but chipped {:?}, not \"intrinsic\"",
+                        "{module}/{label} is shown but chipped {:?}, not \"intrinsic\"",
                         declaration.chip
                     ));
                 }
             }
-            None => missing.push(format!("/{module}/{label} reaches no page at all")),
+            None => missing.push(format!("{module}/{label} reaches no page at all")),
         }
     }
 
@@ -271,13 +272,14 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
     );
 }
 
-/// The signature of the card `/{module}` shows for `label`, and the declaration each name it marks is linked to, in the order they are written.
+/// The signature of the card the module at `module`, an absolute path, shows for `label`, and the declaration each name it marks is linked to, in the order they are written.
 fn card(
     documentation: &curios_document::Documentation,
     module: &str,
     label: &str,
 ) -> (String, Vec<String>) {
-    let path = Qualifier::from(module.split('/'));
+    let relative = module.strip_prefix('/').expect("an absolute path");
+    let path = Qualifier::from(relative.split('/'));
     let declaration = documentation
         .modules
         .iter()
@@ -287,7 +289,7 @@ fn card(
                 .iter()
                 .find(|declaration| declaration.name == label)
         })
-        .unwrap_or_else(|| panic!("/{module} shows no {label}"));
+        .unwrap_or_else(|| panic!("{module} shows no {label}"));
     let signature = &declaration.signature;
 
     (
@@ -305,11 +307,11 @@ fn card(
 fn an_adopted_signature_marks_its_carriers_and_operations() {
     let documentation = standard_library();
 
-    let (_, fill) = card(&documentation, "std/Cell", "fill");
+    let (_, fill) = card(&documentation, "/std/Cell", "fill");
     assert_eq!(fill, ["/std/Cell", "/std/Io", "/std/Bool"]);
 
     // A precondition reads as a report reads it: an operator where the surface writes one, a call of the declaration where it does not.
-    let (text, get) = card(&documentation, "std/Bytes", "get");
+    let (text, get) = card(&documentation, "/std/Bytes", "get");
     assert!(text.contains("(i < "), "{text}");
     assert_eq!(
         get,
@@ -328,7 +330,7 @@ fn an_adopted_signature_marks_its_carriers_and_operations() {
 fn a_written_name_links_what_the_lowering_resolved_it_to() {
     let documentation = standard_library();
 
-    let (text, begins) = card(&documentation, "std/Str/Valid", "begins");
+    let (text, begins) = card(&documentation, "/std/Str/Valid", "begins");
     assert!(text.contains("Holds(Str/At/starts(b))"), "{text}");
     assert!(
         begins
@@ -338,16 +340,55 @@ fn a_written_name_links_what_the_lowering_resolved_it_to() {
     );
 }
 
+/// **A constructor standing beside its family calls the family once per parameter group, as a signature writes it.** A hidden parameter is left out, so `refl` produces `Eq()(z, z)` rather than the flat `Eq(A, z, z)`, a call no surface writes; an explicit one keeps a group of its own ahead of the indices.
+#[test]
+fn a_constructor_calls_its_family_once_per_parameter_group() {
+    let library = standard_library();
+
+    let (refl, _) = card(&library, "/std/Eq", "refl");
+    assert_eq!(refl, "refl(@z: A) -> Eq()(z, z)");
+    let (nil, _) = card(&library, "/std/List/Permutation", "nil");
+    assert_eq!(nil, "nil() -> Permutation()([], [])");
+
+    let root = tree(
+        "document-indexed",
+        &[
+            ("curios.toml", "name = \"vectors\"\n"),
+            (
+                "lib.crs",
+                concat!(
+                    "use /std/{Nat};\n\n",
+                    "pub induct Vec(T: Type): (Nat) -> pub Type\n",
+                    "| nil(): (0)\n",
+                    "| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)\n",
+                    "end\n\n",
+                    "pub use Vec/*;\n",
+                ),
+            ),
+        ],
+    );
+    let governing = Governing::found(None, &root).expect("a governed package");
+    let units = order(&governing).expect("a scope");
+    let vectors = documentation(DEFAULT_STEP_BUDGET, units, &Overlay::default(), None)
+        .expect("the package documents");
+
+    let (cons, _) = card(&vectors, "/vectors", "cons");
+    assert_eq!(
+        cons,
+        "cons(@n: Nat, head: T, tail: Vec(T)(n)) -> Vec(T)(n + 1)"
+    );
+}
+
 /// **A path the compiler wrote is spelled as a consumer writes it, and laid out as it is spelled.** `/sys` names what its declarations build on by absolute `/sys` paths, which no consumer may write; an adopted card shows each by its path below `/sys`, which `/std` re-exports it under, rather than in full beside names an author chose. The spelling is decided before the line is laid out, so `get` stays on the one line its shown text fits.
 #[test]
 fn an_adopted_signature_spells_its_names_below_their_root() {
     let documentation = standard_library();
 
-    let (fill, _) = card(&documentation, "std/Cell", "fill");
+    let (fill, _) = card(&documentation, "/std/Cell", "fill");
     assert_eq!(fill, "pub let fill(@T: Sort, c: Cell(T), v: T) -> Io(Bool)");
-    let (poll, _) = card(&documentation, "std/Cell", "poll");
+    let (poll, _) = card(&documentation, "/std/Cell", "poll");
     assert_eq!(poll, "pub let poll(@T: Sort, c: Cell(T)) -> Io(Option(T))");
-    let (get, _) = card(&documentation, "std/Bytes", "get");
+    let (get, _) = card(&documentation, "/std/Bytes", "get");
     assert_eq!(
         get,
         "pub let get(b: Bytes, i: Nat, @ok: Bool/Holds(i < Bytes/len(b))) -> Byte"

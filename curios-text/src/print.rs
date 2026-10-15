@@ -1520,9 +1520,9 @@ pub(crate) fn print_case_head(case: &TopCase) -> Printer {
     flat([pure(case.label.clone()), listed("(", payload, ")"), target])
 }
 
-/// The head of a constructor where a module exposes it beside its type: the payload as the block writes it, then the family it produces — `success(A) -> Result(E, A)`, or `cons(@n: Nat, head: T, tail: Vec(T, n)) -> Vec(T, n + 1)` for an indexed family.
+/// The head of a constructor where a module exposes it beside its type: the payload as the block writes it, then the family it produces, called once per parameter group — `success(A) -> Result(E, A)`, `cons(@n: Nat, head: T, tail: Vec(T)(n)) -> Vec(T)(n + 1)` for an indexed family, and `refl(@z: A) -> Eq()(z, z)` where every parameter is hidden.
 ///
-/// **The result replaces the block's index suffix rather than joining it.** Inside the block a case states only the indices it targets, because the family is the declaration it sits in; standing alone it has to say what it produces, and writing both would spell those indices twice. What it deliberately does not state is the family's parameters, which are implicit at every value constructor: that is the lowering's rule to apply, and the card names its owner so the one card that does state them is a click away.
+/// **The result replaces the block's index suffix rather than joining it.** Inside the block a case states only the indices it targets, because the family is the declaration it sits in; standing alone it has to say what it produces, and writing both would spell those indices twice. What it deliberately does not state is the family's parameters, which are implicit at every value constructor: that is the lowering's rule to apply, and the card names its owner so the one card that does state them is a click away. Of the family's own parameters it writes the explicit ones, as a signature writes the family, a hidden one being optional in the call that owns it.
 pub(crate) fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printer {
     let payload = case
         .payload
@@ -1540,20 +1540,20 @@ pub(crate) fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printe
         })
         .collect();
 
-    let mut args = item
-        .params
-        .iter()
-        // A `use` parameter has no name, and the constructor's own result type leaves it to resolution as this does.
-        .filter_map(|param| param.label.clone().map(pure))
-        .collect::<Vec<_>>();
-    if let Some(target) = &case.target {
-        args.extend(target.iter().cloned().map(print_term));
+    let mut family = named(item.label.to_string());
+    if !item.params.is_empty() {
+        let explicit = item
+            .params
+            .iter()
+            .filter(|param| param.plicity == Plicity::Explicit)
+            .filter_map(|param| param.label.clone().map(pure))
+            .collect();
+        family = flat([family, listed("(", explicit, ")")]);
     }
-
-    let family = match args.is_empty() {
-        true => named(item.label.to_string()),
-        false => flat([named(item.label.to_string()), listed("(", args, ")")]),
-    };
+    if let Some(target) = &case.target {
+        let indices = target.iter().cloned().map(print_term).collect();
+        family = flat([family, listed("(", indices, ")")]);
+    }
 
     flat([
         pure(case.label.clone()),
