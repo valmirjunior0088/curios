@@ -1,8 +1,8 @@
 use {
-    super::{SCC_CLONE_NODE_LIMIT, clone_scc, introducing_letfun},
+    super::{SCC_CLONE_NODE_LIMIT, copy_bodies, introducing_letfun},
     crate::{
-        Atom, Callee, Continuation, Edge, FunctionId, Module, Node, NodeId, analyze_calls,
-        function_nodes,
+        Atom, Callee, Continuation, CopyPlan, Edge, FunctionId, Module, Node, NodeId,
+        analyze_calls, function_nodes,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -109,14 +109,20 @@ pub(crate) fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> 
             return None;
         }
 
-        introducing_letfun(module, &BTreeSet::from([callee]))
-            .map(|intro| (callee, intro, external[1]))
+        introducing_letfun(module, &BTreeSet::from([callee])).map(|intro| {
+            (
+                callee,
+                intro,
+                external[1],
+                CopyPlan::functions(module, BTreeSet::from([callee])),
+            )
+        })
     });
-    let Some((callee, intro, site)) = chosen else {
+    let Some((callee, intro, site, plan)) = chosen else {
         return false;
     };
 
-    let copy = clone_scc(module, &BTreeSet::from([callee]))[&callee];
+    let copy = copy_bodies(module, plan).functions[&callee];
     if let Some(Node::LetFun { functions, .. }) = module.node_mut(intro) {
         functions.push(copy);
     }

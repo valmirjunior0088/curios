@@ -1,8 +1,8 @@
 use {
     crate::{
-        Atom, Callee, Continuation, ContinuationId, Function, FunctionId, MULTI_SITE_INLINE_LIMIT,
-        Mapping, Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueId, analyze_calls, clone_node,
-        copied_extent, function_nodes, nodes_from, prune_unreachable, visit_atoms_mut,
+        Atom, Callee, Continuation, ContinuationId, CopyPlan, Function, FunctionId,
+        MULTI_SITE_INLINE_LIMIT, Mapping, Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueId,
+        analyze_calls, clone_node, function_nodes, nodes_from, prune_unreachable, visit_atoms_mut,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -35,7 +35,7 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
                 continue;
             }
             // The extent rather than the body: `function_nodes` walks a `LetFun`'s continuation and not its members, so it understates the duplication of a body that nests definitions — and a multi-site inline copies those members once per site.
-            let (nodes, _) = copied_extent(module, function_nodes(module, callee));
+            let plan = CopyPlan::functions(module, BTreeSet::from([callee]));
             let sites = analysis.call_sites.get(&callee).map_or(0, Vec::len);
             let duplicated = sites > 1 || analysis.escaping.contains(&callee);
             let limit = if duplicated {
@@ -43,10 +43,10 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
             } else {
                 SCC_CLONE_NODE_LIMIT
             };
-            if nodes.len() > limit {
+            if plan.nodes.len() > limit {
                 continue;
             }
-            if inline_call(module, node_id, callee, &args, return_to) {
+            if inline_call(module, node_id, callee, &args, return_to, plan) {
                 changed = true;
                 inlined_any = true;
             }
@@ -246,11 +246,12 @@ pub(crate) fn inline_call(
     callee: FunctionId,
     args: &[Atom],
     return_to: ContinuationId,
+    plan: CopyPlan,
 ) -> bool {
     let function = module.function(callee).unwrap().clone();
-    let (extent, nested) = copied_extent(module, function_nodes(module, callee));
-    let node_ids: Vec<NodeId> = extent.into_iter().collect();
-    let nested_defs: BTreeMap<FunctionId, Function> = nested
+    let node_ids: Vec<NodeId> = plan.nodes.into_iter().collect();
+    let nested_defs: BTreeMap<FunctionId, Function> = plan
+        .nested
         .iter()
         .map(|&id| (id, module.function(id).unwrap().clone()))
         .collect();

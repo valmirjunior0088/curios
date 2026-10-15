@@ -1,9 +1,10 @@
 use {
     crate::{
-        Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, CallAnalysis, Callee, ContinuationId, Edge,
-        FunctionId, Intrinsic, Lattice, Literal, Module, Node, NodeId, RowId, SCC_CLONE_NODE_LIMIT,
-        Slot, Solver, ValueExpr, ValueId, analyze_calls, continuation_transfers, copied_extent,
-        copy_bodies, function_nodes, nodes_from, resolve_atom, visit_atoms_mut,
+        Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, CallAnalysis, Callee, ContinuationId, CopyPlan,
+        Edge, FunctionId, Intrinsic, Lattice, Literal, Module, Node, NodeId, RowId,
+        SCC_CLONE_NODE_LIMIT, Slot, Solver, ValueExpr, ValueId, analyze_calls,
+        continuation_transfers, copy_bodies, function_nodes, nodes_from, resolve_atom,
+        visit_atoms_mut,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
@@ -178,6 +179,7 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut usize) -> b
             continue;
         };
 
+        let plan = CopyPlan::functions(module, member_set.clone());
         let params_of: BTreeMap<FunctionId, Vec<ValueId>> = members
             .iter()
             .map(|&m| (m, module.function(m).unwrap().params.clone()))
@@ -221,7 +223,7 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut usize) -> b
             continue;
         };
 
-        let clones = clone_scc(module, &member_set);
+        let clones = copy_bodies(module, plan).functions;
         let clone_entry = clones[&entry];
         // Only the requested members are bound here. A copy of a *nested* definition is introduced by the copied `LetFun` inside its own member's body, so binding it out here as well would bind it twice.
         if let Some(Node::LetFun { functions, .. }) = module.node_mut(intro) {
@@ -251,7 +253,7 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
     }
 
     // The first specializable pattern in deterministic (node, then argument) order: a known-callee call whose argument is a family's construction of known tag that the callee deconstructs, whose callee has a lexical `LetFun` owner and a clonable body within the growth budget.
-    let mut chosen: Option<(FunctionId, usize, u32, usize, RowId)> = None;
+    let mut chosen = None;
     'search: for (_, node) in module.live_nodes() {
         let Node::ApplyFun {
             callee: Callee::Known(callee),
@@ -281,21 +283,21 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
                 continue;
             }
             // The extent rather than the body: a definition nested in the callee is copied along with it, and counting only the outer body would price the clone at a fraction of what it duplicates.
-            let (extent, _) = copied_extent(module, function_nodes(module, *callee));
-            if extent.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
+            let plan = CopyPlan::functions(module, member);
+            if plan.nodes.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
                 continue;
             }
-            chosen = Some((*callee, index, *tag, fields.len(), *row));
+            chosen = Some((*callee, index, *tag, fields.len(), *row, plan));
             break 'search;
         }
     }
-    let Some((callee, index, tag, arity, row)) = chosen else {
+    let Some((callee, index, tag, arity, row, plan)) = chosen else {
         return false;
     };
 
     let member = BTreeSet::from([callee]);
     let intro = introducing_letfun(module, &member).unwrap();
-    let clones = clone_scc(module, &member);
+    let clones = copy_bodies(module, plan).functions;
     let clone = clones[&callee];
 
     // Peel: the clone recurses into the general function, not itself, so a recursive call that does not carry the matched constructor stays valid.
@@ -456,13 +458,6 @@ pub(crate) fn introducing_letfun(
     }
     None
 }
-/// Copy every member of an SCC, and every definition nested inside them, into fresh functions with fresh return continuations, local continuations, owned values, and nodes. Internal known-callee edges and return continuations are rewired to the copies while free values, external callees, and external continuations are shared.
-pub(crate) fn clone_scc(
-    module: &mut Module,
-    members: &BTreeSet<FunctionId>,
-) -> BTreeMap<FunctionId, FunctionId> {
-    copy_bodies(module, members, &BTreeSet::new()).functions
-}
 /// SpecConstr for continuation joins — the join-point analogue of [`specialize_call_patterns`]. When an edge jumps a variant family's construction whose tag is known into a multi-transfer continuation that deconstructs it, clone the continuation with the constructor rebuilt at its entry and its dynamic fields threaded as parameters, so the existing aggregate-projection and known-switch simplifications collapse the deconstruction — and usually the allocation and the branch — on a later iteration. Every edge sharing the `(target, index, tag, arity, row)` pattern repoints to the single clone. The row identity matches the constructor the clone rebuilds, as for calls. Single-transfer joins are excluded: `inline_single_use_continuations` already collapses them outright. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
 pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
@@ -475,7 +470,7 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) 
     let transfers = continuation_transfers(module);
 
     // The first specializable pattern in deterministic (node, then edge, then argument) order.
-    let mut chosen: Option<(ContinuationId, usize, u32, usize, RowId)> = None;
+    let mut chosen = None;
     'search: for (_, node) in module.live_nodes() {
         let edges: Vec<&Edge> = match node {
             Node::ApplyCont(edge) => vec![edge],
@@ -507,21 +502,21 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) 
                     continue;
                 }
                 // The extent rather than the body, for the reason the call specializer counts one: a definition nested in the join is copied with it.
-                let (extent, _) = copied_extent(module, nodes_from(module, continuation.body));
-                if extent.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
+                let plan = CopyPlan::continuation(module, edge.target);
+                if plan.nodes.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
                     continue;
                 }
-                chosen = Some((edge.target, index, *tag, fields.len(), *row));
+                chosen = Some((edge.target, index, *tag, fields.len(), *row, plan));
                 break 'search;
             }
         }
     }
-    let Some((target, index, tag, arity, row)) = chosen else {
+    let Some((target, index, tag, arity, row, plan)) = chosen else {
         return false;
     };
 
     let intro = introducing_letcont(module, target).unwrap();
-    let clone = clone_continuation(module, target);
+    let clone = copy_bodies(module, plan).continuations[&target];
 
     // Rebuild the constructor at the clone entry, threading its dynamic fields as fresh parameters in place of the specialized parameter.
     let clone_definition = module.continuation(clone).unwrap();
@@ -618,10 +613,6 @@ pub(crate) fn introducing_letcont(module: &Module, continuation: ContinuationId)
         )
         .then_some(id)
     })
-}
-/// Copy one continuation's body subtree, and every definition nested inside it, into a fresh continuation with fresh parameters, owned values, nested continuations, and nodes. External values, functions, and continuations — including the owning function's return — are shared.
-pub(crate) fn clone_continuation(module: &mut Module, target: ContinuationId) -> ContinuationId {
-    copy_bodies(module, &BTreeSet::new(), &BTreeSet::from([target])).continuations[&target]
 }
 pub(crate) fn merge_inputs(inputs: &mut [Knowledge], args: Option<&[Atom]>) {
     for (index, input) in inputs.iter_mut().enumerate() {

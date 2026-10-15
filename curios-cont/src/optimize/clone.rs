@@ -144,34 +144,67 @@ pub(crate) fn clone_node(node: &Node, map: &Mapping<'_>) -> Node {
     }
 }
 
-/// Everything a copy of `roots` has to reproduce: the nodes, and the functions defined lexically within them.
+/// The roots and complete lexical extent one copy reproduces.
 ///
-/// Closed transitively, because a nested body may nest further. A nested definition cannot be left shared and cannot be copied separately: its body may read values bound in the body being copied, so it has to be renamed by the same mapping — which is what makes the extent one question rather than each caller's own.
-pub(crate) fn copied_extent(
-    module: &Module,
-    roots: impl IntoIterator<Item = NodeId>,
-) -> (BTreeSet<NodeId>, BTreeSet<FunctionId>) {
-    let mut nodes: BTreeSet<NodeId> = roots.into_iter().collect();
-    let mut functions = BTreeSet::new();
-    let mut pending: Vec<NodeId> = nodes.iter().copied().collect();
+/// Admission reads the same nodes execution copies, closed transitively over nested definitions. A nested body may read values bound in its enclosing body, so both must be renamed together. Explicit roots remain distinct from nested functions: a function root's recursive calls follow its copy, a continuation root's backedges retain the original target, and the inliner substitutes a function root's parameters rather than minting them.
+///
+/// Planning reads the module without minting identities. A plan is consumed before any intervening graph mutation; it is not an analysis kept across rewrites. Continuations and owned values are derived from these nodes and roots by the executing transformation, in its existing allocation order.
+pub(crate) struct CopyPlan {
+    functions: BTreeSet<FunctionId>,
+    continuations: BTreeSet<ContinuationId>,
+    pub(crate) nodes: BTreeSet<NodeId>,
+    pub(crate) nested: BTreeSet<FunctionId>,
+}
 
-    while let Some(node_id) = pending.pop() {
-        let nested = match module.node(node_id) {
-            Some(Node::LetFun { functions, .. }) => functions.clone(),
-            _ => continue,
-        };
-        for function in nested {
-            if !functions.insert(function) {
-                continue;
-            }
-            for inner in function_nodes(module, function) {
-                if nodes.insert(inner) {
-                    pending.push(inner);
+impl CopyPlan {
+    pub(crate) fn functions(module: &Module, functions: BTreeSet<FunctionId>) -> Self {
+        Self::new(module, functions, BTreeSet::new())
+    }
+
+    pub(crate) fn continuation(module: &Module, continuation: ContinuationId) -> Self {
+        Self::new(module, BTreeSet::new(), BTreeSet::from([continuation]))
+    }
+
+    fn new(
+        module: &Module,
+        functions: BTreeSet<FunctionId>,
+        continuations: BTreeSet<ContinuationId>,
+    ) -> Self {
+        let mut nodes: BTreeSet<NodeId> = functions
+            .iter()
+            .flat_map(|&id| function_nodes(module, id))
+            .chain(
+                continuations
+                    .iter()
+                    .flat_map(|&id| nodes_from(module, module.continuation(id).unwrap().body)),
+            )
+            .collect();
+        let mut nested = BTreeSet::new();
+        let mut pending: Vec<NodeId> = nodes.iter().copied().collect();
+
+        while let Some(node_id) = pending.pop() {
+            let definitions = match module.node(node_id) {
+                Some(Node::LetFun { functions, .. }) => functions,
+                _ => continue,
+            };
+            for &function in definitions {
+                if !nested.insert(function) {
+                    continue;
+                }
+                for inner in function_nodes(module, function) {
+                    if nodes.insert(inner) {
+                        pending.push(inner);
+                    }
                 }
             }
         }
+        Self {
+            functions,
+            continuations,
+            nodes,
+            nested,
+        }
     }
-    (nodes, functions)
 }
 
 /// What one call to [`copy_bodies`] minted.
@@ -180,24 +213,16 @@ pub(crate) struct Copies {
     pub(crate) continuations: BTreeMap<ContinuationId, ContinuationId>,
 }
 
-/// Copy `functions` and `continuations` into fresh identities, together with everything nested inside them.
+/// Execute an admitted plan, copying its roots and everything nested inside them into fresh identities.
 ///
 /// Values, continuations, nodes and function identities owned by the copied extent are minted afresh and rewired to each other; anything defined outside it is shared, which is what makes the copy a copy rather than a second module. A seeded continuation is copied as itself, so its own parameters are renamed — a caller wanting the original's arity preserved reads the fresh id out of [`Copies`].
-pub(crate) fn copy_bodies(
-    module: &mut Module,
-    functions: &BTreeSet<FunctionId>,
-    continuations: &BTreeSet<ContinuationId>,
-) -> Copies {
-    let roots = functions
-        .iter()
-        .flat_map(|&id| function_nodes(module, id))
-        .chain(
-            continuations
-                .iter()
-                .flat_map(|&id| nodes_from(module, module.continuation(id).unwrap().body)),
-        )
-        .collect::<Vec<_>>();
-    let (node_ids, nested) = copied_extent(module, roots);
+pub(crate) fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
+    let CopyPlan {
+        functions,
+        continuations,
+        nodes: node_ids,
+        nested,
+    } = plan;
     let members: BTreeSet<FunctionId> = functions.union(&nested).copied().collect();
 
     let member_defs: BTreeMap<FunctionId, Function> = members
