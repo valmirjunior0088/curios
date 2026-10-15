@@ -13,6 +13,7 @@ mod churn;
 mod copying;
 mod fields;
 mod ladder;
+mod reconstruction;
 mod specialize;
 
 mod map_wall;

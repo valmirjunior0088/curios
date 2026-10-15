@@ -13,8 +13,8 @@ mod tests;
 
 use {
     crate::{
-        Atom, BlockId, ConstructorId, Module, ProductId, Rebindings, Remap, Rhs, Statement,
-        StatementId, Terminator, ValueId,
+        Atom, BlockId, Constant, ConstructorId, FunctionId, Module, ProductId, Rebindings, Remap,
+        Rhs, Statement, StatementId, Terminator, ValueId,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -34,7 +34,7 @@ struct Reconstruction<'m> {
     module: &'m Module,
     bindings: Rebindings,
     definitions: BTreeMap<ValueId, (StatementId, &'m Rhs)>,
-    templates: BTreeMap<crate::FunctionId, ConstructionTemplate>,
+    templates: BTreeMap<FunctionId, ConstructionTemplate>,
     facts: ValueFacts,
     replacements: BTreeMap<ValueId, Atom>,
 }
@@ -142,7 +142,7 @@ impl<'m> Reconstruction<'m> {
             .iter()
             .enumerate()
             .all(|(i, &field)| self.projection(field) == Some((schema, base, i))
-                || matches!(self.follow(field), Atom::Constant(id) if matches!(self.module.constant(id), Some(crate::Constant::Unit)))
+                || matches!(self.follow(field), Atom::Constant(id) if matches!(self.module.constant(id), Some(Constant::Unit)))
                     && self.facts.unit_field(base, schema, i))
             .then_some(base)
     }

@@ -2,7 +2,10 @@
 
 use {
     super::*,
-    crate::{Analysis, Constant, ErsdBuilder, Field, ProductSchema, VariantArm},
+    crate::{
+        Analysis, CellOperation, Constant, ErsdBuilder, Field, NatCase, Operation, ProductSchema,
+        VariantArm,
+    },
 };
 
 fn finish(module: &mut Module) {
@@ -123,7 +126,7 @@ fn variant_fixture(wrapper: bool, effect: bool, default: bool) -> Module {
         builder.let_value(
             None,
             Rhs::Cell {
-                operation: crate::CellOperation::New,
+                operation: CellOperation::New,
                 operands: vec![],
             },
         );
@@ -273,7 +276,7 @@ fn recursive_unit_fixture(mixed: bool) -> Module {
     let pred = builder.let_value(
         None,
         Rhs::Operation {
-            operation: crate::Operation::NatSub,
+            operation: Operation::NatSub,
             operands: vec![Atom::Value(n), one],
         },
     );
@@ -305,7 +308,7 @@ fn recursive_unit_fixture(mixed: bool) -> Module {
         None,
         Rhs::SwitchNat {
             scrutinee: Atom::Value(n),
-            cases: vec![crate::NatCase {
+            cases: vec![NatCase {
                 key: 0,
                 block: base,
             }],
@@ -368,7 +371,7 @@ fn state_work_in_a_producer_survives_forwarding_its_answer() {
     builder.let_value(
         None,
         Rhs::Cell {
-            operation: crate::CellOperation::New,
+            operation: CellOperation::New,
             operands: vec![],
         },
     );
@@ -515,7 +518,7 @@ fn many_returns(count: usize) -> Module {
             cases: blocks
                 .into_iter()
                 .enumerate()
-                .map(|(i, block)| crate::NatCase {
+                .map(|(i, block)| NatCase {
                     key: i as u32,
                     block,
                 })
@@ -724,7 +727,7 @@ fn a_trap_before_constructor_reconstruction_is_preserved() {
     let trap = module.add_statement(Statement::Let {
         result,
         rhs: Rhs::Operation {
-            operation: crate::Operation::NatDiv,
+            operation: Operation::NatDiv,
             operands: vec![zero, zero],
         },
     });
