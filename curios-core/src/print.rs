@@ -2043,11 +2043,10 @@ pub fn intrinsic_form(intrinsic: Intrinsic, grouped: bool) -> IntrinsicForm {
             explicits: vec![list, init, function],
         },
         Intrinsic::HandleType => IntrinsicForm::Named("Handle"),
-        // The four `/sys/Handle` constants are the only handles a term ever holds: every other handle is minted by the host at run time, behind an `Io` no reduction enters. The last arm names a token no source can spell, and spells the token rather than abort the diagnostic it is inside.
+        // The three `/sys/Handle` constants are the only handles a term ever holds: every other handle is minted by the host at run time, behind an `Io` no reduction enters. The last arm names a token no source can spell, and spells the token rather than abort the diagnostic it is inside.
         Intrinsic::Handle(stdio::STDIN) => IntrinsicForm::Named("Handle/stdin"),
         Intrinsic::Handle(stdio::STDOUT) => IntrinsicForm::Named("Handle/stdout"),
         Intrinsic::Handle(stdio::STDERR) => IntrinsicForm::Named("Handle/stderr"),
-        Intrinsic::Handle(stdio::READY) => IntrinsicForm::Named("Handle/ready"),
         Intrinsic::Handle(token) => IntrinsicForm::Handle(token),
         Intrinsic::CellType(elem) => IntrinsicForm::Call {
             path: "Cell".into(),

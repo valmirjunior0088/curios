@@ -1,8 +1,8 @@
 use {
     super::*,
     crate::{
-        ChildExit, ChildHandles, Failure, Handle, Mode, Readiness, SerialFlow, SerialOp,
-        SerialParity, StdioMode,
+        ChildExit, ChildHandles, Failure, Handle, Mode, SerialFlow, SerialOp, SerialParity,
+        StdioMode,
     },
     curios_abi::{errno, event},
     curios_utilities::test_support::Temporary,
@@ -13,6 +13,28 @@ use {
     },
     std::{num::NonZeroU32, path::Path, thread, time::Duration},
 };
+
+/// Whether a watch of `handle`, asking to read or to write as said, is ready now.
+fn watched(host: &OsHost, handle: &Handle, readable: bool, writable: bool) -> bool {
+    let watch = host.handle_watch(handle.clone(), readable, writable);
+    let ready = host.handle_ready(vec![watch.clone()]);
+    host.handle_close(watch);
+
+    ready == [event::READY]
+}
+
+/// Whether a watch of `handle`, asking to read or to write as said, is ready within five seconds: a program's wait, beside a timer so that a handle never readied fails its test rather than holding it.
+fn awaited(host: &OsHost, handle: &Handle, readable: bool, writable: bool) -> bool {
+    let watch = host.handle_watch(handle.clone(), readable, writable);
+    let now = host.clock_mono();
+    let deadline = host.clock_timer(now.secs + 5, now.nanos);
+    host.wait(vec![watch.clone(), deadline.clone()]).unwrap();
+    let ready = host.handle_ready(vec![watch.clone()]);
+    host.handle_close(watch);
+    host.handle_close(deadline);
+
+    ready == [event::READY]
+}
 
 /// A pseudo-terminal: its near end, and the name its far end opens by.
 fn pseudo_terminal() -> (OwnedFd, Vec<u8>) {
@@ -62,7 +84,7 @@ fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_refuse_through_the_errno_
     host.handle_close(handle);
 }
 
-/// A piped child stream is filed non-blocking by `proc_spawn`: before the child writes, a read answers `WouldBlock` instead of blocking the caller; bytes it echoes come back through `handle_read` once `handle_poll` reports them; closing its stdin ends it, its stdout reads to its end, and `proc_wait` reaps it. These streams are what let a fiber's drain yield instead of stalling the scheduler.
+/// A piped child stream is filed non-blocking by `proc_spawn`: before the child writes, a read answers `WouldBlock` instead of blocking the caller; bytes it echoes come back through `handle_read` once a watch of it is ready; closing its stdin ends it, its stdout reads to its end, and `proc_wait` reaps it. These streams are what let a drain suspend instead of blocking the run.
 #[test]
 fn a_piped_child_stream_is_filed_non_blocking() {
     let host = OsHost::with_args(vec![]);
@@ -90,10 +112,7 @@ fn a_piped_child_stream_is_filed_non_blocking() {
         Err(Failure::WouldBlock)
     );
     assert_eq!(host.handle_write(stdin.clone(), b"abc".to_vec()), Ok(3));
-    let ready = host
-        .handle_poll(vec![stdout.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
+    assert!(awaited(&host, &stdout, true, false));
     assert_eq!(
         host.handle_read(stdout.clone(), 8),
         Ok(Some(b"abc".to_vec()))
@@ -111,10 +130,7 @@ fn a_piped_child_stream_is_filed_non_blocking() {
     }
     assert_eq!(outcome, Ok(None));
 
-    let ready = host
-        .handle_poll(vec![child.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
+    assert!(awaited(&host, &child, true, false));
     assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
 
     host.handle_close(stdout);
@@ -218,7 +234,7 @@ fn a_listener_at_a_held_address_is_refused() {
     host.handle_close(listener);
 }
 
-/// A listener never blocks: `socket_accept` with nothing pending answers `WouldBlock`. A connect to it answers at once on loopback or goes pending and settles through `handle_poll` and `socket_finish_connect`, which is idempotent on a settled socket. Both ends are non-blocking, so a read before any write answers `WouldBlock` and one after `handle_poll` serves the bytes.
+/// A listener never blocks: `socket_accept` with nothing pending answers `WouldBlock`. A connect to it answers at once on loopback or goes pending and settles through a watch and `socket_finish_connect`, which is idempotent on a settled socket. Both ends are non-blocking, so a read before any write answers `WouldBlock` and one after a watch is ready serves the bytes.
 #[test]
 fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     let host = OsHost::with_args(vec![]);
@@ -232,20 +248,14 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     match host.socket_connect(client.clone(), blob) {
         Ok(()) => {}
         Err(Failure::WouldBlock) => {
-            let ready = host
-                .handle_poll(vec![], vec![client.clone()], 5_000)
-                .unwrap();
-            assert_ne!(ready.writable[0].bits() & event::READY, 0);
+            assert!(awaited(&host, &client, false, true));
             assert_eq!(host.socket_finish_connect(client.clone()), Ok(()));
         }
         Err(failure) => panic!("connect answered {failure:?}"),
     }
     assert_eq!(host.socket_finish_connect(client.clone()), Ok(()));
 
-    let ready = host
-        .handle_poll(vec![listener.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
+    assert!(awaited(&host, &listener, true, false));
     let server = host.socket_accept(listener.clone()).unwrap();
 
     assert_eq!(
@@ -253,10 +263,7 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
         Err(Failure::WouldBlock)
     );
     assert_eq!(host.handle_write(client.clone(), b"ping".to_vec()), Ok(4));
-    let ready = host
-        .handle_poll(vec![server.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
+    assert!(awaited(&host, &server, true, false));
     assert_eq!(
         host.handle_read(server.clone(), 8),
         Ok(Some(b"ping".to_vec()))
@@ -267,18 +274,16 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     host.handle_close(listener);
 }
 
-/// A connected loopback pair: a listener, a client settled through `handle_poll` and `socket_finish_connect` where the kernel made it pend, and the accepted server end.
+/// A connected loopback pair: a listener, a client settled through a watch and `socket_finish_connect` where the kernel made it pend, and the accepted server end.
 fn loopback_pair(host: &OsHost) -> (Handle, Handle, Handle) {
     let (listener, blob) = loopback_listener(host);
 
     let client = host.socket_open(blob.clone()).unwrap();
     if host.socket_connect(client.clone(), blob) == Err(Failure::WouldBlock) {
-        host.handle_poll(vec![], vec![client.clone()], 5_000)
-            .unwrap();
+        assert!(awaited(host, &client, false, true));
         assert_eq!(host.socket_finish_connect(client.clone()), Ok(()));
     }
-    host.handle_poll(vec![listener.clone()], vec![], 5_000)
-        .unwrap();
+    assert!(awaited(host, &listener, true, false));
     let server = host.socket_accept(listener.clone()).unwrap();
 
     (listener, client, server)
@@ -303,10 +308,7 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
         Err(Failure::WouldBlock)
     );
 
-    let ready = host
-        .handle_poll(vec![server.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
+    assert!(awaited(&host, &server, true, false));
     let hello = host
         .handle_read(server.clone(), 4096)
         .unwrap()
@@ -317,10 +319,7 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
         host.handle_write(server.clone(), b"HTTP/1.0 400 Bad Request\r\n\r\n".to_vec())
             .is_ok()
     );
-    let ready = host
-        .handle_poll(vec![client.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
+    assert!(awaited(&host, &client, true, false));
     assert_eq!(host.handle_read(client.clone(), 8), Err(Failure::TlsError));
     assert_ne!(host.handle_read(client.clone(), 8), Err(Failure::NotFound));
 
@@ -341,12 +340,9 @@ fn a_tls_stream_ended_without_its_alert_reads_as_a_failure() {
     );
     assert_eq!(host.handle_finish(server.clone()), Ok(()));
 
-    // Driven as a fiber drives it: with the client hello still unsent, the poll wakes on the socket's writability as well, so a read can come before the peer's end has arrived and answer `WouldBlock`, and the fiber polls again.
+    // Driven as a program drives it: with the client hello still unsent, a watch to read wakes on the socket's writability as well, so a read can come before the peer's end has arrived and answer `WouldBlock`, and the program waits again.
     let read = loop {
-        let ready = host
-            .handle_poll(vec![client.clone()], vec![], 5_000)
-            .unwrap();
-        assert_ne!(ready.readable[0].bits() & event::READY, 0);
+        assert!(awaited(&host, &client, true, false));
 
         match host.handle_read(client.clone(), 8) {
             Err(Failure::WouldBlock) => continue,
@@ -384,15 +380,8 @@ fn a_refused_connect_reports_and_drops_the_socket() {
     let client = host.socket_open(blob.clone()).unwrap();
     let outcome = match host.socket_connect(client.clone(), blob) {
         Err(Failure::WouldBlock) => {
-            let ready = host
-                .handle_poll(vec![], vec![client.clone()], 5_000)
-                .unwrap();
-            // A settled connect is reported as the platform reports it: Linux answers a refused one ready to write, macOS hung up, and the failure rides either. `/std`'s scheduler resumes a park on any of the three for the same reason — a handle in one of those states will never become ready.
-            assert!(
-                ready.writable[0].is_any(),
-                "the poll reported {:#05b}",
-                ready.writable[0].bits()
-            );
+            // A settled connect is reported as the platform reports it: Linux answers a refused one ready to write, macOS hung up, and the failure rides either. A watch is ready on any of the three for the same reason — a handle in one of those states will never become ready.
+            assert!(awaited(&host, &client, false, true));
             host.socket_finish_connect(client.clone())
         }
         other => other,
@@ -424,10 +413,7 @@ fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
         panic!("the piped stream, and only it, is answered");
     };
 
-    let ready = host
-        .handle_poll(vec![child.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
+    assert!(awaited(&host, &child, true, false));
     assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
     assert_eq!(
         host.handle_read(stdout.clone(), 64),
@@ -463,7 +449,7 @@ fn open_takes_a_listed_name_back_as_the_bytes_it_was_given() {
     host.handle_close(handle);
 }
 
-/// A serial port opened on the far end of a pseudo-terminal: a frame outside the row's ranges opens nothing, the open takes the raw frame, a byte the near end writes arrives through `handle_read` once `handle_poll` has reported it, the input discard is served, and a closed port misses loudly. A pty forces its own character size and keeps no modem lines, so what is under test is the open's shape rather than a wire: Linux refuses the lines through the errno lane.
+/// A serial port opened on the far end of a pseudo-terminal: a frame outside the row's ranges opens nothing, the open takes the raw frame, a byte the near end writes arrives through `handle_read` once a watch of it is ready, the input discard is served, and a closed port misses loudly. A pty forces its own character size and keeps no modem lines, so what is under test is the open's shape rather than a wire: Linux refuses the lines through the errno lane.
 #[test]
 fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
     const EINVAL: u32 = 22;
@@ -503,8 +489,7 @@ fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
 
     assert_eq!(host.handle_read(port.clone(), 8), Err(Failure::WouldBlock));
     rustix::io::write(&near, b"ok").expect("the near end writes");
-    let ready = host.handle_poll(vec![port.clone()], vec![], 5_000).unwrap();
-    assert!(ready.readable[0].bits() & event::READY != 0);
+    assert!(awaited(&host, &port, true, false));
     assert_eq!(host.handle_read(port.clone(), 8), Ok(Some(b"ok".to_vec())));
 
     assert_eq!(
@@ -641,8 +626,7 @@ fn a_serial_drain_ends_once_the_output_has_left() {
     assert_eq!(host.handle_write(port.clone(), b"ok".to_vec()), Ok(2));
 
     let wait = host.serial_drain(port.clone()).unwrap();
-    let ready = host.handle_poll(vec![wait.clone()], vec![], 5_000).unwrap();
-    assert_ne!(ready.readable[0].bits() & (event::READY | event::HUP), 0);
+    assert!(awaited(&host, &wait, true, false));
     assert_eq!(host.handle_read(wait.clone(), 1), Ok(None));
     host.handle_close(wait);
 
@@ -686,15 +670,7 @@ fn quiet(host: &OsHost, argv: &[&[u8]]) -> Result<Handle, Failure> {
 
 /// Wait up to five seconds for `child`'s handle to report that its end is recorded.
 fn ended(host: &OsHost, child: &Handle) {
-    let ready = host
-        .handle_poll(vec![child.clone()], vec![], 5_000)
-        .unwrap();
-
-    assert_ne!(
-        ready.readable[0].bits() & event::READY,
-        0,
-        "the child ended"
-    );
+    assert!(awaited(host, child, true, false), "the child ended");
 }
 
 /// Once the reaper has recorded an exit it has also reaped the pid, which the OS may hand to another process, so a kill answers `ok` without signaling anything — and the exit still reads back. A kill that signaled the freed pid would answer `ESRCH` here, or end whatever process had inherited it.
@@ -828,10 +804,7 @@ fn a_flush_pushes_what_rustls_holds() {
     );
     assert_eq!(host.handle_flush(client.clone()), Ok(()));
 
-    let ready = host
-        .handle_poll(vec![server.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
+    assert!(awaited(&host, &server, true, false));
     let hello = host.handle_read(server.clone(), 4096).unwrap().unwrap();
     assert_eq!(&hello[..2], &[0x16, 0x03], "a TLS handshake record");
 
@@ -840,15 +813,12 @@ fn a_flush_pushes_what_rustls_holds() {
     host.handle_close(listener);
 }
 
-/// Everything `handle` sends until its stream ends, each read waited for through `handle_poll`.
+/// Everything `handle` sends until its stream ends, each read waited for through a watch.
 fn read_to_the_end(host: &OsHost, handle: &Handle) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     loop {
-        let ready = host
-            .handle_poll(vec![handle.clone()], vec![], 5_000)
-            .unwrap();
-        assert_ne!(ready.readable[0].bits() & event::READY, 0);
+        assert!(awaited(host, handle, true, false));
 
         match host.handle_read(handle.clone(), 4096) {
             Ok(Some(chunk)) => bytes.extend(chunk),
@@ -908,34 +878,22 @@ fn a_finished_tls_stream_sends_its_closure_alert_before_it_ends() {
     host.handle_close(listener);
 }
 
-/// A handle standing in both lists is polled once and answered in each for what that list waits on: a socket with a byte to read is ready in both, and its peer, sent nothing, is ready to write and not to read.
+/// A watch is ready for what it asks and no other: a socket with a byte to read is ready to read and to write, and its peer, sent nothing, is ready to write and not to read.
 #[test]
-fn a_handle_in_both_lists_is_answered_in_each_for_its_own() {
+fn a_watch_is_ready_for_what_it_asks() {
     let host = OsHost::with_args(vec![]);
     let (listener, client, server) = loopback_pair(&host);
 
     assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(1));
 
-    // The byte is waited for alone first: a poll answers once any slot is ready, and the writing one is ready at once, possibly before the byte has crossed the loopback.
-    let arrived = host
-        .handle_poll(vec![server.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(arrived.readable[0].bits() & event::READY, 0);
-
-    let both = vec![server.clone(), client.clone()];
-    let ready = host.handle_poll(both.clone(), both, 0).unwrap();
-    let ready_bit = |report: Readiness| report.bits() & event::READY;
-
-    assert_eq!(ready.readable.len(), 2);
-    assert_eq!(ready.writable.len(), 2);
-    assert_eq!(ready_bit(ready.readable[0]), event::READY);
-    assert_eq!(
-        ready_bit(ready.readable[1]),
-        0,
+    // The byte is waited for first, since it may not have crossed the loopback yet.
+    assert!(awaited(&host, &server, true, false));
+    assert!(watched(&host, &server, false, true));
+    assert!(
+        !watched(&host, &client, true, false),
         "nothing was sent to the client"
     );
-    assert_eq!(ready_bit(ready.writable[0]), event::READY);
-    assert_eq!(ready_bit(ready.writable[1]), event::READY);
+    assert!(watched(&host, &client, false, true));
 
     host.handle_close(server);
     host.handle_close(client);
@@ -991,10 +949,7 @@ fn a_tls_upgrade_that_cannot_start_leaves_the_socket_connected() {
     );
     assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(1));
 
-    let ready = host
-        .handle_poll(vec![server.clone()], vec![], 5_000)
-        .unwrap();
-    assert_ne!(ready.readable[0].bits() & event::READY, 0);
+    assert!(awaited(&host, &server, true, false));
     assert_eq!(host.handle_read(server.clone(), 8), Ok(Some(b"x".to_vec())));
 
     host.handle_close(server);
@@ -1027,14 +982,21 @@ fn a_write_accepts_within_what_it_was_offered() {
     host.handle_close(file);
 }
 
-/// A poll answers one report for each handle of each list, in a list of its own for each.
+/// A look answers a byte for each handle, in their order: a timer past its instant is ready and one before it is not, and a handle that is neither a watch nor a timer, which nothing would hold, is ready at once.
 #[test]
-fn a_poll_answers_one_report_for_each_handle_of_each_list() {
+fn a_look_answers_each_handle_in_its_order() {
     let host = OsHost::with_args(vec![]);
-    let polled = host
-        .handle_poll(vec![Handle::Stdin], vec![Handle::Stdout, Handle::Stderr], 0)
-        .unwrap();
+    let now = host.clock_mono();
+    let (passed, later) = (
+        host.clock_timer(0, 0),
+        host.clock_timer(now.secs + 3_600, now.nanos),
+    );
 
-    assert_eq!(polled.readable.len(), 1);
-    assert_eq!(polled.writable.len(), 2);
+    assert_eq!(
+        host.handle_ready(vec![later.clone(), passed.clone(), Handle::Stderr]),
+        [0, event::READY, event::READY]
+    );
+
+    host.handle_close(passed);
+    host.handle_close(later);
 }

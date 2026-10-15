@@ -1,15 +1,14 @@
 //! The native adapter's own concerns, and the contract it speaks in.
 //!
-//! The wire contract — the [`Handle`]/[`Failure`]/[`Readiness`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], the platform's `poll` flags to a [`Readiness`] (whose raw values differ per platform), and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
+//! The wire contract — the [`Handle`]/[`Failure`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
 pub use curios_abi::{
-    ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, HostOps, Mode, Polled, Readiness,
-    Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
+    ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, HostOps, Mode, Refusal,
+    SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
 };
 
 use {
-    curios_abi::event,
-    rustix::{event::PollFlags, io::Errno, termios::ControlModes},
+    rustix::{io::Errno, termios::ControlModes},
     std::io::{Error, ErrorKind},
 };
 
@@ -88,25 +87,6 @@ pub(crate) fn failure_from_error(error: Error) -> Failure {
             None => Failure::Other(0),
         },
     }
-}
-
-/// What the platform's `revents` say of a descriptor to one standing of it in a poll, which watched it for `watched`: ready where any flag watched on the standing's behalf fired, and, asked or not, the failure and the hang-up the kernel reports. A descriptor the kernel calls invalid (`POLLNVAL`) reports its failure: its waiter wakes into the call that says why rather than waiting on a descriptor that cannot become ready.
-pub(crate) fn readiness(flags: PollFlags, watched: PollFlags) -> Readiness {
-    let mut bits = 0;
-
-    if flags.intersects(watched) {
-        bits |= event::READY;
-    }
-
-    if flags.intersects(PollFlags::ERR | PollFlags::NVAL) {
-        bits |= event::ERR;
-    }
-
-    if flags.contains(PollFlags::HUP) {
-        bits |= event::HUP;
-    }
-
-    Readiness::from_bits(bits)
 }
 
 #[cfg(test)]

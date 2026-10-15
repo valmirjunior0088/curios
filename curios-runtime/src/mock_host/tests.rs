@@ -3,12 +3,21 @@
 use {
     super::{EBUSY, ENOTTY, MockHost, SocketEvent},
     crate::{
-        ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, Mode, Readiness, SerialFlow,
-        SerialOp, SerialParity, StdioMode, TtySize,
+        ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, Mode, SerialFlow, SerialOp,
+        SerialParity, StdioMode, TtySize,
     },
     curios_abi::{HostOps, errno, event},
     std::num::NonZeroU32,
 };
+
+/// Whether a watch of `handle`, asking to read or to write as said, is ready now; the watch is closed again.
+fn watched(host: &MockHost, handle: &Handle, readable: bool, writable: bool) -> bool {
+    let watch = host.handle_watch(handle.clone(), readable, writable);
+    let ready = host.handle_ready(vec![watch.clone()]);
+    host.handle_close(watch);
+
+    ready == [event::READY]
+}
 
 #[test]
 fn terminal_sizes_advance_on_queries_and_repeat_the_last() {
@@ -49,7 +58,7 @@ fn a_fixed_terminal_size_repeats_and_an_empty_script_has_no_terminal() {
 }
 
 #[test]
-fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_polled() {
+fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_watched() {
     let (host, _io) = MockHost::builder()
         .net_chunks([("example.com:80", vec!["ab", "cd"])])
         .build();
@@ -70,22 +79,20 @@ fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_polled() {
         Err(Failure::WouldBlock)
     );
 
-    // A poll arms the next chunk and reports the handle readable, and only then does the read serve it.
-    let ready = host.handle_poll(vec![handle.clone()], vec![], -1).unwrap();
-    assert_eq!(ready.readable[0].bits() & event::READY, event::READY);
+    // A look at a watch arms the next chunk and finds the handle readable, and only then does the read serve it.
+    assert!(watched(&host, &handle, true, false));
     assert_eq!(
         host.handle_read(handle.clone(), 8),
         Ok(Some(b"cd".to_vec()))
     );
 
-    // Past the last chunk the stream is at its end, which a poll still reports as readable.
+    // Past the last chunk the stream is at its end, which a watch still finds readable.
     assert_eq!(host.handle_read(handle.clone(), 8), Ok(None));
-    let ready = host.handle_poll(vec![handle], vec![], -1).unwrap();
-    assert_eq!(ready.readable[0].bits() & event::READY, event::READY);
+    assert!(watched(&host, &handle, true, false));
 }
 
 #[test]
-fn a_pending_connect_settles_through_poll_and_finish_connect() {
+fn a_pending_connect_settles_through_a_watch_and_finish_connect() {
     let (host, _io) = MockHost::builder()
         .net([("example.com:80", "pong")])
         .connect_pending()
@@ -101,8 +108,7 @@ fn a_pending_connect_settles_through_poll_and_finish_connect() {
         host.socket_finish_connect(handle.clone()),
         Err(Failure::WouldBlock)
     );
-    let ready = host.handle_poll(vec![], vec![handle.clone()], -1).unwrap();
-    assert_eq!(ready.writable[0].bits() & event::READY, event::READY);
+    assert!(watched(&host, &handle, false, true));
     assert_eq!(host.socket_finish_connect(handle.clone()), Ok(()));
     assert_eq!(host.handle_read(handle, 8), Ok(Some(b"pong".to_vec())));
 
@@ -112,7 +118,7 @@ fn a_pending_connect_settles_through_poll_and_finish_connect() {
         host.socket_connect(stray.clone(), b"nowhere:1".to_vec()),
         Err(Failure::WouldBlock)
     );
-    host.handle_poll(vec![], vec![stray.clone()], -1).unwrap();
+    assert!(watched(&host, &stray, false, true));
     assert_eq!(
         host.socket_finish_connect(stray.clone()),
         Err(Failure::ConnectionRefused)
@@ -129,10 +135,9 @@ fn a_chunked_endpoint_ends_readable() {
         Ok(())
     );
 
-    // A stream at its end reads as its end, and a poll still reports it readable, as an OS reports a closed peer.
+    // A stream at its end reads as its end, and a watch still finds it readable, as an OS reports a closed peer.
     assert_eq!(host.handle_read(handle.clone(), 8), Ok(None));
-    let ready = host.handle_poll(vec![handle], vec![], -1).unwrap();
-    assert_eq!(ready.readable[0].bits() & event::READY, event::READY);
+    assert!(watched(&host, &handle, true, false));
 }
 
 #[test]
@@ -219,7 +224,7 @@ fn the_root_directory_exists_holds_absolute_paths_and_cannot_be_removed() {
 }
 
 #[test]
-fn scripted_stdin_serves_one_chunk_then_would_blocks_until_polled() {
+fn scripted_stdin_serves_one_chunk_then_would_blocks_until_watched() {
     let (host, _io) = MockHost::builder()
         .stdin_chunks(vec![b"\x1b[A".as_slice(), b"q".as_slice()])
         .build();
@@ -231,9 +236,8 @@ fn scripted_stdin_serves_one_chunk_then_would_blocks_until_polled() {
     );
     assert_eq!(host.handle_read(Handle::Stdin, 8), Err(Failure::WouldBlock));
 
-    // A poll arms the next chunk and reports standard input readable, and only then does the read serve it: the park-poll-resume path a keystroke arriving later takes.
-    let ready = host.handle_poll(vec![Handle::Stdin], vec![], -1).unwrap();
-    assert_eq!(ready.readable[0].bits() & event::READY, event::READY);
+    // A look at a watch arms the next chunk and finds standard input readable, and only then does the read serve it: the wait-and-resume path a keystroke arriving later takes.
+    assert!(watched(&host, &Handle::Stdin, true, false));
     assert_eq!(host.handle_read(Handle::Stdin, 8), Ok(Some(b"q".to_vec())));
 
     // Past the last chunk the script is spent, which is end-of-input.
@@ -244,7 +248,7 @@ fn scripted_stdin_serves_one_chunk_then_would_blocks_until_polled() {
 fn scripted_stdin_lines_are_one_chunk_that_never_waits() {
     let (host, _io) = MockHost::builder().stdin_lines(["one", "two"]).build();
 
-    // Lines are one armed chunk, so a reader crosses from one to the next without a poll between them.
+    // Lines are one armed chunk, so a reader crosses from one to the next without a wait between them.
     assert_eq!(
         host.handle_read(Handle::Stdin, 4),
         Ok(Some(b"one\n".to_vec()))
@@ -295,7 +299,7 @@ fn a_serial_discard_drops_only_what_arrived() {
         Ok(())
     );
     assert_eq!(host.handle_read(port.clone(), 16), Err(Failure::WouldBlock));
-    host.handle_poll(vec![port.clone()], vec![], 0).unwrap();
+    assert!(watched(&host, &port, true, false));
     assert_eq!(host.handle_read(port, 16), Ok(Some(b"ready".to_vec())));
 }
 
@@ -409,12 +413,10 @@ fn a_running_child_ends_by_its_kill_and_an_ended_one_is_not_signaled() {
 
     let sleepy = spawned(&host, b"sleepy").child;
     assert_eq!(host.proc_wait(sleepy.clone()), Err(Failure::WouldBlock));
-    let ready = host.handle_poll(vec![sleepy.clone()], vec![], 0).unwrap();
-    assert_eq!(ready.readable[0].bits(), 0);
+    assert!(!watched(&host, &sleepy, true, false));
 
     assert_eq!(host.proc_kill(sleepy.clone()), Ok(()));
-    let ready = host.handle_poll(vec![sleepy.clone()], vec![], 0).unwrap();
-    assert_eq!(ready.readable[0].bits() & event::READY, event::READY);
+    assert!(watched(&host, &sleepy, true, false));
     assert_eq!(
         host.proc_wait(sleepy.clone()),
         Ok(ChildExit::Signal(NonZeroU32::new(9).unwrap()))
@@ -541,31 +543,27 @@ fn a_scripted_finish_waits_then_ends_the_sending_half() {
     );
 }
 
-/// A peer scripted to wait keeps its sending half open past its chunks: a read answers `WouldBlock`, a poll reports nothing to read, and one with no timeout is refused, where a native one would sleep without end. Once this side finishes, the peer has closed, and the events say in what order it all happened.
+/// A peer scripted to wait keeps its sending half open past its chunks: a read answers `WouldBlock`, a watch finds nothing to read, and a wait on it is refused, where a native one would sleep without end. Once this side finishes, the peer has closed, and the events say in what order it all happened.
 #[test]
 fn a_waiting_peer_closes_once_this_side_has_finished() {
     let (host, io) = MockHost::builder().inbound_waiting([vec!["ping"]]).build();
     let listener = host.socket_listen(b"0.0.0.0:8080".to_vec()).unwrap();
     let conn = host.socket_accept(listener).unwrap();
-    let reading = || {
-        host.handle_poll(vec![conn.clone()], vec![], 0)
-            .unwrap()
-            .readable[0]
-            .bits()
-            & event::READY
-    };
+    let reading = || watched(&host, &conn, true, false);
 
     assert_eq!(
         host.handle_read(conn.clone(), 8),
         Ok(Some(b"ping".to_vec()))
     );
     assert_eq!(host.handle_read(conn.clone(), 8), Err(Failure::WouldBlock));
-    assert_eq!(reading(), 0);
-    assert!(host.handle_poll(vec![conn.clone()], vec![], -1).is_err());
+    assert!(!reading());
+    let watch = host.handle_watch(conn.clone(), true, false);
+    assert!(host.wait(vec![watch.clone()]).is_err());
+    host.handle_close(watch);
 
     assert_eq!(host.handle_write(conn.clone(), b"pong".to_vec()), Ok(4));
     assert_eq!(host.handle_finish(conn.clone()), Ok(()));
-    assert_ne!(reading(), 0);
+    assert!(reading());
     assert_eq!(host.handle_read(conn.clone(), 8), Ok(None));
     host.handle_close(conn);
 
@@ -580,7 +578,7 @@ fn a_waiting_peer_closes_once_this_side_has_finished() {
     );
 }
 
-/// A peer scripted to stay open keeps its sending half open whatever this side does: once this side has finished, a read still answers `WouldBlock` and a poll still reports nothing to read.
+/// A peer scripted to stay open keeps its sending half open whatever this side does: once this side has finished, a read still answers `WouldBlock` and a watch still finds nothing to read.
 #[test]
 fn an_open_peer_stays_open_once_this_side_has_finished() {
     let (host, io) = MockHost::builder().inbound_open([vec!["ping"]]).build();
@@ -593,13 +591,7 @@ fn an_open_peer_stays_open_once_this_side_has_finished() {
     );
     assert_eq!(host.handle_finish(conn.clone()), Ok(()));
     assert_eq!(host.handle_read(conn.clone(), 8), Err(Failure::WouldBlock));
-    assert_eq!(
-        host.handle_poll(vec![conn.clone()], vec![], 0)
-            .unwrap()
-            .readable[0]
-            .bits(),
-        0
-    );
+    assert!(!watched(&host, &conn, true, false));
     host.handle_close(conn);
 
     assert_eq!(
@@ -608,24 +600,26 @@ fn an_open_peer_stays_open_once_this_side_has_finished() {
     );
 }
 
-/// A timed poll that readies nothing is answered while the scripted clock has a reading left to pass its timeout, and refused once it has none, since nothing would end the wait.
+/// A wait that readies nothing sleeps until its soonest timer, after which that timer is ready and a later one is not; a wait on watches alone that readies nothing is refused, since nothing would end it.
 #[test]
-fn a_timed_poll_nothing_can_end_is_refused() {
-    let (host, _io) = MockHost::builder()
-        .inbound_open([vec!["ping"]])
-        .mono([(1, 0)])
-        .build();
+fn a_wait_sleeps_to_its_soonest_timer_and_one_nothing_can_end_is_refused() {
+    let (host, _io) = MockHost::builder().inbound_open([vec!["ping"]]).build();
     let listener = host.socket_listen(b"0.0.0.0:8080".to_vec()).unwrap();
     let conn = host.socket_accept(listener).unwrap();
-    let waiting = || host.handle_poll(vec![conn.clone()], vec![], 1000);
-
     assert_eq!(
         host.handle_read(conn.clone(), 8),
         Ok(Some(b"ping".to_vec()))
     );
-    assert!(waiting().is_ok());
-    host.clock_mono();
-    assert!(waiting().is_err());
+
+    let watch = host.handle_watch(conn, true, false);
+    let (soon, late) = (host.clock_timer(1, 0), host.clock_timer(2, 0));
+    assert_eq!(host.handle_ready(vec![soon.clone(), late.clone()]), [0, 0]);
+    assert!(
+        host.wait(vec![watch.clone(), late.clone(), soon.clone()])
+            .is_ok()
+    );
+    assert_eq!(host.handle_ready(vec![soon, late]), [event::READY, 0]);
+    assert!(host.wait(vec![watch]).is_err());
 }
 
 /// A peer scripted to reset answers `ConnectionReset` to the read after its chunks, where one that closed answers the end of the stream.
@@ -723,9 +717,9 @@ fn randomness_answers_exactly_what_was_asked() {
     assert_eq!(host.rand_bytes(32).map(|bytes| bytes.len()), Ok(32));
 }
 
-/// A poll answers one report for each handle of each list, each for what its own list waits on and no other: a stream with a chunk to read is ready in both, and a child that still runs, which a poll waits on for its end, in neither.
+/// A watch is ready for what it asks and no other: a stream with a chunk to read is ready to read and to write, and a child that still runs, which a watch waits on for its end, for neither. A look at several answers a byte for each, in their order.
 #[test]
-fn a_poll_answers_each_list_for_what_it_waits_on() {
+fn a_watch_is_ready_for_what_it_asks() {
     let (host, _io) = MockHost::builder()
         .net([("example.com:80", "pong")])
         .running_children(["sleepy"])
@@ -738,20 +732,19 @@ fn a_poll_answers_each_list_for_what_it_waits_on() {
     );
     let child = spawned(&host, b"sleepy").child;
 
-    let both = vec![stream, child];
-    let polled = host.handle_poll(both.clone(), both, 0).unwrap();
-    let ready_bit = |report: Readiness| report.bits() & event::READY;
-
-    assert_eq!(polled.readable.len(), 2);
-    assert_eq!(polled.writable.len(), 2);
-    assert_eq!(
-        ready_bit(polled.readable[0]),
-        event::READY,
-        "a chunk is due"
+    assert!(watched(&host, &stream, true, false), "a chunk is due");
+    assert!(watched(&host, &stream, false, true));
+    assert!(!watched(&host, &child, true, false), "the child still runs");
+    assert!(
+        !watched(&host, &child, false, true),
+        "a child is never written"
     );
-    assert_eq!(ready_bit(polled.writable[0]), event::READY);
-    assert_eq!(ready_bit(polled.readable[1]), 0, "the child still runs");
-    assert_eq!(ready_bit(polled.writable[1]), 0, "a child is never written");
+
+    let watches = vec![
+        host.handle_watch(child, true, true),
+        host.handle_watch(stream, true, true),
+    ];
+    assert_eq!(host.handle_ready(watches), [0, event::READY]);
 }
 
 /// Both clocks answer whole seconds beside the nanoseconds within one.

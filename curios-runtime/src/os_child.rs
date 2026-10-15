@@ -1,6 +1,6 @@
 //! Children of the native host: spawning a program with each standard stream wired as the guest asked, reaping it on a thread that signals a pipe the scheduler polls, and killing it by pid only while that pid is still its own.
 //!
-//! The reaping follows `os_resolver`'s pattern for a finished lookup: a thread does the blocking wait, records the end, and writes one byte to a pipe whose read end is the child's handle, so `handle_poll` sees the exit as readiness and `proc_wait` reads the record at once. One thread per child is the native host's cost for observing an exit without a signal handler; the guest never sees it.
+//! The reaping follows `os_resolver`'s pattern for a finished lookup: a thread does the blocking wait, records the end, and writes one byte to a pipe whose read end is the child's handle, so a watch sees the exit as readiness and `proc_wait` reads the record at once. One thread per child is the native host's cost for observing an exit without a signal handler; the guest never sees it.
 //!
 //! **The pid is the one raw OS identity the host holds that the OS recycles**, so the reaper never frees it behind `kill`'s back. It waits with `waitid(WEXITED | WNOWAIT)`, which leaves the exited child a zombie whose pid stays reserved, and only then, holding the child's state, reaps it and records how it ended — or the errno that kept it from knowing. `kill` holds the same state, so it signals only a child with no recorded end, whose pid is still its own, and answers `ok` without signaling once an end is recorded. **Host assumption:** the embedding process leaves `SIGCHLD` at its default and reaps nothing itself. A process that auto-reaps lets the OS free a pid the moment its child exits, which only a pidfd could guard, and macOS has none.
 //!
@@ -30,7 +30,7 @@ use {
 /// How a child ended, once the reaper has recorded it: its exit, or the failure that kept the reaper from observing one. `None` while it runs — and while it runs, its pid is its own.
 type End = Option<Result<ChildExit, Failure>>;
 
-/// A running child as the host files it: `done` is the read end of a pipe the reaper writes to once it has recorded the end, so `handle_poll` sees the exit; `end` then holds it; `pid` is what `proc_kill` addresses while no end is recorded. Dropping it closes the pipe's read end; the reaper's later write fails with `EPIPE` and is discarded, and the child is reaped regardless.
+/// A running child as the host files it: `done` is the read end of a pipe the reaper writes to once it has recorded the end, so a watch sees the exit; `end` then holds it; `pid` is what `proc_kill` addresses while no end is recorded. Dropping it closes the pipe's read end; the reaper's later write fails with `EPIPE` and is discarded, and the child is reaped regardless.
 pub(crate) struct Running {
     pub(crate) done: OwnedFd,
     end: Arc<Mutex<End>>,

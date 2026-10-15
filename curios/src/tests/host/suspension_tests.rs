@@ -51,8 +51,10 @@ fn a_program_suspended_on_a_timer_wakes_into_its_rest() {
 fn a_suspension_passed_out_through_binds_resumes_into_their_continuations_in_order() {
     let (code, output, _) = ended(
         r#"
-        use /std/{Io, Handle, Nat};
-        let suspended = Io/suspend([Handle/ready], [], Io/pure(()), Io/pure(1));
+        use /std/{Io, Nat};
+        use /std/time/{Instant};
+        let due = Instant/timer(Instant/now()!)!;
+        let suspended = Io/suspend([due], [], Io/pure(()), Io/pure(1));
         let x = Io/bind(Io/bind(suspended, (a) => Io/pure(a + 1)), (b) => Io/pure(b * 10))!;
         /std/print(Nat/to_str(x))
         "#,
@@ -65,8 +67,10 @@ fn a_suspension_passed_out_through_binds_resumes_into_their_continuations_in_ord
 fn advance_hands_a_suspension_to_its_handler_and_a_value_to_its_continuation() {
     let (code, output, _) = ended(
         r#"
-        use /std/{Io, Handle, Nat, Str};
-        let suspended = Io/suspend([Handle/ready], [], Io/pure(()), Io/pure(7));
+        use /std/{Io, Nat, Str};
+        use /std/time/{Instant};
+        let due = Instant/timer(Instant/now()!)!;
+        let suspended = Io/suspend([due], [], Io/pure(()), Io/pure(7));
         let caught = Io/advance(suspended, (n) => Io/pure(n + 1), (_, _, _, rest) => Io/bind(rest, (n) => Io/pure(n + 100)))!;
         let passed = Io/advance(Io/pure(3), (n) => Io/pure(n + 1), (_, _, _, rest) => rest)!;
         /std/print(Str/flatten([Nat/to_str(caught), " ", Nat/to_str(passed)]))
@@ -76,7 +80,7 @@ fn advance_hands_a_suspension_to_its_handler_and_a_value_to_its_continuation() {
     assert_eq!((code, output.as_slice()), (0, b"107 4".as_slice()));
 }
 
-// The host reads no cell, so the entry hands it a suspension whose cell is already filled as one on the ready token.
+// The host reads no cell, so the entry goes on itself into the rest of a suspension whose cell is already filled.
 #[test]
 fn a_program_suspended_on_a_filled_cell_goes_on_into_its_rest() {
     let (code, output, _) = ended(
@@ -116,8 +120,10 @@ fn a_program_suspended_on_an_empty_cell_alone_ends_reporting_the_deadlock() {
 fn an_abandon_that_suspends_part_way_runs_to_its_end() {
     let (code, output, _) = ended(
         r#"
-        use /std/{Io, Handle};
-        let abandon = Io/bind(Io/wait([Handle/ready]), (_) => /std/print("abandoned|"));
+        use /std/{Io};
+        use /std/time/{Instant};
+        let due = Instant/timer(Instant/now()!)!;
+        let abandon = Io/bind(Io/wait([due]), (_) => /std/print("abandoned|"));
         let _ = Io/suspend([], [], abandon, /std/print("resumed|"))!;
         /std/print("after|")
         "#,
@@ -182,15 +188,17 @@ fn what_a_suspension_holds_survives_the_collections_between_its_turns() {
     let (code, output, _) = ended(
         r#"
         use /std/{Io, Handle, Nat, List};
-        let turn(n: Nat, held: List(Nat)) -> Io(Nat) =
+        use /std/time/{Instant};
+        let turn(due: Handle, n: Nat, held: List(Nat)) -> Io(Nat) =
             match n: (_) => Io(Nat)
             | 0 => Io/pure(List/len(held))
             | m + 1 =>
                 let garbage = List/range(0, 2000);
-                let _ = Io/suspend([Handle/ready], [], Io/pure(()), Io/pure(List/len(garbage)))!;
-                turn(m, [n, ..held])
+                let _ = Io/suspend([due], [], Io/pure(()), Io/pure(List/len(garbage)))!;
+                turn(due, m, [n, ..held])
             end;
-        let counted = turn(3000, [])!;
+        let due = Instant/timer(Instant/now()!)!;
+        let counted = turn(due, 3000, [])!;
         /std/print(Nat/to_str(counted))
         "#,
     );

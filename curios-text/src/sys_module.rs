@@ -1010,7 +1010,7 @@ fn io_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     ]
 }
 
-// The values and operations of the `/sys/Handle` type: the three standard streams and the ready token, handle identity, and `host` — the store rows whose subject is the handle itself (`read`, `write`, `poll`, `close`), which join their type module rather than open one of their own.
+// The values and operations of the `/sys/Handle` type: the three standard streams, handle identity, and `host` — the store rows whose subject is the handle itself (`read`, `write`, `watch`, `close`), which join their type module rather than open one of their own.
 fn handle_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
@@ -1024,12 +1024,6 @@ fn handle_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         documented(
             &["The stream the program writes its diagnostics to."],
             operation("stderr", &[], syntax, Intrinsic::Handle(stdio::STDERR)),
-        ),
-        documented(
-            &[
-                "The handle that is always ready: a description suspended on it lets what waits beside it run, and goes on.",
-            ],
-            operation("ready", &[], syntax, Intrinsic::Handle(stdio::READY)),
         ),
     ]
 }

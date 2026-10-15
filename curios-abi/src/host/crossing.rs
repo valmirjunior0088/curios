@@ -6,9 +6,9 @@
 
 use {
     super::{
-        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Polled, Readiness, Refusal,
-        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf,
-        WireResults, WireReturn, WireType,
+        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Refusal, SerialFlow, SerialOp,
+        SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf, WireResults,
+        WireReturn, WireType,
     },
     crate::status,
     std::convert::identity,
@@ -241,31 +241,6 @@ impl WirePayload for Vec<Vec<u8>> {
 
     fn pad(values: &mut Vec<WireValue>) {
         values.push(WireValue::BytesList(Vec::new()));
-    }
-}
-
-/// A poll's reports cross as two `Bytes`, one for each of its lists, byte `i` the report of that list's handle `i`.
-impl WirePayload for Polled {
-    type Label = ();
-
-    fn slots() -> PayloadSlots<()> {
-        PayloadSlots::Fields(
-            ("readable", WireType::Bytes),
-            ("writable", WireType::Bytes),
-            Vec::new(),
-        )
-    }
-
-    fn encode(self, values: &mut Vec<WireValue>) {
-        values.extend(
-            [self.readable, self.writable].map(|reports| {
-                WireValue::Bytes(reports.into_iter().map(Readiness::bits).collect())
-            }),
-        );
-    }
-
-    fn pad(values: &mut Vec<WireValue>) {
-        values.extend([WireValue::Bytes(Vec::new()), WireValue::Bytes(Vec::new())]);
     }
 }
 

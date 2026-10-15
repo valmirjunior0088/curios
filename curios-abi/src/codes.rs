@@ -1,4 +1,4 @@
-//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, serial-parity, serial-flow, serial-op, and stdio-handle tags, each module named by the tag it holds, and the [`errno`]s named rather than passed through from an operating system. Each set is mirrored by a guest-side `/sys` module of the same name; the host vocabulary's `Failure`, `Readiness` and closed-code types cite these constants for the codes they cross as, and both ends cite [`stdio`] for the well-known handle tokens.
+//! The numeric wire codes for `/sys/Handle`'s status, readiness-event, open-mode, file-kind, stdio-wiring, serial-parity, serial-flow, serial-op, and stdio-handle tags, each module named by the tag it holds, and the [`errno`]s named rather than passed through from an operating system. Each set is mirrored by a guest-side `/sys` module of the same name; the host vocabulary's `Failure` and closed-code types cite these constants for the codes they cross as, and both ends cite [`stdio`] for the well-known handle tokens.
 //!
 //! **The codes are one table, and every mirror of them is read off it.** A row is a code's constant, its value, the name the guest reads it by where the guest reads it at all, and, for a status that names a failure, the [`Failure`] it is the code of. The constants below, [`Failure::code`], the `/sys` modules the compiler mints ([`code_sets`]) and the browser's tables are each a projection of those rows, so a code cannot be given one value on one side of the wire and another on the other, a new status cannot go unnamed in the guest, and a failure cannot be left without a code.
 
@@ -92,7 +92,7 @@ code_sets! {
         ALREADY_EXISTS = 4 => exists, AlreadyExists;
         /// A `socket_connect` was actively refused — no listener at the target address.
         CONNECTION_REFUSED = 5 => refused, ConnectionRefused;
-        /// A non-blocking op could not make progress right now. Retriable by design: `/std/Handle` matches on it to poll the handle and retry instead of surfacing a failure.
+        /// A non-blocking op could not make progress right now. Retriable by design: `/std/Handle` matches on it to wait on a watch of the handle and retry instead of surfacing a failure.
         WOULD_BLOCK = 6 => would_block, WouldBlock;
         /// A TLS upgrade or server-config build failed. `rustls` errors carry no OS errno, so they collapse to this one named code instead of riding the errno passthrough.
         TLS_ERROR = 7 => tls, TlsError;
@@ -110,14 +110,10 @@ code_sets! {
         ERRNO_MAX = i32::MAX as u64;
     }
 
-    /// What `handle_poll` reports of one handle of one of its lists — a bitmask of one byte, mirrored by `/sys/event`. A poll states its interest by the list a handle stands in, so no flag asks for anything: all three are a host's to report.
+    /// What `handle_ready` reports of one handle, a byte mirrored by `/sys/event`.
     event: u8 as Byte {
-        /// The handle is ready for what its list waits on: to read, in the readers', and to write, in the writers'.
+        /// The handle is ready now: a watch whose handle is ready for what it asks, a timer past its instant, or any other handle.
         READY = 0b001 => ready;
-        /// The handle is in an error state, or names nothing a poll can watch.
-        ERR = 0b010 => err;
-        /// The peer hung up.
-        HUP = 0b100 => hup;
     }
 
     /// `file_open` modes, mirrored by `/sys/open_mode` and the guest's `/std/File/Mode`.
@@ -188,8 +184,6 @@ code_sets! {
         STDOUT = 1;
         /// Standard error.
         STDERR = 2;
-        /// The handle that is always ready: no host mints it or files anything under it, so every wait on it ends at once. What a description suspends on to let what waits beside it run.
-        READY = 3;
     }
 
     /// The errnos named here rather than passed through from an operating system, each the value both release targets give it: what a host with no operating system of its own — the mock host, the browser — answers in one's place, and what the standard library raises for an argument it refuses before the call. `/sys/errno` mirrors the one the standard library raises, so that failure is one status whichever side names it.

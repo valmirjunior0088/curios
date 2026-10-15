@@ -1,6 +1,6 @@
 //! The semantic Rust types a host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Readiness`] a byte of flags, a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`], [`ChildHandles`] and [`Polled`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, the platform's `poll` flags to a `Readiness` — live with the adapter (`curios-runtime`), not here.
+//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a wait on the platform's descriptors — live with the adapter (`curios-runtime`), not here.
 
 use {
     crate::{file_kind, open_mode, serial_flow, serial_op, serial_parity, stdio, stdio_mode},
@@ -24,10 +24,8 @@ impl Handle {
     const STDOUT: u32 = stdio::STDOUT;
     /// The well-known stderr handle token.
     const STDERR: u32 = stdio::STDERR;
-    /// The ready token, the last before [`HANDLE_SEED`](Self::HANDLE_SEED). No variant names it: a host files nothing under it, which is all that makes a wait on it end at once.
-    const READY: u32 = stdio::READY;
-    /// The first handle token a host mints, one past the constant tokens so a minted file or socket handle never collides with a standard stream or the ready token; each host counts up from here with a [`TokenMint`].
-    pub const HANDLE_SEED: u32 = Self::READY + 1;
+    /// The first handle token a host mints, one past the standard streams' so a minted file or socket handle never collides with one; each host counts up from here with a [`TokenMint`].
+    pub const HANDLE_SEED: u32 = Self::STDERR + 1;
 
     /// The canonical byte encoding of a token: its little-endian [`Natural`] bytes — one zero byte for zero, never the empty string, and never padded to a fixed width. This is the one place the convention is spelled: [`TokenMint`] mints through it, hosts key their tables on the bytes it returns, and the `ersd → cont` lowering calls it for the stdio constants `Handle(0/1/2)` — so the three ends cannot drift.
     pub fn encode(token: &Natural) -> Vec<u8> {
@@ -77,7 +75,7 @@ impl PartialEq for Handle {
 
 impl Eq for Handle {}
 
-/// The monotonic source a host mints handle tokens from, seeded one past the constant tokens so a minted token never collides with a standard stream or the ready token.
+/// The monotonic source a host mints handle tokens from, seeded one past the standard streams' tokens so a minted token never collides with one.
 ///
 /// It lives beside [`Handle`] rather than in the host that drives it because the token encoding is wire contract, not host policy: [`Handle::bytes`] reads back the same little-endian convention this writes. A host owns *when* to mint and what to file under the result; it does not get its own opinion about what a token looks like.
 ///
@@ -107,39 +105,6 @@ impl Default for TokenMint {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// What a poll reports of one handle of one of its lists: whether the handle is ready for what that list waits on, and the two a host reports of a handle whatever it was asked — that it failed, and that its peer hung up. A set of flags riding a byte, the one bitfield in the host design, so a list's reports cross as one `Bytes` with a byte per handle. The mapping to the platform's `POLLIN`/`POLLOUT`/… (whose raw values differ per platform) is the native adapter's concern.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Readiness(u8);
-
-impl Readiness {
-    /// Nothing to report: the handle is not ready, and nothing is wrong with it.
-    pub const fn none() -> Self {
-        Self(0)
-    }
-
-    /// The report a byte holds.
-    pub const fn from_bits(bits: u8) -> Self {
-        Self(bits)
-    }
-
-    /// The raw bits, one byte of the `Bytes` lowered back to the guest.
-    pub const fn bits(self) -> u8 {
-        self.0
-    }
-
-    /// Whether anything is reported: readiness, a failure or a hang-up, any of which wakes whoever waits on the handle.
-    pub const fn is_any(self) -> bool {
-        self.0 != 0
-    }
-}
-
-/// What a poll answers: a report for each handle it waited on to read and one for each it waited on to write, each list in its handles' order. The interest is the list a handle stands in, so nothing pairs a handle with a mask and no two operands have a length to share.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Polled {
-    pub readable: Vec<Readiness>,
-    pub writable: Vec<Readiness>,
 }
 
 /// Why a fallible host operation failed, mirrored by `/std/Io/Error`'s `of`. It names failures only: success and a stream's end are the shape of the reply that carries it ([`WireReply`](super::WireReply)), so no host can answer a success beside a failure's padding. Each named failure has a fixed wire code, stated beside the status it names in the table of codes (`codes.rs`), which is where [`Failure::code`] is read off; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](crate::status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).

@@ -181,24 +181,6 @@ export async function run(config) {
     tls_start: denied,
     tls_server_config: deniedHandle,
     tls_start_server: denied,
-    // Readiness in the playground: the standard streams are always ready — stdin is at its end, which a read answers at once, and the output streams accept everything — and any other handle names nothing, so it reports its failure in whichever list it stands, which filled whatever waits on it into the call that says why.
-    // A list's reports cross as one byte per handle, in the list's order.
-    handle_poll: (readers, writers, _timeout) => {
-      const reported = (handles) => {
-        const count = bridge.list_len(handles);
-        const reports = new Uint8Array(count);
-
-        for (let i = 0; i < count; i += 1) {
-          reports[i] = standard.has(keyOf(bridge.list_get(handles, i)))
-            ? event.READY
-            : event.ERR;
-        }
-
-        return encodeBytes(reports);
-      };
-
-      return [reported(readers), reported(writers)];
-    },
     // A watch is ready at once, as every handle a watch could name here is.
     handle_watch: () => mint({ ready: () => true }),
     // A byte for each handle, ready or not, in the list's order.

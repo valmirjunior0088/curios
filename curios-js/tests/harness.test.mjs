@@ -115,20 +115,15 @@ let unknown = Io/Read/read(h, 4)!;
 print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f) end, said(out), said(rest), said(unknown)]))
 `;
 
-const POLL = `
-use /std/{Handle, List, Str, print};
-use /std/Handle/{Interest, Readiness};
+const WATCH = `
+use /std/{Handle, print};
+use /std/Handle/{Interest};
 foreign token() -> Handle;
-let said(r: Readiness) -> Str =
-    choose
-    | r.failed => "err"
-    | r.fired.writable => "write"
-    | r.fired.readable => "read"
-    | _ => "none"
-    end;
 let h = token()!;
-let rs = Handle/poll([(h, Interest/readable), (Handle/stdout, Interest/writable), (Handle/stdin, Interest/readable)], 0)!;
-print(Str/join(" ", List/map(rs, said)))
+let _ = Handle/wait(h, Interest/readable)!;
+let _ = Handle/wait(Handle/stdout, Interest/writable)!;
+let _ = Handle/wait(Handle/stdin, Interest/readable)!;
+print("ready")
 `;
 
 const HOOKS = `
@@ -372,12 +367,12 @@ test("a stream used against its direction fails with EBADF, and a handle this ho
   assert.equal(stdout, "other(9) other(9) eof not_found");
 });
 
-test("a poll reports a failure for a handle it does not know, beside the streams ready for what each was waited on", async () => {
-  const { stdout } = await execute(POLL, {
+test("a wait on a handle answers at once, on a handle this host never minted as on the streams", async () => {
+  const { stdout } = await execute(WATCH, {
     foreign: { "/token": () => Uint8Array.of(9) },
   });
 
-  assert.equal(stdout, "err write read");
+  assert.equal(stdout, "ready");
 });
 
 test("listing a directory is denied rather than refused", async () => {

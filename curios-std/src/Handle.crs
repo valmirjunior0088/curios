@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
-pub use /sys/Handle/{stdin, stdout, stderr, ready};
-use /std/{Bool, Byte, Bytes, Nat, Int, List, Option, Result, Io};
+pub use /sys/Handle/{stdin, stdout, stderr};
+use /std/{Bool, Byte, Bytes, Nat, List, Option, Result, Io};
 use /std/Bool/{Holds};
 
 --- Close this handle.
@@ -14,63 +14,8 @@ pub let close(h: Handle) -> Io({}) =
 pub mod Interest;
 pub use Interest/{let Interest};
 
---- What a poll reports for one handle.
-pub mod Readiness;
-pub use Readiness/{let Readiness};
-
 let flagged(report: Byte, flag: Byte) -> Bool =
     Byte/to_nat(report && flag) > 0;
-
---- The handles of `waits` that are waited on to read, in their order.
-let readers(waits: List({Handle, Interest})) -> List(Handle) =
-    match waits
-    | [] => []
-    | [w, ..rest] =>
-        match w.1.readable | true => [w.0, ..readers(rest)] | false => readers(rest) end
-    end;
-
---- The handles of `waits` that are waited on to write, in their order.
-let writers(waits: List({Handle, Interest})) -> List(Handle) =
-    match waits
-    | [] => []
-    | [w, ..rest] =>
-        match w.1.writable | true => [w.0, ..writers(rest)] | false => writers(rest) end
-    end;
-
---- The next report of a list for a wait that stands in it, beside the reports after it; a wait that does not stand there takes none, and a list that has run out reports nothing.
-let taken(stands: Bool, reports: Bytes) -> {Byte, Bytes} =
-    match stands
-    | false => (0, reports)
-    | true => match reports | x[] => (0, x[]) | x[r, ..rest] => (r, rest) end
-    end;
-
---- What a poll reports of one wait: each direction fired where that list's report says ready, and the handle failed or hung up where either list's says so.
-let of_reports(read: Byte, wrote: Byte) -> Readiness =
-    Readiness {
-        fired =
-            Interest {
-                readable = flagged(read, /sys/event/ready),
-                writable = flagged(wrote, /sys/event/ready) },
-        failed = flagged(read || wrote, /sys/event/err),
-        hung_up = flagged(read || wrote, /sys/event/hup) };
-
---- One report for each wait, in the waits' order: a wait takes the next report of each list it stands in.
-let reports(waits: List({Handle, Interest}), readable: Bytes, writable: Bytes) -> List(Readiness) =
-    match waits
-    | [] => []
-    | [w, ..rest] =>
-        let read = taken(w.1.readable, readable);
-        let wrote = taken(w.1.writable, writable);
-        [of_reports(read.0, wrote.0), ..reports(rest, read.1, wrote.1)]
-    end;
-
---- Wait for so many milliseconds on the first handles to read and the second to write: a byte of what is reported for each handle of each list, in the list's order.
-foreign handle_poll(List(Handle), List(Handle), Int) -> {readable: Bytes, writable: Bytes};
-
---- Wait until a handle is ready for the interest beside it, or until `timeout` milliseconds pass; a negative timeout waits forever and zero answers at once. One report answers each wait, in the waits' order.
-pub let poll(waits: List({Handle, Interest}), timeout: Int) -> Io(List(Readiness)) =
-    let polled = handle_poll(readers(waits), writers(waits), timeout)!;
-    Io/pure(reports(waits, polled.readable, polled.writable));
 
 --- A handle ready once the handle is ready to read where the first flag asks, to write where the second does, or has failed or hung up.
 foreign handle_watch(Handle, Bool, Bool) -> Handle;

@@ -2,8 +2,8 @@ use {
     super::Table,
     crate::{
         ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps, Mode,
-        Polled, Readiness, Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination,
-        Timestamp, TtySize, lookup_address, names_a_variable, serial_frame, serial_speed,
+        Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
+        lookup_address, names_a_variable, serial_frame, serial_speed,
     },
     curios_abi::{ClosedCode, errno, event},
     std::{
@@ -263,7 +263,7 @@ struct MockFile {
     position: usize,
 }
 
-/// The scripted bytes a stream serves, chunk by chunk, as a peer would deliver them: a `handle_read` serves from the front chunk and, once that chunk is spent, answers `WouldBlock` until a `handle_poll` arms the next one. A flat script is one chunk, armed from the start; a multi-chunk script is what puts a scheduler's park-poll-resume path under test, which a host that is always ready never could.
+/// The scripted bytes a stream serves, chunk by chunk, as a peer would deliver them: a `handle_read` serves from the front chunk and, once that chunk is spent, answers `WouldBlock` until a watch of it arms the next one. A flat script is one chunk, armed from the start; a multi-chunk script is what puts a reader's wait-and-resume path under test, which a host that is always ready never could.
 struct Chunked {
     chunks: VecDeque<Vec<u8>>,
     position: usize,
@@ -278,9 +278,9 @@ struct Chunked {
 enum Ending {
     /// It has closed: a read answers the end of the stream.
     Closed,
-    /// It keeps its sending half open until this side finishes its own, as a peer waiting on a reply does: a read answers `WouldBlock` and no poll reports it readable until `handle_finish`, after which it has closed.
+    /// It keeps its sending half open until this side finishes its own, as a peer waiting on a reply does: a read answers `WouldBlock` and no watch finds it readable until `handle_finish`, after which it has closed.
     Waiting,
-    /// It keeps its sending half open whatever this side does, as a peer that never closes: a read answers `WouldBlock` and no poll reports it readable.
+    /// It keeps its sending half open whatever this side does, as a peer that never closes: a read answers `WouldBlock` and no watch finds it readable.
     Open,
     /// It resets the connection: a read answers `ConnectionReset`.
     Reset,
@@ -346,7 +346,7 @@ impl Chunked {
         Ok(Some(bytes))
     }
 
-    /// Make the next chunk due — what a `handle_poll` reporting the handle readable means — and say whether a read now answers anything but `WouldBlock`: a spent script whose peer waits or stays open has nothing to read.
+    /// Make the next chunk due — what a watch finding the handle ready to read means — and say whether a read now answers anything but `WouldBlock`: a spent script whose peer waits or stays open has nothing to read.
     fn arm(&mut self) -> bool {
         self.due = true;
 
@@ -406,7 +406,7 @@ enum MockResource {
     Sink,
     /// A finished name lookup minted by `dns_lookup`, holding the resolved address blobs `dns_resolve` drains. The scripted host resolves synchronously, so the handle is ready the moment it is minted.
     Resolved(Vec<Vec<u8>>),
-    /// A scripted connect under way: what `socket_finish_connect` will answer — the response to serve, or the refusal — once a `handle_poll` has marked it due.
+    /// A scripted connect under way: what `socket_finish_connect` will answer — the response to serve, or the refusal — once a watch of it has marked it due.
     Connecting {
         outcome: Result<Chunked, Failure>,
         due: bool,
@@ -433,7 +433,7 @@ enum MockResource {
 
 /// The scripted, in-memory `Host` used by the test suite — the mirror of `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
-    /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `handle_read(Handle::Stdin, …)` drains the front chunk, answers `Failure::WouldBlock` until a `handle_poll` arms the next one, and reports the end of the stream once the script is spent. A script of lines is one chunk, armed from the start; a multi-chunk script is what puts a fiber's park-poll-resume path over standard input under test, which a host that is always ready never could.
+    /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `handle_read(Handle::Stdin, …)` drains the front chunk, answers `Failure::WouldBlock` until a watch of it arms the next one, and reports the end of the stream once the script is spent. A script of lines is one chunk, armed from the start; a multi-chunk script is what puts a reader's wait-and-resume path over standard input under test, which a host that is always ready never could.
     input: Mutex<Chunked>,
     /// Every byte written to stdout and stderr, concatenated in write order. Shared with [`MockIo::output`], which is what a fixture reads when it only cares that something was written.
     output: Arc<Mutex<Vec<u8>>>,
@@ -447,7 +447,7 @@ pub struct MockHost {
     endpoints: HashMap<Vec<u8>, Script>,
     /// Scripted inbound peers, one served per `socket_accept` (FIFO).
     inbound: Mutex<VecDeque<Script>>,
-    /// Whether `socket_connect` answers `WouldBlock` and settles through `handle_poll` and `socket_finish_connect`, as a connect to a remote peer does, rather than at once as loopback does.
+    /// Whether `socket_connect` answers `WouldBlock` and settles through a watch and `socket_finish_connect`, as a connect to a remote peer does, rather than at once as loopback does.
     connect_pending: bool,
     /// Captured server responses: one entry per accepted connection, the concatenation of its writes. Shared with [`MockIo::captures`].
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
@@ -561,67 +561,57 @@ impl MockHost {
         self.table.lock().unwrap().mint(resource)
     }
 
-    /// What a poll reports of `handle` waited on to read.
-    fn read_report(&self, table: &mut Table<MockResource>, handle: &Handle) -> Readiness {
-        let ready = Readiness::from_bits(event::READY);
-        let report = |answers: bool| match answers {
-            true => ready,
-            false => Readiness::none(),
-        };
-
+    /// Whether a watch of `handle` asking to read is ready.
+    fn read_ready(&self, table: &mut Table<MockResource>, handle: &Handle) -> bool {
         match handle {
-            // Standard input is armed like a scripted stream, so one `handle_poll` is one chunk of progress and a fiber parked on `WouldBlock` resumes into the next chunk.
+            // Standard input is armed like a scripted stream, so one look of a watch is one chunk of progress and a reader waiting on `WouldBlock` resumes into the next chunk.
             Handle::Stdin => {
                 self.input.lock().unwrap().arm();
 
-                ready
+                true
             }
             // The output streams answer a read at once, with the refusal a stream open only to write gives.
-            Handle::Stdout | Handle::Stderr => ready,
+            Handle::Stdout | Handle::Stderr => true,
             Handle::Other(_) => match table.get_mut(handle) {
-                Some(MockResource::Outbound(stream) | MockResource::Piped(stream)) => {
-                    report(stream.arm())
-                }
-                Some(MockResource::Inbound(conn)) => report(conn.bytes.arm()),
+                Some(MockResource::Outbound(stream) | MockResource::Piped(stream)) => stream.arm(),
+                Some(MockResource::Inbound(conn)) => conn.bytes.arm(),
                 Some(MockResource::Serial(port)) => {
                     port.bytes.arm();
 
-                    ready
+                    true
                 }
                 // A connect settles as readiness to write, and a socket still connecting has nothing to read.
-                Some(MockResource::Connecting { .. }) => Readiness::none(),
+                Some(MockResource::Connecting { .. }) => false,
                 // A child is readable once it has ended, which is when `proc_wait` answers.
-                Some(MockResource::Child(child)) => report(child.exit.is_some()),
-                Some(_) => ready,
-                // An unknown handle — closed, say — reports its failure, as the native host does, so a waiter wakes into the call that reports why.
-                None => Readiness::from_bits(event::ERR),
+                Some(MockResource::Child(child)) => child.exit.is_some(),
+                Some(_) => true,
+                // An unknown handle — closed, say — is ready, as the native host reports its failure, so a waiter wakes into the call that reports why.
+                None => true,
             },
         }
     }
 
-    /// What a poll reports of `handle` waited on to write.
-    fn write_report(table: &mut Table<MockResource>, handle: &Handle) -> Readiness {
-        let ready = Readiness::from_bits(event::READY);
-
+    /// Whether a watch of `handle` asking to write is ready.
+    fn write_ready(table: &mut Table<MockResource>, handle: &Handle) -> bool {
         match handle {
-            Handle::Stdin | Handle::Stdout | Handle::Stderr => ready,
+            Handle::Stdin | Handle::Stdout | Handle::Stderr => true,
             Handle::Other(_) => match table.get_mut(handle) {
                 // The connect is due once it has been waited on, and the wait is answered at once: the next `socket_finish_connect` settles it.
                 Some(MockResource::Connecting { due, .. }) => {
                     *due = true;
 
-                    ready
+                    true
                 }
                 // A child's handle is waited on for its end alone, and is never written.
-                Some(MockResource::Child(_)) => Readiness::none(),
+                Some(MockResource::Child(_)) => false,
                 // Nothing a script holds refuses a write for want of room.
-                Some(_) => ready,
-                None => Readiness::from_bits(event::ERR),
+                Some(_) => true,
+                None => true,
             },
         }
     }
 
-    /// Whether `handle` is ready now, as `handle_ready` reports it: a watch as a poll of its handle for what it asks would report it, a timer once a wait has passed its instant, and anything else at once.
+    /// Whether `handle` is ready now, as `handle_ready` reports it: a watch once its handle is ready for what it asks, a timer once a wait has passed its instant, and anything else at once.
     fn ready(&self, table: &mut Table<MockResource>, handle: &Handle) -> bool {
         match table.get(handle) {
             Some(MockResource::Watch {
@@ -631,8 +621,8 @@ impl MockHost {
             }) => {
                 let (target, readable, writable) = (target.clone(), *readable, *writable);
 
-                readable && self.read_report(table, &target).is_any()
-                    || writable && Self::write_report(table, &target).is_any()
+                readable && self.read_ready(table, &target)
+                    || writable && Self::write_ready(table, &target)
             }
             Some(MockResource::Timer { at }) => *at <= *self.slept_until.lock().unwrap(),
             _ => true,
@@ -659,7 +649,7 @@ impl HostOps for MockHost {
     }
 
     fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Result<Handle, Failure> {
-        // One synthetic address blob: the `host:port` key `net` uses, so `socket_connect` can recover the scripted endpoint from the blob. Stashed behind a handle `handle_poll` reports ready and `dns_resolve` drains, mirroring the async OS path without a real pipe.
+        // One synthetic address blob: the `host:port` key `net` uses, so `socket_connect` can recover the scripted endpoint from the blob. Stashed behind a handle a watch finds ready and `dns_resolve` drains, mirroring the async OS path without a real pipe.
         let endpoint = lookup_address(&host, port)?.into_bytes();
 
         Ok(self.mint(MockResource::Resolved(vec![endpoint])))
@@ -694,7 +684,7 @@ impl HostOps for MockHost {
             None => Err(Failure::ConnectionRefused),
         };
 
-        // A pending connect defers its outcome, refusal included, to `socket_finish_connect` after a poll, as the OS reports a refusal through `SO_ERROR`; a synchronous one answers here, as loopback does.
+        // A pending connect defers its outcome, refusal included, to `socket_finish_connect` after a watch, as the OS reports a refusal through `SO_ERROR`; a synchronous one answers here, as loopback does.
         if self.connect_pending {
             self.table.lock().unwrap().insert(
                 &io,
@@ -793,50 +783,6 @@ impl HostOps for MockHost {
             bytes: Chunked::scripted(request),
             capture,
         })))
-    }
-
-    fn handle_poll(
-        &self,
-        readers: Vec<Handle>,
-        writers: Vec<Handle>,
-        timeout: i64,
-    ) -> Result<Polled, Refusal> {
-        // Readiness is what the script says is due, and never a wait. Each standing answers for its own list and no other: a handle waited on to read is ready where a read of it now answers, one waited on to write where a write does, and a handle that names nothing reports its failure in whichever list it stands.
-        let mut table = self.table.lock().unwrap();
-
-        let readable = readers
-            .iter()
-            .map(|handle| self.read_report(&mut table, handle))
-            .collect::<Vec<_>>();
-
-        let writable = writers
-            .iter()
-            .map(|handle| Self::write_report(&mut table, handle))
-            .collect::<Vec<_>>();
-
-        // A native poll with no timeout sleeps until a handle is ready. Nothing moves a script but the program, so one that reports nothing would be asked again without end: the call is refused, which ends the test saying what it waited on.
-        let waited = !readable.is_empty() || !writable.is_empty();
-        let idle = readable
-            .iter()
-            .chain(&writable)
-            .all(|report| !report.is_any());
-
-        if timeout < 0 && waited && idle {
-            return Err(Refusal(
-                "the script readies none of the handles this poll waits on without a timeout"
-                    .to_string(),
-            ));
-        }
-
-        // A timed poll that readies nothing ends when the clock passes its timeout, and a clock with no reading left answers the epoch for good: the same wait without end, refused the same way.
-        if timeout > 0 && idle && self.clock_mono_seq.lock().unwrap().is_empty() {
-            return Err(Refusal(
-                "the script readies none of the handles this poll waits on, and its clock has no reading left to pass the timeout"
-                    .to_string(),
-            ));
-        }
-
-        Ok(Polled { readable, writable })
     }
 
     fn handle_finish(&self, io: Handle) -> Result<(), Failure> {
@@ -1501,7 +1447,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Append the chunks standard input delivers, verbatim: nothing is terminated for you, and each chunk is served only once a `handle_poll` has armed it, so a reader parks between them. This is how a raw-mode program's keystrokes are scripted — one chunk per burst, `x[0x1b, 0x5b, 0x41]` for an arrow key — and the only way a read of standard input that waits is put under test. Whatever [`stdin_lines`](Self::stdin_lines) wrote precedes these, as the one chunk it is.
+    /// Append the chunks standard input delivers, verbatim: nothing is terminated for you, and each chunk is served only once a watch has armed it, so a reader waits between them. This is how a raw-mode program's keystrokes are scripted — one chunk per burst, `x[0x1b, 0x5b, 0x41]` for an arrow key — and the only way a read of standard input that waits is put under test. Whatever [`stdin_lines`](Self::stdin_lines) wrote precedes these, as the one chunk it is.
     pub fn stdin_chunks<C: AsRef<[u8]>>(mut self, chunks: Vec<C>) -> Self {
         self.input_chunks.extend(chunk_list(chunks));
 
@@ -1538,7 +1484,7 @@ impl MockHostBuilder {
         )
     }
 
-    /// Script the network endpoints served by `socket_connect` as `(host:port, chunks)` pairs: a read serves one chunk, and the next is served only after a `handle_poll` has reported the connection readable, so a reader that parks between chunks is exercised.
+    /// Script the network endpoints served by `socket_connect` as `(host:port, chunks)` pairs: a read serves one chunk, and the next is served only after a watch has found the connection readable, so a reader that waits between chunks is exercised.
     pub fn net_chunks<E, C, I>(mut self, endpoints: I) -> Self
     where
         E: AsRef<[u8]>,
@@ -1569,7 +1515,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script network endpoints as `net_chunks` does, whose peer never closes: a read past its chunks answers `WouldBlock` whatever the client has finished, so a client that reads to the close is refused its poll, or waits out its own deadline.
+    /// Script network endpoints as `net_chunks` does, whose peer never closes: a read past its chunks answers `WouldBlock` whatever the client has finished, so a client that reads to the close is refused its wait, or waits out its own deadline.
     pub fn net_open<E, C, I>(mut self, endpoints: I) -> Self
     where
         E: AsRef<[u8]>,
@@ -1605,7 +1551,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script the serial devices `serial_list` names and `serial_open` finds: `(path, chunks)`, each port serving its chunks as `net_chunks` serves a response — the first arrived by the open, each later one once a `handle_poll` arms it. Opening an unscripted path is `NotFound`.
+    /// Script the serial devices `serial_list` names and `serial_open` finds: `(path, chunks)`, each port serving its chunks as `net_chunks` serves a response — the first arrived by the open, each later one once a watch arms it. Opening an unscripted path is `NotFound`.
     pub fn serial<P, C, I>(mut self, devices: I) -> Self
     where
         P: AsRef<[u8]>,
@@ -1621,7 +1567,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Make every `socket_connect` pend: it answers `WouldBlock`, a `handle_poll` marks the socket writable, and `socket_finish_connect` then answers what a synchronous connect would have — the way a connect to a remote peer settles.
+    /// Make every `socket_connect` pend: it answers `WouldBlock`, a watch marks the socket writable, and `socket_finish_connect` then answers what a synchronous connect would have — the way a connect to a remote peer settles.
     pub fn connect_pending(mut self) -> Self {
         self.connect_pending = true;
 
@@ -1654,7 +1600,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script inbound requests as `inbound_chunks` does, whose peer keeps its sending half open after its chunks, as one waiting on a reply does, and closes once the server has finished its own: until then a read past the chunks answers `WouldBlock` and no poll reports the connection readable, so a server that reads past its request's end is refused its poll.
+    /// Script inbound requests as `inbound_chunks` does, whose peer keeps its sending half open after its chunks, as one waiting on a reply does, and closes once the server has finished its own: until then a read past the chunks answers `WouldBlock` and no watch finds the connection readable, so a server that reads past its request's end is refused its wait.
     pub fn inbound_waiting<C: AsRef<[u8]>, I: IntoIterator<Item = Vec<C>>>(
         mut self,
         requests: I,

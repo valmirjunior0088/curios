@@ -329,7 +329,7 @@ impl Lift for Vec<Vec<u8>> {
     }
 }
 
-/// `List(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — each of `handle_poll`'s two lists.
+/// `List(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — a suspension's handles, and `handle_ready`'s.
 impl Lift for Vec<Handle> {
     fn shape() -> Vec<WireType> {
         vec![WireType::List(WireLeaf::Handle)]
