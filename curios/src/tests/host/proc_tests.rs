@@ -182,27 +182,27 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
     assert!(io.output().is_empty());
 }
 
-/// A program computing one `Str` inside a `Try` region over `Async`, with the process names in scope; a failure that escapes the region prints as its name.
+/// A program computing one `Str` inside a `Try` region over `Io`, with the process names in scope; a failure that escapes the region prints as its name.
 fn child_program(body: &str) -> String {
     format!(
         r#"
-        use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Async, Io, Path, Command}};
+        use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Io, Path, Command}};
         use /std/Command/{{Child}};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
-        let program: Try(Async, Io/Error, Str) =
+        let program: Try(Io, Io/Error, Str) =
             {body};
-        let fiber: Async({{}}) =
+        let main: Io({{}}) =
             let r = Try/run(program)!;
             match r
             | failure(e) => /std/print(Show/show(e))
             | success(s) => /std/print(s)
             end;
-        Async/run(fiber)
+        main
         "#
     )
 }
 
-// `run` captures both outputs and the exit: each pipe is drained in a task of its own and both are joined before the child is waited for, so neither output can stall the other.
+// `run` captures both outputs and the exit: the two pipes are drained side by side, and both are read before the child is waited for, so neither output can stall the other.
 #[test]
 fn run_captures_both_outputs_and_the_exit() {
     let source = child_program(
@@ -247,19 +247,16 @@ fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     assert_eq!(io.output(), b"signaled(9) not_found");
 }
 
-// A child spawned inside `Child/with` is killed when the task around it is cancelled: the child runs until something ends it, and the mock records the program name when the kill does.
+// A child spawned inside `Child/with` is killed when the body around it is cancelled: a timeout drops the bracket while it waits on a sleep the child would outlast, and the mock records the program name when the kill does.
 #[test]
-fn a_cancelled_task_kills_the_child_it_spawned() {
+fn a_cancelled_bracket_kills_the_child_it_spawned() {
     let source = child_program(
         r#"
-            let body: Try(Async, Io/Error, {}) =
+            let body: Try(Io, Io/Error, {}) =
                 let child = Command/spawn(Command/new("sleepy", []))!;
-                Child/with(child, Async/sleep(/std/time/Duration/of(60, 0)));
-            let task = Async/spawn(Try/run(body))!;
-            let _ = Async/yield_now()!;
-            let _ = Async/cancel(task)!;
-            let _ = Async/yield_now()!;
-            Try/pure("cancelled")
+                Child/with(child, Io/sleep(/std/time/Duration/of(60, 0)));
+            let ran = Io/timeout(/std/time/Duration/of(0, 0), Try/run(body))!;
+            Try/pure(match ran | none() => "cancelled" | some(_) => "finished" end)
         "#,
     );
 
@@ -289,7 +286,7 @@ fn a_bracket_releases_its_child_and_kills_nothing_that_has_ended() {
     assert!(io.kills().is_empty(), "an ended child is not signaled");
 }
 
-// A child's pipes are streams: `spawn` with piped output hands back a `Command/Pipe` that `Async/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
+// A child's pipes are streams: `spawn` with piped output hands back a `Command/Pipe` that `Io/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
 #[test]
 fn a_piped_output_is_read_through_the_stream_witness() {
     let source = child_program(
@@ -297,8 +294,8 @@ fn a_piped_output_is_read_through_the_stream_witness() {
             let child = Command/spawn(Command { ..Command/new("greet", []), stdout = Command/Stdio/piped() })!;
             let read =
                 match Child/stdout(child)
-                | some(p) => /std/Async/read_all(p)
-                | none() => Async/pure(Result/success(x[]))
+                | some(p) => /std/Io/read_all(p)
+                | none() => Io/pure(Result/success(x[]))
                 end;
             let out = read!;
             let bytes = out!;

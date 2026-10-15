@@ -112,20 +112,20 @@ fn read_pulls_bytes_inside_the_bracket() {
 #[test]
 fn with_async_reads_through_the_stream_witness_inside_a_fiber() {
     let source = r#"
-        use /std/{File, Path, Str, Bytes, Try, Async, Io};
+        use /std/{File, Path, Str, Bytes, Try, Io};
         use /std/Monad/{Lift};
-        let program: Try(Async, Io/Error, Bytes) =
-            File/with_async(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
-                let _ = Async/yield_now()!;
-                let c = Lift/lift(Async/Read/read(@Async, f, 1024))!;
+        let program: Try(Io, Io/Error, Bytes) =
+            File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
+                let _ = Io/yield()!;
+                let c = Lift/lift(Io/Read/read(f, 1024))!;
                 Try/pure(match c | chunk(b, @_) => b | _ => x[] end));
-        let fiber: Async({}) =
+        let main: Io({}) =
             let r = Try/run(program)!;
             match r
             | success(b) => Io/write(Io/stdout, b)
             | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
             end;
-        Async/run(fiber)
+        main
         "#;
 
     let (system, io) = MockHost::builder()

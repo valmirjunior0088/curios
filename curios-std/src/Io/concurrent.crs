@@ -1,0 +1,267 @@
+use /std/{Nat, Bool, List, Option, Cell, Io, Handle};
+use /std/Io/{Future, Channel, Signal};
+use /std/time/{Duration};
+
+-- A branch the driver holds: one still to start, or one suspended on what its suspension named, with what cancels it and the rest of it. A branch that ran to its end is dropped, its answer in whatever it wrote to.
+induct Branch: Type
+| fresh(Io({}))
+| waiting(on: List(Handle), filled: List(Cell({})), cancel: Io({}), rest: Io({}))
+end
+
+-- `b` advanced until it ends or suspends: nothing where it ended, or the branch it suspended as.
+let step(b: Io({})) -> Io(Option(Branch)) =
+    Io/advance(
+        b,
+        (_) => Io/pure(Option/none()),
+        (on, filled, cancel, rest) =>
+            Io/pure(Option/some(Branch/waiting(on, filled, cancel, rest))));
+
+-- Whether a cell of `cells` is filled.
+let any_filled(cells: List(Cell({}))) -> Io(Bool) =
+    match cells
+    | [] => Io/pure(false)
+    | [cell, ..more] =>
+        let held = Cell/poll(cell)!;
+        match held | some(_) => Io/pure(true) | none() => any_filled(more) end
+    end;
+
+-- Whether any of the first `n` of `flags` holds, and the flags after them.
+let split(flags: List(Bool), n: Nat) -> {Bool, List(Bool)} =
+    match n
+    | 0 => (false, flags)
+    | m + 1 =>
+        match flags
+        | [] => (false, [])
+        | [f, ..more] =>
+            let (any, rest) = split(more, m);
+            (f || any, rest)
+        end
+    end;
+
+-- The handles the waiting branches of `branches` wait on, in their order.
+let handles(branches: List(Branch)) -> List(Handle) =
+    List/concat_map(branches, (b: Branch) =>
+        match b | waiting(on, _, _, _) => on | fresh(_) => [] end);
+
+-- The cells the waiting branches of `branches` wait on, in their order.
+let cells(branches: List(Branch)) -> List(Cell({})) =
+    List/concat_map(branches, (b: Branch) =>
+        match b | waiting(_, filled, _, _) => filled | fresh(_) => [] end);
+
+-- Every waiting branch's cancel, in their order. A branch that never started has nothing to cancel.
+let cancel_all(branches: List(Branch)) -> Io({}) =
+    match branches
+    | [] => Io/pure(())
+    | [b, ..more] =>
+        let _ = match b | waiting(_, _, cancel, _) => cancel | fresh(_) => Io/pure(()) end!;
+        cancel_all(more)
+    end;
+
+let kept(stepped: Option(Branch), after: List(Branch)) -> List(Branch) =
+    match stepped | some(b) => [b, ..after] | none() => after end;
+
+-- One pass over `branches`, `flags` saying which of their handles are ready, in their order: a fresh branch is started, a waiting one whose handle is ready or whose cell is filled advanced, and any other kept as it waits. A pass advances nothing more once `settled` holds. Answers the branches after the pass, and whether any moved.
+let pass(branches: List(Branch), flags: List(Bool), settled: Io(Bool)) -> Io({List(Branch), Bool}) =
+    match branches
+    | [] => Io/pure(([], false))
+    | [b, ..more] =>
+        let done = settled!;
+        match done
+        | true => Io/pure((branches, false))
+        | false =>
+            match b
+            | fresh(start) =>
+                let stepped = step(start)!;
+                let (after, _) = pass(more, flags, settled)!;
+                Io/pure((kept(stepped, after), true))
+            | waiting(on, filled, _, rest) =>
+                let (ready, later) = split(flags, List/len(on));
+                let woken = any_filled(filled)!;
+                match ready || woken
+                | true =>
+                    let stepped = step(rest)!;
+                    let (after, _) = pass(more, later, settled)!;
+                    Io/pure((kept(stepped, after), true))
+                | false =>
+                    let (after, moved) = pass(more, later, settled)!;
+                    Io/pure(([b, ..after], moved))
+                end
+            end
+        end
+    end;
+
+-- `branches`, with whatever `intake` hands over before each pass, advanced pass after pass until `settled` holds or none is left: the one place `/std` holds a branch's rest and performs a dropped branch's cancel, under every combinator. A pass that moved something yields outward on a cell filled already, so whatever advances this description runs its own branches between passes; a pass that moved nothing suspends outward on every handle and cell its branches wait on, and on nothing where they wait on nothing. The branches still waiting when it ends are cancelled, each once, and so is every one of them where whatever advances it cancels it.
+let drive(held: List(Branch), intake: Io(List(Branch)), settled: Io(Bool)) -> Io({}) =
+    let incoming = intake!;
+    let branches = [..held, ..incoming];
+    let done = settled!;
+    match done
+    | true => cancel_all(branches)
+    | false =>
+        match branches
+        | [] => Io/pure(())
+        | _ =>
+            let on = handles(branches);
+            let flags = match on | [] => Io/pure([]) | _ => Handle/ready_now(on) end!;
+            let (next, moved) = pass(branches, flags, settled)!;
+            let ended = settled!;
+            match ended
+            | true => cancel_all(next)
+            | false =>
+                match next
+                | [] => drive([], intake, settled)
+                | _ =>
+                    let rest = drive(next, intake, settled);
+                    match moved
+                    | true =>
+                        let cell = Io/ready()!;
+                        Io/suspend([], [cell], cancel_all(next), rest)
+                    | false => Io/suspend(handles(next), cells(next), cancel_all(next), rest)
+                    end
+                end
+            end
+        end
+    end;
+
+-- A driver over a fixed set of branches.
+let nothing_more: Io(List(Branch)) =
+    Io/pure([]);
+
+-- Whether `f` has been fulfilled.
+let answered(@A: Type, f: Future(A)) -> Io(Bool) =
+    Io/bind(Future/poll(f), (held) => Io/pure(Option/is_some(held)));
+
+-- `a` as a branch that fulfils `f` with its answer.
+let into(@A: Type, a: Io(A), f: Future(A)) -> Branch =
+    Branch/fresh(Io/bind(a, (x) => Future/fulfill(f, x)));
+
+--- `a` and `b` side by side, and both answers once both have them.
+pub let both(@A: Type, @B: Type, a: Io(A), b: Io(B)) -> Io({A, B}) =
+    let fa = Future/new()!;
+    let fb = Future/new()!;
+    let _ = drive([into(a, fa), into(b, fb)], nothing_more, Io/pure(false))!;
+    let x = Future/await(fa)!;
+    let y = Future/await(fb)!;
+    Io/pure((x, y));
+
+-- A future for each action of `actions`, beside it.
+let promised(@A: Type, actions: List(Io(A))) -> Io(List({Io(A), Future(A)})) =
+    match actions
+    | [] => Io/pure([])
+    | [a, ..more] =>
+        let f = Future/new()!;
+        let rest = promised(more)!;
+        Io/pure([(a, f), ..rest])
+    end;
+
+-- The answer of each future of `fs`, in their order.
+let awaited(@A: Type, fs: List(Future(A))) -> Io(List(A)) =
+    match fs
+    | [] => Io/pure([])
+    | [f, ..more] =>
+        let a = Future/await(f)!;
+        let rest = awaited(more)!;
+        Io/pure([a, ..rest])
+    end;
+
+--- Every action of `actions` side by side, and their answers in their order once all have them.
+pub let all(@A: Type, actions: List(Io(A))) -> Io(List(A)) =
+    let pairs = promised(actions)!;
+    let _ =
+        drive(
+            List/map(pairs, (p: {Io(A), Future(A)}) => into(p.0, p.1)),
+            nothing_more,
+            Io/pure(false))!;
+    awaited(List/map(pairs, (p: {Io(A), Future(A)}) => p.1));
+
+--- The first of `actions` to answer, with its index; every other one is cancelled where it waits. An action dropped part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over offers takes nothing until it keeps it, and is the way to choose without paying that. With no action, nothing answers.
+pub let first(@A: Type, actions: List(Io(A))) -> Io({Nat, A}) =
+    let won: Future({Nat, A}) = Future/new()!;
+    let entered = List/zip(List/range(0, List/len(actions)), actions);
+    let branches =
+        List/map(entered, (e: {Nat, Io(A)}) =>
+            Branch/fresh(Io/bind(e.1, (x) => Future/fulfill(won, (e.0, x)))));
+    let _ = drive(branches, nothing_more, answered(won))!;
+    Future/await(won);
+
+--- The first of `actions` to answer; every other one is cancelled where it waits.
+pub let race(@A: Type, actions: List(Io(A))) -> Io(A) =
+    Io/bind(first(actions), (w) => Io/pure(w.1));
+
+--- `a`'s answer, or `none` where `d` passes first, `a` then cancelled where it waits. An answer that lands after `d` is dropped, which is what a timeout means.
+pub let timeout(@A: Type, d: Duration, a: Io(A)) -> Io(Option(A)) =
+    race([
+        Io/bind(a, (x) => Io/pure(Option/some(x))),
+        Io/bind(Io/sleep(d), (_) => Io/pure(Option/none()))]);
+
+-- How many children of a scope have not ended, kept in a capacity-one channel, and the signal raised as each ends: what `join_all` waits on, a count rather than the tasks, so a scope that spawns without end holds nothing of the children that have ended.
+struct Live: Type {
+    count: {Channel/Sender(Nat), Channel/Receiver(Nat)},
+    ended: Signal,
+}
+
+-- `change` applied to the count of `live`.
+let counted(live: Live, change: (Nat) -> Nat) -> Io({}) =
+    let held = Channel/try_recv(live.count.1)!;
+    let n = match held | item(n) => n | _ => 0 end;
+    let _ = Channel/try_send(live.count.0, change(n))!;
+    Io/pure(());
+
+-- One child of `live` ended.
+let ended(live: Live) -> Io({}) =
+    let _ = counted(live, (n) => match n | 0 => 0 | m + 1 => m end)!;
+    Signal/notify(live.ended);
+
+--- What a scope's body spawns its children into.
+pub struct Scope: Type {
+    children: Channel/Sender(Io({})),
+    live: Live,
+}
+
+--- A child a scope runs: its answer once it has one.
+pub struct Task(A: Type): Type {
+    Future(A),
+}
+
+--- `child` run beside the body of the scope `s`, answering at once with the task `join` waits on. A child still running when the body of its scope answers is cancelled where it waits, and one spawned once the scope has answered never runs.
+pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =
+    let f = Future/new()!;
+    let _ = counted(s.live, (n) => n + 1)!;
+    let finished = Io/bind(child, (a) => Io/bind(Future/fulfill(f, a), (_) => ended(s.live)));
+    let _ = Channel/send(s.children, finished)!;
+    Io/pure(Task { f });
+
+--- The task's answer, waiting until it has one.
+pub let join(@A: Type, t: Task(A)) -> Io(A) =
+    Future/await(t.0);
+
+--- Until every child spawned into `s` has ended, those spawned meanwhile among them: what a body that needs all of its children finished asks before it answers.
+pub let join_all(s: Scope) -> Io({}) =
+    let held = Channel/try_recv(s.live.count.1)!;
+    let n = match held | item(n) => n | _ => 0 end;
+    let _ = Channel/try_send(s.live.count.0, n)!;
+    match n
+    | 0 => Io/pure(())
+    | _ =>
+        let _ = Signal/wait(s.live.ended)!;
+        join_all(s)
+    end;
+
+-- Every child spawned into `r` since the last time it was asked.
+let spawned(r: Channel/Receiver(Io({}))) -> Io(List(Branch)) =
+    let taken = Channel/try_recv(r)!;
+    match taken
+    | item(child) => Io/bind(spawned(r), (more) => Io/pure([Branch/fresh(child), ..more]))
+    | _ => Io/pure([])
+    end;
+
+--- `body` run with a scope it spawns children into, and its answer once it has one. The children run beside the body, and those still running when the body answers are cancelled where they wait: a description's answer is all it yields, so a child the body needs is joined before it answers.
+pub let scope(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
+    let ends = Channel/new(@Io({}), 64)!;
+    let count = Channel/new(@Nat, 1)!;
+    let ended = Signal/new()!;
+    let s = Scope { children = ends.0, live = Live { count = count, ended = ended } };
+    let answer: Future(A) = Future/new()!;
+    let _ = drive([into(body(s), answer)], spawned(ends.1), answered(answer))!;
+    let _ = Channel/close(ends.0)!;
+    Future/await(answer);

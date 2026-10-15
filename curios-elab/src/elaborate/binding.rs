@@ -737,6 +737,9 @@ fn abstracted_monad(
             *last = slot;
             Term::from(Subterm::InductType(induct_type))
         }
+        // The intrinsic formers a monad is declared at take their value as their one parameter: `Io(?)`, the region of a `match` sequenced whole, is `(x) => Io(x)` as `Try(Io, E, ?)` is `(x) => Try(Io, E, x)`.
+        Subterm::Intrinsic(Intrinsic::IoType(_)) => Term::intrinsic(Intrinsic::IoType(slot)),
+        Subterm::Intrinsic(Intrinsic::ListType(_)) => Term::intrinsic(Intrinsic::ListType(slot)),
         _ => return Ok(None),
     };
 
@@ -844,7 +847,7 @@ fn context_keys(context: &mut Context, args: &[Term]) -> Result<Vec<Option<HeadK
     Ok(keys)
 }
 
-/// Whether an action of shape `action` belongs to another monad than a region of shape `region`, so that sequencing it needs an embedding: a different head, or a context argument both sides key and key differently — `Try(Io, E)` beside `Try(Async, E)`, which share a head and are two monads. Two shapes that agree wherever both are known are one monad as far as the oracle can read, and unification settles the rest.
+/// Whether an action of shape `action` belongs to another monad than a region of shape `region`, so that sequencing it needs an embedding: a different head, or a context argument both sides key and key differently — `Try(Io, E)` beside `Try(State(S), E)`, which share a head and are two monads. Two shapes that agree wherever both are known are one monad as far as the oracle can read, and unification settles the rest.
 pub(crate) fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
     region.head != action.head
         || region
@@ -908,7 +911,7 @@ fn declared_result_shape(
     declared: &Term,
     args: &[Term],
 ) -> Result<Option<MonadShape>, Error> {
-    // The declared type is peeled arrow by arrow until the spine's arguments are spent, each arrow's binders opened with fresh frees: a concept method wrapper is curried — `(@S: Type, use w: Read(S)) -> (S, Nat) -> Async(Chunk)` — so its explicit binders sit behind an arrow of hidden ones. An arrow with more explicit binders than arguments remain is a partial application, which is a function and not an action, and abstains. A zero-argument action (`Async/yield_now`) has the carrier itself as its declared type.
+    // The declared type is peeled arrow by arrow until the spine's arguments are spent, each arrow's binders opened with fresh frees: a concept method wrapper is curried — `(@S: Type, use w: Read(S)) -> (S, Nat) -> Io(Chunk)` — so its explicit binders sit behind an arrow of hidden ones. An arrow with more explicit binders than arguments remain is a partial application, which is a function and not an action, and abstains. A zero-argument action (`Io/yield`) has the carrier itself as its declared type.
     let Some(mut whnf) = reduce_with(context, declared).probed()? else {
         return Ok(None);
     };

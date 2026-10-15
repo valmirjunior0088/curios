@@ -1,0 +1,26 @@
+use /std/{List, Option, Cell, Io, Handle};
+
+--- What an offer waits on while it declines: handles a host makes ready and cells the program fills, and what releases the handles the wait made for itself, whether the wait ends or is cancelled.
+pub struct Waiting: pub Type {
+    on: List(Handle),
+    filled: List(Cell({})),
+    release: Io({}),
+}
+
+--- A wait on cells alone, which made nothing to release.
+pub let on_filled(cells: List(Cell({}))) -> Waiting =
+    Waiting { on = [], filled = cells, release = Io/pure(()) };
+
+--- A non-committing attempt at a value, and what to wait on while it declines. `Io/select` takes nothing out of a source until that source is the one it answers with, so an offer that loses a selection has consumed nothing.
+pub struct Offer(A: Type): pub Type {
+    try: Io(Option(A)),
+    wait: Io(Waiting),
+}
+
+--- An offer that attempts `try` and waits on `wait` while it declines. The wait is a description rather than a value because it is asked again on every retry, so an offer against a deadline can name the time still left rather than the whole of it.
+pub let new(@A: Type, try: Io(Option(A)), wait: Io(Waiting)) -> Offer(A) =
+    Offer { try = try, wait = wait };
+
+--- `f` applied to whatever the offer answers with.
+pub let map(@A: Type, @B: Type, o: Offer(A), f: (A) -> B) -> Offer(B) =
+    new(Io/bind(o.try, (m) => Io/pure(Option/map(m, f))), o.wait);

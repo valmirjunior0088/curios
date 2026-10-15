@@ -43,8 +43,8 @@ mod runaways;
 #[cfg(feature = "profile")]
 use runaways::*;
 
+mod concurrent;
 mod runtime;
-mod scheduler;
 mod soundness;
 mod strings;
 mod structs;

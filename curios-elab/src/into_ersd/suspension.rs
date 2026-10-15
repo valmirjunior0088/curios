@@ -6,7 +6,6 @@
 
 use {
     super::{Error, Lowering, Retyping},
-    curios_abi::stdio,
     curios_core::Global,
 };
 
@@ -335,7 +334,7 @@ impl Lowering<'_> {
 
     /// Define `surface(suspension)` in the innermost open block: the suspension around no frames, with a rest that resumes it through `resume` and a cancel that performs its own, each surfacing in turn whatever suspension it answers.
     ///
-    /// The host reads no cell, so a suspension whose cell is already filled is surfaced on the ready token alone: nothing of the program runs while the host waits, so a cell still empty stays so, and one filled means the rest can go on at once.
+    /// A suspension whose cell is already filled is resumed here instead, and what it answers surfaced in turn: the host reads no cell, and the rest can go on at once, so a yield costs no turn of the host. Nothing of the program runs while the host waits, so a cell still empty stays so.
     fn surfacing(
         &mut self,
         resume: curios_ersd::FunctionId,
@@ -345,41 +344,35 @@ impl Lowering<'_> {
         let suspension = self.builder.value(None);
         let held = curios_ersd::Atom::Value(suspension);
         let body = self.block(|lowering| {
-            let rest = lowering.description("io/rest", |lowering| {
+            let [on, filled, cancel] = lowering.waiting(held);
+            let woken = lowering.any_filled(filled, polled);
+            let waiting = lowering.block(|lowering| {
+                let rest = lowering.description("io/rest", |lowering| {
+                    let answer = lowering.applied(curios_ersd::Atom::Function(resume), vec![held]);
+                    lowering.surfaced(surface, answer)
+                });
+                let cancel = lowering.description("io/cancel", |lowering| {
+                    let answer = lowering.forced(cancel);
+                    lowering.surfaced(surface, answer)
+                });
+                let none = lowering.let_atom(curios_ersd::Rhs::Sequence {
+                    operation: curios_ersd::SequenceOp::ListBuild,
+                    operands: Vec::new(),
+                });
+                lowering.suspension(
+                    curios_ersd::SuspensionOperation::Build,
+                    vec![on, filled, cancel, rest, none],
+                )
+            });
+            let ready = lowering.block(|lowering| {
                 let answer = lowering.applied(curios_ersd::Atom::Function(resume), vec![held]);
                 lowering.surfaced(surface, answer)
             });
-            let [on, filled, cancel] = lowering.waiting(held);
-            let cancel = lowering.description("io/cancel", |lowering| {
-                let answer = lowering.forced(cancel);
-                lowering.surfaced(surface, answer)
-            });
-            let woken = lowering.any_filled(filled, polled);
-            let waiting = lowering.block(|_| on);
-            let ready = lowering.block(|lowering| {
-                let token = curios_ersd::Atom::Constant(
-                    lowering
-                        .builder
-                        .constant(curios_ersd::Constant::Handle(stdio::READY)),
-                );
-                lowering.let_atom(curios_ersd::Rhs::Sequence {
-                    operation: curios_ersd::SequenceOp::ListBuild,
-                    operands: vec![token],
-                })
-            });
-            let on = lowering.let_atom(curios_ersd::Rhs::SwitchBool {
+            lowering.let_atom(curios_ersd::Rhs::SwitchBool {
                 scrutinee: woken,
                 if_false: waiting,
                 if_true: ready,
-            });
-            let none = lowering.let_atom(curios_ersd::Rhs::Sequence {
-                operation: curios_ersd::SequenceOp::ListBuild,
-                operands: Vec::new(),
-            });
-            lowering.suspension(
-                curios_ersd::SuspensionOperation::Build,
-                vec![on, filled, cancel, rest, none],
-            )
+            })
         });
         self.builder.define_function(
             surface,

@@ -1,4 +1,4 @@
-use /std/{Bytes, Str, Nat, Bool, List, Result, Try, Async, Io};
+use /std/{Bytes, Str, Nat, Bool, List, Result, Try, Io};
 use /std/Io/{Reader};
 use /std/time/{Duration, Timestamp};
 use /std/time/Timestamp/{Utc};
@@ -24,7 +24,7 @@ pub let default: Server =
 
 --- The handler a server runs per request: given the request, it answers with the response to send. The server writes it and ends the connection.
 pub let Handler: Type =
-    (Request) -> Try(Async, Io/Error, Response);
+    (Request) -> Try(Io, Io/Error, Response);
 
 -- Whether the request `head` expects `100 Continue` before it sends its content (RFC 9110 §10.1.1): an HTTP/1.1 request whose `Expect` lists it.
 let expects_continue(head: Request/Head) -> Bool =
@@ -72,14 +72,14 @@ let opened(scheme: Scheme, lines: Bytes) -> Result(Unread, Opened) =
     end;
 
 -- `100 Continue` written to `c` where the request expects it and its body is still to arrive: one whose head already refuses it, or whose content came with its head, is not invited to send it.
-let invite(limits: Limits, c: Socket, r: Reader(Socket), o: Opened) -> Async(Result(Io/Error, {})) =
+let invite(limits: Limits, c: Socket, r: Reader(Socket), o: Opened) -> Io(Result(Io/Error, {})) =
     match expects_continue(o.head)
-    | false => Async/pure(Result/success(()))
+    | false => Io/pure(Result/success(()))
     | true =>
         let held = Reader/held(r)!;
         match read/body(limits, o.framing, x[], held)
         | more(_, _) => Socket/write(c, Str/to_bytes("HTTP/1.1 100 Continue\r\n\r\n"))
-        | _ => Async/pure(Result/success(()))
+        | _ => Io/pure(Result/success(()))
         end
     end;
 
@@ -89,17 +89,17 @@ let request(
     scheme: Scheme,
     c: Socket,
     r: Reader(Socket),
-) -> Async(Result(Unread, Request)) =
+) -> Io(Result(Unread, Request)) =
     let first =
         Reader/take(r, (searched: Nat, held: Bytes) => read/head(limits, true, searched, held), 0)!;
     match first
     | failure(stop) =>
         match stop
-        | refused(why) => Async/pure(Result/failure(Unread/refused(why)))
-        | failed(_, _) => Async/pure(Result/failure(Unread/silent()))
+        | refused(why) => Io/pure(Result/failure(Unread/refused(why)))
+        | failed(_, _) => Io/pure(Result/failure(Unread/silent()))
         | ended(_) =>
             let held = Reader/held(r)!;
-            Async/pure(
+            Io/pure(
                 Result/failure(
                     match Bytes/len(held)
                     | 0 => Unread/silent()
@@ -108,14 +108,14 @@ let request(
         end
     | success(lines) =>
         match opened(scheme, lines)
-        | failure(why) => Async/pure(Result/failure(why))
+        | failure(why) => Io/pure(Result/failure(why))
         | success(o) =>
             let invited = invite(limits, c, r, o)!;
             match invited
-            | failure(_) => Async/pure(Result/failure(Unread/silent()))
+            | failure(_) => Io/pure(Result/failure(Unread/silent()))
             | success(_) =>
                 let content = stream/body(limits, r, o.framing)!;
-                Async/pure(
+                Io/pure(
                     match content
                     | success(body) =>
                         Result/success(
@@ -137,35 +137,35 @@ let request(
     end;
 
 -- What `c`'s peer still sends, read and dropped until the peer closes, sends nothing for `quiet`, or has sent `left` octets.
-let drain(c: Socket, quiet: Duration, left: Nat) -> Async({}) =
+let drain(c: Socket, quiet: Duration, left: Nat) -> Io({}) =
     match left
-    | 0 => Async/pure(())
+    | 0 => Io/pure(())
     | _ =>
-        let arrived = Async/timeout(quiet, Socket/read(c, 65536))!;
+        let arrived = Io/timeout(quiet, Socket/read(c, 65536))!;
         match arrived
-        | none() => Async/pure(())
+        | none() => Io/pure(())
         | some(read) =>
             match read
             | chunk(bytes) => drain(c, quiet, left - Nat/min(left, Bytes/len(bytes)))
-            | eof() => Async/pure(())
-            | error(_) => Async/pure(())
+            | eof() => Io/pure(())
+            | error(_) => Io/pure(())
             end
         end
     end;
 
 -- `reply` with the `Date` of the moment it is sent, which an origin server with a clock owes (RFC 9110 §6.6.1), unless its handler dated it.
-let dated(reply: Response) -> Async(Response) =
+let dated(reply: Response) -> Io(Response) =
     match Response/header(reply, "Date")
-    | some(_) => Async/pure(reply)
+    | some(_) => Io/pure(reply)
     | none() =>
         let now = Timestamp/now()!;
         let date =
             Field { name = Name { text = "Date" }, value = Value/of_utc(Utc/of_timestamp(now)) };
-        Async/pure(Response { ..reply, headers = [date, ..reply.headers], @bodied = reply.bodied })
+        Io/pure(Response { ..reply, headers = [date, ..reply.headers], @bodied = reply.bodied })
     end;
 
 -- `reply` written to `c` in answer to a request of `method` — its head alone where the method is `HEAD`, stating the length its body has — and the connection ended as RFC 9112 §9.6 asks: the sending half first, then what the peer still sends read on, since a close over unread bytes would reset the connection under the reply.
-let send(s: Server, c: Socket, method: Method, reply: Response) -> Async({}) =
+let send(s: Server, c: Socket, method: Method, reply: Response) -> Io({}) =
     let stamped = dated(reply)!;
     let bytes =
         match method
@@ -174,9 +174,9 @@ let send(s: Server, c: Socket, method: Method, reply: Response) -> Async({}) =
         end;
     let wrote = Socket/write(c, bytes)!;
     match wrote
-    | failure(_) => Async/pure(())
+    | failure(_) => Io/pure(())
     | success(_) =>
-        let _ = Async/Write/flush(c)!;
+        let _ = Io/Write/flush(c)!;
         let _ = Socket/finish(c)!;
         drain(c, s.quiet, s.limits.head + s.limits.content)
     end;
@@ -189,10 +189,10 @@ let allowed: Response =
         body = x[] };
 
 --- What a server does with one connection of `scheme`: read a request as its framing delimits it, hand it to `handler`, write the reply, and end the connection as HTTP asks — the sending half ended, what the peer still sends read until it closes or falls quiet, and the close left to whoever opened the connection. A request the reader refuses is answered with the status its refusal names, one that has not arrived whole within `s.deadline` 408, and a handler that fails 500; `OPTIONS *`, which asks about the server and no resource, is answered by the server with the methods it reads, and no handler sees it; a peer that sends nothing is told nothing. Every reply carries the `Date` it is sent at, unless its handler dated it. `serve` and `serve_tls` run it over a listener of their own, and a program with a listener of its own hands it each socket it accepts.
-pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Async({}) =
+pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Io({}) =
     (c) =>
         let r = Reader/new(c)!;
-        let arrived = Async/timeout(s.deadline, request(s.limits, scheme, c, r))!;
+        let arrived = Io/timeout(s.deadline, request(s.limits, scheme, c, r))!;
         match arrived
         | none() => send(s, c, Method/get(), Response/of_refusal(Refusal/timed_out()))
         | some(read) =>
@@ -201,7 +201,7 @@ pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Async
                 match why
                 | refused(reason) => send(s, c, Method/get(), Response/of_refusal(reason))
                 | of_server() => send(s, c, Method/options(), allowed)
-                | silent() => Async/pure(())
+                | silent() => Io/pure(())
                 end
             | success(asked) =>
                 let answered = Try/run(handler(asked))!;
@@ -213,8 +213,8 @@ pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Async
             end
         end;
 
---- Every connection to `host` at `port` answered by `handler` as `answer` answers one, in the clear: one request per connection in a fiber of its own, until an accept fails. A slow request holds up no other connection.
-pub let serve(s: Server, host: Str, port: Nat, handler: Handler) -> Try(Async, Io/Error, {}) =
+--- Every connection to `host` at `port` answered by `handler` as `answer` answers one, in the clear: one request per connection in a branch of its own, until an accept fails. A slow request holds up no other connection.
+pub let serve(s: Server, host: Str, port: Nat, handler: Handler) -> Try(Io, Io/Error, {}) =
     Listener/serve(host, port, answer(s, Scheme/http(), handler));
 
 --- `serve` under TLS: every connection is upgraded with the certificate chain `cert` and the private key `key` before a request is read from it.
@@ -225,5 +225,5 @@ pub let serve_tls(
     cert: Bytes,
     key: Bytes,
     handler: Handler,
-) -> Try(Async, Io/Error, {}) =
+) -> Try(Io, Io/Error, {}) =
     Listener/serve_tls(host, port, cert, key, answer(s, Scheme/https(), handler));

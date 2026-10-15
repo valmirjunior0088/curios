@@ -85,17 +85,17 @@ fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
 #[test]
 fn with_raw_async_brackets_a_parking_body_inside_a_fiber() {
     let source = r#"
-        use /std/{Nat, Show, Try, Async, Io, Tty};
-        let body: Try(Async, Io/Error, Nat) =
-            let _ = Async/yield_now()!;
+        use /std/{Nat, Show, Try, Io, Tty};
+        let body: Try(Io, Io/Error, Nat) =
+            let _ = Io/yield()!;
             Try/pure(7);
-        let fiber: Async({}) =
-            let r = Try/run(Tty/with_raw_async(Tty/stdin, body))!;
+        let program: Io({}) =
+            let r = Try/run(Tty/with_raw(Tty/stdin, body))!;
             match r
             | success(n) => /std/print(Nat/to_str(n))
             | failure(e) => /std/print(Show/show(e))
             end;
-        Async/run(fiber)
+        program
         "#;
 
     let (system, io) = MockHost::builder().tty_size(80, 24).build();

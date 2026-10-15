@@ -1,6 +1,6 @@
 //! Polarity travelling through a type former, which is the whole of what "modulo polarity" buys.
 //!
-//! A check recognizing recursive occurrences only in immediate payload positions rejects every shape here, `/std/Toml` and `/std/Async` among them. Each row names the former whose polarity vector the occurrence composes against.
+//! A check recognizing recursive occurrences only in immediate payload positions rejects every shape here, `/std/Toml` among them. Each row names the former whose polarity vector the occurrence composes against.
 
 use crate::tests::run;
 
@@ -25,7 +25,7 @@ fn an_io_payload_is_a_strictly_positive_occurrence() {
     assert_eq!(run(source), b"suspended");
 }
 
-// The rule most likely to be implemented wrongly, and the one that would take the whole concurrency stack with it. A nullary `() -> X` is an *empty* parameter list, so nothing flips and `X` stays strictly positive — a zero-argument function is a thunk of its result. Read as "an occurrence under an arrow is negative", this rejects `/std/Async`.
+// The rule most likely to be implemented wrongly. A nullary `() -> X` is an *empty* parameter list, so nothing flips and `X` stays strictly positive — a zero-argument function is a thunk of its result. Read as "an occurrence under an arrow is negative", this rejects every type that holds a thunk of itself.
 #[test]
 fn a_nullary_arrow_codomain_is_a_strictly_positive_payload() {
     let source = r#"
@@ -46,7 +46,7 @@ fn a_nullary_arrow_codomain_is_a_strictly_positive_payload() {
     assert_eq!(run(source), b"thunked");
 }
 
-// `/std/Pause` and `/std/Async` in miniature: two declarations in one `and` block, each reaching the other, with the recursive occurrence behind a thunk. The group boundary lives on `Item::Rec` and not on the registry entry, so this passes only because the occurrence relation is closed transitively rather than by asking who shares a declaration block.
+// A step and the suspended rest of it in miniature: two declarations in one `and` block, each reaching the other, with the recursive occurrence behind a thunk. The group boundary lives on `Item::Rec` and not on the registry entry, so this passes only because the occurrence relation is closed transitively rather than by asking who shares a declaration block.
 #[test]
 fn a_mutually_recursive_group_reaching_itself_through_a_thunk_is_admitted() {
     let source = r#"

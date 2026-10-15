@@ -1,0 +1,26 @@
+use /std/{Io};
+use /std/Io/{Channel, Offer};
+
+--- A flag one branch raises and another waits on. Notifications coalesce while its one slot is full.
+pub struct Signal: Type {
+    sender: Channel/Sender({}),
+    receiver: Channel/Receiver({}),
+}
+
+--- A lowered flag.
+pub let new() -> Io(Signal) =
+    let ends = Channel/new(1)!;
+    Io/pure(Signal { sender = ends.0, receiver = ends.1 });
+
+--- Raise the flag. A raised flag stays raised until taken, so a burst of notifications is one pending wake.
+pub let notify(s: Signal) -> Io({}) =
+    let _ = Channel/try_send(s.sender, ())!;
+    Io/pure(());
+
+--- An offer that yields once the flag is raised, lowering it.
+pub let offer(s: Signal) -> Offer({}) =
+    Offer/map(Channel/recv_offer(s.receiver), (_) => ());
+
+--- Wait until the flag is raised, then lower it. A flag already raised is lowered at once.
+pub let wait(s: Signal) -> Io({}) =
+    Io/bind(Io/select([offer(s)]), (_) => Io/pure(()));

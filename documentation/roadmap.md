@@ -113,12 +113,12 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] Collections: `List` and its helpers, `Vec` counting its list in its type, and `Map`, a canonical crit-bit trie over `Bytes` keys
 - [x] Text: proof-carrying UTF-8 `Str` addressed by proved byte positions, its walks costing what they read and `Str/of_bytes` answering where bytes stop being text; certified `Char`; parser combinators over bytes and over text; typed format strings folded from their characters; and decimal conversions that round-trip, read by grammars
 - [x] Formats, each read as the text it is given by its own grammar: `Json` over finite binary64, `Toml` 1.0.0, and `Html` as a tree
-- [x] Applications: an HTTP client and server over TCP and `Async`, command-line interfaces, and terminal programs with widgets
+- [x] Applications: an HTTP client and server over TCP, a connection a branch of its own, command-line interfaces, and terminal programs with widgets
 - [x] [Explicit invariants](../curios-std/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position): decoding and encoding carry their certificates, indices carry their bounds, and a host's facts arrive first-order
 - [x] [A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md), with `Result` error first and its own monad
 - [x] [Only a fiber waits](design/standard-library/only-a-fiber-waits.md): every peer-facing handle non-blocking, single-attempt writes and an explicit flush, write-once cells, bounded channels and level waiting in the guest heap
 - [x] [A `Bits` encoding is injective by its extent](design/standard-library/a-bits-encoding-is-injective-by-its-extent.md): one byte per bit, so a run's extent is its length and no field beside the bytes states it
-- [x] Structured concurrency in `/std/Async`: fibers and tasks, `race`, `select` and `join_all`, `sleep` and `timeout`, scoped resources, and deadlock detection
+- [x] Structured concurrency in `/std/Io`: a scope, the children its body spawns and joins or `join_all` waits for, and those it cancels once it has answered, `both`, `all`, `first`, `race` and `timeout`, futures, channels and signals waited on through `select`, `sleep`, brackets released however a body ends, and the deadlock the host reports
 
 ## Surface
 

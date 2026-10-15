@@ -142,15 +142,15 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
 
 #[test]
 fn a_dependent_result_action_auto_lifts_through_bang() {
-    // `Cell/new : (@T: Type) -> Io(Cell(T))` names its binder in the result, so the auto-lift oracle can key it only by opening the declared telescope before reading the head. The `!` must insert the `Lift(Io, Async)` embedding without an explicit `lift(...)`.
+    // `Cell/new : (@T: Type) -> Io(Cell(T))` names its binder in the result, so the auto-lift oracle can key it only by opening the declared telescope before reading the head. The `!` must insert the `Lift(Io, Try(Io, Io/Error))` embedding without an explicit `lift(...)`.
     let source = r#"
-        use /std/{Async, Cell, Nat, Option, Io};
+        use /std/{Cell, Nat, Option, Io, Try};
 
-        let fiber: Async(Nat) =
+        let program: Try(Io, Io/Error, Nat) =
             let c = Cell/new()!;
             let _ = Cell/fill(c, 7)!;
             let n = Option/unwrap_or(Cell/poll(c)!, 0);
-            Async/pure(n);
+            Try/pure(n);
 
         Io/pure(())
     "#;
@@ -161,10 +161,10 @@ fn a_dependent_result_action_auto_lifts_through_bang() {
 fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
     // The root cause of `a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade`, reached another way: checked as a list element, `map`'s result metavariable reaches the lambda body's conversion still spelling solved metavariables whose spines carry out-of-scope binders, and the unmaterialized scope check refused the ground `Option(A)`.
     let source = r#"
-        use /std/{Async, Option};
+        use /std/{Option, Io};
 
-        let probe(@A: Type, body: Async(A)) -> Async(Option(A)) =
-            Async/race([Async/map(body, (a) => Option/some(a))]);
+        let probe(@A: Type, body: Io(A)) -> Io(Option(A)) =
+            Io/race([Io/bind(body, (a) => Io/pure(Option/some(a)))]);
 
         /std/Io/pure(())
     "#;

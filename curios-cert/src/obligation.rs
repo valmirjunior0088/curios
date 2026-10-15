@@ -62,7 +62,7 @@ fn holds_a_group(term: &Term) -> bool {
 ///
 /// What an environment already answers for is read rather than recomputed: a name of a unit in scope is classified as the certifier's record of that unit classifies it, asked where a judgment reaches the name, and of a module's items only the judged ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library, and from copying its classification.
 ///
-/// **Reading the environment is load-bearing rather than an optimization.** A definition is partial where anything it *mentions* is, and the already-judged items are not carried inside the module, so nothing else in a walk knows `/std/Async/bind` is partial. A user proof reaching it would then be read against a set the name is absent from and pass as total, which is exactly the identification (T) and (V) exist to prevent.
+/// **Reading the environment is load-bearing rather than an optimization.** A definition is partial where anything it *mentions* is, and the already-judged items are not carried inside the module, so nothing else in a walk knows that a partial definition, a parser of `/std/Json/decode`, is partial. A user proof reaching it would then be read against a set the name is absent from and pass as total, which is exactly the identification (T) and (V) exist to prevent.
 pub(crate) struct Totals<'g> {
     /// The units in scope, whose records answer for their own definitions.
     scope: &'g Globals<'g>,

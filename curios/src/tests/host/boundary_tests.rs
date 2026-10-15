@@ -106,8 +106,8 @@ fn a_file_kind_no_code_names_fails_the_stat() {
 fn a_write_that_accepts_nothing_is_a_failure() {
     let code = answering(
         r#"
-        use /std/{Io, Async, Handle, proc};
-        let r = Async/Write/write(@Io, @Handle, Handle/stdout, x[0x41])!;
+        use /std/{Io, Handle, proc};
+        let r = Io/Write/write(@Handle, Handle/stdout, x[0x41])!;
         match r | success(_) => proc/exit(@{}, 0) | failure(_) => proc/exit(@{}, 7) end
         "#,
         MockHost::builder().build().0,

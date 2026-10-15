@@ -582,29 +582,29 @@ fn a_local_recursive_function_elaborated_again_is_itself() {
     .expect("the copy is the group");
 }
 
-/// An implicit born under an arm's binder is re-expressed over the match's own where it rides into the match's type: `Result/success(v)`'s error type is minted under `v` and embedded in the match's type at `success(v)`, so it becomes a stand-in applied to `success(v)`, the match's type is solved from the first arm, and the second solves the stand-in to `Io/Error`. Waiting for it would hold the match's type open until `read!` pinned it to the region's monad, refusing the first arm with `Async(Result(?, Bytes))`. Mutation-checked: refusing every binder the match's type lacks refuses the program.
+/// An implicit born under an arm's binder is re-expressed over the match's own where it rides into the match's type: `Result/success(v)`'s error type is minted under `v` and embedded in the match's type at `success(v)`, so it becomes a stand-in applied to `success(v)`, the match's type is solved from the first arm, and the second solves the stand-in to `Io/Error`. Waiting for it would hold the match's type open until `read!` pinned it to the region's monad, refusing the first arm with `Io(Result(?, Bytes))`. Mutation-checked: refusing every binder the match's type lacks refuses the program.
 #[test]
 fn an_implicit_born_under_an_arms_binder_is_re_expressed_over_the_match_to_type_it() {
     let output = run(r#"
-        use /std/{Str, Bytes, Option, Result, Show, Try, Async, Io};
+        use /std/{Str, Bytes, Option, Result, Show, Try, Io};
 
-        let program(r: Result(Io/Error, Bytes)) -> Try(Async, Io/Error, Str) =
+        let program(r: Result(Io/Error, Bytes)) -> Try(Io, Io/Error, Str) =
             let read =
                 match r
-                | success(v) => Async/pure(Result/success(v))
-                | failure(e) => Async/pure(Result/failure(e))
+                | success(v) => Io/pure(Result/success(v))
+                | failure(e) => Io/pure(Result/failure(e))
                 end;
             let out = read!;
             let bytes = out!;
             Try/pure(Result/unwrap_or(Str/of_bytes(bytes), "?"));
 
-        let fiber: Async({}) =
+        let main: Io({}) =
             let r = Try/run(program(Result/success(Str/to_bytes("read"))))!;
             match r
             | failure(e) => /std/print(Show/show(e))
             | success(s) => /std/print(s)
             end;
-        Async/run(fiber)
+        main
         "#);
 
     assert_eq!(output, b"read");

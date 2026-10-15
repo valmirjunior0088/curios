@@ -67,42 +67,38 @@ fn io_read_short_reads_and_eof() {
 
 // `drain` treats `eof` as the stream's only orderly terminator. The load-bearing script is chunk-then-error: the accumulated prefix must not be passed off as complete content, so the verdict is a failure and the prefix's length leaks nowhere. Chunk-then-eof is the control that accumulation itself still works.
 #[test]
-fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
+fn drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
     let source = r#"
-        use /std/{Nat, Bytes, Result, Async, Cell, Str, Io, print};
+        use /std/{Nat, Bytes, Result, Cell, Str, Io, print};
         use /std/Bool/{Holds};
-        let show(r : Result(Async/Deadlock, Result(Io/Error, Bytes))) -> Str =
+        let show(r : Result(Io/Error, Bytes)) -> Str =
             match r
-            | failure(_) => "deadlock"
-            | success(inner) =>
-                match inner
-                | success(bytes) => Str/concat("ok:", Nat/to_str(Bytes/len(bytes)))
-                | failure(_) => "error"
-                end
+            | success(bytes) => Str/concat("ok:", Nat/to_str(Bytes/len(bytes)))
+            | failure(_) => "error"
             end;
-        let error_first(n : Nat, @positive : Holds(0 < n)) -> Async(Io/Chunk) =
-            Async/pure(Io/Chunk/error(Io/Error/other(247)));
-        let chunk_then_error : Io((n : Nat, @positive : Holds(0 < n)) -> Async(Io/Chunk)) =
+        let error_first(n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk) =
+            Io/pure(Io/Chunk/error(Io/Error/other(247)));
+        let chunk_then_error : Io((n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk)) =
             let calls = Cell/new(@{})!;
             Io/pure((n) =>
-                let first = Async/lift(Cell/fill(calls, ()))!;
+                let first = Cell/fill(calls, ())!;
                 match first
-                | true => Async/pure(Io/Chunk/chunk(x[0x41, 0x42]))
-                | _ => Async/pure(Io/Chunk/error(Io/Error/other(247)))
+                | true => Io/pure(Io/Chunk/chunk(x[0x41, 0x42]))
+                | _ => Io/pure(Io/Chunk/error(Io/Error/other(247)))
                 end);
-        let chunk_then_eof : Io((n : Nat, @positive : Holds(0 < n)) -> Async(Io/Chunk)) =
+        let chunk_then_eof : Io((n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk)) =
             let calls = Cell/new(@{})!;
             Io/pure((n) =>
-                let first = Async/lift(Cell/fill(calls, ()))!;
+                let first = Cell/fill(calls, ())!;
                 match first
-                | true => Async/pure(Io/Chunk/chunk(x[0x41, 0x42, 0x43]))
-                | _ => Async/pure(Io/Chunk/eof())
+                | true => Io/pure(Io/Chunk/chunk(x[0x41, 0x42, 0x43]))
+                | _ => Io/pure(Io/Chunk/eof())
                 end);
-        let _ = print(show(Async/block_on(Async/drain(error_first))!))!;
+        let _ = print(show(Io/drain(error_first)!))!;
         let _ = print(" / ")!;
-        let _ = print(show(Async/block_on(Async/drain(chunk_then_error!))!))!;
+        let _ = print(show(Io/drain(chunk_then_error!)!))!;
         let _ = print(" / ")!;
-        print(show(Async/block_on(Async/drain(chunk_then_eof!))!))
+        print(show(Io/drain(chunk_then_eof!)!))
         "#;
 
     assert_eq!(run(source), b"error / error / ok:3");
@@ -114,7 +110,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     let stream = |answer: &str| {
         format!(
             r#"
-            use /std/{{Nat, Bytes, Str, List, Result, Cell, Try, Async, Io, print}};
+            use /std/{{Nat, Bytes, Str, List, Result, Cell, Try, Io, print}};
             struct Pieces: Type {{ List({{Cell({{}}), Bytes}}) }}
             let next(ps: List({{Cell({{}}), Bytes}})) -> Io(Io/Chunk) =
                 match ps
@@ -126,7 +122,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
                     | true => {answer}
                     end
                 end;
-            satisfy Async/Read(Io, Pieces) {{
+            satisfy Io/Read(Pieces) {{
                 read(s, n) = next(s.0),
             }}
             let piece(b: Bytes) -> Io({{Cell({{}}), Bytes}}) =
@@ -160,7 +156,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
 #[test]
 fn lines_read_across_the_chunks_a_stream_arrives_in() {
     let source = r#"
-        use /std/{Str, Bytes, Bool, Option, Result, Try, Async, Io, print};
+        use /std/{Str, Bytes, Bool, Option, Result, Try, Io, print};
         let line(r: Result(Io/Error, Option(Bytes))) -> Str =
             match r
             | success(some(b)) => Result/unwrap_or(Str/of_bytes(b), "?")
@@ -172,7 +168,7 @@ fn lines_read_across_the_chunks_a_stream_arrives_in() {
             | success(found) => Result/unwrap_or(Str/of_bytes(found.bytes), "?")
             | failure(_) => "<error>"
             end;
-        let fiber: Async({}) =
+        let program: Io({}) =
             let input = Io/Reader/new(Io/stdin)!;
             let a = Try/run(Io/Reader/line(input))!;
             let b = Try/run(Io/Reader/line(input))!;
@@ -180,7 +176,7 @@ fn lines_read_across_the_chunks_a_stream_arrives_in() {
             let d = Try/run(Io/Reader/line(input))!;
             let e = Try/run(Io/Reader/line(input))!;
             print(Str/join("|", [line(a), line(b), field(c), line(d), line(e)]));
-        Async/run(fiber)
+        program
     "#;
 
     let (system, io) = MockHost::builder()

@@ -1,4 +1,4 @@
-use /std/{Bool, List, Async};
+use /std/{Bool, List, Io};
 
 --- What an `update` asks the loop to do beside the new model: whether to stop, and what to run.
 ---
@@ -7,7 +7,7 @@ pub struct Directive(E: Type): pub Type {
     --- Stop the loop.
     stop: Bool,
     --- Run each of these, and hand every answer back as `Event/custom`.
-    run: List(Async(E)),
+    run: List(Io(E)),
 }
 
 --- Nothing beside the new model.
@@ -19,7 +19,7 @@ pub let quit(@E: Type) -> Directive(E) =
     Directive { stop = true, run = [] };
 
 --- Run this, and hand its answer back as `Event/custom`.
-pub let perform(@E: Type, a: Async(E)) -> Directive(E) =
+pub let perform(@E: Type, a: Io(E)) -> Directive(E) =
     Directive { stop = false, run = [a] };
 
 --- Every one of these, in order: their work concatenated, stopping if any of them stops.

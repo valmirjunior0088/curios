@@ -12,6 +12,6 @@ pub struct Readiness: pub Type {
 pub let nothing: Readiness =
     Readiness { fired = Interest/none, failed = false, hung_up = false };
 
---- Whether `r` answers a park registered for `i`: its interest fired, or the handle failed, or the peer hung up — either of which means the handle will never become ready.
+--- Whether `r` answers a wait registered for `i`: its interest fired, or the handle failed, or the peer hung up — either of which means the handle will never become ready.
 pub let answers(r: Readiness, i: Interest) -> Bool =
     Interest/overlaps(r.fired, i) || r.failed || r.hung_up;

@@ -12,7 +12,7 @@ struct Edge {
 }
 
 const HEADER: &str =
-    "use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Bits, List, Io}; use /std/Async/{Channel};";
+    "use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Bits, List, Io}; use /std/Io/{Channel};";
 
 const EDGES: &[Edge] = &[
     Edge {

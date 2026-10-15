@@ -41,7 +41,7 @@ fn stamped(item: &Item) -> Totality {
 
 #[test]
 fn a_partial_name_from_another_unit_still_taints_what_mentions_it() {
-    // The replay path: `caller` is user code and `/std/Async/bind` is a prelude definition this unit does not contain. Without the recorded verdict the classification sees a name with none and calls `caller` total, which is the hole that would let a user proof mention a divergent prelude function.
+    // The replay path: `caller` is user code and `prelude_partial` a partial prelude definition this unit does not contain, as a parser of `/std/Json/decode` is. Without the recorded verdict the classification sees a name with none and calls `caller` total, which is the hole that would let a user proof mention a divergent prelude function.
     let mut context = Context::with_default_budget(SYNTAX);
     context.record_definition_totality(&name("prelude_partial"), Totality::Partial);
     let mut caller = mentioning("caller", "prelude_partial");

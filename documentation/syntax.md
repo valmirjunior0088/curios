@@ -277,13 +277,13 @@ Labels are part of a tuple type's identity: `{Nat, Bool}`, `{a: Nat, b: Bool}` a
 A labeled function field may use signature sugar:
 
 ```crs
-{run(input: Bytes) -> Async(Nat)}
+{run(input: Bytes) -> Io(Nat)}
 ```
 
 This is equivalent to:
 
 ```crs
-{run: (input: Bytes) -> Async(Nat)}
+{run: (input: Bytes) -> Io(Nat)}
 ```
 
 ## Expressions
@@ -514,7 +514,7 @@ once                            -- prints "x" twice in total
 
 `Io` is not matchable: it has no constructors to enumerate, so a `match` over one is rejected, whether it writes constructor arms or none at all. A lone `| _ =>` arm is an irrefutable binder match rather than an elimination, and is accepted as the binding it is.
 
-A host operation that can fail is declared `Try(M, E, A)` over its base monad — `Try(Io, Io/Error, File)` for `File/open`, `Try(Async, Io/Error, Socket)` for `tcp/Socket/connect`. Through the edges `/std/Try` declares, a `Try` region sequences a `Try` over its own base or over one that embeds in it, a bare `Result` as early return, and an `Io` or `Async` action wherever its base admits one — which is how an `Io` or `Async` base's own actions are sequenced; an action of any other base is refused. `Try/raise` stops the region, `Try/rescue` handles the stop, and `Try/run` hands the outcome back as an `M(Result(E, A))`.
+A host operation that can fail is declared `Try(M, E, A)` over its base monad — `Try(Io, Io/Error, File)` for `File/open`, `Try(Io, Io/Error, Socket)` for `tcp/Socket/connect`. Through the edges `/std/Try` declares, a `Try` region sequences a `Try` over its own base or over one that embeds in it, a bare `Result` as early return, and an `Io` action wherever its base admits one — which is how an `Io` base's own actions are sequenced; an action of any other base is refused. `Try/raise` stops the region, `Try/rescue` handles the stop, and `Try/run` hands the outcome back as an `M(Result(E, A))`.
 
 ```crs
 use /std/{File, Path, Bytes, Try, Io};
@@ -529,19 +529,21 @@ let contents: Try(Io, Io/Error, Bytes) =
 
 `/std/Monad/Lift(M, N)` declares the canonical embedding of monad `M` into monad `N`: one method, `Monad/lift`, taking an `M(A)` to an `N(A)`, with `Monad` witnesses for both sides as superclasses — so an embedding between non-monads cannot be declared. Like every witness, one `Monad/Lift` witness may occupy each ordered pair of monads program-wide, so which embedding runs is a fact about the program, never about a call site.
 
+For a monad `Job` that wraps a description — `pub struct Job(A: Type): pub Type { Io(A) }`, with its `Monad` witness — the embedding of `Io` is one line:
+
 ```crs
-satisfy Monad/Lift(Io, Async) {
-    lift = Async/lift,
+satisfy Monad/Lift(Io, Job) {
+    lift(action) = Job { action },
 }
 ```
 
-With that witness declared — `/std/Async` declares it — an `Io` action sequences directly inside an `Async` region, and the `!` inserts the lift:
+With that witness declared, an `Io` action sequences directly inside a `Job` region, and the `!` inserts the lift:
 
 ```crs
-use /std/{Async, print};
-pub let fiber: Async({}) =
+use /std/{Monad, print};
+pub let job: Job({}) =
     let _ = print("hello\n")!;
-    Async/pure(());
+    Monad/pure(());
 ```
 
 The explicit spelling `Monad/lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when its head's declared monad and the region's are both monads and differ; a tail that is no monadic action keeps the ordinary type mismatch. The read is of the action's *head's declaration*, so one whose head is not a declared name — a projection, a call of a lambda — is not embedded on its own: it reports as an action of one monad where another is expected, and `Monad/lift(action)` is the spelling that embeds it.

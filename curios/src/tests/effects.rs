@@ -230,103 +230,141 @@ fn a_try_region_over_io_sequences_io_actions_and_results() {
     assert_eq!(run(source), b"ss5");
 }
 
-/// A `Try(Async, ..)` region takes every edge at once: an `Io` action, an `Async` action, a bare `Result`, and a `Try` over `Io` embedded through `Lift(Io, Async)`.
+/// A `Try(Io, ..)` region takes every edge at once: a `Try` over `Io`, an `Io` action, and a bare `Result`.
 #[test]
-fn a_try_region_over_async_takes_every_declared_edge() {
+fn a_try_region_over_io_takes_every_declared_edge() {
     let source = r#"
-        use /std/{Nat, Str, Result, Try, Io, Async, print};
+        use /std/{Nat, Str, Result, Try, Io, print};
         pub let sync(n: Nat) -> Try(Io, Str, Nat) =
             let _ = print("i")!;
             Try/pure(n * 2);
-        pub let body: Try(Async, Str, Nat) =
+        pub let body: Try(Io, Str, Nat) =
             let a = sync(2)!;
-            let _ = Async/yield_now()!;
             let _ = print("a")!;
             let b = Result/success(a + 1)!;
             let _ = Result/raise(@Str, @{}, "stop")!;
             Try/pure(b);
-        pub let fiber: Async({}) =
+        pub let program: Io({}) =
             let outcome = Try/run(body)!;
             match outcome
             | success(n) => print(Nat/to_str(n))
             | failure(e) => print(e)
             end;
-        Async/run(fiber)
+        program
         "#;
 
     assert_eq!(run(source), b"iastop");
 }
 
-/// `Try/run`'s declared result is `M(Result(E, A))` with `M` a binder, so the lift oracle reads the base off the argument's own declared shape: an `Io` outcome sequenced in an `Async` region lifts through `Lift(Io, Async)`, and the same spelling in a `Try(Io, ..)` region lifts through the identity edge rather than letting unification guess the region's base.
+/// `Try/run`'s declared result is `M(Result(E, A))` with `M` a binder, so the lift oracle reads the base off the argument's own declared shape: an `Io` outcome sequenced in a `Try` region over `Job` lifts through `Lift(Io, Job)` rather than letting unification guess the region's base.
 #[test]
 fn running_a_try_lifts_by_the_base_its_argument_was_declared_over() {
     let source = r#"
-        use /std/{Nat, Str, Result, Try, Async, Io, print};
+        use /std/{Monad, Nat, Str, Result, Try, Io, print};
+        use /std/Monad/{Lift};
+        pub struct Job(A: Type): pub Type {
+            Io(A),
+        }
+        pub let jpure(@A: Type, a: A) -> Job(A) =
+            Job { Io/pure(a) };
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+            Job { Io/bind(m.0, (a) => f(a).0) };
+        satisfy Monad(Job) {
+            pure = jpure,
+            bind = jbind,
+        }
+        satisfy Lift(Io, Job) {
+            lift(action) = Job { action },
+        }
         pub let step: Try(Io, Str, Nat) =
             let _ = print("s")!;
             Try/pure(4);
-        pub let wrapped: Try(Io, Str, Nat) =
+        pub let wrapped: Try(Job, Str, Nat) =
             let outcome = Try/run(step)!;
             let n = outcome!;
             Try/pure(n + 1);
-        pub let fiber: Async({}) =
-            let r = Try/run(wrapped)!;
+        pub let program: Io({}) =
+            let r = Try/run(wrapped).0!;
             match r
             | success(n) => print(Nat/to_str(n))
             | failure(e) => print(e)
             end;
-        Async/run(fiber)
+        program
         "#;
 
     assert_eq!(run(source), b"s5");
 }
 
-/// `Try/rescue`'s declared result is `Try(M, E, A)` with `M` a binder in a *context* slot, so the lift oracle reads the base off the argument in that position: an `Io`-based rescue sequenced in an `Async`-based `Try` region lifts through the `Try` edge, as the action it wraps would have.
+/// `Try/rescue`'s declared result is `Try(M, E, A)` with `M` a binder in a *context* slot, so the lift oracle reads the base off the argument in that position: an `Io`-based rescue sequenced in a `Job`-based `Try` region lifts through the `Try` edge, as the action it wraps would have.
 #[test]
 fn a_try_action_lifts_by_the_base_its_context_argument_was_declared_over() {
     let source = r#"
-        use /std/{Nat, Str, Result, Try, Async, Io, print};
+        use /std/{Monad, Nat, Str, Result, Try, Io, print};
+        use /std/Monad/{Lift};
+        pub struct Job(A: Type): pub Type {
+            Io(A),
+        }
+        pub let jpure(@A: Type, a: A) -> Job(A) =
+            Job { Io/pure(a) };
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+            Job { Io/bind(m.0, (a) => f(a).0) };
+        satisfy Monad(Job) {
+            pure = jpure,
+            bind = jbind,
+        }
+        satisfy Lift(Io, Job) {
+            lift(action) = Job { action },
+        }
         pub let step: Try(Io, Str, Nat) =
             let _ = print("s")!;
             Try/raise("e");
-        pub let rescued: Try(Async, Str, {}) =
+        pub let rescued: Try(Job, Str, {}) =
             let n = Try/rescue(step, (e) => Try/pure(4))!;
-            let _ = Async/yield_now()!;
             let _ = print(Nat/to_str(n))!;
             Try/pure(());
-        pub let fiber: Async({}) =
-            let r = Try/run(rescued)!;
+        pub let program: Io({}) =
+            let r = Try/run(rescued).0!;
             match r
             | success(_) => print("!")
             | failure(e) => print(e)
             end;
-        Async/run(fiber)
+        program
         "#;
 
     assert_eq!(run(source), b"s4!");
 }
 
-/// The bind's monad is the region's, supplied before any action is checked, so an action of another monad that the oracle cannot read — here a projection, which has no declaration to read — is reported at its own `!` as what it is, and the well-typed actions before it are never blamed: the region is `Async` throughout, not pinned to `Io` by the unreadable action.
+/// The bind's monad is the region's, supplied before any action is checked, so an action of another monad that the oracle cannot read — here a projection, which has no declaration to read — is reported at its own `!` as what it is, and the well-typed actions before it are never blamed: the region is `Job` throughout, not pinned to `Io` by the unreadable action.
 #[test]
 fn an_unreadable_action_of_another_monad_is_reported_at_its_own_bang() {
     let source = r#"
-        use /std/{Nat, Async, Io, print};
-        let fiber: Async({}) =
-            let _ = Async/yield_now()!;
-            let _ = print("a")!;
+        use /std/{Monad, Nat, Io, print};
+        pub struct Job(A: Type): pub Type {
+            Io(A),
+        }
+        pub let jpure(@A: Type, a: A) -> Job(A) =
+            Job { Io/pure(a) };
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+            Job { Io/bind(m.0, (a) => f(a).0) };
+        satisfy Monad(Job) {
+            pure = jpure,
+            bind = jbind,
+        }
+        let job: Job({}) =
+            let _ = jpure(())!;
             let acts = (print("b"), 1);
             let _ = acts.0!;
-            Async/pure(());
-        Async/run(fiber)
+            jpure(());
+        job.0
         "#;
 
     let error = typecheck(source).expect_err("an unlifted action must refuse");
     assert!(
         error.contains("an action of one monad where another is expected")
             && error.contains("action: Io({})")
-            && error.contains("expected: Async(")
+            && error.contains("expected: Job(")
             && error.contains("acts.0!")
-            && !error.contains("yield_now!"),
+            && !error.contains("jpure(())!"),
         "expected the report at the projection's own `!`, got: {error}"
     );
 }
@@ -353,36 +391,66 @@ fn a_result_value_sequences_in_a_result_region() {
 
 // === The `Lift` embedding vocabulary and auto-lift at `!`. =======================
 
-/// An `Io` action sequenced bare inside an `Async` region, lifted through the `/std/Async` edge with nothing spelled at the call site.
+/// An `Io` action sequenced bare inside a region of a monad with a declared edge from `Io`, lifted through that edge with nothing spelled at the call site.
 #[test]
-fn an_io_action_lifts_into_an_async_region() {
+fn an_io_action_lifts_into_a_region_with_a_declared_edge() {
     let source = r#"
-        use /std/{Async, print};
-        pub let fiber: Async({}) =
+        use /std/{Monad, Io, print};
+        use /std/Monad/{Lift};
+        pub struct Job(A: Type): pub Type {
+            Io(A),
+        }
+        pub let jpure(@A: Type, a: A) -> Job(A) =
+            Job { Io/pure(a) };
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+            Job { Io/bind(m.0, (a) => f(a).0) };
+        satisfy Monad(Job) {
+            pure = jpure,
+            bind = jbind,
+        }
+        satisfy Lift(Io, Job) {
+            lift(action) = Job { action },
+        }
+        pub let job: Job({}) =
             let _ = print("a")!;
-            let _ = Async/yield_now()!;
+            let _ = jpure(())!;
             let _ = print("b")!;
-            Async/pure(());
-        Async/run(fiber)
+            jpure(());
+        job.0
         "#;
 
     assert_eq!(run(source), b"ab");
 }
 
-/// A region's tail is the second place an embedding is written: an `Io` action ending an `Async` region is lifted through the same edge a `!` would use, and so is one ending a match arm, which is a region of its own.
+/// A region's tail is the second place an embedding is written: an `Io` action ending a `Job` region is lifted through the same edge a `!` would use, and so is one ending a match arm, which is a region of its own.
 #[test]
-fn an_io_tail_lifts_into_an_async_region() {
+fn an_io_tail_lifts_into_a_region_with_a_declared_edge() {
     let source = r#"
-        use /std/{Async, Bool, print};
-        pub let fiber(flag: Bool) -> Async({}) =
-            let _ = Async/yield_now()!;
+        use /std/{Monad, Bool, Io, print};
+        use /std/Monad/{Lift};
+        pub struct Job(A: Type): pub Type {
+            Io(A),
+        }
+        pub let jpure(@A: Type, a: A) -> Job(A) =
+            Job { Io/pure(a) };
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+            Job { Io/bind(m.0, (a) => f(a).0) };
+        satisfy Monad(Job) {
+            pure = jpure,
+            bind = jbind,
+        }
+        satisfy Lift(Io, Job) {
+            lift(action) = Job { action },
+        }
+        pub let job(flag: Bool) -> Job({}) =
+            let _ = jpure(())!;
             match flag
             | true => print("t")
             | false => print("f")
             end;
-        pub let plain: Async({}) =
+        pub let plain: Job({}) =
             print("p");
-        Async/run(Async/bind(fiber(true), (_) => plain))
+        Io/bind(job(true).0, (_) => plain.0)
         "#;
 
     assert_eq!(run(source), b"tp");
@@ -392,7 +460,7 @@ fn an_io_tail_lifts_into_an_async_region() {
 #[test]
 fn a_tail_with_no_edge_reports_the_lift_witness() {
     let source = r#"
-        use /std/{Monad, Io, Async};
+        use /std/{Monad, Io};
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
@@ -405,13 +473,13 @@ fn a_tail_with_no_edge_reports_the_lift_witness() {
             bind = jbind,
         }
         pub let job: Job({}) =
-            Async/yield_now();
+            Io/yield();
         job.0
         "#;
 
     let error = typecheck(source).expect_err("a missing edge must refuse");
     assert!(
-        error.contains("no witness of Monad/Lift(Async, Job)"),
+        error.contains("no witness of Monad/Lift(Io, Job)"),
         "expected the embedding report, got: {error}"
     );
 }
@@ -420,12 +488,27 @@ fn a_tail_with_no_edge_reports_the_lift_witness() {
 #[test]
 fn an_explicit_lift_spells_the_same_embedding() {
     let source = r#"
-        use /std/{Async, print};
+        use /std/{Monad, Io, print};
+        use /std/Monad/{Lift};
         use /std/Monad/Lift/{lift};
-        pub let fiber: Async({}) =
+        pub struct Job(A: Type): pub Type {
+            Io(A),
+        }
+        pub let jpure(@A: Type, a: A) -> Job(A) =
+            Job { Io/pure(a) };
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+            Job { Io/bind(m.0, (a) => f(a).0) };
+        satisfy Monad(Job) {
+            pure = jpure,
+            bind = jbind,
+        }
+        satisfy Lift(Io, Job) {
+            lift(action) = Job { action },
+        }
+        pub let job: Job({}) =
             let _ = lift(print("x"))!;
-            Async/pure(());
-        Async/run(fiber)
+            jpure(());
+        job.0
         "#;
 
     assert_eq!(run(source), b"x");
@@ -435,7 +518,7 @@ fn an_explicit_lift_spells_the_same_embedding() {
 #[test]
 fn a_missing_edge_reports_the_lift_witness() {
     let source = r#"
-        use /std/{Monad, Io, Async};
+        use /std/{Monad, Io};
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
@@ -448,7 +531,7 @@ fn a_missing_edge_reports_the_lift_witness() {
             bind = jbind,
         }
         pub let job: Job({}) =
-            let _ = Async/yield_now()!;
+            let _ = Io/yield()!;
             jpure(());
         job.0
         "#;
@@ -456,8 +539,8 @@ fn a_missing_edge_reports_the_lift_witness() {
     let error = typecheck(source).expect_err("a missing edge must refuse");
     // The former-eta display fold renders the goal's monads as bare heads, and the embedding diagnosis speaks in terms of the sequencing rather than the synthesized wrapper.
     assert!(
-        error.contains("no witness of Monad/Lift(Async, Job)")
-            && error.contains("needed to sequence an Async action in this Job region"),
+        error.contains("no witness of Monad/Lift(Io, Job)")
+            && error.contains("needed to sequence an Io action in this Job region"),
         "expected the embedding report with folded formers, got: {error}"
     );
 }
@@ -567,39 +650,6 @@ fn a_flex_action_still_sequences_without_lifting() {
     assert_eq!(run(source), b"65");
 }
 
-/// Embeddings never chain: an edge into `Job` from `Io` does not carry an `Async` action through `Io`, and the refusal names the pair that is actually missing.
-#[test]
-fn embeddings_do_not_chain_through_a_middle_monad() {
-    let source = r#"
-        use /std/{Monad, Io, Async};
-        use /std/Monad/{Lift};
-        pub struct Job(A: Type): pub Type {
-            Io(A),
-        }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
-            Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
-            Job { Io/bind(m.0, (a) => f(a).0) };
-        satisfy Monad(Job) {
-            pure = jpure,
-            bind = jbind,
-        }
-        satisfy Lift(Io, Job) {
-            lift(action) = Job { action },
-        }
-        pub let job: Job({}) =
-            let _ = Async/yield_now()!;
-            jpure(());
-        job.0
-        "#;
-
-    let error = typecheck(source).expect_err("no Async-into-Job edge exists");
-    assert!(
-        error.contains("no witness of") && error.contains("Lift"),
-        "expected the missing Lift witness, got: {error}"
-    );
-}
-
 /// An action that may fail has no edge into a monad that cannot hold a failure, so no witness is to be declared: the refusal names the function that hands the outcome back where the action stands, and that a region which is itself a `Try` sequences it.
 #[test]
 fn a_try_sequenced_in_a_region_with_no_edge_for_it_is_told_what_is_written_instead() {
@@ -629,7 +679,7 @@ fn a_try_sequenced_in_a_region_with_no_edge_for_it_is_told_what_is_written_inste
 fn a_missing_edge_between_monads_that_hold_no_failure_offers_no_runner() {
     let error = typecheck(
         r#"
-        use /std/{Monad, Io, Async};
+        use /std/{Monad, Io};
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
@@ -642,12 +692,12 @@ fn a_missing_edge_between_monads_that_hold_no_failure_offers_no_runner() {
             bind = jbind,
         }
         pub let job: Job({}) =
-            let _ = Async/yield_now()!;
+            let _ = Io/yield()!;
             jpure(());
         job.0
         "#,
     )
-    .expect_err("no Async-into-Job edge exists");
+    .expect_err("no Io-into-Job edge exists");
 
     assert!(
         error.contains("no witness of") && error.contains("Lift"),

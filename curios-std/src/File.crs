@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Str, Path, Try, Async, Io, Handle};
+use /std/{Bytes, Nat, Str, Path, Try, Io, Handle};
 use /std/Bool/{Holds};
 
 --- An open file.
@@ -41,31 +41,22 @@ pub let close(f: File) -> Io({}) =
 
 --- Up to `n` bytes, and at least one until the file ends.
 pub let read(f: File, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
-    Async/Read/read(@Io, @Handle, f.0, n, @positive);
+    Io/Read/read(@Handle, f.0, n, @positive);
 
 --- The whole of `b`, a short write resent.
 pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
-    Try/attempt(Async/Write/write(f.0, b));
+    Try/attempt(Io/Write/write(f.0, b));
 
-satisfy Async/Read(Io, File) {
+satisfy Io/Read(File) {
     read(f, n, @positive) = read(f, n, @positive),
 }
 
-satisfy Async/Read(Async, File) {
-    read(f, n, @positive) = Async/lift(read(f, n, @positive)),
-}
-
-satisfy Async/Write(Io, File) {
+satisfy Io/Write(File) {
     write(f, b) = Try/run(write(f, b)),
-    flush(f) = Async/Write/flush(f.0),
+    flush(f) = Io/Write/flush(f.0),
 }
 
-satisfy Async/Write(Async, File) {
-    write(f, b) = Async/lift(Try/run(write(f, b))),
-    flush(f) = Async/lift(Async/Write/flush(f.0)),
-}
-
---- `body` over the file at `path`, closed whichever way the body ends; the body's own failure is the answer after the close.
+--- `body` over the file at `path`, closed whichever way the body ends — finished, failed, or cancelled while it waits; the body's own failure is the answer after the close.
 pub let with(
     @A: Type,
     path: Path,
@@ -73,24 +64,7 @@ pub let with(
     body: (File) -> Try(Io, Io/Error, A),
 ) -> Try(Io, Io/Error, A) =
     let f = open(path, mode)!;
-    let a =
-        Try/rescue(
-            body(f),
-            (e) =>
-                let _ = close(f)!;
-                Try/raise(e))!;
-    let _ = close(f)!;
-    Try/pure(a);
-
---- The same bracket inside a fiber, registered with the scheduler, so a cancelled task closes the file.
-pub let with_async(
-    @A: Type,
-    path: Path,
-    mode: Mode,
-    body: (File) -> Try(Async, Io/Error, A),
-) -> Try(Async, Io/Error, A) =
-    let f = open(path, mode)!;
-    let outcome = Async/using(close(f), Try/run(body(f)))!;
+    let outcome = Io/using((_) => close(f), Try/run(body(f)))!;
     let a = outcome!;
     Try/pure(a);
 

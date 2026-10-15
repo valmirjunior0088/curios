@@ -94,7 +94,7 @@ pub use Monad/{let Monad};
 
 --- A description of a computation that touches the host, never its result.
 ---
---- Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. `Error` is the failure every host operation reports and `Chunk` what one read answers with. `Reader` is a stream with the bytes read ahead of what was asked of it, through which a line or any other piece is cut from them. Beside them are this process's own standard streams, read and written without a scheduler.
+--- Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. A description that waits suspends, so it holds only the branch it runs in, and the host alone waits: `wait`, `sleep` and `yield` suspend, `using` brackets a resource so that a branch dropped while it waits releases it, `both`, `all`, `first`, `race` and `timeout` run descriptions side by side, and a `scope` runs the children its body spawns beside it, joined one by one or all at once. `Future`, `Channel` and `Signal` are waited on through `select` over their offers. `Read` and `Write` are what a stream is read and written through — the concepts a file, a socket, a child's pipe and the standard streams satisfy — with `read_all` and `copy` written once over them; `Reader` is a stream with the bytes read ahead of what was asked of it, through which a line or any other piece is cut from them. `Error` is the failure every host operation reports and `Chunk` what one read answers with.
 pub mod Io;
 pub use Io/{let Io};
 
@@ -105,12 +105,6 @@ pub use Handle/{let Handle};
 --- A mutable cell in `Io`: the one mutable state a program has.
 pub mod Cell;
 pub use Cell/{let Cell};
-
---- Cooperative tasks over the host's scheduler: a fiber that parks on a handle, a timer or a signal and resumes when it is ready.
----
---- `run` drives a root fiber to its answer or reports a deadlock, and `using` brackets a resource so that a cancelled task releases it. An `Io` action sequences inside an `Async` region as it is. `Read` and `Write` are what a stream is read and written through — the concepts a file, a socket, a child's pipe and the standard streams satisfy, parking the fiber wherever the host would block — with `read_all` and `copy` written once over them.
-pub mod Async;
-pub use Async/{let Async};
 
 --- The error channel over a monad: an `M(Result(E, A))` sequenced so that a failure stops the region.
 ---
@@ -132,7 +126,7 @@ pub use Path/{let Path};
 
 --- A regular file the program opened.
 ---
---- Every operation is `Io`, since the disk answers at once, and what can fail is `Try` over `Io`. Inside a fiber a file is a stream like any other.
+--- Every operation is `Io`, since the disk answers at once, and what can fail is `Try` over `Io`. A file is a stream like any other, and its bracket closes it however the body ends.
 pub mod File;
 pub use File/{let File};
 
@@ -146,7 +140,7 @@ pub mod proc;
 
 --- A child process to run: the program, its arguments, and how its streams are wired.
 ---
---- A child started inside a fiber is killed when the task around it ends.
+--- A child started inside a bracket is killed when the body ends, however it ends.
 pub mod Command;
 pub use Command/{let Command};
 
@@ -160,7 +154,7 @@ pub use Tty/{let Tty};
 pub mod Serial;
 pub use Serial/{let Serial};
 
---- TCP over the host's sockets: connections and listeners as streams, parking the fiber wherever a peer decides.
+--- TCP over the host's sockets: connections and listeners as streams, waiting by suspending wherever a peer decides.
 pub mod tcp;
 
 --- What may close a program: the concept the compiler performs a program's closing term through, witnessed by a description that yields nothing, by one over `Io` that may fail, and by a `Test`.

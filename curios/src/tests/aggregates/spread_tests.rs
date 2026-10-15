@@ -81,17 +81,17 @@ fn list_spread_operand_hoists_bangs() {
     // A bang inside a spread operand hoists into the enclosing region exactly like one inside a plain element — the literal is collected, not sealed.
     assert_eq!(
         run(r#"
-        use /std/{Async, Str, Nat, List, Io};
-        let prog : Async({}) =
-            let ys : List(Nat) = [1, ..Async/pure([2, 3])!, 4];
+        use /std/{Str, Nat, List, Io};
+        let prog : Io({}) =
+            let ys : List(Nat) = [1, ..Io/pure([2, 3])!, 4];
             let digits : Nat =
                 match ys : (_) => Nat
                 | [] => 0
                 | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
                 end;
-            let wrote = Async/lift(Io/write(Io/stdout, Str/to_bytes(Nat/to_str(digits))))!;
-            Async/pure(());
-        Async/run(prog)
+            let wrote = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(digits)))!;
+            Io/pure(());
+        prog
         "#),
         b"4321"
     );
@@ -139,12 +139,12 @@ fn bin_spread_operand_hoists_bangs() {
     // The `Bytes` sibling of `list_spread_operand_hoists_bangs`, through the dedicated `Intrinsic::Bytes` collect arm — the glued `!` binds to the operand.
     assert_eq!(
         run(r#"
-        use /std/{Async, Bytes, Io};
-        let prog : Async({}) =
-            let out : Bytes = x[0x3e, ..Async/pure(x[0x68, 0x69])!, 0x3c];
-            let wrote = Async/lift(Io/write(Io/stdout, out))!;
-            Async/pure(());
-        Async/run(prog)
+        use /std/{Bytes, Io};
+        let prog : Io({}) =
+            let out : Bytes = x[0x3e, ..Io/pure(x[0x68, 0x69])!, 0x3c];
+            let wrote = Io/write(Io/stdout, out)!;
+            Io/pure(());
+        prog
         "#),
         b">hi<"
     );

@@ -14,7 +14,7 @@ const DENIED: u8 = 3;
 
 /// What every fixture begins with: the imports, and `verdict`, which turns an outcome into the code the program exits with.
 const PRELUDE: &str = "
-use /std/{Byte, Io, Result, Try, Async, Handle, File, Path, fs, Tty, Serial, Command, tcp};
+use /std/{Byte, Io, Result, Try, Handle, File, Path, fs, Tty, Serial, Command, tcp};
 use /std/Command/{Stdio, Child};
 let code(e: Io/Error) -> Byte = match e | permission_denied() => 3 | not_found() => 2 | _ => 1 end;
 let verdict(@A: Type, r: Result(Io/Error, A)) -> Byte = match r | success(_) => 0 | failure(e) => code(e) end;
@@ -23,35 +23,14 @@ let verdict(@A: Type, r: Result(Io/Error, A)) -> Byte = match r | success(_) => 
 /// The rows a fixture scripts, each with the raw reply it answers every call with.
 type Replies = Vec<(HostOp, Vec<RawValue>)>;
 
-/// The monad a fixture's subject runs in.
-#[derive(Clone, Copy)]
-enum In {
-    Io,
-    Async,
-}
-
-/// Run `subject`, a `Try` over `monad` with no value, against a mock host whose rows in `replies` answer raw, and the code it exits with.
-fn exit_code(monad: In, subject: &str, replies: Replies) -> u8 {
-    let tail = match monad {
-        In::Io => {
-            "
+/// Run `subject`, a `Try` over `Io` with no value, against a mock host whose rows in `replies` answer raw, and the code it exits with.
+fn exit_code(subject: &str, replies: Replies) -> u8 {
+    let tail = "
 let subject: Try(Io, Io/Error, {}) =
     SUBJECT;
 let r = Try/run(subject)!;
 /std/proc/exit(@{}, verdict(r))
-"
-        }
-        In::Async => {
-            "
-let subject: Try(Async, Io/Error, {}) =
-    SUBJECT;
-let fiber: Async({}) =
-    let r = Try/run(subject)!;
-    /std/proc/exit(@{}, verdict(r));
-Async/run(fiber)
-"
-        }
-    };
+";
     let source = format!("{PRELUDE}{}", tail.replace("SUBJECT", subject));
     let compiled = compile(&source).expect("the fixture compiles");
 
@@ -83,127 +62,115 @@ fn ok(payload: Vec<RawValue>) -> Vec<RawValue> {
 }
 
 /// Each case's row fails, and the program exits with the code its failure maps to.
-fn each_fails(monad: In, cases: Vec<(&str, Replies)>) {
+fn each_fails(cases: Vec<(&str, Replies)>) {
     for (subject, replies) in cases {
-        assert_eq!(exit_code(monad, subject, replies), DENIED, "{subject}");
+        assert_eq!(exit_code(subject, replies), DENIED, "{subject}");
     }
 }
 
 #[test]
 fn a_stream_row_s_failure_is_the_error_it_names() {
-    each_fails(
-        In::Io,
-        vec![
-            (
-                "let c = Io/read(Io/stdin, 8)!;
+    each_fails(vec![
+        (
+            "let c = Io/read(Io/stdin, 8)!;
                  match c | error(e) => Try/raise(e) | _ => Try/pure(()) end",
-                vec![(HostOp::HandleRead, denied(vec![bytes(b"")]))],
-            ),
-            (
-                "Try/attempt(Async/Write/write(Handle/stdout, x[1]))",
-                vec![(HostOp::HandleWrite, denied(vec![nat(0)]))],
-            ),
-            (
-                "Try/attempt(Async/Write/flush(Handle/stdout))",
-                vec![(HostOp::HandleFlush, denied(vec![]))],
-            ),
-        ],
-    );
+            vec![(HostOp::HandleRead, denied(vec![bytes(b"")]))],
+        ),
+        (
+            "Try/attempt(Io/Write/write(Handle/stdout, x[1]))",
+            vec![(HostOp::HandleWrite, denied(vec![nat(0)]))],
+        ),
+        (
+            "Try/attempt(Io/Write/flush(Handle/stdout))",
+            vec![(HostOp::HandleFlush, denied(vec![]))],
+        ),
+    ]);
 }
 
 #[test]
 fn a_filesystem_row_s_failure_is_the_error_it_names() {
-    each_fails(
-        In::Io,
-        vec![
-            (
-                r#"let _ = File/open(Path/of_str("a"), File/Mode/read())!; Try/pure(())"#,
-                vec![(HostOp::FileOpen, denied(vec![bytes(b"")]))],
-            ),
-            (
-                r#"let _ = fs/stat(Path/of_str("a"))!; Try/pure(())"#,
-                vec![(
-                    HostOp::FileStat,
-                    denied(vec![nat(0), nat(0), nat(0), nat(0)]),
-                )],
-            ),
-            (
-                r#"fs/remove_file(Path/of_str("a"))"#,
-                vec![(HostOp::FileRemove, denied(vec![]))],
-            ),
-            (
-                r#"fs/rename(Path/of_str("a"), Path/of_str("b"))"#,
-                vec![(HostOp::FileRename, denied(vec![]))],
-            ),
-            (
-                r#"let _ = fs/list(Path/of_str("a"))!; Try/pure(())"#,
-                vec![(HostOp::DirList, denied(vec![RawValue::BytesList(vec![])]))],
-            ),
-            (
-                r#"fs/create_dir(Path/of_str("a"))"#,
-                vec![(HostOp::DirCreate, denied(vec![]))],
-            ),
-            (
-                r#"fs/remove_dir(Path/of_str("a"))"#,
-                vec![(HostOp::DirRemove, denied(vec![]))],
-            ),
-            (
-                "let _ = fs/cwd()!; Try/pure(())",
-                vec![(HostOp::ProcCwd, denied(vec![bytes(b"")]))],
-            ),
-        ],
-    );
+    each_fails(vec![
+        (
+            r#"let _ = File/open(Path/of_str("a"), File/Mode/read())!; Try/pure(())"#,
+            vec![(HostOp::FileOpen, denied(vec![bytes(b"")]))],
+        ),
+        (
+            r#"let _ = fs/stat(Path/of_str("a"))!; Try/pure(())"#,
+            vec![(
+                HostOp::FileStat,
+                denied(vec![nat(0), nat(0), nat(0), nat(0)]),
+            )],
+        ),
+        (
+            r#"fs/remove_file(Path/of_str("a"))"#,
+            vec![(HostOp::FileRemove, denied(vec![]))],
+        ),
+        (
+            r#"fs/rename(Path/of_str("a"), Path/of_str("b"))"#,
+            vec![(HostOp::FileRename, denied(vec![]))],
+        ),
+        (
+            r#"let _ = fs/list(Path/of_str("a"))!; Try/pure(())"#,
+            vec![(HostOp::DirList, denied(vec![RawValue::BytesList(vec![])]))],
+        ),
+        (
+            r#"fs/create_dir(Path/of_str("a"))"#,
+            vec![(HostOp::DirCreate, denied(vec![]))],
+        ),
+        (
+            r#"fs/remove_dir(Path/of_str("a"))"#,
+            vec![(HostOp::DirRemove, denied(vec![]))],
+        ),
+        (
+            "let _ = fs/cwd()!; Try/pure(())",
+            vec![(HostOp::ProcCwd, denied(vec![bytes(b"")]))],
+        ),
+    ]);
 }
 
 #[test]
 fn a_device_row_s_failure_is_the_error_it_names() {
     let open = r#"Serial/open(Path/of_str("/dev/x"), Serial/config(9600))"#;
 
-    each_fails(
-        In::Io,
-        vec![
-            (
-                "Tty/raw(Tty/stdin, true)",
-                vec![(HostOp::TtyRaw, denied(vec![]))],
-            ),
-            (
-                "let _ = Tty/size(Tty/stdin)!; Try/pure(())",
-                vec![(HostOp::TtySize, denied(vec![nat(0), nat(0)]))],
-            ),
-            (
-                &format!("let _ = {open}!; Try/pure(())"),
-                vec![(HostOp::SerialOpen, denied(vec![bytes(b"")]))],
-            ),
-            (
-                "let _ = Serial/list()!; Try/pure(())",
-                vec![(
-                    HostOp::SerialList,
-                    denied(vec![RawValue::BytesList(vec![])]),
-                )],
-            ),
-            (
-                &format!("let s = {open}!; Serial/set_dtr(s, true)"),
-                vec![
-                    (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
-                    (HostOp::SerialControl, denied(vec![])),
-                ],
-            ),
-        ],
-    );
+    each_fails(vec![
+        (
+            "Tty/raw(Tty/stdin, true)",
+            vec![(HostOp::TtyRaw, denied(vec![]))],
+        ),
+        (
+            "let _ = Tty/size(Tty/stdin)!; Try/pure(())",
+            vec![(HostOp::TtySize, denied(vec![nat(0), nat(0)]))],
+        ),
+        (
+            &format!("let _ = {open}!; Try/pure(())"),
+            vec![(HostOp::SerialOpen, denied(vec![bytes(b"")]))],
+        ),
+        (
+            "let _ = Serial/list()!; Try/pure(())",
+            vec![(
+                HostOp::SerialList,
+                denied(vec![RawValue::BytesList(vec![])]),
+            )],
+        ),
+        (
+            &format!("let s = {open}!; Serial/set_dtr(s, true)"),
+            vec![
+                (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
+                (HostOp::SerialControl, denied(vec![])),
+            ],
+        ),
+    ]);
 }
 
 #[test]
 fn a_serial_drain_s_failure_is_the_error_it_names() {
-    each_fails(
-        In::Async,
-        vec![(
-            r#"let s = Serial/open(Path/of_str("/dev/x"), Serial/config(9600))!; Serial/drain(s)"#,
-            vec![
-                (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
-                (HostOp::SerialDrain, denied(vec![bytes(b"")])),
-            ],
-        )],
-    );
+    each_fails(vec![(
+        r#"let s = Serial/open(Path/of_str("/dev/x"), Serial/config(9600))!; Serial/drain(s)"#,
+        vec![
+            (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
+            (HostOp::SerialDrain, denied(vec![bytes(b"")])),
+        ],
+    )]);
 }
 
 #[test]
@@ -218,89 +185,86 @@ fn a_network_row_s_failure_is_the_error_it_names() {
     let opened = || (HostOp::SocketOpen, ok(vec![bytes(&[8])]));
     let connect = r#"let _ = tcp/Socket/connect("h", 80)!; Try/pure(())"#;
 
-    each_fails(
-        In::Async,
-        vec![
-            (
-                r#"let _ = tcp/resolve("h", 80)!; Try/pure(())"#,
-                vec![(HostOp::DnsLookup, denied(vec![bytes(b"")]))],
-            ),
-            (
-                r#"let _ = tcp/resolve("h", 80)!; Try/pure(())"#,
-                vec![
-                    looked_up(),
-                    (
-                        HostOp::DnsResolve,
-                        denied(vec![RawValue::BytesList(vec![])]),
-                    ),
-                ],
-            ),
-            (
-                connect,
-                vec![
-                    looked_up(),
-                    resolved(),
-                    (HostOp::SocketOpen, denied(vec![bytes(b"")])),
-                ],
-            ),
-            (
-                connect,
-                vec![
-                    looked_up(),
-                    resolved(),
-                    opened(),
-                    (HostOp::SocketConnect, denied(vec![])),
-                ],
-            ),
-            (
-                connect,
-                vec![
-                    looked_up(),
-                    resolved(),
-                    opened(),
-                    (HostOp::SocketConnect, vec![nat(status::WOULD_BLOCK)]),
-                    (HostOp::SocketFinishConnect, denied(vec![])),
-                ],
-            ),
-            (
-                r#"let _ = tcp/Socket/connect_tls("h", 80)!; Try/pure(())"#,
-                vec![
-                    looked_up(),
-                    resolved(),
-                    opened(),
-                    (HostOp::SocketConnect, ok(vec![])),
-                    (HostOp::TlsStart, denied(vec![])),
-                ],
-            ),
-            (
-                r#"let _ = tcp/Listener/listen("h", 80)!; Try/pure(())"#,
-                vec![
-                    looked_up(),
-                    resolved(),
-                    (HostOp::SocketListen, denied(vec![bytes(b"")])),
-                ],
-            ),
-            (
-                r#"let l = tcp/Listener/listen("h", 80)!;
+    each_fails(vec![
+        (
+            r#"let _ = tcp/resolve("h", 80)!; Try/pure(())"#,
+            vec![(HostOp::DnsLookup, denied(vec![bytes(b"")]))],
+        ),
+        (
+            r#"let _ = tcp/resolve("h", 80)!; Try/pure(())"#,
+            vec![
+                looked_up(),
+                (
+                    HostOp::DnsResolve,
+                    denied(vec![RawValue::BytesList(vec![])]),
+                ),
+            ],
+        ),
+        (
+            connect,
+            vec![
+                looked_up(),
+                resolved(),
+                (HostOp::SocketOpen, denied(vec![bytes(b"")])),
+            ],
+        ),
+        (
+            connect,
+            vec![
+                looked_up(),
+                resolved(),
+                opened(),
+                (HostOp::SocketConnect, denied(vec![])),
+            ],
+        ),
+        (
+            connect,
+            vec![
+                looked_up(),
+                resolved(),
+                opened(),
+                (HostOp::SocketConnect, vec![nat(status::WOULD_BLOCK)]),
+                (HostOp::SocketFinishConnect, denied(vec![])),
+            ],
+        ),
+        (
+            r#"let _ = tcp/Socket/connect_tls("h", 80)!; Try/pure(())"#,
+            vec![
+                looked_up(),
+                resolved(),
+                opened(),
+                (HostOp::SocketConnect, ok(vec![])),
+                (HostOp::TlsStart, denied(vec![])),
+            ],
+        ),
+        (
+            r#"let _ = tcp/Listener/listen("h", 80)!; Try/pure(())"#,
+            vec![
+                looked_up(),
+                resolved(),
+                (HostOp::SocketListen, denied(vec![bytes(b"")])),
+            ],
+        ),
+        (
+            r#"let l = tcp/Listener/listen("h", 80)!;
                    let _ = tcp/Listener/accept(l)!;
                    Try/pure(())"#,
-                vec![
-                    looked_up(),
-                    resolved(),
-                    (HostOp::SocketListen, ok(vec![bytes(&[8])])),
-                    (HostOp::SocketAccept, denied(vec![bytes(b"")])),
-                ],
-            ),
-            (
-                r#"tcp/Listener/serve_tls("h", 80, x[], x[], (_) => Async/pure(()))"#,
-                vec![(HostOp::TlsServerConfig, denied(vec![bytes(b"")]))],
-            ),
-            (
-                "Try/attempt(Handle/finish(Handle/stdout))",
-                vec![(HostOp::HandleFinish, denied(vec![]))],
-            ),
-        ],
-    );
+            vec![
+                looked_up(),
+                resolved(),
+                (HostOp::SocketListen, ok(vec![bytes(&[8])])),
+                (HostOp::SocketAccept, denied(vec![bytes(b"")])),
+            ],
+        ),
+        (
+            r#"tcp/Listener/serve_tls("h", 80, x[], x[], (_) => Io/pure(()))"#,
+            vec![(HostOp::TlsServerConfig, denied(vec![bytes(b"")]))],
+        ),
+        (
+            "Try/attempt(Handle/finish(Handle/stdout))",
+            vec![(HostOp::HandleFinish, denied(vec![]))],
+        ),
+    ]);
 }
 
 /// A name that resolves to no address names nothing a socket can reach: the resolution is an answer, and `/std` reads it as `not_found`, as it reads a name that resolves to nothing at all.
@@ -308,7 +272,6 @@ fn a_network_row_s_failure_is_the_error_it_names() {
 fn a_name_resolving_to_no_address_is_not_found() {
     assert_eq!(
         exit_code(
-            In::Async,
             r#"let _ = tcp/Socket/connect("h", 80)!; Try/pure(())"#,
             vec![
                 (HostOp::DnsLookup, ok(vec![bytes(&[7])])),
@@ -329,22 +292,16 @@ fn spawned() -> (HostOp, Vec<RawValue>) {
 
 #[test]
 fn a_process_row_s_failure_is_the_error_it_names() {
-    each_fails(
-        In::Io,
-        vec![(
-            r#"let _ = Command/spawn(Command/new("x", []))!; Try/pure(())"#,
-            vec![(HostOp::ProcSpawn, denied(vec![bytes(b""); 4]))],
-        )],
-    );
-    each_fails(
-        In::Async,
-        vec![(
-            r#"let c = Command/spawn(Command/new("x", []))!;
+    each_fails(vec![(
+        r#"let _ = Command/spawn(Command/new("x", []))!; Try/pure(())"#,
+        vec![(HostOp::ProcSpawn, denied(vec![bytes(b""); 4]))],
+    )]);
+    each_fails(vec![(
+        r#"let c = Command/spawn(Command/new("x", []))!;
                let _ = Child/wait(c)!;
                Try/pure(())"#,
-            vec![spawned(), (HostOp::ProcWait, denied(vec![nat(0), nat(0)]))],
-        )],
-    );
+        vec![spawned(), (HostOp::ProcWait, denied(vec![nat(0), nat(0)]))],
+    )]);
 }
 
 /// `/std` absorbs two failures by design: a kill that fails leaves a child the bracket reaps regardless, and a socket's finish is a courtesy to a peer that may already be gone.
@@ -352,7 +309,6 @@ fn a_process_row_s_failure_is_the_error_it_names() {
 fn the_failures_std_absorbs_by_design_are_absorbed() {
     assert_eq!(
         exit_code(
-            In::Async,
             r#"tcp/Socket/with(tcp/Socket/connect("h", 80), (_) => Try/pure(()))"#,
             vec![
                 (HostOp::DnsLookup, ok(vec![bytes(&[7])])),
@@ -370,7 +326,6 @@ fn the_failures_std_absorbs_by_design_are_absorbed() {
     );
     assert_eq!(
         exit_code(
-            In::Io,
             r#"let c = Command/spawn(Command/new("x", []))!;
                let _ = Child/kill(c)!;
                Try/pure(())"#,

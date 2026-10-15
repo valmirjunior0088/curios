@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, Try, Async, Io, Handle, Show};
+use /std/{Nat, Bool, Str, Try, Io, Handle, Show};
 use /std/ops/{Eql};
 
 --- A terminal this process holds a handle on.
@@ -49,19 +49,9 @@ pub let size(t: Tty) -> Try(Io, Io/Error, Size) =
 let restore(t: Tty) -> Io({}) =
     Io/bind(tty_raw(t.0, false), (_) => Io/pure(()));
 
---- Raw mode on `t` around `body`, restored whichever way the body ends.
+--- Raw mode on `t` around `body`, restored whichever way the body ends — finished, failed, or cancelled while it waits.
 pub let with_raw(@A: Type, t: Tty, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
     let _ = raw(t, true)!;
-    let a =
-        Try/rescue(body, (e) =>
-            let _ = restore(t)!;
-            Try/raise(e))!;
-    let _ = restore(t)!;
-    Try/pure(a);
-
---- The same bracket inside a fiber, registered with the scheduler, so a cancelled task restores the mode.
-pub let with_raw_async(@A: Type, t: Tty, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
-    let _ = raw(t, true)!;
-    let outcome = Async/using(restore(t), Try/run(body))!;
+    let outcome = Io/using((_) => restore(t), Try/run(body))!;
     let a = outcome!;
     Try/pure(a);

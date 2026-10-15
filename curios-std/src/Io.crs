@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind, suspend, advance};
-use /std/{Monad, Bytes, Nat, List, Result, Cell, Async, Handle, Program};
+use /std/{Monad, Bytes, Nat, List, Option, Result, Cell, Handle, Program};
 use /std/Bool/{Holds};
 use /std/time/{Duration, Instant};
 
@@ -8,9 +8,29 @@ use /std/time/{Duration, Instant};
 pub mod Error;
 pub use Error/{let Error};
 
+--- What a selection is written against: a non-committing attempt at a value and what to wait on while it declines.
+pub mod Offer;
+pub use Offer/{let Offer};
+
+--- A value fulfilled once, which whatever waits on it waits for until it is.
+pub mod Future;
+pub use Future/{let Future};
+
+--- A bounded queue values are handed through, its two ends waited on.
+pub mod Channel;
+pub use Channel/{let Channel};
+
+--- A flag one branch raises and another waits on: a wait on no handle and no timer.
+pub mod Signal;
+pub use Signal/{let Signal};
+
 --- A stream with the bytes read ahead of what was asked of it, and the reads that cut a piece from them.
 pub mod Reader;
 pub use Reader/{let Reader};
+
+--- Descriptions run side by side under one: each runs until it suspends, and the one that holds them waits on what all of them wait on. A branch no longer needed — a loser, a timed-out action, a child of a scope whose body has answered — is cancelled where it waits.
+pub mod concurrent;
+pub use concurrent/{both, all, first, race, timeout, scope, spawn, join, join_all, Scope, Task};
 
 satisfy Monad(Io) {
     pure = pure,
@@ -35,15 +55,26 @@ pub let wait(on: List(Handle)) -> Io({}) =
 pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
     suspend([], cells, pure(()), pure(()));
 
---- Until `d` has passed, on a timer closed whether the sleep ends or is cancelled.
+--- Until the handle `mint` makes is ready, the handle closed whether the wait ends or is cancelled: every wait on a handle made for it alone, a timer or a watch, is this one.
+pub let wait_minted(mint: Io(Handle)) -> Io({}) =
+    let h = mint!;
+    suspend([h], [], Handle/close(h), Handle/close(h));
+
+--- Until `d` has passed, on a timer of its own.
 pub let sleep(d: Duration) -> Io({}) =
     let start = Instant/now()!;
-    let timer = Instant/timer(Instant/add(start, d))!;
-    suspend([timer], [], Handle/close(timer), Handle/close(timer));
+    wait_minted(Instant/timer(Instant/add(start, d)));
 
---- Let what waits beside this run, and go on: a suspension on the handle that is always ready, so at the top of a program it waits on nothing.
+-- A cell filled already: what a suspension that may go on at once waits on. Private to the subtree, which is where every such suspension is made.
+let ready() -> Io(Cell({})) =
+    let cell = Cell/new()!;
+    let _ = Cell/fill(cell, ())!;
+    pure(cell);
+
+--- Let what waits beside this run, and go on: a suspension on a cell filled already, which whatever advances it may go on from at once, and which the top of a program goes on from without waiting.
 pub let yield() -> Io({}) =
-    wait([Handle/ready]);
+    let cell = ready()!;
+    wait_filled([cell]);
 
 --- How a body that `using` brackets ended.
 pub induct Ended: pub Type
@@ -99,32 +130,135 @@ pub let stdout: Output =
 pub let stderr: Output =
     Output { Handle/stderr };
 
---- Up to `n` bytes, and at least one until the input ends, waited for on this program's own behalf. Inside a fiber, `Async/Read`'s `read` parks instead.
+--- What a stream is read through. A read asks for a positive count and answers a chunk of between one byte and that count, the end of the stream, or a failure; a read the host cannot answer yet waits until it can, by suspending, so it holds only the branch that reads.
+---
+--- The lower bound is the chunk's own, stated in its type, so a witness for a stream of its own proves every chunk it hands out holds a byte — `Nat/lt/try` decides it of a length the witness cannot see. The upper bound is the witness's promise, which the host's rows hold `Handle` to.
+pub concept Read(S: Type): pub Type {
+    read(s: S, n: Nat, @positive: Holds(0 < n)) -> Io(Chunk),
+}
+
+--- What a stream is written through: the whole of the bytes, a short write resent, and what the stream holds of the writes it accepted handed on.
+pub concept Write(S: Type): pub Type {
+    write(S, Bytes) -> Io(Result(Error, {})),
+    --- Hand on what the stream holds of the writes it accepted: a TLS stream's records, which a write can accept before the socket takes them. Every other stream holds nothing.
+    flush(S) -> Io(Result(Error, {})),
+}
+
+--- Everything `read` yields up to the end of the stream; a failure before the end drops what was read. Every chunk holds a byte, so every read short of the end is progress.
+pub let drain(read: (n: Nat, @positive: Holds(0 < n)) -> Io(Chunk)) -> Io(Result(Error, Bytes)) =
+    let go(acc: Bytes) -> Io(Result(Error, Bytes)) =
+        let r = read(4096)!;
+        match r
+        | chunk(bytes) => go(x[..acc, ..bytes])
+        | eof() => pure(Result/success(acc))
+        | error(e) => pure(Result/failure(e))
+        end;
+    go(x[]);
+
+--- Everything up to the end of the stream; a failure before the end drops what was read.
+pub let read_all(@S: Type, use Read(S), s: S) -> Io(Result(Error, Bytes)) =
+    drain((n, @positive) => Read/read(@S, s, n, @positive));
+
+--- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer.
+pub let copy(
+    @S: Type,
+    @T: Type,
+    use Read(S),
+    use Write(T),
+    from: S,
+    to: T,
+) -> Io(Result(Error, {})) =
+    let go() -> Io(Result(Error, {})) =
+        let c = Read/read(from, 4096)!;
+        match c
+        | chunk(b) =>
+            let w = Write/write(to, b)!;
+            match w | success(_) => go() | failure(e) => pure(Result/failure(e)) end
+        | eof() => pure(Result/success(()))
+        | error(e) => pure(Result/failure(e))
+        end;
+    go();
+
+--- Up to `n` bytes of this process's input, and at least one until the input ends.
 pub let read(i: Input, n: Nat, @positive: Holds(0 < n)) -> Io(Chunk) =
-    Async/Read/read(@Io, @Handle, i.0, n, @positive);
+    Read/read(@Handle, i.0, n, @positive);
 
 --- The whole of `b`, a short write resent; the first failure is the answer.
 let written(o: Output, b: Bytes) -> Io(Result(Error, {})) =
-    Async/Write/write(o.0, b);
+    Write/write(o.0, b);
 
 --- The whole of `b`, a short write resent and a failure dropped.
 pub let write(o: Output, b: Bytes) -> Io({}) =
-    Io/bind(written(o, b), (_) => Io/pure(()));
+    bind(written(o, b), (_) => pure(()));
 
-satisfy Async/Read(Io, Input) {
+satisfy Read(Input) {
     read(i, n, @positive) = read(i, n, @positive),
 }
 
-satisfy Async/Read(Async, Input) {
-    read(i, n, @positive) = Async/Read/read(@Async, @Handle, i.0, n, @positive),
-}
-
-satisfy Async/Write(Io, Output) {
+satisfy Write(Output) {
     write(o, b) = written(o, b),
-    flush(o) = Async/Write/flush(o.0),
+    flush(o) = Write/flush(o.0),
 }
 
-satisfy Async/Write(Async, Output) {
-    write(o, b) = Async/Write/write(o.0, b),
-    flush(o) = Async/Write/flush(o.0),
-}
+-- The first offer of `offers` to yield, with its index, trying each in its order.
+let attempt(@A: Type, offers: List(Offer(A)), i: Nat) -> Io(Option({Nat, A})) =
+    match offers
+    | [] => pure(Option/none())
+    | [o, ..more] =>
+        let got = o.try!;
+        match got | some(a) => pure(Option/some((i, a))) | none() => attempt(more, i + 1) end
+    end;
+
+-- What every offer of `offers` waits on, in their order.
+let waits(@A: Type, offers: List(Offer(A))) -> Io(List(Offer/Waiting)) =
+    match offers
+    | [] => pure([])
+    | [o, ..more] =>
+        let w = o.wait!;
+        let ws = waits(more)!;
+        pure([w, ..ws])
+    end;
+
+-- Every release of `ws`, in their order.
+let released(ws: List(Offer/Waiting)) -> Io({}) =
+    match ws | [] => pure(()) | [w, ..more] => bind(w.release, (_) => released(more)) end;
+
+--- The first offer to yield a value, with its index, waiting on what all of them wait on while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing.
+---
+--- This is the one place a wait on the program's own state checks and then suspends, with nothing run between the two, so no change is missed: a future, a channel and a signal each wait as an offer through it.
+pub let select(@A: Type, offers: List(Offer(A))) -> Io({Nat, A}) =
+    let taken = attempt(offers, 0)!;
+    match taken
+    | some(w) => pure(w)
+    | none() =>
+        let ws = waits(offers)!;
+        let release = released(ws);
+        suspend(
+            List/flatten(List/map(ws, (w: Offer/Waiting) => w.on)),
+            List/flatten(List/map(ws, (w: Offer/Waiting) => w.filled)),
+            release,
+            bind(release, (_) => select(offers)))
+    end;
+
+--- An offer that yields once `d` has passed, on a timer of its own each time it is waited on.
+pub let after(d: Duration) -> Io(Offer({})) =
+    let start = Instant/now()!;
+    let due = Instant/add(start, d);
+    pure(
+        Offer/new(
+            bind(
+                Instant/now(),
+                (t) =>
+                    pure(
+                        match Instant/before(t, due)
+                        | true => Option/none()
+                        | false => Option/some(())
+                        end)),
+            bind(
+                Instant/timer(due),
+                (timer) =>
+                    pure(
+                        Offer/Waiting {
+                            on = [timer],
+                            filled = [],
+                            release = Handle/close(timer) }))));

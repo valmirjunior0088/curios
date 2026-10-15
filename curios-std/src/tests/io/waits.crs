@@ -1,6 +1,6 @@
 -- Waiting in `Io`: what a suspension `Io/advance` catches holds, and what a bracket tells its finalizer.
 use /std/{Bool, List, Cell, Io, Handle, Test};
-use /std/Async/{Channel};
+use /std/Io/{Channel};
 use /std/time/{Duration};
 
 -- A finalizer that leaves how its body ended where a take finds it.

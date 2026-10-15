@@ -425,9 +425,9 @@ enum MockResource {
         readable: bool,
         writable: bool,
     },
-    /// A timer minted by `clock_timer`. Nothing but the program moves a script, so its instant has passed once a wait has been asked to hold out for it: the clock jumps to the timer a wait would sleep until.
+    /// A timer minted by `clock_timer`, at its instant. Nothing but the program moves a script, so a wait that finds nothing ready sleeps until the soonest timer it holds out for, and every timer at or before that instant is due.
     Timer {
-        due: bool,
+        at: (u64, u64),
     },
 }
 
@@ -461,6 +461,8 @@ pub struct MockHost {
     clock_wall_seq: Mutex<VecDeque<(u64, u64)>>,
     /// Scripted monotonic readings, served in order by `clock_mono`.
     clock_mono_seq: Mutex<VecDeque<(u64, u64)>>,
+    /// The instant the waits have slept until: a timer at or before it is due.
+    slept_until: Mutex<(u64, u64)>,
     /// Deterministic xorshift64 state backing `rand_bytes`.
     rng: Mutex<u64>,
     /// Scripted process arguments served by `proc_args`.
@@ -632,7 +634,7 @@ impl MockHost {
                 readable && self.read_report(table, &target).is_any()
                     || writable && Self::write_report(table, &target).is_any()
             }
-            Some(MockResource::Timer { due }) => *due,
+            Some(MockResource::Timer { at }) => *at <= *self.slept_until.lock().unwrap(),
             _ => true,
         }
     }
@@ -912,19 +914,23 @@ impl HostOps for MockHost {
             return Ok(());
         }
 
-        // The wait sleeps until the soonest timer, which the script has no clock for: every timer it holds out for is due.
-        let mut slept = false;
-        for handle in &on {
-            if let Some(MockResource::Timer { due }) = table.get_mut(handle) {
-                *due = true;
-                slept = true;
-            }
-        }
+        // The wait sleeps until the soonest timer it holds out for, and every timer at or before it is due.
+        let soonest = on
+            .iter()
+            .filter_map(|handle| match table.get(handle) {
+                Some(MockResource::Timer { at }) => Some(*at),
+                _ => None,
+            })
+            .min();
 
-        match slept {
-            true => Ok(()),
+        match soonest {
+            Some(at) => {
+                let mut slept_until = self.slept_until.lock().unwrap();
+                *slept_until = (*slept_until).max(at);
+                Ok(())
+            }
             // A native wait on watches alone sleeps until one is ready, and nothing moves a script but the program: one that readies none would be waited on without end, so the run is refused saying so.
-            false => Err(Refusal(
+            None => Err(Refusal(
                 "the script readies none of the handles this wait holds out for".to_string(),
             )),
         }
@@ -1036,8 +1042,8 @@ impl HostOps for MockHost {
         reading(self.clock_wall_seq.lock().unwrap().pop_front())
     }
 
-    fn clock_timer(&self, _: u64, _: u64) -> Handle {
-        self.mint(MockResource::Timer { due: false })
+    fn clock_timer(&self, secs: u64, nanos: u64) -> Handle {
+        self.mint(MockResource::Timer { at: (secs, nanos) })
     }
 
     fn clock_mono(&self) -> Timestamp {
@@ -1762,6 +1768,7 @@ impl MockHostBuilder {
             captures,
             clock_wall_seq: Mutex::new(self.clock_wall_seq),
             clock_mono_seq: Mutex::new(self.clock_mono_seq),
+            slept_until: Mutex::new((0, 0)),
             // A fixed non-zero xorshift64 seed: deterministic across runs.
             rng: Mutex::new(0x2545_F491_4F6C_DD1D),
             args: self.args,

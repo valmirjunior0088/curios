@@ -23,9 +23,9 @@ use {
 /// cargo test --release --package curios --lib --all-features -- --ignored --nocapture coordination_measurements --test-threads=1
 /// ```
 ///
-/// The instrument runs one warmup (sample 0) and five measured samples per workload, in order: `monad_async`, then `tui`. Each sample compiles the source afresh against the embedded prelude and executes it once with a fresh scripted host. There is no package-cache lookup. Rust compilation and prelude construction finish before the instrument starts and are excluded.
+/// The instrument runs one warmup (sample 0) and five measured samples per workload, in order: `monad_suspend`, then `tui`. Each sample compiles the source afresh against the embedded prelude and executes it once with a fresh scripted host. There is no package-cache lookup. Rust compilation and prelude construction finish before the instrument starts and are excluded.
 ///
-/// - **`monad_async`:** the existing `programs/monad_async.crs` corpus program, with stdin `10000\n`, requiring stdout `30000\n` and no stderr. This measures the Async carrier's recursive bind path, not contention among fibers.
+/// - **`monad_suspend`:** the existing `programs/monad_suspend.crs` corpus program, with the argument `10000`, requiring stdout `30000\n` and no stderr. This measures a suspension's path through the driver every combinator is written over, one a step, not contention among branches.
 /// - **`tui`:** the existing bordered listing fixture in `curios/src/tests/tui.rs`, driven by 100 down/up pairs followed by `q`. The first down escape sequence arrives in two chunks; each remaining key has its own chunk. Terminal-size queries answer 12×5, 16×6, then 12×5 forever. Monotonic-clock queries advance by 1 ms, starting at zero, with 100,000 scripted readings. The mock host releases the next input chunk when polled and does not sleep in real time. Assertions require terminal entry and restoration, raw mode on then off, selection `one`, a titled border, exactly three screen clears (initial frame and two resizes), no stderr, and a successful exit.
 ///
 /// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/coordination/`. Each stream has a folded `.tsv` beside it. The `coordination_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `coordination_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The test binary has no counting allocator; memory columns in the folded reports are zero and are not allocation evidence.
@@ -70,8 +70,8 @@ fn coordination_measurements() {
 
     for (workload, source) in [
         (
-            "monad_async",
-            include_str!("../../../../programs/monad_async.crs"),
+            "monad_suspend",
+            include_str!("../../../../programs/monad_suspend.crs"),
         ),
         ("tui", LISTING_PROGRAM),
     ] {
@@ -79,7 +79,7 @@ fn coordination_measurements() {
             let (host, io) = if workload == "tui" {
                 listing_host()
             } else {
-                MockHost::builder().stdin_lines(["10000"]).build()
+                MockHost::builder().args(["monad_suspend", "10000"]).build()
             };
             let path = directory.join(format!("{workload}-{sample}.trace"));
             let sink = BufWriter::new(File::create(&path).expect("capture file"));

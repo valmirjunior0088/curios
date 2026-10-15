@@ -1,4 +1,4 @@
-use /std/{Bytes, Str, Nat, Bool, Option, Result, Try, Async};
+use /std/{Bytes, Str, Nat, Bool, Option, Result, Try, Io};
 use /std/Io/{Reader};
 use /std/time/{Duration};
 use /std/tcp/{Socket};
@@ -18,7 +18,7 @@ pub let default: Client =
     Client { timeout = Duration/of_secs(30), redirects = 3, limits = Limits/client };
 
 -- The reply to a request of `method`, read through `r` as its framing delimits it: every 1xx reply ahead of the final one is passed over (RFC 9110 §15.2), and the reading stops where the final reply's framing ends.
-let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Async(Result(Error, Response)) =
+let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Io(Result(Error, Response)) =
     let first =
         Reader/take(
             r,
@@ -26,7 +26,7 @@ let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Async(Result(Err
             0)!;
     match first
     | failure(stop) =>
-        Async/pure(
+        Io/pure(
             Result/failure(
                 match stop
                 | refused(why) => Error/refused(why)
@@ -35,16 +35,16 @@ let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Async(Result(Err
                 end))
     | success(lines) =>
         match Response/head_of(lines)
-        | failure(why) => Async/pure(Result/failure(Error/refused(why)))
+        | failure(why) => Io/pure(Result/failure(Error/refused(why)))
         | success(head) =>
             match head.status.code < 200
             | true => reply(limits, method, r)
             | false =>
                 match Response/framing(method, head)
-                | failure(why) => Async/pure(Result/failure(Error/refused(why)))
+                | failure(why) => Io/pure(Result/failure(Error/refused(why)))
                 | success(framing) =>
                     let content = stream/body(limits, r, framing)!;
-                    Async/pure(
+                    Io/pure(
                         match content
                         | success(body) =>
                             Result/map_failure(
@@ -64,7 +64,7 @@ let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Async(Result(Err
     end;
 
 -- One exchange over a connection of its own. The reply is read whether or not the request was written whole: a peer that answers before it has read its request and then stops reading fails the write, and the reply it sent is still there (RFC 9112 §9.6). The failed write is the exchange's failure only where no reply is.
-let exchange(c: Client, request: Request) -> Try(Async, Error, Response) =
+let exchange(c: Client, request: Request) -> Try(Io, Error, Response) =
     let u = request.url;
     let open =
         match u.scheme
@@ -86,7 +86,7 @@ let exchange(c: Client, request: Request) -> Try(Async, Error, Response) =
                     end
                 end),
             (e) => Error/net(e))!;
-    Try/attempt(Async/pure(read));
+    Try/attempt(Io/pure(read));
 
 let is_redirect(code: Nat) -> Bool =
     code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
@@ -113,7 +113,7 @@ let redirect_of(request: Request, response: Response) -> Option(Url) =
             (location) => target_of(request.url, location))
     end;
 
-let follow(c: Client, request: Request, left: Nat) -> Try(Async, Error, Response) =
+let follow(c: Client, request: Request, left: Nat) -> Try(Io, Error, Response) =
     let response = exchange(c, request)!;
     match redirect_of(request, response)
     | none() => Try/pure(response)
@@ -125,9 +125,6 @@ let follow(c: Client, request: Request, left: Nat) -> Try(Async, Error, Response
     end;
 
 --- One exchange: connect by the scheme, send the request whole, read the reply as its framing delimits it and no further, and follow a redirect while the limit allows — all under the deadline, which is reported as `timeout`. A reply the peer closes on before it is whole is `incomplete` with what arrived of it, and one that is malformed or past `c.limits` is `refused`. A reply a peer sent before it had read the request is the answer even where the request could not then be sent whole.
-pub let perform(c: Client, request: Request) -> Try(Async, Error, Response) =
-    let outcome = Async/timeout(c.timeout, Try/run(follow(c, request, c.redirects)))!;
-    match outcome
-    | none() => Try/raise(Error/timeout())
-    | some(r) => Try/attempt(Async/pure(r))
-    end;
+pub let perform(c: Client, request: Request) -> Try(Io, Error, Response) =
+    let outcome = Io/timeout(c.timeout, Try/run(follow(c, request, c.redirects)))!;
+    match outcome | none() => Try/raise(Error/timeout()) | some(r) => Try/attempt(Io/pure(r)) end;

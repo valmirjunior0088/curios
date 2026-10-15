@@ -1,6 +1,6 @@
-use /std/{Nat, Bool, Str, List, Option, Io, Try, Async, Tty};
+use /std/{Nat, Bool, Str, List, Option, Io, Try, Tty};
 use /std/time/{Duration};
-use /std/Async/{Channel};
+use /std/Io/{Channel};
 
 --- A terminal colour, in the four forms a terminal understands.
 pub mod Color;
@@ -100,7 +100,7 @@ pub let drive(
     w: Nat,
     h: Nat,
     events: List(Event(E)),
-) -> {model: M, quit: Bool, frame: Frame(w, h), pending: List(Async(E))} =
+) -> {model: M, quit: Bool, frame: Frame(w, h), pending: List(Io(E))} =
     let start = app.init.1;
     let state =
         List/fold(
@@ -126,98 +126,108 @@ induct Wake(E: Type): Type
 | failed(Io/Error)
 end
 
---- Run the program in a session until it quits, answering its last model. Keys, resizes and the answers of the program's own directives feed one queue, and the screen is drawn once per burst. A read of the terminal that fails ends the run with its error, and so does a query of its size. The end of standard input ends the reading alone, and the program runs on until it quits.
-pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
-    Session/with((s) =>
-        let queue: {Channel/Sender(Wake(E)), Channel/Receiver(Wake(E))} = Channel/new(256)!;
-        let push(e: Event(E)) -> Async({}) =
-            let _ = Channel/send(queue.0, Wake/event(e))!;
-            Async/pure(());
-        let fail(why: Io/Error) -> Async({}) =
-            let _ = Channel/send(queue.0, Wake/failed(why))!;
-            Async/pure(());
-        let reader(session: Session) -> Async({}) =
-            let got = Try/run(Session/read(@E, session))!;
-            match got
-            | failure(why) => fail(why)
-            | success(input) =>
-                match input
-                | none() => Async/pure(())
-                | some(events) =>
-                    let _ = List/each(events, push)!;
-                    reader(session)
-                end
-            end;
-        let ticker(session: Session) -> Async({}) =
-            let _ = Async/sleep(Duration/of_millis(100))!;
-            let known = Session/last_size(session)!;
-            let now = Try/run(Session/size(session))!;
-            match now
-            | failure(why) => fail(why)
-            | success((updated, sz)) =>
-                match sz == known
-                | true => ticker(updated)
-                | false =>
-                    let _ = push(Event/resize(sz.cols, sz.rows))!;
-                    ticker(updated)
-                end
-            end;
-        let answer(a: Async(E)) -> Async({}) =
-            let e = a!;
-            push(Event/custom(e));
-        let issue(c: Directive(E)) -> Async(Bool) =
-            let _ = List/each(c.run, (a) => Async/go(answer(a)))!;
-            Async/pure(c.stop);
-        let draw(session: Session, m: M) -> Async(Session) =
-            let sz = Session/last_size(session)!;
-            Session/draw(session, app.view(m, sz.cols, sz.rows), app.cursor(m, sz.cols, sz.rows));
-        let drain(session: Session, m: M, events: List(Event(E))) -> Async({Session, M, Bool}) =
-            match events
-            | [] => Async/pure((session, m, false))
-            | [e, ..more] =>
-                let updated =
-                    match e
-                    | resize(cols, rows) =>
-                        Session/resized(session, Tty/Size { cols = cols, rows = rows })
-                    | _ => session
-                    end;
-                let next = app.update(m, e);
-                let stop = issue(next.1)!;
-                match stop
-                | true => Async/pure((updated, next.0, true))
-                | false => drain(updated, next.0, more)
-                end
-            end;
-        -- Everything queued behind the event that woke the loop, so a burst still draws once. A failure queued among them ends the run where it stands.
-        let burst(acc: List(Event(E))) -> Try(Async, Io/Error, List(Event(E))) =
-            let more = Async/lift(Channel/try_recv(queue.1))!;
-            match more
-            | item(event(e)) => burst([..acc, e])
-            | item(failed(why)) => Try/raise(why)
-            | empty() => Try/pure(acc)
-            | ended() => Try/pure(acc)
-            end;
-        let loop(session: Session, m: M) -> Try(Async, Io/Error, M) =
-            let woke = Channel/recv(queue.1)!;
-            match woke
-            | none() => Try/pure(m)
-            | some(failed(why)) => Try/raise(why)
-            | some(event(e)) =>
-                let events = burst([e])!;
-                let folded = drain(session, m, events)!;
-                match folded.2
-                | true => Try/pure(folded.1)
-                | false =>
-                    let drawn = draw(folded.0, folded.1)!;
-                    loop(drawn, folded.1)
-                end
-            end;
-        let _ = Async/go(reader(s))!;
-        let _ = Async/go(ticker(s))!;
-        let first = issue(app.init.1)!;
-        match first
-        | true => Try/pure(app.init.0)
-        | false =>
-            let drawn = draw(s, app.init.0)!;
-            loop(drawn, app.init.0)
-        end);
+--- Run the program in a session until it quits, answering its last model. Keys, resizes and the answers of the program's own directives feed one queue, and the screen is drawn once per burst. The reading of keys, the watch on the terminal's size and every directive's work run beside the loop, and whatever of them is still running when the program quits is cancelled where it waits. A read of the terminal that fails ends the run with its error, and so does a query of its size. The end of standard input ends the reading alone, and the program runs on until it quits.
+pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Io, Io/Error, M) =
+    Session/with((s) => Try/attempt(Io/scope((children) => Try/run(running(app, s, children)))));
+
+-- The loop of `app` over the session `s`, with what runs beside it spawned into `children`.
+let running(
+    @M: Type,
+    @E: Type,
+    app: Tui(M, E),
+    s: Session,
+    children: Io/Scope,
+) -> Try(Io, Io/Error, M) =
+    let queue: {Channel/Sender(Wake(E)), Channel/Receiver(Wake(E))} = Channel/new(256)!;
+    let push(e: Event(E)) -> Io({}) =
+        let _ = Channel/send(queue.0, Wake/event(e))!;
+        Io/pure(());
+    let fail(why: Io/Error) -> Io({}) =
+        let _ = Channel/send(queue.0, Wake/failed(why))!;
+        Io/pure(());
+    let reader(session: Session) -> Io({}) =
+        let got = Try/run(Session/read(@E, session))!;
+        match got
+        | failure(why) => fail(why)
+        | success(input) =>
+            match input
+            | none() => Io/pure(())
+            | some(events) =>
+                let _ = List/each(events, push)!;
+                reader(session)
+            end
+        end;
+    let ticker(session: Session) -> Io({}) =
+        let _ = Io/sleep(Duration/of_millis(100))!;
+        let known = Session/last_size(session)!;
+        let now = Try/run(Session/size(session))!;
+        match now
+        | failure(why) => fail(why)
+        | success((updated, sz)) =>
+            match sz == known
+            | true => ticker(updated)
+            | false =>
+                let _ = push(Event/resize(sz.cols, sz.rows))!;
+                ticker(updated)
+            end
+        end;
+    let answer(a: Io(E)) -> Io({}) =
+        let e = a!;
+        push(Event/custom(e));
+    let beside(work: Io({})) -> Io({}) = Io/bind(Io/spawn(children, work), (_) => Io/pure(()));
+    let issue(c: Directive(E)) -> Io(Bool) =
+        let _ = List/each(c.run, (a) => beside(answer(a)))!;
+        Io/pure(c.stop);
+    let draw(session: Session, m: M) -> Io(Session) =
+        let sz = Session/last_size(session)!;
+        Session/draw(session, app.view(m, sz.cols, sz.rows), app.cursor(m, sz.cols, sz.rows));
+    let drain(session: Session, m: M, events: List(Event(E))) -> Io({Session, M, Bool}) =
+        match events
+        | [] => Io/pure((session, m, false))
+        | [e, ..more] =>
+            let updated =
+                match e
+                | resize(cols, rows) =>
+                    Session/resized(session, Tty/Size { cols = cols, rows = rows })
+                | _ => session
+                end;
+            let next = app.update(m, e);
+            let stop = issue(next.1)!;
+            match stop
+            | true => Io/pure((updated, next.0, true))
+            | false => drain(updated, next.0, more)
+            end
+        end;
+    -- Everything queued behind the event that woke the loop, so a burst still draws once. A failure queued among them ends the run where it stands.
+    let burst(acc: List(Event(E))) -> Try(Io, Io/Error, List(Event(E))) =
+        let more = Channel/try_recv(queue.1)!;
+        match more
+        | item(event(e)) => burst([..acc, e])
+        | item(failed(why)) => Try/raise(why)
+        | empty() => Try/pure(acc)
+        | ended() => Try/pure(acc)
+        end;
+    let loop(session: Session, m: M) -> Try(Io, Io/Error, M) =
+        let woke = Channel/recv(queue.1)!;
+        match woke
+        | none() => Try/pure(m)
+        | some(failed(why)) => Try/raise(why)
+        | some(event(e)) =>
+            let events = burst([e])!;
+            let folded = drain(session, m, events)!;
+            match folded.2
+            | true => Try/pure(folded.1)
+            | false =>
+                let drawn = draw(folded.0, folded.1)!;
+                loop(drawn, folded.1)
+            end
+        end;
+    let _ = beside(reader(s))!;
+    let _ = beside(ticker(s))!;
+    let first = issue(app.init.1)!;
+    match first
+    | true => Try/pure(app.init.0)
+    | false =>
+        let drawn = draw(s, app.init.0)!;
+        loop(drawn, app.init.0)
+    end;

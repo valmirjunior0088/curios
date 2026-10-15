@@ -496,7 +496,7 @@ impl<E: Env> Walk<'_, E> {
             .or_insert(polarity);
     }
 
-    /// Weak-head-reduce `term` when its head could reduce, which is what unfolds a type-level `let` — `pub let Fiber : Type = Async({})` mentioned as `struct Job { resume : Fiber, … }`, or `Valid(bytes)` inside `struct Str` — into the type former it actually names.
+    /// Weak-head-reduce `term` when its head could reduce, which is what unfolds a type-level `let` — `Valid(bytes)` inside `struct Str` — into the type former it actually names.
     ///
     /// Forces a `rec` head rather than leaving it stuck, because a mutually recursive `induct` group lowers its *type constructors* into a top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to a universe instance of a projection, and without forcing it the whole `Pause`/`Step` group reads as `Mixed` and is rejected.
     ///
@@ -518,7 +518,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// A function type: each domain flips, the terminal keeps its polarity.
     ///
-    /// A nullary `() -> X` is `Done(X)` — an *empty* domain telescope — so this loop never runs and `X` keeps the polarity it arrived with. That is not an edge case to tolerate but the rule that admits `step(pause : Pause, next : () -> Async(A))`: a zero-argument function is a thunk of its result, so `Async(A) = done(A) | step(Pause × X)` is the polynomial functor it looks like.
+    /// A nullary `() -> X` is `Done(X)` — an *empty* domain telescope — so this loop never runs and `X` keeps the polarity it arrived with. That is not an edge case to tolerate but the rule that admits `later(next : () -> Susp(A))`: a zero-argument function is a thunk of its result, so `Susp(A) = now(A) | later(X)` is the polynomial functor it looks like.
     fn arrow(&mut self, telescope: &Telescope<Term>, polarity: Polarity) {
         let flipped = polarity.flip();
         let mut cursor = telescope.cursor();
@@ -703,7 +703,7 @@ impl<E: Env> Walk<'_, E> {
             //
             // A description of a `T` is operationally the delayed `T` its thunk erasure makes it — `{} -> T`, whose codomain is a strictly positive position. What decides the polarity is what the eliminations can extract, and `Io`'s are *weaker* than `List`'s: `List/at` hands back a `T` outright, while `bind` never exposes the `A` except inside another `Io`, and there is no `Io(T) -> T` for any other rule to lean on. A carrier whose only reader is stricter than a covariant carrier's cannot be less positive than it.
             //
-            // This is the rule that admits a suspension whose continuation is computed by performing an effect — `/std/Async`'s `Step(A) | step(pause: Pause, next: Io(Step(A)))`.
+            // This is the rule that admits a step whose continuation is computed by performing an effect — `Step(A) | step(next: Io(Step(A)))`.
             Intrinsic::IoType(result) => self.walk(result, polarity),
 
             // Everything remaining is a value or an operation over values, not a type former. Its operands are terms; whatever they mention, they mention at `Mixed`.

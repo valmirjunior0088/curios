@@ -1079,9 +1079,8 @@ const UNPROVED: [&str; 1] = [
 ];
 
 /// The `let`s of the library whose printed form or whose proof elaboration accepts and the kernel refuses, each a finding of `documentation/roadmap/soundness/000-findings.md`.
-const UNCERTIFIED: [&str; 16] = [
+const UNCERTIFIED: [&str; 15] = [
     // Each runs an effect: the kernel holds no two such definitions to be one, whatever they unfold to.
-    "/std/Async/poll_ready",
     "/std/Command/Pipe/close",
     "/std/File/close",
     // Its printed body holds a bound's proof the kernel refuses: a comparison it decides under one order of its atoms and not under another.

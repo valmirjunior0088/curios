@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Bool, List, Result, Path, Try, Async, Io, Handle};
+use /std/{Bytes, Nat, Bool, List, Result, Path, Try, Io, Handle};
 use /std/Bool/{Holds};
 
 --- An open serial port.
@@ -76,15 +76,15 @@ pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
 pub let close(s: Serial) -> Io({}) =
     Handle/close(s.0);
 
---- Up to `n` bytes, parking until some arrive.
-pub let read(s: Serial, n: Nat, @positive: Holds(0 < n)) -> Async(Io/Chunk) =
-    Async/Read/read(@Async, @Handle, s.0, n, @positive);
+--- Up to `n` bytes, waiting until some arrive.
+pub let read(s: Serial, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
+    Io/Read/read(@Handle, s.0, n, @positive);
 
---- The whole of `b`, parking while the device cannot take more.
-pub let write(s: Serial, b: Bytes) -> Async(Result(Io/Error, {})) =
-    Async/Write/write(s.0, b);
+--- The whole of `b`, waiting while the device cannot take more.
+pub let write(s: Serial, b: Bytes) -> Io(Result(Io/Error, {})) =
+    Io/Write/write(s.0, b);
 
-satisfy Async/Read(Async, Serial) {
+satisfy Io/Read(Serial) {
     read(s, n, @positive) = read(s, n, @positive),
 }
 
@@ -98,14 +98,14 @@ let draining(s: Serial) -> Try(Io, Io/Error, Handle) =
     | false => Try/raise(Io/Error/of(reply.status))
     end;
 
---- Park until `s` has sent what it accepted, or can no longer send it. A device that never takes the output — hardware flow control with nothing asking for more — parks the fiber for good, so bound it with a timeout where that can happen; a cancelled drain leaves the output where it was.
-pub let drain(s: Serial) -> Try(Async, Io/Error, {}) =
+--- Wait until `s` has sent what it accepted, or can no longer send it. A device that never takes the output — hardware flow control with nothing asking for more — waits for good, so bound it with a timeout where that can happen; a cancelled drain leaves the output where it was.
+pub let drain(s: Serial) -> Try(Io, Io/Error, {}) =
     let wait = draining(s)!;
-    let outcome = Async/using(Handle/close(wait), Async/read_all(wait))!;
+    let outcome = Io/using((_) => Handle/close(wait), Io/read_all(wait))!;
     let _ = outcome!;
     Try/pure(());
 
-satisfy Async/Write(Async, Serial) {
+satisfy Io/Write(Serial) {
     write(s, b) = write(s, b),
     flush(s) = Try/run(drain(s)),
 }
@@ -132,20 +132,20 @@ pub let set_rts(s: Serial, on: Bool) -> Try(Io, Io/Error, {}) =
 pub let discard_input(s: Serial) -> Try(Io, Io/Error, {}) =
     control(s, /sys/serial_op/discard_input, false);
 
---- `body` over the port at `path`, closed whichever way the task ends, a cancellation included; the body's own failure is the answer after the close. A body that ends well is followed by a `drain`, so what it wrote has left before the close discards the rest.
+--- `body` over the port at `path`, closed whichever way the body ends, a cancellation included; the body's own failure is the answer after the close. A body that ends well is followed by a `drain`, so what it wrote has left before the close discards the rest.
 pub let with(
     @A: Type,
     path: Path,
     c: Config,
-    body: (Serial) -> Try(Async, Io/Error, A),
-) -> Try(Async, Io/Error, A) =
+    body: (Serial) -> Try(Io, Io/Error, A),
+) -> Try(Io, Io/Error, A) =
     let s = open(path, c)!;
-    let outcome = Async/using(close(s), Try/run(drained(s, body(s))))!;
+    let outcome = Io/using((_) => close(s), Try/run(drained(s, body(s))))!;
     let a = outcome!;
     Try/pure(a);
 
---- `body`, then `s` drained; a failure to drain is the task's.
-let drained(@A: Type, s: Serial, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
+--- `body`, then `s` drained; a failure to drain is the body's.
+let drained(@A: Type, s: Serial, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
     let a = body!;
     let _ = drain(s)!;
     Try/pure(a);

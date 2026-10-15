@@ -1,0 +1,32 @@
+-- The suspension arm of the comparison begun in `state_monad.crs`: `monad_io.crs`'s loop with a yield at every step, run as one branch of `Io/both` beside one that answers at once,
+-- so every step suspends out of the loop, through the driver every combinator is written over, and back in — the cost of a suspension, beside the cost of `bind`.
+-- N is read from the command line so the loop survives constant folding; output is 3N.
+use /std/{Str, Nat, Io};
+
+let loop(n: Nat, acc: Nat) -> Io(Nat) =
+    match n: (_) => Io(Nat)
+    | 0 => Io/pure(acc)
+    | m + 1 =>
+        let _ = Io/yield()!;
+        let a = Io/pure(acc + 3)!;
+        loop(m, a)
+    end;
+
+let measured(n: Nat) -> Io({}) =
+    let (total, _) = Io/both(loop(n, 0), Io/pure(()))!;
+    /std/print(Str/concat(Nat/to_str(total), "\n"));
+
+let arguments = /std/proc/args()!;
+let input = /std/List/try_get(arguments, 1);
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | success(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) => measured(n)
+        | none() => /std/print("bad input\n")
+        end
+    | failure(_) => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end

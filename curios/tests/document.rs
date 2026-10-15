@@ -168,7 +168,7 @@ fn the_standard_library_documents_into_the_directory_std_names() {
     let result = fs::read_to_string(site.join("Result.crs.html")).expect("a module's page");
     assert!(result.contains("id=\"Result/success\""), "{result}");
     // A nested module's page climbs back to the bundle's static files and the landing page.
-    let signal = fs::read_to_string(site.join("Async/Signal.crs.html")).expect("a nested page");
+    let signal = fs::read_to_string(site.join("Io/Signal.crs.html")).expect("a nested page");
     assert!(
         signal.contains("href=\"../static/style.css\"")
             && signal.contains("src=\"../static/index.js\"")

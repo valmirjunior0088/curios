@@ -1,19 +1,19 @@
-//! A stream's reader: its named reads over every way an input may arrive, a read a deadline abandons, a refusal past the bound, and one reader read by two fibers.
+//! A stream's reader: its named reads over every way an input may arrive, a read a deadline abandons, a refusal past the bound, and one reader read by two branches.
 
 use {
     crate::tests::{compile, run_text},
     curios_runtime::{ForeignBindings, MockHost},
 };
 
-/// What [`READS_AT_IO`] and [`READS_IN_A_FIBER`] share: two lines, the bytes before a comma, two bytes, a line, what is left, and a line of a stream that has ended, read in that order through one reader and joined by bars.
-fn reads(monad: &str, tail: &str) -> String {
+/// Two lines, the bytes before a comma, two bytes, a line, what is left, and a line of a stream that has ended, read in that order through one reader and joined by bars, and then `tail`.
+fn reads(tail: &str) -> String {
     format!(
         r#"
-        use /std/{{Str, Bytes, Option, Result, Show, Try, Async, Io, print}};
+        use /std/{{Str, Bytes, Option, Result, Show, Try, Io, print}};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let line(found: Option(Bytes)) -> Str =
             match found | some(b) => text(b) | none() => "<end>" end;
-        let reads(input: Io/Reader(Io/Input)) -> Try({monad}, Io/Error, Str) =
+        let reads(input: Io/Reader(Io/Input)) -> Try(Io, Io/Error, Str) =
             let a = Io/Reader/line(input)!;
             let b = Io/Reader/line(input)!;
             let c = Io/Reader/until(input, ',')!;
@@ -32,23 +32,23 @@ fn reads(monad: &str, tail: &str) -> String {
     )
 }
 
-/// A stream of a program's own, whose chunks are what its other end is sent: a read of it parks until the program sends more, and ends once the sender is closed.
+/// A stream of a program's own, whose chunks are what its other end is sent: a read of it waits until the program sends more, and ends once the sender is closed.
 const WIRE: &str = r#"
-    use /std/{Nat, Str, Bytes, Option, Result, Show, Try, Async, Io, print};
-    use /std/Async/{Channel};
+    use /std/{Nat, Str, Bytes, Option, Result, Show, Try, Io, print};
+    use /std/Io/{Channel};
     use /std/time/{Duration};
     struct Wire: Type { Channel/Receiver(Bytes) }
-    let next(w: Wire) -> Async(Io/Chunk) =
+    let next(w: Wire) -> Io(Io/Chunk) =
         let got = Channel/recv(w.0)!;
         match got
-        | none() => Async/pure(Io/Chunk/eof())
+        | none() => Io/pure(Io/Chunk/eof())
         | some(bytes) =>
             match Nat/lt/try(0, Bytes/len(bytes))
-            | some(held) => Async/pure(Io/Chunk/chunk(bytes, @held))
+            | some(held) => Io/pure(Io/Chunk/chunk(bytes, @held))
             | none() => next(w)
             end
         end;
-    satisfy Async/Read(Async, Wire) {
+    satisfy Io/Read(Wire) {
         read(w, n) = next(w),
     }
     let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
@@ -60,44 +60,33 @@ const WIRE: &str = r#"
         end;
 "#;
 
-/// The reads answer alike however their input is cut in two, at `Io` and in a fiber: a line ends at its newline whichever chunk holds it, a carriage return before the newline goes with it, and each read begins where the one before it stopped.
+/// The reads answer alike however their input is cut in two: a line ends at its newline whichever chunk holds it, a carriage return before the newline goes with it, and each read begins where the one before it stopped.
 #[test]
 fn the_named_reads_answer_alike_over_every_cut_of_their_input() {
     let input: &[u8] = b"ab\ncd\r\nef,ghi\nrest";
-    let at_io = reads(
-        "Io",
+    let source = reads(
         "let input = Io/Reader/new(Io/stdin)!;
          let outcome = Try/run(reads(input))!;
          said(outcome)",
     );
-    let in_a_fiber = reads(
-        "Async",
-        "let fiber: Async({}) =
-             let input = Io/Reader/new(Io/stdin)!;
-             let outcome = Try/run(reads(input))!;
-             said(outcome);
-         Async/run(fiber)",
-    );
 
-    for source in [at_io, in_a_fiber] {
-        let program = compile(&source).expect("the reads compile");
+    let program = compile(&source).expect("the reads compile");
 
-        for cut in 0..=input.len() {
-            let chunks = [&input[..cut], &input[cut..]]
-                .into_iter()
-                .filter(|chunk| !chunk.is_empty())
-                .collect::<Vec<_>>();
-            let (system, io) = MockHost::builder().stdin_chunks(chunks).build();
+    for cut in 0..=input.len() {
+        let chunks = [&input[..cut], &input[cut..]]
+            .into_iter()
+            .filter(|chunk| !chunk.is_empty())
+            .collect::<Vec<_>>();
+        let (system, io) = MockHost::builder().stdin_chunks(chunks).build();
 
-            program
-                .run(system, ForeignBindings::empty())
-                .expect("the reads run");
-            assert_eq!(
-                String::from_utf8_lossy(&io.output()),
-                "ab|cd|ef|gh|i|rest|<end>",
-                "cut at {cut}"
-            );
-        }
+        program
+            .run(system, ForeignBindings::empty())
+            .expect("the reads run");
+        assert_eq!(
+            String::from_utf8_lossy(&io.output()),
+            "ab|cd|ef|gh|i|rest|<end>",
+            "cut at {cut}"
+        );
     }
 }
 
@@ -106,18 +95,18 @@ fn the_named_reads_answer_alike_over_every_cut_of_their_input() {
 fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
     let source = format!(
         r#"{WIRE}
-        let fiber: Async({{}}) =
+        let program: Io({{}}) =
             let ends = Channel/new(@Bytes, 4)!;
             let input = Io/Reader/new(Wire {{ ends.1 }})!;
             let _ = Channel/try_send(ends.0, Str/to_bytes("ab"))!;
-            let hurried = Async/timeout(Duration/of_secs(2), Try/run(Io/Reader/line(input)))!;
+            let hurried = Io/timeout(Duration/of_secs(2), Try/run(Io/Reader/line(input)))!;
             let _ = print(match hurried | some(read) => line(read) | none() => "<deadline>" end)!;
             let held = Io/Reader/held(input)!;
             let _ = print(Str/concat("|", text(held)))!;
             let _ = Channel/try_send(ends.0, Str/to_bytes("cd\nef"))!;
             let patient = Try/run(Io/Reader/line(input))!;
             print(Str/concat("|", line(patient)));
-        Async/run(fiber)
+        program
         "#
     );
     let (system, io) = MockHost::builder()
@@ -152,26 +141,26 @@ fn a_refusal_past_the_bound_leaves_the_bytes_held() {
     assert_eq!(String::from_utf8_lossy(&io.output()), "too_long|abcdef|ab");
 }
 
-/// Two fibers that read one reader each get a whole line. Both have searched six bytes for a newline when one of them takes the arrival that holds it, cuts its line and leaves `b` and a newline held; the stream then ends, and the other is asked again of what is held now, from the start, where the search it had made would pass the newline by.
+/// Two branches that read one reader each get a whole line. Both have searched six bytes for a newline when one of them takes the arrival that holds it, cuts its line and leaves `b` and a newline held; the stream then ends, and the other is asked again of what is held now, from the start, where the search it had made would pass the newline by.
 #[test]
-fn two_fibers_on_one_reader_each_get_a_whole_line() {
+fn two_branches_on_one_reader_each_get_a_whole_line() {
     let source = format!(
         r#"{WIRE}
-        let reading(input: Io/Reader(Wire)) -> Async({{}}) =
+        let reading(input: Io/Reader(Wire)) -> Io({{}}) =
             let read = Try/run(Io/Reader/line(input))!;
             print(Str/flatten(["<", line(read), ">"]));
-        let fiber: Async({{}}) =
+        let both_read(s: Io/Scope) -> Io({{}}) =
             let ends = Channel/new(@Bytes, 4)!;
             let input = Io/Reader/new(Wire {{ ends.1 }})!;
             let _ = Channel/try_send(ends.0, Str/to_bytes("aaaaaa"))!;
-            let first = Async/spawn(reading(input))!;
-            let second = Async/spawn(reading(input))!;
-            let _ = Async/yield_now()!;
+            let first = Io/spawn(s, reading(input))!;
+            let second = Io/spawn(s, reading(input))!;
+            let _ = Io/yield()!;
             let _ = Channel/try_send(ends.0, Str/to_bytes("\nb\n"))!;
             let _ = Channel/close(ends.0)!;
-            let _ = Async/join(first)!;
-            Async/join(second);
-        Async/run(fiber)
+            let _ = Io/join(first)!;
+            Io/join(second);
+        Io/scope(both_read)
         "#
     );
     let (system, io) = MockHost::builder().build();

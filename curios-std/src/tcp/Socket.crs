@@ -1,27 +1,27 @@
-use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io, Handle};
+use /std/{Bytes, Str, Nat, Bool, Result, Try, Io, Handle};
 use /std/tcp/{resolve, Socket};
 use /std/Handle/{Interest};
 use /std/Bool/{Holds};
 
---- Up to `n` bytes, parking until some arrive.
-pub let read(c: Socket, n: Nat, @positive: Holds(0 < n)) -> Async(Io/Chunk) =
-    Async/Read/read(@Async, @Handle, c.0, n, @positive);
+--- Up to `n` bytes, waiting until some arrive.
+pub let read(c: Socket, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
+    Io/Read/read(@Handle, c.0, n, @positive);
 
---- The whole of `b`, parking while the peer cannot take more.
-pub let write(c: Socket, b: Bytes) -> Async(Result(Io/Error, {})) =
-    Async/Write/write(c.0, b);
+--- The whole of `b`, waiting while the peer cannot take more.
+pub let write(c: Socket, b: Bytes) -> Io(Result(Io/Error, {})) =
+    Io/Write/write(c.0, b);
 
-satisfy Async/Read(Async, Socket) {
+satisfy Io/Read(Socket) {
     read(c, n, @positive) = read(c, n, @positive),
 }
 
-satisfy Async/Write(Async, Socket) {
+satisfy Io/Write(Socket) {
     write(c, b) = write(c, b),
-    flush(c) = Async/Write/flush(c.0),
+    flush(c) = Io/Write/flush(c.0),
 }
 
 --- `c`'s sending half ended, with `c` still reading: the peer reads the end of the stream — a TLS peer its closure alert first — and whatever it sends after is still `c`'s to read. It is how a connection says it has finished, where `close` says nothing and resets a connection that holds unread bytes.
-pub let finish(c: Socket) -> Async(Result(Io/Error, {})) =
+pub let finish(c: Socket) -> Io(Result(Io/Error, {})) =
     Handle/finish(c.0);
 
 --- Close `c`.
@@ -59,11 +59,11 @@ let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
 --- How a connect under way ended: `ok`, or the status of the failure.
 foreign socket_finish_connect(Handle) -> Nat;
 
-let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
+let settle(h: Handle, pending: Bool) -> Try(Io, Io/Error, {}) =
     match pending
     | false => Try/pure(())
     | true =>
-        let _ = Async/park([Async/Wait/ready(h, Interest/writable)])!;
+        let _ = Handle/wait(h, Interest/writable)!;
         let status = socket_finish_connect(h)!;
         choose
         | status == /sys/status/ok => Try/pure(())
@@ -86,42 +86,42 @@ let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
     | false => Try/pure(())
     end;
 
-let connect_addr(host: Str, addr: Bytes, tls: Bool) -> Try(Async, Io/Error, Socket) =
+let connect_addr(host: Str, addr: Bytes, tls: Bool) -> Try(Io, Io/Error, Socket) =
     let (h, pending) = open_and_connect(addr)!;
     let _ = Try/rescue(settle(h, pending), (e) => close_raising(h, e))!;
     let _ = Try/rescue(upgrade(h, host, tls), (e) => close_raising(h, e))!;
     Try/pure(Socket { h });
 
 --- A connection to `host` at `port`, in the clear. Nothing guards it: `with` is the bracket that closes it.
-pub let connect(host: Str, port: Nat) -> Try(Async, Io/Error, Socket) =
+pub let connect(host: Str, port: Nat) -> Try(Io, Io/Error, Socket) =
     let addr = resolve(host, port)!;
     connect_addr(host, addr, false);
 
 --- A connection to `host` at `port` under TLS, the certificate checked against `host`.
-pub let connect_tls(host: Str, port: Nat) -> Try(Async, Io/Error, Socket) =
+pub let connect_tls(host: Str, port: Nat) -> Try(Io, Io/Error, Socket) =
     let addr = resolve(host, port)!;
     connect_addr(host, addr, true);
 
---- `body` over the socket `open` connects, its sending half ended once `body` has answered, and closed whichever way the task ends.
+--- `body` over the socket `open` connects, its sending half ended once `body` has answered, and closed whichever way the body ends.
 pub let with(
     @A: Type,
-    open: Try(Async, Io/Error, Socket),
-    body: (Socket) -> Try(Async, Io/Error, A),
-) -> Try(Async, Io/Error, A) =
+    open: Try(Io, Io/Error, Socket),
+    body: (Socket) -> Try(Io, Io/Error, A),
+) -> Try(Io, Io/Error, A) =
     let c = open!;
-    let outcome = Async/using(close(c), Try/run(flushed(c, body(c))))!;
+    let outcome = Io/using((_) => close(c), Try/run(flushed(c, body(c))))!;
     let a = outcome!;
     Try/pure(a);
 
 --- `body`, then what `c` holds of the writes it accepted handed on, so a TLS stream has sent its records before `with` closes it; a failure to hand them on is the task's. `c`'s sending half is ended after, a courtesy to a peer that may already be gone, so its failure is not.
-let flushed(@A: Type, c: Socket, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
+let flushed(@A: Type, c: Socket, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
     let a = body!;
-    let _ = Try/attempt(Async/Write/flush(c))!;
+    let _ = Try/attempt(Io/Write/flush(c))!;
     let _ = finish(c)!;
     Try/pure(a);
 
 --- `request` written whole and the reply read to its end, over the socket `open` connects, closed after. One exchange with a peer that closes when it has answered.
-pub let call(open: Try(Async, Io/Error, Socket), request: Bytes) -> Try(Async, Io/Error, Bytes) =
+pub let call(open: Try(Io, Io/Error, Socket), request: Bytes) -> Try(Io, Io/Error, Bytes) =
     with(open, (c) =>
         let _ = Try/attempt(write(c, request))!;
-        Try/attempt(Async/read_all(c)));
+        Try/attempt(Io/read_all(c)));

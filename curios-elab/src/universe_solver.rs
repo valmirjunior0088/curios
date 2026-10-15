@@ -2029,7 +2029,7 @@ impl UniverseSolver {
 
     /// [`Self::pin_instance`], then every level of `minted` the pin left open minimized from its lower bounds: what a goal resolved after its consuming declaration finalized is closed by.
     ///
-    /// The goal fixes only the levels its own application mentions. A witness scheme may carry more — `satisfy Monad(Async)` generalizes levels its *body* needs, which no goal could determine — so `minted` names the whole instance. Minimizing what is left is how [`Self::finalize`] treats a level reachable only through a body, applied here because the declaration that would have done it has already closed. A goal resolved while that declaration is open is pinned alone, and its finalization settles the rest with everything else the declaration said.
+    /// The goal fixes only the levels its own application mentions. A witness scheme may carry more — the levels its *body* needs, which no goal could determine — so `minted` names the whole instance. Minimizing what is left is how [`Self::finalize`] treats a level reachable only through a body, applied here because the declaration that would have done it has already closed. A goal resolved while that declaration is open is pinned alone, and its finalization settles the rest with everything else the declaration said.
     pub fn close_instance(
         &mut self,
         minted: &[Level],

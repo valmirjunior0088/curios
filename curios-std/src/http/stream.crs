@@ -1,4 +1,4 @@
-use /std/{Bytes, Result, Async};
+use /std/{Bytes, Result, Io};
 use /std/Io/{Reader};
 use /std/Io/Reader/{Stop};
 use /std/tcp/{Socket};
@@ -9,21 +9,21 @@ pub let body(
     limits: Limits,
     r: Reader(Socket),
     framing: Framing,
-) -> Async(Result(Stop(Bytes, Refusal), Bytes)) =
+) -> Io(Result(Stop(Bytes, Refusal), Bytes)) =
     let read =
         Reader/take(
             r,
             (content: Bytes, bytes: Bytes) => read/body(limits, framing, content, bytes),
             x[])!;
     match read
-    | success(taken) => Async/pure(Result/success(taken))
+    | success(taken) => Io/pure(Result/success(taken))
     | failure(stop) =>
         match stop
-        | refused(why) => Async/pure(Result/failure(Stop/refused(why)))
-        | failed(content, e) => Async/pure(Result/failure(Stop/failed(content, e)))
+        | refused(why) => Io/pure(Result/failure(Stop/refused(why)))
+        | failed(content, e) => Io/pure(Result/failure(Stop/failed(content, e)))
         | ended(content) =>
             let held = Reader/held(r)!;
-            Async/pure(
+            Io/pure(
                 match framing
                 | close() => Result/success(held)
                 | chunked() => Result/failure(Stop/ended(content))

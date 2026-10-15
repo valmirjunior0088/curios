@@ -32,10 +32,10 @@ const CORPUS: [(&str, &str); 14] = [
         )),
     ),
     (
-        "monad_async",
+        "monad_suspend",
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../programs/monad_async.crs"
+            "/../programs/monad_suspend.crs"
         )),
     ),
     (

@@ -14,7 +14,7 @@ use {
 
 /// Whether shape reading may force `term`.
 ///
-/// [`forceable`] answers the two halves every analysis on this seam shares — whether the head could move, and whether the term is closed enough to reduce. This adds totality's own, and it is what bounds the read in place of a step count: **a `rec` head is refused.** The group under analysis is the one whose termination is being decided, and a group already in scope may be legitimately partial — `check_rec_group` demands descent only where a member is erased, so `/std/Async`'s scheduler and `/std/Json/decode` classify `Partial` and are still defined. Unfolding either can spin, and refusing makes the read stop on its own terms instead of by exhausting the reduction budget.
+/// [`forceable`] answers the two halves every analysis on this seam shares — whether the head could move, and whether the term is closed enough to reduce. This adds totality's own, and it is what bounds the read in place of a step count: **a `rec` head is refused.** The group under analysis is the one whose termination is being decided, and a group already in scope may be legitimately partial — `check_rec_group` demands descent only where a member is erased, so `/std/Json/decode` classifies `Partial` and is still defined. Unfolding it can spin, and refusing makes the read stop on its own terms instead of by exhausting the reduction budget.
 ///
 /// Measured inert — no load-bearing unfolding in the corpus has a `rec` head — so this is a determinism guarantee rather than a restriction.
 fn readable(term: &Term) -> bool {

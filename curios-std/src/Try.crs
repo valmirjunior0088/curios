@@ -1,4 +1,4 @@
-use /std/{Monad, Result, Io, Async, Program, Show, Str, print_err, proc};
+use /std/{Monad, Result, Io, Program, Show, Str, print_err, proc};
 
 --- An `M(Result(E, A))` sequenced so that a failure stops the region.
 pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type {
@@ -81,16 +81,6 @@ satisfy (
     use Monad(M),
     use Monad/Lift(Io, M),
 ) => Monad/Lift(Io, (A: Type) => Try(M, E, A)) {
-    lift(@A, m) = Try { Monad/bind(Monad/lift(m), (a: A) => Monad/pure(Result/success(a))) },
-}
-
---- An `Async` action in a `Try` region over `Async`, or over any base `Async` embeds in.
-satisfy (
-    @M: (Type) -> Type,
-    @E: Type,
-    use Monad(M),
-    use Monad/Lift(Async, M),
-) => Monad/Lift(Async, (A: Type) => Try(M, E, A)) {
     lift(@A, m) = Try { Monad/bind(Monad/lift(m), (a: A) => Monad/pure(Result/success(a))) },
 }
 

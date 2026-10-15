@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Option, Try, Async, Io};
+use /std/{Bytes, Nat, Option, Try, Io};
 
 --- The request's method.
 pub mod Method;
@@ -75,5 +75,5 @@ pub induct Error: pub Type
 end
 
 --- One exchange under the default client.
-pub let perform(request: Request) -> Try(Async, Error, Response) =
+pub let perform(request: Request) -> Try(Io, Error, Response) =
     Client/perform(Client/default, request);

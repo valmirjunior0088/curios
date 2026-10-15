@@ -10,15 +10,15 @@ use {
 
 /// One `call` to `example.com:80`, its reply written out or its failure printed by name.
 const CALL: &str = r#"
-    use /std/{Str, Show, Try, Async, Io};
+    use /std/{Str, Show, Try, Io};
     use /std/tcp/{Socket};
-    let fiber: Async({}) =
+    let program: Io({}) =
         let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
         match r
         | success(response) => Io/write(Io/stdout, response)
         | failure(e) => /std/print(Show/show(e))
         end;
-    Async/run(fiber)
+    program
     "#;
 
 #[test]
@@ -61,13 +61,13 @@ fn https_perform_reaches_a_public_host_over_the_real_host() {
     let path = report.to_str().expect("a UTF-8 temporary path");
     let source = format!(
         r#"
-        use /std/{{Str, Nat, Result, Try, Async, Io, Path, File, http}};
-        let program: Async({{}}) =
+        use /std/{{Str, Nat, Result, Try, Io, Path, File, http}};
+        let program: Io({{}}) =
             let r = Try/run(http/perform(http/get(http/Url/lit("https://example.com/"))))!;
             let line = match r | success(resp) => Nat/to_str(resp.status.code) | failure(_) => "failed" end;
             let _ = Try/run(File/write_all(Path/of_str("{path}"), Str/to_bytes(line)))!;
-            Async/pure(());
-        Async/run(program)
+            Io/pure(());
+        program
         "#
     );
 
@@ -113,9 +113,9 @@ fn a_peer_that_resets_reads_as_reset() {
 fn read_one_chunk(open: &str) -> String {
     format!(
         r#"
-        use /std/{{Str, Bytes, Show, Try, Async, Io}};
+        use /std/{{Str, Bytes, Show, Try, Io}};
         use /std/tcp/{{Socket}};
-        let fiber: Async({{}}) =
+        let program: Io({{}}) =
             let r = Try/run(Socket/with({open}, (s) =>
                 let c = Socket/read(s, 64)!;
                 Try/pure(match c | chunk(b, @_) => b | _ => x[] end)))!;
@@ -123,7 +123,7 @@ fn read_one_chunk(open: &str) -> String {
             | success(bytes) => Io/write(Io/stdout, bytes)
             | failure(e) => /std/print(Show/show(e))
             end;
-        Async/run(fiber)
+        program
         "#
     )
 }
@@ -156,23 +156,23 @@ fn connect_tls_upgrades_and_reads() {
 fn echo_server(listener: &str, prefix: &str) -> String {
     format!(
         r#"
-        use /std/{{Str, Bytes, Show, Try, Async, Io}};
+        use /std/{{Str, Bytes, Show, Try, Io}};
         use /std/tcp/{{Listener, Socket}};
-        let handler(c: Socket) -> Async({{}}) =
+        let handler(c: Socket) -> Io({{}}) =
             let r = Socket/read(c, 64)!;
             match r
             | chunk(bytes, @_) =>
                 let _ = Socket/write(c, x[..Str/to_bytes("{prefix}"), ..bytes])!;
-                Async/pure(())
-            | _ => Async/pure(())
+                Io/pure(())
+            | _ => Io/pure(())
             end;
-        let fiber: Async({{}}) =
+        let program: Io({{}}) =
             let r = Try/run({listener})!;
             match r
             | success(_) => Io/pure(())
             | failure(e) => /std/print(Show/show(e))
             end;
-        Async/run(fiber)
+        program
         "#
     )
 }
@@ -221,27 +221,27 @@ fn serve_tls_handles_a_scripted_inbound_connection() {
 #[test]
 fn listen_and_accept_serve_one_connection_by_hand() {
     let source = r#"
-        use /std/{Str, Bytes, Result, Show, Try, Async, Io};
+        use /std/{Str, Bytes, Result, Show, Try, Io};
         use /std/tcp/{Listener, Socket};
-        let session: Try(Async, Io/Error, {}) =
+        let session: Try(Io, Io/Error, {}) =
             let l = Listener/listen("0.0.0.0", 8080)!;
             let c = Listener/accept(l)!;
             let r = Socket/read(c, 64)!;
             let reply =
                 match r
                 | chunk(bytes, @_) => Socket/write(c, x[..Str/to_bytes("one: "), ..bytes])
-                | _ => Async/pure(Result/success(()))
+                | _ => Io/pure(Result/success(()))
                 end;
             let _ = Try/attempt(reply)!;
             let _ = Socket/close(c)!;
             Listener/close(l);
-        let fiber: Async({}) =
+        let program: Io({}) =
             let r = Try/run(session)!;
             match r
             | success(_) => Io/pure(())
             | failure(e) => /std/print(Show/show(e))
             end;
-        Async/run(fiber)
+        program
         "#;
 
     let (system, io) = MockHost::builder().inbound(["ping"]).build();
@@ -251,8 +251,8 @@ fn listen_and_accept_serve_one_connection_by_hand() {
 
 /// `http/perform` against `example.com:80`, the status, content type and body printed, or the failure's arm.
 const HTTP_GET: &str = r#"
-    use /std/{Str, Nat, Option, Result, Try, Async, http, Io};
-    let fiber: Async({}) =
+    use /std/{Str, Nat, Option, Result, Try, http, Io};
+    let program: Io({}) =
         let r = Try/run(http/perform(http/get(http/Url/lit("http://example.com/"))))!;
         match r
         | success(response) =>
@@ -271,7 +271,7 @@ const HTTP_GET: &str = r#"
             | redirected(_) => /std/print("redirected")
             end
         end;
-    Async/run(fiber)
+    program
     "#;
 
 // HTTP client: `http/perform` renders a `Request`, sends it through `/std/tcp`, and reads the reply off the socket as its framing delimits it — the framing core end to end through codegen.

@@ -92,10 +92,10 @@ abort(3)
 `;
 
 const WRITE = `
-use /std/{Async, Handle, Show, print};
+use /std/{Handle, Io, Show, print};
 foreign token() -> Handle;
 let h = token()!;
-let r = Async/Write/write(h, x[0x68, 0x69])!;
+let r = Io/Write/write(h, x[0x68, 0x69])!;
 match r
 | success(_) => print(" wrote")
 | failure(e) => print(Show/show(e))
@@ -103,15 +103,15 @@ end
 `;
 
 const DIRECTION = `
-use /std/{Async, Handle, Io, Show, Str, print};
+use /std/{Handle, Io, Show, Str, print};
 foreign token() -> Handle;
 let said(c: Io/Chunk) -> Str =
     match c | chunk(_, @_) => "chunk" | eof() => "eof" | error(e) => Show/show(e) end;
-let w = Async/Write/write(Handle/stdin, x[1])!;
-let out = Async/Read/read(Handle/stdout, 4)!;
-let rest = Async/Read/read(Handle/stdin, 4)!;
+let w = Io/Write/write(Handle/stdin, x[1])!;
+let out = Io/Read/read(Handle/stdout, 4)!;
+let rest = Io/Read/read(Handle/stdin, 4)!;
 let h = token()!;
-let unknown = Async/Read/read(h, 4)!;
+let unknown = Io/Read/read(h, 4)!;
 print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f) end, said(out), said(rest), said(unknown)]))
 `;
 

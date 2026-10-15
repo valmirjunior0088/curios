@@ -1,4 +1,4 @@
-use /std/{Bytes, Str, Nat, Result, Try, Async, Io, Handle};
+use /std/{Bytes, Str, Nat, Result, Try, Io, Handle};
 use /std/tcp/{resolve, Socket};
 use /std/Handle/{Interest};
 
@@ -18,28 +18,28 @@ let listening(addr: Bytes) -> Try(Io, Io/Error, Listener) =
     end;
 
 --- A listener bound to `host` at `port`, the address reusable so a restart does not wait out the previous socket.
-pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
+pub let listen(host: Str, port: Nat) -> Try(Io, Io/Error, Listener) =
     let addr = resolve(host, port)!;
     listening(addr);
 
 --- The next connection on this listener: `ok` beside its handle, or the status of the failure.
 foreign socket_accept(Handle) -> {status: Nat, handle: Handle};
 
---- The next connection on `l`, parking until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
-let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =
-    let go() -> Async(Result(Io/Error, Handle)) =
+--- The next connection on `l`, waiting until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
+let accepted(l: Listener) -> Io(Result(Io/Error, Handle)) =
+    let go() -> Io(Result(Io/Error, Handle)) =
         let reply = socket_accept(l.0)!;
         choose
-        | reply.status == /sys/status/ok => Async/pure(Result/success(reply.handle))
+        | reply.status == /sys/status/ok => Io/pure(Result/success(reply.handle))
         | reply.status == /sys/status/would_block =>
-            let _ = Async/park([Async/Wait/ready(l.0, Interest/readable)])!;
+            let _ = Handle/wait(l.0, Interest/readable)!;
             go()
-        | _ => Async/pure(Result/failure(Io/Error/of(reply.status)))
+        | _ => Io/pure(Result/failure(Io/Error/of(reply.status)))
         end;
     go();
 
---- The next connection, parking until a peer arrives.
-pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
+--- The next connection, waiting until a peer arrives.
+pub let accept(l: Listener) -> Try(Io, Io/Error, Socket) =
     let h = Try/attempt(accepted(l))!;
     Try/pure(Socket { h });
 
@@ -47,11 +47,11 @@ pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
 pub let close(l: Listener) -> Io({}) =
     Handle/close(l.0);
 
-let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
-    let go() -> Async({}) =
+let accept_loop(l: Listener, on_conn: (Handle) -> Io({})) -> Io({}) =
+    let go() -> Io({}) =
         let r = accepted(l)!;
         match r
-        | failure(_) => Async/pure(())
+        | failure(_) => Io/pure(())
         | success(h) =>
             let _ = on_conn(h)!;
             go()
@@ -59,28 +59,32 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
     go();
 
 --- `handler` over the connection, then what the connection holds of the writes it accepted handed on and its sending half ended, so a TLS stream has sent its records and its closure alert before it is closed.
-let served(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
+let served(h: Handle, handler: (Socket) -> Io({})) -> Io({}) =
     let _ = handler(Socket { h })!;
-    let _ = Async/Write/flush(h)!;
+    let _ = Io/Write/flush(h)!;
     let _ = Handle/finish(h)!;
-    Async/pure(());
+    Io/pure(());
 
-let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
-    Async/go(Async/using(Handle/close(h), served(h, handler)));
+-- The connection `h` served by `handler` beside the accept loop, a child of `s`, closed however it ends.
+let serve_conn(s: Io/Scope, h: Handle, handler: (Socket) -> Io({})) -> Io({}) =
+    Io/bind(Io/spawn(s, Io/using((_) => Handle/close(h), served(h, handler))), (_) => Io/pure(()));
 
---- Every connection to `host` at `port` handed to `handler` in a fiber of its own, until an accept fails; the listener is closed whichever way the task ends.
-pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async, Io/Error, {}) =
+--- Every connection to `host` at `port` handed to `handler` in a branch of its own, until an accept fails, when the connections still open are served to their end; the listener is closed however the serving ends.
+pub let serve(host: Str, port: Nat, handler: (Socket) -> Io({})) -> Try(Io, Io/Error, {}) =
     let l = listen(host, port)!;
-    Async/using(close(l), accept_loop(l, (h) => serve_conn(h, handler)));
+    Io/using(
+        (_) => close(l),
+        Io/scope((s) =>
+            Io/bind(accept_loop(l, (h) => serve_conn(s, h, handler)), (_) => Io/join_all(s))));
 
 --- Upgrade this socket to a TLS server stream under this configuration: `ok`, or the status of the failure.
 foreign tls_start_server(Handle, Handle) -> Nat;
 
-let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
+let serve_tls_conn(s: Io/Scope, h: Handle, cfg: Handle, handler: (Socket) -> Io({})) -> Io({}) =
     let status = tls_start_server(h, cfg)!;
     match status == /sys/status/ok
-    | true => serve_conn(h, handler)
-    | false => Async/lift(Handle/close(h))
+    | true => serve_conn(s, h, handler)
+    | false => Handle/close(h)
     end;
 
 --- A server's TLS configuration from this certificate chain and this key: `ok` beside its handle, or the status of the failure.
@@ -92,8 +96,8 @@ pub let serve_tls(
     port: Nat,
     cert: Bytes,
     key: Bytes,
-    handler: (Socket) -> Async({}),
-) -> Try(Async, Io/Error, {}) =
+    handler: (Socket) -> Io({}),
+) -> Try(Io, Io/Error, {}) =
     let reply = tls_server_config(cert, key)!;
     let cfg =
         match reply.status == /sys/status/ok
@@ -101,6 +105,11 @@ pub let serve_tls(
         | false => Result/failure(Io/Error/of(reply.status))
         end!;
     let l = listen(host, port)!;
-    Async/using(
-        Handle/close(cfg),
-        Async/using(close(l), accept_loop(l, (h) => serve_tls_conn(h, cfg, handler))));
+    Io/using(
+        (_) => Handle/close(cfg),
+        Io/using(
+            (_) => close(l),
+            Io/scope((s) =>
+                Io/bind(
+                    accept_loop(l, (h) => serve_tls_conn(s, h, cfg, handler)),
+                    (_) => Io/join_all(s)))));

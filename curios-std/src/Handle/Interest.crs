@@ -1,6 +1,6 @@
 use /std/{Bool};
 
---- The host's settable poll flags: what a park asks to be woken for, and, coming back, which of those fired.
+--- The host's settable poll flags: what a wait asks to be woken for, and, coming back, which of those fired.
 ---
 --- Both flags are askable, together or apart. The two a host reports unasked are `Readiness`'s own.
 pub struct Interest: pub Type {

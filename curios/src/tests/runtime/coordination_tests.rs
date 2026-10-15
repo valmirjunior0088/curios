@@ -7,7 +7,7 @@ fn a_channel_preserves_fifo_through_wraparound_and_close() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, print};
-        use /std/Async/{Channel};
+        use /std/Io/{Channel};
         let pushed(p: Channel/Push) -> Io({}) =
             print(match p | taken() => "taken " | full() => "full " | closed() => "closed " end);
         let taken(t: Channel/Take(Nat)) -> Io({}) =
@@ -35,7 +35,7 @@ fn evidence_payloads_still_occupy_storage() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Eq, Option, Cell, Io, print};
-        use /std/Async/{Channel};
+        use /std/Io/{Channel};
         let proof = Cell/new(@Option(Eq()(1, 1)))!;
         let _ = Cell/fill(proof, Option/some(Eq/refl()))!;
         let _ = print(match Cell/poll(proof)! | some(_) => "proof " | none() => "missing " end)!;
@@ -53,7 +53,7 @@ fn type_payloads_still_occupy_storage() {
     assert_eq!(
         run(r#"
         use /std/{Cell, Nat, Io, print};
-        use /std/Async/{Channel};
+        use /std/Io/{Channel};
         Io/bind(Cell/new(@Type), (c) =>
         Io/bind(Cell/fill(c, Nat), (_) =>
         Io/bind(Cell/poll(c), (held) =>
@@ -71,16 +71,15 @@ fn type_payloads_still_occupy_storage() {
 
 #[test]
 fn a_zero_capacity_is_refused_at_the_public_constructor() {
-    let error = typecheck("let c = /std/Async/Channel/new(@/std/Nat, 0)!; /std/Io/pure(())")
+    let error = typecheck("let c = /std/Io/Channel/new(@/std/Nat, 0)!; /std/Io/pure(())")
         .expect_err("zero has no positive-capacity evidence");
     assert!(error.contains("Holds") || error.contains("Lt"), "{error}");
 }
 
+// Only `/std` advances a description: the driver every combinator is written over holds each branch's rest and performs each dropped branch's cancel, and a program reaches it through the combinators alone.
 #[test]
-fn arbitrary_wait_probes_are_private() {
-    let error = typecheck(
-        "let w = /std/Async/Wait/probe(/std/Async/Probe { /std/Io/pure(true) }); /std/Io/pure(())",
-    )
-    .expect_err("a program cannot manufacture a probe");
+fn the_driver_of_branches_is_private() {
+    let error = typecheck("let d = /std/Io/concurrent/drive; /std/Io/pure(())")
+        .expect_err("a program cannot reach the driver");
     assert!(error.contains("private"), "{error}");
 }

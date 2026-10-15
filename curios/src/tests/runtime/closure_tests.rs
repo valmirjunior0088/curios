@@ -236,16 +236,16 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
     let (system, io) = MockHost::builder().args([b"program".as_slice()]).build();
     run_text(
         r#"
-        use /std/{Nat, Bool, Str, List, Async, proc};
+        use /std/{Nat, Bool, Str, List, proc, Io};
 
         induct Thing(E: Type): pub Type
         | nothing()
         | stop()
-        | doing(Async(E))
+        | doing(Io(E))
         | many(List(Thing(E)))
         end
 
-        let flatten(@E: Type, c: Thing(E)) -> {quit: Bool, pending: List(Async(E))} =
+        let flatten(@E: Type, c: Thing(E)) -> {quit: Bool, pending: List(Io(E))} =
             match c
             | nothing() => (quit = false, pending = [])
             | stop() => (quit = true, pending = [])
@@ -263,11 +263,11 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
             choose
             | tag == 1 => (model + 1, Thing/nothing())
             | tag == 2 => (model, Thing/stop())
-            | tag == 3 => (model, Thing/doing(Async/pure(model * 2)))
+            | tag == 3 => (model, Thing/doing(Io/pure(model * 2)))
             | _ => (model, Thing/nothing())
             end;
 
-        let drive(start: Nat, tags: List(Nat)) -> {model: Nat, quit: Bool, pending: List(Async(Nat))} =
+        let drive(start: Nat, tags: List(Nat)) -> {model: Nat, quit: Bool, pending: List(Io(Nat))} =
             List/fold(
                 tags,
                 (model = start, quit = false, pending = []),

@@ -150,7 +150,7 @@ pub enum Failure {
     AlreadyExists,
     /// A `socket_connect` was actively refused — no listener at the target host:port.
     ConnectionRefused,
-    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). Every handle a peer decides on is non-blocking from the moment the host mints it, so this is the failure a fiber parks on: `/std/Handle` matches on it to poll the handle and retry instead of treating it as a real failure.
+    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). Every handle a peer decides on is non-blocking from the moment the host mints it, so this is the failure a read or a write waits on: `/std/Handle` matches on it to wait on a watch of the handle and retry, instead of treating it as a real failure.
     WouldBlock,
     /// A TLS upgrade (`tls_start`/`tls_start_server`) or server-config build failed: an unparseable certificate/key, an invalid SNI, or a failed handshake (bad cert chain, protocol error). These are `rustls`'s own errors, not OS errnos, so they collapse to this one named code rather than passing through the errno mapping.
     TlsError,

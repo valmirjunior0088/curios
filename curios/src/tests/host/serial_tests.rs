@@ -49,19 +49,19 @@ fn an_open_asks_the_host_for_the_configured_speed_and_frame() {
 #[test]
 fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
     let source = r#"
-        use /std/{Str, Bytes, Option, Show, Try, Async, Io, Path, Serial};
-        let exchange(s: Serial) -> Try(Async, Io/Error, Bytes) =
+        use /std/{Str, Bytes, Option, Show, Try, Io, Path, Serial};
+        let exchange(s: Serial) -> Try(Io, Io/Error, Bytes) =
             let _ = Try/attempt(Serial/write(s, Str/to_bytes("AT\r\n")))!;
             let input = Io/Reader/new(s)!;
             let line = Io/Reader/line(input)!;
             Try/pure(Option/unwrap_or(line, x[]));
-        let fiber: Async({}) =
+        let program: Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), exchange))!;
             match r
             | success(line) => Io/write(Io/stdout, line)
             | failure(e) => /std/print(Show/show(e))
             end;
-        Async/run(fiber)
+        program
         "#;
 
     let (system, io) = MockHost::builder()
@@ -77,17 +77,17 @@ fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
 #[test]
 fn with_does_not_drain_after_a_body_that_fails() {
     let source = r#"
-        use /std/{Str, Show, Try, Async, Io, Path, Serial};
-        let failing(s: Serial) -> Try(Async, Io/Error, {}) =
+        use /std/{Str, Show, Try, Io, Path, Serial};
+        let failing(s: Serial) -> Try(Io, Io/Error, {}) =
             let _ = Try/attempt(Serial/write(s, Str/to_bytes("AT\r\n")))!;
             Try/raise(Io/Error/not_found());
-        let fiber: Async({}) =
+        let program: Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), failing))!;
             match r
             | success(_) => /std/print("drained")
             | failure(e) => /std/print(Show/show(e))
             end;
-        Async/run(fiber)
+        program
         "#;
 
     let (system, io) = MockHost::builder()
@@ -103,8 +103,8 @@ fn with_does_not_drain_after_a_body_that_fails() {
 #[test]
 fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
     let source = r#"
-        use /std/{Bytes, Option, Show, Try, Async, Io, Path, Serial};
-        let reset(s: Serial) -> Try(Async, Io/Error, Bytes) =
+        use /std/{Bytes, Option, Show, Try, Io, Path, Serial};
+        let reset(s: Serial) -> Try(Io, Io/Error, Bytes) =
             let _ = Serial/set_dtr(s, false)!;
             let _ = Serial/set_rts(s, true)!;
             let _ = Serial/set_dtr(s, true)!;
@@ -112,13 +112,13 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
             let input = Io/Reader/new(s)!;
             let line = Io/Reader/line(input)!;
             Try/pure(Option/unwrap_or(line, x[]));
-        let fiber: Async({}) =
+        let program: Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), reset))!;
             match r
             | success(line) => Io/write(Io/stdout, line)
             | failure(e) => /std/print(Show/show(e))
             end;
-        Async/run(fiber)
+        program
         "#;
 
     let (system, io) = MockHost::builder()
@@ -136,16 +136,16 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
 #[test]
 fn opens_are_refused_by_name() {
     let source = r#"
-        use /std/{Str, Result, Show, Try, Async, Io, Path, Serial};
+        use /std/{Str, Result, Show, Try, Io, Path, Serial};
         let elsewhere: Path = Path/of_str("/dev/ttyACM9");
         let shown(@A: Type, r: Result(Io/Error, A)) -> Str =
             match r | success(_) => "ok" | failure(e) => Show/show(e) end;
-        let fiber: Async({}) =
+        let program: Io({}) =
             let missing = Try/run(Serial/open(elsewhere, Serial/config(9600)))!;
             let framed = Try/run(Serial/open(elsewhere, Serial/Config { ..Serial/config(9600), data_bits = 5 }))!;
             let stalled = Try/run(Serial/open(elsewhere, Serial/config(0)))!;
             /std/print(Str/join(" ", [shown(missing), shown(framed), shown(stalled)]));
-        Async/run(fiber)
+        program
         "#;
 
     let (system, io) = MockHost::builder()

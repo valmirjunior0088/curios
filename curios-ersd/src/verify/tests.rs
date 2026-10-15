@@ -10,7 +10,7 @@ fn nat_atom(builder: &mut ErsdBuilder, value: u32) -> Atom {
     Atom::Constant(constant)
 }
 
-/// The `Async/join_all` idiom: a recursive group function called by the computed member's eager initializer — a supported program.
+/// A recursive group function called by the computed member's eager initializer — a supported program.
 #[test]
 fn a_join_all_shaped_knot_verifies() {
     let mut builder = ErsdBuilder::new();

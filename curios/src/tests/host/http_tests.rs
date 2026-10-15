@@ -49,11 +49,11 @@ fn a_message_no_wire_carries_is_refused_where_it_is_written() {
 
 /// A server over one connection: it accepts it, answers it as `http/Server/answer` does under the default bounds, and closes it. Its handler answers the method, the path and how many octets of content arrived, fails where the path is `/fail`, and dates its own reply where it is `/dated`. `Listener/serve` is not what runs it: the scripted host's accept fails once its connections are spent, which ends that loop under a connection still parked.
 const SERVER: &str = r#"
-    use /std/{Str, Bytes, Nat, Show, Try, Async, Io};
+    use /std/{Str, Bytes, Nat, Show, Try, Io};
     use /std/tcp/{Listener, Socket};
     use /std/http/{Server, Request, Response};
     use /std/http/Url/{Scheme};
-    let handler(r: Request) -> Try(Async, Io/Error, Response) =
+    let handler(r: Request) -> Try(Io, Io/Error, Response) =
         let said =
             Response/of_text(
                 200,
@@ -64,19 +64,19 @@ const SERVER: &str = r#"
             Try/pure(Response/with_header(said, "Date", "Tue, 15 Nov 1994 08:12:31 GMT"))
         | _ => Try/pure(said)
         end;
-    let session: Try(Async, Io/Error, {}) =
+    let session: Try(Io, Io/Error, {}) =
         let l = Listener/listen("0.0.0.0", 8080)!;
         let c = Listener/accept(l)!;
         let _ = Server/answer(Server/default, Scheme/http(), handler)(c)!;
         let _ = Socket/close(c)!;
         Listener/close(l);
-    let fiber: Async({}) =
+    let program: Io({}) =
         let r = Try/run(session)!;
         match r
         | success(_) => Io/pure(())
         | failure(e) => /std/print(Show/show(e))
         end;
-    Async/run(fiber)
+    program
     "#;
 
 /// What the server wrote to its one connection under `host`, and that connection's events in order.
@@ -361,14 +361,14 @@ fn a_reply_is_written_finished_and_read_past_before_the_close(server: &Compiled)
 
 /// A client that asks `example.com` with `GET` and `head.example` with `HEAD`, and says of each what came of it on a line of its own: the status and the content, or the failure with what it carries.
 const CLIENT: &str = r#"
-    use /std/{Str, Bytes, Nat, Option, Result, Show, Try, Async, http};
+    use /std/{Str, Bytes, Nat, Option, Result, Show, Try, http, Io};
     use /std/http/{Method, Url, Request};
     let text(b: Bytes) -> Str =
         Result/unwrap_or(Str/of_bytes(b), "not text");
-    let told(method: Method, url: Url) -> Async(Str) =
+    let told(method: Method, url: Url) -> Io(Str) =
         let r =
             Try/run(http/perform(Request { method = method, url = url, headers = [], body = x[] }))!;
-        Async/pure(
+        Io/pure(
             match r
             | success(response) =>
                 Str/flatten([Nat/to_str(response.status.code), " ", text(response.body)])
@@ -386,11 +386,11 @@ const CLIENT: &str = r#"
                 | redirected(_) => "redirected"
                 end
             end);
-    let fiber: Async({}) =
+    let program: Io({}) =
         let got = told(Method/get(), Url/lit("http://example.com/"))!;
         let headed = told(Method/head(), Url/lit("http://head.example/"))!;
         /std/print(Str/flatten([got, "\n", headed]));
-    Async/run(fiber)
+    program
     "#;
 
 /// What the client says of its `GET` to `example.com` under `host`.

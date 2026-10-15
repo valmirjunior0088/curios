@@ -1,13 +1,13 @@
-use /std/{Str, Nat, Bytes, Result, Try, Async, Io, Handle};
+use /std/{Str, Nat, Bytes, Result, Try, Io, Handle};
 use /std/Handle/{Interest};
 
 --- The addresses a lookup found: `ok` beside them, or the status of the failure.
 foreign dns_resolve(Handle) -> {status: Nat, addresses: List(Bytes)};
 
-let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
-    let _ = Async/park([Async/Wait/ready(h, Interest/readable)])!;
+let resolved_address(h: Handle) -> Io(Result(Io/Error, Bytes)) =
+    let _ = Handle/wait(h, Interest/readable)!;
     let reply = dns_resolve(h)!;
-    Async/pure(
+    Io/pure(
         match reply.status == /sys/status/ok
         | true =>
             match reply.addresses
@@ -20,14 +20,14 @@ let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
 --- Start looking this host and port up: `ok` beside a handle to the lookup, or the status of the failure.
 foreign dns_lookup(Bytes, Nat) -> {status: Nat, handle: Handle};
 
---- The first address `host` resolves to, with `port`, as the socket operations take it. The lookup parks the fiber. A name that resolves to no address names nothing a socket can reach, and is `not_found`, as a name that resolves to nothing at all is.
-pub let resolve(host: Str, port: Nat) -> Try(Async, Io/Error, Bytes) =
+--- The first address `host` resolves to, with `port`, as the socket operations take it. The lookup waits by suspending. A name that resolves to no address names nothing a socket can reach, and is `not_found`, as a name that resolves to nothing at all is.
+pub let resolve(host: Str, port: Nat) -> Try(Io, Io/Error, Bytes) =
     let reply = dns_lookup(Str/to_bytes(host), port)!;
     let h =
         match reply.status == /sys/status/ok
         | true => Result/success(reply.handle)
         | false => Result/failure(Io/Error/of(reply.status))
         end!;
-    let a = Async/using(Handle/close(h), resolved_address(h))!;
+    let a = Io/using((_) => Handle/close(h), resolved_address(h))!;
     let addr = a!;
     Try/pure(addr);

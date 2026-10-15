@@ -1,4 +1,4 @@
-use /std/{Option, Try, Async, Io, Handle};
+use /std/{Option, Try, Io, Handle};
 use /std/Command/{Pipe, Exit, Child};
 use /std/Handle/{Interest};
 
@@ -38,9 +38,9 @@ pub let kill(c: Child) -> Io({}) =
 --- How this child ended: `ok` beside its exit code and the signal that ended it, or the status of the failure.
 foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
 
---- How the child ended, parking until it does. The pipes are closed with it, so read what it wrote before waiting for it.
-pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
-    let _ = Async/park([Async/Wait/ready(c.handle, Interest/readable)])!;
+--- How the child ended, waiting until it does. The pipes are closed with it, so read what it wrote before waiting for it.
+pub let wait(c: Child) -> Try(Io, Io/Error, Exit) =
+    let _ = Handle/wait(c.handle, Interest/readable)!;
     let reply = proc_wait(c.handle)!;
     let _ = close_pipes(c)!;
     match reply.status == /sys/status/ok
@@ -59,8 +59,8 @@ let release(c: Child) -> Io({}) =
     let _ = Handle/close(c.handle)!;
     close_pipes(c);
 
---- `body` with the child killed and its handle released whichever way the task ends, so a child never outlives the bracket it was started in, and nothing it was filed under does either.
-pub let with(@A: Type, c: Child, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
-    let outcome = Async/using(release(c), Try/run(body))!;
+--- `body` with the child killed and its handle released whichever way the body ends, so a child never outlives the bracket it was started in, and nothing it was filed under does either.
+pub let with(@A: Type, c: Child, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
+    let outcome = Io/using((_) => release(c), Try/run(body))!;
     let a = outcome!;
     Try/pure(a);

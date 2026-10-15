@@ -86,7 +86,7 @@ fn allows_pub_on_root_items() {
     "#);
 }
 
-// `/std/Async/block_on` pins an unannotated local binding through a *type alias* — `let Slot : Type = Cell(Option(Job));` — whose bare written `Type` mints a generalizable level while its value sits at one fixed level.
+// An unannotated local binding pinned through a *type alias* — `let Slot : Type = Cell(Option(Job));` — whose bare written `Type` mints a generalizable level while its value sits at one fixed level.
 #[test]
 fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
     let module = elaborate_source(

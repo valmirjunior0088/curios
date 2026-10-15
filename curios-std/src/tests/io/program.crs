@@ -1,6 +1,6 @@
 -- What closes a program, each witness asked by hand where what it performs lets the test go on: a failure ends the process, which a program's own test reads (`curios/src/tests/host/program_tests.rs`).
 use /std/{Nat, Bool, Io, Try, Test, Program};
-use /std/Async/{Channel};
+use /std/Io/{Channel};
 
 -- A description that yields nothing and leaves `n` where a take finds it.
 let leave(sender: Channel/Sender(Nat), n: Nat) -> Io({}) =

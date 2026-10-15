@@ -133,7 +133,7 @@ fn sealed_pub_concept_with_private_superclass_is_accepted() {
     assert_eq!(run(source), b"ok");
 }
 
-// A pub inductive's constructors are its interface: a private payload type is rejected (the `Async`/`Pause` shape).
+// A pub inductive's constructors are its interface: a private payload type is rejected.
 #[test]
 fn pub_inductive_with_private_payload_type_is_rejected() {
     let source = r#"
@@ -263,12 +263,12 @@ fn opaque_inductive_is_eliminable_in_a_descendant() {
     assert_eq!(run(source), b"42");
 }
 
-// `/std/Async/Future` publishes its operations while keeping its result cell private.
+// `/std/Io/Future` publishes its operations while keeping its result cell private.
 #[test]
 fn async_future_plumbing_is_not_reachable_from_user_code() {
     let source = r#"
         use /std/{Nat, Cell};
-        use /std/Async/{Future};
+        use /std/Io/{Future};
         let _cell(f: Future(Nat)) -> Cell(Nat) = f.0;
         /std/print("no")
         "#;

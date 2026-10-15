@@ -251,11 +251,11 @@ fn a_witness_whose_head_is_computed_is_refused_at_its_declaration() {
     );
 }
 
-// A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`: it is strictly smaller than the head, so resolution through it still decreases. The transformer's `Io` edge is then written once for every base, and here it resolves at base `Async` through the prelude's `Lift(Io, Async)`.
+// A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`: it is strictly smaller than the head, so resolution through it still decreases. The transformer's `Io` edge is then written once for every base, and here it resolves at base `Io` through the prelude's identity edge, `Lift(Io, Io)`.
 #[test]
 fn a_premise_naming_a_constant_beside_a_binder_resolves_through_the_constant_edge() {
     let source = r#"
-        use /std/{Monad, Result, Io, Async, Nat, Str, print};
+        use /std/{Monad, Result, Io, Nat, Str, print};
         use /std/Monad/{Lift};
         pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type { M(Result(E, A)) }
         let pure(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), a: A) -> Try(M, E, A) =
@@ -269,21 +269,18 @@ fn a_premise_naming_a_constant_beside_a_binder_resolves_through_the_constant_edg
         satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Io, M)) => Lift(Io, (A: Type) => Try(M, E, A)) {
             lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
         }
-        satisfy (@E: Type) => Lift(Async, (A: Type) => Try(Async, E, A)) {
-            lift(@A, m) = Try { Async/map(m, (a: A) => Result/success(a)) },
-        }
-        let body: Try(Async, Nat, Nat) =
+        let body: Try(Io, Nat, Nat) =
             let _ = print("a")!;
-            let _ = Async/yield_now()!;
+            let _ = Io/yield()!;
             let _ = print("b")!;
             pure(3);
-        let fiber: Async({}) =
+        let program: Io({}) =
             let r = body.0!;
             match r
-            | success(n) => Async/lift(print(Nat/to_str(n)))
-            | failure(_) => Async/lift(print("failed"))
+            | success(n) => print(Nat/to_str(n))
+            | failure(_) => print("failed")
             end;
-        Async/run(fiber)
+        program
         "#;
 
     assert_eq!(run(source), b"ab3");

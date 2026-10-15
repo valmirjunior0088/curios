@@ -33,7 +33,7 @@ fn a_channel_capacity_past_the_runtime_bound_refuses_before_allocating() {
         let source = format!(
             r#"
             use /std/{{Nat, Io, print}};
-            use /std/Async/{{Channel}};
+            use /std/Io/{{Channel}};
             let c = Channel/new(@Nat, {count})!;
             print(match Channel/try_send(c.0, 1)!
                 | taken() => "taken"
