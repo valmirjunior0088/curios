@@ -18,9 +18,10 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
 
     for function in module.functions().iter().flatten() {
         let provenance = function.debug_name.as_deref().unwrap_or_default();
-        // An allowlist rather than a check on the loop's own name, which is only possible because every emitted function carries a hint: a prelude helper its `/std/` path, the description machinery its `io/` tag, the step that carries a suspension out of a bind its `suspension/` tag, and a lifted lambda its owner's name qualified — `/sys/Handle/write/1`. A leaked `loop` matches none of them.
+        // An allowlist rather than a check on the loop's own name, which is only possible because every emitted function carries a hint: a prelude helper its `/std/` path, the description machinery its `io/` tag, the step that carries a suspension out of a bind its `suspension/` tag, and a lifted lambda its owner's name qualified — `/sys/Handle/write/1`, or `main/1`, the program's continuation past the host call that reads its arguments, which a suspension carries. A leaked `loop` matches none of them.
         assert!(
             provenance == "main"
+                || provenance.starts_with("main/")
                 || provenance.starts_with("/std/")
                 || provenance.starts_with("io/")
                 || provenance.starts_with("suspension/"),
@@ -33,45 +34,45 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
 #[test]
 fn lcg_hot_kernel_is_one_natural_loop() {
     let wat = wat(LCG);
-    let kernel = loop_containing(&wat, "65537");
-
-    assert_eq!(
-        kernel.matches("loop ").count(),
-        1,
-        "the kernel must be a single natural loop, not nested loops",
-    );
-    assert!(
-        !kernel.contains("$dispatch/"),
-        "the backedge must be an ordinary loop branch, not a dispatcher selector",
-    );
+    for kernel in loops_containing(&wat, "65537") {
+        assert_eq!(
+            kernel.matches("loop ").count(),
+            1,
+            "the kernel must be a single natural loop, not nested loops",
+        );
+        assert!(
+            !kernel.contains("$dispatch/"),
+            "the backedge must be an ordinary loop branch, not a dispatcher selector",
+        );
+    }
 }
 
 /// The loop body is direct scalar arithmetic — Nat multiply (`i64.mul`, widened for its overflow check) and unsigned remainder (`i32.rem_u`) — with no closure allocation and no indirect (`call_indirect`) dispatch.
 #[test]
 fn lcg_loop_is_scalar_no_closure_no_indirect() {
     let wat = wat(LCG);
-    let kernel = loop_containing(&wat, "65537");
-
-    assert!(
-        kernel.contains("i64.mul"),
-        "Nat multiply is direct scalar arithmetic"
-    );
-    assert!(
-        kernel.contains("i32.rem_u"),
-        "the modulo is direct scalar arithmetic"
-    );
-    assert!(
-        !kernel.contains("call_indirect"),
-        "no indirect call in the hot loop"
-    );
-    assert!(
-        !kernel.contains("struct.new $clsr/"),
-        "no closure allocation in the hot loop"
-    );
-    assert!(
-        !kernel.contains("struct.new $envr/"),
-        "no environment allocation in the hot loop"
-    );
+    for kernel in loops_containing(&wat, "65537") {
+        assert!(
+            kernel.contains("i64.mul"),
+            "Nat multiply is direct scalar arithmetic"
+        );
+        assert!(
+            kernel.contains("i32.rem_u"),
+            "the modulo is direct scalar arithmetic"
+        );
+        assert!(
+            !kernel.contains("call_indirect"),
+            "no indirect call in the hot loop"
+        );
+        assert!(
+            !kernel.contains("struct.new $clsr/"),
+            "no closure allocation in the hot loop"
+        );
+        assert!(
+            !kernel.contains("struct.new $envr/"),
+            "no environment allocation in the hot loop"
+        );
+    }
 }
 
 /// The loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: a boxed edge argument is loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision `curios-cont`'s `represent` fixpoint exists to produce.
@@ -80,12 +81,12 @@ fn lcg_loop_is_scalar_no_closure_no_indirect() {
 #[test]
 fn lcg_loop_carries_its_scalars_in_registers() {
     let wat = wat(LCG);
-    let kernel = loop_containing(&wat, "65537");
-
-    assert!(
-        !kernel.contains("ref.as_non_null"),
-        "no edge argument in the hot loop is reboxed to cross it: {kernel}"
-    );
+    for kernel in loops_containing(&wat, "65537") {
+        assert!(
+            !kernel.contains("ref.as_non_null"),
+            "no edge argument in the hot loop is reboxed to cross it: {kernel}"
+        );
+    }
 }
 
 // -- trees ------------------------------------------------------------------

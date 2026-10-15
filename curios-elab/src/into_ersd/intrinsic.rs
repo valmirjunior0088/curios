@@ -81,8 +81,8 @@ impl Lowering<'_> {
         Ok(row.constructors[index].id)
     }
 
-    /// Erase a constant to its interned atom.
-    fn constant(&mut self, constant: curios_ersd::Constant) -> Outcome {
+    /// Erase a constant to its interned atom, as the outcome of erasing a term.
+    fn constant_outcome(&mut self, constant: curios_ersd::Constant) -> Outcome {
         Outcome::Emitted(curios_ersd::Atom::Constant(self.builder.constant(constant)))
     }
 
@@ -214,19 +214,23 @@ pub(super) fn erase_intrinsic(
         | Intrinsic::ChannelType(_)
         | Intrinsic::IoType(_) => Ok(Outcome::Emitted(lowering.unit())),
 
-        &Intrinsic::Bool(value) => Ok(lowering.constant(curios_ersd::Constant::Bool(value))),
+        &Intrinsic::Bool(value) => {
+            Ok(lowering.constant_outcome(curios_ersd::Constant::Bool(value)))
+        }
         Intrinsic::BoolAnd(..) => op!(curios_ersd::Operation::BoolAnd),
         Intrinsic::BoolOr(..) => op!(curios_ersd::Operation::BoolOr),
         Intrinsic::BoolXor(..) => op!(curios_ersd::Operation::BoolXor),
         Intrinsic::BoolEql(..) => op!(curios_ersd::Operation::BoolEql),
         Intrinsic::BoolNeq(..) => op!(curios_ersd::Operation::BoolNeq),
 
-        &Intrinsic::Byte(value) => Ok(lowering.constant(curios_ersd::Constant::Byte(value))),
+        &Intrinsic::Byte(value) => {
+            Ok(lowering.constant_outcome(curios_ersd::Constant::Byte(value)))
+        }
         Intrinsic::ByteToNat(..) => op!(curios_ersd::Operation::ByteToNat),
         Intrinsic::NatToByte { .. } => op!(curios_ersd::Operation::NatToByte),
 
         Intrinsic::Nat(Nat::Zero) => {
-            Ok(lowering.constant(curios_ersd::Constant::Nat(Natural::zero())))
+            Ok(lowering.constant_outcome(curios_ersd::Constant::Nat(Natural::zero())))
         }
         Intrinsic::Nat(Nat::Succ(spine, inner)) => {
             let spine = spine.clone();
@@ -234,7 +238,7 @@ pub(super) fn erase_intrinsic(
                 inner.as_ref(),
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))
             ) {
-                return Ok(lowering.constant(curios_ersd::Constant::Nat(spine)));
+                return Ok(lowering.constant_outcome(curios_ersd::Constant::Nat(spine)));
             }
             let [inner] = places(computed(context, intrinsic));
             let inner_atom = emitted!(lowering.demanded(context, &inner)?);
@@ -267,7 +271,9 @@ pub(super) fn erase_intrinsic(
         Intrinsic::NatPow(..) => op!(curios_ersd::Operation::NatPow),
         Intrinsic::NatShr(..) => op!(curios_ersd::Operation::NatShr),
 
-        Intrinsic::Int(value) => Ok(lowering.constant(curios_ersd::Constant::Int(value.clone()))),
+        Intrinsic::Int(value) => {
+            Ok(lowering.constant_outcome(curios_ersd::Constant::Int(value.clone())))
+        }
         Intrinsic::IntEql(..) => op!(curios_ersd::Operation::IntEql),
         Intrinsic::IntNeq(..) => op!(curios_ersd::Operation::IntNeq),
         Intrinsic::IntAdd(..) => op!(curios_ersd::Operation::IntAdd),
@@ -285,7 +291,7 @@ pub(super) fn erase_intrinsic(
         Intrinsic::IntShl(..) => op!(curios_ersd::Operation::IntShl),
         Intrinsic::IntShr(..) => op!(curios_ersd::Operation::IntShr),
 
-        &Intrinsic::Flt(value) => Ok(lowering.constant(curios_ersd::Constant::Flt(value))),
+        &Intrinsic::Flt(value) => Ok(lowering.constant_outcome(curios_ersd::Constant::Flt(value))),
         Intrinsic::FltAdd(rounding, ..) => op!(curios_ersd::Operation::FltAdd(*rounding)),
         Intrinsic::FltSub(rounding, ..) => op!(curios_ersd::Operation::FltSub(*rounding)),
         Intrinsic::FltMul(rounding, ..) => op!(curios_ersd::Operation::FltMul(*rounding)),
@@ -320,7 +326,7 @@ pub(super) fn erase_intrinsic(
         Intrinsic::FltOfLeBytes { .. } => op!(curios_ersd::Operation::FltOfLeBytes),
 
         Intrinsic::Bin(grain, value) => {
-            Ok(lowering.constant(curios_ersd::Constant::Bin(*grain, value.clone())))
+            Ok(lowering.constant_outcome(curios_ersd::Constant::Bin(*grain, value.clone())))
         }
         Intrinsic::BinLen(grain, ..) => seq!(curios_ersd::SequenceOp::BinLen(*grain)),
         Intrinsic::BinEql(grain, ..) => seq!(curios_ersd::SequenceOp::BinEql(*grain)),
@@ -364,7 +370,9 @@ pub(super) fn erase_intrinsic(
             lowering.erase_list_fold(context, element, result, operands, hint)
         }
 
-        &Intrinsic::Handle(token) => Ok(lowering.constant(curios_ersd::Constant::Handle(token))),
+        &Intrinsic::Handle(token) => {
+            Ok(lowering.constant_outcome(curios_ersd::Constant::Handle(token)))
+        }
         // Every operation the host performs is typed `Io`, so every one erases to a thunk: the operands are computed where the description is *built*, and the operation itself happens only when the description is forced. Nothing below changes what the host call is — only where it sits relative to the closure boundary.
         Intrinsic::Cell { .. } => lowering.thunk(hint.or(Some("io/cell_new")), move |lowering| {
             Ok(lowering.bind(

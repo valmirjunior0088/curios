@@ -159,10 +159,10 @@ fn print_constant_args_collapses_at_ersd() {
     .expect("compile succeeded");
 
     let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
-    // "x = 42, s = hello\n", already formatted, as the operand of the host write itself. `print` is an `Io`-returning wrapper and inlines away with the rest, so what survives is the write inside the description thunk it erases to. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
+    // "x = 42, s = hello\n", already formatted, as the operand of the host write itself, ahead of a first call's lane. `print` is an `Io`-returning wrapper and inlines away with the rest, so what survives is the write inside the description thunk it erases to. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
     assert!(
         ersd.contains(
-            "ffi//std/Handle/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\")"
+            "ffi//std/Handle/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\", "
         ),
         "expected the folded write residual, got:\n{ersd}",
     );

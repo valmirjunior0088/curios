@@ -471,3 +471,32 @@ where
         }
     }
 }
+
+/// Fill `replies` with a value of each of `results`, a reply nothing reads: a zero for a scalar, an empty payload for a reference, and null for an option, whose carrier admits it.
+pub(crate) fn filled(
+    caller: &mut Caller<'_, ()>,
+    results: &[WireType],
+    replies: &mut [Val],
+) -> Result<(), wasmtime::Error> {
+    for (result, reply) in results.iter().zip(replies.iter_mut()) {
+        let reply = std::slice::from_mut(reply);
+
+        match result {
+            WireType::Nat | WireType::Int => reply[0] = Val::I64(0),
+            WireType::Bool | WireType::Byte => reply[0] = Val::I32(0),
+            WireType::Flt => reply[0] = Val::F64(0f64.to_bits()),
+            WireType::Bytes | WireType::Bits | WireType::Handle => {
+                Vec::<u8>::new().lower(caller, reply)?
+            }
+            WireType::List(WireLeaf::Nat) => Vec::<u64>::new().lower(caller, reply)?,
+            WireType::List(WireLeaf::Int) => Vec::<i64>::new().lower(caller, reply)?,
+            WireType::List(WireLeaf::Bool) => Vec::<bool>::new().lower(caller, reply)?,
+            WireType::List(WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle) => {
+                Vec::<Vec<u8>>::new().lower(caller, reply)?
+            }
+            WireType::Option(_) => reply[0] = Val::AnyRef(None),
+        }
+    }
+
+    Ok(())
+}

@@ -217,13 +217,14 @@ impl ChannelOperation {
 ///
 /// A suspension holds the handles it waits on, the cells it waits on to be filled — which only the program fills, and only what advances it inside the program reads — the description that cancels it, what runs first when it resumes — the rest of the description that suspended, or a suspension nested in it — and the frames: the continuations of the binds it passed on its way out, innermost first, each applied to what the one before it yields. A bind that forces a suspension appends its continuation rather than wrapping the rest in a new description, so resuming walks the frames in a loop, and a chain of binds pays once for its depth however often its innermost action suspends.
 ///
-/// `New` takes the handles, the cells, the cancel and the rest, and builds a suspension with no frames. `Carry` takes a suspension and a bind's continuation and answers the suspension with the continuation appended to its frames: what a bind answers of a suspension its action answered, as one step the lowering keeps out of line, so the path a bind takes when nothing suspends stays small. `Build` takes all five parts, and is how resuming carries a suspension on — a nested one wrapped, its frames still to run. `Is` takes anything a description may answer and answers whether it is a suspension, a `Bool`; `On`, `Filled`, `Cancel`, `Next` and `Frames` take a suspension and read that part.
+/// `New` takes the handles, the cells, the cancel and the rest, and builds a suspension with no frames. `Later` takes the token a host call answered in place of its reply, a list holding one handle, and `again`, which makes the description calling the row once more with a token, dropping it where its second operand is `true` and asking for its answer where it is `false`: it builds the suspension on the token with `again(token, true)` as its cancel and `again(token, false)` as its rest, the one shape every call answered later waits in, as one step the lowering keeps out of line. `Carry` takes a suspension and a bind's continuation and answers the suspension with the continuation appended to its frames: what a bind answers of a suspension its action answered, as one step the lowering keeps out of line, so the path a bind takes when nothing suspends stays small. `Build` takes all five parts, and is how resuming carries a suspension on — a nested one wrapped, its frames still to run. `Is` takes anything a description may answer and answers whether it is a suspension, a `Bool`; `On`, `Filled`, `Cancel`, `Next` and `Frames` take a suspension and read that part.
 ///
-/// `New` is kept apart from `Carry` and `Build` because it is the only operation that makes a suspension where none existed: a program whose reachable code holds no `New` holds no suspension at all, which is what lets every `Is` in it fold to false.
+/// `New` and `Later` are kept apart from `Carry` and `Build` because they are the only operations that make a suspension where none existed: a program whose reachable code holds neither holds no suspension at all, which is what lets every `Is` in it fold to false.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum SuspensionOperation {
     New,
+    Later,
     Carry,
     Build,
     Is,
@@ -239,7 +240,7 @@ impl SuspensionOperation {
     pub fn arity(self) -> usize {
         match self {
             Self::New => 4,
-            Self::Carry => 2,
+            Self::Later | Self::Carry => 2,
             Self::Build => 5,
             Self::Is | Self::On | Self::Filled | Self::Cancel | Self::Next | Self::Frames => 1,
         }

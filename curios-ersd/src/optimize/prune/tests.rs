@@ -27,11 +27,20 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
         },
     });
     let foreign = builder.foreign(row);
+    // A first call's lane: no token, and not dropped (`curios_abi::LANE_IN`).
+    let none = builder.item_value(
+        None,
+        Rhs::Sequence {
+            operation: SequenceOp::ListBuild,
+            operands: vec![],
+        },
+    );
+    let asking = builder.constant(Constant::Bool(false));
     let _effectful_unused = builder.item_value(
         Some("effectful_unused".into()),
         Rhs::Foreign {
             foreign,
-            operands: vec![],
+            operands: vec![Atom::Value(none), Atom::Constant(asking)],
         },
     );
     builder.open_block();
@@ -44,7 +53,8 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     let printed = module.to_string();
     assert!(!printed.contains("pure_unused"), "{printed}");
     assert!(printed.contains("effectful_unused"), "{printed}");
-    assert_eq!(module.items().len(), 2, "{printed}");
+    // `used`, the effectful call, and the empty list its lane takes.
+    assert_eq!(module.items().len(), 3, "{printed}");
 }
 
 /// A dead function web (mutually recursive combinators, never referenced) drops whole; a reached recursive group survives whole.

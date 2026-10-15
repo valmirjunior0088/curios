@@ -63,15 +63,16 @@ fn a_capture_free_closure_in_a_loop_interns_as_a_const() {
     let wat = wat(LOOPED_PICK);
 
     // `spin` owns the 40009 modulus and is contified into the entry, so the claim is made of the loop itself; the two lambdas own 30011 and are lifted to their own functions.
-    let kernel = loop_containing(&wat, "40009");
-    assert!(
-        !kernel.contains("struct.new $envr/"),
-        "the loop constructs no environment per iteration: {kernel}",
-    );
-    assert!(
-        kernel.contains("global.get $const/"),
-        "the arms reference the interned consts instead: {kernel}",
-    );
+    for kernel in loops_containing(&wat, "40009") {
+        assert!(
+            !kernel.contains("struct.new $envr/"),
+            "the loop constructs no environment per iteration: {kernel}",
+        );
+        assert!(
+            kernel.contains("global.get $const/"),
+            "the arms reference the interned consts instead: {kernel}",
+        );
+    }
 
     let functions = functions(&wat);
     let start = functions
@@ -172,18 +173,18 @@ fn a_convoy_in_a_hot_loop_allocates_no_closure() {
         "#;
 
     let wat = wat(CONVOY);
-    let kernel = loop_containing(&wat, "65537");
-
-    assert!(
-        !kernel.contains("struct.new $envr/"),
-        "no arm's environment is allocated in the loop"
-    );
-    assert!(
-        !kernel.contains("struct.new $clsr/"),
-        "no closure is allocated in the loop"
-    );
-    assert!(
-        !kernel.contains("call_indirect"),
-        "no arm is called indirectly in the loop"
-    );
+    for kernel in loops_containing(&wat, "65537") {
+        assert!(
+            !kernel.contains("struct.new $envr/"),
+            "no arm's environment is allocated in the loop"
+        );
+        assert!(
+            !kernel.contains("struct.new $clsr/"),
+            "no closure is allocated in the loop"
+        );
+        assert!(
+            !kernel.contains("call_indirect"),
+            "no arm is called indirectly in the loop"
+        );
+    }
 }

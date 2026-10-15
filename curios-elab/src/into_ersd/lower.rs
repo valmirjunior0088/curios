@@ -354,20 +354,14 @@ impl<'s> Lowering<'s> {
                         }))
                     });
                 }
-                self.thunk(hint.or(Some(described.as_str())), move |lowering| {
-                    let answer = emitted!(lowering.bind(
-                        None,
-                        curios_ersd::Rhs::Foreign {
-                            foreign,
-                            operands: atoms,
-                        },
-                    ));
-
-                    Ok(Outcome::Emitted(match polled {
-                        Some(polled) => lowering.answered(answer, &results, polled),
-                        None => answer,
-                    }))
-                })
+                Ok(Outcome::Emitted(self.lane_call(
+                    foreign,
+                    atoms,
+                    &signature.params,
+                    &results,
+                    polled,
+                    hint.unwrap_or(described.as_str()),
+                )))
             }
             // Type formers carry nothing to lower; their value is the unit of a retained-but-erased slot.
             Subterm::Sort(..)

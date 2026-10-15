@@ -821,6 +821,16 @@ impl<'a, 'b> Context<'a, 'b> {
         output.extend(self.resume_instrs(resume, results));
     }
 
+    /// Whether the parameter at `index` of `resume`'s block is held in a register, so a value entering it stays raw.
+    fn resume_param_is_raw(&self, resume: &EmissionBlockName, index: usize) -> bool {
+        !self.is_resume(resume)
+            && self
+                .find_block(resume)
+                .params()
+                .get(index)
+                .is_some_and(|(param, _)| self.table().raw_carrier(param).is_some())
+    }
+
     /// Resume after a host op whose single result already matches the function's anyref return shape: return it directly on the sentinel, else enter the resume block with one value.
     fn host_single_resume(&self, output: &mut Vec<curios_wasm::Instr>, resume: &EmissionBlockName) {
         if self.is_resume(resume) {
@@ -904,17 +914,17 @@ impl<'a, 'b> Context<'a, 'b> {
         function: &Arc<ForeignFunction>,
         operands: &'a [EmissionValueName],
     ) -> Vec<curios_wasm::Instr> {
-        let signature = function.signature();
+        let params = function.signature().imported_params();
 
         assert_eq!(
             operands.len(),
-            signature.params.len(),
+            params.len(),
             "{} operand count does not match its signature",
             function.name()
         );
 
         let mut output = Vec::new();
-        for (operand, wire_type) in operands.iter().zip(&signature.params) {
+        for (operand, wire_type) in operands.iter().zip(&params) {
             output.extend(self.load_value_instrs(operand, wire_type.into()));
             output.extend(self.wire_force_instrs(wire_type));
 
@@ -952,12 +962,10 @@ impl<'a, 'b> Context<'a, 'b> {
                 operands,
                 resume,
             } => {
-                let signature = function.signature();
-
                 output.extend(self.host_call_instrs(function, operands));
 
                 // A scalar result crosses as the number it is and is boxed here, where every box is this crate's to build (see `Table::wire_type`), and a reference crosses as a flat payload and is embedded back into a rope. Both work on the top of the stack only, so a row with a result to box, or a reference below the top, waits its results out in locals of their own and brings them back in order, boxing or embedding each where it stands. A row with neither at most embeds its last result, which is already on top. Nothing is checked on the way: a reply is a value of its wire type because whatever answered the row lowered it as one.
-                let results = signature.returns.types();
+                let results = function.signature().imported_results();
                 let reference = |wire_type: &WireType| match wire_type.shape() {
                     WireShape::Reference(reference) => Some(reference),
                     WireShape::Scalar(_) => None,
@@ -985,7 +993,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
                     output.extend(waiting.iter().rev().map(|(_, local)| set(local)));
 
-                    for (wire_type, local) in &waiting {
+                    for (index, (wire_type, local)) in waiting.iter().enumerate() {
                         output.push(get(local));
                         match reference(wire_type) {
                             // `none` crosses as null and enters as the empty list an option rides; `some` crosses as the list of one its element's list would.
@@ -1012,6 +1020,12 @@ impl<'a, 'b> Context<'a, 'b> {
                             Some(reference) => {
                                 output.push(curios_wasm::Instr::RefAsNonNull);
                                 output.extend(self.wire_embed_instrs(reference));
+                            }
+                            // An `Flt` stays the raw `f64` where the parameter receiving it is held at its carrier, and is boxed where it is a reference: a join of the call's answer with a suspension, say.
+                            None if matches!(wire_type, WireType::Flt) => {
+                                if !self.resume_param_is_raw(resume, index) {
+                                    output.extend(box_instr(&curios_cont::Repr::Flt, self.table()));
+                                }
                             }
                             None => output.extend(self.table().box_word_instrs(wire_type)),
                         }

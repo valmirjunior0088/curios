@@ -333,10 +333,10 @@ pub(super) fn channel_roundtrip() -> curios_cont::Module {
 
 // --- Foreign ABI ----------------------------------------------------------
 
-/// A host call whose signature has `results` results, resuming into a continuation that binds them all and exits with the first.
+/// A host call whose signature has `results` results, resuming into a continuation that binds them all and the lane's token and exits with the first. Its operands are zeros, the lane's token an empty list.
 pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cont::Module {
-    let arity = function.signature().params.len();
-    let results = function.signature().returns.arity();
+    let params = function.signature().imported_params();
+    let results = function.signature().imported_results().len();
 
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
@@ -353,10 +353,23 @@ pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cont::Mo
         params: bound,
         body: exit,
     });
+    let none = module.add_value(Some("none".into()));
+    let args = params
+        .iter()
+        .map(|wire| match wire {
+            WireType::List(_) | WireType::Option(_) => curios_cont::Atom::Value(none),
+            _ => nat(0),
+        })
+        .collect();
     let call = module.add_node(curios_cont::Node::Foreign {
         function,
-        args: (0..arity).map(|_| nat(0)).collect(),
+        args,
         return_to: resume,
+    });
+    let call = module.add_node(curios_cont::Node::LetValue {
+        result: none,
+        value: curios_cont::ValueExpr::List(Vec::new()),
+        next: call,
     });
     let body = module.add_node(curios_cont::Node::LetCont {
         continuations: vec![resume],

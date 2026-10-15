@@ -1,6 +1,6 @@
 //! The whole-program fold of suspension tests.
 //!
-//! Erasure tests what every non-tail force answers, since a description may suspend, and builds beside each test the arm that carries a suspension on. Only `Io/suspend` makes a suspension, so a program whose reachable code holds no [`SuspensionOperation::New`] holds none: every test in it answers no, and every arm carrying one on is dead. This pass puts the value arm in place of each switch on such a test, in the shape erasure binds them — the test, the switch, and the block returning the switch — so the program enters partial evaluation and lowering as it was before descriptions could suspend, and the functions only the dead arms defined drop at the prune that follows.
+//! Erasure tests what every non-tail force answers, since a description may suspend, and builds beside each test the arm that carries a suspension on. Only `Io/suspend` and a host call answered later make a suspension, so a program whose reachable code holds no [`SuspensionOperation::New`] and no [`SuspensionOperation::Later`] holds none: every test in it answers no, and every arm carrying one on is dead. This pass puts the value arm in place of each switch on such a test, in the shape erasure binds them — the test, the switch, and the block returning the switch — so the program enters partial evaluation and lowering as it was before descriptions could suspend, and the functions only the dead arms defined drop at the prune that follows.
 
 #[cfg(test)]
 mod tests;
@@ -15,7 +15,7 @@ pub(super) fn fold_suspension_tests(module: &mut Module) -> bool {
             statement,
             Statement::Let {
                 rhs: Rhs::Suspension {
-                    operation: SuspensionOperation::New,
+                    operation: SuspensionOperation::New | SuspensionOperation::Later,
                     ..
                 },
                 ..

@@ -64,11 +64,20 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
         },
     });
     let foreign = builder.foreign(row);
+    // A first call's lane: no token, and not dropped (`curios_abi::LANE_IN`).
+    let none = builder.let_value(
+        None,
+        Rhs::Sequence {
+            operation: SequenceOp::ListBuild,
+            operands: vec![],
+        },
+    );
+    let asking = builder.constant(Constant::Bool(false));
     let opaque = builder.let_value(
         Some("opaque".into()),
         Rhs::Foreign {
             foreign,
-            operands: vec![],
+            operands: vec![Atom::Value(none), Atom::Constant(asking)],
         },
     );
     let result = builder.let_value(

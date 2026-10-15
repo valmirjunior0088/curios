@@ -50,6 +50,8 @@ pub(crate) const SCC_CLONE_LIMIT: usize = 64;
 pub(crate) const SCC_CLONE_NODE_LIMIT: usize = 256;
 pub(crate) const BRANCH_CLONE_LIMIT: usize = 64;
 pub(crate) const JUMP_CLONE_LIMIT: usize = 64;
+/// How many loops [`separate_loop_entries`] may copy for one more call site each, across a module.
+pub(crate) const ENTRY_CLONE_LIMIT: usize = 64;
 
 /// How many times the pass sequence may be re-run before the fixpoint gives up.
 ///
@@ -68,6 +70,7 @@ pub fn optimize(module: &mut Module) {
     let mut scc_clone_budget = SCC_CLONE_LIMIT;
     let mut branch_clone_budget = BRANCH_CLONE_LIMIT;
     let mut jump_clone_budget = JUMP_CLONE_LIMIT;
+    let mut entry_clone_budget = ENTRY_CLONE_LIMIT;
     // Name and time one pass, and record whether it fired. The two together are what separate the fixpoint's hypotheses: a pass that admits one candidate per call fires on as many rounds as it has candidates, while a pair undoing each other's work fires in lockstep for rounds neither needed.
     macro_rules! pass {
         ($name:literal, $pass:expr) => {{
@@ -126,6 +129,11 @@ pub fn optimize(module: &mut Module) {
             | pass!(
                 "cont::specialize_scc_calls",
                 specialize_scc_calls(module, &mut scc_clone_budget)
+            )
+            // After the specializer, which copies a loop for a caller whose arguments it can then fold: what that leaves with several callers is copied for contification alone.
+            | pass!(
+                "cont::separate_loop_entries",
+                separate_loop_entries(module, &mut entry_clone_budget)
             )
             | pass!(
                 "cont::specialize_call_patterns",

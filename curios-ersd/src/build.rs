@@ -214,6 +214,14 @@ impl ErsdBuilder {
         self.module.push_item(statement);
     }
 
+    /// Introduce a function group as a top-level item now, ahead of whatever item is still being built: for functions closed over nothing but other items, which that item's body names and which need not live inside it. A function left local to a body is out of reach of everything outside it, the closed evaluator's copies of a description among them.
+    pub fn hoist_functions(&mut self, functions: Vec<FunctionId>) {
+        let statement = self
+            .module
+            .add_statement(Statement::Functions { functions });
+        self.module.push_item(statement);
+    }
+
     /// Introduce a mixed recursive group as the next top-level item.
     pub fn item_rec(&mut self, group: RecGroupId) {
         self.require_top_level("item_rec");

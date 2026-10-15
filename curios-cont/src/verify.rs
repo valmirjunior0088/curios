@@ -799,10 +799,10 @@ impl Module {
                 args,
                 return_to,
             } => {
-                if args.len() != function.signature().params.len() {
+                if args.len() != function.signature().imported_params().len() {
                     return Err(VerifyError(format!(
                         "{id} foreign call expects {} operands, got {}",
-                        function.signature().params.len(),
+                        function.signature().imported_params().len(),
                         args.len()
                     )));
                 }
@@ -812,7 +812,7 @@ impl Module {
                         function.name()
                     )));
                 }
-                let results = function.signature().returns.arity();
+                let results = function.signature().imported_results().len();
                 let params = self.continuation_arity(
                     current_function,
                     return_cont,
@@ -907,10 +907,10 @@ impl Module {
                         function.name()
                     )));
                 }
-                if args.len() != function.signature().params.len() {
+                if args.len() != function.signature().imported_params().len() {
                     return Err(VerifyError(format!(
                         "{id} halting call expects {} operands, got {}",
-                        function.signature().params.len(),
+                        function.signature().imported_params().len(),
                         args.len()
                     )));
                 }

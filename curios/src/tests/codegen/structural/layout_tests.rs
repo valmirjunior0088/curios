@@ -106,7 +106,7 @@ fn a_returned_constructor_is_delivered_as_its_fields() {
 ///
 /// The premise is asserted before the claim, and it is the half that decays: a pass that stopped raising this parameter to a register, or stopped splitting the variant at all, would leave a fixture that passes while measuring nothing. `f64.const 0` in the loop is the filler — the fixture's own float constants are `0.25`, `1.5` and `2`, none of them zero — so its presence says both that the split fired and that the slot is raw.
 ///
-/// **Positive control.** Putting `curios_cont::Atom::Literal(curios_cont::Literal::Nat(0))` at the `split_parameters` filler site makes this fixture fail as `execution failed: error while executing at wasm backtrace: 0: 0x70b - <wasm function 4>`.
+/// **Positive control.** The filler on the `none` edge is the one the door pads `Option`'s row with, through `Module::pad`. Guessing `Atom::Literal(Literal::Nat(Natural::zero()))` in its reference arm makes this fixture fail at its premise: the edge carries an `i31`, and no `f64.const 0` is emitted.
 #[test]
 fn a_variant_filler_is_built_at_its_destination_carrier() {
     let wat = wat(VARIANT_FILLER);
@@ -118,7 +118,7 @@ fn a_variant_filler_is_built_at_its_destination_carrier() {
     let args = ["prog", "a", "b", "c"];
     assert_eq!(
         run_raw(VARIANT_FILLER, &args),
-        b"+2".to_vec(),
+        b"+4".to_vec(),
         "the `none` edge must carry a filler the destination can hold, rather than one it casts and traps on",
     );
 }

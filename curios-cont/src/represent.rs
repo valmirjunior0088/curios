@@ -177,7 +177,7 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
                 ..
             } => {
                 if let Some(continuation) = module.continuation(*return_to) {
-                    let results = function.signature().returns.types();
+                    let results = function.signature().imported_results();
 
                     for (index, &param) in continuation.params.iter().enumerate() {
                         match results.get(index) {
@@ -368,7 +368,7 @@ pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
 
                 // A host call reads its scalar parameters raw and its reference parameters as shapes, whether or not it returns.
                 Node::Foreign { function, args, .. } | Node::Halt { function, args } => {
-                    for (arg, wire) in args.iter().zip(&function.signature().params) {
+                    for (arg, wire) in args.iter().zip(&function.signature().imported_params()) {
                         demand(arg, wire_carrier(wire), &offers, solver);
                     }
                 }

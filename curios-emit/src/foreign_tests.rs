@@ -57,9 +57,16 @@ fn a_byte_result_is_boxed_as_it_crossed() {
     );
 
     let wat = wat(&foreign_call_to(function));
-    assert_contains(&wat, "(param i32) (result i32)");
-    assert_absent(&wat, "i32.gt_u");
-    assert_contains(&wat, "ref.i31");
+    // The byte, then the lane: a pending token and whether it is dropped, and a pending token back.
+    assert_contains(&wat, "(param i32 (ref null $elems) i32)");
+    assert_contains(&wat, "(result i32 (ref null $elems))");
+    // Read in the function that calls the row, since the helpers the lane's token reaches compare words of their own.
+    let caller = wat
+        .split("(func ")
+        .find(|function| function.contains("call $host/ffi//flip"))
+        .expect("a function calls the row");
+    assert_absent(caller, "i32.gt_u");
+    assert_contains(caller, "ref.i31");
 }
 
 /// A diverging row is imported and called like any other, and nothing resumes after it: the call is followed by the instruction that says no return arrives, never by a continuation.

@@ -1,11 +1,12 @@
 use {
     super::{
         Handle, HostOps, Lift, Mode, Plugin, Replied, Reply, SerialFlow, SerialOp, SerialParity,
-        StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type, words_array_type,
+        StdioMode, anyref_array_type, bool_of, filled, i8_array_type, longs_array_type,
+        words_array_type,
     },
     curios_abi::{
-        Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireReturn,
-        WireType, for_each_host_op,
+        Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, LANE_IN, Namespace, PANIC,
+        WireReturn, WireType, for_each_host_op,
     },
     std::{
         collections::{HashMap, hash_map::Entry},
@@ -92,7 +93,11 @@ pub fn shared_engine() -> &'static Engine {
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let signature = function.signature();
 
-    wire_func_type(engine, &signature.params, &signature.returns.types())
+    wire_func_type(
+        engine,
+        &signature.imported_params(),
+        &signature.imported_results(),
+    )
 }
 
 /// [`host_func_type`] over the wire types alone: what an import that takes `params` and answers `results` is typed as.
@@ -386,6 +391,27 @@ fn answering<'a, T>(
     Ok((declared, entered))
 }
 
+/// `answer`, the answer to the row declared as `name` that answers `results`, entered through the lane every row that returns carries (`curios_abi::LANE_IN`, `curios_abi::LANE_OUT`): the operands it declares go to `answer` on a first call, and its reply goes back beside no token. A call that drops answers fillers, there being nothing pending to drop, and one that asks again with a token is refused, since nothing here left a call pending.
+fn laned(name: &str, results: Vec<WireType>, answer: Trampoline) -> Trampoline {
+    let name = name.to_string();
+
+    Arc::new(move |mut caller, params, replies| {
+        let (operands, lane) = params.split_at(params.len() - LANE_IN.len());
+        let (reply, token) = replies.split_at_mut(replies.len() - 1);
+        let pending = Option::<Handle>::lift(&mut caller, &lane[..1])?;
+        let dropped = bool_of(lane[1].unwrap_i32())?;
+        token[0] = Val::AnyRef(None);
+
+        match (pending, dropped) {
+            (None, false) => answer(caller, operands, reply),
+            (_, true) => filled(&mut caller, &results, reply),
+            (Some(_), false) => Err(wasmtime::Error::msg(format!(
+                "{name}: the call asks again for an answer no call left pending"
+            ))),
+        }
+    })
+}
+
 /// Define the `ffi` import declared as `name` into `linker`, entered as [`answering`] finds it answered.
 fn link(
     linker: &mut Linker<()>,
@@ -396,7 +422,10 @@ fn link(
     name: &str,
 ) -> Result<(), String> {
     let (declared, trampoline) = answering(foreigns, bindings, host, name)?;
-    let trampoline = Arc::clone(trampoline);
+    let trampoline = match &declared.signature().returns {
+        WireReturn::Answers(results) => laned(name, results.types(), Arc::clone(trampoline)),
+        WireReturn::Never => Arc::clone(trampoline),
+    };
 
     linker
         .func_new(

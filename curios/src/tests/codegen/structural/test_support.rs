@@ -201,11 +201,13 @@ pub(super) const LOOPED_PICK: &str = r#"
 /// [`SPLIT_RETURN`] exercises the filler too, but only through the return protocol, whose slots are boxed by construction, so it cannot catch a filler at a raw carrier. Here the variant reaches a continuation parameter instead, and the parameter's uses demand an unboxed `Flt`, so the edges carry `f64` and the `none` edge has no value to carry. The payload must be a `Flt` rather than a `Nat`: a `Nat` filler and its slot share the `i31` carrier, so the wrong-carrier constant is indistinguishable from a right one.
 ///
 /// **The `none` edge has to be taken, and taken while other iterations take `some`.** A loop is what buys that: `o` is genuinely joined from both constructors, and the payload is read only under the tag. `p % 3` alternates the two so neither edge is dead, and the final iteration lands on `some`, so a run that reads the filler is reading something the program never stored.
+///
+/// **The demand is `spin`'s own `* +2.0`.** The program's tail follows a host call, so it is reached both where the answer arrives and through the suspension's continuation: `spin` is called from the two, stays a function and returns its result boxed, and a use past that return would leave the slot a reference.
 pub(super) const VARIANT_FILLER: &str = r#"
     use /std/{Nat, Flt, Option, List, proc};
     let spin(k : Nat, o : Option(Flt)) -> Flt =
         match k : (_) => Flt
-        | 0 => Option/unwrap_or(o, +0.25)
+        | 0 => Option/unwrap_or(o, +0.25) * +2.0
         | p + 1; ih =>
             let next =
                 match Nat/eql(p % 3, 0) : (_) => Option(Flt)
@@ -467,15 +469,19 @@ pub(super) fn row_declaration<'a>(wat: &'a str, family: &str) -> &'a str {
     panic!("the {family} row's declaration closes")
 }
 
-/// The innermost `loop … end` enclosing the (unique) `needle`: walk backward from the needle with block/loop/if-vs-`end` nesting to the enclosing `loop ` opener, then balance forward to its matching `end`. `block`/`loop`/`if` are the only `end`-terminated openers the emitter produces.
-pub(super) fn loop_containing<'a>(wat: &'a str, needle: &str) -> &'a str {
-    assert_eq!(
-        wat.matches(needle).count(),
-        1,
-        "`{needle}` must be unique to slice its loop",
-    );
-    let needle_offset = wat.find(needle).unwrap();
+/// The innermost `loop … end` enclosing each occurrence of `needle`, one for every copy of the code that holds it. A loop that follows a host call is held twice — where the call answers at once and in the continuation a suspension carries — and each copy is its own loop.
+pub(super) fn loops_containing<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
+    let loops = wat
+        .match_indices(needle)
+        .map(|(offset, _)| loop_at(wat, offset))
+        .collect::<Vec<_>>();
+    assert!(!loops.is_empty(), "`{needle}` is in the module");
 
+    loops
+}
+
+/// The innermost `loop … end` enclosing `needle_offset`: walk backward from it with block/loop/if-vs-`end` nesting to the enclosing `loop ` opener, then balance forward to its matching `end`. `block`/`loop`/`if` are the only `end`-terminated openers the emitter produces.
+fn loop_at(wat: &str, needle_offset: usize) -> &str {
     let lines: Vec<(usize, &str)> = {
         let mut offset = 0;
         wat.lines()

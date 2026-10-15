@@ -717,7 +717,7 @@ impl<'m> Verifier<'m> {
                         format!("statement {id} references dead {foreign}"),
                     )
                 })?;
-                let arity = row.signature().params.len();
+                let arity = row.signature().imported_params().len();
                 if operands.len() != arity {
                     return Err(fault(
                         StructuralRule::ForeignArity,
@@ -802,7 +802,7 @@ impl<'m> Verifier<'m> {
                         format!("the terminator of block {id} references dead {foreign}"),
                     )
                 })?;
-                let arity = row.signature().params.len();
+                let arity = row.signature().imported_params().len();
                 if operands.len() != arity {
                     return Err(fault(
                         StructuralRule::ForeignArity,

@@ -1049,23 +1049,31 @@ impl MachineModule {
                 resume,
                 ..
             } => {
-                if args.len() != foreign.signature().params.len() {
+                if args.len() != foreign.signature().imported_params().len() {
                     return Err(MachineVerifyError(format!(
                         "{owner} foreign call argument count does not match its ABI"
                     )));
                 }
-                verify_block_resume(function, *resume, foreign.signature().returns.arity())?;
+                verify_block_resume(
+                    function,
+                    *resume,
+                    foreign.signature().imported_results().len(),
+                )?;
             }
             MachineTerminator::ForeignReturn {
                 function: foreign,
                 args,
             } => {
-                if args.len() != foreign.signature().params.len() {
+                if args.len() != foreign.signature().imported_params().len() {
                     return Err(MachineVerifyError(format!(
                         "{owner} foreign tail call argument count does not match its ABI"
                     )));
                 }
-                tail_returns(owner, function, foreign.signature().returns.arity())?;
+                tail_returns(
+                    owner,
+                    function,
+                    foreign.signature().imported_results().len(),
+                )?;
             }
             MachineTerminator::Cell { op, args, resume } => {
                 if args.len() != op.operand_arity() {
@@ -1103,7 +1111,7 @@ impl MachineModule {
                 function: foreign,
                 args,
             } => {
-                if args.len() != foreign.signature().params.len() {
+                if args.len() != foreign.signature().imported_params().len() {
                     return Err(MachineVerifyError(format!(
                         "{owner} halting call argument count does not match its ABI"
                     )));

@@ -34,7 +34,7 @@ impl Lowering<'_> {
         })
     }
 
-    fn applied(
+    pub(super) fn applied(
         &mut self,
         callee: curios_ersd::Atom,
         arguments: Vec<curios_ersd::Atom>,
@@ -236,7 +236,7 @@ impl Lowering<'_> {
     }
 
     /// Define a description named `name` in the innermost open block, its performance what `body` computes, and hand it back.
-    fn description(
+    pub(super) fn description(
         &mut self,
         name: &str,
         body: impl FnOnce(&mut Self) -> curios_ersd::Atom,

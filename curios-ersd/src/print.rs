@@ -950,6 +950,7 @@ fn intrinsic_name(intrinsic: Intrinsic) -> &'static str {
 fn suspension_name(operation: SuspensionOperation) -> &'static str {
     match operation {
         SuspensionOperation::New => "Suspension/new",
+        SuspensionOperation::Later => "Suspension/later",
         SuspensionOperation::Carry => "Suspension/carry",
         SuspensionOperation::Build => "Suspension/build",
         SuspensionOperation::Is => "Suspension/is",

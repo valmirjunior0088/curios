@@ -221,9 +221,10 @@ impl Semantics {
             Rhs::Channel { operation, .. } => Self::channel(*operation),
             Rhs::Foreign { .. } => LocalBehavior::host(),
             Rhs::Intrinsic { intrinsic, .. } => Self::intrinsic(*intrinsic),
-            // A suspension is data: building one allocates an immutable value, and the test and the reads are total and allocation-free.
+            // A suspension is data: building one allocates an immutable value, and the test and the reads are total and allocation-free. `Later` applies its `again` twice, and `again` only makes the descriptions it answers, performing nothing.
             Rhs::Suspension { operation, .. } => match operation {
                 SuspensionOperation::New
+                | SuspensionOperation::Later
                 | SuspensionOperation::Carry
                 | SuspensionOperation::Build => LocalBehavior::alloc(Allocation::Immutable),
                 SuspensionOperation::Is

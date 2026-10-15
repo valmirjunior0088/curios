@@ -545,8 +545,12 @@ test("a row the program calls needs a hook, a row it never calls needs none, and
     /hooks\.foreign implements \/other, which the program declares no foreign row for/,
   );
 
+  const compiled = compile(HOOKS);
   const { trap } = await run(
-    { ...compile(HOOKS), foreigns: [] },
+    {
+      ...compiled,
+      foreigns: compiled.foreigns.filter(({ name }) => name !== "/used"),
+    },
     { foreign: {} },
   );
 

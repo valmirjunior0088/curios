@@ -31,6 +31,8 @@ pub(super) struct Lowerer<'a> {
     layout: Layout<'a>,
     /// The step every bind's suspension arm calls, built at the first and bound at the top of the entry.
     carry: Option<curios_cont::FunctionId>,
+    /// The step every host call answered later suspends through, built and bound as `carry` is.
+    later: Option<curios_cont::FunctionId>,
 }
 
 /// Where a `let` stands in its block: the value it binds, and what follows it — the statements after it, the terminator closing the block and the continuation the block delivers to. What a binding becomes is read off all four together: one nothing follows but its own return delivers straight to the target, and every other opens a continuation for the rest.
@@ -53,6 +55,7 @@ impl<'a> Lowerer<'a> {
             emitter: Emitter::new(source),
             layout: Layout::new(source),
             carry: None,
+            later: None,
         }
     }
 
@@ -70,10 +73,10 @@ impl<'a> Lowerer<'a> {
         let mut statements: Vec<StatementId> = self.source.items().to_vec();
         statements.extend(&entry.statements);
         let mut body = self.lower_statements(&statements, &entry.terminator, return_cont);
-        // It closes over nothing, so binding it ahead of everything puts it in scope of every bind.
-        if let Some(carry) = self.carry {
+        // Each closes over nothing, so binding it ahead of everything puts it in scope of every bind and every call.
+        for step in [self.carry, self.later].into_iter().flatten() {
             body = self.emitter.module.add_node(curios_cont::Node::LetFun {
-                functions: vec![carry],
+                functions: vec![step],
                 body,
             });
         }
@@ -837,7 +840,85 @@ impl Lowerer<'_> {
         carry
     }
 
-    /// Lower a suspension operation over the module's suspension row: a construction, a test against the row's type, or a read of one of its slots. A new suspension's frames are the empty list, and a carry is a call of the one out-of-line [`carry`](Self::carry).
+    /// The function a host call answered later suspends through: `later(token, again)` answers the suspension on the token's handle, with `again(token, true)`, the description dropping the call, as its cancel, `again(token, false)`, the one asking for its answer, as its rest, and no cells or frames. Built on first use and kept out of line, so every row's call waits in the one shape.
+    fn later(&mut self, row: curios_cont::RowId) -> curios_cont::FunctionId {
+        if let Some(later) = self.later {
+            return later;
+        }
+        let module = &mut self.emitter.module;
+        let later = module.reserve_function();
+        let return_cont = module.reserve_continuation();
+        let token = module.add_value(None);
+        let again = module.add_value(None);
+        let cancel = module.add_value(None);
+        let rest = module.add_value(None);
+        let cells = module.add_value(None);
+        let frames = module.add_value(None);
+        let built = module.add_value(None);
+
+        let returned = self
+            .emitter
+            .jump(return_cont, vec![curios_cont::Atom::Value(built)]);
+        let module = &mut self.emitter.module;
+        let mut body = module.add_node(curios_cont::Node::LetValue {
+            result: built,
+            value: curios_cont::ValueExpr::Row(
+                row,
+                [token, cells, cancel, rest, frames]
+                    .into_iter()
+                    .map(curios_cont::Atom::Value)
+                    .collect(),
+            ),
+            next: returned,
+        });
+        for empty in [frames, cells] {
+            body = module.add_node(curios_cont::Node::LetValue {
+                result: empty,
+                value: curios_cont::ValueExpr::List(Vec::new()),
+                next: body,
+            });
+        }
+        // The rest is asked for after the cancel, so each application's continuation holds what the one before made.
+        for (made, dropping) in [(rest, 0u32), (cancel, 1u32)] {
+            let made_it = module.reserve_continuation();
+            module.define_continuation(
+                made_it,
+                curios_cont::Continuation {
+                    debug_name: Some("io/later/made".into()),
+                    params: vec![made],
+                    body,
+                },
+            );
+            let apply = module.add_node(curios_cont::Node::ApplyFun {
+                callee: curios_cont::Callee::Closure(again),
+                args: vec![
+                    curios_cont::Atom::Value(token),
+                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(dropping))),
+                ],
+                return_to: made_it,
+            });
+            body = module.add_node(curios_cont::Node::LetCont {
+                continuations: vec![made_it],
+                body: apply,
+            });
+        }
+        module.define_function(
+            later,
+            curios_cont::Function {
+                debug_name: Some("io/later".into()),
+                params: vec![token, again],
+                return_cont,
+                body,
+                // It applies a closure, whose totality is nothing this lowering states.
+                droppable: false,
+            },
+        );
+        module.keep_out_of_line(later);
+        self.later = Some(later);
+        later
+    }
+
+    /// Lower a suspension operation over the module's suspension row: a construction, a test against the row's type, or a read of one of its slots. A new suspension's frames are the empty list, and a carry and a later are calls of the one out-of-line [`carry`](Self::carry) and [`later`](Self::later).
     fn lower_suspension(
         &mut self,
         operation: SuspensionOperation,
@@ -868,6 +949,14 @@ impl Lowerer<'_> {
                 let carry = self.carry(row);
                 return self.split(1, site, |return_to| curios_cont::Node::ApplyFun {
                     callee: curios_cont::Callee::Known(carry),
+                    args,
+                    return_to,
+                });
+            }
+            SuspensionOperation::Later => {
+                let later = self.later(row);
+                return self.split(1, site, |return_to| curios_cont::Node::ApplyFun {
+                    callee: curios_cont::Callee::Known(later),
                     args,
                     return_to,
                 });
@@ -1943,7 +2032,7 @@ impl Lowerer<'_> {
             terminator,
             target,
         } = site;
-        let arity = function.signature().returns.arity();
+        let arity = function.signature().imported_results().len();
         if arity == 1 {
             return self.split(1, site, |return_to| curios_cont::Node::Foreign {
                 function,

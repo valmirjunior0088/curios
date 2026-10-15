@@ -311,6 +311,34 @@ pub struct WireSignature {
     pub returns: WireReturn,
 }
 
+/// The lane a row that returns carries beside what its declaration states, on every import alike, so no answerer's nature changes what crosses. It comes in as two operands: the token of a call still pending, `none` on a first call, and whether the guest drops it rather than asks for its answer. It goes out as one result: the token of a call still pending, `none` where it answered. Whoever answers a row decides whether its answer may come later; nothing a program declares says so.
+///
+/// A first call is `(none, false)`, asking again `(some(h), false)` and dropping `(some(h), true)`. Once a token is given the operands are not read, so a guest sends fillers in their place.
+pub const LANE_IN: [WireType; 2] = [WireType::Option(WireLeaf::Handle), WireType::Bool];
+
+/// The lane's one result: see [`LANE_IN`].
+pub const LANE_OUT: WireType = WireType::Option(WireLeaf::Handle);
+
+impl WireSignature {
+    /// What the row's import takes: its operands, then [`LANE_IN`] where the row returns.
+    pub fn imported_params(&self) -> Vec<WireType> {
+        let lane = match self.returns {
+            WireReturn::Answers(_) => LANE_IN.as_slice(),
+            WireReturn::Never => &[],
+        };
+
+        self.params.iter().chain(lane).copied().collect()
+    }
+
+    /// What the row's import answers: its results, then [`LANE_OUT`] where the row returns, and nothing where it does not.
+    pub fn imported_results(&self) -> Vec<WireType> {
+        match &self.returns {
+            WireReturn::Answers(results) => results.types().into_iter().chain([LANE_OUT]).collect(),
+            WireReturn::Never => Vec::new(),
+        }
+    }
+}
+
 /// The wasm import namespaces — the closed pair both ends agree on. `Ffi` holds every foreign function, under the name its declaration has, the standard library's among them; `Sys` holds [`PANIC`] alone, the one import no declaration states.
 ///
 /// Two variants rather than a `&'static str`, so the namespaces that exist are exactly the namespaces that can be written — `README.md`'s decision.

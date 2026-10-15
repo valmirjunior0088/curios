@@ -489,7 +489,70 @@ export async function run(config) {
       }
     };
 
-  // The `ffi` import object, built from the module's own imports. A hook answers a row before this host does, as a module answers one before the native host, and is held to the row `compile` described; a row no hook implements is this host's where it answers that name, and needs no description, since nothing here is held to one. A declaration the program never calls is never imported, so it needs no hook; a hook naming no row is a hook for a program other than this one.
+  // A value of `type` standing where nothing reads it: a zero for a scalar, an empty payload for a reference, and null for an option.
+  const filler = (type) => {
+    const element = /^List\((\w+)\)$/.exec(type)?.[1];
+
+    if (element !== undefined) {
+      return lists[element][0](0);
+    }
+
+    if (type.startsWith("Option(")) {
+      return null;
+    }
+
+    switch (type) {
+      case "Nat":
+      case "Int":
+        return 0n;
+      case "Bool":
+      case "Byte":
+      case "Flt":
+        return 0;
+      default:
+        return emptyBytes();
+    }
+  };
+
+  // A row's reply with the lane's token beside it, as its import answers: the token alone for a row with no result, and after its results otherwise.
+  const withToken = (row, reply, token) => {
+    switch (row.results.length) {
+      case 0:
+        return token;
+      case 1:
+        return [reply, token];
+      default:
+        return [...reply, token];
+    }
+  };
+
+  // Every row that returns carries the lane beside its own operands and results: the token of a call still pending and whether it is dropped coming in, and the token of a call still pending going out. Nothing here leaves a call pending, so a first call is answered with no token, a call that drops answers fillers, and one that asks again is refused.
+  const laned =
+    (row, answer) =>
+    (...operands) => {
+      const dropped = operands.pop();
+      const pending = operands.pop();
+
+      if (dropped === 1) {
+        const fillers = row.results.map(({ type }) => filler(type));
+
+        return withToken(
+          row,
+          fillers.length === 1 ? fillers[0] : fillers,
+          null,
+        );
+      }
+
+      if (pending !== null) {
+        throw new Error(
+          `ffi ${row.name}: the call asks again for an answer no call left pending`,
+        );
+      }
+
+      return withToken(row, answer(...operands), null);
+    };
+
+  // The `ffi` import object, built from the module's own imports. A hook answers a row before this host does, as a module answers one before the native host, and is held to the row `compile` described; a row no hook implements is this host's where it answers that name. Each row that returns is entered through the lane, read off the row's description. A declaration the program never calls is never imported, so it needs no hook; a hook naming no row is a hook for a program other than this one.
   const ffiEnv = (module) => {
     const rows = new Map(
       config.compiled.foreigns.map((row) => [row.name, row]),
@@ -514,12 +577,6 @@ export async function run(config) {
       }
 
       const hooked = typeof implemented[name] === "function";
-
-      if (!hooked && answered.has(name)) {
-        env[name] = answered.get(name);
-        continue;
-      }
-
       const row = rows.get(name);
 
       if (row === undefined) {
@@ -528,13 +585,17 @@ export async function run(config) {
         );
       }
 
-      if (!hooked) {
+      if (!hooked && !answered.has(name)) {
         throw new Error(
           `the program calls ffi ${name}, and hooks.foreign implements no ${name}`,
         );
       }
 
-      env[name] = checked(row, implemented[name]);
+      const answer = hooked
+        ? checked(row, implemented[name])
+        : answered.get(name);
+
+      env[name] = row.never ? answer : laned(row, answer);
     }
 
     return env;

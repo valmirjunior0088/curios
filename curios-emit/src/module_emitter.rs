@@ -112,14 +112,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 func_name.clone(),
                 curios_wasm::ResultType::from(
                     signature
-                        .params
+                        .imported_params()
                         .iter()
                         .map(|wire_type| self.table.wire_type(wire_type)),
                 ),
                 curios_wasm::ResultType::from(
                     signature
-                        .returns
-                        .types()
+                        .imported_results()
                         .iter()
                         .map(|wire_type| self.table.wire_type(wire_type)),
                 ),
