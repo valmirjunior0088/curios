@@ -10,6 +10,7 @@ mod census;
 pub(super) use census::*;
 
 mod churn;
+mod copying;
 mod fields;
 mod ladder;
 mod specialize;

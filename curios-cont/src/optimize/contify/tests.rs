@@ -237,7 +237,8 @@ fn contifies_a_callee_whose_capture_the_owner_never_mentions() {
 
 #[test]
 fn nested_definitions_count_toward_the_copy_limit() {
-    for size in [SCC_CLONE_NODE_LIMIT, SCC_CLONE_NODE_LIMIT + 1] {
+    let body_limit = SCC_CLONE_NODE_LIMIT - super::CONTIFICATION_NODE_OVERHEAD;
+    for size in [body_limit, body_limit + 1] {
         let PolymorphicLoop {
             mut module,
             loop_fn,
@@ -254,11 +255,7 @@ fn nested_definitions_count_toward_the_copy_limit() {
         let original = module.to_string();
         let mut budget = 1;
         let changed = separate_loop_entries(&mut module, &mut budget);
-        assert_eq!(
-            changed,
-            size <= SCC_CLONE_NODE_LIMIT,
-            "extent of {size} nodes"
-        );
+        assert_eq!(changed, size <= body_limit, "extent of {size} nodes");
         if changed {
             assert_eq!(budget, 0);
             module.verify().unwrap();
@@ -276,4 +273,174 @@ fn nested_definitions_count_toward_the_copy_limit() {
             );
         }
     }
+}
+
+fn arenas(module: &Module) -> [usize; 4] {
+    [
+        module.nodes().len(),
+        module.functions().len(),
+        module.continuations().len(),
+        module.values().len(),
+    ]
+}
+
+fn declines_without_minting(mut module: Module, mut budget: usize) {
+    module.verify().unwrap();
+    let before = arenas(&module);
+    let text = module.to_string();
+    let remaining = budget;
+    assert!(!separate_loop_entries(&mut module, &mut budget));
+    assert_eq!(budget, remaining);
+    assert_eq!(arenas(&module), before);
+    assert_eq!(module.to_string(), text);
+    module.verify().unwrap();
+}
+
+#[test]
+fn a_nested_callback_calling_the_loop_is_not_duplicated() {
+    for name in [Some("io/surface"), Some("ordinary loop"), None] {
+        let PolymorphicLoop {
+            mut module,
+            loop_fn,
+            ..
+        } = polymorphic_loop(true, 0);
+        let callback = nest_helpers(&mut module, loop_fn, 0);
+        module.function_mut(loop_fn).unwrap().debug_name = name.map(str::to_owned);
+        let definition = module.function(callback).unwrap().clone();
+        module.set_node(
+            definition.body,
+            Node::ApplyFun {
+                callee: Callee::Known(loop_fn),
+                args: module
+                    .function(loop_fn)
+                    .unwrap()
+                    .params
+                    .iter()
+                    .map(|&p| Atom::Value(p))
+                    .collect(),
+                return_to: definition.return_cont,
+            },
+        );
+        declines_without_minting(module, 64);
+    }
+}
+
+#[test]
+fn a_loop_copy_is_contified_immediately_with_its_capturing_helpers() {
+    let PolymorphicLoop {
+        mut module,
+        loop_fn,
+        call1,
+        call2,
+    } = polymorphic_loop(true, 0);
+    nest_helpers(&mut module, loop_fn, 0);
+    let extent = crate::CopyPlan::functions(&module, std::collections::BTreeSet::from([loop_fn]));
+    let added = extent.nodes.len() + super::CONTIFICATION_NODE_OVERHEAD;
+    let nested = extent.nested.len();
+    let before_nodes = module.live_nodes().count();
+    let before_functions = module.live_functions().count();
+    let mut budget = 2;
+    assert!(separate_loop_entries(&mut module, &mut budget));
+    assert_eq!(budget, 1);
+    assert_eq!(module.live_nodes().count(), before_nodes + added);
+    assert_eq!(module.live_functions().count(), before_functions + nested);
+    assert_eq!(
+        [call1, call2]
+            .into_iter()
+            .filter(|&site| matches!(module.node(site), Some(Node::LetCont { .. })))
+            .count(),
+        1
+    );
+    assert_eq!([call1, call2].into_iter().filter(|&site| matches!(module.node(site), Some(Node::ApplyFun { callee: Callee::Known(target), .. }) if *target == loop_fn)).count(), 1);
+    module.verify().unwrap();
+    let before = arenas(&module);
+    assert!(!separate_loop_entries(&mut module, &mut budget));
+    assert_eq!(budget, 1);
+    assert_eq!(arenas(&module), before);
+    assert!(contify_calls(&mut module));
+    assert!(module.function(loop_fn).is_none());
+    module.verify().unwrap();
+}
+
+#[test]
+fn an_exhausted_entry_budget_does_not_mint_a_copy() {
+    let PolymorphicLoop { module, .. } = polymorphic_loop(true, 0);
+    declines_without_minting(module, 0);
+}
+
+#[test]
+fn an_out_of_line_loop_does_not_mint_a_copy() {
+    let PolymorphicLoop {
+        mut module,
+        loop_fn,
+        ..
+    } = polymorphic_loop(true, 0);
+    module.keep_out_of_line(loop_fn);
+    declines_without_minting(module, 1);
+}
+
+#[test]
+fn an_escaping_loop_does_not_mint_a_copy() {
+    let PolymorphicLoop {
+        mut module,
+        loop_fn,
+        ..
+    } = polymorphic_loop(true, 0);
+    let entry = module.function(module.entry().unwrap()).unwrap().body;
+    let Node::LetFun { body, .. } = module.node(entry).unwrap() else {
+        unreachable!()
+    };
+    let next = *body;
+    let held = module.add_value(None);
+    let body = module.add_node(Node::LetValue {
+        result: held,
+        value: crate::ValueExpr::Tuple(vec![Atom::Fun(loop_fn)]),
+        next,
+    });
+    let Node::LetFun { body: next, .. } = module.node_mut(entry).unwrap() else {
+        unreachable!()
+    };
+    *next = body;
+    declines_without_minting(module, 1);
+}
+
+#[test]
+fn a_nontail_recursive_call_does_not_mint_a_copy() {
+    let PolymorphicLoop {
+        mut module,
+        loop_fn,
+        ..
+    } = polymorphic_loop(true, 0);
+    let definition = module.function(loop_fn).unwrap().clone();
+    let resume = module.reserve_continuation();
+    let result = module.add_value(None);
+    let body = module.add_node(Node::ApplyCont(Edge {
+        target: definition.return_cont,
+        args: vec![Atom::Value(result)],
+    }));
+    module.define_continuation(
+        resume,
+        Continuation {
+            debug_name: None,
+            params: vec![result],
+            body,
+        },
+    );
+    for node in function_nodes(&module, loop_fn) {
+        if let Some(Node::ApplyFun {
+            callee: Callee::Known(target),
+            return_to,
+            ..
+        }) = module.node_mut(node)
+            && *target == loop_fn
+        {
+            *return_to = resume;
+        }
+    }
+    let body = module.add_node(Node::LetCont {
+        continuations: vec![resume],
+        body: definition.body,
+    });
+    module.function_mut(loop_fn).unwrap().body = body;
+    declines_without_minting(module, 1);
 }

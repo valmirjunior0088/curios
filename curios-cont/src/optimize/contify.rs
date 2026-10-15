@@ -1,7 +1,7 @@
 use {
     super::{SCC_CLONE_NODE_LIMIT, copy_bodies, introducing_letfun},
     crate::{
-        Atom, Callee, Continuation, CopyPlan, Edge, FunctionId, Module, Node, NodeId,
+        Atom, CallAnalysis, Callee, Continuation, CopyPlan, Edge, FunctionId, Module, Node, NodeId,
         analyze_calls, function_nodes,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -66,16 +66,21 @@ pub(crate) fn contify_calls(module: &mut Module) -> bool {
     changed
 }
 
-/// Give one more external call site of a loop a copy of its own, so that each copy has the single entry [`contify_calls`] asks for.
-///
-/// A loop here is a function that recurses through itself alone and only by tail calls, that nothing holds as a value, and whose body is within `SCC_CLONE_NODE_LIMIT` nodes: what contification would turn into a continuation if one site called it. Inlining makes a second site where it copies a caller that must also stay — a bind's continuation called on the path that answers at once and handed to `carry` on the path that suspends — and the loop would then stay a function, its scalars in no register. Copying it once per extra site costs its body again, which the node limit bounds, and leaves every copy contifiable where it is called. One copy is made per call, so the fixpoint stays deterministic, and at most `ENTRY_CLONE_LIMIT` across the module.
-pub(crate) fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> bool {
-    if *budget == 0 {
-        return false;
-    }
-    let analysis = analyze_calls(module);
+/// The three nodes contification adds beside the copied body: its initial transfer, return bridge, and bridge scope. The call node itself is reused.
+const CONTIFICATION_NODE_OVERHEAD: usize = 3;
 
-    let chosen = module.live_functions().find_map(|(callee, function)| {
+/// One admitted loop-entry copy whose sole external caller can receive its body as a continuation.
+///
+/// The copy's complete extent must contain no call back to the root from a nested function: that call would follow the copy and give it another external entry. Ordinary self-tail calls belong to the root itself and become backedges. Preparation mints nothing; application copies and contifies immediately, with no graph mutation between them that could invalidate admission.
+struct LoopEntryPlan {
+    function: FunctionId,
+    call: NodeId,
+    intro: NodeId,
+    copy: CopyPlan,
+}
+
+impl LoopEntryPlan {
+    fn prepare(module: &Module, analysis: &CallAnalysis, callee: FunctionId) -> Option<Self> {
         let alone = !analysis.call_graph[&callee]
             .iter()
             .any(|&next| next != callee && function_reaches(&analysis.call_graph, next, callee));
@@ -86,16 +91,13 @@ pub(crate) fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> 
         {
             return None;
         }
-
+        let function = module.function(callee).unwrap();
         let (internal, external): (Vec<_>, Vec<_>) = analysis.call_sites[&callee]
             .iter()
             .copied()
             .partition(|site| analysis.node_owners[site] == callee);
         let tail = internal.iter().all(|&site| {
-            matches!(
-                module.node(site),
-                Some(Node::ApplyFun { return_to, .. }) if *return_to == function.return_cont
-            )
+            matches!(module.node(site), Some(Node::ApplyFun { return_to, .. }) if *return_to == function.return_cont)
         });
         let reentered = external
             .iter()
@@ -103,26 +105,60 @@ pub(crate) fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> 
         if internal.is_empty() || external.len() < 2 || !tail || reentered {
             return None;
         }
-
-        let plan = CopyPlan::functions(module, BTreeSet::from([callee]));
-        if plan.nodes.len() > SCC_CLONE_NODE_LIMIT {
+        let copy = CopyPlan::functions(module, BTreeSet::from([callee]));
+        if copy.nodes.len() + CONTIFICATION_NODE_OVERHEAD > SCC_CLONE_NODE_LIMIT
+            || external.iter().any(|site| copy.nodes.contains(site))
+        {
             return None;
         }
+        Some(Self {
+            function: callee,
+            call: external[1],
+            intro: introducing_letfun(module, &BTreeSet::from([callee]))?,
+            copy,
+        })
+    }
 
-        introducing_letfun(module, &BTreeSet::from([callee]))
-            .map(|intro| (callee, intro, external[1], plan))
-    });
-    let Some((callee, intro, site, plan)) = chosen else {
+    fn apply(self, module: &mut Module) {
+        let copy = copy_bodies(module, self.copy).functions[&self.function];
+        let Node::LetFun { functions, .. } = module.node_mut(self.intro).unwrap() else {
+            unreachable!()
+        };
+        functions.push(copy);
+        let Node::ApplyFun { callee, .. } = module.node_mut(self.call).unwrap() else {
+            unreachable!()
+        };
+        *callee = Callee::Known(copy);
+        #[cfg(debug_assertions)]
+        {
+            let analysis = analyze_calls(module);
+            let external = analysis.call_sites[&copy]
+                .iter()
+                .copied()
+                .filter(|site| analysis.node_owners[site] != copy)
+                .collect::<Vec<_>>();
+            debug_assert_eq!(external, vec![self.call]);
+        }
+        contify_call(module, copy, self.call);
+        debug_assert!(module.function(copy).is_none());
+    }
+}
+
+/// Give one additional caller a contified copy of a small self-tail loop.
+///
+/// The admitted plan bounds the complete copy and contification scaffolding, and proves the copy has one external entry. Copying and contification are one rewrite, so no intermediate function waits for a later round to make the expansion useful. One candidate is taken per call in function/site order, under the module's entry-copy budget.
+pub(crate) fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> bool {
+    if *budget == 0 {
+        return false;
+    }
+    let analysis = analyze_calls(module);
+    let chosen = module
+        .live_functions()
+        .find_map(|(callee, _)| LoopEntryPlan::prepare(module, &analysis, callee));
+    let Some(plan) = chosen else {
         return false;
     };
-
-    let copy = copy_bodies(module, plan).functions[&callee];
-    if let Some(Node::LetFun { functions, .. }) = module.node_mut(intro) {
-        functions.push(copy);
-    }
-    if let Some(Node::ApplyFun { callee, .. }) = module.node_mut(site) {
-        *callee = Callee::Known(copy);
-    }
+    plan.apply(module);
     *budget -= 1;
     true
 }

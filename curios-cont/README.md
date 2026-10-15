@@ -4,6 +4,14 @@ The Curios continuation-passing IR and its optimizer: `curios_ersd::lower_to_con
 
 ## Design
 
+### A loop copy finishes the contification it admits
+
+**Decision.** A loop copied for an additional caller is admitted over its complete lexical extent, including nested definitions and the contification scaffolding, and is contified at that caller in the same rewrite. A nested function that calls the loop would give the copy another external entry, so that extent is declined. Every copying transformation uses one plan for admission and execution; its own parameter and backedge mapping remains its own.
+
+**Rationale.** The purpose of this copy is to put a loop inside its caller, where local representation can hold its state in registers. That purpose is a condition the rewrite proves and completes, rather than an opportunity left for a later optimizer round. Counting and copying the same extent bounds what admission authorizes, including the callbacks a nested definition carries.
+
+**Rejected.** Keeping selected generated helpers shared by name, which leaves the same shape in an ordinary program unprotected; treating all recursion as a reason to refuse, which loses useful self-tail loops; changing the ordinary call graph to include definitions, which answers a different question from a call's component; and spending a clone budget on a function another round may never contify.
+
 ### Mutation hides behind instruction atomicity
 
 **Decision.** Each write-once cell and bounded channel operation ([A wait is a suspension, and only the host waits](../documentation/design/standard-library/a-wait-is-a-suspension-and-only-the-host-waits.md)) is a CPS node that completes before invoking its continuation: the emitter performs its state transition and chooses its outcome without calling the host or suspending, optimizers preserve these nodes and their order, and a readiness query observes state without reserving a later operation's outcome. Compiler-generated knots use the same operations: a result cell and a capacity-one initializer channel per computed member, every storage object and closure bound and every initializer enqueued before forcing starts. A force polls the result, otherwise takes and runs the initializer, then fills the result; an empty result beside an empty initializer channel is recursive re-entry and emits `Panic::Cycle`. The force captures only the two storage objects, so taking the initializer releases the knot's reference to its captures. The lowering and its structural tests live in `curios-ersd/src/into_cont/`.
