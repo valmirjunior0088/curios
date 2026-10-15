@@ -4,7 +4,7 @@
 
 use {
     super::{Construction, Shape},
-    crate::{Atom, FunctionId, Module, Rebindings, Rhs, Statement, Terminator},
+    crate::{Atom, FunctionId, Module, Rebindings, Rhs, Statement, Terminator, ValueId},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -39,6 +39,15 @@ pub(super) fn construction_templates(
     module: &Module,
     bindings: &Rebindings,
 ) -> BTreeMap<FunctionId, ConstructionTemplate> {
+    let definitions = module
+        .statements()
+        .iter()
+        .flatten()
+        .filter_map(|statement| match statement {
+            Statement::Let { result, rhs } => Some((*result, rhs)),
+            _ => None,
+        })
+        .collect::<BTreeMap<_, _>>();
     let mut users = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
     let mut work = module.function_ids().collect::<BTreeSet<_>>();
     for function in module.function_ids() {
@@ -61,7 +70,7 @@ pub(super) fn construction_templates(
         if templates.contains_key(&function) {
             continue;
         }
-        if let Some(template) = recognize(module, bindings, &templates, function) {
+        if let Some(template) = recognize(module, bindings, &templates, &definitions, function) {
             templates.insert(function, template);
             work.extend(users.get(&function).into_iter().flatten().copied());
         }
@@ -73,6 +82,7 @@ fn recognize(
     module: &Module,
     bindings: &Rebindings,
     templates: &BTreeMap<FunctionId, ConstructionTemplate>,
+    all_definitions: &BTreeMap<ValueId, &Rhs>,
     function: FunctionId,
 ) -> Option<ConstructionTemplate> {
     let function = module.function(function)?;
@@ -104,12 +114,10 @@ fn recognize(
     let Atom::Value(result) = returned else {
         return None;
     };
-    let rhs = definitions.get(&result).copied().or_else(|| {
-        module.statements().iter().flatten().find_map(|s| match s {
-            Statement::Let { result: value, rhs } if *value == result => Some(rhs),
-            _ => None,
-        })
-    })?;
+    let rhs = definitions
+        .get(&result)
+        .copied()
+        .or_else(|| all_definitions.get(&result).copied())?;
     let Construction { shape, fields } = match rhs {
         Rhs::Product { schema, fields } => Construction {
             shape: Shape::Product(*schema),

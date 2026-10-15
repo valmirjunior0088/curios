@@ -24,7 +24,7 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 
 ### Reconstruction recovers the existing value
 
-**Decision.** The erased optimizer removes complete, ordered product reconstruction and exhaustive constructor identity before layout selection. Constructor wrappers are recognized by their bodies, including acyclic forwarding, and removing a match proves every arm contains only safe administrative work. Substitution and removal of the bindings it strands are one transformation, so an immediately returned call reaches the existing tail-call lowering.
+**Decision.** The erased optimizer removes complete, ordered product reconstruction and exhaustive constructor identity before layout selection, and forwards retained unit fields only where immutable value flow proves the particular source field is unit. Construction sites and fields form a shared graph; a deterministic return-and-field fixed point widens beyond 32 origins to unknown. Parameters, opaque calls, state reads and computed recursive members establish no contents. Callable proof stubs remain functions. Constructor wrappers are recognized by their bodies, including acyclic forwarding, and removing a match proves every arm contains only safe administrative work. Substitution and removal of the bindings it strands are one transformation, so an immediately returned call reaches the existing tail-call lowering.
 
 **Rationale.** Erasure can leave runtime reconstruction around an answer whose source only restates evidence. Schema and constructor identities make equality explicit here, before layout encoding obscures it. Computed recursive members are forcing boundaries; effects, traps and unknown calls retain their order.
 

@@ -2,6 +2,9 @@
 //!
 //! Plans are substitutions to dominating atoms: a complete product's base or an exhaustive match's scrutinee. Nested identities settle through a dependency worklist over one immutable snapshot. Applying them preserves calls and effect order, then removes only administrative bindings the substitutions strand. Computed recursive members are forcing boundaries, including in aliases and constructor wrappers. Orphaned arms and removed statements remain arena slots until the driver's final prune and compaction.
 
+mod facts;
+use facts::*;
+
 mod templates;
 use templates::*;
 
@@ -32,6 +35,7 @@ struct Reconstruction<'m> {
     bindings: Rebindings,
     definitions: BTreeMap<ValueId, (StatementId, &'m Rhs)>,
     templates: BTreeMap<crate::FunctionId, ConstructionTemplate>,
+    facts: ValueFacts,
     replacements: BTreeMap<ValueId, Atom>,
 }
 
@@ -50,11 +54,13 @@ impl<'m> Reconstruction<'m> {
             })
             .collect();
         let templates = construction_templates(module, &bindings);
+        let facts = ValueFacts::analyze(module, &bindings, &templates);
         Self {
             module,
             bindings,
             definitions,
             templates,
+            facts,
             replacements: BTreeMap::new(),
         }
     }
@@ -135,7 +141,9 @@ impl<'m> Reconstruction<'m> {
         fields
             .iter()
             .enumerate()
-            .all(|(i, &field)| self.projection(field) == Some((schema, base, i)))
+            .all(|(i, &field)| self.projection(field) == Some((schema, base, i))
+                || matches!(self.follow(field), Atom::Constant(id) if matches!(self.module.constant(id), Some(crate::Constant::Unit)))
+                    && self.facts.unit_field(base, schema, i))
             .then_some(base)
     }
 
