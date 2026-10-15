@@ -23,7 +23,7 @@ impl<'a, 'b> TurnEmitter<'a, 'b> {
         let turn = self.emit_turn(row);
 
         let main = self.add_func(
-            "suspension/main",
+            "io/main",
             Vec::new(),
             Vec::new(),
             vec![
@@ -40,7 +40,7 @@ impl<'a, 'b> TurnEmitter<'a, 'b> {
         let description = curios_wasm::LocalName::from("description");
         let envr = self.table.find_envr_type(0);
         let advance = self.add_func(
-            "suspension/advance",
+            "io/advance",
             vec![(description.clone(), Table::top_type(true))],
             Vec::new(),
             vec![
@@ -60,7 +60,7 @@ impl<'a, 'b> TurnEmitter<'a, 'b> {
             .add_export(ADVANCE, curios_wasm::Export::Func(advance));
     }
 
-    /// `$suspension/turn (anyref) -> turn`: what a forced description answered, as a turn. The handles cross as a `List(Handle)` operand of a host row does.
+    /// `$io/turn (anyref) -> turn`: what a forced description answered, as a turn. The handles cross as a `List(Handle)` operand of a host row does.
     fn emit_turn(&mut self, row: curios_cont::RowId) -> curios_wasm::FuncName {
         let row_type = self.table.find_row_type(row);
         let answer = curios_wasm::LocalName::from("answer");
@@ -109,7 +109,7 @@ impl<'a, 'b> TurnEmitter<'a, 'b> {
         instrs.extend(slot(3));
 
         self.add_func(
-            "suspension/turn",
+            "io/turn",
             vec![(answer, Table::top_type(true))],
             vec![(suspension, concrete_val(row_type.clone(), true))],
             instrs,

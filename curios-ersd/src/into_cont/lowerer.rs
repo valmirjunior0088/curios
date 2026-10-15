@@ -827,7 +827,7 @@ impl Lowerer<'_> {
         module.define_function(
             carry,
             curios_cont::Function {
-                debug_name: Some("suspension/carry".into()),
+                debug_name: Some("io/carry".into()),
                 params: vec![suspension, continuation],
                 return_cont,
                 body,

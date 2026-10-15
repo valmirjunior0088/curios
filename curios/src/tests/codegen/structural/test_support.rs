@@ -324,7 +324,7 @@ pub(in crate::tests::codegen) fn wat(source: &str) -> String {
 ///
 /// Every program's tail is a description, and a description erases to a zero-argument closure — so an effect boundary allocates a closure and forces it through an indirect call no matter how the *user's* code is written. Those carry the `$io/…` hint their thunk was minted with (`io/pure`, `io/bind`, `io/write`, …), which is what lets a claim about user code stay a claim about user code. A test that dropped the distinction would either fail on every program or assert nothing.
 ///
-/// **The suspension path's allocations are the other exception, and they are separated by where they stand.** A bind whose action may suspend hands the suspension out with its continuation appended, through `suspension/carry`, so the continuation's closure — and the close of the watch it waits on — is built on the arm that calls `carry`, in the straight run of instructions that ends in that call, and nowhere else: a block boundary ends the run, and a run that ends in no such call is kept. A closure `start` builds is a module constant, built once whatever it closes over, so nothing there is built per call either.
+/// **The suspension path's allocations are the other exception, and they are separated by where they stand.** A bind whose action may suspend hands the suspension out with its continuation appended, through `io/carry`, so the continuation's closure — and the close of the watch it waits on — is built on the arm that calls `carry`, in the straight run of instructions that ends in that call, and nowhere else: a block boundary ends the run, and a run that ends in no such call is kept. A closure `start` builds is a module constant, built once whatever it closes over, so nothing there is built per call either.
 ///
 /// **The separation of the carrier is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the arity's table and type instead: `call_indirect $clsr/0 $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
 pub(in crate::tests::codegen) fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
@@ -341,7 +341,7 @@ pub(in crate::tests::codegen) fn user_allocations<'a>(wat: &'a str, needle: &str
             in_start = line.starts_with("    (func $start");
         }
         let line = line.trim();
-        if line.contains("suspension/carry") && line.contains("call ") {
+        if line.contains("io/carry") && line.contains("call ") {
             run.clear();
         } else if ["end", "else", "block", "loop", "if", "br", "return"]
             .iter()
@@ -358,18 +358,12 @@ pub(in crate::tests::codegen) fn user_allocations<'a>(wat: &'a str, needle: &str
 
 /// The names of the user's own emitted functions whose bodies contain `needle`.
 ///
-/// The counterpart to [`user_allocations`] for everything an instruction does not name itself. Three kinds of function are the effect boundary rather than the user's code: one carrying the `$io/…` hint of the thunk it was minted for, `$func/main`, which forces the program's own description exactly once because a program *is* a description, and a turn of a program that can suspend — `$suspension/main` and `$suspension/advance`, which force the description the host hands back, and `$suspension/turn`, which takes apart what it answered.
+/// The counterpart to [`user_allocations`] for everything an instruction does not name itself. Two kinds of function are the effect boundary rather than the user's code: one carrying an `$io/…` hint — the thunk of a description, the steps a suspension takes (`$io/carry`, `$io/later`), and a turn of a program that can suspend (`$io/main` and `$io/advance`, which force the description the host hands back, and `$io/turn`, which takes apart what it answered) — and `$func/main`, which forces the program's own description exactly once because a program *is* a description.
 pub(super) fn user_functions_with<'a>(functions: &'a [Function<'a>], needle: &str) -> Vec<&'a str> {
     functions
         .iter()
         .filter(|function| function.body.contains(needle))
-        .filter(|function| {
-            !function.name.contains("$io/")
-                && !matches!(
-                    function.name,
-                    "$func/main" | "$suspension/main" | "$suspension/advance" | "$suspension/turn"
-                )
-        })
+        .filter(|function| !function.name.contains("$io/") && function.name != "$func/main")
         .map(|function| function.name)
         .collect()
 }
