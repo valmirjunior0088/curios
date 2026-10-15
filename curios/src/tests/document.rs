@@ -271,6 +271,58 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
     );
 }
 
+/// The signature of the card `/{module}` shows for `label`, and the declaration each name it marks is linked to, in the order they are written.
+fn card(
+    documentation: &curios_document::Documentation,
+    module: &str,
+    label: &str,
+) -> (String, Vec<String>) {
+    let path = Qualifier::from(module.split('/'));
+    let declaration = documentation
+        .modules
+        .iter()
+        .find(|page| page.path == path)
+        .and_then(|page| {
+            page.declarations
+                .iter()
+                .find(|declaration| declaration.name == label)
+        })
+        .unwrap_or_else(|| panic!("/{module} shows no {label}"));
+    let signature = &declaration.signature;
+
+    (
+        signature.text.clone(),
+        signature
+            .marks
+            .iter()
+            .map(|mark| mark.referent.join())
+            .collect(),
+    )
+}
+
+/// **An adopted card links its carriers and its operations as an authored one does.** `/sys` is typed by core's table, so its types and preconditions hold intrinsic nodes rather than names. The printer writes each node through core's one table of how an intrinsic is written, naming every declaration it builds on by its path, so the card marks each one and the page links it.
+#[test]
+fn an_adopted_signature_marks_its_carriers_and_operations() {
+    let documentation = standard_library();
+
+    let (_, fill) = card(&documentation, "std/Cell", "fill");
+    assert_eq!(fill, ["/std/Cell", "/std/Io", "/std/Bool"]);
+
+    // A precondition reads as a report reads it: an operator where the surface writes one, a call of the declaration where it does not.
+    let (text, get) = card(&documentation, "std/Bytes", "get");
+    assert!(text.contains("(i < "), "{text}");
+    assert_eq!(
+        get,
+        [
+            "/std/Bytes",
+            "/std/Nat",
+            "/std/Bool/Holds",
+            "/std/Bytes/len",
+            "/std/Byte"
+        ]
+    );
+}
+
 /// **No page names a root a consumer may not write.** `/sys` is adopted rather than linked: its declarations appear under the `/std` module that exposes them, and their own paths appear nowhere a reader can see — not in a signature, a card header, a search row or a crumb.
 ///
 /// Rendered and read back rather than checked against the record, because the record is only half the claim. A path can reach a reader through a template as easily as through a field, and the file is the thing a reader opens.

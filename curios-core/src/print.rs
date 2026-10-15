@@ -1193,17 +1193,42 @@ fn escaped(text: &str) -> String {
 
 /// One entry of a list or a packed literal as it is written: an element, a constant atom of a packed one, or a `..` spread of a whole run.
 #[derive(Debug, Clone)]
-pub enum LiteralEntry {
+pub enum LiteralEntry<T = Term> {
     /// A constant bit of a `Bits` literal.
     Bit(bool),
     /// A constant byte of a `Bytes` literal.
     Byte(u8),
-    Item(Term),
-    Spread(Term),
+    Item(T),
+    Spread(T),
+}
+
+/// An operand [`intrinsic_form`] looks into: a literal splices an operand in, and a numeral reads its tail as zero, only where that operand is an intrinsic node itself. A Core term answers it, and so does the surface term `/sys`'s own declarations are built over, which is what lets one table write both.
+pub trait IntrinsicOperand: Sized {
+    /// The node this operand is, where it is one.
+    fn as_intrinsic(&self) -> Option<&Intrinsic<Self>>;
+
+    /// The node this operand is, taken out of it, where it is one.
+    fn into_intrinsic(self) -> Option<Intrinsic<Self>>;
+}
+
+impl IntrinsicOperand for Term {
+    fn as_intrinsic(&self) -> Option<&Intrinsic> {
+        match &**self {
+            Subterm::Intrinsic(node) => Some(node),
+            _ => None,
+        }
+    }
+
+    fn into_intrinsic(self) -> Option<Intrinsic> {
+        match Term::unwrap_or_clone(self) {
+            Subterm::Intrinsic(node) => Some(node),
+            _ => None,
+        }
+    }
 }
 
 /// The constant atoms of a packed literal: its bits, or its bytes.
-fn packed_atoms(grain: Grain, packed: &Binary) -> Vec<LiteralEntry> {
+fn packed_atoms<T>(grain: Grain, packed: &Binary) -> Vec<LiteralEntry<T>> {
     match grain {
         Grain::B => (0..packed.bit_length())
             .map(|index| LiteralEntry::Bit(packed.bit(index).unwrap()))
@@ -1218,28 +1243,27 @@ fn packed_atoms(grain: Grain, packed: &Binary) -> Vec<LiteralEntry> {
 }
 
 /// The entries of a list concatenation as the surface spells them: a literal operand contributes its items in place, a nested concatenation its own entries, and anything else a `..` spread. Lowering turns the `[h, ..t]` a reader wrote into a concatenation of the literal `[h]` with `t`, and substitution nests one concatenation inside another; splicing both back is what lets the report quote the program rather than its lowering. Concatenation is associative, so the splice changes no value — which is exactly why axis (g) exists: a report that has found two groupings rendering alike keeps the nesting instead.
-fn list_entries(operands: Vec<Term>, grouped: bool, entries: &mut Vec<LiteralEntry>) {
+fn list_entries<T: IntrinsicOperand>(
+    operands: Vec<T>,
+    grouped: bool,
+    entries: &mut Vec<LiteralEntry<T>>,
+) {
     for operand in operands {
-        match &*operand {
-            Subterm::Intrinsic(Intrinsic::List { .. }) => {
-                let Subterm::Intrinsic(Intrinsic::List { items, .. }) =
-                    Term::unwrap_or_clone(operand)
-                else {
+        match operand.as_intrinsic() {
+            Some(Intrinsic::List { .. }) => {
+                let Some(Intrinsic::List { items, .. }) = operand.into_intrinsic() else {
                     unreachable!()
                 };
                 entries.extend(items.into_iter().map(LiteralEntry::Item));
             }
-            Subterm::Intrinsic(Intrinsic::ListConcat { .. }) if !grouped => {
-                let Subterm::Intrinsic(Intrinsic::ListConcat { operands, .. }) =
-                    Term::unwrap_or_clone(operand)
-                else {
+            Some(Intrinsic::ListConcat { .. }) if !grouped => {
+                let Some(Intrinsic::ListConcat { operands, .. }) = operand.into_intrinsic() else {
                     unreachable!()
                 };
                 list_entries(operands, grouped, entries);
             }
-            Subterm::Intrinsic(Intrinsic::ListAppend { .. }) if !grouped => {
-                let Subterm::Intrinsic(Intrinsic::ListAppend { list, item, .. }) =
-                    Term::unwrap_or_clone(operand)
+            Some(Intrinsic::ListAppend { .. }) if !grouped => {
+                let Some(Intrinsic::ListAppend { list, item, .. }) = operand.into_intrinsic()
                 else {
                     unreachable!()
                 };
@@ -1252,32 +1276,25 @@ fn list_entries(operands: Vec<Term>, grouped: bool, entries: &mut Vec<LiteralEnt
 }
 
 /// [`list_entries`] for a packed concatenation: a constant operand of the same grain contributes its atoms in place.
-fn packed_entries(
+fn packed_entries<T: IntrinsicOperand>(
     grain: Grain,
-    operands: Vec<Term>,
+    operands: Vec<T>,
     grouped: bool,
-    entries: &mut Vec<LiteralEntry>,
+    entries: &mut Vec<LiteralEntry<T>>,
 ) {
     for operand in operands {
-        match &*operand {
-            Subterm::Intrinsic(Intrinsic::Bin(g, packed)) if *g == grain => {
+        match operand.as_intrinsic() {
+            Some(Intrinsic::Bin(g, packed)) if *g == grain => {
                 entries.extend(packed_atoms(grain, packed));
             }
-            Subterm::Intrinsic(Intrinsic::BinConcat { grain: g, .. })
-                if *g == grain && !grouped =>
-            {
-                let Subterm::Intrinsic(Intrinsic::BinConcat { operands, .. }) =
-                    Term::unwrap_or_clone(operand)
-                else {
+            Some(Intrinsic::BinConcat { grain: g, .. }) if *g == grain && !grouped => {
+                let Some(Intrinsic::BinConcat { operands, .. }) = operand.into_intrinsic() else {
                     unreachable!()
                 };
                 packed_entries(grain, operands, grouped, entries);
             }
-            Subterm::Intrinsic(Intrinsic::BinAppend { grain: g, .. })
-                if *g == grain && !grouped =>
-            {
-                let Subterm::Intrinsic(Intrinsic::BinAppend { bin, element, .. }) =
-                    Term::unwrap_or_clone(operand)
+            Some(Intrinsic::BinAppend { grain: g, .. }) if *g == grain && !grouped => {
+                let Some(Intrinsic::BinAppend { bin, element, .. }) = operand.into_intrinsic()
                 else {
                     unreachable!()
                 };
@@ -1490,34 +1507,34 @@ fn print_operand(term: Term, frame: Frame) -> Printer {
     }
 }
 
-/// How a reader writes an intrinsic. The one table of it ([`intrinsic_form`]): this printer prints from it, a dump under the paths `/sys` declares and a report under what its reader writes, and the translation a report's term is printed through builds the surface form it names.
+/// How a reader writes an intrinsic. The one table of it ([`intrinsic_form`]): this printer prints from it, a dump under the paths `/sys` declares and a report under what its reader writes, and the translation a report's term is printed through builds the surface form it names. It is written over either stage's term ([`IntrinsicOperand`]), so the surface printer writes `/sys`'s own declarations through that same translation.
 #[derive(Debug, Clone)]
-pub enum IntrinsicForm {
+pub enum IntrinsicForm<T = Term> {
     /// A type former or a constant, by the path under `/sys` its declaration stands at ([`intrinsic_global`]).
     Named(&'static str),
     /// An operation called by its path under `/sys`: the type arguments it takes under `@`, then the written ones. The proof an operation carries — a bound on an index, a nonzero divisor — is no argument here: the reader never wrote one, the operator or the elaborator inserted it, and it is erased.
     Call {
         path: String,
-        implicits: Vec<Term>,
-        explicits: Vec<Term>,
+        implicits: Vec<T>,
+        explicits: Vec<T>,
     },
     /// An operator between its two operands.
-    Infix(InfixOp, Term, Term),
+    Infix(InfixOp, T, T),
     Bool(bool),
     /// A numeral of `Nat`.
     Nat(Natural),
     /// A successor over a symbolic tail: that tail plus its literal floor, `n + 1`.
     NatAbove {
-        tail: Term,
+        tail: T,
         floor: Natural,
     },
     Byte(u8),
     Int(Integer),
     Flt(Floating),
     /// A packed literal, `b[…]` or `x[…]`: its entries in order.
-    Packed(Grain, Vec<LiteralEntry>),
+    Packed(Grain, Vec<LiteralEntry<T>>),
     /// A list literal: its entries in order.
-    List(Vec<LiteralEntry>),
+    List(Vec<LiteralEntry<T>>),
     /// A handle the host minted at run time, which no source spells.
     Handle(u32),
 }
@@ -1535,7 +1552,10 @@ pub fn intrinsic_global(path: &str) -> Global {
 }
 
 /// How `intrinsic` is written: see [`IntrinsicForm`]. Under `grouped` a nested concatenation stays the operand it is (axis (g)), where the splice would hide how a run is grouped.
-pub fn intrinsic_form(intrinsic: Intrinsic, grouped: bool) -> IntrinsicForm {
+pub fn intrinsic_form<T: IntrinsicOperand>(
+    intrinsic: Intrinsic<T>,
+    grouped: bool,
+) -> IntrinsicForm<T> {
     let operator = |symbol: &str| InfixOp::from_symbol(symbol).expect("an operator's symbol");
 
     match intrinsic {
@@ -1554,7 +1574,7 @@ pub fn intrinsic_form(intrinsic: Intrinsic, grouped: bool) -> IntrinsicForm {
         Intrinsic::Nat(Nat::Zero) => IntrinsicForm::Nat(Natural::zero()),
         // A successor over `0` is a plain numeral; over a symbolic tail it is that tail plus its literal floor.
         Intrinsic::Nat(Nat::Succ(floor, tail)) => {
-            match matches!(&*tail, Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))) {
+            match matches!(tail.as_intrinsic(), Some(Intrinsic::Nat(Nat::Zero))) {
                 true => IntrinsicForm::Nat(floor),
                 false => IntrinsicForm::NatAbove { tail, floor },
             }

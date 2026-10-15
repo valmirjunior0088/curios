@@ -1,5 +1,5 @@
 use {
-    super::Term,
+    super::{Subterm, Term},
     curios_num::{Floating, Grain},
 };
 
@@ -31,3 +31,20 @@ pub enum Literal {
 ///
 /// Never parsed. The `/sys` roster plants one in a declaration's body, and reads the types core's table gives it into the declaration's signature, so a program reaches every intrinsic as an ordinary named binding rather than as syntax.
 pub type Intrinsic = curios_core::Intrinsic<Term>;
+
+// What core's one table of intrinsics looks into, so `/sys`'s own trees are written by it as a report's terms are.
+impl curios_core::IntrinsicOperand for Term {
+    fn as_intrinsic(&self) -> Option<&Intrinsic> {
+        match self.as_subterm() {
+            Subterm::Intrinsic(node) => Some(node),
+            _ => None,
+        }
+    }
+
+    fn into_intrinsic(self) -> Option<Intrinsic> {
+        match self.into_subterm() {
+            Subterm::Intrinsic(node) => Some(node),
+            _ => None,
+        }
+    }
+}

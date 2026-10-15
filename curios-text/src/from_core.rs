@@ -126,6 +126,24 @@ impl<'a> Frame<'a> {
     }
 }
 
+/// How a form of core's one table of intrinsics ([`curios_core::intrinsic_form`]) has its pieces written: each term it holds, and each declaration of `/sys` it names. A report writes a Core term's for its reader ([`Frame`]); the printer writes the surface tree `/sys` is built as, each piece as it stands.
+pub(crate) trait Writer<T> {
+    fn operand(&self, operand: T) -> Option<Term>;
+
+    /// The declaration of `/sys` at `path` ([`curios_core::intrinsic_global`]), as a name.
+    fn sys(&self, path: &str) -> Option<Term>;
+}
+
+impl Writer<curios_core::Term> for Frame<'_> {
+    fn operand(&self, operand: curios_core::Term) -> Option<Term> {
+        sub(operand, *self)
+    }
+
+    fn sys(&self, path: &str) -> Option<Term> {
+        global(&curios_core::intrinsic_global(path), *self)
+    }
+}
+
 /// One witness binder in scope: its label, the concept application its type names where the table knows the concept, whether a reference to it reached the tree, and the binder outside it.
 struct WitnessNode<'a> {
     label: curios_core::Free,
@@ -262,7 +280,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         Core::Intrinsic(intrinsic) => {
             let form = curios_core::intrinsic_form(intrinsic, frame.spelling.keeps_grouping());
 
-            recurse(|| written_intrinsic(form, frame))?
+            recurse(|| written_intrinsic(form, &frame))?
         }
         // A call across the wire reads as a call of its declaration, the type a row that does not return is handed under its mark. A row of no operand is still called.
         Core::Foreign(function, declared, mut arguments) => {
@@ -270,7 +288,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
 
             apply(
                 global(&declared, frame)?,
-                marked(arguments, explicits, frame)?,
+                marked(arguments, explicits, &frame)?,
             )
         }
         Core::FuncType(curios_core::FuncType { telescope }) => {
@@ -699,16 +717,16 @@ fn infix(op: InfixOp, left: Term, right: Term) -> Term {
 }
 
 /// The arguments of a call of a `/sys` declaration: the type arguments under their mark, then the written ones.
-fn marked(
-    implicits: Vec<curios_core::Term>,
-    explicits: Vec<curios_core::Term>,
-    frame: Frame,
+fn marked<T>(
+    implicits: Vec<T>,
+    explicits: Vec<T>,
+    writer: &impl Writer<T>,
 ) -> Option<Vec<Argument>> {
     implicits
         .into_iter()
         .map(|term| (Plicity::Implicit, term))
         .chain(explicits.into_iter().map(|term| (Plicity::Explicit, term)))
-        .map(|(plicity, term)| Some(argument(plicity, sub(term, frame)?)))
+        .map(|(plicity, term)| Some(argument(plicity, writer.operand(term)?)))
         .collect()
 }
 
@@ -931,32 +949,33 @@ fn written_field(field: &curios_core::Field, frame: Frame) -> Option<Field> {
     }
 }
 
-/// An intrinsic as its one table writes it ([`curios_core::intrinsic_form`]): a declaration of `/sys` named as the reader reaches it, a literal as the grammar spells it.
-fn written_intrinsic(form: curios_core::IntrinsicForm, frame: Frame) -> Option<Term> {
+/// An intrinsic as its one table writes it ([`curios_core::intrinsic_form`]): a declaration of `/sys` named as `writer` names it, a literal as the grammar spells it.
+pub(crate) fn written_intrinsic<T>(
+    form: curios_core::IntrinsicForm<T>,
+    writer: &impl Writer<T>,
+) -> Option<Term> {
     use curios_core::IntrinsicForm as Form;
 
-    let sys = |path: &str| global(&curios_core::intrinsic_global(path), frame);
-
     Some(match form {
-        Form::Named(path) => sys(path)?,
+        Form::Named(path) => writer.sys(path)?,
         Form::Call {
             path,
             implicits,
             explicits,
         } => {
-            let arguments = marked(implicits, explicits, frame)?;
+            let arguments = marked(implicits, explicits, writer)?;
             // A row with no parameters is a constant in `/sys`, named the way a constant is.
             match arguments.is_empty() {
-                true => sys(&path)?,
-                false => apply(sys(&path)?, arguments),
+                true => writer.sys(&path)?,
+                false => apply(writer.sys(&path)?, arguments),
             }
         }
-        Form::Infix(op, left, right) => infix(op, sub(left, frame)?, sub(right, frame)?),
+        Form::Infix(op, left, right) => infix(op, writer.operand(left)?, writer.operand(right)?),
         Form::Bool(value) => Subterm::Literal(Literal::Bool(value)).into(),
         Form::Nat(value) => numeral(value, Sign::Unmarked),
         Form::NatAbove { tail, floor } => infix(
             InfixOp::Add,
-            sub(tail, frame)?,
+            writer.operand(tail)?,
             numeral(floor, Sign::Unmarked),
         ),
         Form::Byte(value) => Subterm::NumLit(NumLit {
@@ -973,11 +992,11 @@ fn written_intrinsic(form: curios_core::IntrinsicForm, frame: Frame) -> Option<T
 
             numeral(value.magnitude(), sign)
         }
-        Form::Flt(value) => written_flt(value, frame)?,
+        Form::Flt(value) => written_flt(value, writer)?,
         Form::Packed(grain, entries) => {
             let segments = entries
                 .into_iter()
-                .map(|entry| written_segment(entry, frame))
+                .map(|entry| written_segment(entry, writer))
                 .collect::<Option<Vec<_>>>()?;
 
             Subterm::Literal(Literal::Bin(grain, segments)).into()
@@ -988,9 +1007,11 @@ fn written_intrinsic(form: curios_core::IntrinsicForm, frame: Frame) -> Option<T
                 .map(|entry| {
                     Some(match entry {
                         curios_core::LiteralEntry::Spread(run) => {
-                            ListEntry::Spread(sub(run, frame)?)
+                            ListEntry::Spread(writer.operand(run)?)
                         }
-                        curios_core::LiteralEntry::Item(item) => ListEntry::Elem(sub(item, frame)?),
+                        curios_core::LiteralEntry::Item(item) => {
+                            ListEntry::Elem(writer.operand(item)?)
+                        }
                         // A list holds no packed atom.
                         curios_core::LiteralEntry::Bit(_) | curios_core::LiteralEntry::Byte(_) => {
                             return None;
@@ -1007,38 +1028,54 @@ fn written_intrinsic(form: curios_core::IntrinsicForm, frame: Frame) -> Option<T
 }
 
 /// One entry of a packed literal: a constant atom as the numeral it is written by, a term's atom, or a spread.
-fn written_segment(entry: curios_core::LiteralEntry, frame: Frame) -> Option<BinSegment> {
+fn written_segment<T>(
+    entry: curios_core::LiteralEntry<T>,
+    writer: &impl Writer<T>,
+) -> Option<BinSegment> {
     Some(match entry {
         curios_core::LiteralEntry::Bit(bit) => {
             BinSegment::Atom(numeral(Natural::from(u8::from(bit)), Sign::Unmarked))
         }
-        curios_core::LiteralEntry::Byte(byte) => BinSegment::Atom(
-            Subterm::NumLit(NumLit {
-                magnitude: Natural::from(byte),
-                radix: Radix::Hex(0),
-                sign: Sign::Unmarked,
-            })
-            .into(),
-        ),
-        curios_core::LiteralEntry::Item(item) => BinSegment::Atom(sub(item, frame)?),
-        curios_core::LiteralEntry::Spread(run) => BinSegment::Spread(sub(run, frame)?),
+        curios_core::LiteralEntry::Byte(byte) => written_byte(byte),
+        curios_core::LiteralEntry::Item(item) => BinSegment::Atom(writer.operand(item)?),
+        curios_core::LiteralEntry::Spread(run) => BinSegment::Spread(writer.operand(run)?),
     })
 }
 
+/// A constant byte of a packed literal, as the numeral it is written by.
+fn written_byte(byte: u8) -> BinSegment {
+    BinSegment::Atom(
+        Subterm::NumLit(NumLit {
+            magnitude: Natural::from(byte),
+            radix: Radix::Hex(0),
+            sign: Sign::Unmarked,
+        })
+        .into(),
+    )
+}
+
 /// A `Flt` as what reads back as it, bit for bit: the literal where one spells it, and any other NaN as the call building it from its bytes.
-fn written_flt(value: Floating, frame: Frame) -> Option<Term> {
+fn written_flt<T>(value: Floating, writer: &impl Writer<T>) -> Option<Term> {
     let spelled =
         value.is_finite() || !value.is_nan() || value.abs().to_bits() == Floating::nan().to_bits();
     if spelled {
         return Some(Subterm::Literal(Literal::Flt(value)).into());
     }
 
-    let bytes =
-        curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(Grain::X, value.to_le_bytes()));
+    let bytes = value
+        .to_le_bytes()
+        .as_bytes()
+        .expect("a float's bytes are whole bytes")
+        .iter()
+        .map(|byte| written_byte(*byte))
+        .collect();
 
     Some(apply(
-        global(&curios_core::intrinsic_global("Flt/of_le_bytes"), frame)?,
-        vec![argument(Plicity::Explicit, sub(bytes, frame)?)],
+        writer.sys("Flt/of_le_bytes")?,
+        vec![argument(
+            Plicity::Explicit,
+            Subterm::Literal(Literal::Bin(Grain::X, bytes)).into(),
+        )],
     ))
 }
 
