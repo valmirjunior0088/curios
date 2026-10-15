@@ -60,4 +60,4 @@ Settled 2026-10-13.
 
 ## Completion and retirement
 
-Each landed stage is restated here as what is left; `documentation/usage.md` lists the queries, `curios-wonder`'s rustdoc their contracts, and [the decision](../../design/tools/a-place-in-a-file-is-answered-from-the-declaration-that-writes-it.md) takes each stage's design with what it rejects. Once both have landed the line in `documentation/roadmap.md` becomes a checked summary, and this file is deleted.
+Each landed stage is restated here as what is left; `documentation/usage.md` lists the queries, `curios-wonder`'s rustdoc their contracts, and [the decision](../../design/tools/a-place-in-a-file-is-answered-from-the-declaration-that-writes-it.md) takes each stage's design with what it rejects. Once both have landed and no reference to this specification remains, this file is deleted.

@@ -6,7 +6,7 @@ paths:
 
 # Findings: what a find is, where it goes, how an entry is kept
 
-Whoever writes a findings file is held to this: a hunt, a fix run, a campaign filing what it noticed on the way. The form of an entry, an open line and a spec is the opening paragraphs of `documentation/roadmap.md`'s; this file restates none of it.
+Whoever writes a findings file is held to this: a hunt, a fix run, a campaign filing what it noticed on the way. The form of an entry and a spec is [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md)'s; this file restates none of it.
 
 ## What a find is
 
@@ -24,11 +24,11 @@ A change whose only case is taste — no rule the tree states, no consequence be
 
 **Weigh stated reasoning three times.** Where the tree argues for what you are about to call a find — a decision's rationale, a **Rejected** paragraph, a comment saying why — consider it three times over before judging against it: what it claims, whether the code is still what it argues about, and whether its premise still holds. A defended shape is a find only where its defence fails, and the find names the sentence that fails.
 
-What is written down already is known: an entry in a findings file, an open line of `documentation/roadmap.md`, a ticket on the board, a decision's **Rejected** paragraph.
+What is written down already is known: an entry in a findings file, a specification under `documentation/roadmap/`, a ticket on the board, a decision's **Rejected** paragraph.
 
 ## Where a find goes
 
-A find whose fix is stated and takes one pass is an entry in the findings file of its area, or in the workspace's for what belongs to no area. One whose fix is not one pass, as the opening paragraphs of `documentation/roadmap.md` say what that is, is an open line there with a spec not yet refined, numbered as those paragraphs number it, among its area's specs, or among the workspace's, loose in `roadmap/`, for what belongs to no area.
+A find whose fix is stated and takes one pass is an entry in the findings file of its area, or in the workspace's for what belongs to no area. One whose fix is not one pass is a specification not yet refined, filed and numbered as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states, among its area's specifications or loose in `documentation/roadmap/` for what belongs to the workspace as a whole.
 
 A closed term the checkers admit at `/std/Bool/False` is never set aside: it is an open ticket on the soundness board, filed as **The open ticket** of `.claude/commands/hunt-unsoundness.md` files one, in a commit of its own. A term admitted that should be refused, from which no `False` is built, is a finding, in soundness's findings file.
 
@@ -41,4 +41,4 @@ A cause is what one change settles, and a findings file holds one entry for each
 - **Merge** two entries that one change settles, and split one that two changes settle.
 - **Drop** an entry the code no longer bears out, or one that a spec or a ticket now holds.
 
-A cause is closed once three things are done: it is shown, by a probe or a test or by the rule and the code that departs from it; its extent is swept, every site that shares it found, in the workspace and not only the scope it was met in, so the entry is whole; and it is read against every entry, open line, ticket and **Rejected** paragraph that names the same code or the same rule. Whoever closes a cause reconciles the entries it meets and no others: showing every entry again is `/fix-findings`'s pass.
+A cause is closed once three things are done: it is shown, by a probe or a test or by the rule and the code that departs from it; its extent is swept, every site that shares it found, in the workspace and not only the scope it was met in, so the entry is whole; and it is read against every entry, specification, ticket and **Rejected** paragraph that names the same code or the same rule. Whoever closes a cause reconciles the entries it meets and no others: showing every entry again is `/fix-findings`'s pass.

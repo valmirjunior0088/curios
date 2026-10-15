@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Curios is a dependently typed functional language implemented in Rust 2024, compiled from `.crs` through Core, an erased IR and a continuation IR to WebAssembly-GC and run under Wasmtime. What a crate owns is its `Cargo.toml` description and `README.md`; why the language and toolchain are the way they are is `documentation/design/`; what exists and what is pending is `documentation/roadmap.md`. Read the owner, never a copy.
+Curios is a dependently typed functional language implemented in Rust 2024, compiled from `.crs` through Core, an erased IR and a continuation IR to WebAssembly-GC and run under Wasmtime. What a crate owns is its `Cargo.toml` description and `README.md`; why the language and toolchain are the way they are is `documentation/design/`; pending work lives under `documentation/roadmap/`, filed as [Pending work is owned by its specification](documentation/design/pending-work-is-owned-by-its-specification.md) states. Read the owner, never a copy.
 
 ## Working here
 
@@ -33,4 +33,4 @@ Every other fact is on disk: `documentation/syntax.md` for the surface language,
 ## Where the rest is
 
 - `.claude/rules/` loads by itself when a matching file is read: the Rust, Curios and documentation conventions, and one file per area of the workspace with what a change there must also inspect.
-- Before proposing a capability, read `documentation/roadmap.md`. Before changing a public contract — a pipeline stage, the host ABI, the runtime, the JavaScript harness, the embedded standard library — trace it to its consumers.
+- Before proposing a capability, read the applicable findings and specifications under `documentation/roadmap/`. Before changing a public contract — a pipeline stage, the host ABI, the runtime, the JavaScript harness, the embedded standard library — trace it to its consumers.

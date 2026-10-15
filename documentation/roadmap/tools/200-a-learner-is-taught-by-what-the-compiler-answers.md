@@ -141,4 +141,4 @@ Counted from each transcript, by reading: the words of the teacher's prose in a 
 
 ## Completion and retirement
 
-The command holds its own contract; why it is shaped so, with what was rejected, goes to a decision under `documentation/design/tools/`; the dry run stays there as the measurement a reader can retake, and a learner's session as what the maintainer reads from one after the release. The line in `documentation/roadmap.md` becomes a checked summary linking that decision, and this file is deleted.
+The command holds its own contract; why it is shaped so, with what was rejected, goes to a decision under `documentation/design/tools/`; the dry run stays there as the measurement a reader can retake, and a learner's session as what the maintainer reads from one after the release. Once those contracts are recorded and no reference to this specification remains, this file is deleted.

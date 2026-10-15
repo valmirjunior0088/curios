@@ -45,6 +45,6 @@ Each elementary function is checked against the exact path at a raised precision
 
 - All thirty-nine functions of §9.2 are provided in their four forms, correctly rounded in every direction, with the exceptions of Table 9.1.
 - The fuel and exhaustion decision is resolved, with the evidence supporting each function's precision bound stated explicitly.
-- Before this specification is deleted, what it states is recorded in `/std/Flt`'s documentation, signatures and tests, the roadmap entry is a checked summary, and no reference to this filename remains.
+- Before this specification is deleted, what it states is recorded in `/std/Flt`'s documentation, signatures and tests, no reference to this filename remains.
 
 Retirement does not wait for alternate exception handling. Update its link to this specification to the permanent elementary-function contracts if that work remains pending.

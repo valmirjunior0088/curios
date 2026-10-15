@@ -44,4 +44,4 @@ Working specification for labelling a source of the package `std` by the package
 
 ## Completion and retirement
 
-What a source's label is and who may ask for its file goes to `curios-utilities`' and `curios-text`'s rustdoc, the rationale to a decision under `documentation/design/compilation/`, and the two-directory comparison stays as a stated protocol there. The line in `documentation/roadmap.md` becomes a checked summary, and this file is deleted.
+What a source's label is and who may ask for its file goes to `curios-utilities`' and `curios-text`'s rustdoc, the rationale to a decision under `documentation/design/compilation/`, and the two-directory comparison stays as a stated protocol there. Once those contracts are recorded and no reference to this specification remains, this file is deleted.

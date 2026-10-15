@@ -39,4 +39,4 @@
 
 ## Retirement
 
-Before this specification is deleted, the conversion decision states the rule with its rejected alternatives, the certifier's README states what the kernel checks of a mark, the roadmap entry is a checked summary, and no reference to this filename remains.
+Before this specification is deleted, the conversion decision states the rule with its rejected alternatives, the certifier's README states what the kernel checks of a mark, no reference to this filename remains.

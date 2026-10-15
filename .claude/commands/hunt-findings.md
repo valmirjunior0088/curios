@@ -9,7 +9,7 @@ Hunt for what is wrong and not yet written down. One invocation is one charter: 
 
 ## Read first
 
-`.claude/rules/findings.md` states what a find is, where it goes and how an entry is kept. It loads with the first findings file read, so read the findings files the scope touches before anything else: for the rule, and for the size, the evidence and the form a find carries. The opening paragraphs of `documentation/roadmap.md` state what a findings entry, an open line and a spec hold. The scope's `README.md` and `//!` documentation argue for its shape. CLAUDE.md says how to probe and how to commit; this file restates none of it.
+`.claude/rules/findings.md` states what a find is, where it goes and how an entry is kept. It loads with the first findings file read, so read the findings files the scope touches before anything else: for the rule, and for the size, the evidence and the form a find carries. [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states what a findings entry and a spec hold. The scope's `README.md` and `//!` documentation argue for its shape. CLAUDE.md says how to probe and how to commit; this file restates none of it.
 
 ## Where a suspicion comes from
 
@@ -17,7 +17,7 @@ A seed states a theory a probe can ask, where a scope alone states none. Take on
 
 - **A defect already fixed.** A commit that deleted a findings entry, or turned a ticket to fixed, states a cause and shows what settled it: `git log` over the findings files and `xboard/src/board/`, narrowed to the scope. The theory is that the cause stands where the fix did not reach — another crate, another form of the same mistake, the same rule over another carrier.
 - **What landed last.** The scope's newest commits, each read whole, its message, its diff and the tests it added. The theory is that a change made for one reason broke what another reader of the same code relies on, and that no hunt has been over it.
-- **A claim.** A sentence of `documentation/syntax.md` or `documentation/usage.md`, a decision's rule, a checked line of the roadmap, a doc comment's contract. Each says what a program does, and a probe at its edge asks whether it does.
+- **A claim.** A sentence of `documentation/syntax.md` or `documentation/usage.md`, a decision's rule, a doc comment's contract. Each says what a program does, and a probe at its edge asks whether it does.
 - **Two answers that must agree.** Where the tree answers one question twice, ask both and compare: the elaborator and the kernel over one term, conversion and the compiled program over one closed computation, a unit compiled over a baseline and the same unit compiled whole, `wonder diagnostics` and `run` over one refusal. A disagreement is shown by itself, and which side is wrong is the find.
 
 The scope bounds where a hunt starts, never where a cause is followed.
@@ -28,7 +28,7 @@ A write **follows** where everything it claims can be shown again by what the tr
 
 A write **sets** where it states what work is held to, and it waits for the user:
 
-- **An open line and its spec.** It takes a number, a place in the order work is taken.
+- **A new specification.** It takes a number, a place in the order work is taken.
 - **A find against stated reasoning.** Its case is that a sentence the tree argues by fails.
 
 ## A refusal met on the way
@@ -44,14 +44,14 @@ When a probe you wrote is refused, do not rewrite it until it compiles. First de
 ## The loop
 
 1. Take a suspicion the seed raises and hunt it until it is shown or let go. Shown, close its cause as `.claude/rules/findings.md` closes one. Let go, keep one line of it: what was asked, by which probe, and what answered.
-2. Where its write follows, make it, in the form `documentation/roadmap.md` states for an entry or `xboard/README.md` for a ticket, and commit it as prose, by itself. Where it sets, hold it with its text exactly as it would be written.
+2. Where its write follows, make it, in the form [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states for an entry or `xboard/README.md` for a ticket, and commit it as prose, by itself. Where it sets, hold it with its text exactly as it would be written.
 3. Hunt on.
 
 ## Stopping
 
 Stop when the charter is spent: every suspicion its seed raised is shown or let go. A scope that would take another seed is another invocation's.
 
-Close with the charter and three lists. What was written: every write made, by file and by kind, with its commit. What held: each suspicion let go, by its line, and what of the scope the seed did not reach, so a quiet scope is told from a shallow hunt. What is held: each write that sets, put to the user in one round of structured questions with where it goes, its text exactly as it will be written, in the form `documentation/roadmap.md` states for an entry, an open line and a spec; the evidence and the rule or the consequence it rests on; why nothing written down already holds it; and, where the tree argues otherwise, the sentence whose defence fails.
+Close with the charter and three lists. What was written: every write made, by file and by kind, with its commit. What held: each suspicion let go, by its line, and what of the scope the seed did not reach, so a quiet scope is told from a shallow hunt. What is held: each write that sets, put to the user in one round of structured questions with where it goes, its text exactly as it will be written, in the form [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states for an entry and a spec; the evidence and the rule or the consequence it rests on; why nothing written down already holds it; and, where the tree argues otherwise, the sentence whose defence fails.
 
 Write what is approved and commit it as prose, by itself. A write declined is not proposed again in this session. For a later hunt to know, the round offers a third answer beside writing and declining: declined, with its reason recorded. That reason is written where the tree argues — one comment saying why at the site, or a sentence of the **Rejected** paragraph of the decision that owns the rule — so the next hunt meets it as stated reasoning. The close names each write declined with no reason recorded, which a later hunt may raise again.
 

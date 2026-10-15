@@ -62,4 +62,4 @@ Working specification for deciding what erases through no engine that elaborates
 
 ## Completion and retirement
 
-Done when what erases is decided through no engine that elaborates. The rule goes to [`curios-elab`'s README](../../../curios-elab/README.md), its two decisions on erasure and on the context corrected in place, or to the README of the crate erasure moves to. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
+Done when what erases is decided through no engine that elaborates. The rule goes to [`curios-elab`'s README](../../../curios-elab/README.md), its two decisions on erasure and on the context corrected in place, or to the README of the crate erasure moves to. Verify that nothing references this filename, and delete it.

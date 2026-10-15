@@ -14,14 +14,14 @@ With none given, work supervised.
 
 ## Read first
 
-`.claude/rules/findings.md` states what a find is, how stated reasoning is weighed and how an entry is kept; it loads with the first findings file read. **When a step fails** of `.claude/commands/run-full-gate.md` says how a failing check is read and its cause fixed. The opening paragraphs of `documentation/roadmap.md` state what an entry and a spec hold, and when one becomes the other. CLAUDE.md says how a focused change is checked and committed. This file restates none of them.
+`.claude/rules/findings.md` states what a find is, how stated reasoning is weighed and how an entry is kept; it loads with the first findings file read. **When a step fails** of `.claude/commands/run-full-gate.md` says how a failing check is read and its cause fixed. [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states what an entry and a spec hold, and when one becomes the other. CLAUDE.md says how a focused change is checked and committed. This file restates none of them.
 
 ## What every fix is
 
 An entry is a claim someone filed, and the code may have moved since. Before changing anything, show the defect as the entry states it, by the probe it gives or by the code it names read against the rule it cites, and weigh what the tree argues for that code as `.claude/rules/findings.md` weighs stated reasoning: the decision the entry cites, the crate's `README.md`, the `//!` and the comments saying why. Then sweep the cause's sites as the workspace stands now: the entry was swept at an older commit, and a site it does not name is the same case where the same change settles it, and a find where it does not. The sweep also names the cause: where the sites each state for themselves a rule their siblings state too, the cause is the second statement, and what settles it is one statement every site reads, never a patch at the entry's site, which writes a third. Before adding a refusal there, see whether the form already fails and is only reported in the wrong place. An entry marked uncertain is investigated until what it says is not known is known.
 
 - **A drop**, where the code no longer bears the entry out, is one commit that deletes it and nothing else.
-- **A fix** is one commit that makes the fix, lands the test that holds it, and deletes the entry, as the opening paragraphs of `documentation/roadmap.md` require. A fix that changes what a program does, is told or is refused lands with a test that fails without it: the one its entry's check names, or one written for it where the entry names none. A fix that changes none of that has no such test to add, and lands on the third rule below. Its check is the entry's own and CLAUDE.md's for a focused change, and where it changes code, the whole test suite, `cargo xtask workspace test`; a comment or a doc comment is not code. It is committed as CLAUDE.md says. Anything noticed on the way is a find, never part of it.
+- **A fix** is one commit that makes the fix, lands the test that holds it, and deletes the entry, as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) requires. A fix that changes what a program does, is told or is refused lands with a test that fails without it: the one its entry's check names, or one written for it where the entry names none. A fix that changes none of that has no such test to add, and lands on the third rule below. Its check is the entry's own and CLAUDE.md's for a focused change, and where it changes code, the whole test suite, `cargo xtask workspace test`; a comment or a doc comment is not code. It is committed as CLAUDE.md says. Anything noticed on the way is a find, never part of it.
 
 A fix is held to three things beside its entry's check:
 
@@ -43,7 +43,7 @@ A fix **sets** where making it would write what the tree judges by. Nothing in t
 
 What following leaves open is the run's to choose where a rule the tree states holds the choice and nothing relies on which was made: a private name, a message's wording under `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`, where a helper stands in its crate, one mechanism over another where no caller and no check tells them apart. Each such choice is listed in the close.
 
-A fix that is not one pass is no finding's: the opening paragraphs of `documentation/roadmap.md` make it a spec, and a lift is put to the user as a case that sets is.
+A fix that is not one pass is no finding's: [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) makes it a spec, and a lift is put to the user as a case that sets is.
 
 ## Sorting the cases
 
@@ -62,14 +62,14 @@ Invoking `autonomous` is standing authorization for five kinds of commit: the fi
 2. Make each fix that follows, one commit a case. Cases that share no file, none naming what another adds, moves or removes, may share one run of `cargo xtask workspace lint` and `cargo xtask workspace test`, each having passed its own check by name before it and each committed by itself after it. A shared run that fails is no case's verdict yet: name the case by what the failing test exercises, confirm it by running that test with that case's patch reversed, and where no one case answers for it, run each alone.
 3. Undo a fix where the making shows it sets after all, or where its check fails for a cause that is the stated fix's and not a slip in the making. Reverse exactly its own edits, by `git apply -R` over a patch of them, never by a reset, a checkout or a stash, which take with them what another session wrote. Then restate its entry with what was tried and what the check showed. Never try a second design unasked, and never guess.
 4. Take the measurement an entry asks for where a figure can be recorded as `.claude/rules/documentation.md` states one, a timed one on a quiet machine alone.
-5. File what the run noticed on the way, each a find as `.claude/rules/findings.md` states one, in the findings file of its area or the workspace's and in the form `documentation/roadmap.md` states, all in one commit of prose.
+5. File what the run noticed on the way, each a find as `.claude/rules/findings.md` states one, in the findings file of its area or the workspace's and in the form [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states, all in one commit of prose.
 
 ## The cases that set
 
-Put every case whose fix sets, and every lift, to the user in one round of structured questions: what the code shows and whether it still bears each entry out, the alternatives with their trade-offs, the one recommended first, the steps each ending on its check, and for a lift the spec's open line and what the spec will state. Each answer is the go-ahead for that case.
+Put every case whose fix sets, and every lift, to the user in one round of structured questions: what the code shows and whether it still bears each entry out, the alternatives with their trade-offs, the one recommended first, the steps each ending on its check, and for a lift the spec's place in the work order and what it will state. Each answer is the go-ahead for that case.
 
 - **A fix** is made as a case that follows is, a step at a time where it takes several. Where a step meets a decision the case did not settle, stop and ask. Under `supervised`, each step ends on a checkpoint — what changed, what its check said, what comes next — and the commit waits for the user's word on the result.
-- **A lift** writes the spec and its open line as the opening paragraphs of `documentation/roadmap.md` state, or rewrites the open spec that already covers the case, deletes the case's entries, and presents the draft.
+- **A lift** writes the spec as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states, or rewrites the open spec that already covers the case, deletes the case's entries, and presents the draft.
 - **An answer the session does not carry out** is written into its entry, which states one fix from then on.
 
 ## Close

@@ -51,4 +51,4 @@ The site cannot ride on the error as `ArgumentSite` does for a lambda. The confl
 
 ## Completion and retirement
 
-The solver's rustdoc states that a constraint's origin is live and a scheme's constraint has none; why, and what was rejected, goes to a decision under `documentation/design/theory/`; the fixture and the solver test hold the behaviour. The line in `documentation/roadmap.md` becomes a checked summary linking that decision, and this file is deleted.
+The solver's rustdoc states that a constraint's origin is live and a scheme's constraint has none; why, and what was rejected, goes to a decision under `documentation/design/theory/`; the fixture and the solver test hold the behaviour. Once those contracts are recorded and no reference to this specification remains, this file is deleted.

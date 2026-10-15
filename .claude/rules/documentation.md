@@ -13,8 +13,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 | `README.md` | What Curios is, the happy path to running one, and where to go next |
 | `documentation/usage.md` | The command line and packages: every subcommand, flag, manifest key, exit code and file |
 | `documentation/syntax.md` | The surface language, complete |
-| `documentation/roadmap.md` | What exists and what is pending, one line each |
-| `documentation/roadmap/**` | An area's findings, and the specification of a pending item |
+| `documentation/roadmap/**` | Pending work: an area's findings and specifications, each owning its status |
 | `documentation/design/**` | One cross-cutting decision per file, in a directory per subject, or at the root for the workspace as a whole; a decision scoped to one crate is its `README.md`'s |
 | `xboard/src/board/` | The soundness board: one part of the judgment per file, with a ticket for every proof of `False` found in it; the claim and its boundaries are `documentation/design/soundness/the-soundness-board.md`'s |
 | Crate `README.md` | The crate's mission and its crate-scoped decisions |
@@ -35,8 +34,6 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 
 ## Roadmap
 
-- When work lands, rewrite the item it extends; don't stack new ones beside it. Open an unchecked item only for a limitation named from the code — what is refused, and where.
-- A file under `documentation/roadmap/` opens its name with the order its work is taken in: `000-findings.md`, then a spec numbered from `100` where the code breaks a rule a document states, then one numbered from `200` for a capability or a cost. `documentation/roadmap.md`'s opening paragraphs state the scheme.
-- A measurement a spec depends on is written into the spec as a protocol precise enough to rebuild its scripts; the scripts are not checked in.
+The filing, refinement and retirement rules are [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md)'s.
 
 An absolute Curios path leads with its slash — `/std/Tui/Layout` — while a file path such as `curios-std/src/Tui.crs` keeps its form.

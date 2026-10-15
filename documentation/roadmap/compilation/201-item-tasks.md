@@ -70,4 +70,4 @@ Parallelizing the Ersd and Cont optimizers or the emitter beyond Cranelift; cach
 - A compilation is the same bytes for every number of workers, and the gate holds it.
 - The prelude build and a program's compilation use every worker the product supplies, with the measured speedup recorded.
 
-Before this specification is deleted, its contracts are recorded in the owning crates' READMEs and rustdoc, its decision and its rejected alternatives are a design decision in `documentation/design/compilation/`, `.claude/rules/`' area routing names the executor, the roadmap entry is a checked summary, and no reference to this filename remains.
+Before this specification is deleted, its contracts are recorded in the owning crates' READMEs and rustdoc, its decision and its rejected alternatives are a design decision in `documentation/design/compilation/`, `.claude/rules/`' area routing names the executor, no reference to this filename remains.
