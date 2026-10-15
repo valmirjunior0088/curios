@@ -7,7 +7,10 @@ use {
     },
     curios_abi::event,
     rustix::{
-        event::{PollFd, PollFlags, Timespec, poll},
+        event::{
+            FdSetElement, FdSetIter, PollFd, PollFlags, Timespec, fd_set_insert,
+            fd_set_num_elements, poll, select,
+        },
         fs::{OFlags, fcntl_getfl, fcntl_setfl},
         io::Errno,
         pipe::PIPE_BUF,
@@ -25,7 +28,7 @@ use {
         io::{self, Error, ErrorKind, Read, Write, stderr, stdin, stdout},
         net::{Shutdown, SocketAddr},
         os::{
-            fd::{AsFd, BorrowedFd, OwnedFd},
+            fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
             unix::{
                 ffi::{OsStrExt, OsStringExt},
                 fs::{FileTypeExt, OpenOptionsExt},
@@ -140,9 +143,106 @@ fn descriptor<'a>(
     }
 }
 
-/// What a wait on some handles holds out for: each watch's descriptor polled for what it asks, beside the watch's place among the handles, and the earliest instant one of the timers fires at.
+/// One descriptor a wait watches, and what it asks of it.
+struct Watched<'a> {
+    fd: BorrowedFd<'a>,
+    asked: PollFlags,
+}
+
+/// Wait until a descriptor of `watched` is ready for what it asks, has failed or has hung up, or until `deadline` passes — at once where `deadline` is now — and say which by their places among `watched`.
+///
+/// The wait is a `poll(2)`. Where the poll answers that it cannot watch a descriptor the wait holds open, as macOS's does a character device that is no terminal, the wait is made again with `select(2)`, which watches every kind of descriptor, so the poll's own answer decides and no platform is named. An interruption is not readiness, so either resumes for what is left of the wait; any other failure is the system refusing it, which the caller decides how to answer.
+fn ready(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
+    let mut polls = watched
+        .iter()
+        .map(|watched| PollFd::from_borrowed_fd(watched.fd, watched.asked))
+        .collect::<Vec<_>>();
+
+    retried(deadline, |timeout| poll(&mut polls, timeout).map(drop))?;
+
+    if polls
+        .iter()
+        .any(|poll| poll.revents().contains(PollFlags::NVAL))
+    {
+        return selected(watched, deadline);
+    }
+
+    Ok(polls
+        .iter()
+        .enumerate()
+        .filter(|(_, poll)| !poll.revents().is_empty())
+        .map(|(place, _)| place)
+        .collect())
+}
+
+/// Run `wait` for what is left until `deadline`, and again after each interruption.
+fn retried(
+    deadline: Option<Instant>,
+    mut wait: impl FnMut(Option<&Timespec>) -> Result<(), Errno>,
+) -> Result<(), Errno> {
+    loop {
+        let timeout = deadline.map(|deadline| {
+            let left = deadline.saturating_duration_since(Instant::now());
+
+            Timespec {
+                tv_sec: left.as_secs() as _,
+                tv_nsec: left.subsec_nanos() as _,
+            }
+        });
+
+        match wait(timeout.as_ref()) {
+            Err(Errno::INTR) => {}
+            outcome => return outcome,
+        }
+    }
+}
+
+/// [`ready`]'s wait made with `select(2)`, for descriptors a poll cannot watch. A descriptor that has failed or hung up is ready for what it was asked, as a poll reports it, since the call that follows says why.
+fn selected(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
+    let bound = watched
+        .iter()
+        .map(|watched| watched.fd.as_raw_fd() + 1)
+        .max()
+        .unwrap_or(0);
+    let length = fd_set_num_elements(watched.len(), bound);
+    let mut readers = vec![FdSetElement::default(); length];
+    let mut writers = vec![FdSetElement::default(); length];
+
+    retried(deadline, |timeout| {
+        readers.fill(FdSetElement::default());
+        writers.fill(FdSetElement::default());
+        for watched in watched {
+            if watched.asked.contains(PollFlags::IN) {
+                fd_set_insert(&mut readers, watched.fd.as_raw_fd());
+            }
+            if watched.asked.contains(PollFlags::OUT) {
+                fd_set_insert(&mut writers, watched.fd.as_raw_fd());
+            }
+        }
+
+        // SAFETY: every descriptor in the two sets is one of `watched`'s `BorrowedFd`s, each open for as long as `watched` is borrowed, which outlasts this call.
+        unsafe { select(bound, Some(&mut readers), Some(&mut writers), None, timeout) }.map(drop)
+    })?;
+
+    let readable = FdSetIter::new(&readers).collect::<Vec<_>>();
+    let writable = FdSetIter::new(&writers).collect::<Vec<_>>();
+
+    Ok(watched
+        .iter()
+        .enumerate()
+        .filter(|(_, watched)| {
+            let fd = watched.fd.as_raw_fd();
+
+            watched.asked.contains(PollFlags::IN) && readable.contains(&fd)
+                || watched.asked.contains(PollFlags::OUT) && writable.contains(&fd)
+        })
+        .map(|(place, _)| place)
+        .collect())
+}
+
+/// What a wait on some handles holds out for: each watch's descriptor and what it asks of it, beside the watch's place among the handles, and the earliest instant one of the timers fires at.
 struct Waits<'a> {
-    polls: Vec<PollFd<'a>>,
+    watched: Vec<Watched<'a>>,
     places: Vec<usize>,
     deadline: Option<Instant>,
 }
@@ -156,7 +256,7 @@ impl<'a> Waits<'a> {
         now: Instant,
     ) -> (Self, Vec<u8>) {
         let mut waits = Self {
-            polls: Vec::new(),
+            watched: Vec::new(),
             places: Vec::new(),
             deadline: None,
         };
@@ -166,8 +266,8 @@ impl<'a> Waits<'a> {
             match table.get(handle) {
                 Some(OsResource::Watch { target, asked }) => {
                     match descriptor(table, streams, target, *asked) {
-                        Some((fd, watch)) => {
-                            waits.polls.push(PollFd::from_borrowed_fd(fd, watch));
+                        Some((fd, asked)) => {
+                            waits.watched.push(Watched { fd, asked });
                             waits.places.push(place);
                         }
                         None => reports[place] = event::READY,
@@ -185,31 +285,11 @@ impl<'a> Waits<'a> {
         (waits, reports)
     }
 
-    /// Poll the watches until one fires or the deadline passes — at once where `deadline` is `now` — and say which watch fired by its handle's place. An interruption is not readiness, so the poll resumes for what is left of the wait; any other failure is the system refusing the poll, which the caller decides how to answer.
-    fn poll(&mut self, deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
-        loop {
-            let timeout = deadline.map(|deadline| {
-                let left = deadline.saturating_duration_since(Instant::now());
-
-                Timespec {
-                    tv_sec: left.as_secs() as _,
-                    tv_nsec: left.subsec_nanos() as _,
-                }
-            });
-
-            match poll(&mut self.polls, timeout.as_ref()) {
-                Ok(_) => break,
-                Err(Errno::INTR) => {}
-                Err(errno) => return Err(errno),
-            }
-        }
-
-        Ok(self
-            .polls
-            .iter()
-            .zip(&self.places)
-            .filter(|(poll, _)| !poll.revents().is_empty())
-            .map(|(_, place)| *place)
+    /// Wait on the watches until one is ready or the deadline passes — at once where `deadline` is `now` — and say which by its handle's place, as [`ready`] waits.
+    fn poll(&self, deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
+        Ok(ready(&self.watched, deadline)?
+            .into_iter()
+            .map(|index| self.places[index])
             .collect())
     }
 }
@@ -650,7 +730,7 @@ impl HostOps for OsHost {
     fn handle_ready(&self, on: Vec<Handle>) -> Vec<u8> {
         let table = self.table.lock().unwrap();
         let streams = (stdin(), stdout(), stderr());
-        let (mut waits, mut reports) = Waits::of(&table, &streams, &on, Instant::now());
+        let (waits, mut reports) = Waits::of(&table, &streams, &on, Instant::now());
 
         // A poll the system refuses says nothing of any watch, so each reports ready, and its waiter wakes into the call that says why.
         let fired = waits
@@ -669,7 +749,7 @@ impl HostOps for OsHost {
 
         // A poll ends at a watch's event or at the soonest timer's instant; one the system ends before either is polled again.
         loop {
-            let (mut waits, reports) = Waits::of(&table, &streams, &on, Instant::now());
+            let (waits, reports) = Waits::of(&table, &streams, &on, Instant::now());
             if reports.contains(&event::READY) {
                 return Ok(());
             }
@@ -1102,20 +1182,14 @@ impl HostOps for OsHost {
     }
 }
 
-/// Whether `fd` would take a write now, as [`readable_now`] asks of a read; a poll the system refuses answers yes, so the write that follows says why.
+/// Whether `fd` would take a write now, as [`readable_now`] asks of a read; a wait the system refuses answers yes, so the write that follows says why.
 fn writable_now(fd: BorrowedFd<'_>) -> bool {
-    let mut polls = [PollFd::from_borrowed_fd(fd, PollFlags::OUT)];
-    let now = Timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
+    let watched = [Watched {
+        fd,
+        asked: PollFlags::OUT,
+    }];
 
-    match poll(&mut polls, Some(&now)) {
-        Ok(_) => polls[0]
-            .revents()
-            .intersects(PollFlags::OUT | PollFlags::HUP | PollFlags::ERR),
-        Err(_) => true,
-    }
+    ready(&watched, Some(Instant::now())).map_or(true, |ready| !ready.is_empty())
 }
 
 /// Whether `fd` is a pipe or a socket, the descriptors a ready poll promises only `PIPE_BUF` bytes of room on; one whose kind cannot be read is taken to be one, which only bounds its writes.
@@ -1128,20 +1202,14 @@ fn pipe_or_socket(fd: BorrowedFd<'_>) -> bool {
     })
 }
 
-/// Whether `fd` has input to read right now: a zero-timeout poll for `IN`, with a hang-up or an error counting as readable, since a read then answers at once with the end of the stream or the fault. A failed poll answers `true`, so the read runs and reports the fault itself.
+/// Whether `fd` has input to read right now: a wait for `IN` that ends at once ([`ready`]), with a hang-up or an error counting as readable, since a read then answers at once with the end of the stream or the fault. A wait the system refuses answers `true`, so the read runs and reports the fault itself.
 fn readable_now(fd: BorrowedFd<'_>) -> bool {
-    let mut polls = [PollFd::from_borrowed_fd(fd, PollFlags::IN)];
-    let now = Timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
+    let watched = [Watched {
+        fd,
+        asked: PollFlags::IN,
+    }];
 
-    match poll(&mut polls, Some(&now)) {
-        Ok(_) => polls[0]
-            .revents()
-            .intersects(PollFlags::IN | PollFlags::HUP | PollFlags::ERR),
-        Err(_) => true,
-    }
+    ready(&watched, Some(Instant::now())).map_or(true, |ready| !ready.is_empty())
 }
 
 /// Whether `error` carries the OS errno `errno` — the read for the connect statuses that have no `ErrorKind`.

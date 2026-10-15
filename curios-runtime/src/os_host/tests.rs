@@ -163,6 +163,43 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
     assert!(closed);
 }
 
+/// The gates tell a descriptor of every kind ready as it is, the null device included, which macOS's poll cannot watch, so its gates wait on it with `select`: the null device reads its end and takes a write at once, so it is ready both ways.
+#[test]
+fn the_null_device_is_ready_to_read_and_to_write() {
+    let reader = File::open("/dev/null").expect("the null device opens to read");
+    let writer = OpenOptions::new()
+        .write(true)
+        .open("/dev/null")
+        .expect("the null device opens to write");
+
+    assert!(readable_now(reader.as_fd()));
+    assert!(writable_now(writer.as_fd()));
+}
+
+/// A wait made with `select` finds what one made with a poll finds, so the descriptors a poll cannot watch are waited on alike: a pipe's write end is ready to write, and its read end ready to read once a byte is there and not before.
+#[test]
+fn a_select_finds_a_pipe_ready_as_a_poll_does() {
+    let (reader, writer) = std::io::pipe().expect("a pipe");
+    let watched = [
+        Watched {
+            fd: reader.as_fd(),
+            asked: PollFlags::IN,
+        },
+        Watched {
+            fd: writer.as_fd(),
+            asked: PollFlags::OUT,
+        },
+    ];
+    let now = || Some(Instant::now());
+
+    assert_eq!(selected(&watched, now()), Ok(vec![1]));
+    assert_eq!(ready(&watched, now()), Ok(vec![1]));
+
+    rustix::io::write(&writer, b"x").expect("the pipe takes a byte");
+    assert_eq!(selected(&watched, now()), Ok(vec![0, 1]));
+    assert_eq!(ready(&watched, now()), Ok(vec![0, 1]));
+}
+
 /// The standard output gate, exercised on a pipe of its own: a pipe with room takes a write, one its writer has filled does not until its reader drains it, and a pipe's writes are bounded where a device's are not.
 #[test]
 fn writable_now_follows_a_pipe_end_as_its_reader_drains_it() {
