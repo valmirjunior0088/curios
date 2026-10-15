@@ -269,18 +269,18 @@ fn a_premise_naming_a_constant_beside_a_binder_resolves_through_the_constant_edg
         satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Io, M)) => Lift(Io, (A: Type) => Try(M, E, A)) {
             lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
         }
-        let body: Try(Io, Nat, Nat) =
+        let body() -> Try(Io, Nat, Nat) =
             let _ = print("a")!;
             let _ = Io/yield()!;
             let _ = print("b")!;
             pure(3);
-        let program: Io({}) =
-            let r = body.0!;
+        let program() -> Io({}) =
+            let r = body().0!;
             match r
             | success(n) => print(Nat/to_str(n))
             | failure(_) => print("failed")
             end;
-        program
+        program()
         "#;
 
     assert_eq!(run(source), b"ab3");

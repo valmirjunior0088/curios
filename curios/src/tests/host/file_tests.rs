@@ -9,10 +9,12 @@ use {
 fn read_all_reads_a_seeded_file() {
     let source = r#"
         use /std/{File, Path, Try, Io};
-        match Try/run(File/read_all(Path/of_str("data.txt")))!
-        | success(contents) => Io/bind(Io/Write/write(Io/stdout, contents), (_) => Io/pure(()))
-        | failure(_) => /std/print("error")
-        end
+        let entry() -> /std/Io({}) =
+            match Try/run(File/read_all(Path/of_str("data.txt")))!
+            | success(contents) => Io/bind(Io/Write/write(Io/stdout, contents), (_) => Io/pure(()))
+            | failure(_) => /std/print("error")
+            end;
+        entry()
         "#;
 
     let (system, io) = MockHost::builder()
@@ -26,26 +28,28 @@ fn read_all_reads_a_seeded_file() {
 fn read_all_of_a_missing_path_is_not_found() {
     let source = r#"
         use /std/{File, Path, Try, Io};
-        match Try/run(File/read_all(Path/of_str("nope.txt")))!
-        | success(_) => /std/print("contents")
-        | failure(e) =>
-            match e : (_) => /std/Io({})
-            | not_found() => /std/print("not found")
-            | permission_denied() => /std/print("denied")
-            | exists() => /std/print("exists")
-            | refused() => /std/print("refused")
-            | tls() => /std/print("tls")
-            | would_block() => /std/print("would block")
-            | not_empty() => /std/print("not empty")
-            | is_directory() => /std/print("is a directory")
-            | not_directory() => /std/print("not a directory")
-            | reset() => /std/print("reset")
-            | broken_pipe() => /std/print("broken pipe")
-            | too_long() => /std/print("too long")
-            | not_text(_) => /std/print("not text")
-            | other(_) => /std/print("other")
-            end
-        end
+        let entry() -> /std/Io({}) =
+            match Try/run(File/read_all(Path/of_str("nope.txt")))!
+            | success(_) => /std/print("contents")
+            | failure(e) =>
+                match e : (_) => /std/Io({})
+                | not_found() => /std/print("not found")
+                | permission_denied() => /std/print("denied")
+                | exists() => /std/print("exists")
+                | refused() => /std/print("refused")
+                | tls() => /std/print("tls")
+                | would_block() => /std/print("would block")
+                | not_empty() => /std/print("not empty")
+                | is_directory() => /std/print("is a directory")
+                | not_directory() => /std/print("not a directory")
+                | reset() => /std/print("reset")
+                | broken_pipe() => /std/print("broken pipe")
+                | too_long() => /std/print("too long")
+                | not_text(_) => /std/print("not text")
+                | other(_) => /std/print("other")
+                end
+            end;
+        entry()
         "#;
 
     assert_eq!(run(source), b"not found");
@@ -60,10 +64,12 @@ fn read_all_text_answers_text_and_refuses_bytes_that_are_none() {
     ] {
         let source = r#"
             use /std/{File, Path, Show, Try, Io, print};
-            match Try/run(File/read_all_text(Path/of_str("data.txt")))!
-            | success(text) => print(text)
-            | failure(why) => print(Show/show(why))
-            end
+            let entry() -> /std/Io({}) =
+                match Try/run(File/read_all_text(Path/of_str("data.txt")))!
+                | success(text) => print(text)
+                | failure(why) => print(Show/show(why))
+                end;
+            entry()
             "#;
 
         let (system, io) = MockHost::builder().files([("data.txt", contents)]).build();
@@ -76,10 +82,12 @@ fn read_all_text_answers_text_and_refuses_bytes_that_are_none() {
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Path, Try, Io};
-        match Try/run(File/with(Path/of_str("out.txt"), File/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))!
-        | success(_) => /std/print("ok")
-        | failure(_) => /std/print("error")
-        end
+        let entry() -> /std/Io({}) =
+            match Try/run(File/with(Path/of_str("out.txt"), File/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))!
+            | success(_) => /std/print("ok")
+            | failure(_) => /std/print("error")
+            end;
+        entry()
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -93,13 +101,15 @@ fn file_with_write_mode_persists_through_close() {
 fn read_pulls_bytes_inside_the_bracket() {
     let source = r#"
         use /std/{File, Path, Str, Bytes, Try, Io};
-        let bytes = Try/run(File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
-            let c = File/read(f, 1024)!;
-            Try/pure(match c | chunk(b, @_) => b | eof() => x[] | error(_) => x[] end)))!;
-        match bytes
-        | success(b) => Io/bind(Io/Write/write(Io/stdout, b), (_) => Io/pure(()))
-        | failure(_) => /std/print("error")
-        end
+        let entry() -> /std/Io({}) =
+            let bytes = Try/run(File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
+                let c = File/read(f, 1024)!;
+                Try/pure(match c | chunk(b, @_) => b | eof() => x[] | error(_) => x[] end)))!;
+            match bytes
+            | success(b) => Io/bind(Io/Write/write(Io/stdout, b), (_) => Io/pure(()))
+            | failure(_) => /std/print("error")
+            end;
+        entry()
         "#;
 
     let (system, io) = MockHost::builder()
@@ -120,13 +130,13 @@ fn a_bracketed_file_reads_through_its_stream_witness_across_a_suspension() {
                 let _ = Io/yield()!;
                 let c = Lift/lift(Io/Read/read(f, 1024))!;
                 Try/pure(match c | chunk(b, @_) => b | _ => x[] end));
-        let main: Io({}) =
+        let main() -> Io({}) =
             let r = Try/run(program)!;
             match r
             | success(b) => Io/bind(Io/Write/write(Io/stdout, b), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
-        main
+        main()
         "#;
 
     let (system, io) = MockHost::builder()

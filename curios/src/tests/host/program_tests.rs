@@ -35,11 +35,11 @@ fn ended(source: &str, files: &[(&str, &str)]) -> (u8, Vec<u8>, Vec<u8>) {
 /// A program over a file it reads and prints the length of, closed by a description that may fail.
 const READS_A_FILE: &str = r#"
     use /std/{Nat, Bytes, Io, Try, File, Path, print};
-    let main: Try(Io, Io/Error, {}) =
+    let main() -> Try(Io, Io/Error, {}) =
+        let _ = print("before|")!;
         let held = File/read_all(Path/of_str("notes.txt"))!;
         print(Nat/to_str(Bytes/len(held)));
-    let _ = print("before|")!;
-    main
+    main()
     "#;
 
 #[test]
@@ -111,11 +111,12 @@ fn the_arms_of_a_match_that_closes_a_program_are_each_performed() {
                 let _ = File/read_all(Path/of_str(name))!;
                 print("read");
             let choice: Nat = {choice};
+            let named() -> Try(Io, Io/Error, {{}}) =
+                let name = Io/pure("notes.txt")!;
+                read(name);
             match choice
             | 0 => print("usage")
-            | _ =>
-                let name = Io/pure("notes.txt")!;
-                read(name)
+            | _ => named()
             end
             "#
         );
@@ -126,15 +127,16 @@ fn the_arms_of_a_match_that_closes_a_program_are_each_performed() {
     }
 }
 
-/// The top level is an `Io` region whatever closes it: a step that may fail is refused there, as it is in any `Io` region.
+/// An `Io` function cannot sequence a fallible action: no reverse edge from `Try` to `Io` discards its error.
 #[test]
-fn a_step_that_may_fail_is_refused_at_the_top_level_of_a_program_that_closes_in_a_try() {
+fn a_step_that_may_fail_is_refused_in_an_io_function() {
     let error = typecheck(
         r#"
-        use /std/{Io, Try, File, Path, print};
-        let main: Try(Io, Io/Error, {}) = print("read");
-        let _ = File/read_all(Path/of_str("notes.txt"))!;
-        main
+        use /std/{Io, Try, File, Path};
+        let step() -> Io({}) =
+            let _ = File/read_all(Path/of_str("notes.txt"))!;
+            Io/pure(());
+        step()
         "#,
     )
     .expect_err("a `Try` has no edge into `Io`");
@@ -173,10 +175,13 @@ fn a_description_that_yields_a_value_closes_no_program() {
     );
 }
 
-/// A program may close with `()`, having done what it does by its last `!`.
+/// A function ends with an explicit pure description after its last action.
 #[test]
-fn a_program_that_closes_with_unit_ends_with_what_its_actions_did() {
-    let (code, output, errors) = ended("use /std/{print};\nlet _ = print(\"done\")!;\n()\n", &[]);
+fn a_program_that_closes_with_a_pure_description_ends_with_what_its_actions_did() {
+    let (code, output, errors) = ended(
+        "use /std/{Io, print};\nlet main() -> Io({}) = let _ = print(\"done\")!; Io/pure(());\nmain()\n",
+        &[],
+    );
 
     assert_eq!(code, 0);
     assert_eq!(errors, b"");
@@ -197,14 +202,14 @@ fn a_program_reads_a_number_and_prints_its_double() {
     const DOUBLES: &str = r#"
         use /std/{Nat, Str, Option, Io, Try, print};
         use /std/Io/{Reader};
-        let main: Try(Io, Io/Error, {}) =
+        let main() -> Try(Io, Io/Error, {}) =
             let input = Reader/new(Io/stdin)!;
             let line = Reader/line_text(input)!;
             match Option/bind(line, Nat/of_str)
             | some(n) => print(Nat/to_str(n * 2))
             | none() => print("not a number")
             end;
-        main
+        main()
         "#;
 
     for (typed, status, written) in [

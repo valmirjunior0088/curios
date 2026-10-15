@@ -9,8 +9,10 @@ use {
 #[test]
 fn random_bin_returns_requested_length() {
     let output = run(r#"
-let _ = std/Io/Write/write(std/Io/stdout, /std/rand/bytes(8)!)!;
-/std/Io/pure(())
+let entry() -> /std/Io({}) =
+    let _ = std/Io/Write/write(std/Io/stdout, /std/rand/bytes(8)!)!;
+    /std/Io/pure(());
+entry()
 "#);
     assert_eq!(output.len(), 8);
 }
@@ -21,11 +23,13 @@ fn nat_of_str_returns_option() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Option, Io};
-        let ok = Option/unwrap_or(Nat/of_str("123"), 0);
-        let bad = Option/unwrap_or(Nat/of_str("12a"), 7);
-        let empty = Option/unwrap_or(Nat/of_str(""), 9);
-        let _ = /std/print(Nat/to_str(Nat/add(Nat/add(ok, bad), empty)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let ok = Option/unwrap_or(Nat/of_str("123"), 0);
+            let bad = Option/unwrap_or(Nat/of_str("12a"), 7);
+            let empty = Option/unwrap_or(Nat/of_str(""), 9);
+            let _ = /std/print(Nat/to_str(Nat/add(Nat/add(ok, bad), empty)))!;
+            /std/Io/pure(());
+        entry()
         "#),
         b"139"
     );
@@ -37,11 +41,13 @@ fn int_of_str_returns_option() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Int, Str, Option, Io};
-        let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
-        let pos = Int/abs(Option/unwrap_or(Int/of_str("+7"), +0));
-        let bad = Int/abs(Option/unwrap_or(Int/of_str("x"), +3));
-        let _ = /std/print(Nat/to_str(Nat/add(Nat/add(neg, pos), bad)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
+            let pos = Int/abs(Option/unwrap_or(Int/of_str("+7"), +0));
+            let bad = Int/abs(Option/unwrap_or(Int/of_str("x"), +3));
+            let _ = /std/print(Nat/to_str(Nat/add(Nat/add(neg, pos), bad)))!;
+            /std/Io/pure(());
+        entry()
         "#),
         b"15"
     );
@@ -55,12 +61,14 @@ fn flt_of_str_returns_option() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Flt, Str, Option, Io};
-        let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
-        let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
-        let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
-        let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
-        let _ = /std/print(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad))))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
+            let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
+            let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
+            let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
+            let _ = /std/print(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad))))!;
+            /std/Io/pure(());
+        entry()
         "#),
         b"1017"
     );
@@ -71,12 +79,14 @@ fn option_result_char_helpers() {
     assert_eq!(
         run(r#"
         use /std/{Option, Result, Char, Nat, Str, Io};
-        let opt = Option/unwrap_or(Option/map(Option/some(4), (x : Nat) => Nat/add(x, 1)), 0);
-        let res0 : Result(Nat, Nat) = Result/success(5);
-        let res = Result/unwrap_or(Result/map_success(res0, (x : Nat) => Nat/mul(x, 2)), 0);
-        let up = Char/to_ascii_upper('a');
-        let _ = /std/print(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up))))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let opt = Option/unwrap_or(Option/map(Option/some(4), (x : Nat) => Nat/add(x, 1)), 0);
+            let res0 : Result(Nat, Nat) = Result/success(5);
+            let res = Result/unwrap_or(Result/map_success(res0, (x : Nat) => Nat/mul(x, 2)), 0);
+            let up = Char/to_ascii_upper('a');
+            let _ = /std/print(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up))))!;
+            /std/Io/pure(());
+        entry()
         "#),
         // opt = 5, res = 10, up = 'A' = 65  ->  80
         b"80",
@@ -89,11 +99,13 @@ fn clock_diff_of_two_distinct_now_readings() {
     let (system, io) = MockHost::builder().mono([(100, 500), (130, 900)]).build();
     run_text(
         r#"
-        let a = /std/time/Instant/now()!;
-        let b = /std/time/Instant/now()!;
-        let d = /std/time/Instant/diff(b, a);
-        let _ = /std/print(/std/Nat/to_str(/std/time/Duration/secs(d)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let a = /std/time/Instant/now()!;
+            let b = /std/time/Instant/now()!;
+            let d = /std/time/Instant/diff(b, a);
+            let _ = /std/print(/std/Nat/to_str(/std/time/Duration/secs(d)))!;
+            /std/Io/pure(());
+        entry()
         "#,
         system,
     )
@@ -112,15 +124,17 @@ fn a_timestamp_reads_the_wall_clock_canonicalises_and_shows_as_epoch_seconds() {
         r#"
         use /std/{Str, Nat, Bool, Show};
         use /std/time/{Timestamp, Duration};
-        let a = Timestamp/now()!;
-        let b = Timestamp/now()!;
-        /std/print(Str/join(" ", [
-            Nat/to_str(Duration/secs(Timestamp/diff(b, a))),
-            Show/show(a),
-            Show/show(Timestamp/of_unix(1000000000, 1500000000)),
-            Bool/to_str(Timestamp/before(a, b)),
-            Bool/to_str(a == Timestamp/of_unix(1000000100, 500))
-        ]))
+        let entry() -> /std/Io({}) =
+            let a = Timestamp/now()!;
+            let b = Timestamp/now()!;
+            /std/print(Str/join(" ", [
+                Nat/to_str(Duration/secs(Timestamp/diff(b, a))),
+                Show/show(a),
+                Show/show(Timestamp/of_unix(1000000000, 1500000000)),
+                Bool/to_str(Timestamp/before(a, b)),
+                Bool/to_str(a == Timestamp/of_unix(1000000100, 500))
+            ]));
+        entry()
         "#,
         system,
     )
@@ -137,11 +151,13 @@ fn clock_mono_reads_scripted_elapsed() {
     let (system, io) = MockHost::builder().mono([(2, 7), (5, 9)]).build();
     run_text(
         r#"
-        let earlier = /std/time/Instant/now()!;
-        let later = /std/time/Instant/now()!;
-        let e = /std/time/Instant/diff(later, earlier);
-        let _ = /std/print(/std/Nat/to_str(/std/time/Duration/secs(e)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let earlier = /std/time/Instant/now()!;
+            let later = /std/time/Instant/now()!;
+            let e = /std/time/Instant/diff(later, earlier);
+            let _ = /std/print(/std/Nat/to_str(/std/time/Duration/secs(e)))!;
+            /std/Io/pure(());
+        entry()
         "#,
         system,
     )
@@ -155,12 +171,14 @@ fn a_cell_polls_empty_until_its_first_fill() {
     assert_eq!(
         run(r#"
             use /std/{Cell, Nat, Option, Io, print};
-            let cell = Cell/new(@Nat)!;
-            let before = Cell/poll(cell)!;
-            let _ = print(match before | none() => "empty " | some(_) => "full " end)!;
-            let accepted = Cell/fill(cell, 42)!;
-            let _ = print(match accepted | true => "yes " | false => "no " end)!;
-            print(Nat/to_str(Option/unwrap_or(Cell/poll(cell)!, 0)))
+            let entry() -> /std/Io({}) =
+                let cell = Cell/new(@Nat)!;
+                let before = Cell/poll(cell)!;
+                let _ = print(match before | none() => "empty " | some(_) => "full " end)!;
+                let accepted = Cell/fill(cell, 42)!;
+                let _ = print(match accepted | true => "yes " | false => "no " end)!;
+                print(Nat/to_str(Option/unwrap_or(Cell/poll(cell)!, 0)));
+            entry()
         "#),
         b"empty yes 42",
     );
@@ -171,11 +189,13 @@ fn a_later_fill_preserves_the_first_value() {
     assert_eq!(
         run(r#"
             use /std/{Cell, Nat, Option, Io, print};
-            let cell = Cell/new()!;
-            let _ = Cell/fill(cell, 7)!;
-            let accepted = Cell/fill(cell, 99)!;
-            let _ = print(match accepted | true => "yes " | false => "no " end)!;
-            print(Nat/to_str(Option/unwrap_or(Cell/poll(cell)!, 0)))
+            let entry() -> /std/Io({}) =
+                let cell = Cell/new()!;
+                let _ = Cell/fill(cell, 7)!;
+                let accepted = Cell/fill(cell, 99)!;
+                let _ = print(match accepted | true => "yes " | false => "no " end)!;
+                print(Nat/to_str(Option/unwrap_or(Cell/poll(cell)!, 0)));
+            entry()
         "#),
         b"no 7",
     );
@@ -186,10 +206,12 @@ fn filling_one_cell_leaves_another_empty() {
     assert_eq!(
         run(r#"
             use /std/{Cell, Nat, Option, Io, print};
-            let a = Cell/new(@Nat)!;
-            let b = Cell/new(@Nat)!;
-            let _ = Cell/fill(a, 1)!;
-            print(match Cell/poll(b)! | none() => "empty" | some(_) => "full" end)
+            let entry() -> /std/Io({}) =
+                let a = Cell/new(@Nat)!;
+                let b = Cell/new(@Nat)!;
+                let _ = Cell/fill(a, 1)!;
+                print(match Cell/poll(b)! | none() => "empty" | some(_) => "full" end);
+            entry()
         "#),
         b"empty",
     );

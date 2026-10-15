@@ -21,12 +21,14 @@ fn program(body: &str) -> String {
             match r | success(_) => "ok" | failure(e) => Show/show(e) end;
         let text(b: Bytes) -> Str =
             Result/unwrap_or(Str/of_bytes(b), "?");
-        let program: Try(Io, Io/Error, Str) =
+        let program() -> Try(Io, Io/Error, Str) =
             {body};
-        match Try/run(program)!
-        | failure(e) => /std/print(Show/show(e))
-        | success(s) => /std/print(s)
-        end
+        let entry() -> /std/Io({{}}) =
+            match Try/run(program())!
+            | failure(e) => /std/print(Show/show(e))
+            | success(s) => /std/print(s)
+            end;
+        entry()
         "#
     )
 }

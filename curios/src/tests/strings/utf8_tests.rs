@@ -82,8 +82,10 @@ fn slice_proof_aligns_with_byte_walk() {
                     end
                 end;
             go(d);
-        let _ = Io/Write/write(Io/stdout, x[0x6F, 0x6B])!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Io/Write/write(Io/stdout, x[0x6F, 0x6B])!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -110,10 +112,12 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
         use /std/{Char, Nat, Bytes, Option, List, Io};
         let encode(n : Nat) -> Bytes =
             Char/to_utf8(Option/unwrap_or(Char/of_nat(n), '?'));
-        let _ = Io/Write/write(Io/stdout, Bytes/flatten(List/map(
-            [0, 0x7F, 0x80, 0x3BB, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFFFF,
-             0x10000, 0x1F600, 0x10FFFF], encode)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Io/Write/write(Io/stdout, Bytes/flatten(List/map(
+                [0, 0x7F, 0x80, 0x3BB, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFFFF,
+                 0x10000, 0x1F600, 0x10FFFF], encode)))!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     let expected = scalars
@@ -181,8 +185,10 @@ fn utf8_construction_spike() {
             | x[] => All/empty()
             | x[h, ..t]; ih => All/snoc(/std/Byte/to_nat(h), t, ih)
             end;
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -262,8 +268,10 @@ fn concat_closed_holds_for_the_real_automaton() {
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
             -> Valid(x[..a, ..b]) =
             seq(va, vb);
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -356,8 +364,10 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
             | some(_) => Str/to_bytes("yes")
             | none() => Str/to_bytes("no")
             end;
-        let _ = Io/Write/write(Io/stdout, x[..decide(x[0x68, 0x69]), ..decide(x[0x80])])!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Io/Write/write(Io/stdout, x[..decide(x[0x68, 0x69]), ..decide(x[0x80])])!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"yesno");
 }
@@ -473,8 +483,10 @@ fn decimal_is_ascii_carries_its_proof() {
 
         let decimal_is_ascii(n : Nat) -> Valid(decimal(n).b) =
             decimal(n).v;
-        let _ = Io/Write/write(Io/stdout, decimal(255).b)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Io/Write/write(Io/stdout, decimal(255).b)!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"255");
 }
@@ -609,8 +621,10 @@ fn slice_closed_peels_codepoints() {
         let slice(@b : Bytes, d : Valid(b), x : Nat, n : Nat) -> { r : Bytes, v : Valid(r) } =
             let dropped = drop_n(x, d);
             take_n(n, @dropped.r, dropped.v);
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }

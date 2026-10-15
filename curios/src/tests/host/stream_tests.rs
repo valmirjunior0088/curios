@@ -9,8 +9,10 @@ use {
 fn io_write() {
     assert_eq!(
         run(r#"
-let _ = /std/print("hello")!;
-/std/Io/pure(())
+let entry() -> /std/Io({}) =
+    let _ = /std/print("hello")!;
+    /std/Io/pure(());
+entry()
 "#),
         b"hello"
     );
@@ -20,8 +22,10 @@ let _ = /std/print("hello")!;
 fn io_write_stderr() {
     assert_eq!(
         run(r#"
-let _ = /std/print_err("oops")!;
-/std/Io/pure(())
+let entry() -> /std/Io({}) =
+    let _ = /std/print_err("oops")!;
+    /std/Io/pure(());
+entry()
 "#),
         b"oops"
     );
@@ -32,11 +36,13 @@ fn io_read() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     run_text(
         r#"
-        match std/Io/read(std/Io/stdin, 1024)! : (_) => /std/Io({})
-        | chunk(b, @_) => let w = std/Io/Write/write(std/Io/stdout, b)!; /std/Io/pure(())
-        | eof() => /std/Io/pure(())
-        | error(_) => /std/Io/pure(())
-        end
+        let entry() -> /std/Io({}) =
+            match std/Io/read(std/Io/stdin, 1024)! : (_) => /std/Io({})
+            | chunk(b, @_) => let w = std/Io/Write/write(std/Io/stdout, b)!; /std/Io/pure(())
+            | eof() => /std/Io/pure(())
+            | error(_) => /std/Io/pure(())
+            end;
+        entry()
         "#,
         system,
     )
@@ -55,9 +61,11 @@ fn io_read_short_reads_and_eof() {
             | eof() => /std/print("1")
             | error(_) => /std/print("e")
             end;
-        let _ = show(Io/read(Io/stdin, 2)!)!;
-        let _ = show(Io/read(Io/stdin, 2)!)!;
-        show(Io/read(Io/stdin, 2)!)
+        let entry() -> /std/Io({}) =
+            let _ = show(Io/read(Io/stdin, 2)!)!;
+            let _ = show(Io/read(Io/stdin, 2)!)!;
+            show(Io/read(Io/stdin, 2)!);
+        entry()
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["abc"]).build();
@@ -78,7 +86,7 @@ fn drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
             end;
         let error_first(n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk) =
             Io/pure(Io/Chunk/error(Io/Error/other(247)));
-        let chunk_then_error : Io((n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk)) =
+        let chunk_then_error() -> Io((n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk)) =
             let calls = Cell/new(@{})!;
             Io/pure((n) =>
                 let first = Cell/fill(calls, ())!;
@@ -86,7 +94,7 @@ fn drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 | true => Io/pure(Io/Chunk/chunk(x[0x41, 0x42]))
                 | _ => Io/pure(Io/Chunk/error(Io/Error/other(247)))
                 end);
-        let chunk_then_eof : Io((n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk)) =
+        let chunk_then_eof() -> Io((n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk)) =
             let calls = Cell/new(@{})!;
             Io/pure((n) =>
                 let first = Cell/fill(calls, ())!;
@@ -94,11 +102,13 @@ fn drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 | true => Io/pure(Io/Chunk/chunk(x[0x41, 0x42, 0x43]))
                 | _ => Io/pure(Io/Chunk/eof())
                 end);
-        let _ = print(show(Io/drain(error_first)!))!;
-        let _ = print(" / ")!;
-        let _ = print(show(Io/drain(chunk_then_error!)!))!;
-        let _ = print(" / ")!;
-        print(show(Io/drain(chunk_then_eof!)!))
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Io/drain(error_first)!))!;
+            let _ = print(" / ")!;
+            let _ = print(show(Io/drain(chunk_then_error()!)!))!;
+            let _ = print(" / ")!;
+            print(show(Io/drain(chunk_then_eof()!)!));
+        entry()
         "#;
 
     assert_eq!(run(source), b"error / error / ok:3");
@@ -128,16 +138,18 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
             let piece(b: Bytes) -> Io({{Cell({{}}), Bytes}}) =
                 let c = Cell/new(@{{}})!;
                 Io/pure((c, b));
-            let a = piece(x[])!;
-            let b = piece(Str/to_bytes("a"))!;
-            let c = piece(x[])!;
-            let d = piece(Str/to_bytes("\n"))!;
-            let input = Io/Reader/new(Pieces {{ [a, b, c, d] }})!;
-            let r = Try/run(Io/Reader/until(input, '\n'))!;
-            match r
-            | success(found) => print(Result/unwrap_or(Str/of_bytes(found.bytes), "?"))
-            | failure(_) => print("error")
-            end
+            let entry() -> /std/Io({{}}) =
+                let a = piece(x[])!;
+                let b = piece(Str/to_bytes("a"))!;
+                let c = piece(x[])!;
+                let d = piece(Str/to_bytes("\n"))!;
+                let input = Io/Reader/new(Pieces {{ [a, b, c, d] }})!;
+                let r = Try/run(Io/Reader/until(input, '\n'))!;
+                match r
+                | success(found) => print(Result/unwrap_or(Str/of_bytes(found.bytes), "?"))
+                | failure(_) => print("error")
+                end;
+            entry()
             "#
         )
     };
@@ -168,7 +180,7 @@ fn lines_read_across_the_chunks_a_stream_arrives_in() {
             | success(found) => Result/unwrap_or(Str/of_bytes(found.bytes), "?")
             | failure(_) => "<error>"
             end;
-        let program: Io({}) =
+        let program() -> Io({}) =
             let input = Io/Reader/new(Io/stdin)!;
             let a = Try/run(Io/Reader/line(input))!;
             let b = Try/run(Io/Reader/line(input))!;
@@ -176,7 +188,7 @@ fn lines_read_across_the_chunks_a_stream_arrives_in() {
             let d = Try/run(Io/Reader/line(input))!;
             let e = Try/run(Io/Reader/line(input))!;
             print(Str/join("|", [line(a), line(b), field(c), line(d), line(e)]));
-        program
+        program()
     "#;
 
     let (system, io) = MockHost::builder()

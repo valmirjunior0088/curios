@@ -232,20 +232,22 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
             match e | left() => (t + 1) % 1000003 | right() => (t + 2) % 1000003 end))
     end;
 
-let arguments = /std/proc/args()!;
-let input = /std/List/try_get(arguments, 1);
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(s) =>
-        match Nat/of_str(Str/trim(s)): (_) => Io({})
-        | some(r) => /std/print(Str/concat(Nat/to_str(rounds(r, build(65536, []), 0)), "\n"))
-        | none() => /std/print("bad\n")
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) =>
+            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            | some(r) => /std/print(Str/concat(Nat/to_str(rounds(r, build(65536, []), 0)), "\n"))
+            | none() => /std/print("bad\n")
+            end
+        | failure(_) => /std/print("utf8\n")
         end
-    | failure(_) => /std/print("utf8\n")
-    end
-| none() => /std/print("none\n")
-end
+    | none() => /std/print("none\n")
+    end;
+entry()
 "#;
 
 const FOLD_PAYLOAD: &str = r#"
@@ -270,20 +272,22 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
             match e | left(v) => (t + v) % 1000003 | right(v) => (t + v + 1) % 1000003 end))
     end;
 
-let arguments = /std/proc/args()!;
-let input = /std/List/try_get(arguments, 1);
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(s) =>
-        match Nat/of_str(Str/trim(s)): (_) => Io({})
-        | some(r) => /std/print(Str/concat(Nat/to_str(rounds(r, build(65536, []), 0)), "\n"))
-        | none() => /std/print("bad\n")
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) =>
+            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            | some(r) => /std/print(Str/concat(Nat/to_str(rounds(r, build(65536, []), 0)), "\n"))
+            | none() => /std/print("bad\n")
+            end
+        | failure(_) => /std/print("utf8\n")
         end
-    | failure(_) => /std/print("utf8\n")
-    end
-| none() => /std/print("none\n")
-end
+    | none() => /std/print("none\n")
+    end;
+entry()
 "#;
 
 /// The census's dynamic probe: nanoseconds per element-visit for the bare and payload-carrying folds, and the delta — the price of one boxed scalar field read.

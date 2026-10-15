@@ -106,10 +106,12 @@ fn struct_arm_privacy_is_enforced() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Path, Try};
-        match Try/run(File/with(Path/of_str("log.txt"), File/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))!
-        | success(_) => /std/print("ok")
-        | failure(_) => /std/print("error")
-        end
+        let entry() -> /std/Io({}) =
+            match Try/run(File/with(Path/of_str("log.txt"), File/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))!
+            | success(_) => /std/print("ok")
+            | failure(_) => /std/print("error")
+            end;
+        entry()
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -130,8 +132,10 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
             | some(x) => x + 10
             | _ => 99
             end;
-        let z = Bytes/len(rand/bytes(0)!);
-        /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
+        let entry() -> /std/Io({}) =
+            let z = Bytes/len(rand/bytes(0)!);
+            /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z));
+        entry()
         "#;
 
     // some(5) → 15 via its arm; none() → 99 via the catch-all; 15 + 99 = 114.

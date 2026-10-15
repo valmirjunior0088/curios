@@ -25,11 +25,13 @@ fn written(source: &str, op: HostOp, reply: Vec<RawValue>) -> Vec<u8> {
 }
 
 const OPEN: &str = r#"
-    let r = /std/Try/run(/std/File/open(/std/Path/of_str("a.txt"), /std/File/Mode/read()))!;
-    match r
-    | success(_) => /std/print("opened")
-    | failure(e) => /std/print(/std/Show/show(e))
-    end
+    let entry() -> /std/Io({}) =
+        let r = /std/Try/run(/std/File/open(/std/Path/of_str("a.txt"), /std/File/Mode/read()))!;
+        match r
+        | success(_) => /std/print("opened")
+        | failure(e) => /std/print(/std/Show/show(e))
+        end;
+    entry()
 "#;
 
 /// A failure's padding is inert: the empty token beside a failing status is never read as a handle, and the program reads the failure.
@@ -82,11 +84,13 @@ fn a_file_kind_no_code_names_fails_the_stat() {
     assert_eq!(
         written(
             r#"
-            let r = /std/Try/run(/std/fs/stat(/std/Path/of_str("a")))!;
-            match r
-            | success(_) => /std/print("a kind")
-            | failure(e) => /std/print(/std/Show/show(e))
-            end
+            let entry() -> /std/Io({}) =
+                let r = /std/Try/run(/std/fs/stat(/std/Path/of_str("a")))!;
+                match r
+                | success(_) => /std/print("a kind")
+                | failure(e) => /std/print(/std/Show/show(e))
+                end;
+            entry()
             "#,
             HostOp::FileStat,
             vec![
@@ -107,8 +111,10 @@ fn a_write_that_accepts_nothing_is_a_failure() {
     let code = answering(
         r#"
         use /std/{Io, Handle, proc};
-        let r = Io/Write/write(@Handle, Handle/stdout, x[0x41])!;
-        match r | success(_) => proc/exit(@{}, 0) | failure(_) => proc/exit(@{}, 7) end
+        let entry() -> /std/Io({}) =
+            let r = Io/Write/write(@Handle, Handle/stdout, x[0x41])!;
+            match r | success(_) => proc/exit(@{}, 0) | failure(_) => proc/exit(@{}, 7) end;
+        entry()
         "#,
         MockHost::builder().build().0,
         HostOp::HandleWrite,

@@ -39,11 +39,13 @@ fn every_printed_value_is_the_one_its_proof_states() {
 
         let show(n: Nat) -> Io({}) = print(Str/concat(Nat/to_str(n), "\n"));
 
-        let _ = show(z_of(Eq/refl(@Nat, @41)))!;
-        let _ = show(digits(Swap/mk(@2, @1)))!;
-        let _ = show(pick(Nat, Eq/refl(), 41))!;
-        let _ = show(Bounded { n = 41, ok = /std/Bool/True/qed() }.n + 1)!;
-        show(keep(41, lemma(41)))
+        let entry() -> /std/Io({}) =
+            let _ = show(z_of(Eq/refl(@Nat, @41)))!;
+            let _ = show(digits(Swap/mk(@2, @1)))!;
+            let _ = show(pick(Nat, Eq/refl(), 41))!;
+            let _ = show(Bounded { n = 41, ok = /std/Bool/True/qed() }.n + 1)!;
+            show(keep(41, lemma(41)));
+        entry()
         "#;
 
     assert_eq!(

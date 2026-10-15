@@ -336,15 +336,17 @@ fn printer(root: &Path) -> std::path::PathBuf {
     fs::write(
         package.join("exe.crs"),
         r#"use /std/{List, print, print_err};
-let arguments = /std/proc/args()!;
-match List/try_get(arguments, 1)
-| some(_) =>
-    let _ = print_err("written\n")!;
-    print("after\n")
-| none() =>
-    let _ = print("written\n")!;
-    print_err("after\n")
-end
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    match List/try_get(arguments, 1)
+    | some(_) =>
+        let _ = print_err("written\n")!;
+        print("after\n")
+    | none() =>
+        let _ = print("written\n")!;
+        print_err("after\n")
+    end;
+entry()
 "#,
     )
     .expect("write the temp source");
@@ -432,13 +434,13 @@ let ticks(n: Nat) -> Io({}) =
         let _ = /std/print("tick\n")!;
         ticks(m)
     end;
-let reading: Io({}) =
+let reading() -> Io({}) =
     let read = Io/read_all(Io/stdin)!;
     match read
     | success(bytes) => /std/print(Str/concat("read ", Nat/to_str(Bytes/len(bytes))))
     | failure(_) => /std/print("failed")
     end;
-Io/race([reading, ticks(3000)])
+Io/race([reading(), ticks(3000)])
 "#,
     )
     .expect("write the temp source");

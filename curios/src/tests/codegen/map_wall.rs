@@ -109,20 +109,22 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
         walk(k, y, (s + y + Bytes/len(Hash/hash(y)) + Bytes/len(Hash/hash(x))) % 1000003)
     end;
 
-let arguments = /std/proc/args()!;
-let input = /std/List/try_get(arguments, 1);
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(str) =>
-        match Nat/of_str(Str/trim(str)): (_) => Io({})
-        | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
-        | none() => /std/print("bad input\n")
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(str) =>
+            match Nat/of_str(Str/trim(str)): (_) => Io({})
+            | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
+            | none() => /std/print("bad input\n")
+            end
+        | failure(_) => /std/print("invalid utf-8\n")
         end
-    | failure(_) => /std/print("invalid utf-8\n")
-    end
-| none() => /std/print("no input\n")
-end
+    | none() => /std/print("no input\n")
+    end;
+entry()
 "#;
 
 const KEY_CONTROL: &str = r#"
@@ -136,20 +138,22 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
         walk(k, y, (s + y + 4) % 1000003)
     end;
 
-let arguments = /std/proc/args()!;
-let input = /std/List/try_get(arguments, 1);
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(str) =>
-        match Nat/of_str(Str/trim(str)): (_) => Io({})
-        | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
-        | none() => /std/print("bad input\n")
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(str) =>
+            match Nat/of_str(Str/trim(str)): (_) => Io({})
+            | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
+            | none() => /std/print("bad input\n")
+            end
+        | failure(_) => /std/print("invalid utf-8\n")
         end
-    | failure(_) => /std/print("invalid utf-8\n")
-    end
-| none() => /std/print("no input\n")
-end
+    | none() => /std/print("no input\n")
+    end;
+entry()
 "#;
 
 /// The key's share of the insert: what the two encodings an insert builds cost at `spines`' key magnitudes, isolated from the map. Sound as a pair of scalar loops because the collector's share of this workload measured nil (`spines_collection_decomposition`) — the live-set confound that would invalidate a whole-process ablation has no collections left to misattribute.

@@ -275,9 +275,11 @@ fn overwriting_an_ordinary_numeric_field_changes_the_answer() {
             | 0 => (at = 7, real = 9)
             | k + 1 => let r = walk(k); (at = r.at, real = 0)
             end;
-        let n = List/len(proc/args()!);
-        let r = walk(n);
-        /std/print(Nat/to_str(r.real))
+        let entry() -> /std/Io({{}}) =
+            let n = List/len(proc/args()!);
+            let r = walk(n);
+            /std/print(Nat/to_str(r.real));
+        entry()
         "#
     ));
     run_both(

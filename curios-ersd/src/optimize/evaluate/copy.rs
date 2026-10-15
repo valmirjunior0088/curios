@@ -28,7 +28,12 @@ pub(super) fn deep_copy_function(
     let values: BTreeMap<ValueId, ValueId> = region
         .values
         .iter()
-        .map(|&value| (value, module.add_value(None)))
+        .map(|&value| {
+            let hint = module
+                .value(value)
+                .and_then(|value| value.debug_name.clone());
+            (value, module.add_value(hint))
+        })
         .collect();
     let block_ids: BTreeMap<BlockId, BlockId> = region
         .blocks

@@ -52,16 +52,18 @@ let row(pair: Str) -> Str =
         Int/to_str(Option/unwrap_or(Flt/try_to_int(Int/to_flt(x)), +0)),
     ]);
 
-let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(s) => print(Str/join("\n", List/map(Str/split(Str/trim(s), ";"), row)))
-    | failure(_) => print("invalid utf-8")
-    end
-| none() => print("no input")
-end
+let entry() -> /std/Io({}) =
+    let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+    let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) => print(Str/join("\n", List/map(Str/split(Str/trim(s), ";"), row)))
+        | failure(_) => print("invalid utf-8")
+        end
+    | none() => print("no input")
+    end;
+entry()
 "#;
 
 /// Every value the grid pairs: each side of the i31's two edges and of a limb, two and three limbs, a value past 128 bits with low bits set, at both signs.

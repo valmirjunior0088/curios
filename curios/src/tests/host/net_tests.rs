@@ -12,13 +12,13 @@ use {
 const CALL: &str = r#"
     use /std/{Str, Show, Try, Io};
     use /std/tcp/{Socket};
-    let program: Io({}) =
+    let program() -> Io({}) =
         let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
         match r
         | success(response) => Io/bind(Io/Write/write(Io/stdout, response), (_) => Io/pure(()))
         | failure(e) => /std/print(Show/show(e))
         end;
-    program
+    program()
     "#;
 
 #[test]
@@ -62,12 +62,12 @@ fn https_perform_reaches_a_public_host_over_the_real_host() {
     let source = format!(
         r#"
         use /std/{{Str, Nat, Result, Try, Io, Path, File, http}};
-        let program: Io({{}}) =
+        let program() -> Io({{}}) =
             let r = Try/run(http/perform(http/get(http/Url/lit("https://example.com/"))))!;
             let line = match r | success(resp) => Nat/to_str(resp.status.code) | failure(_) => "failed" end;
             let _ = Try/run(File/write_all(Path/of_str("{path}"), Str/to_bytes(line)))!;
             Io/pure(());
-        program
+        program()
         "#
     );
 
@@ -115,7 +115,7 @@ fn read_one_chunk(open: &str) -> String {
         r#"
         use /std/{{Str, Bytes, Show, Try, Io}};
         use /std/tcp/{{Socket}};
-        let program: Io({{}}) =
+        let program() -> Io({{}}) =
             let r = Try/run(Socket/with({open}, (s) =>
                 let c = Socket/read(s, 64)!;
                 Try/pure(match c | chunk(b, @_) => b | _ => x[] end)))!;
@@ -123,7 +123,7 @@ fn read_one_chunk(open: &str) -> String {
             | success(bytes) => Io/bind(Io/Write/write(Io/stdout, bytes), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
-        program
+        program()
         "#
     )
 }
@@ -166,13 +166,13 @@ fn echo_server(listener: &str, prefix: &str) -> String {
                 Io/pure(())
             | _ => Io/pure(())
             end;
-        let program: Io({{}}) =
+        let program() -> Io({{}}) =
             let r = Try/run({listener})!;
             match r
             | success(_) => Io/pure(())
             | failure(e) => /std/print(Show/show(e))
             end;
-        program
+        program()
         "#
     )
 }
@@ -223,7 +223,7 @@ fn listen_and_accept_serve_one_connection_by_hand() {
     let source = r#"
         use /std/{Str, Bytes, Result, Show, Try, Io};
         use /std/tcp/{Listener, Socket};
-        let session: Try(Io, Io/Error, {}) =
+        let session() -> Try(Io, Io/Error, {}) =
             let l = Listener/listen("0.0.0.0", 8080)!;
             let c = Listener/accept(l)!;
             let r = Socket/read(c, 64)!;
@@ -235,13 +235,13 @@ fn listen_and_accept_serve_one_connection_by_hand() {
             let _ = Try/attempt(reply)!;
             let _ = Socket/close(c)!;
             Listener/close(l);
-        let program: Io({}) =
-            let r = Try/run(session)!;
+        let program() -> Io({}) =
+            let r = Try/run(session())!;
             match r
             | success(_) => Io/pure(())
             | failure(e) => /std/print(Show/show(e))
             end;
-        program
+        program()
         "#;
 
     let (system, io) = MockHost::builder().inbound(["ping"]).build();
@@ -252,7 +252,7 @@ fn listen_and_accept_serve_one_connection_by_hand() {
 /// `http/perform` against `example.com:80`, the status, content type and body printed, or the failure's arm.
 const HTTP_GET: &str = r#"
     use /std/{Str, Nat, Option, Result, Try, http, Io};
-    let program: Io({}) =
+    let program() -> Io({}) =
         let r = Try/run(http/perform(http/get(http/Url/lit("http://example.com/"))))!;
         match r
         | success(response) =>
@@ -271,7 +271,7 @@ const HTTP_GET: &str = r#"
             | redirected(_) => /std/print("redirected")
             end
         end;
-    program
+    program()
     "#;
 
 // HTTP client: `http/perform` renders a `Request`, sends it through `/std/tcp`, and reads the reply off the socket as its framing delimits it — the framing core end to end through codegen.
@@ -293,9 +293,11 @@ fn http_perform_parses_a_scripted_response() {
 fn an_embedder_ends_the_program_through_a_row_that_does_not_return() {
     let source = r#"
         foreign abort(Byte) -> Never;
-        let _ = abort(@{}, 7)!;
-        let _ = /std/print("unreachable")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = abort(@{}, 7)!;
+            let _ = /std/print("unreachable")!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -323,9 +325,11 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     // `double` has no host meaning at all — it's purely an embedder-supplied function, wired up via the store `compile_entrypoint` hands back and exercised end to end through `run_wasm`, not the compiler's own `sys` implementations.
     let source = r#"
         foreign double(Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
-        let _ = /std/print("unreachable")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            let _ = /std/print("unreachable")!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -353,10 +357,12 @@ fn foreign_declaration_runs_through_supplied_bindings() {
 fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
     let source = r#"
         foreign flip(Byte) -> Byte;
-        let top = flip(0)!;
-        let bottom = flip(255)!;
-        let _ = /std/proc/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let top = flip(0)!;
+            let bottom = flip(255)!;
+            let _ = /std/proc/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -387,10 +393,12 @@ fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
 fn a_foreign_flt_crosses_raw_in_both_directions() {
     let source = r#"
         foreign halve(Flt) -> Flt;
-        let halved = halve(/std/Nat/to_flt(84))!;
-        let matched = halved == /std/Nat/to_flt(42);
-        let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let halved = halve(/std/Nat/to_flt(84))!;
+            let matched = halved == /std/Nat/to_flt(42);
+            let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -419,10 +427,12 @@ fn a_foreign_flt_crosses_raw_in_both_directions() {
 fn a_foreign_flt_may_stand_before_another_result() {
     let source = r#"
         foreign probe(Nat) -> {value: Flt, status: Nat};
-        let answered = probe(3)!;
-        let matched = answered.value == /std/Nat/to_flt(6);
-        let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte(answered.status % 256) | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let answered = probe(3)!;
+            let matched = answered.value == /std/Nat/to_flt(6);
+            let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte(answered.status % 256) | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -453,12 +463,14 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
     let source = r#"
         use /std/{Bytes, List, Nat, Str};
         foreign split(Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
-        let r = split(x[1, 2, 3])!;
-        /std/print(Str/flatten([
-            Nat/to_str(Bytes/to_nat(r.head)), " ",
-            Nat/to_str(r.count), " ",
-            Str/join(",", List/map(r.rest, (b) => Nat/to_str(Bytes/to_nat(b)))),
-        ]))
+        let entry() -> /std/Io({}) =
+            let r = split(x[1, 2, 3])!;
+            /std/print(Str/flatten([
+                Nat/to_str(Bytes/to_nat(r.head)), " ",
+                Nat/to_str(r.count), " ",
+                Str/join(",", List/map(r.rest, (b) => Nat/to_str(Bytes/to_nat(b)))),
+            ]));
+        entry()
         "#;
 
     let entrypoint = source
@@ -494,12 +506,14 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
 fn a_list_of_bit_runs_crosses_in_both_directions() {
     let source = r#"
         foreign echo(List(Bits)) -> List(Bits);
-        let run = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
-        let answered = echo([run, b[]])!;
-        let first = match answered | [] => b[] | [head, .._] => head end;
-        let matched = /std/Bits/eql(first, run);
-        let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte((/std/List/len(answered) + 3) % 256) | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let run = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
+            let answered = echo([run, b[]])!;
+            let first = match answered | [] => b[] | [head, .._] => head end;
+            let matched = /std/Bits/eql(first, run);
+            let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte((/std/List/len(answered) + 3) % 256) | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -528,12 +542,14 @@ fn a_list_of_scalars_crosses_flat_in_both_directions() {
         foreign nats(List(Nat)) -> List(Nat);
         foreign ints(List(Int)) -> List(Int);
         foreign flags(List(Bool)) -> List(Bool);
-        let n = nats([1, 6000000000000000000])!;
-        let i = ints([-5, +7, -3000000000])!;
-        let f = flags([true, false])!;
-        let matched = n == [2, 12000000000000000000] && i == [+5, -7, +3000000000] && f == [false, true];
-        let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let n = nats([1, 6000000000000000000])!;
+            let i = ints([-5, +7, -3000000000])!;
+            let f = flags([true, false])!;
+            let matched = n == [2, 12000000000000000000] && i == [+5, -7, +3000000000] && f == [false, true];
+            let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -570,18 +586,20 @@ fn an_option_crosses_both_ways() {
         use /std/{Bool, Bytes, Option, Str, Io};
         foreign succ(Option(Nat)) -> Option(Nat);
         foreign shout(Option(Bytes)) -> {seen: Bool, text: Option(Bytes)};
-        let a = succ(Option/some(41))!;
-        let b = succ(Option/none())!;
-        let c = shout(Option/some(Str/to_bytes("hi")))!;
-        let d = shout(Option/none())!;
-        let matched = Option/unwrap_or(a, 0) == 42
-            && Option/is_none(b)
-            && c.seen
-            && Option/unwrap_or(c.text, x[]) == Str/to_bytes("HI")
-            && d.seen == false
-            && Option/is_none(d.text);
-        let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let a = succ(Option/some(41))!;
+            let b = succ(Option/none())!;
+            let c = shout(Option/some(Str/to_bytes("hi")))!;
+            let d = shout(Option/none())!;
+            let matched = Option/unwrap_or(a, 0) == 42
+                && Option/is_none(b)
+                && c.seen
+                && Option/unwrap_or(c.text, x[]) == Str/to_bytes("HI")
+                && d.seen == false
+                && Option/is_none(d.text);
+            let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -612,9 +630,11 @@ fn a_list_element_past_the_wire_is_refused() {
     let source = r#"
         use /std/{Nat, Bytes, Option, Io};
         foreign nats(List(Nat)) -> List(Nat);
-        let v = /std/proc/env("CURIOS_UNSET_LIST")!;
-        let _ = nats([1, Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[]))])!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let v = /std/proc/env("CURIOS_UNSET_LIST")!;
+            let _ = nats([1, Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[]))])!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");

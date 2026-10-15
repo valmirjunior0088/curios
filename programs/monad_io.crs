@@ -10,19 +10,22 @@ let loop(n: Nat, acc: Nat) -> Io(Nat) =
         loop(m, a)
     end;
 
-let arguments = /std/proc/args()!;
-let input = /std/List/try_get(arguments, 1);
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(s) =>
-        match Nat/of_str(Str/trim(s)): (_) => Io({})
-        | some(n) =>
-            let total = loop(n, 0)!;
-            /std/print(Str/concat(Nat/to_str(total), "\n"))
-        | none() => /std/print("bad input\n")
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) =>
+            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            | some(n) =>
+                let total = loop(n, 0)!;
+                /std/print(Str/concat(Nat/to_str(total), "\n"))
+            | none() => /std/print("bad input\n")
+            end
+        | failure(_) => /std/print("invalid utf-8\n")
         end
-    | failure(_) => /std/print("invalid utf-8\n")
-    end
-| none() => /std/print("no input\n")
-end
+    | none() => /std/print("no input\n")
+    end;
+
+entry()

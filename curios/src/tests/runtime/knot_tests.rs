@@ -36,7 +36,7 @@ fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
         run(r#"
         use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
         let wrap(f: (Nat) -> Nat) -> (Nat) -> Nat = (n) => f(n);
-        let main: Io({}) =
+        let main() -> Io({}) =
             let bs = rand/bytes(1)!;
             let first: (Nat) -> Nat =
                 wrap((n) => match n | 0 => 0 | p + 1; _ => second(p) end)
@@ -49,7 +49,7 @@ fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
                 | x[] => first
                 end;
             print(Nat/to_str(f(3)));
-        main
+        main()
         "#),
         b"0"
     );
@@ -66,14 +66,14 @@ fn an_initializer_calling_a_function_that_reads_a_later_member_forces_it_first()
             run(&format!(
                 r#"
                 use /std/{{Nat, Str, Bytes, Byte, Io, rand, print}};
-                let main: Io({{}}) =
+                let main() -> Io({{}}) =
                     let bs = rand/bytes(1)!;
                     let base: Nat = Bytes/len(bs) + 40
                     and {first}
                     and build(n: Nat) -> Nat = n + size
                     and {second};
                     print(Nat/to_str(table));
-                main
+                main()
                 "#
             )),
             b"43"
@@ -98,12 +98,12 @@ fn a_stepper_a_fold_applies_inside_an_initializer_forces_what_it_reads() {
             run(&format!(
                 r#"
                 use /std/{{Nat, Str, Bytes, Byte, List, Io, rand, print}};
-                let main: Io({{}}) =
+                let main() -> Io({{}}) =
                     let bs = rand/bytes(1)!;
                     let {first}
                     and {second};
                     print(Nat/to_str(table));
-                main
+                main()
                 "#
             )),
             b"42"
@@ -117,7 +117,7 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
-        let main: Io({}) =
+        let main() -> Io({}) =
             let bs = rand/bytes(1)!;
             let p: Parse(Bytes, Nat) = Parse/map(Parse/bytes/byte, (b) => Byte/to_nat(b) + size)
             and n: Nat =
@@ -127,7 +127,7 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
                 end
             and size: Nat = Bytes/len(bs) + 40;
             print(Nat/to_str(n));
-        main
+        main()
         "#),
         b"42"
     );
@@ -141,7 +141,7 @@ fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
     let error = named_error(
         r#"
         use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
-        let main: Io({}) =
+        let main() -> Io({}) =
             let bs = rand/bytes(1)!;
             let p: Parse(Bytes, Nat) = Parse/map(Parse/bytes/byte, (b) => Byte/to_nat(b) + n)
             and n: Nat =
@@ -150,7 +150,7 @@ fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
                 | failure(_) => 0
                 end;
             print(Nat/to_str(n));
-        main
+        main()
         "#,
     );
     // The lowering emits `Panic(Cycle)`; inlining the force function must preserve the refusal and the active member's initializer frame.
@@ -168,14 +168,14 @@ fn a_member_reading_itself_is_refused_before_it_can_trap() {
     let error = error(
         r#"
         use /std/{Nat, Str, Bytes, Io, Result, Parse, rand, print};
-        let main: Io({}) =
+        let main() -> Io({}) =
             let bs = rand/bytes(1)!;
             let p: Parse(Bytes, Nat) = Parse/or(Parse/map(Parse/bytes/byte, (_) => 1), Parse/map(p, (n) => n));
             match Parse/run(p, bs)
             | success(v) => print(Nat/to_str(v))
             | failure(_) => print("0")
             end;
-        main
+        main()
         "#,
     );
     assert!(

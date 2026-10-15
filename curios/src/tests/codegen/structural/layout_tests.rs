@@ -184,12 +184,14 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         | pair(Nat, Nat)
         end
 
-        let taint = List/len(proc/args()!);
-        let g = match taint | 0 => Gauge/tiny(7) | _ => Gauge/pair(taint, taint) end;
-        match g
-        | tiny(n) => /std/print(Str/concat(Nat/to_str(n), "\n"))
-        | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))
-        end
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let g = match taint | 0 => Gauge/tiny(7) | _ => Gauge/pair(taint, taint) end;
+            match g
+            | tiny(n) => /std/print(Str/concat(Nat/to_str(n), "\n"))
+            | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))
+            end;
+        entry()
         "#;
     let bytes_family = r#"
         use /std/{Nat, List, Bytes, Str, proc};
@@ -199,12 +201,14 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         | pair(Nat, Nat)
         end
 
-        let taint = List/len(proc/args()!);
-        let g = match taint | 0 => Gauge/tiny(x[7]) | _ => Gauge/pair(taint, taint) end;
-        match g
-        | tiny(inner) => /std/print(Str/concat(Nat/to_str(Bytes/len(inner)), "\n"))
-        | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))
-        end
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let g = match taint | 0 => Gauge/tiny(x[7]) | _ => Gauge/pair(taint, taint) end;
+            match g
+            | tiny(inner) => /std/print(Str/concat(Nat/to_str(Bytes/len(inner)), "\n"))
+            | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))
+            end;
+        entry()
         "#;
 
     assert!(
@@ -227,12 +231,14 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         | pair(Nat, Nat)
         end
 
-        let taint = List/len(proc/args()!);
-        let g = match taint | 0 => Gauge/tiny(b[1]) | _ => Gauge/pair(taint, taint) end;
-        match g
-        | tiny(inner) => /std/print(Str/concat(Nat/to_str(Bits/len(inner)), "\n"))
-        | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))
-        end
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let g = match taint | 0 => Gauge/tiny(b[1]) | _ => Gauge/pair(taint, taint) end;
+            match g
+            | tiny(inner) => /std/print(Str/concat(Nat/to_str(Bits/len(inner)), "\n"))
+            | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))
+            end;
+        entry()
         "#;
     assert!(
         !emits(&cont_optm_module(bits_family), |op| *op
@@ -250,18 +256,20 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
 fn small_bits_ride_the_immediate_and_overflow_boxes() {
     let source = r#"
         use /std/{Nat, List, Bits, Bool, Str, proc};
-        let taint = List/len(proc/args()!);
-        let t: Bool = taint == 0;
-        let small = b[t, 1, 0, t];
-        let grown = b[..small, 1];
-        let widen(n: Nat, acc: Bits) -> Bits =
-            match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
-        let wide = widen(30 + taint, grown);
-        let wide2 = widen(30 + taint, grown);
-        match (grown == b[1, 1, 0, 1, 1]) && (wide == wide2) && (Bits/len(wide) == 35 + taint)
-        | true => /std/print("ok\n")
-        | false => /std/print("bad\n")
-        end
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let t: Bool = taint == 0;
+            let small = b[t, 1, 0, t];
+            let grown = b[..small, 1];
+            let widen(n: Nat, acc: Bits) -> Bits =
+                match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
+            let wide = widen(30 + taint, grown);
+            let wide2 = widen(30 + taint, grown);
+            match (grown == b[1, 1, 0, 1, 1]) && (wide == wide2) && (Bits/len(wide) == 35 + taint)
+            | true => /std/print("ok\n")
+            | false => /std/print("bad\n")
+            end;
+        entry()
         "#;
 
     assert_eq!(run(source), b"ok\n");
@@ -282,17 +290,19 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
         | right(Nat)
         end
 
-        let taint = List/len(proc/args()!);
-        let flag : Bool = taint == 0;
-        let decide(n : Nat, acc : Nat) -> Nat =
-            match n : (_) => Nat
-            | 0 => acc
-            | m + 1; ih =>
-                let chosen : Pair = match flag | true => Pair/left(m) | false => Pair/right(m) end;
-                let folded = match chosen | left(x) => x + 65521 | right(x) => x + 65519 end;
-                decide(m, acc + folded)
-            end;
-        /std/print(Nat/to_str(decide(taint + 3, 0) + decide(taint + 4, 1)))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let flag : Bool = taint == 0;
+            let decide(n : Nat, acc : Nat) -> Nat =
+                match n : (_) => Nat
+                | 0 => acc
+                | m + 1; ih =>
+                    let chosen : Pair = match flag | true => Pair/left(m) | false => Pair/right(m) end;
+                    let folded = match chosen | left(x) => x + 65521 | right(x) => x + 65519 end;
+                    decide(m, acc + folded)
+                end;
+            /std/print(Nat/to_str(decide(taint + 3, 0) + decide(taint + 4, 1)));
+        entry()
         "#;
 
     let wat = wat(source);
@@ -321,18 +331,20 @@ fn a_tuple_is_read_at_its_own_final_type() {
         | link(Nat, Chain)
         end
 
-        let taint = List/len(proc/args()!);
-        let build(n : Nat, acc : Chain) -> Chain =
-            match n : (_) => Chain
-            | 0 => acc
-            | m + 1; ih => build(m, Chain/link(m, acc))
-            end;
-        let total(c : Chain, acc : Nat) -> Nat =
-            match c
-            | stop() => acc
-            | link(v, rest) => total(rest, (acc + v) % 999983)
-            end;
-        /std/print(Nat/to_str(total(build(taint + 3, Chain/stop()), 0) + total(build(taint + 4, Chain/stop()), 1)))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let build(n : Nat, acc : Chain) -> Chain =
+                match n : (_) => Chain
+                | 0 => acc
+                | m + 1; ih => build(m, Chain/link(m, acc))
+                end;
+            let total(c : Chain, acc : Nat) -> Nat =
+                match c
+                | stop() => acc
+                | link(v, rest) => total(rest, (acc + v) % 999983)
+                end;
+            /std/print(Nat/to_str(total(build(taint + 3, Chain/stop()), 0) + total(build(taint + 4, Chain/stop()), 1)));
+        entry()
         "#;
 
     let wat = wat(source);
@@ -384,18 +396,20 @@ fn a_monomorphic_slot_carries_its_own_type() {
         | link(Nat, Chain)
         end
 
-        let taint = List/len(proc/args()!);
-        let build(n : Nat, acc : Chain) -> Chain =
-            match n : (_) => Chain
-            | 0 => acc
-            | m + 1; ih => build(m, Chain/link(m, acc))
-            end;
-        let total(c : Chain, acc : Nat) -> Nat =
-            match c
-            | stop() => acc
-            | link(v, rest) => total(rest, (acc + v) % 999983)
-            end;
-        /std/print(Nat/to_str(total(build(taint + 3, Chain/stop()), 0) + total(build(taint + 4, Chain/stop()), 1)))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let build(n : Nat, acc : Chain) -> Chain =
+                match n : (_) => Chain
+                | 0 => acc
+                | m + 1; ih => build(m, Chain/link(m, acc))
+                end;
+            let total(c : Chain, acc : Nat) -> Nat =
+                match c
+                | stop() => acc
+                | link(v, rest) => total(rest, (acc + v) % 999983)
+                end;
+            /std/print(Nat/to_str(total(build(taint + 3, Chain/stop()), 0) + total(build(taint + 4, Chain/stop()), 1)));
+        entry()
         "#;
 
     let wat = wat(source);

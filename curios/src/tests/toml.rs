@@ -560,6 +560,7 @@ fn program() -> String {
         r##"
         use /std/{{Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt, Bool, rand, Io}};
         use /std/Toml/{{flt}};
+        let entry() -> /std/Io({{}}) =
         let taint = Bytes/len(rand/bytes(0)!);
         let opaque_n(n : Nat) -> Nat = (taint + 1) * n;
         let run_of(ch : Str, k : Nat) -> Str =
@@ -620,7 +621,8 @@ fn program() -> String {
         match row
         {arms}
         | _ => /std/print("no such row")
-        end
+        end;
+        entry()
         "##
     )
 }
@@ -679,9 +681,11 @@ fn every_document_prints_what_its_table_expects() {
 fn encode_spells_a_map_built_by_hand() {
     let source = r#"
         use /std/{Str, Toml, Map, Nat, Bytes, rand, Io};
-        let taint = Bytes/len(rand/bytes(0)!);
-        let opaque = Nat/to_int(taint + 1);
-        /std/print(Toml/encode(Map/insert(Map/empty(), "a key", Toml/int(opaque))))
+        let entry() -> /std/Io({}) =
+            let taint = Bytes/len(rand/bytes(0)!);
+            let opaque = Nat/to_int(taint + 1);
+            /std/print(Toml/encode(Map/insert(Map/empty(), "a key", Toml/int(opaque))));
+        entry()
         "#;
 
     assert_eq!(run(source), b"\"a key\" = 1\n");
@@ -691,20 +695,22 @@ fn encode_spells_a_map_built_by_hand() {
 fn parse_eof_accepts_only_end_of_input() {
     let source = r#"
         use /std/{Str, Bytes, Nat, Byte, Result, Parse, rand, Io};
-        let doc : Parse(Bytes, Byte) =
+        let doc() -> Parse(Bytes, Byte) =
             let b = Parse/bytes/byte!;
             let _ = Parse/eof()!;
             Parse/pure(b);
         let check(input : Bytes) -> Str =
-            match Parse/run(doc, input)
+            match Parse/run(doc(), input)
             | success(b) => Str/concat("ok:", Nat/to_str(Byte/to_nat(b)))
             | failure(_) => "rejected"
             end;
-        /std/print(Str/flatten([
-            check(x[..rand/bytes(0)!, 0x41]), ";",
-            check(x[..rand/bytes(0)!, 0x41, 0x42]), ";",
-            check(x[..rand/bytes(0)!])
-        ]))
+        let entry() -> /std/Io({}) =
+            /std/print(Str/flatten([
+                check(x[..rand/bytes(0)!, 0x41]), ";",
+                check(x[..rand/bytes(0)!, 0x41, 0x42]), ";",
+                check(x[..rand/bytes(0)!])
+            ]));
+        entry()
         "#;
 
     assert_eq!(run(source), b"ok:65;rejected;rejected");

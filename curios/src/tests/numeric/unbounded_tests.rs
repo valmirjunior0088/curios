@@ -378,16 +378,18 @@ fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
     run_text(
         r#"
         use /std/{Byte, Bytes, Nat, Str, Option, Io};
-        let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b, @_) => b
-            | eof() => x[]
-            | error(_) => x[]
+        let entry() -> /std/Io({}) =
+            let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
+                | chunk(b, @_) => b
+                | eof() => x[]
+                | error(_) => x[]
+                end;
+            let n = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
+            match n < 256
+            | true => /std/print(Nat/to_str(Byte/to_nat(Nat/to_byte(n))))
+            | false => /std/print("out")
             end;
-        let n = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
-        match n < 256
-        | true => /std/print(Nat/to_str(Byte/to_nat(Nat/to_byte(n))))
-        | false => /std/print("out")
-        end
+        entry()
         "#,
         system,
     )

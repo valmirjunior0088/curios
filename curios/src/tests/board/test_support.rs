@@ -1658,7 +1658,8 @@ pub(super) const A_STRUCT_DECLARED_A_PROPOSITION_MEETS_ITS_LITERAL: &str = r#"
 pub(super) const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
-    let c = Cell/new(@Bool)!;
+    let entry() -> /std/Io({}) =
+let c = Cell/new(@Bool)!;
 
     let forged : Str =
         match Cell/fill(c, true)
@@ -1672,14 +1673,16 @@ pub(super) const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
         | false => "first read false"
         end;
 
-    /std/print(forged)
+    /std/print(forged);
+entry()
     "#;
 
 /// The control. Only the refinement's escape into a *type* is at issue, so a rule that refused the elimination outright, or refused `Cell/poll` in every position, would be a brick. Forcing the poll yields an ordinary `Option(Bool)`, from which the fixture reads its Boolean.
 pub(super) const A_MATCH_ON_A_FORCED_CELL_READ_STILL_COMPILES: &str = r#"
     use /std/{Cell, Bool, Option, Str};
 
-    let c = Cell/new(@Bool)!;
+    let entry() -> /std/Io({}) =
+let c = Cell/new(@Bool)!;
     let _ = Cell/fill(c, true)!;
     let v = Option/unwrap_or(Cell/poll(c)!, false);
 
@@ -1688,14 +1691,16 @@ pub(super) const A_MATCH_ON_A_FORCED_CELL_READ_STILL_COMPILES: &str = r#"
         | true => "t"
         | false => "f"
         end
-    )
+    );
+entry()
     "#;
 
 // The same premise behind a stuck head. With the read an argument of the parameters `f`, `g` and `h`, weak-head reduction stops at the head without visiting it, so one spelling of the read would be refined to `true` in the outer arm and, after `Cell/fill(c, false)`, to `false` in the inner one — `h` carrying the outer arm's knowledge across, so `p` re-reads at `Eq()(false, true)` and `/std/Bool/false_neq_true` turns it into `/std/Bool/False`. Two heads rather than one because the kernel drops a nested refinement of a *single* key: `assume_case_value` reduces the inner scrutinee under the outer arm's equation, gets the literal `true` back, and `Scope::refine` skips a key with no local free. The read's type is `Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the argument is refused before any arm records an equation.
 pub(super) const AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
-    /std/print(
+    let entry() -> /std/Io({}) =
+/std/print(
         ((f : (Bool) -> Bool,
           g : (Bool) -> Bool,
           h : (x : Bool) -> Eq()(g(x), f(x)),
@@ -1712,7 +1717,8 @@ pub(super) const AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT: &str = r#"
             | false => "first read false"
             end
         )((b) => b, (b) => b, (x) => Eq/refl(), Cell/new(@Bool)!)
-    )
+    );
+entry()
     "#;
 
 /// The control, and it guards against a brick: a scrutinee whose head is stuck is the *ordinary* case — `flip(b)` for a `b` nothing can instantiate — and refining it is what lets a hypothesis stated over the scrutinee re-read at the arm's value. So a guard that refused every stuck application, or every application it could not fully reduce, would still reject this.
@@ -1746,7 +1752,8 @@ pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
         | true => "no contradiction"
         end;
 
-    /std/print(
+    let entry() -> /std/Io({}) =
+/std/print(
         ((c : Cell(Bool)) =>
             ((f : (Bool) -> Bool) =>
                 match f(true)
@@ -1755,7 +1762,8 @@ pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
                 end
             )((b) => Cell/fill(c, true))
         )(Cell/new(@Bool)!)
-    )
+    );
+entry()
     "#;
 
 /// A parameter-headed scrutinee refines. A walk over the term cannot read a binder's body, so it cannot tell a pure `f` from an effectful one, and refusing the equation would withhold a refinement from every program stating a hypothesis over an opaque head; purity is a typing fact, so the equation is licensed and `p` re-reads at the arm's value.

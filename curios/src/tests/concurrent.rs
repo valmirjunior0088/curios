@@ -22,13 +22,13 @@ fn a_read_waits_and_resumes_across_a_chunk_boundary() {
         r#"
         use /std/{Str, Show, Try, Io};
         use /std/tcp/{Socket};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
             match r
             | success(response) => Io/bind(Io/Write/write(Io/stdout, response), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
-        program
+        program()
         "#,
         system,
     )
@@ -43,14 +43,14 @@ fn a_stream_read_sequences_into_a_write() {
     run_text(
         r#"
         use /std/{Io};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let r = Io/Read/read(Io/stdin, 1024)!;
             match r : (_) => Io({})
             | chunk(bytes, @_) => Io/bind(Io/Write/write(Io/stdout, bytes), (_) => Io/pure(()))
             | eof() => Io/pure(())
             | error(_) => Io/pure(())
             end;
-        program
+        program()
         "#,
         system,
     )
@@ -64,17 +64,19 @@ fn a_scope_answers_with_its_body_after_the_child_it_joins() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, Io};
-        let child: Io(Nat) =
+        let child() -> Io(Nat) =
             let _ = Io/yield()!;
             let _ = /std/print("child;")!;
             Io/pure(5);
         let root(s: Io/Scope) -> Io(Nat) =
-            let f = Io/spawn(s, child)!;
+            let f = Io/spawn(s, child())!;
             let _ = /std/print("root;")!;
             let c = Io/join(f)!;
             Io/pure(c + 2);
-        let n = Io/scope(root)!;
-        /std/print(Nat/to_str(n))
+        let entry() -> /std/Io({}) =
+            let n = Io/scope(root)!;
+            /std/print(Nat/to_str(n));
+        entry()
         "#),
         b"root;child;7"
     );
@@ -86,11 +88,11 @@ fn a_scope_inside_a_child_of_another_composes() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, Io};
-        let leaf: Io(Nat) =
+        let leaf() -> Io(Nat) =
             let _ = Io/yield()!;
             Io/pure(3);
         let inner(s: Io/Scope) -> Io(Nat) =
-            let f = Io/spawn(s, leaf)!;
+            let f = Io/spawn(s, leaf())!;
             let n = Io/join(f)!;
             Io/pure(n + 1);
         let outer(s: Io/Scope) -> Io(Nat) =
@@ -98,8 +100,10 @@ fn a_scope_inside_a_child_of_another_composes() {
             let _ = /std/print("outer;")!;
             let n = Io/join(f)!;
             Io/pure(n * 10);
-        let n = Io/scope(outer)!;
-        /std/print(Nat/to_str(n))
+        let entry() -> /std/Io({}) =
+            let n = Io/scope(outer)!;
+            /std/print(Nat/to_str(n));
+        entry()
         "#),
         b"outer;40"
     );
@@ -111,13 +115,13 @@ fn all_answers_in_the_order_of_its_actions() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, List, Io};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let rs = Io/all([
                 Io/bind(/std/print("a;"), (_) => Io/pure(1)),
                 Io/bind(/std/print("b;"), (_) => Io/pure(2))
             ])!;
             /std/print(Nat/to_str(Nat/add(/std/Option/unwrap_or(List/try_get(rs, 0), 0), /std/Option/unwrap_or(List/try_get(rs, 1), 0))));
-        program
+        program()
         "#),
         b"a;b;3"
     );
@@ -131,17 +135,17 @@ fn race_cancels_a_started_loser_and_runs_its_release_before_answering() {
         r#"
         use /std/{Str, Nat, Io};
         use /std/time/{Duration};
-        let slow: Io(Nat) =
+        let slow() -> Io(Nat) =
             let _ = Io/sleep(Duration/of_secs(60))!;
             let _ = /std/print("slow;")!;
             Io/pure(20);
-        let program: Io({}) =
+        let program() -> Io({}) =
             let v = Io/race([
-                Io/using((_) => /std/print("released;"), slow),
+                Io/using((_) => /std/print("released;"), slow()),
                 Io/bind(/std/print("fast;"), (_) => Io/pure(10))
             ])!;
             /std/print(Nat/to_str(v));
-        program
+        program()
         "#,
         system,
     )
@@ -157,12 +161,14 @@ fn constructing_a_read_performs_no_effect() {
         r#"
         use /std/{Str, Io};
         let discarded: Io(Io/Chunk) = Io/Read/read(Io/stdin, 100);
-        let r = Io/read(Io/stdin, 100)!;
-        match r : (_) => /std/Io({})
-        | chunk(bytes, @_) => Io/bind(Io/Write/write(Io/stdout, bytes), (_) => Io/pure(()))
-        | eof() => /std/print("<eof>")
-        | error(_) => /std/print("<err>")
-        end
+        let entry() -> /std/Io({}) =
+            let r = Io/read(Io/stdin, 100)!;
+            match r : (_) => /std/Io({})
+            | chunk(bytes, @_) => Io/bind(Io/Write/write(Io/stdout, bytes), (_) => Io/pure(()))
+            | eof() => /std/print("<eof>")
+            | error(_) => /std/print("<err>")
+            end;
+        entry()
         "#,
         system,
     )
@@ -188,8 +194,10 @@ fn a_scope_cancels_a_child_still_waiting_when_its_body_answers() {
             let _ = Io/spawn(s, Io/using((_) => /std/print("released;"), child(started)))!;
             let _ = Signal/wait(started)!;
             /std/print("root;");
-        let _ = Io/scope(body)!;
-        /std/print("ended")
+        let entry() -> /std/Io({}) =
+            let _ = Io/scope(body)!;
+            /std/print("ended");
+        entry()
         "#,
         system,
     )
@@ -212,8 +220,10 @@ fn join_all_holds_the_body_until_every_child_has_ended() {
             let _ = Io/spawn(s, child(5, "late;"))!;
             let _ = Io/spawn(s, child(2, "early;"))!;
             Io/join_all(s);
-        let _ = Io/scope(body)!;
-        /std/print("done")
+        let entry() -> /std/Io({}) =
+            let _ = Io/scope(body)!;
+            /std/print("done");
+        entry()
         "#,
         system,
     )
@@ -241,10 +251,10 @@ fn a_brackets_release_runs_once() {
     assert_eq!(
         run(r#"
         use /std/{Str, Io};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let _ = Io/using((_) => /std/print("closed;"), /std/print("body;"))!;
             /std/print("after;");
-        program
+        program()
         "#),
         b"body;closed;after;"
     );
@@ -263,13 +273,15 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
         let Box : Type = { A : Type, t : Susp(A) };
         let boxes : List(Box) =
             [(Nat, Susp/now(7)), ({}, Susp/now(()))];
-        let stepped = List/map(boxes, (b : Box) =>
-            match b.t : (_) => Box
-            | now(a) => (b.A, Susp/now(a))
-            | later(k) => (b.A, k())
-            end);
-        let _ = /std/print(Nat/to_str(List/len(stepped)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let stepped = List/map(boxes, (b : Box) =>
+                match b.t : (_) => Box
+                | now(a) => (b.A, Susp/now(a))
+                | later(k) => (b.A, k())
+                end);
+            let _ = /std/print(Nat/to_str(List/len(stepped)))!;
+            /std/Io/pure(());
+        entry()
         "#),
         b"2"
     );
@@ -283,10 +295,10 @@ fn sleep_waits_until_the_clock_passes_the_deadline() {
         r#"
         use /std/{Str, Io};
         use /std/time/{Duration};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let _ = Io/sleep(Duration/of_secs(5))!;
             /std/print("woke;");
-        program
+        program()
         "#,
         system,
     )
@@ -304,12 +316,12 @@ fn both_wakes_its_sleepers_in_deadline_order() {
         use /std/time/{Duration};
         let mark(m: Str) -> Io({}) =
             /std/print(m);
-        let program: Io({}) =
+        let program() -> Io({}) =
             let _ = Io/both(
                 Io/bind(Io/sleep(Duration/of_secs(6)), (_) => mark("b;")),
                 Io/bind(Io/sleep(Duration/of_secs(3)), (_) => mark("a;")))!;
             mark("done");
-        program
+        program()
         "#,
         system,
     )
@@ -325,13 +337,13 @@ fn timeout_answers_some_when_the_body_finishes_first() {
         r#"
         use /std/{Str, Nat, Io};
         use /std/time/{Duration};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let r = Io/timeout(Duration/of_secs(5), Io/pure(42))!;
             match r : (_) => Io({})
             | some(v) => /std/print(Nat/to_str(v))
             | none() => /std/print("none")
             end;
-        program
+        program()
         "#,
         system,
     )
@@ -347,19 +359,19 @@ fn timeout_cancels_the_body_and_runs_its_release_before_answering_none() {
         r#"
         use /std/{Str, Nat, Io};
         use /std/time/{Duration};
-        let body: Io(Nat) =
+        let body() -> Io(Nat) =
             let _ = Io/sleep(Duration/of_secs(50))!;
             let _ = /std/print("body;")!;
             Io/pure(0);
         let released(ended: Io/Ended) -> Io({}) =
             /std/print(match ended | finished() => "finished;" | cancelled() => "cancelled;" end);
-        let program: Io({}) =
-            let r = Io/timeout(Duration/of_secs(2), Io/using(released, body))!;
+        let program() -> Io({}) =
+            let r = Io/timeout(Duration/of_secs(2), Io/using(released, body()))!;
             match r : (_) => Io({})
             | some(v) => /std/print("some")
             | none() => /std/print("none;")
             end;
-        program
+        program()
         "#,
         system,
     )
@@ -375,18 +387,18 @@ fn race_of_two_sleeps_answers_the_earlier_and_cancels_the_later() {
         r#"
         use /std/{Str, Nat, Io};
         use /std/time/{Duration};
-        let quick: Io(Nat) =
+        let quick() -> Io(Nat) =
             let _ = Io/sleep(Duration/of_secs(2))!;
             let _ = /std/print("quick;")!;
             Io/pure(1);
-        let slow: Io(Nat) =
+        let slow() -> Io(Nat) =
             let _ = Io/sleep(Duration/of_secs(60))!;
             let _ = /std/print("slow;")!;
             Io/pure(2);
-        let program: Io({}) =
-            let v = Io/race([quick, Io/using((_) => /std/print("released;"), slow)])!;
+        let program() -> Io({}) =
+            let v = Io/race([quick(), Io/using((_) => /std/print("released;"), slow())])!;
             /std/print(Nat/to_str(v));
-        program
+        program()
         "#,
         system,
     )
@@ -401,11 +413,13 @@ fn a_selection_over_no_offers_at_the_top_is_a_deadlock() {
     let _ = run_text(
         r#"
         use /std/{Nat, Io};
-        let stuck: Io(Nat) =
+        let stuck() -> Io(Nat) =
             let w = Io/select(@Nat, [])!;
             Io/pure(w.1);
-        let _ = stuck!;
-        /std/print("finished")
+        let entry() -> /std/Io({}) =
+            let _ = stuck()!;
+            /std/print("finished");
+        entry()
         "#,
         system,
     );
@@ -452,7 +466,7 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
             match o | some(n) => Nat/to_str(n) | none() => "none" end;
         let left(t: Channel/Take(Nat)) -> Str =
             match t | item(n) => Nat/to_str(n) | empty() => "empty" | ended() => "ended" end;
-        let program: Io({}) =
+        let program() -> Io({}) =
             let a = Channel/new(@Nat, 4)!;
             let b = Channel/new(@Nat, 4)!;
             let _ = Channel/send(a.0, 10)!;
@@ -463,7 +477,7 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
             /std/print(
                 Str/flatten(
                     [Nat/to_str(w.0), " ", shown(w.1), " ", left(rest_a), " ", left(rest_b)]));
-        program
+        program()
         "#),
         b"0 10 empty 20"
     );
@@ -515,7 +529,7 @@ fn a_closed_channel_drains_before_it_ends() {
             match p | taken() => "taken" | full() => "full" | closed() => "closed" end;
         let left(t: Channel/Take(Nat)) -> Str =
             match t | item(n) => Nat/to_str(n) | empty() => "empty" | ended() => "ended" end;
-        let program: Io({}) =
+        let program() -> Io({}) =
             let c = Channel/new(@Nat, 2)!;
             let nothing_yet = Channel/try_recv(c.1)!;
             let _ = Channel/send(c.0, 1)!;
@@ -546,7 +560,7 @@ fn a_closed_channel_drains_before_it_ends() {
                         left(drained),
                         " ",
                         said(after)]));
-        program
+        program()
         "#),
         b"empty full closed 1 2 end ended false"
     );
@@ -559,8 +573,10 @@ fn the_bare_channel_operations_are_not_reachable() {
     let refusal = run_text(
         r#"
         use /std/{Nat, Io, Channel};
-        let c = Channel/Channel/new(@Nat, 1)!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let c = Channel/Channel/new(@Nat, 1)!;
+            Io/pure(());
+        entry()
         "#,
         system,
     )

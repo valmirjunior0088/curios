@@ -14,8 +14,10 @@ fn args_indexes_the_argv_snapshot() {
     // argv crosses as a host-built `List(Bytes)`; indexing it round-trips one entry.
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     run_text(r#"
-let _ = std/Io/Write/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args()!, 1), x[]))!;
-/std/Io/pure(())
+let entry() -> /std/Io({}) =
+    let _ = std/Io/Write/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args()!, 1), x[]))!;
+    /std/Io/pure(());
+entry()
 "#,
         system,
     )
@@ -30,10 +32,12 @@ fn env_found_unwraps_to_some() {
     run_text(
         r#"
         use /std/{Io};
-        match /std/proc/env("HOME")! : (_) => Io({})
-        | some(v) => let _ = std/Io/Write/write(std/Io/stdout, v)!; /std/Io/pure(())
-        | none() => let _ = /std/print("missing")!; /std/Io/pure(())
-        end
+        let entry() -> /std/Io({}) =
+            match /std/proc/env("HOME")! : (_) => Io({})
+            | some(v) => let _ = std/Io/Write/write(std/Io/stdout, v)!; /std/Io/pure(())
+            | none() => let _ = /std/print("missing")!; /std/Io/pure(())
+            end;
+        entry()
         "#,
         system,
     )
@@ -47,10 +51,12 @@ fn env_absent_is_none() {
     assert_eq!(
         run(r#"
         use /std/{Io};
-        match /std/proc/env("NOPE")! : (_) => Io({})
-        | some(v) => let _ = std/Io/Write/write(std/Io/stdout, v)!; /std/Io/pure(())
-        | none() => let _ = /std/print("missing")!; /std/Io/pure(())
-        end
+        let entry() -> /std/Io({}) =
+            match /std/proc/env("NOPE")! : (_) => Io({})
+            | some(v) => let _ = std/Io/Write/write(std/Io/stdout, v)!; /std/Io/pure(())
+            | none() => let _ = /std/print("missing")!; /std/Io/pure(())
+            end;
+        entry()
         "#),
         b"missing"
     );
@@ -58,11 +64,13 @@ fn env_absent_is_none() {
 
 #[test]
 fn exit_halts_with_code() {
-    // exit traps: it surfaces its code *and* the trailing write never runs. The result type is supplied because the exit yields whatever its region wants, and a `_` nothing reads wants nothing in particular; an annotation on the binder would instead make it a top-level item with a region of its own.
+    // exit traps: it surfaces its code *and* the trailing write never runs. The result type is supplied because the exit yields whatever its region wants, and a `_` nothing reads wants nothing in particular; the function's local binder may carry the same annotation.
     let entrypoint = r#"
-        let _ = /std/proc/exit(@{}, 7)!;
-        let _ = /std/print("unreachable")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, 7)!;
+            let _ = /std/print("unreachable")!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -101,9 +109,11 @@ fn exit_in_local_binding_halts() {
         let go(n : std/Nat) -> Io(std/Nat) =
             let dead : {} = /std/proc/exit(3)!;
             Io/pure(n);
-        let v = go(1)!;
-        let _ = /std/print(std/Nat/to_str(v))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let v = go(1)!;
+            let _ = /std/print(std/Nat/to_str(v))!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -134,9 +144,11 @@ fn an_exit_ends_a_region_of_any_type() {
             | 0 => /std/proc/exit(7)
             | _ => Io/pure("ok")
             end;
-        let s = f(0)!;
-        let _ = /std/print(s)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let s = f(0)!;
+            let _ = /std/print(s)!;
+            /std/Io/pure(());
+        entry()
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -189,15 +201,15 @@ fn child_program(body: &str) -> String {
         use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Io, Path, Command}};
         use /std/Command/{{Child}};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
-        let program: Try(Io, Io/Error, Str) =
+        let program() -> Try(Io, Io/Error, Str) =
             {body};
-        let main: Io({{}}) =
-            let r = Try/run(program)!;
+        let main() -> Io({{}}) =
+            let r = Try/run(program())!;
             match r
             | failure(e) => /std/print(Show/show(e))
             | success(s) => /std/print(s)
             end;
-        main
+        main()
         "#
     )
 }
@@ -252,10 +264,10 @@ fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
 fn a_cancelled_bracket_kills_the_child_it_spawned() {
     let source = child_program(
         r#"
-            let body: Try(Io, Io/Error, {}) =
+            let body() -> Try(Io, Io/Error, {}) =
                 let child = Command/spawn(Command/new("sleepy", []))!;
                 Child/with(child, Io/sleep(/std/time/Duration/of(60, 0)));
-            let ran = Io/timeout(/std/time/Duration/of(0, 0), Try/run(body))!;
+            let ran = Io/timeout(/std/time/Duration/of(0, 0), Try/run(body()))!;
             Try/pure(match ran | none() => "cancelled" | some(_) => "finished" end)
         "#,
     );

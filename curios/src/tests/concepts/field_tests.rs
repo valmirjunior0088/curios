@@ -19,11 +19,13 @@ fn a_concept_field_may_carry_a_type() {
         let v : alias = 3;
         let picked : Type = Sized/pick(@Nat);
         let b : picked = true;
-        let _ = /std/print(Nat/to_str(v))!;
-        match b
-        | true => /std/print("t")
-        | false => /std/print("f")
-        end
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(v))!;
+            match b
+            | true => /std/print("t")
+            | false => /std/print("f")
+            end;
+        entry()
         "#;
 
     assert_eq!(run(source), b"3t");

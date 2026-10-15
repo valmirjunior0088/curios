@@ -216,8 +216,10 @@ fn a_scalar_crosses_to_a_plugin_and_back() {
     let code = run_against(
         r#"
         foreign double(Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("double", "/double")],
     )
@@ -232,10 +234,12 @@ fn a_byte_crosses_to_a_plugin_and_back() {
     let code = run_against(
         r#"
         foreign flip(Byte) -> Byte;
-        let top = flip(0)!;
-        let bottom = flip(255)!;
-        let _ = /std/proc/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let top = flip(0)!;
+            let bottom = flip(255)!;
+            let _ = /std/proc/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("flip", "/flip")],
     )
@@ -250,8 +254,10 @@ fn a_plugin_byte_past_255_is_refused() {
     let refusal = run_against(
         r#"
         foreign bump(Byte) -> Byte;
-        let _ = /std/proc/exit(@{}, bump(255)!)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, bump(255)!)!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("bump", "/bump")],
     )
@@ -269,10 +275,12 @@ fn a_byte_string_crosses_through_the_plugins_memory() {
     let code = run_against(
         r#"
         foreign echo(Bytes) -> Bytes;
-        let answered = echo(/std/Str/to_bytes("curios"))!;
-        let matched = /std/Bytes/eql(answered, /std/Str/to_bytes("curios"));
-        let _ = /std/proc/exit(@{}, match matched | true => 9 | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let answered = echo(/std/Str/to_bytes("curios"))!;
+            let matched = /std/Bytes/eql(answered, /std/Str/to_bytes("curios"));
+            let _ = /std/proc/exit(@{}, match matched | true => 9 | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("echo", "/echo")],
     )
@@ -287,11 +295,13 @@ fn a_bit_run_crosses_through_the_plugins_memory() {
     let code = run_against(
         r#"
         foreign echo(Bits) -> Bits;
-        let sent = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
-        let answered = echo(sent)!;
-        let matched = /std/Bits/eql(answered, sent);
-        let _ = /std/proc/exit(@{}, match matched | true => 9 | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let sent = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
+            let answered = echo(sent)!;
+            let matched = /std/Bits/eql(answered, sent);
+            let _ = /std/proc/exit(@{}, match matched | true => 9 | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("echo", "/echo")],
     )
@@ -306,11 +316,13 @@ fn a_run_shorter_than_its_bytes_returns_padded_to_them() {
     let code = run_against(
         r#"
         foreign echo(Bits) -> Bits;
-        let answered = echo(b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1])!;
-        let padded = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
-        let matched = /std/Bits/eql(answered, padded);
-        let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte(/std/Bits/len(answered) % 256) | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let answered = echo(b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1])!;
+            let padded = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
+            let matched = /std/Bits/eql(answered, padded);
+            let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte(/std/Bits/len(answered) % 256) | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("echo", "/echo")],
     )
@@ -329,8 +341,10 @@ fn a_declaration_nothing_answers_is_refused_where_a_program_reaches_it() {
         r#"
         foreign double(Nat) -> Nat;
         foreign unclaimed(Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte((double(21)! + unclaimed(1)!) % 256))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, /std/Nat/to_byte((double(21)! + unclaimed(1)!) % 256))!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("double", "/double")],
     )
@@ -349,8 +363,10 @@ fn a_declaration_nothing_reaches_asks_for_no_implementation() {
         r#"
         foreign double(Nat) -> Nat;
         foreign unclaimed(Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("double", "/double"), ("echo", "/absent")],
     )
@@ -365,8 +381,10 @@ fn an_export_of_another_type_is_refused_before_the_program_runs() {
     let refusal = run_against(
         r#"
         foreign flip(Byte) -> Byte;
-        let _ = /std/proc/exit(@{}, flip(0)!)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, flip(0)!)!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("double", "/flip")],
     )
@@ -386,8 +404,10 @@ fn a_claim_on_a_missing_export_is_refused_listing_what_there_is() {
     let refusal = run_against(
         r#"
         foreign double(Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("dubble", "/double")],
     )
@@ -406,9 +426,11 @@ fn a_nat_answered_with_every_bit_set_is_read_unsigned() {
     let code = run_against(
         r#"
         foreign ones() -> Nat;
-        let answered = ones()!;
-        let _ = /std/proc/exit(@{}, match answered == 18446744073709551615 | true => 9 | false => 1 end)!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let answered = ones()!;
+            let _ = /std/proc/exit(@{}, match answered == 18446744073709551615 | true => 9 | false => 1 end)!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("ones", "/ones")],
     )
@@ -424,8 +446,10 @@ fn a_declaration_two_modules_claim_is_refused() {
     let refusal = run_linked(
         r#"
         foreign double(Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            /std/Io/pure(());
+        entry()
         "#,
         declared(claim).into_iter().chain(declared(claim)).collect(),
     )
@@ -443,8 +467,10 @@ fn a_modules_trap_names_the_module_the_export_and_the_cause() {
     let refusal = run_against(
         r#"
         foreign boom() -> Nat;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(boom()! % 256))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, /std/Nat/to_byte(boom()! % 256))!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("boom", "/boom")],
     )
@@ -462,8 +488,10 @@ fn an_answer_past_a_modules_memory_names_the_module_and_the_export() {
     let refusal = run_against(
         r#"
         foreign far() -> Bytes;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(/std/Bytes/len(far()!) % 256))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/proc/exit(@{}, /std/Nat/to_byte(/std/Bytes/len(far()!) % 256))!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("far", "/far")],
     )
@@ -482,10 +510,12 @@ fn a_modules_recursion_from_a_deep_frame_stops_on_the_engines_trap() {
         r#"
         use /std/{Io, List, Nat};
         foreign spin() -> Nat;
-        let numbers = List/range(0, 2000000);
-        let walked = List/traverse(numbers, (n: Nat) => match n == 1999999 | true => spin() | false => Io/pure(n) end)!;
-        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(List/len(walked) % 256))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let numbers = List/range(0, 2000000);
+            let walked = List/traverse(numbers, (n: Nat) => match n == 1999999 | true => spin() | false => Io/pure(n) end)!;
+            let _ = /std/proc/exit(@{}, /std/Nat/to_byte(List/len(walked) % 256))!;
+            /std/Io/pure(());
+        entry()
         "#,
         &[("spin", "/spin")],
     )

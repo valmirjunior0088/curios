@@ -139,13 +139,15 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
             | cons(v, tail) => total(tail, acc + v)
             end;
 
-        let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b, @_) => b
-            | eof() => x[]
-            | error(_) => x[]
-            end;
-        let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)), 60);
-        /std/print(Nat/to_str(total(build(n, L/stop(n)), 0)))
+        let entry() -> /std/Io({}) =
+            let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
+                | chunk(b, @_) => b
+                | eof() => x[]
+                | error(_) => x[]
+                end;
+            let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)), 60);
+            /std/print(Nat/to_str(total(build(n, L/stop(n)), 0)));
+        entry()
         "#,
         system,
     )

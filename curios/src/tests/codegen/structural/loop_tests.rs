@@ -22,6 +22,7 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
         assert!(
             provenance == "main"
                 || provenance.starts_with("main/")
+                || provenance.starts_with("/entry/")
                 || provenance.starts_with("/std/")
                 || provenance.starts_with("io/"),
             "the recursive loop must be contified, not left a top-level function: {provenance}",

@@ -32,16 +32,18 @@ fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
 fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
     let source = r#"
         use /std/{Nat, List, Bits, Bool, Str, proc};
-        let taint = List/len(proc/args()!);
-        let t: Bool = taint == 0;
-        let grown = b[t, 1];
-        let widen(n: Nat, acc: Bits) -> Bits =
-            match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
-        let wide = widen(30, grown);
-        match Bits/len(wide) == 32
-        | true => /std/print("ok\n")
-        | false => /std/print("bad\n")
-        end
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let t: Bool = taint == 0;
+            let grown = b[t, 1];
+            let widen(n: Nat, acc: Bits) -> Bits =
+                match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
+            let wide = widen(30, grown);
+            match Bits/len(wide) == 32
+            | true => /std/print("ok\n")
+            | false => /std/print("bad\n")
+            end;
+        entry()
         "#;
     assert!(crate::tests::typecheck_within(1_000, source).is_err());
 }
@@ -51,16 +53,18 @@ fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
 fn a_literal_depth_packed_recursion_compiles_within_the_default_budget() {
     let source = r#"
         use /std/{Nat, List, Bits, Bool, Str, proc};
-        let taint = List/len(proc/args()!);
-        let t: Bool = taint == 0;
-        let grown = b[t, 1];
-        let widen(n: Nat, acc: Bits) -> Bits =
-            match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
-        let wide = widen(30, grown);
-        match Bits/len(wide) == 32
-        | true => /std/print("ok\n")
-        | false => /std/print("bad\n")
-        end
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let t: Bool = taint == 0;
+            let grown = b[t, 1];
+            let widen(n: Nat, acc: Bits) -> Bits =
+                match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
+            let wide = widen(30, grown);
+            match Bits/len(wide) == 32
+            | true => /std/print("ok\n")
+            | false => /std/print("bad\n")
+            end;
+        entry()
         "#;
     assert_eq!(run(source), b"ok\n");
 }
@@ -80,16 +84,18 @@ fn acceptance_is_upward_closed_in_the_budget() {
             "a literal-depth packed recursion",
             r#"
             use /std/{Nat, List, Bits, Bool, Str, proc};
-            let taint = List/len(proc/args()!);
-            let t: Bool = taint == 0;
-            let grown = b[t, 1];
-            let widen(n: Nat, acc: Bits) -> Bits =
-                match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
-            let wide = widen(30, grown);
-            match Bits/len(wide) == 32
-            | true => /std/print("ok\n")
-            | false => /std/print("bad\n")
-            end
+            let entry() -> /std/Io({}) =
+                let taint = List/len(proc/args()!);
+                let t: Bool = taint == 0;
+                let grown = b[t, 1];
+                let widen(n: Nat, acc: Bits) -> Bits =
+                    match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
+                let wide = widen(30, grown);
+                match Bits/len(wide) == 32
+                | true => /std/print("ok\n")
+                | false => /std/print("bad\n")
+                end;
+            entry()
             "#,
         ),
         (

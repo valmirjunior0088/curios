@@ -213,8 +213,10 @@ fn a_default_reached_from_a_nested_dispatch_sequences_in_the_matchs_monad() {
                 let _ = print("a\n")!;
                 print("b\n")
             end;
-        let _ = h(Option/some(Option/none()))!;
-        h(Option/some(Option/some(1)))
+        let entry() -> /std/Io({}) =
+            let _ = h(Option/some(Option/none()))!;
+            h(Option/some(Option/some(1)));
+        entry()
         "#;
 
     assert_eq!(run(source), b"a\nb\ndeep\n");

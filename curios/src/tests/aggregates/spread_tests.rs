@@ -14,8 +14,10 @@ fn list_spread_concats_segments() {
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
-        let _ = /std/print(Nat/to_str(digits))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(digits))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"4321");
 }
@@ -33,8 +35,10 @@ fn list_spread_identity_and_multi() {
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
-        let _ = /std/print(Nat/to_str(digits))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(digits))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"3232");
 }
@@ -46,8 +50,10 @@ fn list_spread_borrows_expected_element_type() {
         use /std/{Str, Nat, Int, List, Io};
         let xs : List(Int) = [-1, +2];
         let ys : List(Int) = [1, ..xs];
-        let _ = /std/print(Nat/to_str(List/len(ys)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(List/len(ys)))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"3");
 }
@@ -58,8 +64,10 @@ fn list_spread_of_non_list_is_rejected() {
     let source = r#"
         use /std/{Str, Nat, List, Io};
         let bad : List(Nat) = [1, ..2];
-        let _ = /std/print("unreachable")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("unreachable")!;
+            /std/Io/pure(());
+        entry()
         "#;
     error(source);
 }
@@ -70,8 +78,10 @@ fn list_spread_element_type_clash_is_rejected() {
         use /std/{Str, Nat, List, Io};
         let ss : List(Str) = ["a"];
         let bad : List(Nat) = [..ss];
-        let _ = /std/print("unreachable")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("unreachable")!;
+            /std/Io/pure(());
+        entry()
         "#;
     error(source);
 }
@@ -82,7 +92,7 @@ fn list_spread_operand_hoists_bangs() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, List, Io};
-        let prog : Io({}) =
+        let prog() -> Io({}) =
             let ys : List(Nat) = [1, ..Io/pure([2, 3])!, 4];
             let digits : Nat =
                 match ys : (_) => Nat
@@ -91,7 +101,7 @@ fn list_spread_operand_hoists_bangs() {
                 end;
             let wrote = /std/print(Nat/to_str(digits))!;
             Io/pure(());
-        prog
+        prog()
         "#),
         b"4321"
     );
@@ -103,8 +113,10 @@ fn bin_spread_concats_segments() {
     let source = r#"
         use /std/{Nat, Bytes, Io};
         let b : Bytes = x[0x02, 0x03];
-        let _ = Io/Write/write(Io/stdout, x[0x01, ..b, 0x04, ..Bytes/slice(b, 1, 1)])!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Io/Write/write(Io/stdout, x[0x01, ..b, 0x04, ..Bytes/slice(b, 1, 1)])!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"\x01\x02\x03\x04\x03");
 }
@@ -115,8 +127,10 @@ fn bin_spread_identity_and_multi() {
         use /std/{Bytes, Io};
         let b : Bytes = x[0x48, 0x65];
         let c : Bytes = x[..b];
-        let _ = Io/Write/write(Io/stdout, x[..c, ..c])!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Io/Write/write(Io/stdout, x[..c, ..c])!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"HeHe");
 }
@@ -128,8 +142,10 @@ fn bin_spread_of_non_bin_is_rejected() {
         use /std/{Str, Nat, List, Bytes, Io};
         let xs : List(Nat) = [1, 2];
         let bad : Bytes = x[0x00, ..xs];
-        let _ = /std/print("unreachable")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("unreachable")!;
+            /std/Io/pure(());
+        entry()
         "#;
     error(source);
 }
@@ -140,11 +156,11 @@ fn bin_spread_operand_hoists_bangs() {
     assert_eq!(
         run(r#"
         use /std/{Bytes, Io};
-        let prog : Io({}) =
+        let prog() -> Io({}) =
             let out : Bytes = x[0x3e, ..Io/pure(x[0x68, 0x69])!, 0x3c];
             let wrote = Io/Write/write(Io/stdout, out)!;
             Io/pure(());
-        prog
+        prog()
         "#),
         b">hi<"
     );

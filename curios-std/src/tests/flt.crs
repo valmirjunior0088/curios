@@ -415,7 +415,7 @@ test to_int_rounds_in_its_direction =
         Test/equal(Flt/try_log_b(+inf.0), Option/none())]);
 
 -- The environment rounds in its direction, restores the one before a block, and accumulates what every operation raised; a `State` over its status sequences in it.
-let rounds_and_records: Env(Flt) =
+let rounds_and_records() -> Env(Flt) =
     let third = Env/with_rounding(Rounding/toward_positive(), Env/div(+1.0, +3.0))!;
     let after = Env/rounding!;
     let _ = Env/mul(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]), +2.0)!;
@@ -423,7 +423,7 @@ let rounds_and_records: Env(Flt) =
     Env/pure(match after == status.rounding | true => third | false => +nan.0 end);
 
 test the_environment_rounds_and_records =
-    let (third, raised) = Env/run(rounds_and_records);
+    let (third, raised) = Env/run(rounds_and_records());
     Test/all([
         Test/equal(show(third), show(rounded/div(Rounding/toward_positive(), +1.0, +3.0))),
         Test/equal(raised, Exceptions { ..Exceptions/none, overflow = true, inexact = true })]);

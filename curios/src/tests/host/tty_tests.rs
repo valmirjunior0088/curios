@@ -7,10 +7,12 @@ use {crate::tests::run_text, curios_runtime::MockHost};
 fn size_reads_the_scripted_dimensions_and_reports_no_terminal_otherwise() {
     let source = r#"
         use /std/{Str, Nat, Show, Try, Io, Tty};
-        match Try/run(Tty/size(Tty/stdin))!
-        | success(s) => /std/print(Show/show(s))
-        | failure(e) => match e | other(n) => /std/print(Str/concat("other ", Nat/to_str(n))) | _ => /std/print("error") end
-        end
+        let entry() -> /std/Io({}) =
+            match Try/run(Tty/size(Tty/stdin))!
+            | success(s) => /std/print(Show/show(s))
+            | failure(e) => match e | other(n) => /std/print(Str/concat("other ", Nat/to_str(n))) | _ => /std/print("error") end
+            end;
+        entry()
         "#;
 
     let (system, io) = MockHost::builder().tty_size(80, 24).build();
@@ -27,10 +29,12 @@ fn size_reads_the_scripted_dimensions_and_reports_no_terminal_otherwise() {
 fn a_size_past_the_i31_crosses_back_whole() {
     let source = r#"
         use /std/{Show, Try, Io, Tty};
-        match Try/run(Tty/size(Tty/stdin))!
-        | success(s) => /std/print(Show/show(s))
-        | failure(e) => /std/print(Show/show(e))
-        end
+        let entry() -> /std/Io({}) =
+            match Try/run(Tty/size(Tty/stdin))!
+            | success(s) => /std/print(Show/show(s))
+            | failure(e) => /std/print(Show/show(e))
+            end;
+        entry()
         "#;
 
     let (system, io) = MockHost::builder()
@@ -45,10 +49,12 @@ fn a_size_past_the_i31_crosses_back_whole() {
 fn with_raw_brackets_the_body_and_restores_the_mode() {
     let source = r#"
         use /std/{Nat, Show, Try, Io, Tty};
-        match Try/run(Tty/with_raw(Tty/stdin, Try/pure(7)))!
-        | success(n) => /std/print(Nat/to_str(n))
-        | failure(e) => /std/print(Show/show(e))
-        end
+        let entry() -> /std/Io({}) =
+            match Try/run(Tty/with_raw(Tty/stdin, Try/pure(7)))!
+            | success(n) => /std/print(Nat/to_str(n))
+            | failure(e) => /std/print(Show/show(e))
+            end;
+        entry()
         "#;
 
     let (system, io) = MockHost::builder().tty_size(80, 24).build();
@@ -64,10 +70,12 @@ fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
         use /std/{Nat, Show, Try, Io, Tty};
         let body: Try(Io, Io/Error, Nat) =
             Try/raise(Io/Error/refused());
-        match Try/run(Tty/with_raw(Tty/stdin, body))!
-        | success(n) => /std/print(Nat/to_str(n))
-        | failure(e) => /std/print(Show/show(e))
-        end
+        let entry() -> /std/Io({}) =
+            match Try/run(Tty/with_raw(Tty/stdin, body))!
+            | success(n) => /std/print(Nat/to_str(n))
+            | failure(e) => /std/print(Show/show(e))
+            end;
+        entry()
         "#;
 
     let (system, io) = MockHost::builder().tty_size(80, 24).build();
@@ -86,16 +94,16 @@ fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
 fn with_raw_brackets_a_body_that_suspends() {
     let source = r#"
         use /std/{Nat, Show, Try, Io, Tty};
-        let body: Try(Io, Io/Error, Nat) =
+        let body() -> Try(Io, Io/Error, Nat) =
             let _ = Io/yield()!;
             Try/pure(7);
-        let program: Io({}) =
-            let r = Try/run(Tty/with_raw(Tty/stdin, body))!;
+        let program() -> Io({}) =
+            let r = Try/run(Tty/with_raw(Tty/stdin, body()))!;
             match r
             | success(n) => /std/print(Nat/to_str(n))
             | failure(e) => /std/print(Show/show(e))
             end;
-        program
+        program()
         "#;
 
     let (system, io) = MockHost::builder().tty_size(80, 24).build();

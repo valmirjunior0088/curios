@@ -98,7 +98,7 @@ fn signals_coalesce_and_futures_preserve_their_first_answer() {
         run(r#"
         use /std/{Nat, Option, print, Io};
         use /std/Io/{Signal, Future};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let s = Signal/new()!;
             let _ = Signal/notify(s)!;
             let _ = Signal/notify(s)!;
@@ -109,7 +109,7 @@ fn signals_coalesce_and_futures_preserve_their_first_answer() {
             let _ = Future/fulfill(f, 7)!;
             let _ = Future/fulfill(f, 99)!;
             print(Nat/to_str(Future/await(f)!));
-        program
+        program()
     "#),
         b"coalesced 7"
     );
@@ -121,13 +121,13 @@ fn a_waiter_cancelled_on_a_cell_is_released_once() {
     assert_eq!(
         run(r#"
         use /std/{Cell, print, Io};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let c = Cell/new(@{})!;
             let _ = Io/race([Io/using((_) => print("released "), Io/wait_filled([c])), Io/pure(())])!;
             let _ = Cell/fill(c, ())!;
             let _ = Io/wait_filled([c])!;
             print("done");
-        program
+        program()
     "#),
         b"released done"
     );

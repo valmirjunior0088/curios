@@ -107,38 +107,40 @@ fn every_direction_executes_as_the_model_rounds() {
         r#"
         use /std/{{Nat, Int, Flt, Bytes, List, Io, Dyadic}};
         use /std/Flt/{{Rounding, rounded}};
-        let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
-        let zero = Bytes/len(/std/rand/bytes(0)!);
-        let operands = List/map([
-            {operands},
-        ], (v) => v * one);
-        let naturals: List(Nat) = List/map([
-            {naturals},
-        ], (n) => n + zero);
-        let addends(a: Flt, b: Flt) -> List(Flt) = [+0.0, -0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
-        let direction(r: Rounding) -> List(Flt) =
-            let pairs = List/concat_map(operands, (a) => List/concat_map(operands, (b) => [
-                rounded/add(r, a, b),
-                rounded/sub(r, a, b),
-                rounded/mul(r, a, b),
-                rounded/div(r, a, b),
-                ..List/map(addends(a, b), (c) => rounded/fma(r, a, b, c)),
-            ]));
-            let unary = List/concat_map(operands, (a) => [rounded/sqrt(r, a), rounded/to_integral(r, a)]);
-            let conversions = List/concat_map(naturals, (n) => [
-                rounded/of_nat(r, n),
-                rounded/of_int(r, Int/sub(+0, Nat/to_int(n))),
-            ]);
-            [..pairs, ..unary, ..conversions];
-        let results = List/concat_map([
-            Rounding/ties_to_even(),
-            Rounding/ties_to_away(),
-            Rounding/toward_zero(),
-            Rounding/toward_positive(),
-            Rounding/toward_negative(),
-        ], direction);
-        let _ = Io/Write/write(Io/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes)))!;
-        Io/pure(())
+        let entry() -> /std/Io({{}}) =
+            let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
+            let zero = Bytes/len(/std/rand/bytes(0)!);
+            let operands = List/map([
+                {operands},
+            ], (v) => v * one);
+            let naturals: List(Nat) = List/map([
+                {naturals},
+            ], (n) => n + zero);
+            let addends(a: Flt, b: Flt) -> List(Flt) = [+0.0, -0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
+            let direction(r: Rounding) -> List(Flt) =
+                let pairs = List/concat_map(operands, (a) => List/concat_map(operands, (b) => [
+                    rounded/add(r, a, b),
+                    rounded/sub(r, a, b),
+                    rounded/mul(r, a, b),
+                    rounded/div(r, a, b),
+                    ..List/map(addends(a, b), (c) => rounded/fma(r, a, b, c)),
+                ]));
+                let unary = List/concat_map(operands, (a) => [rounded/sqrt(r, a), rounded/to_integral(r, a)]);
+                let conversions = List/concat_map(naturals, (n) => [
+                    rounded/of_nat(r, n),
+                    rounded/of_int(r, Int/sub(+0, Nat/to_int(n))),
+                ]);
+                [..pairs, ..unary, ..conversions];
+            let results = List/concat_map([
+                Rounding/ties_to_even(),
+                Rounding/ties_to_away(),
+                Rounding/toward_zero(),
+                Rounding/toward_positive(),
+                Rounding/toward_negative(),
+            ], direction);
+            let _ = Io/Write/write(Io/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes)))!;
+            Io/pure(());
+        entry()
         "#
     );
 
@@ -198,23 +200,25 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
         r#"
         use /std/{{Nat, Int, Flt, Bytes, List, Io, Dyadic}};
         use /std/Flt/{{Rounding, rounded}};
-        let zero = Nat/to_int(Bytes/len(/std/rand/bytes(0)!));
-        let magnitudes: List(Int) = List/map([{magnitudes}], (m) => Nat/to_int(m) + zero);
-        let exponents: List(Int) = [{exponents}];
-        let direction(r: Rounding) -> List(Flt) =
-            List/concat_map(magnitudes, (m) => List/concat_map(exponents, (e) => [
-                rounded/of_dyadic(r, Dyadic {{ mantissa = m, exponent = e }}),
-                rounded/of_dyadic(r, Dyadic {{ mantissa = Int/sub(+0, m), exponent = e }}),
-            ]));
-        let results = List/concat_map([
-            Rounding/ties_to_even(),
-            Rounding/ties_to_away(),
-            Rounding/toward_zero(),
-            Rounding/toward_positive(),
-            Rounding/toward_negative(),
-        ], direction);
-        let _ = Io/Write/write(Io/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes)))!;
-        Io/pure(())
+        let entry() -> /std/Io({{}}) =
+            let zero = Nat/to_int(Bytes/len(/std/rand/bytes(0)!));
+            let magnitudes: List(Int) = List/map([{magnitudes}], (m) => Nat/to_int(m) + zero);
+            let exponents: List(Int) = [{exponents}];
+            let direction(r: Rounding) -> List(Flt) =
+                List/concat_map(magnitudes, (m) => List/concat_map(exponents, (e) => [
+                    rounded/of_dyadic(r, Dyadic {{ mantissa = m, exponent = e }}),
+                    rounded/of_dyadic(r, Dyadic {{ mantissa = Int/sub(+0, m), exponent = e }}),
+                ]));
+            let results = List/concat_map([
+                Rounding/ties_to_even(),
+                Rounding/ties_to_away(),
+                Rounding/toward_zero(),
+                Rounding/toward_positive(),
+                Rounding/toward_negative(),
+            ], direction);
+            let _ = Io/Write/write(Io/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes)))!;
+            Io/pure(());
+        entry()
         "#
     );
 
@@ -403,41 +407,43 @@ fn every_exception_is_raised_as_ieee_defines_it() {
         r#"
         use /std/{{Nat, Int, Flt, Bytes, Byte, List, Io, Bool}};
         use /std/Flt/{{Rounding, Exceptions, signals}};
-        let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
-        let tick = Nat/to_byte(Bytes/len(/std/rand/bytes(1)!) % 256);
-        let signaling = Flt/of_le_bytes(x[tick, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F]);
-        let operands = [..List/map([
-            {operands},
-        ], (v) => v * one), signaling];
-        let scalings: List(Int) = [{scalings}];
-        let flag(set: Bool, weight: Nat) -> Nat = match set | true => weight | false => 0 end;
-        let code(e: Exceptions) -> Byte =
-            Nat/to_byte((flag(e.invalid, 16) + flag(e.division_by_zero, 8) + flag(e.overflow, 4)
-                + flag(e.underflow, 2) + flag(e.inexact, 1)) % 256);
-        let addends(a: Flt, b: Flt) -> List(Flt) = [+0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
-        let direction(r: Rounding) -> List(Exceptions) =
-            let pairs = List/concat_map(operands, (a) => List/concat_map(operands, (b) => [
-                signals/add(r, a, b),
-                signals/sub(r, a, b),
-                signals/mul(r, a, b),
-                signals/div(r, a, b),
-                ..List/map(addends(a, b), (c) => signals/fma(r, a, b, c)),
-            ]));
-            let unary = List/concat_map(operands, (a) => [
-                signals/sqrt(r, a),
-                signals/to_integral_exact(r, a),
-                ..List/map(scalings, (n) => signals/scale(r, a, n)),
-            ]);
-            [..pairs, ..unary];
-        let results = List/concat_map([
-            Rounding/ties_to_even(),
-            Rounding/ties_to_away(),
-            Rounding/toward_zero(),
-            Rounding/toward_positive(),
-            Rounding/toward_negative(),
-        ], direction);
-        let _ = Io/Write/write(Io/stdout, Bytes/flatten(List/map(results, (e) => x[code(e)])))!;
-        Io/pure(())
+        let entry() -> /std/Io({{}}) =
+            let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
+            let tick = Nat/to_byte(Bytes/len(/std/rand/bytes(1)!) % 256);
+            let signaling = Flt/of_le_bytes(x[tick, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F]);
+            let operands = [..List/map([
+                {operands},
+            ], (v) => v * one), signaling];
+            let scalings: List(Int) = [{scalings}];
+            let flag(set: Bool, weight: Nat) -> Nat = match set | true => weight | false => 0 end;
+            let code(e: Exceptions) -> Byte =
+                Nat/to_byte((flag(e.invalid, 16) + flag(e.division_by_zero, 8) + flag(e.overflow, 4)
+                    + flag(e.underflow, 2) + flag(e.inexact, 1)) % 256);
+            let addends(a: Flt, b: Flt) -> List(Flt) = [+0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
+            let direction(r: Rounding) -> List(Exceptions) =
+                let pairs = List/concat_map(operands, (a) => List/concat_map(operands, (b) => [
+                    signals/add(r, a, b),
+                    signals/sub(r, a, b),
+                    signals/mul(r, a, b),
+                    signals/div(r, a, b),
+                    ..List/map(addends(a, b), (c) => signals/fma(r, a, b, c)),
+                ]));
+                let unary = List/concat_map(operands, (a) => [
+                    signals/sqrt(r, a),
+                    signals/to_integral_exact(r, a),
+                    ..List/map(scalings, (n) => signals/scale(r, a, n)),
+                ]);
+                [..pairs, ..unary];
+            let results = List/concat_map([
+                Rounding/ties_to_even(),
+                Rounding/ties_to_away(),
+                Rounding/toward_zero(),
+                Rounding/toward_positive(),
+                Rounding/toward_negative(),
+            ], direction);
+            let _ = Io/Write/write(Io/stdout, Bytes/flatten(List/map(results, (e) => x[code(e)])))!;
+            Io/pure(());
+        entry()
         "#
     );
 

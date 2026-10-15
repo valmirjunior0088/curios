@@ -24,10 +24,12 @@ fn nullary_closure_survives_erasure_and_codegen() {
             end;
         let prog : Susp(/std/Io({})) =
             Susp/later(() => Susp/now(/std/print("ok")));
-        let r = force(prog);
-        let _ = r!;
-        let _ = /std/print("!")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let r = force(prog);
+            let _ = r!;
+            let _ = /std/print("!")!;
+            /std/Io/pure(());
+        entry()
         "#),
         b"ok!"
     );
@@ -46,8 +48,10 @@ fn end_to_end() {
             | left(_) => +42
             | right(_) => +7
             end;
-        let _ = /std/print(std/Int/to_str(score(pair)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(std/Int/to_str(score(pair)))!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"+42");
@@ -67,8 +71,10 @@ fn local_binders_shadow_module_bindings_without_leaking() {
                 let probe : /std/Nat = (let go : /std/Nat = 3; go);
                 go;
         end
-        let _ = /std/print(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling)))!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"37");
@@ -83,8 +89,10 @@ fn triangular_sum() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        let _ = /std/print(std/Nat/to_str(result))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(std/Nat/to_str(result))!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"10");
@@ -94,8 +102,10 @@ fn triangular_sum() {
 fn multi_arg_function() {
     let source = r#"
         let add : (std/Int, std/Int) -> std/Int = (x, y) => std/Int/add(x, y);
-        let _ = /std/print(std/Int/to_str(add(+3, +4)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(std/Int/to_str(add(+3, +4)))!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"+7");
@@ -105,8 +115,10 @@ fn multi_arg_function() {
 fn curried_function() {
     let source = r#"
         let add : (std/Int) -> (std/Int) -> std/Int = (x) => (y) => std/Int/add(x, y);
-        let _ = /std/print(std/Int/to_str(add(+3)(+4)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(std/Int/to_str(add(+3)(+4)))!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"+7");
@@ -168,7 +180,9 @@ fn nested_local_rec_runs_correctly() {
                 | k + 1; ih => go(k) + 1
                 end;
              go(n));
-        /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(4)!))))
+        let entry() -> /std/Io({}) =
+            /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(4)!))));
+        entry()
         "#),
         b"4"
     );
@@ -187,7 +201,9 @@ fn local_rec_calls_enclosing_rec_member() {
                 | k + 1; ih => f(k) + go(k)
                 end;
              go(n));
-        /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(3)!))))
+        let entry() -> /std/Io({}) =
+            /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(3)!))));
+        entry()
         "#),
         b"0"
     );
@@ -202,7 +218,9 @@ fn self_referential_value_rec_never_forced_compiles_and_runs() {
         let make(n : Nat) -> Nat =
             let loop : Nat = loop;
             n;
-        /std/print(Nat/to_str(make(Bytes/len(/std/rand/bytes(5)!))))
+        let entry() -> /std/Io({}) =
+            /std/print(Nat/to_str(make(Bytes/len(/std/rand/bytes(5)!))));
+        entry()
         "#),
         b"5"
     );
@@ -214,15 +232,17 @@ fn recursive_group_signature_reduces_concrete_type_family() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Bytes, Io};
-        let taint = Bytes/len(/std/rand/bytes(3)!);
-        let T(n : Nat) -> Type =
-            match n
-            | 0 => Nat
-            | k + 1; ih => T(k)
-            end
-        and val : T(2) =
-            taint;
-        /std/print(Nat/to_str(val))
+        let entry() -> /std/Io({}) =
+            let taint = Bytes/len(/std/rand/bytes(3)!);
+            let T(n : Nat) -> Type =
+                match n
+                | 0 => Nat
+                | k + 1; ih => T(k)
+                end
+            and val : T(2) =
+                taint;
+            /std/print(Nat/to_str(val));
+        entry()
         "#),
         b"3"
     );
@@ -280,9 +300,11 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
                         (model = next.0, quit = f.quit, pending = [..acc.pending, ..f.pending])
                     end);
 
-        let n = List/len(proc/args()!);
-        let d = drive(n + 6, [1, 3]);
-        /std/print(Str/flatten([Nat/to_str(d.model), ":", Nat/to_str(List/len(d.pending))]))
+        let entry() -> /std/Io({}) =
+            let n = List/len(proc/args()!);
+            let d = drive(n + 6, [1, 3]);
+            /std/print(Str/flatten([Nat/to_str(d.model), ":", Nat/to_str(List/len(d.pending))]));
+        entry()
         "#,
         system,
     )
@@ -305,14 +327,16 @@ fn a_closure_whose_arity_a_value_decides_is_called_at_each() {
             | true => (g) => g(10)
             | false => (g) => g(10, 20)
             end(f);
-        let args = /std/proc/args()!;
-        let b = List/len(args) == 0;
-        /std/print(
-            Str/flatten(
-                [
-                    Nat/to_str(apply(b, pick(b))),
-                    " ",
-                    Nat/to_str(apply(Bool/not(b), pick(Bool/not(b))))]))
+        let entry() -> /std/Io({}) =
+            let args = /std/proc/args()!;
+            let b = List/len(args) == 0;
+            /std/print(
+                Str/flatten(
+                    [
+                        Nat/to_str(apply(b, pick(b))),
+                        " ",
+                        Nat/to_str(apply(Bool/not(b), pick(Bool/not(b))))]));
+        entry()
         "#),
         b"11 30".to_vec()
     );

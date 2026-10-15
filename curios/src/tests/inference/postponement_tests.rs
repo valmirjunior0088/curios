@@ -18,9 +18,11 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
             end;
         let direct : Eq2()(2, 2) = sym2(Eq2/refl());
         let chained : Eq2()(3, 3) = sym2(sym2(Eq2/refl()));
-        match chained : (_, _, _) => /std/Io({})
-        | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
-        end
+        let entry() -> /std/Io({}) =
+            match chained : (_, _, _) => /std/Io({})
+            | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
+            end;
+        entry()
         "#;
 
     assert_eq!(run(source), b"3");
@@ -61,8 +63,10 @@ fn parked_constraints_still_reject_the_unsolvable() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2()(2, 3) = Eq2/refl();
-        let _ = /std/print("no")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("no")!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     error(source);
@@ -75,7 +79,7 @@ fn bare_tuple_continuation_tail_infers() {
         use /std/{Parse, Byte, Nat, Bytes, Io};
         let pairer : Parse(Bytes, { Byte, Byte }) =
             Parse/bind(Parse/bytes/byte, (a) => Parse/pure((a, a)));
-        let with_sugar : Parse(Bytes, { Byte, Byte }) =
+        let with_sugar() -> Parse(Bytes, { Byte, Byte }) =
             let a = Parse/bytes/byte!;
             Parse/pure((a, 0));
         match Parse/run(pairer, /std/Str/to_bytes("hi"))
@@ -95,10 +99,12 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let mk(@A : Type, a : A) -> List(A) = [a];
         let use_(@B : Type, l : List(B)) -> List(B) = l;
         let v : List({ Nat, Nat }) = use_(mk((1, 2)));
-        match v : (_) => /std/Io({})
-        | [] => /std/Io/pure(())
-        | [p, ..rest] => let _ = /std/print(Nat/to_str(p.1))!; /std/Io/pure(())
-        end
+        let entry() -> /std/Io({}) =
+            match v : (_) => /std/Io({})
+            | [] => /std/Io/pure(())
+            | [p, ..rest] => let _ = /std/print(Nat/to_str(p.1))!; /std/Io/pure(())
+            end;
+        entry()
         "#;
 
     assert_eq!(run(source), b"2");
@@ -395,8 +401,10 @@ fn a_refusal_at_the_entrys_drain_is_reported_once() {
     let report = error(
         r#"
         use /std/{proc};
-        let _ = proc/exit(1)!;
-        /std/print("unreachable")
+        let entry() -> /std/Io({}) =
+            let _ = proc/exit(1)!;
+            /std/print("unreachable");
+        entry()
         "#,
     );
     assert!(

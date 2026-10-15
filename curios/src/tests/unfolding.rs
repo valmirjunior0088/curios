@@ -22,7 +22,7 @@ enum Inner {
     Hoisted,
 }
 
-/// A grammar of `rules` rules in the `/std/Json/decode` idiom: each rule is a top-level `Parse` definition built from a `!` chain over the two rules before it.
+/// A grammar of `rules` rules in the `/std/Json/decode` idiom: each rule is a top-level `Parse` description built from explicit binds over the two rules before it. The value graph is intentional: this fixture tests sharing of descriptions independently of the source-function rule for `!`.
 fn grammar(rules: usize, inner: Inner) -> String {
     let mut source = String::from(
         "use /std/{Str, Nat, Byte, Bytes, Bool, List, Option, Result, Parse, Io};\n\n\
@@ -63,15 +63,15 @@ fn grammar(rules: usize, inner: Inner) -> String {
         };
 
         let _ = writeln!(source, "let r{rule}: Parse(Bytes, Bytes) =");
-        let _ = writeln!(source, "    let x0 = {previous}!;");
-        let _ = writeln!(source, "    let x1 = {older}!;");
-        let _ = writeln!(source, "    let x2 = {previous}!;");
+        let mut bindings = vec![("x0", previous.clone()), ("x1", older), ("x2", previous)];
         if let (Some(many), Some(separated)) = (many, separated) {
-            let _ = writeln!(source, "    let m = {many}!;");
-            let _ = writeln!(source, "    let s = {separated}!;");
+            bindings.extend([("m", many), ("s", separated)]);
         }
-        let _ = writeln!(source, "    let e = eq!;");
-        let _ = writeln!(source, "    Parse/pure(x0);");
+        bindings.push(("e", "eq".to_string()));
+        for (name, action) in &bindings {
+            let _ = writeln!(source, "    Parse/bind({action}, ({name}) =>");
+        }
+        let _ = writeln!(source, "    Parse/pure(x0){};", ")".repeat(bindings.len()));
     }
 
     let _ = writeln!(source, "\nlet top: Parse(Bytes, Bytes) = r{};\n", rules - 1);
@@ -80,7 +80,8 @@ fn grammar(rules: usize, inner: Inner) -> String {
 }
 
 /// The entry every grammar shares: a runtime-tainted input, so nothing folds the parse away.
-const ENTRY: &str = r#"let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+const ENTRY: &str = r#"let entry() -> /std/Io({}) =
+let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
 let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 match input: (_) => Io({})
 | some(bytes) =>
@@ -93,7 +94,8 @@ match input: (_) => Io({})
     | failure(e) => /std/print(e.message)
     end
 | none() => /std/print("no input\n")
-end
+end;
+entry()
 "#;
 
 /// The tail every measured program here shares.

@@ -36,19 +36,22 @@ let rounds(k: Nat, c: Chain) -> Chain =
 let total(c: Chain, acc: Nat) -> Nat =
     match c: (_) => Nat | nil() => acc | cons(v, tail) => total(tail, (acc + v) % 1000003) end;
 
-let arguments = /std/proc/args()!;
-let input = /std/List/try_get(arguments, 1);
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(s) =>
-        match Nat/of_str(Str/trim(s)): (_) => Io({})
-        | some(k) =>
-            let chain = rounds(k, build(cells, (k + 1) % 65537, Chain/nil()));
-            /std/print(Str/concat(Nat/to_str(total(chain, 0)), "\n"))
-        | none() => /std/print("bad input\n")
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) =>
+            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            | some(k) =>
+                let chain = rounds(k, build(cells, (k + 1) % 65537, Chain/nil()));
+                /std/print(Str/concat(Nat/to_str(total(chain, 0)), "\n"))
+            | none() => /std/print("bad input\n")
+            end
+        | failure(_) => /std/print("invalid utf-8\n")
         end
-    | failure(_) => /std/print("invalid utf-8\n")
-    end
-| none() => /std/print("no input\n")
-end
+    | none() => /std/print("no input\n")
+    end;
+
+entry()

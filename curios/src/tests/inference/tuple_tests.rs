@@ -11,8 +11,10 @@ fn a_tuple_argument_no_caller_pins_settles_to_its_product() {
         use /std/{Nat, Io};
         let swallow(@A : Type, a : A) -> Nat = 0;
         let n : Nat = swallow((1, 2));
-        let _ = /std/print(Nat/to_str(n))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(n))!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"0");

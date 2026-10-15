@@ -26,11 +26,13 @@ fn accumulation_loops_are_linear_by_construction() {
             | 0 => acc
             | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
-        let built = go(25000, x[]);
-        let head = Bytes/slice(built, 0, 10);
-        let _ = Io/Write/write(Io/stdout, head)!;
-        let _ = /std/print(Nat/to_str(Bytes/len(built)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let built = go(25000, x[]);
+            let head = Bytes/slice(built, 0, 10);
+            let _ = Io/Write/write(Io/stdout, head)!;
+            let _ = /std/print(Nat/to_str(Bytes/len(built)))!;
+            /std/Io/pure(());
+        entry()
         "#),
         b"0123456789250000"
     );
@@ -47,24 +49,26 @@ fn peel_loops_are_linear_by_construction() {
             | 0 => acc
             | k + 1; ih => build(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
-        let built = build(10000, x[]);
-        let c = Cell/new()!;
-        let _ = Cell/fill(c, built)!;
-        let drain(c: Cell(Bytes), fuel : Nat, acc : Nat) -> Io(Nat) =
-            match fuel
-            | 0 => Io/pure(acc)
-            | f + 1; ih =>
-                match Option/unwrap_or(Cell/poll(c)!, x[])
-                | x[] => Io/pure(acc)
-                | x[h, ..t]; ih2 =>
-                    let next = Cell/new()!;
-                    let _ = Cell/fill(next, t)!;
-                    drain(next, f, acc + (Byte/to_nat(h) - 48))
-                end
-            end;
-        let total = drain(c, Bytes/len(built) + 1, 0)!;
-        let _ = /std/print(Nat/to_str(total))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let built = build(10000, x[]);
+            let c = Cell/new()!;
+            let _ = Cell/fill(c, built)!;
+            let drain(c: Cell(Bytes), fuel : Nat, acc : Nat) -> Io(Nat) =
+                match fuel
+                | 0 => Io/pure(acc)
+                | f + 1; ih =>
+                    match Option/unwrap_or(Cell/poll(c)!, x[])
+                    | x[] => Io/pure(acc)
+                    | x[h, ..t]; ih2 =>
+                        let next = Cell/new()!;
+                        let _ = Cell/fill(next, t)!;
+                        drain(next, f, acc + (Byte/to_nat(h) - 48))
+                    end
+                end;
+            let total = drain(c, Bytes/len(built) + 1, 0)!;
+            let _ = /std/print(Nat/to_str(total))!;
+            /std/Io/pure(());
+        entry()
         "#),
         b"450000"
     );
@@ -86,37 +90,39 @@ fn a_collapsed_wrapper_survives_storage_and_retrieval() {
         induct Only : Type
         | only()
         end
-        let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-        let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-        match input : (_) => Io({})
-        | some(bytes) =>
-            match Str/of_bytes(bytes) : (_) => Io({})
-            | success(s) =>
-                match Nat/of_str(Str/trim(s)) : (_) => Io({})
-                | some(d) =>
-                    let stored : List(Meters) = [Meters/m(d), Meters/m(d + 1)];
-                    let sum = List/fold(stored, 0, (x, acc) =>
-                        match x : (_) => Nat
-                        | m(n) => acc + n
-                        end);
-                    let extra =
-                        match Both/both(d + 2, Meters/m(d + 3)) : (_) => Nat
-                        | both(a, w) =>
-                            match w : (_) => Nat
-                            | m(n) => a + n
-                            end
-                        end;
-                    let z =
-                        match Only/only() : (_) => Nat
-                        | only() => d
-                        end;
-                    /std/print(Nat/to_str(sum + extra + z))
-                | none() => /std/print("bad input")
+        let entry() -> /std/Io({}) =
+            let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+            let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+            match input : (_) => Io({})
+            | some(bytes) =>
+                match Str/of_bytes(bytes) : (_) => Io({})
+                | success(s) =>
+                    match Nat/of_str(Str/trim(s)) : (_) => Io({})
+                    | some(d) =>
+                        let stored : List(Meters) = [Meters/m(d), Meters/m(d + 1)];
+                        let sum = List/fold(stored, 0, (x, acc) =>
+                            match x : (_) => Nat
+                            | m(n) => acc + n
+                            end);
+                        let extra =
+                            match Both/both(d + 2, Meters/m(d + 3)) : (_) => Nat
+                            | both(a, w) =>
+                                match w : (_) => Nat
+                                | m(n) => a + n
+                                end
+                            end;
+                        let z =
+                            match Only/only() : (_) => Nat
+                            | only() => d
+                            end;
+                        /std/print(Nat/to_str(sum + extra + z))
+                    | none() => /std/print("bad input")
+                    end
+                | failure(_) => /std/print("bad utf8")
                 end
-            | failure(_) => /std/print("bad utf8")
-            end
-        | none() => /std/print("no input")
-        end
+            | none() => /std/print("no input")
+            end;
+        entry()
         "#,
         system,
     )
@@ -145,20 +151,22 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
             | leaf(n) => n % 1000003
             | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
             end;
-        let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-        let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-        match input : (_) => Io({})
-        | some(bytes) =>
-            match Str/of_bytes(bytes) : (_) => Io({})
-            | success(s) =>
-                match Nat/of_str(Str/trim(s)) : (_) => Io({})
-                | some(d) => /std/print(Nat/to_str(sum(build(d, 1))))
-                | none() => /std/print("bad input")
+        let entry() -> /std/Io({}) =
+            let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+            let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+            match input : (_) => Io({})
+            | some(bytes) =>
+                match Str/of_bytes(bytes) : (_) => Io({})
+                | success(s) =>
+                    match Nat/of_str(Str/trim(s)) : (_) => Io({})
+                    | some(d) => /std/print(Nat/to_str(sum(build(d, 1))))
+                    | none() => /std/print("bad input")
+                    end
+                | failure(_) => /std/print("bad utf8")
                 end
-            | failure(_) => /std/print("bad utf8")
-            end
-        | none() => /std/print("no input")
-        end
+            | none() => /std/print("no input")
+            end;
+        entry()
         "#,
         system,
     )
@@ -174,12 +182,14 @@ fn a_nan_default_on_a_runtime_option_converges() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Flt, Str, Bytes, Option};
-        let taint = Bytes/len(/std/rand/bytes(3)!);
-        let f(s : Str) -> Option(Flt) =
-            let n = Nat/of_str(s)!;
-            Option/some(Nat/to_flt(n));
-        /std/print(Nat/to_str(
-            Option/unwrap_or(Flt/try_to_nat(Option/unwrap_or(f(Nat/to_str(taint)), +nan.0)), 0)))
+        let entry() -> /std/Io({}) =
+            let taint = Bytes/len(/std/rand/bytes(3)!);
+            let f(s : Str) -> Option(Flt) =
+                let n = Nat/of_str(s)!;
+                Option/some(Nat/to_flt(n));
+            /std/print(Nat/to_str(
+                Option/unwrap_or(Flt/try_to_nat(Option/unwrap_or(f(Nat/to_str(taint)), +nan.0)), 0)));
+        entry()
         "#),
         b"3"
     );
@@ -195,10 +205,12 @@ fn arena_pure_computation_hugs_a_host_effect() {
             | 0 => 0
             | p + 1; ih => n + ih
             end;
-        let before = /std/print("a")!;
-        let pure = triangle(100);
-        let after = /std/print(Nat/to_str(pure))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let before = /std/print("a")!;
+            let pure = triangle(100);
+            let after = /std/print(Nat/to_str(pure))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"a10000".to_vec());
 
@@ -227,8 +239,10 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
             | 0 => acc
             | p + 1; ih => build(p, x[0x61, ..acc])
             end;
-        let _ = /std/print(Nat/to_str(count(build({depth}, x[]))))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({{}}) =
+            let _ = /std/print(Nat/to_str(count(build({depth}, x[]))))!;
+            /std/Io/pure(());
+        entry()
         "#
         )
     };
@@ -255,18 +269,20 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
         r#"
         use /std/{Str, Nat, Char, Option, Result, Io};
         use /std/Str/{At};
-        let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-        let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-        match input: (_) => Io({})
-        | some(bytes) =>
-            match Str/of_bytes(bytes): (_) => Io({})
-            | success(s) =>
-                let run = Str/span(s, At/start(s), (c) => Char/to_nat(c) != 10);
-                /std/print(Nat/to_str(run.past.offset))
-            | failure(_) => /std/print("invalid utf-8")
-            end
-        | none() => /std/print("no input")
-        end
+        let entry() -> /std/Io({}) =
+            let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+            let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+            match input: (_) => Io({})
+            | some(bytes) =>
+                match Str/of_bytes(bytes): (_) => Io({})
+                | success(s) =>
+                    let run = Str/span(s, At/start(s), (c) => Char/to_nat(c) != 10);
+                    /std/print(Nat/to_str(run.past.offset))
+                | failure(_) => /std/print("invalid utf-8")
+                end
+            | none() => /std/print("no input")
+            end;
+        entry()
         "#,
     );
 
@@ -322,13 +338,15 @@ fn a_recursion_as_deep_as_its_data_runs() {
     assert_eq!(
         run(r#"
         use /std/{Nat, List, Str, Io};
-        let numbers = List/range(0, 100000);
-        let pairs = List/zip(numbers, List/take(numbers, 100000));
-        let walked = List/traverse(numbers, (n: Nat) => Io/pure(n + 1))!;
-        let _ = /std/print(Nat/to_str(List/len(pairs)))!;
-        let _ = /std/print(" ")!;
-        let _ = /std/print(Nat/to_str(List/len(walked)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let numbers = List/range(0, 100000);
+            let pairs = List/zip(numbers, List/take(numbers, 100000));
+            let walked = List/traverse(numbers, (n: Nat) => Io/pure(n + 1))!;
+            let _ = /std/print(Nat/to_str(List/len(pairs)))!;
+            let _ = /std/print(" ")!;
+            let _ = /std/print(Nat/to_str(List/len(walked)))!;
+            /std/Io/pure(());
+        entry()
         "#),
         b"100000 100000".to_vec()
     );
@@ -342,8 +360,10 @@ fn a_recursion_with_no_end_stops_on_the_stack_it_was_given() {
         r#"
         use /std/{Nat, List, Str, Io};
         let forever(n : Nat) -> List(Nat) = [n, ..forever(n + 1)];
-        let _ = /std/print(Nat/to_str(List/len(forever(0))))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(List/len(forever(0))))!;
+            /std/Io/pure(());
+        entry()
         "#,
         system,
     )

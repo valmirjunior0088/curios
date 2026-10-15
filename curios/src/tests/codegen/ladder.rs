@@ -427,27 +427,29 @@ let work(mode: Str, n: Nat) -> Nat =
     | _ => 0
     end;
 
-let arguments = /std/proc/args()!;
-let mode = /std/List/try_get(arguments, 1);
-let size = /std/List/try_get(arguments, 2);
-let answer: Str =
-    match mode
-    | none() => "0"
-    | some(m) =>
-        match size
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let mode = /std/List/try_get(arguments, 1);
+    let size = /std/List/try_get(arguments, 2);
+    let answer: Str =
+        match mode
         | none() => "0"
-        | some(s) =>
-            match Str/of_bytes(m)
-            | failure(_) => "0"
-            | success(decoder) =>
-                match Option/bind(Result/to_option(Str/of_bytes(s)), Nat/of_str)
-                | none() => "0"
-                | some(n) => Nat/to_str(work(decoder, n))
+        | some(m) =>
+            match size
+            | none() => "0"
+            | some(s) =>
+                match Str/of_bytes(m)
+                | failure(_) => "0"
+                | success(decoder) =>
+                    match Option/bind(Result/to_option(Str/of_bytes(s)), Nat/of_str)
+                    | none() => "0"
+                    | some(n) => Nat/to_str(work(decoder, n))
+                    end
                 end
             end
-        end
-    end;
-/std/print(answer)
+        end;
+    /std/print(answer);
+entry()
 "#;
 
 /// What a decoder's time does when its document doubles: `Json/decode` over `[1, 1, …]`, `Html/of_str` over `<p>x</p>…` and a `take_while` and `expect` token walk over `abcdefgh,…`, each at three sizes that double, timed in process over the Binaryen path. A decoder that costs what it reads doubles; one whose walk reads what is left of its input at every token quadruples.

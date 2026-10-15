@@ -64,19 +64,19 @@ const SERVER: &str = r#"
             Try/pure(Response/with_header(said, "Date", "Tue, 15 Nov 1994 08:12:31 GMT"))
         | _ => Try/pure(said)
         end;
-    let session: Try(Io, Io/Error, {}) =
+    let session() -> Try(Io, Io/Error, {}) =
         let l = Listener/listen("0.0.0.0", 8080)!;
         let c = Listener/accept(l)!;
         let _ = Server/answer(Server/default, Scheme/http(), handler)(c)!;
         let _ = Socket/close(c)!;
         Listener/close(l);
-    let program: Io({}) =
-        let r = Try/run(session)!;
+    let program() -> Io({}) =
+        let r = Try/run(session())!;
         match r
         | success(_) => Io/pure(())
         | failure(e) => /std/print(Show/show(e))
         end;
-    program
+    program()
     "#;
 
 /// What the server wrote to its one connection under `host`, and that connection's events in order.
@@ -386,11 +386,11 @@ const CLIENT: &str = r#"
                 | redirected(_) => "redirected"
                 end
             end);
-    let program: Io({}) =
+    let program() -> Io({}) =
         let got = told(Method/get(), Url/lit("http://example.com/"))!;
         let headed = told(Method/head(), Url/lit("http://head.example/"))!;
         /std/print(Str/flatten([got, "\n", headed]));
-    program
+    program()
     "#;
 
 /// What the client says of its `GET` to `example.com` under `host`.

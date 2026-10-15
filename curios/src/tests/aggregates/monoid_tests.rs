@@ -13,8 +13,10 @@ fn list_match_is_a_foldr() {
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
-        let _ = /std/print(Nat/to_str(digits))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(digits))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"4321");
 }
@@ -25,8 +27,10 @@ fn list_fold_is_a_left_loop() {
     let source = r#"
         use /std/{Str, Nat, List, Io};
         let digits : Nat = List/fold([1, 2, 3, 4], 0, (h, acc) => acc * 10 + h);
-        let _ = /std/print(Nat/to_str(digits))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(digits))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"1234");
 }
@@ -37,8 +41,10 @@ fn list_map_fills_every_slot() {
     let source = r#"
         use /std/{Str, Nat, List, Option, Io};
         let xs : List(Nat) = List/map([10, 20, 30], (n) => Nat/add(n, 1));
-        let _ = /std/print(Nat/to_str(Nat/add(Option/unwrap_or(List/try_get(xs, 0), 0), Option/unwrap_or(List/try_get(xs, 2), 0))))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(Nat/add(Option/unwrap_or(List/try_get(xs, 0), 0), Option/unwrap_or(List/try_get(xs, 2), 0))))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"42");
 }
@@ -51,8 +57,10 @@ fn list_map_distributes_over_cons() {
         let step(f : (Nat) -> Nat, x : Nat, t : List(Nat))
             -> Eq()(List/map([x, ..t], f), [f(x), ..List/map(t, f)]) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -68,8 +76,10 @@ fn bin_match_is_a_foldr() {
             | x[] => 0
             | x[h, ..t]; ih => Nat/add(Nat/mul(ih, 10), Byte/to_nat(h))
             end;
-        let _ = /std/print(Nat/to_str(digits))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(digits))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"4321");
 }
@@ -87,8 +97,10 @@ fn bin_concat_is_a_free_monoid() {
         let resegment(x : Bytes)
             -> Eq()(x[0x01, 0x02, ..x], x[0x01, ..(x[0x02, ..x])]) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -99,8 +111,10 @@ fn bin_concat_leading_byte_clash_is_rejected() {
     let source = r#"
         use /std/{Str, Eq, Bytes, Io};
         let bad(x : Bytes) -> Eq()(x[0x01, ..x], x[0x02, ..x]) = Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     error(source);
 }
@@ -123,8 +137,10 @@ fn a_literal_run_is_the_same_value_however_it_is_grouped() {
         let list_law(@T : Type, xs : List(T), p : T, q : T, r : T)
             -> Eq()([..[p, q], ..[r], ..xs], [..[p, q, r], ..xs]) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -136,8 +152,10 @@ fn a_regrouped_run_still_respects_its_order() {
         use /std/{Str, Eq, Bytes, Io};
         let bad(rest : Bytes)
             -> Eq()(x[..x[0x30], ..x[0x31], ..rest], x[..x[0x31, 0x30], ..rest]) = Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     error(source);
 }
@@ -160,8 +178,10 @@ fn a_symbolic_run_is_the_same_value_however_it_is_grouped() {
         let fold_law(@T : Type, t : List(T), b : List(T), h : T)
             -> Eq()([..[..rev(b), ..rev(t)], ..[h]], [..rev(b), ..rev(t), ..[h]]) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -185,8 +205,10 @@ fn a_length_and_a_window_do_not_depend_on_grouping() {
             Eq/refl();
         let list_length(p : Nat, q : Nat, r : Nat)
             -> Eq()(List/len([..[p, q], ..[r]]), 3) = Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -212,8 +234,10 @@ fn bin_slice_is_a_monoid_citizen() {
         let full(b : Bytes)
             -> Eq()(Bytes/slice(b, 0, Bytes/len(b), @Nat/le/refl(Bytes/len(b))), b) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -229,8 +253,10 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
                 w3 : Holds(s + (l1 + l2) <= Bytes/len(b)))
             -> Eq()(x[..Bytes/slice(b, s, l1, @w1), ..Bytes/slice(b, o, l2, @w2)], Bytes/slice(b, s, l1 + l2, @w3)) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     error(source);
 }
@@ -254,8 +280,10 @@ fn list_slice_is_a_monoid_citizen() {
         let full(@T : Type, a : List(T))
             -> Eq()(List/slice(@T, a, 0, List/len(a), @Nat/le/refl(List/len(a))), a) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -268,8 +296,10 @@ fn list_append_is_concat_with_a_single() {
         let law(@T : Type, xs : List(T), y : T)
             -> Eq()([..xs, y], [..xs, ..[y]]) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -282,8 +312,10 @@ fn bin_append_is_concat_with_a_single_byte() {
         let law(xs : Bytes, y : Byte)
             -> Eq()(x[..xs, ..(x[y])], x[..xs, y]) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -301,8 +333,10 @@ fn list_slice_window_seam_mismatch_is_rejected() {
                     ..List/slice(@T, a, s, m, @sm, @ml),
                     ..List/slice(@T, a, n, e, @ne, @el)], List/slice(@T, a, s, e, @se, @el)) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     error(source);
 }
@@ -318,8 +352,10 @@ fn bin_len_reduces_across_a_cons_spine() {
             -> Eq()(Nat/lt(0, Bytes/len(x[h, ..t])), true) = Eq/refl();
         let floor(h : Byte, t : Bytes)
             -> Eq()(Nat/lt(Bytes/len(x[h, ..t]), 0), false) = Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -334,8 +370,10 @@ fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
         let bit_head(b : Bool) -> Eq()(Bits/try_get(b[1, b], 0), Option/some(true)) = Eq/refl();
         let chained(a : Byte, b : Byte) -> Eq()(Bytes/try_get(x[0x48, a, b], 0), Option/some(lead)) = Eq/refl();
         let chained_len(a : Byte, b : Byte) -> Eq()(Bytes/len(x[a, b]), 2) = Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -347,8 +385,10 @@ fn nat_sub_peels_a_successor_spine() {
         use /std/{Str, Eq, Nat, Io};
         let peel(n : Nat) -> Eq()(Nat/sub(Nat/add(3, n), 1), Nat/add(2, n)) = Eq/refl();
         let to_zero(n : Nat) -> Eq()(Nat/sub(Nat/add(1, n), 1), n) = Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -366,8 +406,10 @@ fn list_concat_is_a_free_monoid() {
         let resegment(@T : Type, a : T, b : T, c : List(T))
             -> Eq()([a, b, ..c], [a, ..[b, ..c]]) =
             Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -378,8 +420,10 @@ fn list_concat_length_clash_is_rejected() {
     let source = r#"
         use /std/{Str, Eq, List, Io};
         let bad(@T : Type, x : T, y : T) -> Eq()([x, y], [x]) = Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
     error(source);
 }
@@ -389,8 +433,10 @@ fn empty_bin_literal_is_the_empty_sequence() {
     // The empty `Bytes` literal concatenated with a value is the identity.
     assert_eq!(
         run(r#"
-let _ = std/Io/Write/write(std/Io/stdout, x[../std/Str/to_bytes("ok")])!;
-/std/Io/pure(())
+let entry() -> /std/Io({}) =
+    let _ = std/Io/Write/write(std/Io/stdout, x[../std/Str/to_bytes("ok")])!;
+    /std/Io/pure(());
+entry()
 "#),
         b"ok"
     );

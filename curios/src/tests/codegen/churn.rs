@@ -56,23 +56,25 @@ let total(c: Chain, acc: Nat) -> Nat =
     | cons(v, tail) => total(tail, (acc + v) % 1000003)
     end;
 
-let arguments = /std/proc/args()!;
-let input = /std/List/try_get(arguments, 1);
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(s) =>
-        match Nat/of_str(Str/trim(s)): (_) => Io({})
-        | some(k) =>
-            let ballast = total(build(ballast_cells, (k + 2) % 65537, Chain/nil()), 0);
-            let chain = rounds(k, build(cells, (k + 1) % 65537, Chain/nil()));
-            /std/print(Str/concat(Nat/to_str((ballast + total(chain, 0)) % 1000003), "\n"))
-        | none() => /std/print("bad input\n")
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) =>
+            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            | some(k) =>
+                let ballast = total(build(ballast_cells, (k + 2) % 65537, Chain/nil()), 0);
+                let chain = rounds(k, build(cells, (k + 1) % 65537, Chain/nil()));
+                /std/print(Str/concat(Nat/to_str((ballast + total(chain, 0)) % 1000003), "\n"))
+            | none() => /std/print("bad input\n")
+            end
+        | failure(_) => /std/print("invalid utf-8\n")
         end
-    | failure(_) => /std/print("invalid utf-8\n")
-    end
-| none() => /std/print("no input\n")
-end
+    | none() => /std/print("no input\n")
+    end;
+entry()
 "#;
 
 /// The churn phase is measured as T(K) − T(0) at this K, which subtracts startup, the initial build, and — in the ballast arms — the whole ballast phase.
@@ -244,23 +246,25 @@ let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
         walk(k, i + 1, y, Map/insert(m, Bytes/of_nat(y), i % 1000003))
     end;
 
-let arguments = /std/proc/args()!;
-let input = /std/List/try_get(arguments, 1);
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(s) =>
-        match Nat/of_str(Str/trim(s)): (_) => Io({})
-        | some(n) =>
-            let ballast = drain(build(ballast_cells, (n + 2) % 65537, Chain/nil()), 0);
-            let m = walk(n, 0, (n + 1) % 65537, Map/empty());
-            /std/print(Str/concat(Nat/to_str((ballast + Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003)) % 1000003), "\n"))
-        | none() => /std/print("bad input\n")
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) =>
+            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            | some(n) =>
+                let ballast = drain(build(ballast_cells, (n + 2) % 65537, Chain/nil()), 0);
+                let m = walk(n, 0, (n + 1) % 65537, Map/empty());
+                /std/print(Str/concat(Nat/to_str((ballast + Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003)) % 1000003), "\n"))
+            | none() => /std/print("bad input\n")
+            end
+        | failure(_) => /std/print("invalid utf-8\n")
         end
-    | failure(_) => /std/print("invalid utf-8\n")
-    end
-| none() => /std/print("no input\n")
-end
+    | none() => /std/print("no input\n")
+    end;
+entry()
 "#;
 
 /// The `spines` half of the heap-sizing evidence, by the method `chain_collection_decomposition` documents — `--release`, timed and counted runs separate. The one difference is the subject: `spines`' live set grows toward the map's plateau instead of holding still, so an unsized heap's collections copy a growing structure and the per-insert cost is superlinear until the plateau.

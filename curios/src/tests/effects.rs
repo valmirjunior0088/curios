@@ -25,8 +25,10 @@ fn bang_sequences_a_description_like_an_explicit_bind() {
         use /std/{Io, print};
         let a : Io({}) = print("a");
         let b : Io({}) = print("b");
-        let _ = a!;
-        b
+        let entry() -> /std/Io({}) =
+            let _ = a!;
+            b;
+        entry()
         "#;
 
     assert_eq!(run(source), b"ab");
@@ -129,19 +131,21 @@ fn state_threads_through_a_bang_region() {
     let source = r#"
         use /std/{Nat, State, print};
         use /std/State/{state, get, put, modify};
-        pub let fresh: State(Nat, Nat) =
+        pub let fresh() -> State(Nat, Nat) =
             let n = get()!;
             let _ = put(n + 1)!;
             State/pure(n);
-        pub let steps: State(Nat, {Nat, Nat}) =
-            let a = fresh!;
+        pub let steps() -> State(Nat, {Nat, Nat}) =
+            let a = fresh()!;
             let _ = modify((n) => n * 2)!;
             let b = state((s) => (s, s + 1))!;
             State/pure((a, b));
-        let out = State/run(steps, 3);
-        let _ = print(Nat/to_str(out.0.0))!;
-        let _ = print(Nat/to_str(out.0.1))!;
-        print(Nat/to_str(out.1))
+        let entry() -> /std/Io({}) =
+            let out = State/run(steps(), 3);
+            let _ = print(Nat/to_str(out.0.0))!;
+            let _ = print(Nat/to_str(out.0.1))!;
+            print(Nat/to_str(out.1));
+        entry()
         "#;
 
     // init 3: fresh yields 3 (state 4), modify doubles to 8, state yields 8 (state 9): (3, 8) with final state 9.
@@ -153,10 +157,10 @@ fn state_threads_through_a_bang_region() {
 fn a_state_region_cannot_perform_io() {
     let source = r#"
         use /std/{Nat, State, print};
-        pub let leak: State(Nat, {}) =
+        pub let leak() -> State(Nat, {}) =
             let _ = print("effect")!;
             State/pure(());
-        let out = State/run(leak, 0);
+        let out = State/run(leak(), 0);
         print("unreachable")
         "#;
 
@@ -183,18 +187,20 @@ fn a_raise_short_circuits_the_region() {
         pub let compute(a: Nat, b: Nat) -> Result(Str, Nat) =
             let q = checked_div(a, b)!;
             Result/pure(q + 1);
-        let ok =
-            match compute(10, 2)
-            | success(n) => Nat/to_str(n)
-            | failure(e) => e
-            end;
-        let caught =
-            match rescue(compute(1, 0), (_) => Result/pure(0))
-            | success(n) => Nat/to_str(n)
-            | failure(e) => e
-            end;
-        let _ = print(ok)!;
-        print(caught)
+        let entry() -> /std/Io({}) =
+            let ok =
+                match compute(10, 2)
+                | success(n) => Nat/to_str(n)
+                | failure(e) => e
+                end;
+            let caught =
+                match rescue(compute(1, 0), (_) => Result/pure(0))
+                | success(n) => Nat/to_str(n)
+                | failure(e) => e
+                end;
+            let _ = print(ok)!;
+            print(caught);
+        entry()
         "#;
 
     // 10/2 + 1 = 6; the rescued division by zero yields the handler's 0.
@@ -215,15 +221,17 @@ fn a_try_region_over_io_sequences_io_actions_and_results() {
             | true => Try/raise("three")
             | false => Try/pure(m)
             end;
-        pub let twice: Try(Io, Str, Nat) =
+        pub let twice() -> Try(Io, Str, Nat) =
             let a = step(1)!;
             let b = step(a)!;
             Try/pure(b);
-        let outcome = Try/run(Try/rescue(twice, (e) => Try/pure(Str/len(e))))!;
-        match outcome
-        | success(n) => print(Nat/to_str(n))
-        | failure(e) => print(e)
-        end
+        let entry() -> /std/Io({}) =
+            let outcome = Try/run(Try/rescue(twice(), (e) => Try/pure(Str/len(e))))!;
+            match outcome
+            | success(n) => print(Nat/to_str(n))
+            | failure(e) => print(e)
+            end;
+        entry()
         "#;
 
     // Two steps print `s` each; the second raises at 3, and the rescue answers the error's length, 5.
@@ -238,19 +246,19 @@ fn a_try_region_over_io_takes_every_declared_edge() {
         pub let sync(n: Nat) -> Try(Io, Str, Nat) =
             let _ = print("i")!;
             Try/pure(n * 2);
-        pub let body: Try(Io, Str, Nat) =
+        pub let body() -> Try(Io, Str, Nat) =
             let a = sync(2)!;
             let _ = print("a")!;
             let b = Result/success(a + 1)!;
             let _ = Result/raise(@Str, @{}, "stop")!;
             Try/pure(b);
-        pub let program: Io({}) =
-            let outcome = Try/run(body)!;
+        pub let program() -> Io({}) =
+            let outcome = Try/run(body())!;
             match outcome
             | success(n) => print(Nat/to_str(n))
             | failure(e) => print(e)
             end;
-        program
+        program()
         "#;
 
     assert_eq!(run(source), b"iastop");
@@ -276,20 +284,20 @@ fn running_a_try_lifts_by_the_base_its_argument_was_declared_over() {
         satisfy Lift(Io, Job) {
             lift(action) = Job { action },
         }
-        pub let step: Try(Io, Str, Nat) =
+        pub let step() -> Try(Io, Str, Nat) =
             let _ = print("s")!;
             Try/pure(4);
-        pub let wrapped: Try(Job, Str, Nat) =
-            let outcome = Try/run(step)!;
+        pub let wrapped() -> Try(Job, Str, Nat) =
+            let outcome = Try/run(step())!;
             let n = outcome!;
             Try/pure(n + 1);
-        pub let program: Io({}) =
-            let r = Try/run(wrapped).0!;
+        pub let program() -> Io({}) =
+            let r = Try/run(wrapped()).0!;
             match r
             | success(n) => print(Nat/to_str(n))
             | failure(e) => print(e)
             end;
-        program
+        program()
         "#;
 
     assert_eq!(run(source), b"s5");
@@ -315,20 +323,20 @@ fn a_try_action_lifts_by_the_base_its_context_argument_was_declared_over() {
         satisfy Lift(Io, Job) {
             lift(action) = Job { action },
         }
-        pub let step: Try(Io, Str, Nat) =
+        pub let step() -> Try(Io, Str, Nat) =
             let _ = print("s")!;
             Try/raise("e");
-        pub let rescued: Try(Job, Str, {}) =
-            let n = Try/rescue(step, (e) => Try/pure(4))!;
+        pub let rescued() -> Try(Job, Str, {}) =
+            let n = Try/rescue(step(), (e) => Try/pure(4))!;
             let _ = print(Nat/to_str(n))!;
             Try/pure(());
-        pub let program: Io({}) =
-            let r = Try/run(rescued).0!;
+        pub let program() -> Io({}) =
+            let r = Try/run(rescued()).0!;
             match r
             | success(_) => print("!")
             | failure(e) => print(e)
             end;
-        program
+        program()
         "#;
 
     assert_eq!(run(source), b"s4!");
@@ -350,12 +358,12 @@ fn an_unreadable_action_of_another_monad_is_reported_at_its_own_bang() {
             pure = jpure,
             bind = jbind,
         }
-        let job: Job({}) =
+        let job() -> Job({}) =
             let _ = jpure(())!;
             let acts = (print("b"), 1);
             let _ = acts.0!;
             jpure(());
-        job.0
+        job().0
         "#;
 
     let error = typecheck(source).expect_err("an unlifted action must refuse");
@@ -411,12 +419,12 @@ fn an_io_action_lifts_into_a_region_with_a_declared_edge() {
         satisfy Lift(Io, Job) {
             lift(action) = Job { action },
         }
-        pub let job: Job({}) =
+        pub let job() -> Job({}) =
             let _ = print("a")!;
             let _ = jpure(())!;
             let _ = print("b")!;
             jpure(());
-        job.0
+        job().0
         "#;
 
     assert_eq!(run(source), b"ab");
@@ -505,10 +513,10 @@ fn an_explicit_lift_spells_the_same_embedding() {
         satisfy Lift(Io, Job) {
             lift(action) = Job { action },
         }
-        pub let job: Job({}) =
+        pub let job() -> Job({}) =
             let _ = lift(print("x"))!;
             jpure(());
-        job.0
+        job().0
         "#;
 
     assert_eq!(run(source), b"x");
@@ -530,10 +538,10 @@ fn a_missing_edge_reports_the_lift_witness() {
             pure = jpure,
             bind = jbind,
         }
-        pub let job: Job({}) =
+        pub let job() -> Job({}) =
             let _ = Io/yield()!;
             jpure(());
-        job.0
+        job().0
         "#;
 
     let error = typecheck(source).expect_err("a missing edge must refuse");
@@ -550,7 +558,7 @@ fn a_missing_edge_reports_the_lift_witness() {
 fn a_missing_edge_between_aliased_monads_reports_them_as_written() {
     let source = r#"
         use /std/{Byte, Str, Parse};
-        pub let mixed: Parse(Str, Byte) =
+        pub let mixed() -> Parse(Str, Byte) =
             let b = Parse/bytes/byte!;
             Parse/pure(b);
         /std/Io/pure(())
@@ -600,10 +608,10 @@ fn a_missing_composite_reports_the_declared_chain() {
         satisfy Lift(Job, Sched) {
             lift(action) = Sched { action },
         }
-        pub let prog: Sched({}) =
+        pub let prog() -> Sched({}) =
             let _ = print("io into sched")!;
             spure(());
-        prog.0.0
+        prog().0.0
         "#;
 
     let error = typecheck(source).expect_err("no composite Io-into-Sched edge exists");
@@ -622,11 +630,11 @@ fn a_non_monad_action_is_called_out() {
         pub struct Box(A: Type): pub Type {
             A,
         }
-        pub let main: Io({}) =
+        pub let main() -> Io({}) =
             let b: Box(Nat) = Box { 1 };
             let _ = b!;
             print("unreachable");
-        main
+        main()
         "#;
 
     let error = typecheck(source).expect_err("a non-monad action must refuse");
@@ -641,10 +649,10 @@ fn a_non_monad_action_is_called_out() {
 fn a_flex_action_still_sequences_without_lifting() {
     let source = r#"
         use /std/{Monad, Io, Nat, print};
-        pub let main: Io({}) =
+        pub let main() -> Io({}) =
             let n = Monad/pure(65)!;
             print(Nat/to_str(n));
-        main
+        main()
         "#;
 
     assert_eq!(run(source), b"65");
@@ -656,14 +664,16 @@ fn a_try_sequenced_in_a_region_with_no_edge_for_it_is_told_what_is_written_inste
     let error = typecheck(
         r#"
         use /std/{Result, Io, Try, File, Path, print};
-        let text = File/read_all(Path/of_str("notes.txt"))!;
-        print("read")
+        let entry() -> /std/Io({}) =
+            let text = File/read_all(Path/of_str("notes.txt"))!;
+            print("read");
+        entry()
         "#,
     )
     .expect_err("a `Try` has no edge into `Io`");
 
     assert!(
-        error.contains("needed to sequence a (x) => Try(Io, Io/Error, x) action in this Io region"),
+        error.contains("needed to sequence a Try(Io, Io/Error) action in this Io region"),
         "expected the missing edge, got: {error}"
     );
     assert!(
@@ -691,10 +701,10 @@ fn a_missing_edge_between_monads_that_hold_no_failure_offers_no_runner() {
             pure = jpure,
             bind = jbind,
         }
-        pub let job: Job({}) =
+        pub let job() -> Job({}) =
             let _ = Io/yield()!;
             jpure(());
-        job.0
+        job().0
         "#,
     )
     .expect_err("no Io-into-Job edge exists");
@@ -861,13 +871,15 @@ fn a_bang_reads_its_monad_where_only_the_value_slot_is_open() {
         use /std/{Try, Io, Nat, Str};
         let take(@A: Type, body: (Nat) -> Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
             body(1);
-        let outcome = Try/run(take((n) =>
-            let a = Try/pure(@Io, @Io/Error, n)!;
-            Try/pure(a + 1)))!;
-        match outcome
-        | success(v) => /std/print(Nat/to_str(v))
-        | failure(_) => /std/print("error")
-        end
+        let entry() -> /std/Io({}) =
+            let outcome = Try/run(take((n) =>
+                let a = Try/pure(@Io, @Io/Error, n)!;
+                Try/pure(a + 1)))!;
+            match outcome
+            | success(v) => /std/print(Nat/to_str(v))
+            | failure(_) => /std/print("error")
+            end;
+        entry()
         "#;
     assert_eq!(run(source), b"2");
 }
@@ -889,8 +901,10 @@ fn a_region_that_names_no_monad_is_still_refused() {
     let undetermined = error(
         r#"
         use /std/{Try, Io, Nat};
-        let go = Try/run((() => let a = Try/pure(@Io, @Io/Error, 1)!; Try/pure(a + 1))())!;
-        /std/print("ok")
+        let entry() -> /std/Io({}) =
+            let go = Try/run((() => let a = Try/pure(@Io, @Io/Error, 1)!; Try/pure(a + 1))())!;
+            /std/print("ok");
+        entry()
         "#,
     );
     assert!(

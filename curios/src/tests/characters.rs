@@ -11,12 +11,14 @@ fn a_character_realizes_at_the_expected_carrier() {
         let n: Nat = 'a';
         let b: Byte = 'a';
         let i: Int = 'a';
-        let c = 'a';
-        let _ = line(Nat/to_str(n))!;
-        let _ = line(Show/show(b))!;
-        let _ = line(Int/to_str(i))!;
-        let _ = line(Show/show(c))!;
-        line(Nat/to_str('\n'))
+        let entry() -> /std/Io({}) =
+            let c = 'a';
+            let _ = line(Nat/to_str(n))!;
+            let _ = line(Show/show(b))!;
+            let _ = line(Int/to_str(i))!;
+            let _ = line(Show/show(c))!;
+            line(Nat/to_str('\n'));
+        entry()
         "#),
         b"97\n97\n+97\na\n10\n"
     );
@@ -115,11 +117,13 @@ fn a_character_dispatches_as_a_nat_literal() {
             | 0 => "nul"
             | _ => "other"
             end;
-        let _ = /std/print(Str/concat(name('\n'), "\n"))!;
-        let _ = /std/print(Str/concat(name('\\'), "\n"))!;
-        let _ = /std/print(Str/concat(name('a'), "\n"))!;
-        let _ = /std/print(Str/concat(name('b'), "\n"))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Str/concat(name('\n'), "\n"))!;
+            let _ = /std/print(Str/concat(name('\\'), "\n"))!;
+            let _ = /std/print(Str/concat(name('a'), "\n"))!;
+            let _ = /std/print(Str/concat(name('b'), "\n"))!;
+            /std/Io/pure(());
+        entry()
         "#),
         b"newline\nbackslash\nletter a\nother\n"
     );

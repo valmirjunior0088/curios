@@ -26,10 +26,12 @@ type Replies = Vec<(HostOp, Vec<RawValue>)>;
 /// Run `subject`, a `Try` over `Io` with no value, against a mock host whose rows in `replies` answer raw, and the code it exits with.
 fn exit_code(subject: &str, replies: Replies) -> u8 {
     let tail = "
-let subject: Try(Io, Io/Error, {}) =
+let subject() -> Try(Io, Io/Error, {}) =
     SUBJECT;
-let r = Try/run(subject)!;
-/std/proc/exit(@{}, verdict(r))
+let main() -> Io({}) =
+    let r = Try/run(subject())!;
+    /std/proc/exit(@{}, verdict(r));
+main()
 ";
     let source = format!("{PRELUDE}{}", tail.replace("SUBJECT", subject));
     let compiled = compile(&source).expect("the fixture compiles");

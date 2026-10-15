@@ -13,19 +13,19 @@ fn run_drains_a_real_child_through_the_scheduler() {
         r#"
         use /std/{{Str, Bytes, Option, Result, Show, Try, Io, Path, File, Command}};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
-        let program: Try(Io, Io/Error, {{}}) =
+        let program() -> Try(Io, Io/Error, {{}}) =
             let e = Command/run(Command/new("/bin/echo", ["hi"]))!;
             let c = Command/run(Command {{ ..Command/new("/bin/cat", []), stdin = Command/Stdio/null() }})!;
             let first = Str/flatten([text(e.stdout), ":", Show/show(e.exit)]);
             let second = Str/flatten([text(c.stdout), ":", Show/show(c.exit)]);
             File/write_all(Path/of_str("{path}"), Str/to_bytes(Str/flatten([first, "|", second])));
-        let main: Io({{}}) =
-            let r = Try/run(program)!;
+        let main() -> Io({{}}) =
+            let r = Try/run(program())!;
             match r
             | failure(e) => /std/print(Show/show(e))
             | success(_) => Io/pure(())
             end;
-        main
+        main()
         "#
     );
 

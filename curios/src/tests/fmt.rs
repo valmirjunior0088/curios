@@ -22,15 +22,17 @@ fn print_partial_evaluation_reduces_residual() {
     let source = r#"
         use /std/{Str, Bytes, Fmt, Io};
 
-        match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
-        | chunk(bytes, @_) =>
-            match Str/of_bytes(bytes) : (_) => /std/Io({})
-            | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
-            | failure(_) => /std/print("invalid input")
-            end
-        | eof() => /std/print("invalid input")
-        | error(_) => /std/print("invalid input")
-        end
+        let entry() -> /std/Io({}) =
+            match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
+            | chunk(bytes, @_) =>
+                match Str/of_bytes(bytes) : (_) => /std/Io({})
+                | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
+                | failure(_) => /std/print("invalid input")
+                end
+            | eof() => /std/print("invalid input")
+            | error(_) => /std/print("invalid input")
+            end;
+        entry()
         "#;
 
     let entrypoint = source
@@ -71,15 +73,17 @@ fn print_runtime_args_specializes_spine() {
     let source = r#"
         use /std/{Str, Bytes, Fmt, Io};
 
-        match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
-        | chunk(bytes, @_) =>
-            match Str/of_bytes(bytes) : (_) => /std/Io({})
-            | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
-            | failure(_) => /std/print("invalid input")
-            end
-        | eof() => /std/print("invalid input")
-        | error(_) => /std/print("invalid input")
-        end
+        let entry() -> /std/Io({}) =
+            match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
+            | chunk(bytes, @_) =>
+                match Str/of_bytes(bytes) : (_) => /std/Io({})
+                | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
+                | failure(_) => /std/print("invalid input")
+                end
+            | eof() => /std/print("invalid input")
+            | error(_) => /std/print("invalid input")
+            end;
+        entry()
         "#;
 
     let entrypoint = source
@@ -122,9 +126,11 @@ fn print_err_formats_to_stderr() {
     assert_eq!(
         run(r#"
         use /std/{Fmt, Io};
-        let a = /std/print("before;")!;
-        let b = Fmt/print_err("%: %;")("code")(3)!;
-        /std/print("after")
+        let entry() -> /std/Io({}) =
+            let a = /std/print("before;")!;
+            let b = Fmt/print_err("%: %;")("code")(3)!;
+            /std/print("after");
+        entry()
         "#),
         b"before;code: 3;after"
     );
@@ -243,7 +249,9 @@ fn a_format_past_the_evaluators_budget_still_prints() {
 fn runtime_args_leave_no_formatter_in_cont() {
     let source = r#"
         use /std/{Fmt, Nat, List, proc};
-        Fmt/print("count: %")(Nat/to_str(List/len(proc/args()!)))
+        let entry() -> /std/Io({}) =
+            Fmt/print("count: %")(Nat/to_str(List/len(proc/args()!)));
+        entry()
         "#;
     assert_eq!(run(source), b"count: 0".to_vec());
 
@@ -262,15 +270,17 @@ fn a_runtime_format_string_is_refused_by_its_written_type() {
         r#"
         use /std/{Str, Fmt, Io};
 
-        match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
-        | chunk(bytes, @_) =>
-            match Str/of_bytes(bytes) : (_) => /std/Io({})
-            | success(s) => Fmt/print(s)(3)
-            | failure(_) => /std/print("invalid input")
-            end
-        | eof() => /std/print("invalid input")
-        | error(_) => /std/print("invalid input")
-        end
+        let entry() -> /std/Io({}) =
+            match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
+            | chunk(bytes, @_) =>
+                match Str/of_bytes(bytes) : (_) => /std/Io({})
+                | success(s) => Fmt/print(s)(3)
+                | failure(_) => /std/print("invalid input")
+                end
+            | eof() => /std/print("invalid input")
+            | error(_) => /std/print("invalid input")
+            end;
+        entry()
         "#,
     );
 

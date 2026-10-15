@@ -15,7 +15,7 @@ use {
 //
 // Every fixture takes a runtime taint (`List/len(proc/args()!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
 //
-// It arrives through two bindings rather than one annotated `let`, because an annotated top-level `let` is a module *item* and an item's value body is its own sequencing region — a `!` written there could not reach the program's. The unannotated binding opens the final term instead, and the annotation rides on a local `let` inside it.
+// The runtime taint is read inside the entry function; its local annotations share that function's sequencing region.
 
 pub(super) const LCG: &str = r#"
     use /std/{Nat, List, proc};
@@ -24,9 +24,11 @@ pub(super) const LCG: &str = r#"
         | 0 => x
         | kp + 1; ih => loop(kp, 75 * x % 65537)
         end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    /std/print(Nat/to_str(loop(n, 1)))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        /std/print(Nat/to_str(loop(n, 1)));
+    entry()
     "#;
 
 pub(super) const TREES: &str = r#"
@@ -45,9 +47,11 @@ pub(super) const TREES: &str = r#"
         | leaf(n) => n % 1000003
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
         end;
-    let taint = List/len(proc/args()!);
-    let d : Nat = taint;
-    /std/print(Nat/to_str(sum(build(d, 1))))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let d : Nat = taint;
+        /std/print(Nat/to_str(sum(build(d, 1))));
+    entry()
     "#;
 
 pub(super) const HIGHER_ORDER: &str = r#"
@@ -57,10 +61,12 @@ pub(super) const HIGHER_ORDER: &str = r#"
         | true => (y) => y + 1
         | false => (y) => y * 2
         end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    let f = pick(n <= 0);
-    /std/print(Nat/to_str(f(n)))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        let f = pick(n <= 0);
+        /std/print(Nat/to_str(f(n)));
+    entry()
     "#;
 
 pub(super) const DIRECT_ESCAPING: &str = r#"
@@ -72,10 +78,12 @@ pub(super) const DIRECT_ESCAPING: &str = r#"
         | true => g
         | false => (y) => y
         end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    let escaped = select(n <= 0, inc);
-    /std/print(Nat/to_str(inc(n) + apply(escaped, n)))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        let escaped = select(n <= 0, inc);
+        /std/print(Nat/to_str(inc(n) + apply(escaped, n)));
+    entry()
     "#;
 
 pub(super) const FUNCTION_ONLY: &str = r#"
@@ -85,9 +93,11 @@ pub(super) const FUNCTION_ONLY: &str = r#"
         | 0 => acc
         | p + 1; ih => down(p, acc + 1)
         end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    /std/print(Nat/to_str(down(n, 0)))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        /std/print(Nat/to_str(down(n, 0)));
+    entry()
     "#;
 
 /// Two mutually recursive functions entered from two arms of a runtime match — the closest surface shape to an irreducible cycle. Curios has no unstructured jump, so the structurizer lays this out reducibly (no dispatcher); see [`mutual_recursion_stays_reducible`].
@@ -97,10 +107,12 @@ pub(super) const MUTUAL_RECURSION: &str = r#"
         match n : (_) => Nat | 0 => 0 | p + 1; ih => pong(p) end
     and pong(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 1 | p + 1; ih => ping(p) end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    let start = n <= 0;
-    /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        let start = n <= 0;
+        /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end));
+    entry()
     "#;
 
 /// A callee returning two distinct constructors to two different callers — the intersection no existing pass reaches. Two external call sites is one too many for contification, whose whole admissibility rests on there being a single return context; the body is past the multi-site inline budget; and neither caller can see the construction, since it is built inside `advance` and arrives as an opaque continuation parameter. `more` carries three fields and `done` two, so the class is four slots wide and the shorter constructor exercises the filler. Neither constructor is unary on purpose: the immediate encoding hands a lone `done(Nat)` edge back as a bare payload rather than a construction, which would quietly retire this fixture's premise — exactly the decay the test's premise check exists to catch.
@@ -131,9 +143,11 @@ pub(super) const SPLIT_RETURN: &str = r#"
         | more(p, q, t) => (p * 2 + q + t) % 40009
         | done(r, s) => (r * 3 + s) % 40009
         end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    /std/print(Nat/to_str(first(n) + second(n)))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        /std/print(Nat/to_str(first(n) + second(n)));
+    entry()
     "#;
 
 /// A recursive callee returning a closure that every caller immediately applies — the shape a monadic carrier produces, where an action *is* a function so each step allocates one.
@@ -154,9 +168,11 @@ pub(super) const UNCURRY: &str = r#"
             let c = (b * 3 + 19) % 30011;
             walk(m)(c)
         end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    /std/print(Nat/to_str(walk(n)(1)))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        /std/print(Nat/to_str(walk(n)(1)));
+    entry()
     "#;
 
 /// [`UNCURRY`]'s admissible shape with one difference: the caller applies the returned closure once *and* captures it in a lambda defined below the application, which escapes into a `List/map` so it is neither inlined nor dead. `mk` is recursive and `n` tainted so nothing folds the closure away, every return edge carries a closure, and the direct application is the resume's only *visible* use.
@@ -170,12 +186,14 @@ pub(super) const UNCURRY_CAPTURED: &str = r#"
             let w = f(0);
             (m) => f(m) + w
         end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    let c = mk(n);
-    let v = c(2);
-    let ws = List/map([0], (z) => c(z + 10));
-    /std/print(Str/concat(Nat/to_str(v), Str/concat(" ", Nat/to_str(List/fold(ws, 0, (w, acc) => w + acc)))))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        let c = mk(n);
+        let v = c(2);
+        let ws = List/map([0], (z) => c(z + 10));
+        /std/print(Str/concat(Nat/to_str(v), Str/concat(" ", Nat/to_str(List/fold(ws, 0, (w, acc) => w + acc)))));
+    entry()
     "#;
 
 /// A capture-free closure selected and applied inside a loop — the constant-closure interning shape. Each iteration picks one of two lambdas by a runtime condition, so the call stays genuinely unknown (the parameter joins two closures, exactly [`HIGHER_ORDER`]'s conflict), but neither lambda captures anything: with the code field an ordinary `i32`, both are constant aggregates, so the loop must reference two module consts rather than construct an environment per iteration.
@@ -191,9 +209,11 @@ pub(super) const LOOPED_PICK: &str = r#"
                 end;
             spin(p, f(acc) % 40009)
         end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    /std/print(Nat/to_str(spin(n, 1)))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        /std/print(Nat/to_str(spin(n, 1)));
+    entry()
     "#;
 
 /// A variant carried round a loop whose payload the analysis holds in a register — the shape that puts a variant-width filler in a *raw* slot.
@@ -216,9 +236,11 @@ pub(super) const VARIANT_FILLER: &str = r#"
                 end;
             spin(p, next)
         end;
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint * 4 + 4;
-    /std/print(Flt/to_str(spin(n, Option/none())))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint * 4 + 4;
+        /std/print(Flt/to_str(spin(n, Option/none())));
+    entry()
     "#;
 
 /// A variant whose two constructors share a payload slot, joined from both: `success` hands the slot a float and `failure` an error. The join reads the payload as a float under one tag and as the error under the other.
@@ -245,23 +267,27 @@ pub(super) const SHARED_PAYLOAD: &str = r#"
         | success(f) => Flt/to_str(f + +0.5)
         | failure(why) => why
         end;
-    let taint = List/len(proc/args()!);
-    /std/print(Str/join(" | ", [told(taint + 1), told(taint), told(taint + 3)]))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        /std/print(Str/join(" | ", [told(taint + 1), told(taint), told(taint + 3)]));
+    entry()
     "#;
 
 /// The same slot met through a parser: `whole` binds a float and answers it after a later step, so the float is `success`'s payload beside the refusal `failure` carries, and here the refusal is built where the join can see it.
 pub(super) const PARSED_FLOAT: &str = r#"
     use /std/{Str, Flt, Parse, Nat, Char, List, proc};
-    let digits : Parse(Str, Flt) =
+    let digits() -> Parse(Str, Flt) =
         let run = Parse/text/take_while(Char/is_digit)!;
         Parse/pure(Nat/to_flt(Str/len(run)));
-    let whole : Parse(Str, Flt) =
-        let value = digits!;
+    let whole() -> Parse(Str, Flt) =
+        let value = digits()!;
         let _ = Parse/eof()!;
         Parse/pure(value);
-    let taint = List/len(proc/args()!);
-    let text = Str/concat(Nat/to_str(taint + 10), match taint > 99 | true => "x" | false => "" end);
-    /std/print(match Parse/run(whole, text) | success(f) => Flt/to_str(f) | failure(_) => "none" end)
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let text = Str/concat(Nat/to_str(taint + 10), match taint > 99 | true => "x" | false => "" end);
+        /std/print(match Parse/run(whole(), text) | success(f) => Flt/to_str(f) | failure(_) => "none" end);
+    entry()
     "#;
 
 /// A value whose type a match computes: `Held(b)` is a float where `b` holds and a string where it does not, so the one name `v` is joined from a float and from a string, and read as a float under one branch only. No variant is involved and no slot is shared: the parameter itself has two types.
@@ -280,8 +306,10 @@ pub(super) const COMPUTED_TYPE: &str = r#"
             | true => (x) => Flt/to_str(x + +0.5)
             | false => (x) => x
             end)(v);
-    let taint = List/len(proc/args()!);
-    /std/print(Str/join(" | ", [told(taint % 2 == 0, taint + 2), told(taint % 2 == 1, taint + 3)]))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        /std/print(Str/join(" | ", [told(taint % 2 == 0, taint + 2), told(taint % 2 == 1, taint + 3)]));
+    entry()
     "#;
 
 /// An idiomatic string walk: `/std/Str/fold` over a string the program derives at runtime.
@@ -289,10 +317,12 @@ pub(super) const COMPUTED_TYPE: &str = r#"
 /// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in the scan `/std/Str/Valid/try` runs over every byte, whose allocations would swamp the claim. What is left is the walk itself.
 pub(super) const STRING_WALK: &str = r#"
     use /std/{Nat, Str, Char, List, proc};
-    let taint = List/len(proc/args()!);
-    let n : Nat = taint;
-    let text : Str = Nat/to_str(n);
-    /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))))
+    let entry() -> /std/Io({}) =
+        let taint = List/len(proc/args()!);
+        let n : Nat = taint;
+        let text : Str = Nat/to_str(n);
+        /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))));
+    entry()
     "#;
 
 // -- helpers ----------------------------------------------------------------

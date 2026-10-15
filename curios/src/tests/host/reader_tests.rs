@@ -27,7 +27,9 @@ fn reads(tail: &str) -> String {
                     [line(a), line(b), text(c.bytes), text(d.bytes), line(e), text(f), line(g)]));
         let said(outcome: Result(Io/Error, Str)) -> Io({{}}) =
             match outcome | success(read) => print(read) | failure(why) => print(Show/show(why)) end;
-        {tail}
+        let main() -> Io({{}}) =
+            {tail};
+        main()
         "#
     )
 }
@@ -94,7 +96,7 @@ fn the_named_reads_answer_alike_over_every_cut_of_their_input() {
 fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
     let source = format!(
         r#"{WIRE}
-        let program: Io({{}}) =
+        let program() -> Io({{}}) =
             let ends = Channel/new(@Bytes, 4)!;
             let input = Io/Reader/new(Wire {{ ends.1 }})!;
             let _ = Channel/try_send(ends.0, Str/to_bytes("ab"))!;
@@ -105,7 +107,7 @@ fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
             let _ = Channel/try_send(ends.0, Str/to_bytes("cd\nef"))!;
             let patient = Try/run(Io/Reader/line(input))!;
             print(Str/concat("|", line(patient)));
-        program
+        program()
         "#
     );
     let (system, io) = MockHost::builder()
@@ -122,17 +124,19 @@ fn a_refusal_past_the_bound_leaves_the_bytes_held() {
     let source = r#"
         use /std/{Str, Bytes, Option, Result, Show, Try, Io, print};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
-        let input = Io/Reader/within(Io/stdin, 4)!;
-        let refused = Try/run(Io/Reader/line(input))!;
-        let _ = print(match refused | success(_) => "read" | failure(why) => Show/show(why) end)!;
-        let held = Io/Reader/held(input)!;
-        let _ = print(Str/concat("|", text(held)))!;
-        let two = Try/run(Io/Reader/exactly(input, 2))!;
-        print(
-            match two
-            | success(found) => Str/concat("|", text(found.bytes))
-            | failure(why) => Show/show(why)
-            end)
+        let entry() -> /std/Io({}) =
+            let input = Io/Reader/within(Io/stdin, 4)!;
+            let refused = Try/run(Io/Reader/line(input))!;
+            let _ = print(match refused | success(_) => "read" | failure(why) => Show/show(why) end)!;
+            let held = Io/Reader/held(input)!;
+            let _ = print(Str/concat("|", text(held)))!;
+            let two = Try/run(Io/Reader/exactly(input, 2))!;
+            print(
+                match two
+                | success(found) => Str/concat("|", text(found.bytes))
+                | failure(why) => Show/show(why)
+                end);
+        entry()
     "#;
     let (system, io) = MockHost::builder().stdin_chunks(vec!["abcdef"]).build();
 
@@ -191,12 +195,14 @@ fn a_line_is_read_as_text_or_refused_where_it_is_none() {
             | success(none()) => "<end>"
             | failure(why) => Show/show(why)
             end;
-        let input = Io/Reader/new(Io/stdin)!;
-        let a = Try/run(Io/Reader/line_text(input))!;
-        let b = Try/run(Io/Reader/line_text(input))!;
-        let c = Try/run(Io/Reader/line_text(input))!;
-        let d = Try/run(Io/Reader/line_text(input))!;
-        print(Str/join("|", [said(a), said(b), said(c), said(d)]))
+        let entry() -> /std/Io({}) =
+            let input = Io/Reader/new(Io/stdin)!;
+            let a = Try/run(Io/Reader/line_text(input))!;
+            let b = Try/run(Io/Reader/line_text(input))!;
+            let c = Try/run(Io/Reader/line_text(input))!;
+            let d = Try/run(Io/Reader/line_text(input))!;
+            print(Str/join("|", [said(a), said(b), said(c), said(d)]));
+        entry()
         "#,
         system,
     )

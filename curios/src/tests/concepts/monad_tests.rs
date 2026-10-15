@@ -35,8 +35,8 @@ fn an_action_is_embedded_wherever_its_monads_witnesses_are_written() {
             let boxed(n: Nat) -> Box(Nat) = Box {{ value = n }};
             {first}
             {second}
-            let main: Io({{}}) = let n = run(3)!; /std/print(Nat/to_str(n));
-            main
+            let main() -> Io({{}}) = let n = run(3)!; /std/print(Nat/to_str(n));
+            main()
             "#
         )
     };
@@ -93,11 +93,11 @@ fn a_bang_sequences_in_a_two_parameter_monad_region() {
                 | wrap(a) => f(a)
                 end,
         }
-        pub let prog : Box(Str, Nat) =
+        pub let prog() -> Box(Str, Nat) =
             let v = Monad/pure(3)!;
             Monad/pure(Nat/add(v, v));
         let out =
-            match prog : (_) => Nat
+            match prog() : (_) => Nat
             | wrap(value) => value
             end;
         /std/print(Nat/to_str(out))

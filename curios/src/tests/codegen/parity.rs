@@ -21,16 +21,20 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
         use /std/{Nat, List, Str, proc};
         use /std/ops/{Add};
         pub let bump(x : Nat) -> Nat = Add/add(x, 1);
-        let taint = List/len(proc/args()!);
-        let n : Nat = taint;
-        /std/print(Nat/to_str(bump(n)))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let n : Nat = taint;
+            /std/print(Nat/to_str(bump(n)));
+        entry()
         "#;
     let direct = r#"
         use /std/{Nat, List, Str, proc};
         pub let bump(x : Nat) -> Nat = Nat/add(x, 1);
-        let taint = List/len(proc/args()!);
-        let n : Nat = taint;
-        /std/print(Nat/to_str(bump(n)))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let n : Nat = taint;
+            /std/print(Nat/to_str(bump(n)));
+        entry()
         "#;
 
     assert_eq!(operations(through_concept), operations(direct),);
@@ -41,30 +45,34 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
 fn choose_matches_hand_nested_bool_codegen() {
     let ladder = r#"
         use /std/{Nat, List, Str, proc};
-        let taint = List/len(proc/args()!);
-        let n : Nat = taint;
-        let result =
-            choose
-            | n <= 0 => Nat/add(n, 100)
-            | n <= 1 => Nat/add(n, 200)
-            | _ => Nat/add(n, 300)
-            end;
-        /std/print(Nat/to_str(result))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let n : Nat = taint;
+            let result =
+                choose
+                | n <= 0 => Nat/add(n, 100)
+                | n <= 1 => Nat/add(n, 200)
+                | _ => Nat/add(n, 300)
+                end;
+            /std/print(Nat/to_str(result));
+        entry()
         "#;
     let nested = r#"
         use /std/{Nat, List, Str, proc};
-        let taint = List/len(proc/args()!);
-        let n : Nat = taint;
-        let result =
-            match n <= 0
-            | true => Nat/add(n, 100)
-            | false =>
-                match n <= 1
-                | true => Nat/add(n, 200)
-                | false => Nat/add(n, 300)
-                end
-            end;
-        /std/print(Nat/to_str(result))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let n : Nat = taint;
+            let result =
+                match n <= 0
+                | true => Nat/add(n, 100)
+                | false =>
+                    match n <= 1
+                    | true => Nat/add(n, 200)
+                    | false => Nat/add(n, 300)
+                    end
+                end;
+            /std/print(Nat/to_str(result));
+        entry()
         "#;
 
     assert_eq!(operations(ladder), operations(nested),);
@@ -80,9 +88,11 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
             | some(x) = o => x + 10
             | _ => 99
             end;
-        let taint = List/len(proc/args()!);
-        let n : Nat = taint;
-        /std/print(Nat/to_str(f(Option/some(n))))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let n : Nat = taint;
+            /std/print(Nat/to_str(f(Option/some(n))));
+        entry()
         "#;
     let headed = r#"
         use /std/{Option, Nat, List, Str, proc};
@@ -91,9 +101,11 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
             | some(x) => x + 10
             | _ => 99
             end;
-        let taint = List/len(proc/args()!);
-        let n : Nat = taint;
-        /std/print(Nat/to_str(f(Option/some(n))))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let n : Nat = taint;
+            /std/print(Nat/to_str(f(Option/some(n))));
+        entry()
         "#;
 
     assert_eq!(operations(bind), operations(headed),);
@@ -106,16 +118,20 @@ fn concept_comparison_matches_direct_intrinsic_codegen() {
         use /std/{Nat, Bool, List, Str, proc};
         use /std/ops/{Cmp};
         pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
-        let taint = List/len(proc/args()!);
-        let n : Nat = taint;
-        /std/print(Bool/to_str(small(n)))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let n : Nat = taint;
+            /std/print(Bool/to_str(small(n)));
+        entry()
         "#;
     let direct = r#"
         use /std/{Nat, Bool, List, Str, proc};
         pub let small(x : Nat) -> Bool = Nat/lt(x, 10);
-        let taint = List/len(proc/args()!);
-        let n : Nat = taint;
-        /std/print(Bool/to_str(small(n)))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let n : Nat = taint;
+            /std/print(Bool/to_str(small(n)));
+        entry()
         "#;
 
     assert_eq!(operations(through_concept), operations(direct),);

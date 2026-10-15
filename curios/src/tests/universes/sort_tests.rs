@@ -402,10 +402,12 @@ fn the_library_holds_proofs_where_it_holds_data() {
         let proofs: List(True) = [True/qed(), True/qed()];
         let found: Option(True) = Option/some(True/qed());
         let same: Eq()(True/qed(), True/qed()) = Eq/refl();
-        let held = Cell/new(@True)!;
-        let _ = Cell/fill(held, True/qed())!;
-        let count = match found | some(_) => 1 | none() => 0 end;
-        /std/print(Nat/to_str(List/len(proofs) + count))
+        let entry() -> /std/Io({}) =
+            let held = Cell/new(@True)!;
+            let _ = Cell/fill(held, True/qed())!;
+            let count = match found | some(_) => 1 | none() => 0 end;
+            /std/print(Nat/to_str(List/len(proofs) + count));
+        entry()
         "#;
 
     assert_eq!(run(source), b"3");

@@ -173,14 +173,16 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
 fn nested_nat_literal_dispatch_selects_matching_case() {
     let source = r#"
         use /std/{Option, Nat, Bytes, rand};
-        let z = Bytes/len(rand/bytes(0)!);
-        let n = Nat/add(z, 5);
-        let hit =
-            match Option/some(n)
-            | some(5) => Nat/add(z, 700)
-            | _ => Nat/add(z, 999)
-            end;
-        /std/print(Nat/to_str(hit))
+        let entry() -> /std/Io({}) =
+            let z = Bytes/len(rand/bytes(0)!);
+            let n = Nat/add(z, 5);
+            let hit =
+                match Option/some(n)
+                | some(5) => Nat/add(z, 700)
+                | _ => Nat/add(z, 999)
+                end;
+            /std/print(Nat/to_str(hit));
+        entry()
         "#;
 
     assert_eq!(run(source), b"700");
@@ -190,14 +192,16 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
 fn nested_nat_literal_dispatch_falls_through_to_default() {
     let source = r#"
         use /std/{Option, Nat, Bytes, rand};
-        let z = Bytes/len(rand/bytes(0)!);
-        let n = Nat/add(z, 6);
-        let miss =
-            match Option/some(n)
-            | some(5) => Nat/add(z, 700)
-            | _ => Nat/add(z, 999)
-            end;
-        /std/print(Nat/to_str(miss))
+        let entry() -> /std/Io({}) =
+            let z = Bytes/len(rand/bytes(0)!);
+            let n = Nat/add(z, 6);
+            let miss =
+                match Option/some(n)
+                | some(5) => Nat/add(z, 700)
+                | _ => Nat/add(z, 999)
+                end;
+            /std/print(Nat/to_str(miss));
+        entry()
         "#;
 
     assert_eq!(run(source), b"999");

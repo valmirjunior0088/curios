@@ -11,8 +11,10 @@ fn let_bound_unit_effect_survives_erasure() {
     // `{}` is unit, not a prop, so it is kept — a unit-typed effect must run after erasure. `/std/print` returns `{}`; binding its first call to an unused `let` must not drop the "a" write. Guards that the empty tuple stays runtime content (the `Sort::of` empty-tuple-is-`Type` rule).
     let source = r#"
         use /std/{Io};
-        let first = /std/print("a")!;
-        /std/print("b")
+        let entry() -> /std/Io({}) =
+            let first = /std/print("a")!;
+            /std/print("b");
+        entry()
         "#;
     assert_eq!(run(source), b"ab");
 }
@@ -24,8 +26,10 @@ fn erased_param_unused_is_accepted() {
         use /std/{Str, Nat, Io};
         let f : (T : Type, m : Nat) -> Nat = (T, m) => m;
         let r : Nat = f(Nat, 3);
-        let _ = /std/print(Nat/to_str(r))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(r))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"3");
 }
@@ -38,8 +42,10 @@ fn erased_param_is_dropped_at_runtime() {
         let h : (m : Type) -> Nat = (m) => 0;
         let g : (n : Type) -> Nat = (n) => h(n);
         let r : Nat = g(Nat);
-        let _ = /std/print(Nat/to_str(r))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(r))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"0");
 }
@@ -52,8 +58,10 @@ fn erased_struct_field_collapses_to_bare_value() {
         struct Wrap : pub Type { val : Nat, ghost : Type }
         let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
         let r : Nat = make(Nat).val;
-        let _ = /std/print(Nat/to_str(r))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(r))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"5");
 }
@@ -98,8 +106,10 @@ fn erased_tuple_field_is_a_subset_type() {
         use /std/{Str, Nat, Io};
         let make : (n : Type) -> { val : Nat, Type } = (n) => (5, n);
         let r : Nat = make(Nat).0;
-        let _ = /std/print(Nat/to_str(r))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(r))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"5");
 }
@@ -112,8 +122,10 @@ fn erased_definition_param_is_dropped_at_runtime() {
         let h(m : Type) -> Nat = 0;
         let g(n : Type) -> Nat = h(n);
         let r : Nat = g(Nat);
-        let _ = /std/print(Nat/to_str(r))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(r))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"0");
 }
@@ -132,8 +144,10 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
             | box(ghost, val) => val
             end;
         let r : Nat = get(make(Nat));
-        let _ = /std/print(Nat/to_str(r))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(r))!;
+            /std/Io/pure(());
+        entry()
         "#;
     assert_eq!(run(source), b"5");
 }

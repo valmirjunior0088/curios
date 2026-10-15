@@ -8,8 +8,10 @@ fn declaration_produces_a_wasm_import() {
     let module = compile(
         r#"
             foreign frobnicate(Nat, Bytes) -> Nat;
-            let n = frobnicate(5, x[0x00, 0x01])!;
-            /std/print(/std/Nat/to_str(n))
+            let entry() -> /std/Io({}) =
+                let n = frobnicate(5, x[0x00, 0x01])!;
+                /std/print(/std/Nat/to_str(n));
+            entry()
         "#,
     )
     .unwrap();
@@ -53,8 +55,10 @@ fn a_program_is_handed_the_rows_it_reaches() {
         r#"
             foreign reached(Nat) -> Nat;
             foreign unreached(Nat) -> Nat;
-            let n = reached(5)!;
-            /std/print(/std/Nat/to_str(n))
+            let entry() -> /std/Io({}) =
+                let n = reached(5)!;
+                /std/print(/std/Nat/to_str(n));
+            entry()
         "#,
     );
     let (_, foreigns) = crate::compile_with_prelude(
@@ -75,9 +79,11 @@ fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under()
     let module = compile(
         r#"
             foreign frobnicate(Nat) -> Nat;
-            let _ = /std/Io/Write/write(/std/Io/stdout, x[0x00])!;
-            let n = frobnicate(5)!;
-            /std/print(/std/Nat/to_str(n))
+            let entry() -> /std/Io({}) =
+                let _ = /std/Io/Write/write(/std/Io/stdout, x[0x00])!;
+                let n = frobnicate(5)!;
+                /std/print(/std/Nat/to_str(n));
+            entry()
         "#,
     )
     .unwrap();

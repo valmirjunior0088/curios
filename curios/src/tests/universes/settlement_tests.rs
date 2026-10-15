@@ -469,7 +469,7 @@ fn a_level_nothing_holds_settles_at_its_least_value() {
         }
         pub let drained(@M: (Type) -> Type, @S: Type, use Monad(M), use Source(M, S), s: S) -> M(Nat) =
             Source/pull(s);
-        pub let large: Io(Type) =
+        pub let large() -> Io(Type) =
             let _n = drained(3)!;
             Io/pure(Nat);
         pub let parameters(n: Nat) -> Option({nums: List(Nat), final: Nat}) =

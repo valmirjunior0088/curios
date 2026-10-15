@@ -17,14 +17,16 @@ fn the_description_schedules_every_rung() {
         let an_action() -> Io(Test) =
             let s = Io/pure("x")!;
             Io/pure(Test/equal(s, "x"));
-        let _ = Test/main([
-            ("/tests/a_bool", () => Test/assert(1 + 1 == 2)),
-            ("/tests/doubling", () => Test/equal(double(21), 42)),
-            ("/tests/a_failing_equal", () => Test/equal(double(2), 5)),
-            ("/tests/an_action", () => Test/perform(an_action)),
-            ("/tests/a_failing_action", () => Test/perform(() => Io/pure(Test/assert(false)))),
-        ])!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Test/main([
+                ("/tests/a_bool", () => Test/assert(1 + 1 == 2)),
+                ("/tests/doubling", () => Test/equal(double(21), 42)),
+                ("/tests/a_failing_equal", () => Test/equal(double(2), 5)),
+                ("/tests/an_action", () => Test/perform(an_action)),
+                ("/tests/a_failing_action", () => Test/perform(() => Io/pure(Test/assert(false)))),
+            ])!;
+            Io/pure(());
+        entry()
         "#),
         b"/tests/a_bool: passed\n/tests/doubling: passed\n/tests/a_failing_equal: failed\n  expected 5 but got 4\n/tests/an_action: passed\n/tests/a_failing_action: failed\n  the condition was false\n"
     );
@@ -42,11 +44,13 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
         let missing() -> Try(Io, Io/Error, Test) =
             let m = fs/stat(Path/of_str("nope"))!;
             Try/pure(Test/assert(true));
-        let _ = Test/main([
-            ("/tests/exists", () => Test/try(exists)),
-            ("/tests/missing", () => Test/try(missing)),
-        ])!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Test/main([
+                ("/tests/exists", () => Test/try(exists)),
+                ("/tests/missing", () => Test/try(missing)),
+            ])!;
+            Io/pure(());
+        entry()
         "#),
         b"/tests/exists: passed\n/tests/missing: failed\n  not_found\n"
     );
@@ -59,11 +63,13 @@ fn an_index_argument_selects_one_test() {
     run_text(
         r#"
         use /std/{Nat, Io, Test};
-        let _ = Test/main([
-            ("/tests/first", () => Test/assert(true)),
-            ("/tests/second", () => Test/assert(2 == 2)),
-        ])!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Test/main([
+                ("/tests/first", () => Test/assert(true)),
+                ("/tests/second", () => Test/assert(2 == 2)),
+            ])!;
+            Io/pure(());
+        entry()
         "#,
         system,
     )
@@ -77,8 +83,10 @@ fn spelled_strings_are_quoted_and_escaped() {
     assert_eq!(
         run(r#"
         use /std/{Str, Io, Test};
-        let _ = Test/main([("/tests/newline", () => Test/equal("a\n", "a"))])!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Test/main([("/tests/newline", () => Test/equal("a\n", "a"))])!;
+            Io/pure(());
+        entry()
         "#),
         b"/tests/newline: failed\n  expected \"a\" but got \"a\\n\"\n"
     );
@@ -93,14 +101,16 @@ fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
         let counter() -> Io(Test) =
             let _ = /std/print("performed\n")!;
             Io/pure(Test/assert(true));
-        let _ = Test/main([
-            ("/tests/passing", () => Test/all([Test/equal(1, 1), Test/equal(2, 2)])),
-            ("/tests/empty", () => Test/all([])),
-            ("/tests/first_failure", () => Test/all([Test/assert(true), Test/equal(2, 3), Test/equal(4, 5)])),
-            ("/tests/action_then_verdict", () => Test/all([Test/perform(counter), Test/assert(true)])),
-            ("/tests/failure_before_action", () => Test/all([Test/assert(false), Test/perform(counter)])),
-        ])!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Test/main([
+                ("/tests/passing", () => Test/all([Test/equal(1, 1), Test/equal(2, 2)])),
+                ("/tests/empty", () => Test/all([])),
+                ("/tests/first_failure", () => Test/all([Test/assert(true), Test/equal(2, 3), Test/equal(4, 5)])),
+                ("/tests/action_then_verdict", () => Test/all([Test/perform(counter), Test/assert(true)])),
+                ("/tests/failure_before_action", () => Test/all([Test/assert(false), Test/perform(counter)])),
+            ])!;
+            Io/pure(());
+        entry()
         "#),
         b"/tests/passing: passed\n/tests/empty: passed\n/tests/first_failure: failed\n  case 1: expected 3 but got 2\nperformed\n/tests/action_then_verdict: passed\n/tests/failure_before_action: failed\n  case 0: the condition was false\n"
     );
@@ -149,11 +159,13 @@ fn numerals_and_booleans_spell_as_their_literals() {
         use /std/{Nat, Int, Bool, Str, Io, Spell, print};
         let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
         let i: Int = 3;
-        let _ = line(Spell/spell(42))!;
-        let _ = line(Spell/spell(-7))!;
-        let _ = line(Spell/spell(i))!;
-        let _ = line(Spell/spell(true))!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = line(Spell/spell(42))!;
+            let _ = line(Spell/spell(-7))!;
+            let _ = line(Spell/spell(i))!;
+            let _ = line(Spell/spell(true))!;
+            Io/pure(());
+        entry()
         "#),
         b"42\n-7\n+3\ntrue\n"
     );
@@ -168,15 +180,17 @@ fn floats_and_their_non_finite_values_spell_as_literals() {
         run(r#"
         use /std/{Flt, Str, Io, Spell, print};
         let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
-        let _ = line(Spell/spell(2.5))!;
-        let _ = line(Spell/spell(-2.5))!;
-        let _ = line(Spell/spell(100.0))!;
-        let _ = line(Spell/spell(-0.0))!;
-        let _ = line(Spell/spell(+nan.0))!;
-        let _ = line(Spell/spell(+inf.0))!;
-        let _ = line(Spell/spell(-inf.0))!;
-        let _ = line(Spell/spell(Flt/mul(1.0e200, 1.0e200)))!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = line(Spell/spell(2.5))!;
+            let _ = line(Spell/spell(-2.5))!;
+            let _ = line(Spell/spell(100.0))!;
+            let _ = line(Spell/spell(-0.0))!;
+            let _ = line(Spell/spell(+nan.0))!;
+            let _ = line(Spell/spell(+inf.0))!;
+            let _ = line(Spell/spell(-inf.0))!;
+            let _ = line(Spell/spell(Flt/mul(1.0e200, 1.0e200)))!;
+            Io/pure(());
+        entry()
         "#),
         concat!(
             "2.5\n-2.5\n100.0\n-0.0\n",
@@ -192,10 +206,12 @@ fn text_spells_quoted_and_escaped() {
         run(r#"
         use /std/{Char, Str, Io, Spell, print};
         let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
-        let _ = line(Spell/spell('c'))!;
-        let _ = line(Spell/spell('\n'))!;
-        let _ = line(Spell/spell("a\"b\n"))!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = line(Spell/spell('c'))!;
+            let _ = line(Spell/spell('\n'))!;
+            let _ = line(Spell/spell("a\"b\n"))!;
+            Io/pure(());
+        entry()
         "#),
         b"'c'\n'\\n'\n\"a\\\"b\\n\"\n"
     );
@@ -207,10 +223,12 @@ fn sequences_spell_as_their_bracketed_literals() {
         run(r#"
         use /std/{Nat, Str, Bits, Bytes, List, Io, Spell, print};
         let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
-        let _ = line(Spell/spell(b[0, 1]))!;
-        let _ = line(Spell/spell(x[72, 255]))!;
-        let _ = line(Spell/spell([1, 2, 3]))!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = line(Spell/spell(b[0, 1]))!;
+            let _ = line(Spell/spell(x[72, 255]))!;
+            let _ = line(Spell/spell([1, 2, 3]))!;
+            Io/pure(());
+        entry()
         "#),
         b"b[0, 1]\nx[72, 255]\n[1, 2, 3]\n"
     );
@@ -223,11 +241,13 @@ fn structural_values_spell_as_type_qualified_constructor_paths() {
         run(r#"
         use /std/{Nat, Str, Option, Result, Ordering, Io, Spell, print};
         let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
-        let _ = line(Spell/spell(Option/some(3)))!;
-        let _ = line(Spell/spell(Option/none(@Nat)))!;
-        let _ = line(Spell/spell(Result/failure(@Str, @Nat, "why")))!;
-        let _ = line(Spell/spell(Ordering/lt()))!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = line(Spell/spell(Option/some(3)))!;
+            let _ = line(Spell/spell(Option/none(@Nat)))!;
+            let _ = line(Spell/spell(Result/failure(@Str, @Nat, "why")))!;
+            let _ = line(Spell/spell(Ordering/lt()))!;
+            Io/pure(());
+        entry()
         "#),
         b"Option/some(3)\nOption/none()\nResult/failure(\"why\")\nOrdering/lt()\n"
     );
@@ -239,8 +259,10 @@ fn a_structural_fixture_compares_and_spells() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Io, Option, Test};
-        let _ = Test/main([("/tests/options", () => Test/equal(Option/some(3), Option/some(4)))])!;
-        Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = Test/main([("/tests/options", () => Test/equal(Option/some(3), Option/some(4)))])!;
+            Io/pure(());
+        entry()
         "#),
         b"/tests/options: failed\n  expected Option/some(4) but got Option/some(3)\n"
     );

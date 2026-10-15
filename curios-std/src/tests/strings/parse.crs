@@ -4,7 +4,7 @@ use /std/{Parse, Str, Char, List, Result, Test};
 let shown(@A: Type, r: Result(Parse/Error, A), f: (A) -> Str) -> Str =
     match r | success(a) => f(a) | failure(e) => Parse/Error/to_str(e) end;
 
-let pair: Parse(Str, {Str, Str}) =
+let pair() -> Parse(Str, {Str, Str}) =
     let word = Parse/text/take_while((c) => Char/to_nat(c) != 32)!;
     let _ = Parse/text/expect(' ')!;
     let _ = Parse/text/literal("wö")!;
@@ -15,21 +15,21 @@ let pair: Parse(Str, {Str, Str}) =
 -- A text parser answers characters and the pieces of its input it read: a run of non-spaces, a separator, a literal of multi-byte characters and what follows it.
 test a_text_parser_reads_characters_and_pieces =
     Test/equal(
-        shown(Parse/run(pair, "héllo wörld"), ((w, r)) => Str/flatten([w, "|", r])),
+        shown(Parse/run(pair(), "héllo wörld"), ((w, r)) => Str/flatten([w, "|", r])),
         "héllo|rld");
 
 -- A text refusal is where it stopped as a byte offset into the input: the literal `wö` is wanted after `héllo `, whose `é` is two bytes.
 test a_text_refusal_is_at_a_byte_offset =
     Test/equal(
-        shown(Parse/run(pair, "héllo world"), ((w, r)) => Str/flatten([w, "|", r])),
+        shown(Parse/run(pair(), "héllo world"), ((w, r)) => Str/flatten([w, "|", r])),
         "expected \"wö\" at byte 7");
 
-let two: Parse(Str, {Char, Char}) =
+let two() -> Parse(Str, {Char, Char}) =
     let a = Parse/text/char!;
     let b = Parse/text/char!;
     Parse/pure((a, b));
 
-let peeked: Parse(Str, Str) =
+let peeked() -> Parse(Str, Str) =
     let first = Parse/text/peek!;
     let taken = Parse/text/char!;
     Parse/pure(
@@ -41,9 +41,9 @@ let peeked: Parse(Str, Str) =
 test a_character_is_refused_at_the_end =
     Test/all([
         Test/equal(
-            shown(Parse/run(two, "€"), ((_, b)) => Str/of_char(b)),
+            shown(Parse/run(two(), "€"), ((_, b)) => Str/of_char(b)),
             "unexpected end of input at byte 3"),
-        Test/equal(shown(Parse/run(peeked, "€"), (s) => s), "€€")]);
+        Test/equal(shown(Parse/run(peeked(), "€"), (s) => s), "€€")]);
 
 -- Of two alternatives that both decline, the refusal reported is the one that reached further into the input, in either order: `ab` then `cd` stops at byte 2, where `x` stopped at the start.
 test or_reports_the_refusal_that_reached_further =

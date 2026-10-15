@@ -25,6 +25,7 @@ pub(super) fn table(rows: &[&str], taint: bool) -> String {
     format!(
         r#"
         use /std/{{Nat, Int, Flt, Byte, Bytes, Str, Option, Io}};
+        let entry() -> /std/Io({{}}) =
         let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
             | chunk(b, @_) => b
             | eof() => x[]
@@ -38,7 +39,8 @@ pub(super) fn table(rows: &[&str], taint: bool) -> String {
         match row
         {arms}
         | _ => /std/print("no such row")
-        end
+        end;
+        entry()
         "#
     )
 }

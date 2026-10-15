@@ -921,13 +921,21 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         })
     }
 
-    /// A nested block contributes its complete lexical context to the enclosing region, including its tail. No statement position opens a new monadic region.
+    /// A nested block contributes the context its actions need to the enclosing region. Pure bindings after its last action stay inside the expression: in particular, a recursive proof passed as an argument must remain in that proof position.
     pub(super) fn build_let(
         &self,
         let_: &Let,
         binds: &mut Vec<RegionFrame>,
     ) -> Result<curios_core::Term, Error> {
-        self.collect_let(&let_.groups, &let_.tail, binds, true)
+        let mut frames = Vec::new();
+        let body = self.collect_let(&let_.groups, &let_.tail, &mut frames, true)?;
+        let past = frames
+            .iter()
+            .rposition(|frame| matches!(frame, RegionFrame::Bang { .. }))
+            .map_or(0, |index| index + 1);
+        let local = frames.split_off(past);
+        binds.extend(frames);
+        self.wrap(local, body)
     }
 
     /// Lowers a function's parameters into core binder `(name, domain)` pairs. A plain-name parameter binds its name directly, unchanged; an un-annotated parameter takes a fresh metavar domain. A compound pattern's core binder is a fresh synthetic name, and the (already lowered) `body` is wrapped with its field-`let` chain.

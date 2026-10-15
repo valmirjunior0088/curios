@@ -18,8 +18,8 @@ fn dispatches_through_a_user_monad_witness() {
         }
         let a : Box(Nat) = Box { unbox = 3 };
         let b : Box(Nat) = Box { unbox = 4 };
-        let result : Box(Nat) = Monad/pure(Nat/add(a!, b!));
-        /std/print(Nat/to_str(result.unbox))
+        let result() -> Box(Nat) = Monad/pure(Nat/add(a!, b!));
+        /std/print(Nat/to_str(result().unbox))
         "#;
 
     assert_eq!(run(source), b"7");
@@ -31,10 +31,10 @@ fn std_parse_threads_bangs_left_to_right() {
     let source = r#"
         use /std/{Parse, Byte, Bytes, Nat, Result};
 
-        let parser : Parse/Parse(Bytes, Nat) =
+        let parser() -> Parse/Parse(Bytes, Nat) =
             Parse/pure(Nat/sub(Byte/to_nat(Parse/bytes/byte!), Byte/to_nat(Parse/bytes/byte!)));
 
-        match Parse/run(parser, /std/Str/to_bytes("BA")) : (_) => /std/Io({})
+        match Parse/run(parser(), /std/Str/to_bytes("BA")) : (_) => /std/Io({})
         | success(n) => /std/print(Nat/to_str(n))
         | failure(e) => /std/print(e.message)
         end
@@ -59,10 +59,10 @@ fn region_mixes_action_types() {
 
         let is_a : (Byte) -> Bool = (b) => b == 0x41;
 
-        let parser : Parse/Parse(Bytes, Bytes) =
+        let parser() -> Parse/Parse(Bytes, Bytes) =
             Parse/pure(x[..Parse/bytes/take_while(is_a)!, Parse/bytes/byte!]);
 
-        match Parse/run(parser, /std/Str/to_bytes("AB")) : (_) => /std/Io({})
+        match Parse/run(parser(), /std/Str/to_bytes("AB")) : (_) => /std/Io({})
         | success(s) =>
             match Str/of_bytes(s) : (_) => /std/Io({})
             | success(t) => /std/print(t)

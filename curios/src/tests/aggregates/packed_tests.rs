@@ -22,8 +22,10 @@ fn vec_cons_with_nat_succ() {
             xs.0;
 
         let v : Vec(std/Nat, 1) = cons(std/Nat, 0, 42, ());
-        let _ = /std/print(std/Nat/to_str(head(std/Nat, 0, v)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(std/Nat/to_str(head(std/Nat, 0, v)))!;
+            /std/Io/pure(());
+        entry()
     "#;
 
     assert_eq!(run(source), b"42");
@@ -51,8 +53,10 @@ fn indexed_vec_append_executes() {
         let a : Vec(Nat)(2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat)(1) = Vec/cons(4, Vec/nil());
         let c : Vec(Nat)(3) = append(a, b);
-        let _ = /std/print(Nat/to_str(total(c, 0)))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(total(c, 0)))!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"7");
@@ -139,17 +143,19 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             | false => false
             end;
 
-        let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
-        let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-        match input: (_) => Io({})
-        | some(bytes) =>
-            /std/print(
-                Str/join(" ", [
-                    Bool/to_str(prefixes(bytes, Bytes/len(bytes))),
-                    Bool/to_str(prefixes_bits(Bytes/to_bits(bytes), 8 * Bytes/len(bytes))),
-                    Bool/to_str(led(bytes))]))
-        | none() => /std/print("no input")
-        end
+        let entry() -> /std/Io({}) =
+            let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+            let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
+            match input: (_) => Io({})
+            | some(bytes) =>
+                /std/print(
+                    Str/join(" ", [
+                        Bool/to_str(prefixes(bytes, Bytes/len(bytes))),
+                        Bool/to_str(prefixes_bits(Bytes/to_bits(bytes), 8 * Bytes/len(bytes))),
+                        Bool/to_str(led(bytes))]))
+            | none() => /std/print("no input")
+            end;
+        entry()
         "#;
 
     let (system, io) = MockHost::builder()

@@ -18,8 +18,10 @@ fn an_implicit_solves_against_a_reduction_through_a_let() {
             end;
 
         let probe(x : Nat) -> Eq()(through(x), through(x)) = Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"ok");
@@ -40,9 +42,11 @@ fn implicit_inductive_type_param_executes() {
         let pinned : Eq2(@Nat)(3, 3) = Eq2/refl();
         let proof : Eq2()(2, 2) = Eq2/refl();
         let inferred : Eq2()(2, 2) = sym2(proof);
-        match inferred : (_, _, _) => /std/Io({})
-        | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
-        end
+        let entry() -> /std/Io({}) =
+            match inferred : (_, _, _) => /std/Io({})
+            | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
+            end;
+        entry()
         "#;
 
     assert_eq!(run(source), b"2");
@@ -57,8 +61,10 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat)(2, 2) = Eq2/refl();
-        let _ = /std/print("no")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("no")!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     error(source);
@@ -107,8 +113,10 @@ fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
             match bits | b[] => b[] | b[head, ..tail]; ih => combine(head, ih) end;
         let through(@t : Bits, q : Eq()(trim(t), b[])) -> Eq()(trim(t), b[]) = q;
         let probe(x : Bits, q : Eq()(trim(b[0, ..x]), b[])) -> Eq()(trim(b[0, ..x]), b[]) = through(q);
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"ok");
@@ -122,8 +130,10 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
         use /std/Bool/{Holds};
         let constant(n : Nat) -> Nat = 0;
         let same : Eq()(constant(2), constant(1)) = Eq/refl();
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"ok");
@@ -598,13 +608,13 @@ fn an_implicit_born_under_an_arms_binder_is_re_expressed_over_the_match_to_type_
             let bytes = out!;
             Try/pure(Result/unwrap_or(Str/of_bytes(bytes), "?"));
 
-        let main: Io({}) =
+        let main() -> Io({}) =
             let r = Try/run(program(Result/success(Str/to_bytes("read"))))!;
             match r
             | failure(e) => /std/print(Show/show(e))
             | success(s) => /std/print(s)
             end;
-        main
+        main()
         "#);
 
     assert_eq!(output, b"read");
@@ -659,12 +669,14 @@ fn a_lists_unknown_tail_is_solved_to_what_the_other_side_has_left() {
         let _of_a_closed_list : Swapped()([2, 1, 3], [1, 2, 3]) =
             Swapped/swap();
 
-        let lengths =
-            List/map(
-                [longer_prefix(1, 2, [3]), two_tails(1, [2], [3]), literal(1, 2)],
-                (l : List(Nat)) => Nat/to_str(List/len(l)));
-        let _ = /std/print(Str/join(" ", lengths))!;
-        /std/Io/pure(())
+        let entry() -> /std/Io({}) =
+            let lengths =
+                List/map(
+                    [longer_prefix(1, 2, [3]), two_tails(1, [2], [3]), literal(1, 2)],
+                    (l : List(Nat)) => Nat/to_str(List/len(l)));
+            let _ = /std/print(Str/join(" ", lengths))!;
+            /std/Io/pure(());
+        entry()
         "#;
 
     assert_eq!(run(source), b"2 2 1");

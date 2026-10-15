@@ -10,9 +10,11 @@ fn an_enumeration_spells_as_its_constructor_paths() {
         use /std/{Str, Spell, print};
         induct Color: pub Type | red() | green() end
         satisfy Spell(Color) { .. }
-        let _ = print(Spell/spell(Color/red()))!;
-        let _ = print("\n")!;
-        print(Spell/spell(Color/green()))
+        let entry() -> /std/Io({}) =
+            let _ = print(Spell/spell(Color/red()))!;
+            let _ = print("\n")!;
+            print(Spell/spell(Color/green()));
+        entry()
         "#;
 
     assert_eq!(run(source), b"Color/red()\nColor/green()");
@@ -25,11 +27,13 @@ fn payloads_spell_through_their_own_witnesses() {
         use /std/{Nat, Str, Bool, List, Spell, print};
         induct Shape: pub Type | dot(Nat) | tag(Str, Bool) | many(List(Nat)) end
         satisfy Spell(Shape) { .. }
-        let _ = print(Spell/spell(Shape/dot(1)))!;
-        let _ = print("\n")!;
-        let _ = print(Spell/spell(Shape/tag("a\n", true)))!;
-        let _ = print("\n")!;
-        print(Spell/spell(Shape/many([1, 2])))
+        let entry() -> /std/Io({}) =
+            let _ = print(Spell/spell(Shape/dot(1)))!;
+            let _ = print("\n")!;
+            let _ = print(Spell/spell(Shape/tag("a\n", true)))!;
+            let _ = print("\n")!;
+            print(Spell/spell(Shape/many([1, 2])));
+        entry()
         "#;
 
     assert_eq!(
@@ -45,9 +49,11 @@ fn a_parameterized_family_spells_under_its_premise() {
         use /std/{Nat, Str, Spell, print};
         induct Box(A: Type): pub Type | boxed(A) end
         satisfy (@A: Type, use Spell(A)) => Spell(Box(A)) { .. }
-        let _ = print(Spell/spell(Box/boxed(3)))!;
-        let _ = print("\n")!;
-        print(Spell/spell(Box/boxed(Box/boxed("x"))))
+        let entry() -> /std/Io({}) =
+            let _ = print(Spell/spell(Box/boxed(3)))!;
+            let _ = print("\n")!;
+            print(Spell/spell(Box/boxed(Box/boxed("x"))));
+        entry()
         "#;
 
     assert_eq!(run(source), b"Box/boxed(3)\nBox/boxed(Box/boxed(\"x\"))");
@@ -60,11 +66,13 @@ fn a_recursive_family_spells_through_its_own_entry_and_re_parses() {
         use /std/{Nat, Str, Spell, print};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Spell(Tree) { .. }
-        let built = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
-        let written: Tree = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
-        let _ = print(Spell/spell(built))!;
-        let _ = print("\n")!;
-        print(Spell/spell(written))
+        let entry() -> /std/Io({}) =
+            let built = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
+            let written: Tree = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
+            let _ = print(Spell/spell(built))!;
+            let _ = print("\n")!;
+            print(Spell/spell(written));
+        entry()
         "#;
 
     let spelled = "Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)))";
@@ -98,9 +106,11 @@ fn a_struct_spells_as_its_literal() {
         struct Meters: pub Type { Nat }
         satisfy Spell(Point) { .. }
         satisfy Spell(Meters) { .. }
-        let _ = print(Spell/spell(Point { x = 1, y = 2 }))!;
-        let _ = print("\n")!;
-        print(Spell/spell(Meters { 5 }))
+        let entry() -> /std/Io({}) =
+            let _ = print(Spell/spell(Point { x = 1, y = 2 }))!;
+            let _ = print("\n")!;
+            print(Spell/spell(Meters { 5 }));
+        entry()
         "#;
 
     assert_eq!(run(source), b"Point { x = 1, y = 2 }\nMeters { 5 }");
@@ -173,12 +183,14 @@ fn derived_equality_is_structural() {
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Eql(Tree) { .. }
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
-        let _ = print(show(Tree/leaf(1) == Tree/leaf(1)))!;
-        let _ = print(show(Tree/leaf(1) == Tree/leaf(2)))!;
-        let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(2)) == Tree/node(Tree/leaf(1), Tree/leaf(2))))!;
-        let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(2)) == Tree/node(Tree/leaf(2), Tree/leaf(1))))!;
-        let _ = print(show(Tree/leaf(1) != Tree/node(Tree/leaf(1), Tree/leaf(1))))!;
-        print(show(Tree/leaf(1) != Tree/leaf(1)))
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Tree/leaf(1) == Tree/leaf(1)))!;
+            let _ = print(show(Tree/leaf(1) == Tree/leaf(2)))!;
+            let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(2)) == Tree/node(Tree/leaf(1), Tree/leaf(2))))!;
+            let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(2)) == Tree/node(Tree/leaf(2), Tree/leaf(1))))!;
+            let _ = print(show(Tree/leaf(1) != Tree/node(Tree/leaf(1), Tree/leaf(1))))!;
+            print(show(Tree/leaf(1) != Tree/leaf(1)));
+        entry()
         "#;
 
     assert_eq!(run(source), b"true false true false true false ");
@@ -194,10 +206,12 @@ fn a_struct_and_a_parameterized_family_compare_fieldwise() {
         satisfy Eql(Point) { .. }
         satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
-        let _ = print(show(Point { x = 1, y = 2 } == Point { x = 1, y = 2 }))!;
-        let _ = print(show(Point { x = 1, y = 2 } != Point { x = 1, y = 3 }))!;
-        let _ = print(show(Box/boxed("a") == Box/boxed("a")))!;
-        print(show(Box/boxed(Point { x = 1, y = 2 }) == Box/boxed(Point { x = 2, y = 1 })))
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Point { x = 1, y = 2 } == Point { x = 1, y = 2 }))!;
+            let _ = print(show(Point { x = 1, y = 2 } != Point { x = 1, y = 3 }))!;
+            let _ = print(show(Box/boxed("a") == Box/boxed("a")))!;
+            print(show(Box/boxed(Point { x = 1, y = 2 }) == Box/boxed(Point { x = 2, y = 1 })));
+        entry()
         "#;
 
     assert_eq!(run(source), b"true true true false ");
@@ -217,10 +231,12 @@ fn proofs_and_implicit_payloads_take_no_part_in_equality() {
         satisfy Eql(Certified) { .. }
         satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T)(n)) { .. }
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
-        let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(1, Eq/refl())))!;
-        let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(2, Eq/refl())))!;
-        let _ = print(show(Vec/cons(1, Vec/cons(2, Vec/nil())) == Vec/cons(1, Vec/cons(2, Vec/nil()))))!;
-        print(show(Vec/cons(1, Vec/cons(2, Vec/nil())) == Vec/cons(1, Vec/cons(3, Vec/nil()))))
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(1, Eq/refl())))!;
+            let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(2, Eq/refl())))!;
+            let _ = print(show(Vec/cons(1, Vec/cons(2, Vec/nil())) == Vec/cons(1, Vec/cons(2, Vec/nil()))))!;
+            print(show(Vec/cons(1, Vec/cons(2, Vec/nil())) == Vec/cons(1, Vec/cons(3, Vec/nil()))));
+        entry()
         "#;
 
     assert_eq!(run(source), b"true false true false ");
@@ -251,24 +267,26 @@ fn the_standard_library_derives_option_result_and_order() {
         use /std/ops/{Eql};
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
         let failing: Result(Str, Nat) = Result/failure("no");
-        let _ = print(Spell/spell(Option/some(1)))!;
-        let _ = print("\n")!;
-        let _ = print(Spell/spell(Option/none(@Nat)))!;
-        let _ = print("\n")!;
-        let _ = print(Spell/spell(Result/success(@Str, @Nat, 1)))!;
-        let _ = print("\n")!;
-        let _ = print(Spell/spell(failing))!;
-        let _ = print("\n")!;
-        let _ = print(Spell/spell(Ordering/lt()))!;
-        let _ = print(Spell/spell(Ordering/eq()))!;
-        let _ = print(Spell/spell(Ordering/gt()))!;
-        let _ = print("\n")!;
-        let _ = print(show(Option/some(1) == Option/some(1)))!;
-        let _ = print(show(Option/some(1) == Option/none()))!;
-        let _ = print(show(failing == Result/failure("no")))!;
-        let _ = print(show(failing != Result/success(1)))!;
-        let _ = print(show(Ordering/lt() == Ordering/lt()))!;
-        print(show(Ordering/lt() != Ordering/gt()))
+        let entry() -> /std/Io({}) =
+            let _ = print(Spell/spell(Option/some(1)))!;
+            let _ = print("\n")!;
+            let _ = print(Spell/spell(Option/none(@Nat)))!;
+            let _ = print("\n")!;
+            let _ = print(Spell/spell(Result/success(@Str, @Nat, 1)))!;
+            let _ = print("\n")!;
+            let _ = print(Spell/spell(failing))!;
+            let _ = print("\n")!;
+            let _ = print(Spell/spell(Ordering/lt()))!;
+            let _ = print(Spell/spell(Ordering/eq()))!;
+            let _ = print(Spell/spell(Ordering/gt()))!;
+            let _ = print("\n")!;
+            let _ = print(show(Option/some(1) == Option/some(1)))!;
+            let _ = print(show(Option/some(1) == Option/none()))!;
+            let _ = print(show(failing == Result/failure("no")))!;
+            let _ = print(show(failing != Result/success(1)))!;
+            let _ = print(show(Ordering/lt() == Ordering/lt()))!;
+            print(show(Ordering/lt() != Ordering/gt()));
+        entry()
         "#;
 
     assert_eq!(
@@ -382,15 +400,17 @@ fn the_renderers_spell_a_call_and_a_record() {
     let source = r#"
         use /std/{Str, print};
         use /std/Spell/{call, record};
-        let _ = print(call("/Tree/leaf", []))!;
-        let _ = print("\n")!;
-        let _ = print(call("/Tree/node", ["1", "/Tree/leaf()"]))!;
-        let _ = print("\n")!;
-        let _ = print(record("/Point", [("x", "1"), ("y", "2")]))!;
-        let _ = print("\n")!;
-        let _ = print(record("/Meters", [("", "5")]))!;
-        let _ = print("\n")!;
-        print(record("/Unit", []))
+        let entry() -> /std/Io({}) =
+            let _ = print(call("/Tree/leaf", []))!;
+            let _ = print("\n")!;
+            let _ = print(call("/Tree/node", ["1", "/Tree/leaf()"]))!;
+            let _ = print("\n")!;
+            let _ = print(record("/Point", [("x", "1"), ("y", "2")]))!;
+            let _ = print("\n")!;
+            let _ = print(record("/Meters", [("", "5")]))!;
+            let _ = print("\n")!;
+            print(record("/Unit", []));
+        entry()
         "#;
 
     assert_eq!(
@@ -404,13 +424,15 @@ fn the_renderers_spell_a_call_and_a_record() {
 fn a_tuple_spells_as_its_literal() {
     let source = r#"
         use /std/{Nat, Bool, Str, Spell, print};
-        let _ = print(Spell/spell(()))!;
-        let _ = print("\n")!;
-        let _ = print(Spell/spell((1,)))!;
-        let _ = print("\n")!;
-        let _ = print(Spell/spell((1, true)))!;
-        let _ = print("\n")!;
-        print(Spell/spell((1, true, "s")))
+        let entry() -> /std/Io({}) =
+            let _ = print(Spell/spell(()))!;
+            let _ = print("\n")!;
+            let _ = print(Spell/spell((1,)))!;
+            let _ = print("\n")!;
+            let _ = print(Spell/spell((1, true)))!;
+            let _ = print("\n")!;
+            print(Spell/spell((1, true, "s")));
+        entry()
         "#;
 
     assert_eq!(run(source), b"()\n(1,)\n(1, true)\n(1, true, \"s\")");
@@ -586,13 +608,15 @@ fn derived_order_ranks_constructors_then_payloads() {
         satisfy Eql(Tree) { .. }
         satisfy Ord(Tree) { .. }
         let show(t: Tree, u: Tree) -> Str = Str/concat(Show/show(Ord/ord(t, u)), " ");
-        let _ = print(show(Tree/leaf(1), Tree/node(Tree/leaf(1), Tree/leaf(1))))!;
-        let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(1)), Tree/leaf(9)))!;
-        let _ = print(show(Tree/leaf(1), Tree/leaf(2)))!;
-        let _ = print(show(Tree/leaf(2), Tree/leaf(1)))!;
-        let _ = print(show(Tree/leaf(2), Tree/leaf(2)))!;
-        let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(2)), Tree/node(Tree/leaf(1), Tree/leaf(3))))!;
-        print(show(Tree/node(Tree/leaf(1), Tree/leaf(9)), Tree/node(Tree/leaf(2), Tree/leaf(0))))
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Tree/leaf(1), Tree/node(Tree/leaf(1), Tree/leaf(1))))!;
+            let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(1)), Tree/leaf(9)))!;
+            let _ = print(show(Tree/leaf(1), Tree/leaf(2)))!;
+            let _ = print(show(Tree/leaf(2), Tree/leaf(1)))!;
+            let _ = print(show(Tree/leaf(2), Tree/leaf(2)))!;
+            let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(2)), Tree/node(Tree/leaf(1), Tree/leaf(3))))!;
+            print(show(Tree/node(Tree/leaf(1), Tree/leaf(9)), Tree/node(Tree/leaf(2), Tree/leaf(0))));
+        entry()
         "#;
 
     // A constructor outranks its declaration predecessors whatever the payloads say — `leaf(9)` is below `node(leaf(1), leaf(1))` — and within one constructor the first payload that differs decides.
@@ -611,10 +635,12 @@ fn a_struct_and_a_parameterized_family_order_fieldwise() {
         satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
         satisfy (@A: Type, use Eql(A), use Ord(A)) => Ord(Box(A)) { .. }
         let show(@A: Type, use Ord(A), a: A, b: A) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
-        let _ = print(show(Point { x = 1, y = 2 }, Point { x = 1, y = 3 }))!;
-        let _ = print(show(Point { x = 2, y = 0 }, Point { x = 1, y = 9 }))!;
-        let _ = print(show(Point { x = 1, y = 2 }, Point { x = 1, y = 2 }))!;
-        print(show(Box/boxed(Point { x = 1, y = 1 }), Box/boxed(Point { x = 1, y = 2 })))
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Point { x = 1, y = 2 }, Point { x = 1, y = 3 }))!;
+            let _ = print(show(Point { x = 2, y = 0 }, Point { x = 1, y = 9 }))!;
+            let _ = print(show(Point { x = 1, y = 2 }, Point { x = 1, y = 2 }))!;
+            print(show(Box/boxed(Point { x = 1, y = 1 }), Box/boxed(Point { x = 1, y = 2 })));
+        entry()
         "#;
 
     assert_eq!(run(source), b"lt gt eq lt ");
@@ -630,8 +656,10 @@ fn proofs_and_implicit_payloads_take_no_part_in_ordering() {
         satisfy Eql(Certified) { .. }
         satisfy Ord(Certified) { .. }
         let show(a: Certified, b: Certified) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
-        let _ = print(show(Certified/cert(1, Eq/refl()), Certified/cert(2, Eq/refl())))!;
-        print(show(Certified/cert(2, Eq/refl()), Certified/cert(2, Eq/refl())))
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Certified/cert(1, Eq/refl()), Certified/cert(2, Eq/refl())))!;
+            print(show(Certified/cert(2, Eq/refl()), Certified/cert(2, Eq/refl())));
+        entry()
         "#;
 
     assert_eq!(run(source), b"lt eq ");
@@ -663,9 +691,11 @@ fn the_standard_library_derives_order_for_ordering() {
     let source = r#"
         use /std/{Str, Ordering, Ord, Show, print};
         let show(a: Ordering, b: Ordering) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
-        let _ = print(show(Ordering/lt(), Ordering/eq()))!;
-        let _ = print(show(Ordering/gt(), Ordering/eq()))!;
-        print(show(Ordering/eq(), Ordering/eq()))
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Ordering/lt(), Ordering/eq()))!;
+            let _ = print(show(Ordering/gt(), Ordering/eq()))!;
+            print(show(Ordering/eq(), Ordering/eq()));
+        entry()
         "#;
 
     assert_eq!(run(source), b"lt gt eq ");

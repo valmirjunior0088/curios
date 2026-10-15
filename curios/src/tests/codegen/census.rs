@@ -1094,10 +1094,12 @@ fn step_specialization_extent() {
 fn surveys_the_fold_accumulator_region() {
     let source = r#"
         use /std/{Nat, Str, Char, List, proc};
-        let taint = List/len(proc/args()!);
-        let n : Nat = taint;
-        let text : Str = Nat/to_str(n);
-        /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))))
+        let entry() -> /std/Io({}) =
+            let taint = List/len(proc/args()!);
+            let n : Nat = taint;
+            let text : Str = Nat/to_str(n);
+            /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))));
+        entry()
         "#;
     let module = cont_optm_module(source);
     let census = Census::of(&module);
@@ -1279,20 +1281,22 @@ const WORKLOADS: [(&str, &str); 3] = [
 pub(in crate::tests) const TOML_DRIVER: &str = r#"
 use /std/{Str, Nat, Map, Toml, Option, Result, Io};
 
-let arguments = /std/proc/args()!;
-let input = /std/List/try_get(arguments, 1);
-match input: (_) => Io({})
-| some(bytes) =>
-    match Str/of_bytes(bytes): (_) => Io({})
-    | success(s) =>
-        match Toml/decode(s): (_) => Io({})
-        | success(m) => /std/print(Nat/to_str(Map/len(m)))
-        | failure(e) => /std/print(Toml/Error/to_str(e))
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) =>
+            match Toml/decode(s): (_) => Io({})
+            | success(m) => /std/print(Nat/to_str(Map/len(m)))
+            | failure(e) => /std/print(Toml/Error/to_str(e))
+            end
+        | failure(_) => /std/print("invalid utf-8")
         end
-    | failure(_) => /std/print("invalid utf-8")
-    end
-| none() => /std/print("no input")
-end
+    | none() => /std/print("no input")
+    end;
+entry()
 "#;
 
 /// The death-birth census. Run explicitly:
@@ -1384,20 +1388,22 @@ fn death_birth_classifier_pins_the_canonical_pair() {
             | nil() => acc
             | cons(v, tail) => total(tail, (acc + v) % 1000003)
             end;
-        let arguments = /std/proc/args()!;
-        let input = /std/List/try_get(arguments, 1);
-        match input: (_) => Io({})
-        | some(bytes) =>
-            match Str/of_bytes(bytes): (_) => Io({})
-            | success(s) =>
-                match Nat/of_str(Str/trim(s)): (_) => Io({})
-                | some(n) => /std/print(Nat/to_str(total(step(build(n, Chain/nil()), Chain/nil()), 0)))
-                | none() => /std/print("bad input")
+        let entry() -> /std/Io({}) =
+            let arguments = /std/proc/args()!;
+            let input = /std/List/try_get(arguments, 1);
+            match input: (_) => Io({})
+            | some(bytes) =>
+                match Str/of_bytes(bytes): (_) => Io({})
+                | success(s) =>
+                    match Nat/of_str(Str/trim(s)): (_) => Io({})
+                    | some(n) => /std/print(Nat/to_str(total(step(build(n, Chain/nil()), Chain/nil()), 0)))
+                    | none() => /std/print("bad input")
+                    end
+                | failure(_) => /std/print("invalid utf-8")
                 end
-            | failure(_) => /std/print("invalid utf-8")
-            end
-        | none() => /std/print("no input")
-        end
+            | none() => /std/print("no input")
+            end;
+        entry()
     "#;
     let module = cont_optm_module(paired);
     let census = Census::of(&module);

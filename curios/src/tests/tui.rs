@@ -34,13 +34,13 @@ fn a_session_switches_the_terminal_and_restores_it_in_reverse() {
         r#"
         use /std/{Str, Try, Io, Show, Tui};
         use /std/Tui/{Session};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let outcome = Try/run(Session/with((s) => Try/pure("inside")))!;
             match outcome
             | success(s) => /std/print(s)
             | failure(e) => /std/print(Show/show(e))
             end;
-        program
+        program()
         "#,
         system,
     )
@@ -60,13 +60,13 @@ fn a_session_without_a_terminal_is_refused_before_anything_is_written() {
         r#"
         use /std/{Str, Try, Io, Show, Tui};
         use /std/Tui/{Session};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let outcome = Try/run(Session/with((s) => Try/pure("inside")))!;
             match outcome
             | success(s) => /std/print(s)
             | failure(e) => /std/print(Show/show(e))
             end;
-        program
+        program()
         "#,
         system,
     )
@@ -106,7 +106,7 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
     run_text(r#"
         use /std/{Nat, List, Option, Try, Io, print};
         use /std/Tui/{Session};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let outcome = Try/run(Session/with((s) =>
                 let first = Session/read(@Nat, s)!;
                 let _ = print(match first | some(events) => Nat/to_str(List/len(events)) | none() => "eof" end)!;
@@ -125,7 +125,7 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
                 let _ = print(match third | none() => "eof" | some(_) => "more" end)!;
                 Try/pure(())))!;
             Io/pure(());
-        program
+        program()
     "# , host).expect("held input");
     let output = String::from_utf8_lossy(&io.output()).into_owned();
     assert!(output.contains("0 up eof"), "{output:?}");
@@ -139,7 +139,7 @@ fn drawing_history_and_size_travel_with_the_returned_session() {
         r#"
         use /std/{Nat, Option, Try, Io, print};
         use /std/Tui/{Session, Frame};
-        let program: Io({}) =
+        let program() -> Io({}) =
             let outcome = Try/run(Session/with((s) =>
                 let drawn = Session/draw(s, Frame/blank(4, 2), Option/none())!;
                 let again = Session/draw(drawn, Frame/blank(4, 2), Option/none())!;
@@ -152,7 +152,7 @@ fn drawing_history_and_size_travel_with_the_returned_session() {
                 let _ = print(Nat/to_str(updated.cols))!;
                 Try/pure(())))!;
             Io/pure(());
-        program
+        program()
     "#,
         host,
     )
@@ -185,10 +185,10 @@ fn resize_events_update_the_drawing_session_before_rendering() {
             view(model, w, h) = Frame/blank(w, h),
             cursor(model, w, h) = Option/none(),
         };
-        let program: Io({}) =
+        let program() -> Io({}) =
             let result = Try/run(Tui/run(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
-        program
+        program()
     "#,
         host,
     )
@@ -209,10 +209,10 @@ const IDLE_PROGRAM: &str = r#"
             view(model, w, h) = Frame/blank(w, h),
             cursor(model, w, h) = Option/none(),
         };
-        let program: Io({}) =
+        let program() -> Io({}) =
             let result = Try/run(Tui/run(app))!;
             print(match result | success(_) => "quit" | failure(e) => Show/show(e) end);
-        program
+        program()
     "#;
 
 // A read of the terminal that fails ends the run with the read's error, the bracket undone on the way out: a program whose terminal has failed does not run on without input and without a reason.
@@ -267,11 +267,11 @@ fn a_program_outlives_the_end_of_its_input() {
         use /std/{Nat, Option, Try, Tui, Io, print};
         use /std/time/{Duration};
         use /std/Tui/{Frame, Directive};
-        let later: Io(Nat) =
+        let later() -> Io(Nat) =
             let _ = Io/sleep(Duration/of_millis(300))!;
             Io/pure(7);
         let app: Tui(Nat, Nat) = Tui {
-            init = (0, Directive/perform(later)),
+            init = (0, Directive/perform(later())),
             update(model, event) = match event
                 | custom(n) => (n, Directive/quit())
                 | _ => (model, Directive/none())
@@ -279,10 +279,10 @@ fn a_program_outlives_the_end_of_its_input() {
             view(model, w, h) = Frame/blank(w, h),
             cursor(model, w, h) = Option/none(),
         };
-        let program: Io({}) =
+        let program() -> Io({}) =
             let result = Try/run(Tui/run(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
-        program
+        program()
     "#,
         host,
     )
@@ -329,11 +329,11 @@ pub(super) const LISTING_PROGRAM: &str = r#"
                     end,
                 cursor(model, w, h) = Option/none(),
             };
-        let program: Io({}) =
+        let program() -> Io({}) =
             let outcome = Try/run(Tui/run(app))!;
             match outcome
             | success(model) => /std/print(Option/unwrap_or(Listing/selected(model), "none"))
             | failure(e) => /std/print(Show/show(e))
             end;
-        program
+        program()
         "#;

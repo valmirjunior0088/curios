@@ -146,7 +146,7 @@ fn a_dependent_result_action_auto_lifts_through_bang() {
     let source = r#"
         use /std/{Cell, Nat, Option, Io, Try};
 
-        let program: Try(Io, Io/Error, Nat) =
+        let program() -> Try(Io, Io/Error, Nat) =
             let c = Cell/new()!;
             let _ = Cell/fill(c, 7)!;
             let n = Option/unwrap_or(Cell/poll(c)!, 0);
@@ -176,11 +176,11 @@ fn a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade() {
     // `c`'s element type is pinned only by the later `Cell/fill`, and the chain back to the `Cell/new` type argument runs through solved metavariables whose spines carry the continuation binder. `solve` must materialize committed solutions before its scope analysis, or the ground candidate is refused for a name that only rides a solved spine.
     let source = r#"
         use /std/{Cell, Option, Io, Nat};
-        let probe: Io({}) =
+        let probe() -> Io({}) =
             let c = Cell/new()!;
             let _ = Cell/fill(c, Option/some(1))!;
             Io/pure(());
-        probe
+        probe()
     "#;
     assert!(compile(source).is_ok());
 }
@@ -263,7 +263,7 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
     let source = r#"
         use /std/{Bytes, Parse};
         use /std/{Byte};
-        let pair : Parse(Bytes, { Byte, Byte }) =
+        let pair() -> Parse(Bytes, { Byte, Byte }) =
             let x = Parse/bytes/byte!;
             Parse/pure((x, x));
         /std/Io/pure(())
@@ -271,10 +271,10 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
 
     assert!(typecheck(source).is_ok());
 
-    // The `expected_ground` gate: with no concrete result type to pin `?B`, the codomain stays a metavar, the continuation is *not* postponed, and the bare tuple is rejected — graceful degradation, no new acceptance. The unpinned region is a typeless local `let`'s body, which is where a region's type is still inferred: the entrypoint tail is always checked.
+    // The `expected_ground` gate: with no concrete result type to pin `?B`, the codomain stays a metavar, the continuation is *not* postponed, and the bare tuple is rejected — graceful degradation, no new acceptance. The unpinned region is an unannotated local lambda's body, whose result is inferred.
     let unpinned = r#"
         use /std/{Parse};
-        let bad =
+        let bad = () =>
             let x = Parse/bytes/byte!;
             Parse/pure((x, x));
         /std/Io/pure(())
