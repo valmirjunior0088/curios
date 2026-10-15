@@ -1,14 +1,34 @@
 //! The scripted host's contract: handles miss loudly after close, and a chunked stream — standard input among them — hands the wait back to its reader between chunks.
 
 use {
-    super::{EBUSY, ENOTTY, MockHost, SocketEvent},
+    super::{EBUSY, ENOTTY, Looked, MockHost, SocketEvent},
     crate::{
-        ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, Mode, SerialFlow, SerialOp,
-        SerialParity, StdioMode, TtySize,
+        Answer, ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, Later, Mode,
+        SerialFlow, SerialOp, SerialParity, Settled, StdioMode, TtySize, blocking,
     },
     curios_abi::{HostOps, errno, event},
-    std::num::NonZeroU32,
+    std::{num::NonZeroU32, sync::mpsc},
 };
+
+/// What `later` comes to, filed with `host` and waited for as a run waits for it.
+fn come<R: Send + 'static>(host: &MockHost, later: Later<R>) -> R {
+    let answer: Answer = Box::pin(async move { Box::new(later.await) as Settled });
+    let settled = match host.later(answer) {
+        Ok(settled) => settled,
+        Err(token) => loop {
+            host.wait(vec![token.clone()]).expect("the wait ends");
+
+            if let Some(settled) = host
+                .settled(token.clone())
+                .expect("the token names a reply")
+            {
+                break settled;
+            }
+        },
+    };
+
+    *settled.downcast::<R>().expect("a reply settles as itself")
+}
 
 /// Whether a watch of `handle`, asking to read or to write as said, is ready now; the watch is closed again.
 fn watched(host: &MockHost, handle: &Handle, readable: bool, writable: bool) -> bool {
@@ -347,9 +367,9 @@ fn a_serial_open_refuses_a_speed_no_setting_holds() {
     assert_eq!(io.serial_opens(), []);
 }
 
-// A scripted port takes every write whole, so its drain is over as it starts: the handle reads its end, and the port is recorded as drained. A handle that is not a port has nothing to drain.
+// A scripted port takes every write whole, so its drain is over once looked at, and the port is recorded as drained. A handle that is not a port has nothing to drain.
 #[test]
-fn a_serial_drain_is_over_as_it_starts() {
+fn a_serial_drain_is_over_once_looked_at() {
     let (host, io) = MockHost::builder()
         .serial([("/dev/ttyUSB0", Vec::<&str>::new())])
         .build();
@@ -365,13 +385,51 @@ fn a_serial_drain_is_over_as_it_starts() {
         )
         .unwrap();
 
-    let wait = host.serial_drain(port).unwrap();
-    assert_eq!(host.handle_read(wait, 1), Ok(None));
+    assert_eq!(come(&host, host.serial_drain(port)), Ok(()));
     assert_eq!(io.serial_drains(), [b"/dev/ttyUSB0".to_vec()]);
 
     let file = host.file_open(b"f".to_vec(), Mode::Write).unwrap();
-    assert_eq!(host.serial_drain(file), Err(Failure::NotFound));
-    assert_eq!(host.serial_drain(Handle::Stdin), Err(Failure::NotFound));
+    assert_eq!(come(&host, host.serial_drain(file)), Err(Failure::NotFound));
+    assert_eq!(
+        come(&host, host.serial_drain(Handle::Stdin)),
+        Err(Failure::NotFound)
+    );
+}
+
+// A reply the script gives later is pending for one look and there on the next, so a call answered later suspends once, as a native one that takes its time does; the token is read back once and names nothing after.
+#[test]
+fn a_scripted_reply_comes_on_its_second_look() {
+    let (host, _io) = MockHost::builder().build();
+    let reply = Looked::later(7u64);
+    let token = host
+        .later(Box::pin(async move { Box::new(reply.await) as Settled }))
+        .expect_err("the first look finds it pending");
+
+    assert_eq!(host.handle_ready(vec![token.clone()]), [event::READY]);
+    let settled = host.settled(token.clone()).unwrap().expect("it has come");
+    assert_eq!(*settled.downcast::<u64>().unwrap(), 7);
+    assert!(host.settled(token).is_err());
+}
+
+// A reply that comes from work run elsewhere wakes a wait that holds out for it alone, which sleeps until it does rather than refusing the run.
+#[test]
+fn a_wait_on_a_reply_to_come_sleeps_until_it_wakes() {
+    let (host, _io) = MockHost::builder().build();
+    let (signal, signalled) = mpsc::channel::<()>();
+    let work = blocking(move || {
+        signalled.recv().unwrap();
+
+        3u64
+    });
+
+    let token = host
+        .later(Box::pin(async move { Box::new(work.await) as Settled }))
+        .expect_err("the work waits for its signal");
+    signal.send(()).unwrap();
+    host.wait(vec![token.clone()]).unwrap();
+
+    let settled = host.settled(token).unwrap().expect("it has come");
+    assert_eq!(*settled.downcast::<u64>().unwrap(), 3);
 }
 
 // A file and a standard stream have no lines to drive, and are `NotFound` as the native host answers them.
@@ -670,14 +728,14 @@ fn a_lookup_and_a_variable_are_refused_as_the_native_host_refuses_them() {
     let (host, _io) = MockHost::builder().env([("A", "1")]).build();
 
     assert_eq!(
-        host.dns_lookup(b"\xff".to_vec(), 80),
+        come(&host, host.dns_lookup(b"\xff".to_vec(), 80)),
         Err(Failure::NotFound)
     );
     assert_eq!(
-        host.dns_lookup(b"example.com".to_vec(), 65_536),
+        come(&host, host.dns_lookup(b"example.com".to_vec(), 65_536)),
         Err(Failure::Other(22))
     );
-    assert!(host.dns_lookup(b"example.com".to_vec(), 80).is_ok());
+    assert!(come(&host, host.dns_lookup(b"example.com".to_vec(), 80)).is_ok());
 
     assert_eq!(host.proc_env(b"A".to_vec()), Some(b"1".to_vec()));
     assert_eq!(host.proc_env(b"A=".to_vec()), None);

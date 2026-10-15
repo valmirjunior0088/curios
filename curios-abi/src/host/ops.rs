@@ -8,15 +8,17 @@
 //!
 //! A row whose reply is a [`Termination`] diverges: its call never returns, which is distinct from a row returning nothing, and it crosses no result. `proc_exit` is the one such row. No host implementation can return into the guest, since nothing but the adapter's guest-exit trap is made of a termination, and the guest holds no code for a return from it.
 //!
+//! A row whose reply is a [`Later`] is answered later: the host's method hands back the reply's future, which the host files ([`HostOps::later`]) while the call suspends on it. It crosses as the reply inside does, since every row that returns carries the lane a call answered later travels in, so the table states only that the host's answer takes its time. `dns_lookup` and `serial_drain` are such rows, each a blocking wait run off the host's thread.
+//!
 //! **A row is a `foreign` declaration of the standard library.** `module` names the `/std` module that declares it, by the host's own method name, so `handle_read` in `Handle` is `/std/Handle/handle_read` ([`HostOp::declared`]): the name a program imports, and the name a host answers. It is a clause of the row rather than a lookup beside the table, so a new row cannot go without one, and `curios-prelude-archive`'s `the_library_declares_every_row_a_host_answers` holds the library's declarations to the table, by name and by signature, in both directions. No program names a row any other way: what a term carries is the declaration ([`ForeignFunction`](super::ForeignFunction)), as it carries a package's.
 
 use {
     super::{
-        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Refusal, SerialFlow, SerialOp,
-        SerialParity, StdioMode, Termination, Timestamp, TtySize, WireOperand, WireReply,
-        WireSignature,
+        ChildExit, ChildHandles, Failure, FileStat, Handle, Later, Mode, Refusal, RowReply,
+        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
+        WireOperand, WireReply, WireSignature,
     },
-    std::sync::LazyLock,
+    std::{any::Any, pin::Pin, sync::LazyLock},
 };
 
 /// The one authored table of the host's operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply { module: path, yields: label }`, `yields` there where the reply's type takes a label: the variant is the row's [`HostOp`], the method name the [`HostOps`] method and the label `module` declares the row by, and the brace group holds what the types cannot say.
@@ -42,11 +44,8 @@ macro_rules! for_each_host_op {
             /// Open the file at `path` in `mode`, succeeding with its handle. A regular file or a directory is read and written synchronously, since the disk answers it; anything else — a FIFO, a device — is opened without waiting for a peer and served as a stream is, a read or a write that cannot progress answering `WouldBlock`. A FIFO opened to read reads nothing, rather than its end, until a writer has opened it; one opened to write with no reader fails with `ENXIO` through the errno lane, as the system reports it.
             FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> { module: File, yields: handle }
 
-            /// Start an asynchronous lookup of `host`:`port`, succeeding with a handle that becomes `READ`-ready once resolution completes, at which point `dns_resolve` forces the address list off it. The blocking resolution runs off the calling thread. A `host` that is not UTF-8 names nothing a resolver can find and is `NotFound`, and a `port` past 65535 is `EINVAL`, both before any lookup starts.
-            DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Result<Handle, Failure> { module: tcp/resolve, yields: handle }
-
-            /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it: every address the resolver found, none included, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_connect`/`socket_listen`. A lookup that failed is `NotFound`. `WouldBlock` before readiness.
-            DnsResolve: fn dns_resolve(handle: Handle) -> Result<Vec<Vec<u8>>, Failure> { module: tcp/resolve, yields: addresses }
+            /// Look up `host`:`port`, answered later: every address the resolver found, none included, each an opaque blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_connect`/`socket_listen`. The blocking resolution runs off the host's thread, and the call suspends while it does. A lookup that failed is `NotFound`. A `host` that is not UTF-8 names nothing a resolver can find and is `NotFound`, and a `port` past 65535 is `EINVAL`, both before any lookup starts.
+            DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Later<Result<Vec<Vec<u8>>, Failure>> { module: tcp/resolve, yields: addresses }
 
             /// Create an unconnected, non-blocking socket for the address family encoded in `addr`, succeeding with its handle; `socket_connect` is what makes it a stream.
             SocketOpen: fn socket_open(addr: Vec<u8>) -> Result<Handle, Failure> { module: tcp/Socket, yields: handle }
@@ -114,8 +113,8 @@ macro_rules! for_each_host_op {
             /// Drive serial port `h`: `op` is a [`serial_op`](crate::serial_op) tag — `DTR` or `RTS` set to the level `on`, or `DISCARD_INPUT`, which drops what the device sent and the program has not read (`on` ignored). A handle that is not a serial port — a standard stream, a file, a pipe, a socket — is `NotFound`. Break and the four status lines are deliberately absent until a program needs them.
             SerialControl: fn serial_control(h: Handle, op: SerialOp, on: bool) -> Result<(), Failure> { module: Serial }
 
-            /// Start waiting for serial port `h` to send what it has accepted, off the calling thread, succeeding with a handle to the wait: a stream that holds nothing and reaches its end once the output has left the system, or can no longer leave it. a watch of that handle for reading is ready then, `handle_read` answers the end, and `handle_close` releases it, which abandons the wait without stopping the output. Closing the port discards what is unsent, which ends a wait under way. `NotFound` for a handle that is not a serial port.
-            SerialDrain: fn serial_drain(h: Handle) -> Result<Handle, Failure> { module: Serial, yields: handle }
+            /// Wait for serial port `h` to send what it has accepted, answered later: `Ok` once the output has left the system, or can no longer leave it. The wait runs off the host's thread, and the call suspends while it does; a call dropped meanwhile abandons the wait without stopping the output. Closing the port discards what is unsent, which ends a wait under way. `NotFound` for a handle that is not a serial port.
+            SerialDrain: fn serial_drain(h: Handle) -> Later<Result<(), Failure>> { module: Serial }
 
             /// The serial devices the system has, each by a path `serial_open` takes, sorted so two listings agree; none is the empty list. On Linux, every terminal with a device behind it whose port the driver found, by its `/dev/serial/by-id` name where the system keeps one — a name that says what the device is and outlives the order it was plugged in — and by its node otherwise, as an onboard port is; on macOS, the callout devices, `/dev/cu.*`.
             SerialList: fn serial_list() -> Result<Vec<Vec<u8>>, Failure> { module: Serial, yields: paths }
@@ -194,7 +193,8 @@ macro_rules! declare_host_rows {
                         module: concat!($(stringify!($module), "/"),+),
                         signature: WireSignature {
                             params: vec![$(<$t as WireOperand>::WIRE),*],
-                            returns: <$r as WireReply>::shape().returns(yields_label!($($yields)?)),
+                            returns: <<$r as RowReply>::Reply as WireReply>::shape()
+                                .returns(yields_label!($($yields)?)),
                         },
                     },
                 )*]
@@ -209,9 +209,21 @@ macro_rules! declare_host_rows {
 
             /// Wait until a handle of `on` is ready, as `handle_ready` would report it — at once where one already is, and never before: a sleep the system ends early is slept again. No program calls it: a program suspends on `on`, and the host's loop waits here before advancing it, so the rest it advances finds what it waited for. A system that refuses the wait refuses the run, naming why. `on` is never empty, which is a program waiting on nothing the host holds, and the loop's to report.
             fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal>;
+
+            /// File `answer`, a reply that comes later, polled once here: what it settled with where that is at once, or else the handle it is filed under, which is ready once it has settled. No program calls it, nor [`settled`](HostOps::settled): the run's adapter for a row files what the row's answerer hands it, the call suspends on the handle, and the call that asks again reads the reply back. `handle_close` drops a filed answer, and its future with it.
+            fn later(&self, answer: Answer) -> Result<Settled, Handle>;
+
+            /// What the answer filed under `h` settled with, which leaves it filed no longer, or `None` while it has not settled. A handle that names no answer refuses the call.
+            fn settled(&self, h: Handle) -> Result<Option<Settled>, Refusal>;
         }
     };
 }
+
+/// What a reply that comes later settles with, its type erased for the host that holds it: only the adapter that filed it reads it back, as the reply it was.
+pub type Settled = Box<dyn Any + Send>;
+
+/// A reply that comes later, as the host holds it ([`HostOps::later`]).
+pub type Answer = Pin<Box<dyn Future<Output = Settled> + Send>>;
 
 for_each_host_op!(declare_host_rows);
 

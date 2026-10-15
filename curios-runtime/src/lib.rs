@@ -20,11 +20,11 @@ pub use host::*;
 mod table;
 use table::*;
 
+mod blocking;
+pub use blocking::*;
+
 mod os_host;
 pub use os_host::*;
-
-mod os_resolver;
-use os_resolver::*;
 
 mod os_child;
 use os_child::*;

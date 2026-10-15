@@ -3,6 +3,8 @@
 //! An operand type states the [`WireType`] it arrives as ([`WireOperand`]). A payload states the slots a success fills, how it fills them, and the padding a reply without it fills them with ([`WirePayload`]). A reply type, built around a payload, states what crosses back, short of the one label its row states, and encodes the whole reply ([`WireReply`]): a bare payload crosses as its own slots; `Result<T, Failure>` puts a status ahead of them, as do `Result<Option<T>, Failure>`, a stream whose `None` is its end, and `Option<T>`, a lookup whose `None` is absence; `Result<T, Refusal>` crosses as its payload, its host free to refuse the call instead; and [`Termination`] crosses nothing, its row one that does not return. The generic shapes are disjoint because no `Option` or `Result` is a payload, which coherence holds rather than a comment.
 //!
 //! A reply encodes to the [`WireValue`]s it crosses with, in slot order ([`Encoded`]), which the runtime writes into wasm values: this leaf names no wasm value, and the table's types agree with the bindings built from them by construction, since both are read off the same row.
+//!
+//! **A reply may come later.** A row whose host answers it later is written with [`Later`] around its reply, which crosses as that reply does once it has come; [`RowReply`] reads either back as what crosses and when. No reply is a `Later`, which coherence holds as it holds the rest.
 
 use {
     super::{
@@ -11,7 +13,11 @@ use {
         WireReturn, WireType,
     },
     crate::status,
-    std::convert::identity,
+    std::{
+        convert::identity,
+        pin::Pin,
+        task::{Context, Poll},
+    },
 };
 
 #[cfg(test)]
@@ -504,5 +510,54 @@ impl WireReply for Termination {
 
     fn encode(self) -> Encoded {
         Encoded::Terminate(self.0)
+    }
+}
+
+/// A reply that comes later: what a row's host answers where the reply is not there yet. The host files it and polls it between a program's turns, the call that asked suspending meanwhile on the handle it is filed under ([`HostOps::later`](super::HostOps::later)), and it crosses as `R` does once it has come.
+pub struct Later<R>(Pin<Box<dyn Future<Output = R> + Send>>);
+
+impl<R> Later<R> {
+    /// The reply `future` comes to.
+    pub fn new(future: impl Future<Output = R> + Send + 'static) -> Self {
+        Self(Box::pin(future))
+    }
+}
+
+impl<R> Future for Later<R> {
+    type Output = R;
+
+    fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<R> {
+        self.0.as_mut().poll(context)
+    }
+}
+
+/// A row's reply as its host gives it.
+pub enum Answered<R> {
+    /// The reply, there at once.
+    Now(R),
+    /// The reply, to come.
+    Later(Later<R>),
+}
+
+/// What a host's method for a row comes back with: a reply, given at once, or a [`Later`] one. Either crosses as its reply does, which is what the table reads a row's results off.
+pub trait RowReply {
+    type Reply: WireReply;
+
+    fn answered(self) -> Answered<Self::Reply>;
+}
+
+impl<R: WireReply> RowReply for R {
+    type Reply = R;
+
+    fn answered(self) -> Answered<R> {
+        Answered::Now(self)
+    }
+}
+
+impl<R: WireReply> RowReply for Later<R> {
+    type Reply = R;
+
+    fn answered(self) -> Answered<R> {
+        Answered::Later(self)
     }
 }

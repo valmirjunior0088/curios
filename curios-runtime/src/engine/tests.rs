@@ -2,7 +2,7 @@
 
 use {
     super::{Answers, ForeignBindings, host_rows, link, shared_engine},
-    crate::{Bits, MockHost, Termination},
+    crate::{Bits, HostOps, MockHost, Termination},
     curios_abi::{
         ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults, WireReturn, WireSignature,
         WireType,
@@ -41,8 +41,14 @@ fn linked(foreigns: &ForeignStore, bindings: &ForeignBindings, name: &str) -> Re
         foreigns,
         &bindings.answers,
         &Answers::default(),
+        &filer(),
         name,
     )
+}
+
+/// A host to file what an answer gives later with, which no link here calls.
+fn filer() -> Arc<dyn HostOps + Send + Sync> {
+    Arc::new(MockHost::builder().build().0)
 }
 
 #[test]
@@ -153,6 +159,7 @@ fn every_host_answer_crosses_as_its_row() {
             &store,
             &Answers::default(),
             &answers,
+            &filer(),
             &op.declared(),
         )
         .unwrap_or_else(|refusal| panic!("{refusal}"));

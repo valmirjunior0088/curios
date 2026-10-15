@@ -4,9 +4,9 @@
 //
 // A handle crosses as its token's bytes, and this harness keys a token on the hex of exactly those bytes, never on a number decoded from them: the empty token is not stdin's `00`, a padded `0100` is not stdout's `01`, and a token longer than any number stays itself.
 //
-// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. The only handles it mints are watches and timers, what a program suspends on. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
+// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. The only handles it mints are what a program suspends on: watches, timers, and the replies a hook's promise answers later. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
 //
-// A program that can suspend exports `func/advance` beside its entry, and both answer turns: whether it suspended, what it yielded, the handles it waits on, its cancel and its rest. The run advances turn after turn, awaiting a timer between them, so the event loop runs while the program sleeps.
+// A program that can suspend exports `func/advance` beside its entry, and both answer turns: whether it suspended, what it yielded, the handles it waits on, its cancel and its rest. The run advances turn after turn, awaiting a timer or a hook's promise between them, so the event loop runs while the program waits.
 
 /** Thrown by the `proc_exit` import to unwind the wasm stack with an exit code. */
 export class ExitSignal extends Error {
@@ -57,7 +57,7 @@ const describe = (value) => {
  * - `bridge`: the bridge module's bytes, from `bridge_bytes`;
  * - `status`, `event`, `stdio`, `seed`, `deadlock`: the wire code tables, the standard streams' tokens, the first token this host may mint and the report of a program suspended on nothing, from `abi`;
  * - `rows`: from `abi` too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
- * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each receiving a copy of every write as a `Uint8Array`; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does.
+ * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each receiving a copy of every write as a `Uint8Array`; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does — at once, or later by a promise, the call suspending while it is pending and the signal the hook was handed aborted where the call is cancelled.
  *
  * Resolves to `{ stdout, stderr, exitCode, trap }`: the accumulated output bytes, the code the program exited with (0 when `main` returns), and the trap message if execution failed instead.
  */
@@ -171,8 +171,7 @@ export async function run(config) {
     },
     handle_write: write,
     file_open: deniedHandle,
-    dns_lookup: deniedHandle,
-    dns_resolve: deniedList,
+    dns_lookup: deniedList,
     socket_open: deniedHandle,
     socket_connect: denied,
     socket_finish_connect: denied,
@@ -194,9 +193,12 @@ export async function run(config) {
 
       return encodeBytes(reports);
     },
-    // Closing a watch or a timer forgets it; closing anything else does nothing, as closing an unknown handle does on every host.
+    // Closing a watch, a timer or a reply to come forgets it, aborting the hook's signal for the last; closing anything else does nothing, as closing an unknown handle does on every host.
     handle_close: (handle) => {
-      minted.delete(keyOf(handle));
+      const key = keyOf(handle);
+
+      minted.get(key)?.close?.();
+      minted.delete(key);
     },
     // Nothing is held back in the playground — every write is delivered as it is made — so a standard stream's flush has nothing to drain, and no other handle exists here.
     handle_flush: (handle) =>
@@ -257,7 +259,7 @@ export async function run(config) {
     // No serial devices either: Web Serial asks the user to pick a port, which no row can do, so opening one is denied as `file_open` is.
     serial_open: deniedHandle,
     serial_control: denied,
-    serial_drain: deniedHandle,
+    serial_drain: denied,
     serial_list: deniedList,
     // No filesystem either: every filesystem row is denied as `file_open` is, listing a directory among them.
     file_stat: () => [status.PERMISSION_DENIED, 0n, 0n, 0n, 0n],
@@ -432,7 +434,16 @@ export async function run(config) {
     return list;
   };
 
-  // A program's own `foreign` row, implemented by `hook`: the operands decoded into copies the hook owns, and what it answers held to the row's results and copied in — nothing for a row with none, the one value for a row with one, and an object keyed by exactly the results' labels for a row with several. A row that does not return is answered by a hook that does not either, which ends the program by throwing. A violation stops the program, naming the row.
+  // What a hook's promise answers later: the promise, the controller of the signal the hook was handed, and how what it settles with is held to its row.
+  class Pending {
+    constructor(promise, controller, lowered) {
+      this.promise = promise;
+      this.controller = controller;
+      this.lowered = lowered;
+    }
+  }
+
+  // A program's own `foreign` row, implemented by `hook`: the operands decoded into copies the hook owns, then an `AbortSignal` that fires where the call is cancelled, and what it answers held to the row's results and copied in — nothing for a row with none, the one value for a row with one, and an object keyed by exactly the results' labels for a row with several, or a promise of one of those, which answers the row later. A row that does not return is answered by a hook that does not either, which ends the program by throwing. A violation stops the program, naming the row.
   const checked =
     (row, hook) =>
     (...operands) => {
@@ -440,8 +451,10 @@ export async function run(config) {
         throw new Error(`ffi ${row.name}: ${what}`);
       };
 
+      const controller = new AbortController();
       const answer = hook(
         ...row.params.map((type, i) => lifts[type](operands[i], fail)),
+        controller.signal,
       );
 
       // The guest holds no code for a return from such a row, so a hook that comes back is refused here, by the row's name, and not left to the engine's trap.
@@ -449,45 +462,55 @@ export async function run(config) {
         return fail("the hook returned, and the row does not return");
       }
 
-      switch (row.results.length) {
-        case 0:
-          return answer === undefined
-            ? undefined
-            : fail(
-                `the hook answered ${describe(answer)}, and the row answers nothing`,
-              );
-        case 1:
-          return lower(row.results[0].type, answer, "the result", fail);
-        default: {
-          const labels = row.results.map(({ label }) => label);
+      // Held to the row once it settles, where the call asks again: a value outside the row stops the program there, as one answered at once does here.
+      if (typeof answer?.then === "function") {
+        return new Pending(answer, controller, (value) =>
+          lowered(row, value, fail),
+        );
+      }
 
-          if (
-            typeof answer !== "object" ||
-            answer === null ||
-            Array.isArray(answer) ||
-            answer instanceof Uint8Array
-          ) {
-            return fail(
-              `the hook answered ${describe(answer)}, not an object of ${labels.join(", ")}`,
+      return lowered(row, answer, fail);
+    };
+
+  // What a hook answered, held to its row's results and copied in.
+  const lowered = (row, answer, fail) => {
+    switch (row.results.length) {
+      case 0:
+        return answer === undefined
+          ? undefined
+          : fail(
+              `the hook answered ${describe(answer)}, and the row answers nothing`,
             );
-          }
+      case 1:
+        return lower(row.results[0].type, answer, "the result", fail);
+      default: {
+        const labels = row.results.map(({ label }) => label);
 
-          for (const label of Object.keys(answer)) {
-            if (!labels.includes(label)) {
-              fail(
-                `the hook answered ${label}, which the row has no result of`,
-              );
-            }
-          }
-
-          return row.results.map(({ label, type }) =>
-            label in answer
-              ? lower(type, answer[label], label, fail)
-              : fail(`the hook answered no ${label}`),
+        if (
+          typeof answer !== "object" ||
+          answer === null ||
+          Array.isArray(answer) ||
+          answer instanceof Uint8Array
+        ) {
+          return fail(
+            `the hook answered ${describe(answer)}, not an object of ${labels.join(", ")}`,
           );
         }
+
+        for (const label of Object.keys(answer)) {
+          if (!labels.includes(label)) {
+            fail(`the hook answered ${label}, which the row has no result of`);
+          }
+        }
+
+        return row.results.map(({ label, type }) =>
+          label in answer
+            ? lower(type, answer[label], label, fail)
+            : fail(`the hook answered no ${label}`),
+        );
       }
-    };
+    }
+  };
 
   // A value of `type` standing where nothing reads it: a zero for a scalar, an empty payload for a reference, and null for an option.
   const filler = (type) => {
@@ -526,30 +549,87 @@ export async function run(config) {
     }
   };
 
-  // Every row that returns carries the lane beside its own operands and results: the token of a call still pending and whether it is dropped coming in, and the token of a call still pending going out. Nothing here leaves a call pending, so a first call is answered with no token, a call that drops answers fillers, and one that asks again is refused.
+  // The reply nothing reads that a call still pending, or dropped, answers.
+  const fillers = (row) => {
+    const values = row.results.map(({ type }) => filler(type));
+
+    return values.length === 1 ? values[0] : values;
+  };
+
+  // File a hook's promise under a handle of its own, ready once the promise settles, and answer the token the call suspends on: an `Option(Handle)` holding that handle. Closing the handle aborts the hook's signal.
+  const filed = (pending) => {
+    const entry = {
+      settled: false,
+      ready: () => entry.settled,
+      close: () => pending.controller.abort(),
+      lowered: pending.lowered,
+    };
+
+    entry.done = Promise.resolve(pending.promise)
+      .then(
+        (value) => {
+          entry.outcome = { value };
+        },
+        (error) => {
+          entry.outcome = { error };
+        },
+      )
+      .then(() => {
+        entry.settled = true;
+      });
+
+    const token = bridge.list_new(1);
+    bridge.list_set(token, 0, mint(entry));
+
+    return token;
+  };
+
+  // Every row that returns carries the lane beside its own operands and results: the token of a call still pending and whether it is dropped coming in, and the token of a call still pending going out. A first call answers at once with no token, or, where a hook answered a promise, with fillers beside the token of the reply it files. A call that asks again with the token answers the reply once the promise has settled — and stops the program, naming the row, where it rejected — and fillers beside the same token until then; a token that names no reply here stops the program. A call that drops its token closes it, which aborts the hook's signal, and answers fillers, as one that drops nothing does.
   const laned =
     (row, answer) =>
     (...operands) => {
       const dropped = operands.pop();
       const pending = operands.pop();
+      const key = pending === null ? null : keyOf(bridge.list_get(pending, 0));
 
       if (dropped === 1) {
-        const fillers = row.results.map(({ type }) => filler(type));
+        if (key !== null) {
+          minted.get(key)?.close?.();
+          minted.delete(key);
+        }
 
-        return withToken(
-          row,
-          fillers.length === 1 ? fillers[0] : fillers,
-          null,
-        );
+        return withToken(row, fillers(row), null);
       }
 
-      if (pending !== null) {
-        throw new Error(
-          `ffi ${row.name}: the call asks again for an answer no call left pending`,
-        );
+      if (key !== null) {
+        const entry = minted.get(key);
+
+        if (entry?.done === undefined) {
+          throw new Error(
+            `ffi ${row.name}: the call asks again with a token that names no reply this host holds`,
+          );
+        }
+
+        if (!entry.settled) {
+          return withToken(row, fillers(row), pending);
+        }
+
+        minted.delete(key);
+
+        if ("error" in entry.outcome) {
+          throw new Error(
+            `ffi ${row.name}: the hook's promise rejected: ${String(entry.outcome.error)}`,
+          );
+        }
+
+        return withToken(row, entry.lowered(entry.outcome.value), null);
       }
 
-      return withToken(row, answer(...operands), null);
+      const reply = answer(...operands);
+
+      return reply instanceof Pending
+        ? withToken(row, fillers(row), filed(reply))
+        : withToken(row, reply, null);
     };
 
   // The `ffi` import object, built from the module's own imports. A hook answers a row before this host does, as a module answers one before the native host, and is held to the row `compile` described; a row no hook implements is this host's where it answers that name. Each row that returns is entered through the lane, read off the row's description. A declaration the program never calls is never imported, so it needs no hook; a hook naming no row is a hook for a program other than this one.
@@ -622,24 +702,41 @@ export async function run(config) {
       keyOf(bridge.list_get(list, i)),
     );
 
-  // Hold out until a handle of `on` is ready: at once where one is, and otherwise until the soonest of its timers, the one thing here that becomes ready with time — asking again after each sleep, since a timeout may fire before the clock `clock_mono` reads has reached its instant. A wait with no timer could never end, and is refused.
+  // Hold out until a handle of `on` is ready: at once where one is, and otherwise until the soonest of its timers or the first of its hooks' promises to settle, the things here that become ready with time — asking again after each, since a timeout may fire before the clock `clock_mono` reads has reached its instant. A wait on neither could never end, and is refused.
   const waited = async (on) => {
     while (!on.some(ready)) {
-      const instants = on
-        .map((key) => minted.get(key)?.at)
+      const entries = on
+        .map((key) => minted.get(key))
+        .filter((entry) => entry !== undefined);
+      const instants = entries
+        .map((entry) => entry.at)
         .filter((at) => at !== undefined);
+      const replies = entries
+        .map((entry) => entry.done)
+        .filter((done) => done !== undefined);
 
-      if (instants.length === 0) {
+      if (instants.length === 0 && replies.length === 0) {
         throw new Error(
           "the program waits on handles nothing in this host can ready",
         );
       }
 
-      const soonest = Math.min(...instants);
+      // A sleep a reply ends first is cleared, so no timer outlives the wait it was set for.
+      let timeout;
+      const slept =
+        instants.length === 0
+          ? []
+          : [
+              new Promise((resolve) => {
+                timeout = setTimeout(
+                  resolve,
+                  Math.max(0, Math.min(...instants) - performance.now()),
+                );
+              }),
+            ];
 
-      await new Promise((resolve) => {
-        setTimeout(resolve, Math.max(0, soonest - performance.now()));
-      });
+      await Promise.race([...slept, ...replies]);
+      clearTimeout(timeout);
     }
   };
 

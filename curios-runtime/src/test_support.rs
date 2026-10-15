@@ -249,7 +249,7 @@ pub enum RawValue {
 
 /// Write `values` into an import's result slots, one each, through the plain encodings and nothing else.
 fn write_raw(
-    mut caller: Caller<'_, ()>,
+    caller: &mut Caller<'_, ()>,
     values: &[RawValue],
     results: &mut [Val],
 ) -> wasmtime::Result<()> {
@@ -257,16 +257,16 @@ fn write_raw(
         let slot = std::slice::from_mut(slot);
 
         match value {
-            RawValue::Nat(value) => value.lower(&mut caller, slot)?,
-            RawValue::Int(value) => value.lower(&mut caller, slot)?,
+            RawValue::Nat(value) => value.lower(caller, slot)?,
+            RawValue::Int(value) => value.lower(caller, slot)?,
             RawValue::Word(word) => slot[0] = Val::I32(*word),
-            RawValue::Bytes(bytes) => bytes.clone().lower(&mut caller, slot)?,
-            RawValue::BytesList(list) => list.clone().lower(&mut caller, slot)?,
+            RawValue::Bytes(bytes) => bytes.clone().lower(caller, slot)?,
+            RawValue::BytesList(list) => list.clone().lower(caller, slot)?,
             RawValue::Words(words) => {
                 let array_type = words_array_type(caller.engine());
 
                 lower_scalars(
-                    &mut caller,
+                    caller,
                     array_type,
                     words.iter().map(|word| Val::I32(*word)),
                     slot,

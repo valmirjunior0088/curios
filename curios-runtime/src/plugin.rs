@@ -14,8 +14,8 @@
 
 use {
     super::{
-        Answers, BundledPlugin, ForeignBindings, Lift, Lower, MachineCode, Stated, Trampoline,
-        shared_engine,
+        Answers, BundledPlugin, Entered, ForeignBindings, Lift, Lower, MachineCode, Stated,
+        Trampoline, shared_engine,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireReturn, WireType},
     std::{collections::BTreeMap, fmt, sync::Arc},
@@ -216,12 +216,12 @@ impl Plugin {
             };
             let plugin = Arc::clone(self);
             let instantiated = instantiated.clone();
-            let entered: Trampoline = Arc::new(move |mut caller, given, answered| {
+            let entered: Trampoline = Arc::new(move |caller, given, answered| {
                 plugin.rows[index].call(
                     &plugin.subject,
                     &instantiated,
                     entry,
-                    &mut caller,
+                    caller,
                     given,
                     answered,
                 )
@@ -230,7 +230,7 @@ impl Plugin {
             answers.record(
                 row.function.name().to_string(),
                 Stated::declared(&row.function),
-                entered,
+                Entered::now(entered),
             );
         }
 

@@ -168,17 +168,16 @@ fn a_serial_drain_s_failure_is_the_error_it_names() {
         r#"let s = Serial/open(Path/of_str("/dev/x"), Serial/config(9600))!; Serial/drain(s)"#,
         vec![
             (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
-            (HostOp::SerialDrain, denied(vec![bytes(b"")])),
+            (HostOp::SerialDrain, denied(vec![])),
         ],
     )]);
 }
 
 #[test]
 fn a_network_row_s_failure_is_the_error_it_names() {
-    let looked_up = || (HostOp::DnsLookup, ok(vec![bytes(&[7])]));
-    let resolved = || {
+    let looked_up = || {
         (
-            HostOp::DnsResolve,
+            HostOp::DnsLookup,
             ok(vec![RawValue::BytesList(vec![b"a".to_vec()])]),
         )
     };
@@ -188,31 +187,16 @@ fn a_network_row_s_failure_is_the_error_it_names() {
     each_fails(vec![
         (
             r#"let _ = tcp/resolve("h", 80)!; Try/pure(())"#,
-            vec![(HostOp::DnsLookup, denied(vec![bytes(b"")]))],
+            vec![(HostOp::DnsLookup, denied(vec![RawValue::BytesList(vec![])]))],
         ),
         (
-            r#"let _ = tcp/resolve("h", 80)!; Try/pure(())"#,
-            vec![
-                looked_up(),
-                (
-                    HostOp::DnsResolve,
-                    denied(vec![RawValue::BytesList(vec![])]),
-                ),
-            ],
+            connect,
+            vec![looked_up(), (HostOp::SocketOpen, denied(vec![bytes(b"")]))],
         ),
         (
             connect,
             vec![
                 looked_up(),
-                resolved(),
-                (HostOp::SocketOpen, denied(vec![bytes(b"")])),
-            ],
-        ),
-        (
-            connect,
-            vec![
-                looked_up(),
-                resolved(),
                 opened(),
                 (HostOp::SocketConnect, denied(vec![])),
             ],
@@ -221,7 +205,6 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             connect,
             vec![
                 looked_up(),
-                resolved(),
                 opened(),
                 (HostOp::SocketConnect, vec![nat(status::WOULD_BLOCK)]),
                 (HostOp::SocketFinishConnect, denied(vec![])),
@@ -231,7 +214,6 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             r#"let _ = tcp/Socket/connect_tls("h", 80)!; Try/pure(())"#,
             vec![
                 looked_up(),
-                resolved(),
                 opened(),
                 (HostOp::SocketConnect, ok(vec![])),
                 (HostOp::TlsStart, denied(vec![])),
@@ -241,7 +223,6 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             r#"let _ = tcp/Listener/listen("h", 80)!; Try/pure(())"#,
             vec![
                 looked_up(),
-                resolved(),
                 (HostOp::SocketListen, denied(vec![bytes(b"")])),
             ],
         ),
@@ -251,7 +232,6 @@ fn a_network_row_s_failure_is_the_error_it_names() {
                    Try/pure(())"#,
             vec![
                 looked_up(),
-                resolved(),
                 (HostOp::SocketListen, ok(vec![bytes(&[8])])),
                 (HostOp::SocketAccept, denied(vec![bytes(b"")])),
             ],
@@ -273,10 +253,7 @@ fn a_name_resolving_to_no_address_is_not_found() {
     assert_eq!(
         exit_code(
             r#"let _ = tcp/Socket/connect("h", 80)!; Try/pure(())"#,
-            vec![
-                (HostOp::DnsLookup, ok(vec![bytes(&[7])])),
-                (HostOp::DnsResolve, ok(vec![RawValue::BytesList(vec![])])),
-            ],
+            vec![(HostOp::DnsLookup, ok(vec![RawValue::BytesList(vec![])]))],
         ),
         2
     );
@@ -311,9 +288,8 @@ fn the_failures_std_absorbs_by_design_are_absorbed() {
         exit_code(
             r#"tcp/Socket/with(tcp/Socket/connect("h", 80), (_) => Try/pure(()))"#,
             vec![
-                (HostOp::DnsLookup, ok(vec![bytes(&[7])])),
                 (
-                    HostOp::DnsResolve,
+                    HostOp::DnsLookup,
                     ok(vec![RawValue::BytesList(vec![b"a".to_vec()])]),
                 ),
                 (HostOp::SocketOpen, ok(vec![bytes(&[8])])),

@@ -88,22 +88,16 @@ satisfy Io/Read(Serial) {
     read(s, n, @positive) = read(s, n, @positive),
 }
 
---- Start waiting for this port to send what it accepted: `ok` beside a handle to the wait, or the status of the failure.
-foreign serial_drain(Handle) -> {status: Nat, handle: Handle};
-
-let draining(s: Serial) -> Try(Io, Io/Error, Handle) =
-    let reply = serial_drain(s.0)!;
-    match reply.status == /sys/status/ok
-    | true => Try/pure(reply.handle)
-    | false => Try/raise(Io/Error/of(reply.status))
-    end;
+--- Wait for this port to send what it accepted: `ok` once it has, or can no longer send it, or the status of the failure. The host answers it later, so the call suspends while the wait runs.
+foreign serial_drain(Handle) -> Nat;
 
 --- Wait until `s` has sent what it accepted, or can no longer send it. A device that never takes the output — hardware flow control with nothing asking for more — waits for good, so bound it with a timeout where that can happen; a cancelled drain leaves the output where it was.
 pub let drain(s: Serial) -> Try(Io, Io/Error, {}) =
-    let wait = draining(s)!;
-    let outcome = Io/using((_) => Handle/close(wait), Io/read_all(wait))!;
-    let _ = outcome!;
-    Try/pure(());
+    let status = serial_drain(s.0)!;
+    match status == /sys/status/ok
+    | true => Try/pure(())
+    | false => Try/raise(Io/Error/of(status))
+    end;
 
 satisfy Io/Write(Serial) {
     write(s, b) = write(s, b),

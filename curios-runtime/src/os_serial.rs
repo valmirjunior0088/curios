@@ -1,15 +1,15 @@
-//! Serial ports of the native host: the devices the system has, and one opened raw at its speed and frame, its modem lines driven, its unread input dropped, and its output waited for on a thread of its own.
+//! Serial ports of the native host: the devices the system has, and one opened raw at its speed and frame, its modem lines driven, its unread input dropped, and its output waited for off the host's thread.
 //!
 //! **A port is filed as a resource of its own**, not as the bare descriptor a pipe to a child is, although the stream rows serve both alike. What only a port can do is then decided by the kind the table holds: a file, a pipe or a socket handed to `serial_control` is `NotFound`, as it is on every host, where asking the kernel would answer whichever errno that descriptor's driver reports.
 //!
 //! **An open sets every mode it means and checks what the device took.** A serial device keeps its settings from one open to the next on Linux, and what "raw" clears differs between the two release targets, so the input modes are set outright rather than edited: none of them, which leaves no software flow control, no parity checking and no break handling behind, on either target. A terminal's settings call succeeds when any part of it applied, so the frame and the speed are read back, and a device that took another is refused rather than opened at settings the program did not ask for.
 //!
-//! **Closing a port discards what it has not sent.** Left to itself, Linux holds the last close of a serial device until its output has drained — thirty seconds by default when the device takes none — whatever the descriptor's flags, and macOS discards the output of a non-blocking one instead; neither is a close that never waits and loses nothing. So the port drops its unsent output as it closes, which bounds the kernel's wait to what the hardware already holds, and the wait a program wants is `serial_drain`'s: `tcdrain` on a thread of its own, signalling a pipe the scheduler polls, as `os_child` reaps a child. One thread per drain under way is the native host's cost for a wait neither system offers without blocking.
+//! **Closing a port discards what it has not sent.** Left to itself, Linux holds the last close of a serial device until its output has drained — thirty seconds by default when the device takes none — whatever the descriptor's flags, and macOS discards the output of a non-blocking one instead; neither is a close that never waits and loses nothing. So the port drops its unsent output as it closes, which bounds the kernel's wait to what the hardware already holds, and the wait a program wants is `serial_drain`'s: `tcdrain` run by [`blocking`](crate::blocking()), its call answered later. A thread of the pool per drain under way is the native host's cost for a wait neither system offers without blocking.
 
 use {
     super::{Failure, SerialOp, failure_from_error},
     rustix::{
-        fs::{OFlags, fcntl_getfl, fcntl_setfl},
+        fs::OFlags,
         io::{Errno, retry_on_intr},
         ioctl::{Opcode, Setter, ioctl},
         termios::{
@@ -20,13 +20,11 @@ use {
     std::{
         ffi::c_int,
         fs,
-        io::{Error, pipe},
         os::{
             fd::{AsFd, BorrowedFd, OwnedFd},
             unix::ffi::OsStringExt,
         },
         path::Path,
-        thread,
     },
 };
 
@@ -149,7 +147,7 @@ pub(crate) fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
     Ok(devices)
 }
 
-/// An open serial port: the descriptor `serial_open` configured, non-blocking from the open itself, so a fiber draining it yields on `WouldBlock` as it does on a pipe to a child.
+/// An open serial port: the descriptor `serial_open` configured, non-blocking from the open itself, so a read or a write that cannot progress answers `WouldBlock` as it does on a pipe to a child.
 pub(crate) struct SerialPort(OwnedFd);
 
 impl SerialPort {
@@ -189,28 +187,14 @@ impl SerialPort {
         }
     }
 
-    /// Start waiting for the port to send what it has accepted, and hand back the read end of a pipe that reaches its end when the wait is over — non-blocking, so a fiber parks on it. The thread waits on a duplicate of the descriptor, so the port may close under it: the close discards the unsent output, which is what the wait was for, and the thread ends.
-    pub(crate) fn drain(&self) -> Result<OwnedFd, Failure> {
-        let errno_failure = |errno: Errno| failure_from_error(Error::from(errno));
-
+    /// The wait for the port to send what it has accepted, to run off the host's thread: `tcdrain` on a duplicate of the descriptor, so the port may close under it — the close discards the unsent output, which is what the wait was for, and the wait ends.
+    pub(crate) fn drain(&self) -> Result<impl FnOnce() + Send + 'static, Failure> {
         let port = self.0.try_clone().map_err(failure_from_error)?;
-        let (done, signal) = pipe().map_err(failure_from_error)?;
-        let done = OwnedFd::from(done);
 
-        let flags = fcntl_getfl(&done).map_err(errno_failure)?;
-        fcntl_setfl(&done, flags | OFlags::NONBLOCK).map_err(errno_failure)?;
-
-        // The wait's own outcome is not reported: a port that can no longer send says so to the write or the control that meets it next, and the pipe's end means only that there is nothing left to wait for.
-        thread::Builder::new()
-            .name("curios-drain".to_string())
-            .spawn(move || {
-                let _ = retry_on_intr(|| tcdrain(&port));
-
-                drop(signal);
-            })
-            .map_err(failure_from_error)?;
-
-        Ok(done)
+        // The wait's own outcome is not reported: a port that can no longer send says so to the write or the control that meets it next, and the wait's end means only that there is nothing left to wait for.
+        Ok(move || {
+            let _ = retry_on_intr(|| tcdrain(&port));
+        })
     }
 
     /// Raise (`on`) or lower the modem lines `mask` names. `TIOCMBIS` and `TIOCMBIC` touch only those lines, where a `TIOCMGET` read back and a `TIOCMSET` of the lot would race whatever else drives the port between the two.

@@ -1,9 +1,10 @@
 use {
-    super::{OsResolver, Running, SerialPort, Slot, Spawned, Table, os_child, serial_devices},
+    super::{Running, SerialPort, Spawned, Table, os_child, serial_devices},
     crate::{
-        ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps, Mode,
-        Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
-        failure_from_error, lookup_address, names_a_variable, serial_frame, serial_speed,
+        Answer, ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps,
+        Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
+        Timestamp, TtySize, blocking, failure_from_error, lookup_address, names_a_variable,
+        serial_frame, serial_speed,
     },
     curios_abi::event,
     rustix::{
@@ -25,8 +26,9 @@ use {
         env,
         ffi::OsStr,
         fs::{self, File, OpenOptions},
+        future,
         io::{self, Error, ErrorKind, Read, Write, stderr, stdin, stdout},
-        net::{Shutdown, SocketAddr},
+        net::{Shutdown, SocketAddr, ToSocketAddrs},
         os::{
             fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
             unix::{
@@ -34,7 +36,11 @@ use {
                 fs::{FileTypeExt, OpenOptionsExt},
             },
         },
-        sync::{Arc, LazyLock, Mutex, OnceLock},
+        sync::{
+            Arc, LazyLock, Mutex, OnceLock,
+            atomic::{AtomicBool, Ordering},
+        },
+        task::{Context, Poll, Wake, Waker},
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
     webpki_roots::TLS_SERVER_ROOTS,
@@ -66,12 +72,14 @@ static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
 /// Every kind on which a peer decides — a socket in any state, an accepted stream, a pipe to a child, a FIFO or a device opened by path, a serial port — is filed non-blocking at the moment it is minted, so no row waits on a peer: a `handle_read`, `handle_write`, `socket_connect` or `socket_accept` that cannot progress answers `WouldBlock` and the host's wait between turns is the one place it sleeps. A regular file is synchronous, since the disk rather than a peer answers it.
 enum OsResource {
     File(File),
-    /// An in-flight asynchronous name lookup minted by `dns_lookup`. `done` is the read end of a pipe a worker thread writes one byte to once it has filled `slot` with the `getaddrinfo` result; that write makes `done` poll-`READ` readable, waking the scheduler. `dns_resolve` then drains `slot` and drops the handle (closing `done`). A watch waits on `done` like any other fd.
-    Resolving {
-        done: OwnedFd,
-        slot: Slot,
+    /// A reply that comes later, filed by `later` with the [`Nudge`] its future wakes: polled again once woken, and filed as `Settled` once it has come.
+    Later {
+        answer: Answer,
+        nudge: Arc<Nudge>,
     },
-    /// A bare owned descriptor — one end of a pipe to a child, filed by `proc_spawn`, the pipe a serial drain ends, filed by `serial_drain`, or a device opened by path, filed by `file_open`. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one makes it so first, so a reader suspends on `WouldBlock` instead of blocking the run, while `handle_read`, `handle_write`, `handle_watch` and `handle_close` serve it as they serve a file.
+    /// What a reply filed by `later` came to, until `settled` takes it.
+    Settled(Settled),
+    /// A bare owned descriptor — one end of a pipe to a child, filed by `proc_spawn`, or a device opened by path, filed by `file_open`. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one makes it so first, so a reader suspends on `WouldBlock` instead of blocking the run, while `handle_read`, `handle_write`, `handle_watch` and `handle_close` serve it as they serve a file.
     Descriptor(OwnedFd),
     /// A FIFO opened by `file_open`, non-blocking from its open. It is served as a `Descriptor` is, except that a read waits for a writer: a FIFO no writer has opened reads as its end, so its read asks first whether anything is there.
     Fifo(OwnedFd),
@@ -125,8 +133,6 @@ fn descriptor<'a>(
             | OsResource::Connecting(socket)
             | OsResource::Unconnected(socket)
             | OsResource::Listener(socket) => Some((socket.as_fd(), asked)),
-            // The lookup's pipe read end: ready to read once the worker has written its wakeup byte, which is the completion signal.
-            OsResource::Resolving { done, .. } => Some((done.as_fd(), asked)),
             OsResource::Descriptor(fd) | OsResource::Fifo(fd) => Some((fd.as_fd(), asked)),
             OsResource::Serial(port) => Some((port.as_fd(), asked)),
             // The reaper's pipe read end: ready to read once the child's end is recorded, which is when `proc_wait` answers.
@@ -138,8 +144,99 @@ fn descriptor<'a>(
             OsResource::ServerTls(stream) => {
                 Some((stream.sock.as_fd(), tls_watch(&stream.conn, asked)))
             }
-            OsResource::TlsConfig(_) | OsResource::Watch { .. } | OsResource::Timer(_) => None,
+            OsResource::TlsConfig(_)
+            | OsResource::Watch { .. }
+            | OsResource::Timer(_)
+            | OsResource::Later { .. }
+            | OsResource::Settled(_) => None,
         }),
+    }
+}
+
+/// What wakes a reply the host holds for later: the flag a wait reads to know the reply's future can move, and the host's wake pipe, written so a wait under way looks again.
+struct Nudge {
+    woken: AtomicBool,
+    pipe: Option<Arc<OwnedFd>>,
+}
+
+impl Wake for Nudge {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.woken.store(true, Ordering::Release);
+
+        // A full pipe already holds a byte that wakes the wait, so a write it refuses loses nothing.
+        if let Some(pipe) = &self.pipe {
+            let _ = rustix::io::write(&**pipe, &[1]);
+        }
+    }
+}
+
+/// Every address `address` resolves to, each the canonical `ip:port` blob `socket_open` reads its family off. A lookup that fails is `NotFound`: the `host:port` named nothing the resolver could find.
+fn resolved(address: &str) -> Result<Vec<Vec<u8>>, Failure> {
+    address
+        .to_socket_addrs()
+        .map(|found| found.map(|found| found.to_string().into_bytes()).collect())
+        .map_err(|_| Failure::NotFound)
+}
+
+/// Poll `answer` once, waking `nudge` when it can move again.
+fn polled(answer: &mut Answer, nudge: &Arc<Nudge>) -> Poll<Settled> {
+    answer
+        .as_mut()
+        .poll(&mut Context::from_waker(&Waker::from(Arc::clone(nudge))))
+}
+
+/// Poll every reply of `on` whose future was woken since it was last polled, filing what one comes to in its place.
+fn settle_woken(table: &mut Table<OsResource>, on: &[Handle]) {
+    for handle in on {
+        let settled = match table.get_mut(handle) {
+            Some(OsResource::Later { answer, nudge })
+                if nudge.woken.swap(false, Ordering::AcqRel) =>
+            {
+                polled(answer, nudge)
+            }
+            _ => continue,
+        };
+
+        if let Poll::Ready(settled) = settled {
+            table.insert(handle, OsResource::Settled(settled));
+        }
+    }
+}
+
+/// The pipe every reply the host holds for later wakes it through: written by their wakers, and read empty before each look, so it is readable again only once a waker writes again. Both ends are non-blocking, so neither a waker nor a look ever waits on it.
+struct WakePipe {
+    read: OwnedFd,
+    write: Arc<OwnedFd>,
+}
+
+impl WakePipe {
+    fn open() -> Result<Self, Errno> {
+        let (read, write) = std::io::pipe().map_err(|error| {
+            error
+                .raw_os_error()
+                .map_or(Errno::IO, Errno::from_raw_os_error)
+        })?;
+        let (read, write) = (OwnedFd::from(read), OwnedFd::from(write));
+
+        for end in [&read, &write] {
+            fcntl_setfl(end, fcntl_getfl(end)? | OFlags::NONBLOCK)?;
+        }
+
+        Ok(Self {
+            read,
+            write: Arc::new(write),
+        })
+    }
+
+    /// Read every byte the wakers wrote.
+    fn drain(&self) {
+        let mut bytes = [0; 64];
+
+        while matches!(rustix::io::read(&self.read, &mut bytes), Ok(read) if read > 0) {}
     }
 }
 
@@ -240,30 +337,36 @@ fn selected(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<us
         .collect())
 }
 
-/// What a wait on some handles holds out for: each watch's descriptor and what it asks of it, beside the watch's place among the handles, and the earliest instant one of the timers fires at.
+/// What a wait on some handles holds out for: each watch's descriptor and what it asks of it, beside the watch's place among the handles, then the wake pipe where a reply to come is waited on, and the earliest instant one of the timers fires at.
 struct Waits<'a> {
     watched: Vec<Watched<'a>>,
     places: Vec<usize>,
     deadline: Option<Instant>,
+    /// Whether a reply to come is waited on with no wake pipe to hear it come by, which no wait could end.
+    stranded: bool,
 }
 
 impl<'a> Waits<'a> {
-    /// The waits `on` holds out for at `now`, beside a report for each handle that is ready already: a timer past its instant, a watch of a handle no poll can watch, and every handle that is neither a watch nor a timer, which nothing would hold.
+    /// The waits `on` holds out for at `now`, beside a report for each handle that is ready already: a timer past its instant, a watch of a handle no poll can watch, a reply that has come, and every handle that is none of these, which nothing would hold. A reply still to come is waited on through `wake`, the read end of the pipe its waker writes.
     fn of(
         table: &'a Table<OsResource>,
         streams: &'a Streams,
         on: &[Handle],
         now: Instant,
+        wake: Option<BorrowedFd<'a>>,
     ) -> (Self, Vec<u8>) {
         let mut waits = Self {
             watched: Vec::new(),
             places: Vec::new(),
             deadline: None,
+            stranded: false,
         };
         let mut reports = vec![0; on.len()];
+        let mut later = false;
 
         for (place, handle) in on.iter().enumerate() {
             match table.get(handle) {
+                Some(OsResource::Later { .. }) => later = true,
                 Some(OsResource::Watch { target, asked }) => {
                     match descriptor(table, streams, target, *asked) {
                         Some((fd, asked)) => {
@@ -282,19 +385,29 @@ impl<'a> Waits<'a> {
             }
         }
 
+        // The wake pipe watched last and at no place: its byte says only to look again.
+        match (later, wake) {
+            (true, Some(fd)) => waits.watched.push(Watched {
+                fd,
+                asked: PollFlags::IN,
+            }),
+            (true, None) => waits.stranded = true,
+            (false, _) => {}
+        }
+
         (waits, reports)
     }
 
-    /// Wait on the watches until one is ready or the deadline passes — at once where `deadline` is `now` — and say which by its handle's place, as [`ready`] waits.
+    /// Wait on the watches until one is ready, the wake pipe is written or the deadline passes — at once where `deadline` is `now` — and say which watches are ready by their handles' places, as [`ready`] waits: none where only the pipe was written or the deadline passed.
     fn poll(&self, deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
         Ok(ready(&self.watched, deadline)?
             .into_iter()
-            .map(|index| self.places[index])
+            .filter_map(|index| self.places.get(index).copied())
             .collect())
     }
 }
 
-/// The native-OS `Host`: stdio passes straight through, and every other handle — files, plain and TLS sockets, listeners, in-flight DNS lookups, TLS configs — lives in one token-keyed table so the BSD-style lifecycle can transition a handle in place. This is the host the CLI's `run` and a bundled executable execute under; tests reach for `MockHost` instead. Each instance is self-contained: its own table, monotonic clock origin, `args`, and lazily-started resolver pool.
+/// The native-OS `Host`: stdio passes straight through, and every other handle — files, plain and TLS sockets, listeners, replies to come, TLS configs — lives in one token-keyed table so the BSD-style lifecycle can transition a handle in place. This is the host the CLI's `run` and a bundled executable execute under; tests reach for `MockHost` instead. Each instance is self-contained: its own table, monotonic clock origin, `args`, and lazily-opened wake pipe.
 pub struct OsHost {
     /// One [`Table`] for every non-stdio handle, keyed by token bytes. Files, unconnected sockets, connected streams, and listeners share it so the BSD lifecycle can transition a handle in place and `handle_close` releases any kind uniformly.
     table: Mutex<Table<OsResource>>,
@@ -302,8 +415,8 @@ pub struct OsHost {
     start: Instant,
     /// The process arguments served by `proc_args` (argv\[0\] is the program name).
     args: Vec<Vec<u8>>,
-    /// The blocking-DNS worker pool, started on the first `dns_lookup` so programs that never resolve a name pay for no threads.
-    resolver: OnceLock<OsResolver>,
+    /// The pipe the replies it holds for later wake it through, opened by the first `later` that files one, so a program that never waits on a reply holds none; or what the system refused it with.
+    wake: OnceLock<Result<WakePipe, Errno>>,
     /// The termios of every descriptor `tty_raw` switched, keyed by the handle's token, so `tty_raw(h, false)` and [`Drop`] restore exactly what the program found. Host state with an exit obligation: a terminal left raw outlives the process that switched it.
     termios: Mutex<Vec<(Vec<u8>, Termios)>>,
     /// Whether standard output and standard error are a pipe or a socket, read on the first write to each: a gated write to one is bounded by what it takes without blocking. See [`OsHost::write_standard`].
@@ -321,7 +434,7 @@ impl OsHost {
             table: Mutex::new(Table::new()),
             start: Instant::now(),
             args,
-            resolver: OnceLock::new(),
+            wake: OnceLock::new(),
             termios: Mutex::new(Vec::new()),
             bounded: [OnceLock::new(), OnceLock::new()],
         }
@@ -387,6 +500,14 @@ impl OsHost {
     /// Mint a fresh handle for `resource` under the table lock (see [`Table::mint`]).
     fn mint(&self, resource: OsResource) -> Handle {
         self.table.lock().unwrap().mint(resource)
+    }
+
+    /// The wake pipe, read empty for a look at what it wakes, where one is open.
+    fn looked(&self) -> Option<&WakePipe> {
+        let wake = self.wake.get()?.as_ref().ok()?;
+        wake.drain();
+
+        Some(wake)
     }
 
     /// Pull an unconnected socket out of the table by handle, leaving any other resource (or none) in place. Lets `socket_connect` transition a handle in place.
@@ -467,45 +588,16 @@ impl HostOps for OsHost {
         }))
     }
 
-    fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Result<Handle, Failure> {
-        let address = lookup_address(&host, port)?;
-
-        // Start the lookup on the pool (booted on first use). A saturated pool sheds the load as a retriable `WouldBlock`; on success the read end and result slot become a `Resolving` handle the scheduler polls.
-        match self
-            .resolver
-            .get_or_init(OsResolver::default)
-            .start(address)
-        {
-            Ok(Some(pending)) => Ok(self.mint(OsResource::Resolving {
-                done: pending.fd,
-                slot: pending.slot,
-            })),
-            Ok(None) => Err(Failure::WouldBlock),
-            Err(failure) => Err(failure),
-        }
-    }
-
-    fn dns_resolve(&self, handle: Handle) -> Result<Vec<Vec<u8>>, Failure> {
-        // Drain the finished lookup. Reached only after a watch of the handle is ready, so the slot is filled; a stray early call leaves the handle intact and honestly reports `WouldBlock` so the caller can retry.
-        let mut table = self.table.lock().unwrap();
-
-        let ready = match table.get(&handle) {
-            Some(OsResource::Resolving { slot, .. }) => slot.get(),
-            _ => return Err(Failure::NotFound),
-        };
-
-        match ready {
-            // Drop the handle (closing the pipe read end) only once drained.
-            Some(resolved) => {
-                table.remove(&handle);
-                resolved.into_reply()
-            }
-            None => Err(Failure::WouldBlock),
+    fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Later<Result<Vec<Vec<u8>>, Failure>> {
+        match lookup_address(&host, port) {
+            // The blocking `getaddrinfo`, run on the pool rather than the host's thread.
+            Ok(address) => Later::new(blocking(move || resolved(&address))),
+            Err(failure) => Later::new(future::ready(Err(failure))),
         }
     }
 
     fn socket_open(&self, addr: Vec<u8>) -> Result<Handle, Failure> {
-        // The address blob is the canonical "ip:port" string `dns_resolve` minted.
+        // The address blob is the canonical "ip:port" string `dns_lookup` answered.
         let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Err(Failure::NotFound),
@@ -521,7 +613,7 @@ impl HostOps for OsHost {
     }
 
     fn socket_connect(&self, io: Handle, addr: Vec<u8>) -> Result<(), Failure> {
-        // The address blob is the canonical "ip:port" string `dns_resolve` minted.
+        // The address blob is the canonical "ip:port" string `dns_lookup` answered.
         let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Err(Failure::NotFound),
@@ -683,7 +775,7 @@ impl HostOps for OsHost {
     }
 
     fn socket_listen(&self, addr: Vec<u8>) -> Result<Handle, Failure> {
-        // The address blob is the canonical "ip:port" string `dns_resolve` minted.
+        // The address blob is the canonical "ip:port" string `dns_lookup` answered.
         let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Err(Failure::NotFound),
@@ -728,9 +820,17 @@ impl HostOps for OsHost {
     }
 
     fn handle_ready(&self, on: Vec<Handle>) -> Vec<u8> {
-        let table = self.table.lock().unwrap();
+        let mut table = self.table.lock().unwrap();
         let streams = (stdin(), stdout(), stderr());
-        let (waits, mut reports) = Waits::of(&table, &streams, &on, Instant::now());
+        let wake = self.looked();
+        settle_woken(&mut table, &on);
+        let (waits, mut reports) = Waits::of(
+            &table,
+            &streams,
+            &on,
+            Instant::now(),
+            wake.map(|wake| wake.read.as_fd()),
+        );
 
         // A poll the system refuses says nothing of any watch, so each reports ready, and its waiter wakes into the call that says why.
         let fired = waits
@@ -744,14 +844,32 @@ impl HostOps for OsHost {
     }
 
     fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal> {
-        let table = self.table.lock().unwrap();
+        let mut table = self.table.lock().unwrap();
         let streams = (stdin(), stdout(), stderr());
 
-        // A poll ends at a watch's event or at the soonest timer's instant; one the system ends before either is polled again.
+        // A poll ends at a watch's event, at the soonest timer's instant or where a reply to come wakes; one that ends with nothing of `on` ready looks again.
         loop {
-            let (waits, reports) = Waits::of(&table, &streams, &on, Instant::now());
+            let wake = self.looked();
+            settle_woken(&mut table, &on);
+            let (waits, reports) = Waits::of(
+                &table,
+                &streams,
+                &on,
+                Instant::now(),
+                wake.map(|wake| wake.read.as_fd()),
+            );
             if reports.contains(&event::READY) {
                 return Ok(());
+            }
+            if waits.stranded {
+                let why = match self.wake.get() {
+                    Some(Err(errno)) => Error::from(*errno).to_string(),
+                    _ => "it was never opened".to_string(),
+                };
+
+                return Err(Refusal(format!(
+                    "the system refused the pipe a reply to come wakes the wait through: {why}"
+                )));
             }
 
             let deadline = waits.deadline;
@@ -769,6 +887,50 @@ impl HostOps for OsHost {
 
     fn handle_close(&self, io: Handle) {
         self.table.lock().unwrap().remove(&io);
+    }
+
+    fn later(&self, mut answer: Answer) -> Result<Settled, Handle> {
+        let wake = self.wake.get_or_init(WakePipe::open);
+        let nudge = Arc::new(Nudge {
+            woken: AtomicBool::new(false),
+            pipe: wake.as_ref().ok().map(|wake| Arc::clone(&wake.write)),
+        });
+
+        match polled(&mut answer, &nudge) {
+            Poll::Ready(settled) => Ok(settled),
+            Poll::Pending => Err(self.mint(OsResource::Later { answer, nudge })),
+        }
+    }
+
+    fn settled(&self, h: Handle) -> Result<Option<Settled>, Refusal> {
+        let mut table = self.table.lock().unwrap();
+
+        // Polled whether or not it was woken: a future is free to be polled early, and the call that asks again is the one place nothing else would.
+        if let Some(OsResource::Later { answer, nudge }) = table.get_mut(&h) {
+            nudge.woken.store(false, Ordering::Release);
+
+            return match polled(answer, nudge) {
+                Poll::Pending => Ok(None),
+                Poll::Ready(settled) => {
+                    table.remove(&h);
+
+                    Ok(Some(settled))
+                }
+            };
+        }
+
+        table
+            .take_if(&h, |resource| match resource {
+                OsResource::Settled(settled) => Ok(settled),
+                other => Err(other),
+            })
+            .map(Some)
+            .ok_or_else(|| {
+                Refusal(
+                    "the call asks again with a token that names no reply this host holds"
+                        .to_string(),
+                )
+            })
     }
 
     fn handle_read(&self, io: Handle, count: u64) -> Result<Option<Vec<u8>>, Failure> {
@@ -1035,15 +1197,21 @@ impl HostOps for OsHost {
         }
     }
 
-    fn serial_drain(&self, io: Handle) -> Result<Handle, Failure> {
-        let mut table = self.table.lock().unwrap();
-
-        let done = match table.get(&io) {
-            Some(OsResource::Serial(port)) => port.drain()?,
-            _ => return Err(Failure::NotFound),
+    fn serial_drain(&self, io: Handle) -> Later<Result<(), Failure>> {
+        let drain = match self.table.lock().unwrap().get(&io) {
+            Some(OsResource::Serial(port)) => port.drain(),
+            _ => Err(Failure::NotFound),
         };
 
-        Ok(table.mint(OsResource::Descriptor(done)))
+        match drain {
+            // `tcdrain`, run on the pool rather than the host's thread.
+            Ok(drain) => Later::new(async move {
+                blocking(drain).await;
+
+                Ok(())
+            }),
+            Err(failure) => Later::new(future::ready(Err(failure))),
+        }
     }
 
     fn serial_list(&self) -> Result<Vec<Vec<u8>>, Failure> {
@@ -1156,7 +1324,7 @@ impl HostOps for OsHost {
     }
 
     fn proc_wait(&self, child: Handle) -> Result<ChildExit, Failure> {
-        // Reached once a watch of the child's handle is ready, so the end is recorded; an early call leaves the handle intact and reports `WouldBlock`, as `dns_resolve` does. Once answered — an exit, or the failure that kept the reaper from observing one — the handle is consumed.
+        // Reached once a watch of the child's handle is ready, so the end is recorded; an early call leaves the handle intact and reports `WouldBlock`. Once answered — an exit, or the failure that kept the reaper from observing one — the handle is consumed.
         let mut table = self.table.lock().unwrap();
 
         let end = match table.get(&child) {

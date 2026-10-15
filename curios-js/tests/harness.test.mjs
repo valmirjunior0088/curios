@@ -247,7 +247,7 @@ test("a row with several results is answered by an object keyed by exactly their
     (await execute(PAIR, answering({ code: 3n, ok: true }))).stdout,
     "3 ok",
   );
-  assert.deepEqual(handed, [1n, new Uint8Array()]);
+  assert.deepEqual(handed.slice(0, -1), [1n, new Uint8Array()]);
   await stopped(PAIR, answering([3n, true]), /not an object of code, ok/);
   await stopped(PAIR, answering({ code: 3n }), /the hook answered no ok/);
   await stopped(
@@ -276,7 +276,7 @@ test("a row's references may stand in any slot, and several may, each read back 
   assert.equal(stdout, "1 7 2,3");
 });
 
-test("a hook is handed each operand as the JavaScript value its type names", async () => {
+test("a hook is handed each operand as the JavaScript value its type names, then the signal of its cancel", async () => {
   let handed;
 
   const { trap } = await execute(TAKE, {
@@ -288,7 +288,8 @@ test("a hook is handed each operand as the JavaScript value its type names", asy
   });
 
   assert.equal(trap, null);
-  assert.deepEqual(handed, [
+  assert.ok(handed.at(-1) instanceof AbortSignal);
+  assert.deepEqual(handed.slice(0, -1), [
     2n ** 64n - 1n,
     -5n,
     true,
@@ -503,6 +504,55 @@ print("after")
 
   assert.deepEqual([exitCode, stdout], [1, "abandoned"]);
   assert.match(stderr, /^deadlock: /);
+});
+
+test("a hook's promise answers its row later, and the rest of the program runs while it is pending", async () => {
+  const { exitCode, stdout } = await execute(
+    `
+foreign fetch(Nat) -> Nat;
+use /std/{Io, Nat, print};
+use /std/time/{Duration};
+let tick = Io/bind(Io/sleep(Duration/of_millis(5)), (_) => print("tick "));
+let (n, _) = Io/both(fetch(3), tick)!;
+print(Nat/to_str(n))
+`,
+    {
+      foreign: {
+        "/fetch": (n) =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve(n * 2n), 40);
+          }),
+      },
+    },
+  );
+
+  assert.deepEqual([exitCode, stdout], [0, "tick 6"]);
+});
+
+test("a call cancelled while its hook's promise is pending aborts the hook's signal", async () => {
+  let aborted = false;
+
+  const { exitCode, stdout } = await execute(
+    `
+foreign hang(Nat) -> Nat;
+use /std/{Io, print};
+use /std/time/{Duration};
+let came = Io/timeout(Duration/of_millis(10), hang(1))!;
+print(match came | some(_) => "came" | none() => "timed out" end)
+`,
+    {
+      foreign: {
+        "/hang": (_, signal) =>
+          new Promise(() => {
+            signal.addEventListener("abort", () => {
+              aborted = true;
+            });
+          }),
+      },
+    },
+  );
+
+  assert.deepEqual([exitCode, stdout, aborted], [0, "timed out", true]);
 });
 
 test("each write reaches its stream and its hook in the order the program made it", async () => {

@@ -84,7 +84,7 @@ code_sets! {
         OK = 0 => ok;
         /// A `handle_read` reached the end of the stream and returned no bytes. Terminal but not a fault — the guest's stream consumers stop on it rather than erroring.
         EOF = 1 => eof;
-        /// The named thing does not exist: a `file_open` path, a `proc_env` variable, or a `dns_resolve` that yielded no addresses (mapped at that call site, since the OS reports it errno-less).
+        /// The named thing does not exist: a `file_open` path, a `proc_env` variable, or a `dns_lookup` that failed (mapped at that call site, since the OS reports it errno-less).
         NOT_FOUND = 2 => not_found, NotFound;
         /// The OS denied access to the path or socket op (`ErrorKind::PermissionDenied`).
         PERMISSION_DENIED = 3 => permission_denied, PermissionDenied;

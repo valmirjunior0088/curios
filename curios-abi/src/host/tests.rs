@@ -64,8 +64,7 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels(HostOp::HandleRead), ["status", "bytes"]);
     assert_eq!(labels(HostOp::HandleWrite), ["status", "written"]);
     assert_eq!(labels(HostOp::FileOpen), ["status", "handle"]);
-    assert_eq!(labels(HostOp::DnsLookup), ["status", "handle"]);
-    assert_eq!(labels(HostOp::DnsResolve), ["status", "addresses"]);
+    assert_eq!(labels(HostOp::DnsLookup), ["status", "addresses"]);
     assert_eq!(labels(HostOp::SocketOpen), ["status", "handle"]);
     assert_eq!(labels(HostOp::SocketAccept), ["status", "handle"]);
     assert_eq!(labels(HostOp::TlsServerConfig), ["status", "handle"]);
@@ -74,7 +73,6 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels(HostOp::ProcEnv), ["status", "value"]);
     assert_eq!(labels(HostOp::TtySize), ["status", "cols", "rows"]);
     assert_eq!(labels(HostOp::SerialOpen), ["status", "handle"]);
-    assert_eq!(labels(HostOp::SerialDrain), ["status", "handle"]);
     assert_eq!(labels(HostOp::SerialList), ["status", "paths"]);
     assert_eq!(
         labels(HostOp::FileStat),

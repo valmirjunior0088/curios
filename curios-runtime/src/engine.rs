@@ -1,12 +1,12 @@
 use {
     super::{
-        Handle, HostOps, Lift, Mode, Plugin, Replied, Reply, SerialFlow, SerialOp, SerialParity,
-        StdioMode, anyref_array_type, bool_of, filled, i8_array_type, longs_array_type,
-        words_array_type,
+        Answer, Handle, HostOps, Lift, Lower, Mode, Plugin, Refusal, Replied, Reply, SerialFlow,
+        SerialOp, SerialParity, Settled, StdioMode, anyref_array_type, bool_of, filled,
+        i8_array_type, longs_array_type, words_array_type,
     },
     curios_abi::{
-        Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, LANE_IN, Namespace, PANIC,
-        WireReturn, WireType, for_each_host_op,
+        Answered, Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, LANE_IN, Namespace, PANIC,
+        RowReply, WireReturn, WireType, for_each_host_op,
     },
     std::{
         collections::{HashMap, hash_map::Entry},
@@ -129,7 +129,69 @@ fn wire_func_type(engine: &Engine, params: &[WireType], results: &[WireType]) ->
 
 /// A type-erased implementation of one import: the closure wasmtime calls, already wrapped in its [`Lift`] and [`Reply`] plumbing.
 pub(crate) type Trampoline =
-    Arc<dyn Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
+    Arc<dyn Fn(&mut Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
+
+/// Ask an answer for its reply to a call's operands: written into the call's results at once, or the future of one handed back for the host to file.
+type Ask = Arc<
+    dyn Fn(&mut Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<Option<Answer>>
+        + Send
+        + Sync,
+>;
+
+/// Write what a filed future of an answer settled with into the results of the call that asks for it again.
+type Settle =
+    Arc<dyn Fn(&mut Caller<'_, ()>, Settled, &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
+
+/// How an answer is entered: asked once a call's operands are lifted, and, where it handed back a future, settled from what the future came to.
+#[derive(Clone)]
+pub(crate) struct Entered {
+    ask: Ask,
+    settle: Settle,
+}
+
+impl Entered {
+    /// An answer `trampoline` gives at once, which settles nothing.
+    pub(crate) fn now(trampoline: Trampoline) -> Self {
+        Self {
+            ask: Arc::new(move |caller, params, results| {
+                trampoline(caller, params, results).map(|()| None)
+            }),
+            settle: Arc::new(|_, _, _| {
+                Err(wasmtime::Error::msg(
+                    "the call asks again for an answer given at once",
+                ))
+            }),
+        }
+    }
+
+    /// An answer whose reply `R` comes when `ask` says: the reply it writes at once, or the future of one, which settles as `R` and is written by `reply`.
+    fn of<R: Send + 'static>(
+        ask: impl Fn(&mut Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<Option<Answer>>
+        + Send
+        + Sync
+        + 'static,
+        reply: impl Fn(&mut Caller<'_, ()>, R, &mut [Val]) -> wasmtime::Result<()>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        Self {
+            ask: Arc::new(ask),
+            settle: Arc::new(move |caller, settled, results| {
+                let settled = settled.downcast::<R>().map_err(|_| {
+                    wasmtime::Error::msg("the call asks again for an answer another call left")
+                })?;
+
+                reply(caller, *settled, results)
+            }),
+        }
+    }
+}
+
+/// `future`, as the host files it: what it comes to, its type erased.
+fn filed<R: Send + 'static>(future: impl Future<Output = R> + Send + 'static) -> Answer {
+    Box::pin(async move { Box::new(future.await) as Settled })
+}
 
 /// What a call comes back with, as the type of what answers it states: the wire types that cross, in order, or nothing ever.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -187,9 +249,9 @@ impl Stated {
 
 /// Answers by the name each row is declared under: the one registry a link reads, whoever filled it. An embedder's closures and a package's modules fill one ([`ForeignBindings`]) and a host's own methods another ([`host_rows`]), and nothing tells the two kinds of answer apart but which was asked first.
 ///
-/// Each answer stands beside `T`, how it is entered: a [`Trampoline`] where a program is run, and nothing where its link is only checked ([`ForeignBindings::check`]). The comparison is the same code either way.
+/// Each answer stands beside `T`, how it is entered: an [`Entered`] where a program is run, and nothing where its link is only checked ([`ForeignBindings::check`]). The comparison is the same code either way.
 #[derive(Clone)]
-pub(crate) struct Answers<T = Trampoline> {
+pub(crate) struct Answers<T = Entered> {
     rows: HashMap<String, (Stated, T)>,
     /// The names answered more than once, in the order the second answer arrived: what the link refuses, since [`ForeignBindings::define`] refuses nothing.
     twice: Vec<String>,
@@ -251,9 +313,57 @@ impl Answers {
                 params: Li::shape(),
                 returned: Lo::returned(),
             },
-            Arc::new(move |mut caller, params, results| {
-                f(Li::lift(&mut caller, params)?).reply(&mut caller, results)
-            }),
+            Entered::now(Arc::new(move |caller, params, results| {
+                f(Li::lift(caller, params)?).reply(caller, results)
+            })),
+        );
+    }
+
+    /// Answer the row declared as `name` with a typed closure whose reply comes later, as [`answer`](Self::answer) answers with one given at once.
+    fn answer_later<Li, Lo, Fu, F>(&mut self, name: String, f: F)
+    where
+        Li: Lift,
+        Lo: Lower + Send + 'static,
+        Fu: Future<Output = Lo> + Send + 'static,
+        F: Fn(Li) -> Fu + Send + Sync + 'static,
+    {
+        self.record(
+            name,
+            Stated {
+                params: Li::shape(),
+                returned: Lo::returned(),
+            },
+            Entered::of(
+                move |caller, params, _| Ok(Some(filed(f(Li::lift(caller, params)?)))),
+                |caller, reply: Lo, results| reply.reply(caller, results),
+            ),
+        );
+    }
+
+    /// Answer the host's row `op` with its method, `f`: at once or later, as the method's reply says.
+    fn row<Li, Ro, F>(&mut self, op: HostOp, f: F)
+    where
+        Li: Lift,
+        Ro: RowReply<Reply: Send + 'static>,
+        F: Fn(Li) -> Ro + Send + Sync + 'static,
+    {
+        self.record(
+            op.declared(),
+            Stated {
+                params: Li::shape(),
+                returned: Replied::<Ro::Reply>::returned(),
+            },
+            Entered::of(
+                move |caller, params, results| match f(Li::lift(caller, params)?).answered() {
+                    Answered::Now(reply) => {
+                        Replied { op, reply }.reply(caller, results).map(|()| None)
+                    }
+                    Answered::Later(later) => Ok(Some(filed(later))),
+                },
+                move |caller, reply: Ro::Reply, results| {
+                    Replied { op, reply }.reply(caller, results)
+                },
+            ),
         );
     }
 
@@ -261,12 +371,15 @@ impl Answers {
     #[cfg(feature = "test-support")]
     pub(crate) fn replace_raw<F>(&mut self, name: &str, f: F)
     where
-        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
+        F: Fn(&mut Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()>
+            + Send
+            + Sync
+            + 'static,
     {
         self.rows
             .get_mut(name)
             .unwrap_or_else(|| panic!("nothing here answers `{name}`"))
-            .1 = Arc::new(f);
+            .1 = Entered::now(Arc::new(f));
     }
 }
 
@@ -294,6 +407,17 @@ impl ForeignBindings {
         F: Fn(Li) -> Lo + Send + Sync + 'static,
     {
         self.answers.answer(name.to_string(), f);
+    }
+
+    /// Answer the row declared as `name`, as [`define`](Self::define) does, with a closure whose reply comes later: the future it hands back is filed with the host, polled where the row is called and again whenever it wakes, and the call suspends meanwhile, so the rest of the program runs on. The future does its waiting by being woken, so slow work runs elsewhere — [`blocking`](crate::blocking()) runs a blocking call on the runtime's pool, and an embedder's own runtime may run the rest — and the future only learns when it is done. A call dropped meanwhile drops the future.
+    pub fn define_async<Li, Lo, Fu, F>(&mut self, name: &str, f: F)
+    where
+        Li: Lift,
+        Lo: Lower + Send + 'static,
+        Fu: Future<Output = Lo> + Send + 'static,
+        F: Fn(Li) -> Fu + Send + Sync + 'static,
+    {
+        self.answers.answer_later(name.to_string(), f);
     }
 
     /// Whether an answer here stands for the row declared as `name`: an embedder's closure, or a module resolved for it.
@@ -391,40 +515,93 @@ fn answering<'a, T>(
     Ok((declared, entered))
 }
 
-/// `answer`, the answer to the row declared as `name` that answers `results`, entered through the lane every row that returns carries (`curios_abi::LANE_IN`, `curios_abi::LANE_OUT`): the operands it declares go to `answer` on a first call, and its reply goes back beside no token. A call that drops answers fillers, there being nothing pending to drop, and one that asks again with a token is refused, since nothing here left a call pending.
-fn laned(name: &str, results: Vec<WireType>, answer: Trampoline) -> Trampoline {
+/// `entered`, the answer to the row declared as `name` that answers `results`, entered through the lane every row that returns carries (`curios_abi::LANE_IN`, `curios_abi::LANE_OUT`).
+///
+/// A first call hands the operands it declares to the answer, and a reply given at once goes back beside no token. A future of one is filed with `host`: the reply goes back where the host found it settled at once, and otherwise fillers go back beside the token it is filed under, which the call suspends on. A call that asks again with the token reads the reply back once it has settled, and fillers beside the token again until then; a token that names no answer the host holds refuses the call. A call that drops its token closes it, which drops the future, and answers fillers, as one that drops nothing does.
+fn laned(
+    name: &str,
+    results: Vec<WireType>,
+    entered: Entered,
+    host: Arc<dyn HostOps + Send + Sync>,
+) -> Trampoline {
     let name = name.to_string();
 
-    Arc::new(move |mut caller, params, replies| {
+    Arc::new(move |caller, params, replies| {
         let (operands, lane) = params.split_at(params.len() - LANE_IN.len());
-        let (reply, token) = replies.split_at_mut(replies.len() - 1);
-        let pending = Option::<Handle>::lift(&mut caller, &lane[..1])?;
+        let (reply, slot) = replies.split_at_mut(replies.len() - 1);
+        let pending = Option::<Handle>::lift(caller, &lane[..1])?;
         let dropped = bool_of(lane[1].unwrap_i32())?;
-        token[0] = Val::AnyRef(None);
 
-        match (pending, dropped) {
-            (None, false) => answer(caller, operands, reply),
-            (_, true) => filled(&mut caller, &results, reply),
-            (Some(_), false) => Err(wasmtime::Error::msg(format!(
-                "{name}: the call asks again for an answer no call left pending"
-            ))),
-        }
+        let settled = match (pending, dropped) {
+            (None, false) => {
+                (entered.ask)(caller, operands, reply)?.map(|answer| host.later(answer))
+            }
+            (Some(token), false) => match host.settled(token.clone()) {
+                Ok(Some(settled)) => Some(Ok(settled)),
+                Ok(None) => Some(Err(token)),
+                Err(Refusal(why)) => {
+                    return Err(wasmtime::Error::msg(format!("{name}: {why}")));
+                }
+            },
+            (token, true) => {
+                if let Some(token) = token {
+                    host.handle_close(token);
+                }
+                filled(caller, &results, reply)?;
+
+                None
+            }
+        };
+
+        let token = match settled {
+            None => None,
+            Some(Ok(settled)) => {
+                (entered.settle)(caller, settled, reply)?;
+
+                None
+            }
+            Some(Err(token)) => {
+                filled(caller, &results, reply)?;
+
+                Some(token)
+            }
+        };
+
+        token.lower(caller, slot)
     })
 }
 
-/// Define the `ffi` import declared as `name` into `linker`, entered as [`answering`] finds it answered.
+/// Define the `ffi` import declared as `name` into `linker`, entered as [`answering`] finds it answered, and filing what it answers later with `host`.
 fn link(
     linker: &mut Linker<()>,
     engine: &Engine,
     foreigns: &ForeignStore,
     bindings: &Answers,
-    host: &Answers,
+    answers: &Answers,
+    host: &Arc<dyn HostOps + Send + Sync>,
     name: &str,
 ) -> Result<(), String> {
-    let (declared, trampoline) = answering(foreigns, bindings, host, name)?;
+    let (declared, entered) = answering(foreigns, bindings, answers, name)?;
     let trampoline = match &declared.signature().returns {
-        WireReturn::Answers(results) => laned(name, results.types(), Arc::clone(trampoline)),
-        WireReturn::Never => Arc::clone(trampoline),
+        WireReturn::Answers(results) => {
+            laned(name, results.types(), entered.clone(), Arc::clone(host))
+        }
+        // A row that does not return carries no lane, so nothing can answer it later.
+        WireReturn::Never => {
+            let ask = Arc::clone(&entered.ask);
+            let name = name.to_string();
+
+            Arc::new(
+                move |caller: &mut Caller<'_, ()>, params: &[Val], results: &mut [Val]| match ask(
+                    caller, params, results,
+                )? {
+                    None => Ok(()),
+                    Some(_) => Err(wasmtime::Error::msg(format!(
+                        "{name}: a call that does not return cannot be answered later"
+                    ))),
+                },
+            ) as Trampoline
+        }
     };
 
     linker
@@ -432,13 +609,13 @@ fn link(
             Namespace::Ffi.as_str(),
             name,
             host_func_type(engine, declared),
-            move |caller, params, results| trampoline(caller, params, results),
+            move |mut caller, params, results| trampoline(&mut caller, params, results),
         )
         .map(|_| ())
         .map_err(|error| format!("failed to define {name}: {error}"))
 }
 
-/// Answer every row of the table under the name the standard library declares it by ([`HostOp::declared`]). Each import lifts its operands as the row types them, calls the method, and lowers the reply through [`Replied`]. Generated from the rows it binds, so no row goes unanswered, none is answered twice, and no answer's types can differ from the row's.
+/// Answer every row of the table under the name the standard library declares it by ([`HostOp::declared`]). Each import lifts its operands as the row types them, calls the method, and lowers the reply through [`Replied`], at once or once it has come. Generated from the rows it binds, so no row goes unanswered, none is answered twice, and no answer's types can differ from the row's.
 macro_rules! declare_host_rows {
     ($(
         $(#[doc = $doc:literal])*
@@ -449,17 +626,11 @@ macro_rules! declare_host_rows {
             let mut answers = Answers::default();
 
             $(
-                answers.answer(
-                    HostOp::$variant.declared(),
-                    {
-                        let host = Arc::clone(&host);
+                answers.row(HostOp::$variant, {
+                    let host = Arc::clone(&host);
 
-                        move |($($p,)*): ($($t,)*)| Replied {
-                            op: HostOp::$variant,
-                            reply: host.$name($($p),*),
-                        }
-                    },
-                );
+                    move |($($p,)*): ($($t,)*)| host.$name($($p),*)
+                });
             )*
 
             answers
@@ -640,7 +811,7 @@ impl Compiled {
     }
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` the answers a module or an embedder gives, `host` the ones the host gives itself, and `waiter` the host that waits between a suspending program's turns.
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` the answers a module or an embedder gives, `host` the ones the host gives itself, and `waiter` the host that waits between a suspending program's turns and files what a row answers later.
 pub(crate) fn instantiate<E: Ended>(
     engine: &Engine,
     module: &Module,
@@ -649,7 +820,7 @@ pub(crate) fn instantiate<E: Ended>(
     host: Answers,
     waiter: Arc<dyn HostOps + Send + Sync>,
 ) -> Result<E, String> {
-    on_guest_stack(move || entered(engine, module, foreigns, bindings, host, &*waiter))?
+    on_guest_stack(move || entered(engine, module, foreigns, bindings, host, waiter))?
 }
 
 /// [`instantiate`], on the thread it is called on.
@@ -659,7 +830,7 @@ fn entered<E: Ended>(
     foreigns: &ForeignStore,
     bindings: ForeignBindings,
     host: Answers,
-    waiter: &(dyn HostOps + Send + Sync),
+    waiter: Arc<dyn HostOps + Send + Sync>,
 ) -> Result<E, String> {
     let mut store = Store::new(engine, ());
 
@@ -711,6 +882,7 @@ fn entered<E: Ended>(
                 foreigns,
                 &bindings,
                 &host,
+                &waiter,
                 import.name(),
             )?,
             namespace => {
@@ -736,7 +908,7 @@ fn entered<E: Ended>(
             .typed::<(), Option<Rooted<AnyRef>>>(&store)
             .map_err(|error| format!("failed to access {ENTRY}: {error}"))?
             .call(&mut store, ()),
-        _ => run_turns(&mut store, &instance, entry, waiter),
+        _ => run_turns(&mut store, &instance, entry, &*waiter),
     };
 
     match ended {

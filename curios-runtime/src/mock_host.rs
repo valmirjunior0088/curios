@@ -1,15 +1,22 @@
 use {
     super::Table,
     crate::{
-        ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps, Mode,
-        Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
-        lookup_address, names_a_variable, serial_frame, serial_speed,
+        Answer, ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps,
+        Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
+        Timestamp, TtySize, lookup_address, names_a_variable, serial_frame, serial_speed,
     },
     curios_abi::{ClosedCode, errno, event},
     std::{
         collections::{BTreeSet, HashMap, VecDeque},
+        future,
         num::NonZeroU32,
-        sync::{Arc, Mutex},
+        pin::Pin,
+        sync::{
+            Arc, Condvar, Mutex,
+            atomic::{AtomicBool, Ordering},
+        },
+        task::{Context, Poll, Wake, Waker},
+        time::Duration,
     },
 };
 
@@ -396,7 +403,7 @@ struct MockSerial {
     bytes: Chunked,
 }
 
-/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle between states: `socket_open` mints a `Socket` that `socket_connect` turns into an `Outbound` stream, and `socket_listen` mints a `Listener` that `socket_accept` pulls `Inbound` streams from; `file_open` files a `File`; `proc_spawn` files a `Child` with a `Piped` stream per piped output and a `Sink` for a piped stdin; `serial_open` files a `Serial` port and `serial_drain` a `Piped` stream already at its end. `handle_close` drops any kind.
+/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle between states: `socket_open` mints a `Socket` that `socket_connect` turns into an `Outbound` stream, and `socket_listen` mints a `Listener` that `socket_accept` pulls `Inbound` streams from; `file_open` files a `File`; `proc_spawn` files a `Child` with a `Piped` stream per piped output and a `Sink` for a piped stdin; `serial_open` files a `Serial` port; `later` files a reply to come, `Later` until it has come and `Settled` after. `handle_close` drops any kind.
 enum MockResource {
     File(MockFile),
     Child(MockChild),
@@ -404,8 +411,13 @@ enum MockResource {
     Piped(Chunked),
     /// A piped stdin of a scripted child: writes are accepted and discarded.
     Sink,
-    /// A finished name lookup minted by `dns_lookup`, holding the resolved address blobs `dns_resolve` drains. The scripted host resolves synchronously, so the handle is ready the moment it is minted.
-    Resolved(Vec<Vec<u8>>),
+    /// A reply that comes later, filed by `later` with the [`MockNudge`] its future wakes: polled again once woken, and filed as `Settled` once it has come.
+    Later {
+        answer: Answer,
+        nudge: Arc<MockNudge>,
+    },
+    /// What a reply filed by `later` came to, until `settled` takes it.
+    Settled(Settled),
     /// A scripted connect under way: what `socket_finish_connect` will answer — the response to serve, or the refusal — once a watch of it has marked it due.
     Connecting {
         outcome: Result<Chunked, Failure>,
@@ -489,6 +501,76 @@ pub struct MockHost {
     serial_written: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
     /// Every drain started on an open serial port, in order, by the port's path. Shared with [`MockIo::serial_drains`].
     serial_drains: Arc<Mutex<Vec<Vec<u8>>>>,
+    /// How often a reply filed for later has woken, which a wait on one sleeps until it changes.
+    wakes: Arc<Wakes>,
+}
+
+/// How long a wait on replies to come, and on nothing else, sleeps for one to wake before it refuses the run: a reply the script gives wakes at once, so only one a real future gives — blocking work run elsewhere — is slept for at all.
+const LATER_LIMIT: Duration = Duration::from_secs(10);
+
+/// What a reply's waker counts, and the signal a wait sleeps on until it does.
+#[derive(Default)]
+struct Wakes {
+    count: Mutex<u64>,
+    rang: Condvar,
+}
+
+/// What wakes a reply the scripted host holds for later: the flag a look reads to know its future can move, and the count a wait sleeps on.
+struct MockNudge {
+    woken: AtomicBool,
+    wakes: Arc<Wakes>,
+}
+
+impl Wake for MockNudge {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.woken.store(true, Ordering::Release);
+        *self.wakes.count.lock().unwrap() += 1;
+        self.wakes.rang.notify_all();
+    }
+}
+
+/// Poll `answer` once, waking `nudge` when it can move again.
+fn polled(answer: &mut Answer, nudge: &Arc<MockNudge>) -> Poll<Settled> {
+    answer
+        .as_mut()
+        .poll(&mut Context::from_waker(&Waker::from(Arc::clone(nudge))))
+}
+
+/// A reply the script gives later: pending on its first poll, which wakes it at once, and there on the next — the one look a call answered later suspends for, as a native reply that takes its time makes it.
+struct Looked<T> {
+    reply: Option<T>,
+    looked: bool,
+}
+
+impl<T> Looked<T> {
+    fn later(reply: T) -> Later<T>
+    where
+        T: Send + Unpin + 'static,
+    {
+        Later::new(Self {
+            reply: Some(reply),
+            looked: false,
+        })
+    }
+}
+
+impl<T: Unpin> Future for Looked<T> {
+    type Output = T;
+
+    fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<T> {
+        if !self.looked {
+            self.looked = true;
+            context.waker().wake_by_ref();
+
+            return Poll::Pending;
+        }
+
+        Poll::Ready(self.reply.take().expect("a reply is taken once"))
+    }
 }
 
 /// `SIGKILL`, the signal a killed child ends by — `9` on both release targets, Linux and macOS.
@@ -611,7 +693,7 @@ impl MockHost {
         }
     }
 
-    /// Whether `handle` is ready now, as `handle_ready` reports it: a watch once its handle is ready for what it asks, a timer once a wait has passed its instant, and anything else at once.
+    /// Whether `handle` is ready now, as `handle_ready` reports it: a watch once its handle is ready for what it asks, a timer once a wait has passed its instant, a reply filed for later once it has come, and anything else at once.
     fn ready(&self, table: &mut Table<MockResource>, handle: &Handle) -> bool {
         match table.get(handle) {
             Some(MockResource::Watch {
@@ -625,7 +707,30 @@ impl MockHost {
                     || writable && Self::write_ready(table, &target)
             }
             Some(MockResource::Timer { at }) => *at <= *self.slept_until.lock().unwrap(),
+            Some(MockResource::Later { .. }) => Self::come(table, handle),
             _ => true,
+        }
+    }
+
+    /// Whether the reply filed under `handle` has come, polled again where it woke since it was last looked at, and filed as what it came to once it has.
+    fn come(table: &mut Table<MockResource>, handle: &Handle) -> bool {
+        let polled = match table.get_mut(handle) {
+            Some(MockResource::Later { answer, nudge })
+                if nudge.woken.swap(false, Ordering::AcqRel) =>
+            {
+                polled(answer, nudge)
+            }
+            Some(MockResource::Later { .. }) => return false,
+            _ => return true,
+        };
+
+        match polled {
+            Poll::Ready(settled) => {
+                table.insert(handle, MockResource::Settled(settled));
+
+                true
+            }
+            Poll::Pending => false,
         }
     }
 }
@@ -648,18 +753,9 @@ impl HostOps for MockHost {
         })))
     }
 
-    fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Result<Handle, Failure> {
-        // One synthetic address blob: the `host:port` key `net` uses, so `socket_connect` can recover the scripted endpoint from the blob. Stashed behind a handle a watch finds ready and `dns_resolve` drains, mirroring the async OS path without a real pipe.
-        let endpoint = lookup_address(&host, port)?.into_bytes();
-
-        Ok(self.mint(MockResource::Resolved(vec![endpoint])))
-    }
-
-    fn dns_resolve(&self, handle: Handle) -> Result<Vec<Vec<u8>>, Failure> {
-        match self.table.lock().unwrap().remove(&handle) {
-            Some(MockResource::Resolved(addresses)) => Ok(addresses),
-            _ => Err(Failure::NotFound),
-        }
+    fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Later<Result<Vec<Vec<u8>>, Failure>> {
+        // One synthetic address blob: the `host:port` key `net` uses, so `socket_connect` can recover the scripted endpoint from the blob.
+        Looked::later(lookup_address(&host, port).map(|endpoint| vec![endpoint.into_bytes()]))
     }
 
     fn socket_open(&self, _addr: Vec<u8>) -> Result<Handle, Failure> {
@@ -856,30 +952,96 @@ impl HostOps for MockHost {
     fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal> {
         let mut table = self.table.lock().unwrap();
 
-        if on.iter().any(|handle| self.ready(&mut table, handle)) {
-            return Ok(());
-        }
+        loop {
+            let seen = *self.wakes.count.lock().unwrap();
 
-        // The wait sleeps until the soonest timer it holds out for, and every timer at or before it is due.
-        let soonest = on
-            .iter()
-            .filter_map(|handle| match table.get(handle) {
-                Some(MockResource::Timer { at }) => Some(*at),
-                _ => None,
-            })
-            .min();
+            if on.iter().any(|handle| self.ready(&mut table, handle)) {
+                return Ok(());
+            }
 
-        match soonest {
-            Some(at) => {
+            // The wait sleeps until the soonest timer it holds out for, and every timer at or before it is due.
+            let soonest = on
+                .iter()
+                .filter_map(|handle| match table.get(handle) {
+                    Some(MockResource::Timer { at }) => Some(*at),
+                    _ => None,
+                })
+                .min();
+
+            if let Some(at) = soonest {
                 let mut slept_until = self.slept_until.lock().unwrap();
                 *slept_until = (*slept_until).max(at);
-                Ok(())
+
+                return Ok(());
             }
-            // A native wait on watches alone sleeps until one is ready, and nothing moves a script but the program: one that readies none would be waited on without end, so the run is refused saying so.
-            None => Err(Refusal(
-                "the script readies none of the handles this wait holds out for".to_string(),
-            )),
+
+            // A native wait on watches alone sleeps until one is ready, and nothing moves a script but the program: one that readies none would be waited on without end, so the run is refused saying so. A reply to come is the one thing that moves elsewhere, so a wait that holds out for one sleeps until one wakes.
+            if !on
+                .iter()
+                .any(|handle| matches!(table.get(handle), Some(MockResource::Later { .. })))
+            {
+                return Err(Refusal(
+                    "the script readies none of the handles this wait holds out for".to_string(),
+                ));
+            }
+
+            let count = self.wakes.count.lock().unwrap();
+            let (count, waited) = self
+                .wakes
+                .rang
+                .wait_timeout_while(count, LATER_LIMIT, |count| *count == seen)
+                .unwrap();
+            drop(count);
+
+            if waited.timed_out() {
+                return Err(Refusal(format!(
+                    "no reply this wait holds out for came within {} seconds",
+                    LATER_LIMIT.as_secs()
+                )));
+            }
         }
+    }
+
+    fn later(&self, mut answer: Answer) -> Result<Settled, Handle> {
+        let nudge = Arc::new(MockNudge {
+            woken: AtomicBool::new(false),
+            wakes: Arc::clone(&self.wakes),
+        });
+
+        match polled(&mut answer, &nudge) {
+            Poll::Ready(settled) => Ok(settled),
+            Poll::Pending => Err(self.mint(MockResource::Later { answer, nudge })),
+        }
+    }
+
+    fn settled(&self, h: Handle) -> Result<Option<Settled>, Refusal> {
+        let mut table = self.table.lock().unwrap();
+
+        if let Some(MockResource::Later { answer, nudge }) = table.get_mut(&h) {
+            nudge.woken.store(false, Ordering::Release);
+
+            return match polled(answer, nudge) {
+                Poll::Pending => Ok(None),
+                Poll::Ready(settled) => {
+                    table.remove(&h);
+
+                    Ok(Some(settled))
+                }
+            };
+        }
+
+        table
+            .take_if(&h, |resource| match resource {
+                MockResource::Settled(settled) => Ok(settled),
+                other => Err(other),
+            })
+            .map(Some)
+            .ok_or_else(|| {
+                Refusal(
+                    "the call asks again with a token that names no reply this host holds"
+                        .to_string(),
+                )
+            })
     }
 
     fn handle_close(&self, io: Handle) {
@@ -1099,17 +1261,17 @@ impl HostOps for MockHost {
         Ok(())
     }
 
-    fn serial_drain(&self, io: Handle) -> Result<Handle, Failure> {
-        let mut table = self.table.lock().unwrap();
+    fn serial_drain(&self, io: Handle) -> Later<Result<(), Failure>> {
+        let table = self.table.lock().unwrap();
 
         let Some(MockResource::Serial(port)) = table.get(&io) else {
-            return Err(Failure::NotFound);
+            return Later::new(future::ready(Err(Failure::NotFound)));
         };
 
         self.serial_drains.lock().unwrap().push(port.path.clone());
 
-        // The in-memory port takes every write whole, so nothing is ever left to send: the wait is over as it starts, a stream with no chunks.
-        Ok(table.mint(MockResource::Piped(Chunked::new(vec![]))))
+        // The in-memory port takes every write whole, so nothing is ever left to send: the wait is over once looked at.
+        Looked::later(Ok(()))
     }
 
     fn serial_list(&self) -> Result<Vec<Vec<u8>>, Failure> {
@@ -1729,6 +1891,7 @@ impl MockHostBuilder {
             serial_controls,
             serial_written,
             serial_drains,
+            wakes: Arc::new(Wakes::default()),
         };
 
         (host, io)

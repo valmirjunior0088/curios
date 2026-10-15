@@ -2,9 +2,9 @@
 
 use {
     curios_abi::{
-        ChildExit, ChildHandles, Failure, FileStat, Handle, HostOp, HostOps, Mode, Refusal,
-        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
-        for_each_host_op,
+        Answer, ChildExit, ChildHandles, Failure, FileStat, Handle, HostOp, HostOps, Later, Mode,
+        Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination, Timestamp,
+        TtySize, for_each_host_op,
     },
     curios_runtime::MockHost,
     std::{any::Any, sync::Mutex},
@@ -86,9 +86,17 @@ macro_rules! declare_lying_host {
                 }
             )*
 
-            // No row answers the wait, so there is nothing to lie about.
+            // No row answers these three, so there is nothing to lie about.
             fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal> {
                 self.inner.wait(on)
+            }
+
+            fn later(&self, answer: Answer) -> Result<Settled, Handle> {
+                self.inner.later(answer)
+            }
+
+            fn settled(&self, h: Handle) -> Result<Option<Settled>, Refusal> {
+                self.inner.settled(h)
             }
         }
     };

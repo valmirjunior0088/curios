@@ -3,8 +3,9 @@
 //! The wire contract — the [`Handle`]/[`Failure`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
 pub use curios_abi::{
-    ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, HostOps, Mode, Refusal,
-    SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
+    Answer, ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, HostOps, Later, Mode,
+    Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination, Timestamp,
+    TtySize,
 };
 
 use {
@@ -70,7 +71,7 @@ pub(crate) fn names_a_variable(name: &[u8]) -> bool {
     !name.is_empty() && !name.contains(&b'=') && !name.contains(&0)
 }
 
-/// Map an `io::Error` to its [`Failure`]. The named kinds map to named failures; anything else with an errno surfaces raw through `Other(errno)`. An errno-less failure (e.g. `write_all`'s synthesized `WriteZero`) is unclassifiable, so it reports the catch-all `Other(0)`; callers that can name it (e.g. `dns_resolve` → `NotFound`) map it at the call site.
+/// Map an `io::Error` to its [`Failure`]. The named kinds map to named failures; anything else with an errno surfaces raw through `Other(errno)`. An errno-less failure (e.g. `write_all`'s synthesized `WriteZero`) is unclassifiable, so it reports the catch-all `Other(0)`; callers that can name it (e.g. a failed `dns_lookup` → `NotFound`) map it at the call site.
 pub(crate) fn failure_from_error(error: Error) -> Failure {
     match error.kind() {
         ErrorKind::NotFound => Failure::NotFound,

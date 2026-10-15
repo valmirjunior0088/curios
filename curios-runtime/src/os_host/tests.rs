@@ -14,6 +14,26 @@ use {
     std::{num::NonZeroU32, path::Path, thread, time::Duration},
 };
 
+/// What `later` comes to, filed with `host` and waited for as a run waits for it.
+fn come<R: Send + 'static>(host: &OsHost, later: Later<R>) -> R {
+    let answer: Answer = Box::pin(async move { Box::new(later.await) as Settled });
+    let settled = match host.later(answer) {
+        Ok(settled) => settled,
+        Err(token) => loop {
+            host.wait(vec![token.clone()]).expect("the wait ends");
+
+            if let Some(settled) = host
+                .settled(token.clone())
+                .expect("the token names a reply")
+            {
+                break settled;
+            }
+        },
+    };
+
+    *settled.downcast::<R>().expect("a reply settles as itself")
+}
+
 /// Whether a watch of `handle`, asking to read or to write as said, is ready now.
 fn watched(host: &OsHost, handle: &Handle, readable: bool, writable: bool) -> bool {
     let watch = host.handle_watch(handle.clone(), readable, writable);
@@ -222,7 +242,7 @@ fn writable_now_follows_a_pipe_end_as_its_reader_drains_it() {
     assert!(writable_now(writer.as_fd()));
 }
 
-/// A listener bound and listening through the host at a loopback port the kernel picked, with the canonical `ip:port` blob `dns_resolve` would mint for it.
+/// A listener bound and listening through the host at a loopback port the kernel picked, with the canonical `ip:port` blob `dns_lookup` would answer for it.
 ///
 /// Bound at port zero and read back, never probed and released: a released port is free only until the next probe takes it, and the two tests that need one run in parallel, so a probe-and-release helper would have the second test bind the port the first is about to.
 fn loopback_listener(host: &OsHost) -> (Handle, Vec<u8>) {
@@ -649,10 +669,10 @@ fn a_serial_open_is_refused_a_frame_the_device_did_not_take() {
     );
 }
 
-/// A drain is a handle to a wait that holds nothing: ready once the port has sent what it accepted — at once on a pseudo-terminal, whose far end has no wire to wait on — and then at its end, with the output arrived rather than discarded. Only a port has output to wait for. Linux alone, since `tcdrain` on a macOS pseudo-terminal can wait for good.
+/// A drain answers once the port has sent what it accepted — at once on a pseudo-terminal, whose far end has no wire to wait on — with the output arrived rather than discarded. Only a port has output to wait for. Linux alone, since `tcdrain` on a macOS pseudo-terminal can wait for good.
 #[cfg(target_os = "linux")]
 #[test]
-fn a_serial_drain_ends_once_the_output_has_left() {
+fn a_serial_drain_answers_once_the_output_has_left() {
     let (near, name) = pseudo_terminal();
 
     let host = OsHost::with_args(vec![]);
@@ -661,19 +681,73 @@ fn a_serial_drain_ends_once_the_output_has_left() {
         .unwrap();
 
     assert_eq!(host.handle_write(port.clone(), b"ok".to_vec()), Ok(2));
-
-    let wait = host.serial_drain(port.clone()).unwrap();
-    assert!(awaited(&host, &wait, true, false));
-    assert_eq!(host.handle_read(wait.clone(), 1), Ok(None));
-    host.handle_close(wait);
+    assert_eq!(come(&host, host.serial_drain(port.clone())), Ok(()));
 
     let mut arrived = [0; 8];
     assert_eq!(rustix::io::read(&near, &mut arrived), Ok(2));
     assert_eq!(&arrived[..2], b"ok");
 
     host.handle_close(port.clone());
-    assert_eq!(host.serial_drain(port), Err(Failure::NotFound));
-    assert_eq!(host.serial_drain(Handle::Stdin), Err(Failure::NotFound));
+    assert_eq!(come(&host, host.serial_drain(port)), Err(Failure::NotFound));
+    assert_eq!(
+        come(&host, host.serial_drain(Handle::Stdin)),
+        Err(Failure::NotFound)
+    );
+}
+
+/// A reply filed for later is waited on as any handle is: it is not ready while the work it waits for runs elsewhere, the wait sleeps until that work wakes it, and it is read back once, naming nothing after.
+#[test]
+fn a_reply_to_come_wakes_the_wait_once_it_has_come() {
+    let host = OsHost::with_args(vec![]);
+    let (signal, signalled) = std::sync::mpsc::channel::<()>();
+    let work = blocking(move || {
+        signalled.recv().unwrap();
+
+        7u64
+    });
+
+    let token = host
+        .later(Box::pin(async move { Box::new(work.await) as Settled }))
+        .expect_err("the work waits for its signal");
+    assert_eq!(host.handle_ready(vec![token.clone()]), [0]);
+    assert!(host.settled(token.clone()).unwrap().is_none());
+
+    signal.send(()).unwrap();
+    host.wait(vec![token.clone()]).unwrap();
+    assert_eq!(host.handle_ready(vec![token.clone()]), [event::READY]);
+
+    let settled = host.settled(token.clone()).unwrap().expect("it has come");
+    assert_eq!(*settled.downcast::<u64>().unwrap(), 7);
+    assert!(host.settled(token).is_err());
+}
+
+/// Closing a reply still to come drops its future, which is how a call cancelled while it waits lets go of what it waited on.
+#[test]
+fn closing_a_reply_to_come_drops_its_future() {
+    struct Held(Arc<AtomicBool>);
+
+    impl Drop for Held {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::Release);
+        }
+    }
+
+    let host = OsHost::with_args(vec![]);
+    let dropped = Arc::new(AtomicBool::new(false));
+    let held = Held(Arc::clone(&dropped));
+
+    let token = host
+        .later(Box::pin(async move {
+            let _held = held;
+            future::pending::<()>().await;
+
+            Box::new(()) as Settled
+        }))
+        .expect_err("a reply that never comes is filed");
+    assert!(!dropped.load(Ordering::Acquire));
+
+    host.handle_close(token);
+    assert!(dropped.load(Ordering::Acquire));
 }
 
 /// Only a serial port has lines to drive: a file and a standard stream are `NotFound` by the kind the host filed, whatever an `ioctl` on their descriptors would answer.
@@ -954,11 +1028,11 @@ fn a_lookup_of_no_host_or_no_port_is_refused_before_it_starts() {
     let host = OsHost::with_args(vec![]);
 
     assert_eq!(
-        host.dns_lookup(b"\xffhost".to_vec(), 80),
+        come(&host, host.dns_lookup(b"\xffhost".to_vec(), 80)),
         Err(Failure::NotFound)
     );
     assert_eq!(
-        host.dns_lookup(b"localhost".to_vec(), 65_536),
+        come(&host, host.dns_lookup(b"localhost".to_vec(), 65_536)),
         Err(Failure::Other(EINVAL))
     );
 }
