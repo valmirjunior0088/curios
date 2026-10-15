@@ -38,15 +38,15 @@ let leave: Io({}) =
 --- The bracket: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse whichever way `body` ends.
 pub let with(@A: Type, body: (Session) -> Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
     let t = Tty/stdin;
-    Tty/with_raw(
-        t,
+    let entered() -> Try(Io, Io/Error, A) =
         let first = Tty/size(t)!;
         let input = Reader/new(Io/stdin)!;
         let s = Session { tty = t, input = input, previous = Option/none(), size = first };
         let _ = enter!;
         let outcome = Io/using((_) => leave, Try/run(body(s)))!;
         let a = outcome!;
-        Try/pure(a));
+        Try/pure(a);
+    Tty/with_raw(t, entered());
 
 --- The terminal's size now, together with the session remembering it.
 pub let size(s: Session) -> Try(Io, Io/Error, {Session, Tty/Size}) =

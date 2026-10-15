@@ -24,13 +24,44 @@ type LoweredParams = Vec<(Plicity, curios_core::Free, curios_core::Term)>;
 /// Minted once, where the binder is introduced, and reused everywhere that binder is in scope — a progressively-extended parameter list re-enters the same identities rather than re-minting them, or an earlier domain and the body would disagree about which binder a name meant.
 pub(super) type Binder = (String, curios_core::Free);
 
-/// One `!` hoisted out of a region: the binder its result lands in, the action to sequence, and the span of the `!` itself.
-///
-/// The span is what [`Lowerer::wrap`] stamps onto the synthesized `/std/Monad/bind` application. Without it the sequencing is the one node in a lowered value body that no source location reaches, so a `!` the region cannot accept — an annotated top-level `let`, a non-monadic helper — reports its type error with no `-->` line at all.
-pub(super) struct Hoisted {
-    pub(super) binder: curios_core::Free,
-    pub(super) action: curios_core::Term,
-    pub(super) span: Option<Span>,
+/// A region's ordered lexical and sequencing context. Keeping bindings beside bangs lets a nested expression contribute its entire continuation without losing the scope of its local names or inventing a new monadic region. Each frame closes over the frames after it; adjacent ordinary bindings are emitted as one flat Core block.
+pub(super) enum RegionFrame {
+    Bang {
+        binder: curios_core::Free,
+        action: curios_core::Term,
+        span: Option<Span>,
+    },
+    Let {
+        binder: curios_core::Free,
+        type_: curios_core::Term,
+        value: curios_core::Term,
+    },
+    Rec(Vec<(curios_core::Free, curios_core::Term, curios_core::Term)>),
+    Held {
+        binder: curios_core::Free,
+        pattern: curios_core::Pattern,
+        span: Option<Span>,
+    },
+}
+
+impl RegionFrame {
+    fn mentions(&self, id: &curios_core::Free) -> bool {
+        let mentions = |term: &curios_core::Term| term.free_vars_shared().contains(id);
+        match self {
+            Self::Bang { action, .. } => mentions(action),
+            Self::Let { type_, value, .. } => mentions(type_) || mentions(value),
+            Self::Rec(members) => members
+                .iter()
+                .any(|(_, type_, value)| mentions(type_) || mentions(value)),
+            Self::Held { binder, .. } => binder == id,
+        }
+    }
+}
+
+/// A statement's minted names and its context, kept apart so the following statement can be read under those exact names before the context is closed.
+struct LoweredGroup {
+    binders: Vec<Binder>,
+    frames: Vec<RegionFrame>,
 }
 
 pub(super) struct Lowerer<'a, 'b> {
@@ -207,7 +238,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Lower `body` with already-minted `binders` in scope, then restore the previous scope.
     ///
-    /// The scope is a stack, so a shadowing inner binder simply sits above the outer one and [`Self::resolve_name`]'s innermost-first scan finds it. A `let` block nests one of these per binding, by recursing rather than by holding a mark per binding across a loop.
+    /// The scope is a stack, so a shadowing inner binder simply sits above the outer one and [`Self::resolve_name`]'s innermost-first scan finds it. A flat `let` block holds one mark around its loop instead, restoring it on either success or refusal.
     pub(super) fn bound<T>(
         &self,
         binders: &[Binder],
@@ -623,100 +654,108 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Lowers a run of `let` statements and their `tail` as one region: each statement's bound expressions are values in this region (their bangs hoist here, sequenced by `wrap`), the tail continues the same region. Loops over `groups` rather than recursing once per statement — a `let` block is flat, so a long straight-line sequence costs one loop, not a stack of native frames. Shared by `region`'s `Let` arm (the whole block) and `build_let` (the statements after the first, whose own bangs hoist to the enclosing region instead).
+    /// Closes a run of value bindings and its tail as one sequencing region. Nested blocks use the same collector, so the position of a statement cannot introduce a region.
     pub(super) fn lower_let_region(
         &self,
         groups: &[LetGroup],
         tail: &Term,
     ) -> Result<curios_core::Term, Error> {
-        recurse(|| {
-            let Some((first, rest)) = groups.split_first() else {
-                return self.region(tail);
-            };
-
-            let (binds, let_term) = self.lower_let_group(
-                first,
-                |term, binds| self.collect(term, binds),
-                || self.lower_let_region(rest, tail),
-            )?;
-
-            self.wrap(binds, let_term)
-        })
+        let mut frames = Vec::new();
+        let value = self.collect_let(groups, tail, &mut frames, true)?;
+        self.wrap(frames, value)
     }
 
-    /// [`Self::lower_let_region`] for a `let` reached through [`Self::term`] — a type, an annotation, a motive — where there is no region to hoist a bang into, so a binding is a plain value and nothing wraps.
+    /// A block in a type has the same lexical context, but no sequencing permission.
     fn lower_let(&self, groups: &[LetGroup], tail: &Term) -> Result<curios_core::Term, Error> {
-        recurse(|| {
-            let Some((first, rest)) = groups.split_first() else {
-                return self.term(tail);
-            };
-
-            let (_, let_term) = self.lower_let_group(
-                first,
-                |term, _| self.term(term),
-                || self.lower_let(rest, tail),
-            )?;
-
-            Ok(let_term)
-        })
+        let mut frames = Vec::new();
+        let value = self.collect_let(groups, tail, &mut frames, false)?;
+        self.wrap(frames, value)
     }
 
-    /// Lowers one `let` statement — a lone binding or a `let … and …;` group — around `inner`, the lowering of what follows it in the statement's scope. `lower_value` lowers a member's value in that scope: `collect`, hoisting bangs into the binds this hands back, or `term` where there is no region to hoist into.
-    ///
-    /// A statement is recursive when it has more than one member or when a member's type or value mentions a member — read off the lowered terms, never declared. It then becomes a core `rec`, whose member bodies are their own regions (hoisting an action out of a recursive binding would change how often it runs), and every member must be a plain, typed name whose value hoists nothing: a pattern binds no name its own value could use, a type cannot be inferred from a body that mentions it, and an action cannot name the result it is still producing. Each is refused by name. Otherwise the statement is a plain `let`, its pattern desugared by [`Self::bind_pattern`].
-    ///
-    /// The binders are minted before any member is lowered — the whole point, since that is what puts a binding in scope of its own value — so a `let n = n + 1` names the binding it declares rather than an outer `n`, and is refused as the recursive value it now is.
+    /// Reads a flat block under progressively extended lexical scope. Only the names stay on the scope stack; the frames hold the lowered context, so closing it needs neither source lookup nor one native stack frame per statement.
+    fn collect_let(
+        &self,
+        groups: &[LetGroup],
+        tail: &Term,
+        frames: &mut Vec<RegionFrame>,
+        region: bool,
+    ) -> Result<curios_core::Term, Error> {
+        let mark = self.scope.borrow().len();
+        let lowered = (|| {
+            for group in groups {
+                let lowered = self.lower_let_group(group, |term, frames| match region {
+                    true => self.collect(term, frames),
+                    false => self.term(term),
+                })?;
+                frames.extend(lowered.frames);
+                self.scope.borrow_mut().extend(
+                    lowered
+                        .binders
+                        .into_iter()
+                        .filter(|(name, _)| bindable(name)),
+                );
+            }
+            match region {
+                true => self.collect(tail, frames),
+                false => self.term(tail),
+            }
+        })();
+        self.scope.borrow_mut().truncate(mark);
+        lowered
+    }
+
+    /// Reads a statement before deciding whether it is recursive. A member's context is held separately until that decision: a recursive member keeps its lexical frames inside its own body and may hoist no action, while an ordinary binding contributes both its actions and its pattern bindings to the caller's region.
     fn lower_let_group(
         &self,
         group: &LetGroup,
-        lower_value: impl Fn(&Term, &mut Vec<Hoisted>) -> Result<curios_core::Term, Error>,
-        inner: impl FnOnce() -> Result<curios_core::Term, Error>,
-    ) -> Result<(Vec<Hoisted>, curios_core::Term), Error> {
+        lower_value: impl Fn(&Term, &mut Vec<RegionFrame>) -> Result<curios_core::Term, Error>,
+    ) -> Result<LoweredGroup, Error> {
         let binders = self.mint_written(
             group
                 .members
                 .iter()
                 .flat_map(|member| pattern_labels(&member.binder)),
         );
-
-        let mut binds = Vec::new();
-        // A member's every use is inside the declaration that holds it, so no caller states a sort it leaves: what follows the statement stands where the statement does.
-        let (types, values) = self.context.with_sorts(SortSite::Local, || {
+        let (types, values, contexts) = self.context.with_sorts(SortSite::Local, || {
             self.bound(&binders, || {
                 let mut types = Vec::with_capacity(group.members.len());
                 let mut values = Vec::with_capacity(group.members.len());
+                let mut contexts = Vec::with_capacity(group.members.len());
                 for member in &group.members {
                     let signature = self.signature(&member.signature);
+                    let mut frames = Vec::new();
                     values.push(
-                        self.signature_value(&signature, |body| lower_value(body, &mut binds))?,
+                        self.signature_value(&signature, |body| lower_value(body, &mut frames))?,
                     );
                     types.push(self.signature_type(&signature, None)?);
+                    contexts.push(frames);
                 }
-                Ok((types, values))
+                Ok((types, values, contexts))
             })
         })?;
-
-        // The hoisted actions count: a `!` lifts its operand out of the value, and the self-reference travels with it.
         let mentioned = binders.iter().any(|(_, id)| {
             types
                 .iter()
                 .chain(&values)
-                .chain(binds.iter().map(|hoisted| &hoisted.action))
                 .any(|term| term.free_vars_shared().contains(id))
+                || contexts.iter().flatten().any(|frame| frame.mentions(id))
         });
         if group.members.len() == 1 && !mentioned {
-            let member = &group.members[0];
-            let (type_, value) = (types[0].clone(), values[0].clone());
-            let tail = self.bound(&binders, inner)?;
-            let let_term = self.bind_pattern(&member.binder, &binders, type_, value, tail)?;
-            return Ok((binds, let_term));
+            let mut frames = contexts.into_iter().next().expect("one member context");
+            self.pattern_frames(
+                &group.members[0].binder,
+                &mut binders.iter(),
+                types.into_iter().next().expect("one member type"),
+                values.into_iter().next().expect("one member value"),
+                &mut frames,
+            )?;
+            return Ok(LoweredGroup { binders, frames });
         }
-
         let located = |error: Error, member: &LetBinding| match member.signature.body().span() {
             Some(span) => error.at(span.clone()),
             None => error,
         };
-        for member in &group.members {
+        for (member, frames) in group.members.iter().zip(&contexts) {
             let Pattern::Binder(label) = &member.binder else {
                 return Err(located(Error::RecursivePatternBinding, member));
             };
@@ -728,7 +767,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     member,
                 ));
             }
-            if !binds.is_empty() {
+            if frames
+                .iter()
+                .any(|frame| matches!(frame, RegionFrame::Bang { .. }))
+            {
                 return Err(located(
                     Error::RecursiveBangBinding {
                         label: label.to_string(),
@@ -737,24 +779,26 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 ));
             }
         }
-
-        let tail = self.bound(&binders, inner)?;
         let members = binders
             .iter()
             .zip(types)
             .zip(values)
-            .map(|(((_, id), type_), value)| (*id, type_, value));
-
-        Ok((Vec::new(), curios_core::Term::rec(members, tail)))
+            .zip(contexts)
+            .map(|((((_, id), type_), value), frames)| Ok((*id, type_, self.wrap(frames, value)?)))
+            .collect::<Result<Vec<_>, Error>>()?;
+        Ok(LoweredGroup {
+            binders,
+            frames: vec![RegionFrame::Rec(members)],
+        })
     }
 
-    /// Walks a non-boundary expression, elaborating to core and accumulating each `Bang` into `binds` (in evaluation order) replaced by a fresh variable. Boundary/binding forms desugar as their own nested region; `let`/`match` hoist their bound-expression/scrutinee bangs into the *enclosing* `binds`.
+    /// Walks a non-boundary expression, elaborating to core and accumulating each `Bang` into `binds` (in evaluation order) replaced by a fresh variable. Function bodies and branch arms begin regions; ordinary `let` blocks contribute their lexical frames, and match scrutinees contribute their actions, to the enclosing context.
     ///
     /// Span stamping happens here rather than inside the walk for the same reason [`Self::term`] stamps at its own boundary: every spine arm *rebuilds* its node (`apply_marked`, `proj`, `infix`, …) instead of routing through `term`, so a node lowered in a value body would otherwise reach elaboration with no span and report its errors unlocated. `with_span` is innermost-wins, so the arms that do delegate — leaves through `term`, lambdas through `region` — keep the span they already carry.
     pub(super) fn collect(
         &self,
         term: &Term,
-        binds: &mut Vec<Hoisted>,
+        binds: &mut Vec<RegionFrame>,
     ) -> Result<curios_core::Term, Error> {
         let lowered = self
             .collect_spine(term, binds)
@@ -768,7 +812,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     fn collect_spine(
         &self,
         term: &Term,
-        binds: &mut Vec<Hoisted>,
+        binds: &mut Vec<RegionFrame>,
     ) -> Result<curios_core::Term, Error> {
         Ok(match term.as_subterm() {
             Subterm::Bang(action) => {
@@ -776,7 +820,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let action = self.collect(action, binds)?;
                 let binder = self.context.fresh_binder(None);
                 let var = curios_core::Term::var(curios_core::Var::free(binder));
-                binds.push(Hoisted {
+                binds.push(RegionFrame::Bang {
                     binder,
                     action,
                     span: term.span().cloned(),
@@ -877,24 +921,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         })
     }
 
-    /// Builds a `let` block reached inside a `collect` (spine) context. The *first* binding's bangs hoist to the enclosing region (`binds`); the bindings after it and the tail form their own region via `lower_let_region`, scoped under the first binder.
+    /// A nested block contributes its complete lexical context to the enclosing region, including its tail. No statement position opens a new monadic region.
     pub(super) fn build_let(
         &self,
         let_: &Let,
-        binds: &mut Vec<Hoisted>,
+        binds: &mut Vec<RegionFrame>,
     ) -> Result<curios_core::Term, Error> {
-        let (first, rest) = let_
-            .groups
-            .split_first()
-            .expect("a `let` block has at least one statement");
-
-        let (hoisted, let_term) = self.lower_let_group(
-            first,
-            |term, binds| self.collect(term, binds),
-            || self.lower_let_region(rest, &let_.tail),
-        )?;
-        binds.extend(hoisted);
-        Ok(let_term)
+        self.collect_let(&let_.groups, &let_.tail, binds, true)
     }
 
     /// Lowers a function's parameters into core binder `(name, domain)` pairs. A plain-name parameter binds its name directly, unchanged; an un-annotated parameter takes a fresh metavar domain. A compound pattern's core binder is a fresh synthetic name, and the (already lowered) `body` is wrapped with its field-`let` chain.
@@ -1067,79 +1100,69 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         self.context.unresolved_bare(label, sought, locals)
     }
 
-    /// Builds `let pat = value : type_; tail` for a pattern in any of the three binder positions: `Pattern::Binder` is a single core `let_` call — the plain-name path is a zero-cost passthrough. A compound pattern mints one fresh synthetic binder (via [`Context::fresh_binder`]) carrying `type_` (the caller's own annotation, so it is still checked), then projects each field off it via [`Self::lower_pattern_fields`]. The synthetic binder is minted unconditionally, even when `value` is already a bare variable reference: reusing it directly would risk silently dropping `type_`'s check (e.g. `let (x, y) : Point = pair;` must still check `pair : Point`). The extra trivial `let` this occasionally emits is exactly the shape `cont`'s copy-threading optimization already collapses, so it costs nothing at runtime. `binders` are the identities minted for this pattern's written leaves, in `pattern_names` order — the same ones the scope this `let` opened was entered with, so the tail's references land on them.
-    pub(super) fn bind_pattern(
-        &self,
-        pattern: &Pattern,
-        binders: &[Binder],
-        type_: curios_core::Term,
-        value: curios_core::Term,
-        tail: curios_core::Term,
-    ) -> Result<curios_core::Term, Error> {
-        self.bind_pattern_from(pattern, &mut binders.iter(), type_, value, tail)
-    }
-
-    fn bind_pattern_from<'i>(
+    /// Resolves a pattern's nominal checks while its source scope still stands, and records the bindings its projections introduce in evaluation order.
+    fn pattern_frames<'i>(
         &self,
         pattern: &Pattern,
         binders: &mut impl Iterator<Item = &'i Binder>,
         type_: curios_core::Term,
         value: curios_core::Term,
-        tail: curios_core::Term,
-    ) -> Result<curios_core::Term, Error> {
-        Ok(match pattern {
-            Pattern::Binder(_) => {
-                let (_, id) = binders.next().expect("one mint per written leaf");
-                curios_core::Term::let_(id, type_, value, tail)
+        frames: &mut Vec<RegionFrame>,
+    ) -> Result<(), Error> {
+        recurse(|| {
+            match pattern {
+                Pattern::Binder(_) => {
+                    let (_, binder) = binders.next().expect("one mint per written leaf");
+                    frames.push(RegionFrame::Let {
+                        binder: *binder,
+                        type_,
+                        value,
+                    });
+                }
+                Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+                    let binder = self.context.fresh_binder(None);
+                    frames.push(RegionFrame::Let {
+                        binder,
+                        type_,
+                        value,
+                    });
+                    if let Pattern::Struct { head, .. } = pattern {
+                        frames.push(self.held_frame(head, binder)?);
+                    }
+                    self.pattern_field_frames(fields, binder, binders, frames)?;
+                }
             }
-            Pattern::Tuple(fields) => {
-                let synthetic = self.context.fresh_binder(None);
-                let inner = self.lower_pattern_fields_from(fields, &synthetic, binders, tail)?;
-                curios_core::Term::let_(&synthetic, type_, value, inner)
-            }
-            Pattern::Struct { head, fields } => {
-                let synthetic = self.context.fresh_binder(None);
-                let inner = self.lower_pattern_fields_from(fields, &synthetic, binders, tail)?;
-                let inner = self.held_to_head(head, &synthetic, inner)?;
-                curios_core::Term::let_(&synthetic, type_, value, inner)
-            }
+            Ok(())
         })
     }
 
-    /// `tail` held to the structure a struct pattern is written under: the one-row match over the pattern's binder whose row is the head over no field. It takes nothing apart, and the matrix compiler holds it to the binder's type as it holds an arm's, so a head means one thing wherever a pattern is written.
+    fn held_frame(&self, head: &Name, binder: curios_core::Free) -> Result<RegionFrame, Error> {
+        let structure = match self.resolve_nominal(head)? {
+            Ok(structure) => curios_core::Free::Global(structure),
+            Err(unbound) => unbound,
+        };
+        Ok(RegionFrame::Held {
+            binder,
+            pattern: curios_core::Pattern::Struct {
+                head: head.join(),
+                structure,
+                fields: Vec::new(),
+            },
+            span: head.span().cloned(),
+        })
+    }
+
+    /// Holds the scrutinee to the struct named by its pattern, using the same resolved check as the region's lexical frames.
     pub(super) fn held_to_head(
         &self,
         head: &Name,
         binder: &curios_core::Free,
         tail: curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
-        let structure = match self.resolve_nominal(head)? {
-            Ok(structure) => curios_core::Free::Global(structure),
-            Err(unbound) => unbound,
-        };
-        let held = curios_core::Term::matrix(curios_core::Matrix {
-            head: curios_core::Term::var(curios_core::Var::free(*binder)),
-            motive: None,
-            rows: vec![curios_core::Row {
-                pattern: curios_core::Pattern::Struct {
-                    head: head.join(),
-                    structure,
-                    fields: Vec::new(),
-                },
-                body: curios_core::Term::func(
-                    Vec::<(curios_core::Free, curios_core::Term)>::new(),
-                    tail,
-                ),
-            }],
-        });
-
-        Ok(match head.span() {
-            Some(span) => self.context.placed(span, held),
-            None => held,
-        })
+        self.wrap(vec![self.held_frame(head, *binder)?], tail)
     }
 
-    /// Projects each field of a compound pattern off the (already-bound) core variable `scrutinee_name`, in field order — folded right-to-left so the first field's `let` ends up outermost, matching the order a person would hand-write (`let x = p0.0; let y = p0.1; …`) — recursing into [`Self::bind_pattern`] for nested patterns. Each field's own type is a fresh metavar hole: there is never a per-field annotation to give, exactly like a hand-written `let x = p.0;`. Each projection is located at its field's pattern ([`pattern_span`]), so a report about reading the field — a head whose type never became a tuple — points at the destructuring rather than at whatever encloses it. The chain over a compound pattern already in scope: its leaves' minted identities are pulled from the surrounding walk, which produced them in this very order.
+    /// Projects the leaves of a compound parameter pattern under its already-minted identities.
     pub(super) fn lower_pattern_fields(
         &self,
         fields: &[PatternField],
@@ -1147,65 +1170,96 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         leaves: &[Binder],
         tail: curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
-        self.lower_pattern_fields_from(fields, scrutinee, &mut leaves.iter(), tail)
+        let mut frames = Vec::new();
+        self.pattern_field_frames(fields, *scrutinee, &mut leaves.iter(), &mut frames)?;
+        self.wrap(frames, tail)
     }
 
-    fn lower_pattern_fields_from<'i>(
+    fn pattern_field_frames<'i>(
         &self,
         fields: &[PatternField],
-        scrutinee_name: &curios_core::Free,
+        scrutinee: curios_core::Free,
         binders: &mut impl Iterator<Item = &'i Binder>,
-        tail: curios_core::Term,
-    ) -> Result<curios_core::Term, Error> {
-        // Right-to-left so the first field's `let` ends up outermost, but the binders were minted left-to-right, so they are consumed in a forward pass first.
-        let mut bound = Vec::with_capacity(fields.len());
-        for field in fields {
-            let taken = pattern_names(&field.value)
-                .iter()
-                .filter_map(|_| binders.next().cloned())
-                .collect::<Vec<_>>();
-            bound.push(taken);
-        }
-
-        let mut tail = tail;
-        for ((index, field), taken) in fields.iter().enumerate().zip(&bound).rev() {
-            let scrutinee = curios_core::Term::var(curios_core::Var::free(*scrutinee_name));
-            let proj = match &field.label {
-                Some(label) => curios_core::Term::proj_label(scrutinee, label.clone()),
-                None => curios_core::Term::proj_position(scrutinee, index),
+        frames: &mut Vec<RegionFrame>,
+    ) -> Result<(), Error> {
+        for (index, field) in fields.iter().enumerate() {
+            let value = curios_core::Term::var(curios_core::Var::free(scrutinee));
+            let value = match &field.label {
+                Some(label) => curios_core::Term::proj_label(value, label.clone()),
+                None => curios_core::Term::proj_position(value, index),
             };
-            let proj = match pattern_span(&field.value) {
-                Some(span) => self.context.placed(&span, proj),
-                None => proj,
+            let value = match pattern_span(&field.value) {
+                Some(span) => self.context.placed(&span, value),
+                None => value,
             };
-            let hole = curios_core::Term::hole(self.context.fresh_metavar());
-            tail = self.bind_pattern(&field.value, taken, hole, proj, tail)?;
+            let type_ = curios_core::Term::hole(self.context.fresh_metavar());
+            self.pattern_frames(&field.value, binders, type_, value, frames)?;
         }
-        Ok(tail)
+        Ok(())
     }
 
-    /// Wraps `body` in one [`curios_core::Bang`] transient per collected bang. The first-collected bang (`binds[0]`) becomes the outermost node, preserving left-to-right evaluation order. Continuation lambdas are built with `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it robustly under nesting; the domain is a fresh hole, inference-solved. `elaborate_bang` later replaces each node with its `/std/Monad/bind` application, handing the wrapper the region's monad as its `@M` (read off the region's type by the flex-apply imitation rule) and inserting fresh implicits and a fresh `use` witness slot per `!` site: the region pins the constructor, which resolves the `Monad` witness, and every action is checked against it — so a region can sequence actions of differing result types, and different regions can use different monads.
-    ///
-    /// Each node carries the span of the `!` that produced it (see [`Hoisted`]), so a region that cannot accept the sequencing reports against the written `!` rather than against nothing.
+    /// Closes the ordered context without re-reading source names. Ordinary bindings are batched into a flat block; a bang closes its following frames into a continuation, keeping the written bang's span on the resulting transient.
     pub(super) fn wrap(
         &self,
-        binds: Vec<Hoisted>,
-        body: curios_core::Term,
+        frames: Vec<RegionFrame>,
+        mut body: curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
-        binds.into_iter().rev().try_fold(body, |acc, hoisted| {
-            let Hoisted {
+        let mut bindings = Vec::new();
+        let flush = |bindings: &mut Vec<_>, body| {
+            bindings.reverse();
+            curios_core::Term::let_block(std::mem::take(bindings), body)
+        };
+        for frame in frames.into_iter().rev() {
+            if let RegionFrame::Let {
                 binder,
-                action,
-                span,
-            } = hoisted;
-            let domain = curios_core::Term::hole(self.context.fresh_metavar());
-            let cont = curios_core::Term::func([(binder, domain)], acc);
-            let bang = curios_core::Term::bang(action, cont);
-            Ok(match span {
-                Some(span) => self.context.placed(&span, bang),
-                None => bang,
-            })
-        })
+                type_,
+                value,
+            } = frame
+            {
+                bindings.push((binder, type_, value));
+                continue;
+            }
+            body = flush(&mut bindings, body);
+            body = match frame {
+                RegionFrame::Let { .. } => unreachable!("ordinary bindings were accumulated above"),
+                RegionFrame::Rec(members) => curios_core::Term::rec(members, body),
+                RegionFrame::Bang {
+                    binder,
+                    action,
+                    span,
+                } => {
+                    let domain = curios_core::Term::hole(self.context.fresh_metavar());
+                    let continuation = curios_core::Term::func([(binder, domain)], body);
+                    let bang = curios_core::Term::bang(action, continuation);
+                    match span {
+                        Some(span) => self.context.placed(&span, bang),
+                        None => bang,
+                    }
+                }
+                RegionFrame::Held {
+                    binder,
+                    pattern,
+                    span,
+                } => {
+                    let held = curios_core::Term::matrix(curios_core::Matrix {
+                        head: curios_core::Term::var(curios_core::Var::free(binder)),
+                        motive: None,
+                        rows: vec![curios_core::Row {
+                            pattern,
+                            body: curios_core::Term::func(
+                                Vec::<(curios_core::Free, curios_core::Term)>::new(),
+                                body,
+                            ),
+                        }],
+                    });
+                    match span {
+                        Some(span) => self.context.placed(&span, held),
+                        None => held,
+                    }
+                }
+            };
+        }
+        Ok(flush(&mut bindings, body))
     }
 
     /// A list literal's element-type slot: an implicit the literal cannot name, minted fresh and solved by elaboration, bidirectionally from the expected type when checking and from the elements otherwise. It is placed at the literal, which is the written term a report that nothing solved it is about.

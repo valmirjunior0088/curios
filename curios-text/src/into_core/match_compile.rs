@@ -1,5 +1,5 @@
 use {
-    super::{Binder, Hoisted, Lowerer},
+    super::{Binder, Lowerer, RegionFrame},
     crate::{
         BinPattern, Choose, ChooseArm, ChooseTest, Error, ListPattern, Match, MatchPattern,
         MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
@@ -32,7 +32,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn match_region(
         &self,
         match_: &Match,
-        binds: &mut Vec<Hoisted>,
+        binds: &mut Vec<RegionFrame>,
     ) -> Result<curios_core::Term, Error> {
         let head = self.collect(&match_.head, binds)?;
         self.headed(head, &match_.motive, &match_.arms, Self::region)
@@ -42,7 +42,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn choose_region(
         &self,
         choose: &Choose,
-        binds: &mut Vec<Hoisted>,
+        binds: &mut Vec<RegionFrame>,
     ) -> Result<curios_core::Term, Error> {
         self.ladder_region(&choose.arms, &choose.default, binds)
     }
@@ -52,7 +52,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         arms: &[ChooseArm],
         default: &Term,
-        binds: &mut Vec<Hoisted>,
+        binds: &mut Vec<RegionFrame>,
     ) -> Result<curios_core::Term, Error> {
         let Some((arm, rest)) = arms.split_first() else {
             return self.collect(default, binds);
