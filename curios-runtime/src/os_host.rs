@@ -248,8 +248,12 @@ struct Watched<'a> {
 
 /// Wait until a descriptor of `watched` is ready for what it asks, has failed or has hung up, or until `deadline` passes — at once where `deadline` is now — and say which by their places among `watched`.
 ///
-/// The wait is a `poll(2)`. Where the poll answers that it cannot watch a descriptor the wait holds open, as macOS's does a character device that is no terminal, the wait is made again with `select(2)`, which watches every kind of descriptor, so the poll's own answer decides and no platform is named. An interruption is not readiness, so either resumes for what is left of the wait; any other failure is the system refusing it, which the caller decides how to answer.
+/// The wait is a `poll(2)`. Where the poll answers that it cannot watch a descriptor the wait holds open, as macOS's does a character device that is no terminal, the wait is made again with `select(2)`, which watches every kind of descriptor, so the poll's own answer decides and no platform is named. A wait on a FIFO, named or a pipe, is a `select(2)` from the start: macOS's poll never reports a FIFO's last writer closing, where its select reports the end it leaves as readable, and on Linux the two read the same state. An interruption is not readiness, so either resumes for what is left of the wait; any other failure is the system refusing it, which the caller decides how to answer.
 fn ready(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
+    if watched.iter().any(|watched| fifo(watched.fd)) {
+        return selected(watched, deadline);
+    }
+
     let mut polls = watched
         .iter()
         .map(|watched| PollFd::from_borrowed_fd(watched.fd, watched.asked))
@@ -294,7 +298,7 @@ fn retried(
     }
 }
 
-/// [`ready`]'s wait made with `select(2)`, for descriptors a poll cannot watch. A descriptor that has failed or hung up is ready for what it was asked, as a poll reports it, since the call that follows says why.
+/// [`ready`]'s wait made with `select(2)`, for descriptors a poll cannot watch or does not report the end of. A descriptor that has failed or hung up is ready for what it was asked, as a poll reports it, since the call that follows says why.
 fn selected(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
     let bound = watched
         .iter()
@@ -975,7 +979,7 @@ impl HostOps for OsHost {
 
                         return read_outcome(result.map_err(Error::from), buffer);
                     }
-                    // A FIFO no writer has opened reads as its end, so it is read only once a poll finds a writer's bytes or its close there.
+                    // A FIFO no writer has opened reads as its end, so it is read only once a wait finds a writer's bytes or its close there.
                     Some(OsResource::Fifo(fd)) => {
                         if !readable_now(fd.as_fd()) {
                             return Err(Failure::WouldBlock);
@@ -1358,6 +1362,13 @@ fn writable_now(fd: BorrowedFd<'_>) -> bool {
     }];
 
     ready(&watched, Some(Instant::now())).map_or(true, |ready| !ready.is_empty())
+}
+
+/// Whether `fd` is a FIFO, named or a pipe: the descriptors [`ready`] waits on with `select(2)`. One whose kind cannot be read is taken to be none, and is polled.
+fn fifo(fd: BorrowedFd<'_>) -> bool {
+    rustix::fs::fstat(fd).is_ok_and(|stat| {
+        rustix::fs::FileType::from_raw_mode(stat.st_mode) == rustix::fs::FileType::Fifo
+    })
 }
 
 /// Whether `fd` is a pipe or a socket, the descriptors a ready poll promises only `PIPE_BUF` bytes of room on; one whose kind cannot be read is taken to be one, which only bounds its writes.
