@@ -76,7 +76,7 @@ fn a_zero_capacity_is_refused_at_the_public_constructor() {
 // Only `/std` advances a description: the driver every combinator is written over holds each branch's rest and performs each dropped branch's cancel, and a program reaches it through the combinators alone.
 #[test]
 fn the_driver_of_branches_is_private() {
-    let error = typecheck("let d = /std/Io/concurrent/drive; /std/Io/pure(())")
+    let error = typecheck("let d = /std/Io/drive; /std/Io/pure(())")
         .expect_err("a program cannot reach the driver");
     assert!(error.contains("private"), "{error}");
 }
