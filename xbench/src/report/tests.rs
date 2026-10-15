@@ -144,7 +144,7 @@ fn a_table_puts_the_fastest_first_and_reads_the_rest_against_rust() {
     );
     let rows = rendered
         .lines()
-        .filter(|line| line.starts_with('|') && !line.contains(":---"))
+        .filter(|line| line.starts_with('|') && !line.contains("---"))
         .collect::<Vec<_>>();
 
     assert!(rendered.contains("`LCG` (N = 100000000)"));
@@ -270,7 +270,10 @@ fn a_build_that_changed_weight_is_reported_exactly() {
 
     assert!(rendered.contains("Builds that changed"), "{rendered}");
     assert!(
-        rendered.contains("12000000 | 12000512 | +512"),
+        rendered.lines().any(|line| {
+            line.split('|').map(str::trim).collect::<Vec<_>>()
+                == ["", "`lcg`", "Curios", "12000000", "12000512", "+512", ""]
+        }),
         "{rendered}"
     );
     // Rust's build did not move, so it is not a row.

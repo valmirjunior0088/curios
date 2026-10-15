@@ -102,6 +102,44 @@ fn titled(contestant: &str) -> &str {
         .map_or(contestant, |named| named.title)
 }
 
+/// A Markdown table with every cell left-aligned and its columns padded for a terminal. Each row has one cell per header.
+fn tabulated(headers: &[&str], rows: &[Vec<String>]) -> String {
+    let widths = headers
+        .iter()
+        .enumerate()
+        .map(|(column, header)| {
+            rows.iter()
+                .map(|row| row[column].chars().count())
+                .chain([header.chars().count(), 4])
+                .max()
+                .unwrap_or(4)
+        })
+        .collect::<Vec<_>>();
+
+    let mut out = String::new();
+    let mut row = |cells: &[String]| {
+        out.push('|');
+        for (cell, width) in cells.iter().zip(&widths) {
+            let _ = write!(out, " {cell:<width$} |");
+        }
+        out.push('\n');
+    };
+
+    row(&headers
+        .iter()
+        .map(|header| header.to_string())
+        .collect::<Vec<_>>());
+    row(&widths
+        .iter()
+        .map(|width| "-".repeat(*width))
+        .collect::<Vec<_>>());
+    for cells in rows {
+        row(cells);
+    }
+
+    out
+}
+
 /// One workload's table, over however its samples are held: the contestants fastest first, each with its span and how many times the control it is.
 pub fn table(title: &str, letter: &str, size: u64, rows: &[(&str, &[&[f64]])]) -> String {
     let mut figures = rows
@@ -114,9 +152,7 @@ pub fn table(title: &str, letter: &str, size: u64, rows: &[(&str, &[&[f64]])]) -
         .map(|(_, figure)| *figure);
     figures.sort_by(|(_, left), (_, right)| left.middle.total_cmp(&right.middle));
 
-    let mut out = format!("### `{title}` ({letter} = {size})\n\n");
-    out.push_str("| Contestant | Median | Span | × Rust |\n| :--- | ---: | ---: | ---: |\n");
-
+    let mut rows = Vec::new();
     for (contestant, figure) in figures {
         let half = figure.half();
         // Curios is the subject, so its row stands out.
@@ -130,16 +166,22 @@ pub fn table(title: &str, letter: &str, size: u64, rows: &[(&str, &[&[f64]])]) -
             _ => "—".to_string(),
         };
 
-        let _ = writeln!(
-            out,
-            "| {mark}{contestant}{mark} | {mark}{} ms{mark} | {}–{} | {mark}{against}{mark} |",
-            stated(figure.middle, half),
-            stated(figure.least, half),
-            stated(figure.most, half),
-        );
+        rows.push(vec![
+            format!("{mark}{contestant}{mark}"),
+            format!("{mark}{} ms{mark}", stated(figure.middle, half)),
+            format!(
+                "{}–{}",
+                stated(figure.least, half),
+                stated(figure.most, half)
+            ),
+            format!("{mark}{against}{mark}"),
+        ]);
     }
 
-    out
+    format!(
+        "### `{title}` ({letter} = {size})\n\n{}",
+        tabulated(&["Contestant", "Median", "Span", "× Rust"], &rows)
+    )
 }
 
 /// What a reading says of itself, ahead of its tables.
@@ -165,14 +207,10 @@ fn header(number: usize, reading: &Reading) -> String {
 ///
 /// It is read down a column and never across one: the Curios contestant is a self-contained executable with the engine compiled into it, so its weight against `rust`'s says nothing. What a column answers is whether that contestant's build grew between two readings.
 fn weights(reading: &Reading) -> String {
-    let mut out = String::from("\n### Builds (bytes)\n\n| Workload |");
-    for contestant in CONTESTANTS {
-        let _ = write!(out, " {} |", contestant.title);
-    }
-    out.push_str("\n| :--- |");
-    out.push_str(&" ---: |".repeat(CONTESTANTS.len()));
-    out.push('\n');
+    let mut headers = vec!["Workload"];
+    headers.extend(CONTESTANTS.iter().map(|contestant| contestant.title));
 
+    let mut rows = Vec::new();
     for workload in WORKLOADS {
         let weighed = CONTESTANTS
             .iter()
@@ -182,18 +220,16 @@ fn weights(reading: &Reading) -> String {
             continue;
         }
 
-        let _ = write!(out, "| `{}` |", workload.name);
-        for bytes in weighed {
-            let _ = write!(
-                out,
-                " {} |",
-                bytes.map_or_else(|| "—".to_string(), |bytes| bytes.to_string())
-            );
-        }
-        out.push('\n');
+        let mut row = vec![format!("`{}`", workload.name)];
+        row.extend(
+            weighed
+                .into_iter()
+                .map(|bytes| bytes.map_or_else(|| "—".to_string(), |bytes| bytes.to_string())),
+        );
+        rows.push(row);
     }
 
-    out
+    format!("\n### Builds (bytes)\n\n{}", tabulated(&headers, &rows))
 }
 
 /// The reading numbered `number`, in full: what it says of itself, then a table per workload it measured.
@@ -267,7 +303,7 @@ pub fn compare(number: usize, before: &Reading, after: &Reading) -> String {
         );
     }
 
-    let mut lines = Vec::new();
+    let mut rows = Vec::new();
     for workload in WORKLOADS {
         let read = |reading: &Reading, contestant: &str| {
             figure(reading.took(workload.name, contestant)?.groups)
@@ -301,34 +337,32 @@ pub fn compare(number: usize, before: &Reading, after: &Reading) -> String {
             },
         };
 
-        lines.push(format!(
-            "| `{}` | {} ms | {} ms | {said} |",
-            workload.name,
-            stated(was.middle, half),
-            stated(is.middle, half),
-        ));
+        rows.push(vec![
+            format!("`{}`", workload.name),
+            format!("{} ms", stated(was.middle, half)),
+            format!("{} ms", stated(is.middle, half)),
+            said,
+        ]);
     }
 
-    out.push_str("| Workload | Was | Is | |\n| :--- | ---: | ---: | :--- |\n");
-    out.push_str(&lines.join("\n"));
-    out.push('\n');
+    out.push_str(&tabulated(&["Workload", "Was", "Is", ""], &rows));
 
     // A build's weight is deterministic under the pins, so a difference is stated as itself: there is no span to clear and no control to hold.
     let reweighed = reweighed(before, after);
     if !reweighed.is_empty() {
-        out.push_str(
-            "\n### Builds that changed (bytes)\n\n| Workload | Contestant | Was | Is | Δ |\n| :--- | :--- | ---: | ---: | ---: |\n",
-        );
-        out.push_str(&reweighed.join("\n"));
-        out.push('\n');
+        out.push_str("\n### Builds that changed (bytes)\n\n");
+        out.push_str(&tabulated(
+            &["Workload", "Contestant", "Was", "Is", "Δ"],
+            &reweighed,
+        ));
     }
 
     out
 }
 
 /// Every build whose weight differs between two readings.
-fn reweighed(before: &Reading, after: &Reading) -> Vec<String> {
-    let mut lines = Vec::new();
+fn reweighed(before: &Reading, after: &Reading) -> Vec<Vec<String>> {
+    let mut rows = Vec::new();
 
     for workload in WORKLOADS {
         for contestant in CONTESTANTS {
@@ -340,17 +374,18 @@ fn reweighed(before: &Reading, after: &Reading) -> Vec<String> {
             };
 
             if then != now {
-                lines.push(format!(
-                    "| `{}` | {} | {then} | {now} | {:+} |",
-                    workload.name,
-                    contestant.title,
-                    i128::from(now) - i128::from(then)
-                ));
+                rows.push(vec![
+                    format!("`{}`", workload.name),
+                    contestant.title.to_string(),
+                    then.to_string(),
+                    now.to_string(),
+                    format!("{:+}", i128::from(now) - i128::from(then)),
+                ]);
             }
         }
     }
 
-    lines
+    rows
 }
 
 /// Every reading so far: each in full, with what changed between consecutive ones.

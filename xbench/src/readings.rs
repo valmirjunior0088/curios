@@ -8,6 +8,9 @@ mod tests;
 mod reading_00;
 use reading_00::*;
 
+mod reading_01;
+use reading_01::*;
+
 use xbench::Reading;
 
-pub(super) const READINGS: &[&Reading] = &[&READING_00];
+pub(super) const READINGS: &[&Reading] = &[&READING_00, &READING_01];

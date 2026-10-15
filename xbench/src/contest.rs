@@ -458,7 +458,7 @@ pub fn collect(taken: usize) -> Result<(), String> {
     let commit = asked("git", &["rev-parse", "--short", "HEAD"], &root)?;
 
     fs::create_dir_all(root.join(ARTIFACTS)).map_err(|error| error.to_string())?;
-    run("cargo", &["xtask", "build"], &root)?;
+    run("cargo", &["xtask", "compiler", "build"], &root)?;
 
     let subject = format!(
         "{} ({commit})",
