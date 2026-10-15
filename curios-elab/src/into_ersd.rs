@@ -58,6 +58,8 @@ use intrinsic::*;
 
 mod suspension;
 
+mod crossing;
+
 mod typed;
 
 #[cfg(test)]

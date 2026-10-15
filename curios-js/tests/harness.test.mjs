@@ -75,6 +75,14 @@ let l = lists()!;
 print(Str/join(",", List/map(l, Nat/to_str)))
 `;
 
+const OPTIONS = `
+use /std/{Nat, Str, Option, print};
+foreign maybe(Option(Nat), Option(Bytes)) -> Option(Nat);
+let a = maybe(Option/some(5), Option/none())!;
+let b = maybe(Option/none(), Option/some(x[1, 2]))!;
+print(Str/flatten([Nat/to_str(Option/unwrap_or(a, 0)), " ", match b | some(_) => "some" | none() => "none" end]))
+`;
+
 const KEEP = `
 use /std/{Io};
 foreign keep(Bytes) -> Bytes;
@@ -309,6 +317,26 @@ test("a list result is an array of its elements, each held to the element type",
     /the result\[1\] is number 1, not a BigInt/,
   );
   await stopped(LISTS, answering(1n), /the result is 1n, not an array/);
+});
+
+test("an option is handed as its value or null, and answered the same way", async () => {
+  const handed = [];
+
+  const { stdout } = await execute(OPTIONS, {
+    foreign: {
+      "/maybe": (n, bytes) => {
+        handed.push([n, bytes]);
+
+        return n === null ? null : n + 1n;
+      },
+    },
+  });
+
+  assert.equal(stdout, "6 none");
+  assert.deepEqual(handed, [
+    [5n, null],
+    [null, Uint8Array.of(1, 2)],
+  ]);
 });
 
 test("a buffer a hook keeps is a copy, so changing it afterwards changes nothing the program holds", async () => {

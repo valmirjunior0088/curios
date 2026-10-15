@@ -9,11 +9,14 @@ use {
     crate::Global,
     curios_abi::{ForeignFunction, ResultShape, WireResults, WireReturn, WireType},
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
+    curios_utilities::SyntaxRegistry,
     std::collections::BTreeSet,
 };
 
 /// The core type a host-boundary [`WireType`] denotes — the one reading of the signature shared by elaboration (operand checks, result records) and erasure, so the two cannot disagree about what crosses the wire.
-pub fn wire_term(wire_type: &WireType) -> Term {
+///
+/// An option is `/sys/Option`, the family `syntax` names, at the sort its element's own signature produces: the instance elaboration gives an `Option` written of the same element, so a program's own type and a row's are one term. Every leaf is an intrinsic carrier, whose sort its signature states, so the instance is read rather than stated here.
+pub fn wire_term(wire_type: &WireType, syntax: &SyntaxRegistry) -> Term {
     let intrinsic = match wire_type {
         WireType::Nat => Intrinsic::NatType,
         WireType::Int => Intrinsic::IntType,
@@ -23,28 +26,55 @@ pub fn wire_term(wire_type: &WireType) -> Term {
         WireType::Bytes => Intrinsic::BinType(Grain::X),
         WireType::Bits => Intrinsic::BinType(Grain::B),
         WireType::Handle => Intrinsic::HandleType,
-        WireType::List(element) => Intrinsic::ListType(wire_term(&(*element).into())),
+        WireType::List(element) => Intrinsic::ListType(wire_term(&(*element).into(), syntax)),
+        WireType::Option(element) => {
+            let element = wire_term(&(*element).into(), syntax);
+            let universes = match &*element {
+                Subterm::Intrinsic(carrier) => match carrier.signature(syntax).produced {
+                    Produced::Fixed(sort) => match &*sort {
+                        Subterm::Sort(quality, level) => Universes {
+                            levels: vec![level.clone()],
+                            qualities: vec![*quality],
+                        },
+                        _ => unreachable!("a leaf's carrier produces its sort"),
+                    },
+                    Produced::Sort => unreachable!("a leaf's carrier is closed"),
+                },
+                _ => unreachable!("a leaf is an intrinsic carrier"),
+            };
+
+            return Term::induct_type_at(
+                Global::Authored(syntax.option.family.qualifier()),
+                universes,
+                vec![element],
+                Vec::<Term>::new(),
+            );
+        }
     };
 
     Subterm::Intrinsic(intrinsic).into()
 }
 
 /// The core type a row's results denote, as [`wire_term`] reads one wire type: the unit type for no result, the bare type for one, and a record of the named fields otherwise, each label bound by a binder `fresh` mints. The one reading of a row's guest-facing shape — the elaborator and the kernel both build the type of a host call through it, so the two cannot come to different answers about what a call yields, and the arity rule itself is `WireResults`'s to state.
-pub fn wire_results_term(results: &WireResults, mut fresh: impl FnMut(&str) -> Free) -> Term {
+pub fn wire_results_term(
+    results: &WireResults,
+    syntax: &SyntaxRegistry,
+    mut fresh: impl FnMut(&str) -> Free,
+) -> Term {
     match results.shape() {
         ResultShape::Unit => Term::tuple_type_unit(),
-        ResultShape::Single(wire_type) => wire_term(&wire_type),
+        ResultShape::Single(wire_type) => wire_term(&wire_type, syntax),
         ResultShape::Record(fields) => Term::tuple_type(
             fields
                 .into_iter()
-                .map(|(label, wire_type)| (fresh(label), wire_term(&wire_type)))
+                .map(|(label, wire_type)| (fresh(label), wire_term(&wire_type, syntax)))
                 .collect::<Vec<_>>(),
         ),
     }
 }
 
 /// What a foreign call demands of each operand, in order: its parameter's wire type, after — for a row that diverges — the type its description yields, which erasure drops. Erasure walks these, and [`foreign_signature`] states them for the checkers.
-pub fn foreign_operands(function: &ForeignFunction) -> Vec<Operand> {
+pub fn foreign_operands(function: &ForeignFunction, syntax: &SyntaxRegistry) -> Vec<Operand> {
     let result = function.diverges().then_some(Operand::IsType);
 
     result
@@ -54,7 +84,7 @@ pub fn foreign_operands(function: &ForeignFunction) -> Vec<Operand> {
                 .signature()
                 .params
                 .iter()
-                .map(|wire_type| Operand::At(wire_term(wire_type))),
+                .map(|wire_type| Operand::At(wire_term(wire_type, syntax))),
         )
         .collect()
 }
@@ -65,6 +95,7 @@ pub fn foreign_operands(function: &ForeignFunction) -> Vec<Operand> {
 pub fn foreign_produced(
     function: &ForeignFunction,
     operands: &[Term],
+    syntax: &SyntaxRegistry,
     fresh: impl FnMut(&str) -> Free,
 ) -> Term {
     let result = match &function.signature().returns {
@@ -72,7 +103,7 @@ pub fn foreign_produced(
             .first()
             .expect("a diverging call's first operand is the type it yields")
             .clone(),
-        WireReturn::Answers(results) => wire_results_term(results, fresh),
+        WireReturn::Answers(results) => wire_results_term(results, syntax, fresh),
     };
 
     Term::intrinsic(Intrinsic::io_type(result))
@@ -84,11 +115,12 @@ pub fn foreign_produced(
 pub fn foreign_signature(
     function: &ForeignFunction,
     operands: &[Term],
+    syntax: &SyntaxRegistry,
     fresh: impl FnMut(&str) -> Free,
 ) -> Signature {
     Signature {
-        operands: foreign_operands(function),
-        produced: Produced::Fixed(foreign_produced(function, operands, fresh)),
+        operands: foreign_operands(function, syntax),
+        produced: Produced::Fixed(foreign_produced(function, operands, syntax, fresh)),
     }
 }
 

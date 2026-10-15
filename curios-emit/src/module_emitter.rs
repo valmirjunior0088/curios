@@ -742,6 +742,39 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
+    /// Add `$list/empty` where the emitted code reached it: an immutable empty leaf, built by a constant expression since it reads nothing.
+    fn emit_list_empty(&mut self) {
+        if !self.table.list_empty_used() {
+            return;
+        }
+
+        let rope = self.table.list_rope();
+        let mut expr: curios_wasm::Expr = Default::default();
+        expr.push(curios_wasm::Instr::I32Const { value: 0 });
+        expr.push(curios_wasm::Instr::I32Const { value: 0 });
+        expr.push(curios_wasm::Instr::ArrayNewFixed {
+            type_name: rope.payload,
+            length: 0,
+        });
+        expr.push(curios_wasm::Instr::StructNew {
+            type_name: rope.leaf,
+        });
+
+        self.module.add_global(
+            self.table.list_empty_global(),
+            curios_wasm::Global {
+                global_type: curios_wasm::GlobalType {
+                    val_type: curios_wasm::ValType::Ref(curios_wasm::RefType {
+                        is_nullable: false,
+                        heap_type: curios_wasm::HeapType::Concrete(rope.base),
+                    }),
+                    mutability: curios_wasm::Mutability::Const,
+                },
+                expr,
+            },
+        );
+    }
+
     /// Add the rope helpers the emitted code referenced. Helpers whose bodies call other helpers go first: *building* a body references its callees through the table, so the callee used-flags must settle before they are read — deep host-boundary forms, then everything else whose body calls `force` (`norm`, `box`, `eql`, `map`, `slice`, `read`), then `force`/`embed`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
@@ -978,6 +1011,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         self.emit_rope_funcs();
+        self.emit_list_empty();
         self.emit_big_funcs();
         self.emit_flt_funcs();
         // After the rope and big-number helpers, whose bodies refuse too: only now is the set of reached classes complete.

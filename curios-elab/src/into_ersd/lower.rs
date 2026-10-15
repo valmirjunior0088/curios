@@ -309,11 +309,32 @@ impl<'s> Lowering<'s> {
             }
             // A host call: each operand erases against the demand elaboration checked it with, `foreign_operands`' reading of the same row. A diverging call's type operand erases with every other type.
             Subterm::Foreign(function, _, arguments) => {
+                let signature = function.signature();
+                let results = signature.returns.types();
+                // An option crosses as its element's list would, so one the row takes or answers is converted beside the call.
+                let polled = signature
+                    .params
+                    .iter()
+                    .chain(&results)
+                    .any(|wire| wire.admits_null())
+                    .then(|| self.polled(context))
+                    .transpose()?;
+                let mut wires = signature.params.iter();
                 let mut atoms = Vec::with_capacity(arguments.len());
-                for (argument, demand) in arguments.iter().zip(foreign_operands(function)) {
+                let syntax = context.syntax();
+                for (argument, demand) in arguments.iter().zip(foreign_operands(function, &syntax))
+                {
                     match demand {
                         Operand::At(type_) => {
-                            atoms.push(emitted!(self.walk(context, argument, &type_, None)?));
+                            let atom = emitted!(self.walk(context, argument, &type_, None)?);
+                            let wire = wires
+                                .next()
+                                .expect("an operand the row demands is one of its parameters");
+
+                            atoms.push(match (wire.admits_null(), polled) {
+                                (true, Some(polled)) => self.option_crossing(atom, polled),
+                                _ => atom,
+                            });
                         }
                         Operand::IsType => {}
                         Operand::Function { .. } => {
@@ -334,13 +355,18 @@ impl<'s> Lowering<'s> {
                     });
                 }
                 self.thunk(hint.or(Some(described.as_str())), move |lowering| {
-                    Ok(lowering.bind(
+                    let answer = emitted!(lowering.bind(
                         None,
                         curios_ersd::Rhs::Foreign {
                             foreign,
                             operands: atoms,
                         },
-                    ))
+                    ));
+
+                    Ok(Outcome::Emitted(match polled {
+                        Some(polled) => lowering.answered(answer, &results, polled),
+                        None => answer,
+                    }))
                 })
             }
             // Type formers carry nothing to lower; their value is the unit of a retained-but-erased slot.

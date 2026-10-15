@@ -4,7 +4,8 @@ use {
     super::{
         BigHelper, BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
         EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
-        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table, get, set,
+        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table,
+        concrete_val, get, set,
     },
     curios_abi::{ForeignFunction, WireLeaf, WireReference, WireShape, WireType},
     curios_num::Grain,
@@ -850,7 +851,7 @@ impl<'a, 'b> Context<'a, 'b> {
             }
             WireType::Bytes | WireType::Handle => self.table().bytes_force_func(),
             WireType::Bits => self.table().bits_force_func(),
-            WireType::List(inner) => match inner {
+            WireType::List(inner) | WireType::Option(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_force_func(),
                 WireLeaf::Bits => self.table().list_bits_force_func(),
                 leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
@@ -885,7 +886,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ];
             }
-            WireReference::List(inner) => match inner {
+            WireReference::List(inner) | WireReference::Option(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_embed_func(),
                 WireLeaf::Bits => self.table().list_bits_embed_func(),
                 leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
@@ -916,6 +917,22 @@ impl<'a, 'b> Context<'a, 'b> {
         for (operand, wire_type) in operands.iter().zip(&signature.params) {
             output.extend(self.load_value_instrs(operand, wire_type.into()));
             output.extend(self.wire_force_instrs(wire_type));
+
+            // An option rides its list, holding none or one value, and one holding none crosses as null.
+            if wire_type.admits_null() {
+                let val_type = self.table().wire_type(wire_type);
+                let forced = self.push_local("option", val_type.clone());
+
+                output.extend([set(&forced), get(&forced)]);
+                output.extend(null_instrs());
+                output.extend([
+                    get(&forced),
+                    curios_wasm::Instr::ArrayLen,
+                    curios_wasm::Instr::Select {
+                        val_types: vec![val_type],
+                    },
+                ]);
+            }
         }
 
         output.push(curios_wasm::Instr::Call {
@@ -950,7 +967,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     matches!(
                         wire_type,
                         WireType::Nat | WireType::Bool | WireType::Byte | WireType::Int
-                    )
+                    ) || wire_type.admits_null()
                 }) || results
                     .iter()
                     .rev()
@@ -971,6 +988,27 @@ impl<'a, 'b> Context<'a, 'b> {
                     for (wire_type, local) in &waiting {
                         output.push(get(local));
                         match reference(wire_type) {
+                            // `none` crosses as null and enters as the empty list an option rides; `some` crosses as the list of one its element's list would.
+                            Some(reference) if wire_type.admits_null() => {
+                                let mut embedded =
+                                    vec![get(local), curios_wasm::Instr::RefAsNonNull];
+                                embedded.extend(self.wire_embed_instrs(reference));
+
+                                output.extend([
+                                    curios_wasm::Instr::RefIsNull,
+                                    curios_wasm::Instr::If {
+                                        label_name: curios_wasm::LabelName::from("option"),
+                                        block_type: curios_wasm::BlockType::Inline(concrete_val(
+                                            self.table().list_rope_type(),
+                                            false,
+                                        )),
+                                        then_instructions: vec![curios_wasm::Instr::GlobalGet {
+                                            global_name: self.table().list_empty_global(),
+                                        }],
+                                        else_instructions: embedded,
+                                    },
+                                ]);
+                            }
                             Some(reference) => {
                                 output.push(curios_wasm::Instr::RefAsNonNull);
                                 output.extend(self.wire_embed_instrs(reference));
@@ -1099,7 +1137,7 @@ impl From<&WireType> for LoadAs {
             WireType::Flt => LoadAs::Flt,
             WireType::Bytes | WireType::Handle => LoadAs::Bin(Grain::X),
             WireType::Bits => LoadAs::Bin(Grain::B),
-            WireType::List(_) => LoadAs::List,
+            WireType::List(_) | WireType::Option(_) => LoadAs::List,
         }
     }
 }

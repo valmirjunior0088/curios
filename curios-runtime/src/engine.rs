@@ -15,8 +15,8 @@ use {
         thread,
     },
     wasmtime::{
-        AnyRef, Caller, Config, Engine, FuncType, HeapType, Linker, Module, RefType, Rooted, Store,
-        Val, ValType,
+        AnyRef, ArrayType, Caller, Config, Engine, FuncType, HeapType, Linker, Module, RefType,
+        Rooted, Store, Val, ValType,
     },
 };
 
@@ -97,31 +97,22 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
 
 /// [`host_func_type`] over the wire types alone: what an import that takes `params` and answers `results` is typed as.
 fn wire_func_type(engine: &Engine, params: &[WireType], results: &[WireType]) -> FuncType {
-    let bytes_ref = ValType::Ref(RefType::new(
-        false,
-        HeapType::ConcreteArray(i8_array_type(engine)),
-    ));
-    let list_ref = ValType::Ref(RefType::new(
-        false,
-        HeapType::ConcreteArray(anyref_array_type(engine)),
-    ));
-    let longs_ref = ValType::Ref(RefType::new(
-        false,
-        HeapType::ConcreteArray(longs_array_type(engine)),
-    ));
-    let words_ref = ValType::Ref(RefType::new(
-        false,
-        HeapType::ConcreteArray(words_array_type(engine)),
-    ));
+    // An option rides its element's list, and admits null where it holds none.
+    let array_ref = |wire_type: &WireType, array_type: ArrayType| {
+        ValType::Ref(RefType::new(
+            wire_type.admits_null(),
+            HeapType::ConcreteArray(array_type),
+        ))
+    };
     // Raw in both directions: a host hands back a number and the guest boxes it, so nothing here needs to know a layout curios-emit defines.
     let val_type = |wire_type: &WireType| match wire_type.carrier() {
         Carrier::I64 => ValType::I64,
         Carrier::I32 => ValType::I32,
         Carrier::F64 => ValType::F64,
-        Carrier::Bytes => bytes_ref.clone(),
-        Carrier::Longs => longs_ref.clone(),
-        Carrier::Words => words_ref.clone(),
-        Carrier::Elems => list_ref.clone(),
+        Carrier::Bytes => array_ref(wire_type, i8_array_type(engine)),
+        Carrier::Longs => array_ref(wire_type, longs_array_type(engine)),
+        Carrier::Words => array_ref(wire_type, words_array_type(engine)),
+        Carrier::Elems => array_ref(wire_type, anyref_array_type(engine)),
     };
 
     FuncType::new(

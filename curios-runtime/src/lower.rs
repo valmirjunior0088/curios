@@ -1,5 +1,5 @@
 use {
-    super::{Bits, ExitTrap, Handle, Returned, Termination},
+    super::{Bits, Element, ExitTrap, Handle, Returned, Termination},
     curios_abi::{Encoded, HostOp, ReplyShape, WireLeaf, WireReply, WireType, WireValue},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
@@ -426,5 +426,48 @@ impl<R: WireReply> Reply for Replied<R> {
         };
 
         written(values, caller, results)
+    }
+}
+
+/// `List(Handle)`: each handle as its token's bytes, the elements a `List(Bytes)` holds.
+impl Lower for Vec<Handle> {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::List(WireLeaf::Handle)]
+    }
+
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        self.into_iter()
+            .map(|handle| handle.bytes())
+            .collect::<Vec<_>>()
+            .lower(caller, results)
+    }
+}
+
+/// `Option(T)`: null for `none`, which allocates nothing, and for `some` the list of one its element's list would cross as.
+impl<T: Element> Lower for Option<T>
+where
+    Vec<T>: Lower,
+{
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Option(T::LEAF)]
+    }
+
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        match self {
+            None => {
+                results[0] = Val::AnyRef(None);
+
+                Ok(())
+            }
+            Some(value) => vec![value].lower(caller, results),
+        }
     }
 }

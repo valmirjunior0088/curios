@@ -332,7 +332,8 @@ fn wire_carrier(wire: &WireType) -> Option<Repr> {
         | WireType::Bytes
         | WireType::Bits
         | WireType::Handle
-        | WireType::List(_) => None,
+        | WireType::List(_)
+        | WireType::Option(_) => None,
     }
 }
 

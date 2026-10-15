@@ -225,7 +225,7 @@ fn top_foreign_refuses_a_result_as_the_form_it_began() {
         ),
         (
             "foreign m(Nat) -> {a: };",
-            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...))",
+            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, List(...), or Option(...))",
             "                      ^",
         ),
         // A field whose separator is missing is no field standing alone: the brace reports it.
@@ -247,8 +247,13 @@ fn top_foreign_refuses_a_result_as_the_form_it_began() {
         ),
         (
             "foreign m(Nat) -> List();",
-            "expected a List element type (Nat, Int, Bool, Bytes, Bits, or Handle — List does not nest)",
+            "expected a List or Option element type (Nat, Int, Bool, Bytes, Bits, or Handle — neither nests)",
             "                       ^",
+        ),
+        (
+            "foreign m(Nat) -> Option;",
+            "`Option` is written with its element type, as in `Option(Nat)`",
+            "                        ^",
         ),
         (
             "foreign m(Nat) -> /std/Nat;",
@@ -334,16 +339,24 @@ fn top_foreign_names_the_wire_vocabulary_it_refused() {
     for (source, expected) in [
         (
             "foreign f(Str) -> Nat;",
-            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...)), found 'Str'",
+            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, List(...), or Option(...)), found 'Str'",
         ),
         // A result goes through the same parser, so it names the same vocabulary.
         (
             "foreign f() -> Str;",
-            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...)), found 'Str'",
+            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, List(...), or Option(...)), found 'Str'",
         ),
         (
             "foreign f(List(List(Nat))) -> Bool;",
-            "expected a List element type (Nat, Int, Bool, Bytes, Bits, or Handle — List does not nest), found 'List'",
+            "expected a List or Option element type (Nat, Int, Bool, Bytes, Bits, or Handle — neither nests), found 'List'",
+        ),
+        (
+            "foreign f(Option(List(Nat))) -> Bool;",
+            "expected a List or Option element type (Nat, Int, Bool, Bytes, Bits, or Handle — neither nests), found 'List'",
+        ),
+        (
+            "foreign f(List(Option(Nat))) -> Bool;",
+            "expected a List or Option element type (Nat, Int, Bool, Bytes, Bits, or Handle — neither nests), found 'Option'",
         ),
         // A `/` stops `parse_identifier` before either arm is reached, so the qualified spelling is refused by name of its own.
         (
@@ -381,6 +394,31 @@ fn top_foreign_list_of_leaf() {
     );
 }
 
+/// One level of `Option` parses too, over each leaf the wire admits.
+#[test]
+fn top_foreign_option_of_leaf() {
+    assert_eq!(
+        "foreign maybe(Option(Nat), Option(Bytes)) -> Option(Handle);"
+            .parse::<Module>()
+            .unwrap()
+            .items,
+        vec![TopItem::Foreign(TopForeign {
+            doc: None,
+            vis_pub: false,
+            label: "maybe".into(),
+            signature: WireSignature {
+                params: vec![
+                    WireType::Option(WireLeaf::Nat),
+                    WireType::Option(WireLeaf::Bytes)
+                ],
+                returns: WireReturn::Answers(WireResults::single(WireType::Option(
+                    WireLeaf::Handle
+                ))),
+            },
+        })]
+    );
+}
+
 #[test]
 fn top_foreign_rejects_non_wire_type() {
     assert!("foreign frobnicate() -> Str;".parse::<Module>().is_err());
@@ -395,7 +433,7 @@ fn a_list_of_bytes_is_not_a_wire_type() {
         .format();
 
     assert!(
-        refusal.contains("expected a List element type"),
+        refusal.contains("expected a List or Option element type"),
         "{refusal}"
     );
 }
@@ -409,6 +447,7 @@ fn foreign_declaration_round_trips() {
         "foreign frobnicate(List(Bytes), List(Handle)) -> List(Nat);",
         "foreign frobnicate(Bits, Bytes) -> Bits;",
         "foreign frobnicate(List(Bits)) -> List(Bits);",
+        "foreign maybe(Option(Nat), Option(Bits)) -> {found: Bool, value: Option(Handle)};",
         "foreign close(Handle) -> {};",
         "foreign flip(Byte) -> Byte;",
         "foreign exited() -> {ok: Bool, code: Byte};",

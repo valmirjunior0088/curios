@@ -313,7 +313,7 @@ export async function run(config) {
   const truth = (word, fail) =>
     word === 0 || word === 1 ? word === 1 : fail(`a Bool arrived as ${word}`);
 
-  // What a hook is handed for each type a row spells: a `BigInt` for a `Nat` or an `Int`, a boolean for a `Bool`, a number for a `Byte` or an `Flt`, a `Uint8Array` for a `Bytes`, `Bits` or `Handle`, and an array of those for a `List` — each a copy the hook owns.
+  // What a hook is handed for each type a row spells: a `BigInt` for a `Nat` or an `Int`, a boolean for a `Bool`, a number for a `Byte` or an `Flt`, a `Uint8Array` for a `Bytes`, `Bits` or `Handle`, an array of those for a `List`, and for an `Option` its one value or `null` — each a copy the hook owns.
   const lifts = {
     Nat: (value) => BigInt.asUintN(64, value),
     Int: (value) => value,
@@ -337,6 +337,21 @@ export async function run(config) {
     "List(Handle)": (ref) =>
       elements("list", ref, bridge.list_get).map(decodeBytes),
   };
+
+  // An option rides its element's list, holding the one value `some` holds, and crosses as null where it holds none.
+  for (const leaf of ["Nat", "Int", "Bool", "Bytes", "Bits", "Handle"]) {
+    lifts[`Option(${leaf})`] = (ref, fail) => {
+      if (ref === null) {
+        return null;
+      }
+
+      const values = lifts[`List(${leaf})`](ref, fail);
+
+      return values.length === 1
+        ? values[0]
+        : fail(`an Option arrived holding ${values.length} values`);
+    };
+  }
 
   // What a hook must answer for each type a row spells, the same JavaScript type it is handed, and what crosses back for it: the value checked strictly — a value of another JavaScript type is refused rather than converted, since a conversion would hide the disagreement — and every buffer copied in.
   const scalar = {
@@ -385,6 +400,14 @@ export async function run(config) {
   };
 
   const lower = (type, value, what, fail) => {
+    const optional = /^Option\((\w+)\)$/.exec(type)?.[1];
+
+    if (optional !== undefined) {
+      return value === null
+        ? null
+        : lower(`List(${optional})`, [value], what, fail);
+    }
+
     const element = /^List\((\w+)\)$/.exec(type)?.[1];
 
     if (element === undefined) {

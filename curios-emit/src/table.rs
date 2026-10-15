@@ -286,6 +286,7 @@ pub(crate) struct Table<'a> {
     list_force: OnceCell<curios_wasm::FuncName>,
     list_bytes_force: OnceCell<curios_wasm::FuncName>,
     list_bits_force: OnceCell<curios_wasm::FuncName>,
+    list_empty: OnceCell<curios_wasm::GlobalName>,
     bytes_embed: OnceCell<curios_wasm::FuncName>,
     bits_embed: OnceCell<curios_wasm::FuncName>,
     bytes_box: OnceCell<curios_wasm::FuncName>,
@@ -379,6 +380,7 @@ impl<'a> Table<'a> {
             list_force: OnceCell::new(),
             list_bytes_force: OnceCell::new(),
             list_bits_force: OnceCell::new(),
+            list_empty: OnceCell::new(),
             bytes_embed: OnceCell::new(),
             bits_embed: OnceCell::new(),
             bytes_box: OnceCell::new(),
@@ -604,10 +606,10 @@ impl<'a> Table<'a> {
             Carrier::I32 => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
             Carrier::F64 => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
             Carrier::Bytes => concrete_val(self.bytes_type(), false),
-            // A list of scalars is one flat element per value, narrowed and boxed by the guest as a scalar is; a list of references is their flat payloads.
-            Carrier::Longs => concrete_val(self.longs_type(), false),
-            Carrier::Words => concrete_val(self.words_type.clone(), false),
-            Carrier::Elems => concrete_val(self.elems_type(), false),
+            // A list of scalars is one flat element per value, narrowed and boxed by the guest as a scalar is; a list of references is their flat payloads. An option rides its element's list, null where it holds none.
+            Carrier::Longs => concrete_val(self.longs_type(), wire_type.admits_null()),
+            Carrier::Words => concrete_val(self.words_type.clone(), wire_type.admits_null()),
+            Carrier::Elems => concrete_val(self.elems_type(), wire_type.admits_null()),
         }
     }
 
@@ -844,6 +846,17 @@ impl<'a> Table<'a> {
 
     pub(crate) fn list_bytes_force_used(&self) -> bool {
         self.list_bytes_force.get().is_some()
+    }
+
+    /// `$list/empty`, one empty list every host answer of `none` enters the guest as, so an option a host answers empty allocates nothing.
+    pub(crate) fn list_empty_global(&self) -> curios_wasm::GlobalName {
+        self.list_empty
+            .get_or_init(|| curios_wasm::GlobalName::from("list/empty"))
+            .clone()
+    }
+
+    pub(crate) fn list_empty_used(&self) -> bool {
+        self.list_empty.get().is_some()
     }
 
     /// `$list/bits/force (ref $rope/list) -> (ref $elems)`: the bit-grain mirror of [`list_bytes_force_func`](Self::list_bytes_force_func) — each element forced through `$bits/force`, so the host reads a `List(Bits)`'s elements as packed `$bytes` too.

@@ -15,7 +15,7 @@ use std::{
     sync::Arc,
 };
 
-/// The element type of a wire [`WireType::List`] — the same vocabulary minus `List` itself, so a list of lists is unrepresentable rather than merely unchecked; `README.md` states why one level is all the boundary handles.
+/// The element type of a wire [`WireType::List`] or [`WireType::Option`] — the same vocabulary minus `List` and `Option` themselves, so a list of lists, an option of a list or a list of options is unrepresentable rather than merely unchecked; `README.md` states why one level is all the boundary handles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum WireLeaf {
@@ -42,6 +42,7 @@ pub enum WireType {
     Bits,
     Handle,
     List(WireLeaf),
+    Option(WireLeaf),
 }
 
 // A leaf is a wire type in its own right — the widening every projection over `List` takes to read its element, stated here once instead of in each of them.
@@ -79,6 +80,7 @@ pub enum WireReference {
     Bits,
     Handle,
     List(WireLeaf),
+    Option(WireLeaf),
 }
 
 /// A wire type by how it crosses: the two halves of [`WireType`], which every consumer that lowers or lifts a value tells apart.
@@ -90,7 +92,7 @@ pub enum WireShape {
 
 /// What a wire type crosses the boundary as at the Wasm level, in either direction: the one statement the emitter types an import by and a runtime answers it by, so the two ends have no mapping of their own to keep alike.
 ///
-/// A scalar is the number it is. A reference is a flat payload, an array the guest forces a value to on the way out and embeds back on the way in: bytes for the two packed grains and for a handle's token, and for a list one element a value, a scalar as a lone one crosses and a reference as its own payload.
+/// A scalar is the number it is. A reference is a flat payload, an array the guest forces a value to on the way out and embeds back on the way in: bytes for the two packed grains and for a handle's token, and for a list one element a value, a scalar as a lone one crosses and a reference as its own payload. An option crosses as its element's list would, holding the one value `some` holds, and `none` as null ([`WireType::admits_null`]): so `none` costs nothing to cross, and `some` crosses by every path a list already does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Carrier {
     /// A raw `i64`: a `Nat` or an `Int`.
@@ -117,10 +119,17 @@ impl WireType {
             WireType::Bool | WireType::Byte => Carrier::I32,
             WireType::Flt => Carrier::F64,
             WireType::Bytes | WireType::Bits | WireType::Handle => Carrier::Bytes,
-            WireType::List(WireLeaf::Nat | WireLeaf::Int) => Carrier::Longs,
-            WireType::List(WireLeaf::Bool) => Carrier::Words,
-            WireType::List(WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle) => Carrier::Elems,
+            WireType::List(leaf) | WireType::Option(leaf) => match leaf {
+                WireLeaf::Nat | WireLeaf::Int => Carrier::Longs,
+                WireLeaf::Bool => Carrier::Words,
+                WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle => Carrier::Elems,
+            },
         }
+    }
+
+    /// Whether this type's carrier admits null, which is how an option's `none` crosses; every other reference is a payload, never absent.
+    pub fn admits_null(self) -> bool {
+        matches!(self, WireType::Option(_))
     }
 
     /// How this type crosses the boundary.
@@ -135,11 +144,12 @@ impl WireType {
             WireType::Bits => WireShape::Reference(WireReference::Bits),
             WireType::Handle => WireShape::Reference(WireReference::Handle),
             WireType::List(leaf) => WireShape::Reference(WireReference::List(leaf)),
+            WireType::Option(leaf) => WireShape::Reference(WireReference::Option(leaf)),
         }
     }
 }
 
-/// A wire type as a `foreign` declaration spells it — `Nat`, `List(Bool)` — the one spelling the printer and every description of a row handed to an embedder read.
+/// A wire type as a `foreign` declaration spells it — `Nat`, `List(Bool)`, `Option(Handle)` — the one spelling the printer and every description of a row handed to an embedder read.
 impl Display for WireType {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -152,6 +162,7 @@ impl Display for WireType {
             WireType::Bits => formatter.write_str("Bits"),
             WireType::Handle => formatter.write_str("Handle"),
             WireType::List(leaf) => write!(formatter, "List({})", WireType::from(*leaf)),
+            WireType::Option(leaf) => write!(formatter, "Option({})", WireType::from(*leaf)),
         }
     }
 }
@@ -175,6 +186,7 @@ impl From<WireReference> for WireType {
             WireReference::Bits => WireType::Bits,
             WireReference::Handle => WireType::Handle,
             WireReference::List(leaf) => WireType::List(leaf),
+            WireReference::Option(leaf) => WireType::Option(leaf),
         }
     }
 }

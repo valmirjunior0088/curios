@@ -166,8 +166,10 @@ impl Lowering<'_> {
                 }
             }
             Subterm::Foreign(function, _, arguments) => {
-                let signature =
-                    foreign_signature(function, arguments, |label| context.fresh(Some(label)));
+                let syntax = context.syntax();
+                let signature = foreign_signature(function, arguments, &syntax, |label| {
+                    context.fresh(Some(label))
+                });
                 let Produced::Fixed(type_) = signature.produced else {
                     unreachable!("a foreign call produces a fixed `Io` type");
                 };

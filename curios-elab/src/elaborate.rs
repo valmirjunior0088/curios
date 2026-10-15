@@ -152,7 +152,8 @@ fn elaborate_subterm(
         ),
         // A host call, elaborated through the same walk an intrinsic is: each operand against what `foreign_operands` demands of it, and the result — unit, a bare value, or a named record, inside `Io` — read off the same row. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
         Subterm::Foreign(function, declared, args) => {
-            let demands = foreign_operands(function);
+            let syntax = context.syntax();
+            let demands = foreign_operands(function, &syntax);
 
             assert_eq!(
                 args.len(),
@@ -170,7 +171,9 @@ fn elaborate_subterm(
             })?;
 
             // Read off the elaborated operands, so a diverging call yields the type its own operand was elaborated to.
-            let type_ = foreign_produced(function, &elaborated, |label| context.fresh(Some(label)));
+            let type_ = foreign_produced(function, &elaborated, &syntax, |label| {
+                context.fresh(Some(label))
+            });
 
             (
                 Term::foreign(Arc::clone(function), *declared, elaborated),

@@ -12,14 +12,14 @@ use {
 /// What a cell's poll answers: `/std/Option`'s family, with `some` where the cell is filled and `none` where it is not.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Polled {
-    family: curios_ersd::FamilyId,
-    some: curios_ersd::ConstructorId,
-    none: curios_ersd::ConstructorId,
+    pub(super) family: curios_ersd::FamilyId,
+    pub(super) some: curios_ersd::ConstructorId,
+    pub(super) none: curios_ersd::ConstructorId,
 }
 
 impl Lowering<'_> {
     /// Bind `rhs` in the innermost open block and hand back its value.
-    fn let_atom(&mut self, rhs: curios_ersd::Rhs) -> curios_ersd::Atom {
+    pub(super) fn let_atom(&mut self, rhs: curios_ersd::Rhs) -> curios_ersd::Atom {
         curios_ersd::Atom::Value(self.builder.let_value(None, rhs))
     }
 
@@ -48,7 +48,10 @@ impl Lowering<'_> {
     }
 
     /// A block of its own, returning what `body` computes in it.
-    fn block(&mut self, body: impl FnOnce(&mut Self) -> curios_ersd::Atom) -> curios_ersd::BlockId {
+    pub(super) fn block(
+        &mut self,
+        body: impl FnOnce(&mut Self) -> curios_ersd::Atom,
+    ) -> curios_ersd::BlockId {
         self.builder.open_block();
         let answer = body(self);
         self.builder

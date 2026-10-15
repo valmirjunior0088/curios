@@ -563,6 +563,49 @@ fn a_list_of_scalars_crosses_flat_in_both_directions() {
     assert_eq!(code, 7, "every list came back as the host answered it");
 }
 
+/// An option crosses both ways, over a scalar and over a reference, as a lone result and as a record's field: `none` as nothing, and `some` as the one value it holds.
+#[test]
+fn an_option_crosses_both_ways() {
+    let source = r#"
+        use /std/{Bool, Bytes, Option, Str, Io};
+        foreign succ(Option(Nat)) -> Option(Nat);
+        foreign shout(Option(Bytes)) -> {seen: Bool, text: Option(Bytes)};
+        let a = succ(Option/some(41))!;
+        let b = succ(Option/none())!;
+        let c = shout(Option/some(Str/to_bytes("hi")))!;
+        let d = shout(Option/none())!;
+        let matched = Option/unwrap_or(a, 0) == 42
+            && Option/is_none(b)
+            && c.seen
+            && Option/unwrap_or(c.text, x[]) == Str/to_bytes("HI")
+            && d.seen == false
+            && Option/is_none(d.text);
+        let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
+        /std/Io/pure(())
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &source,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let mut bindings = ForeignBindings::empty();
+    bindings.define("/succ", |n: Option<u64>| n.map(|n| n + 1));
+    bindings.define("/shout", |text: Option<Vec<u8>>| {
+        (text.is_some(), text.map(|text| text.to_ascii_uppercase()))
+    });
+
+    let (system, _io) = MockHost::builder().build();
+    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+
+    assert_eq!(code, 7, "every option came back as the host answered it");
+}
+
 /// An element past the wire stops the program, as a lone argument does: the guest narrows each one before the call, so the host never sees a number it would have to read as something else.
 #[test]
 fn a_list_element_past_the_wire_is_refused() {

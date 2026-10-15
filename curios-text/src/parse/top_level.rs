@@ -126,15 +126,17 @@ pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<
 }
 
 /// The words a wire type is one of, which the refusal of anything else names.
-const WIRE_TYPE_EXPECTED: &str =
-    "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...))";
+const WIRE_TYPE_EXPECTED: &str = "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, List(...), or Option(...))";
 
-/// The words a `List`'s element is one of.
-const WIRE_LEAF_EXPECTED: &str =
-    "expected a List element type (Nat, Int, Bool, Bytes, Bits, or Handle — List does not nest)";
+/// The words a `List`'s or an `Option`'s element is one of.
+const WIRE_LEAF_EXPECTED: &str = "expected a List or Option element type (Nat, Int, Bool, Bytes, Bits, or Handle — neither nests)";
 
 /// What refuses `List` written with no element.
 const LIST_STATES_ITS_ELEMENT: &str = "`List` is written with its element type, as in `List(Nat)`";
+
+/// What refuses `Option` written with no element.
+const OPTION_STATES_ITS_ELEMENT: &str =
+    "`Option` is written with its element type, as in `Option(Nat)`";
 
 /// What refuses a result that no form of one begins.
 const WIRE_RESULT_EXPECTED: &str = "expected a wire result: a wire type, a braced list of labelled wire types, `{}` for none, or `Never`";
@@ -143,7 +145,7 @@ const WIRE_RESULT_EXPECTED: &str = "expected a wire result: a wire type, a brace
 const WIRE_RESULT_IS_A_TYPE: &str =
     "`()` is the unit value, and a result is a type: a row that answers nothing is written `-> {}`";
 
-// An `List` element type — the wire grammar minus `List` itself. Splitting it out of `parse_wire_type` is what makes `List(List(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
+// A `List` or `Option` element type — the wire grammar minus `List` and `Option` themselves. Splitting it out of `parse_wire_type` is what makes `List(List(T))` and `Option(List(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
 fn parse_wire_leaf<'a>(state: ParserState<'a>) -> Parsed<'a, WireLeaf> {
     refuse_qualified_wire_name
         .and_keep(mark().and(parse_identifier.map_err(WIRE_LEAF_EXPECTED)))
@@ -169,7 +171,7 @@ fn refuse_qualified_wire_name<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     commit(not_ahead("/").map_err("a wire type is written bare: `Nat` rather than `/std/Nat`, since the wire grammar is its own closed vocabulary and resolves no names")).parse(state)
 }
 
-// One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Byte`/`Flt`/`Bytes`/`Bits`/`Handle` are literal keywords here, and `List(T)` takes a leaf.
+// One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Byte`/`Flt`/`Bytes`/`Bits`/`Handle` are literal keywords here, and `List(T)` and `Option(T)` take a leaf.
 pub(super) fn parse_wire_type<'a>(state: ParserState<'a>) -> Parsed<'a, WireType> {
     refuse_qualified_wire_name
         .and_keep(mark().and(parse_identifier.map_err(WIRE_TYPE_EXPECTED)))
@@ -190,6 +192,14 @@ pub(super) fn parse_wire_type<'a>(state: ParserState<'a>) -> Parsed<'a, WireType
                     .and_drop(parse_literal(")")),
             )
             .map(WireType::List)
+            .boxed(),
+            "Option" => commit(
+                parse_literal("(")
+                    .map_err(OPTION_STATES_ITS_ELEMENT)
+                    .and_keep(parse_wire_leaf)
+                    .and_drop(parse_literal(")")),
+            )
+            .map(WireType::Option)
             .boxed(),
             // As in [`parse_wire_leaf`]: a word here is a wire type or nothing. `parse_identifier` failing on a non-identifier is what keeps the empty parameter list `() -> T` working — the arm is never reached at the `)`.
             other => commit(fail_from(

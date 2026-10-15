@@ -234,9 +234,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         declared: curios_core::Global,
     ) -> (curios_core::Term, curios_core::Term) {
         let (telescope, operands) = self.foreign_telescope(function);
-        let produced = curios_core::foreign_produced(function, &operands, |label| {
-            self.mint([label.to_string()]).remove(0).1
-        });
+        let produced =
+            curios_core::foreign_produced(function, &operands, &self.context.syntax(), |label| {
+                self.mint([label.to_string()]).remove(0).1
+            });
         let type_ = curios_core::Term::func_type_marked(telescope, produced);
 
         let (telescope, operands) = self.foreign_telescope(function);
@@ -268,7 +269,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 (
                     Plicity::Explicit,
                     hintless(),
-                    curios_core::wire_term(wire_type),
+                    curios_core::wire_term(wire_type, &self.context.syntax()),
                 )
             }))
             .collect::<Vec<_>>();

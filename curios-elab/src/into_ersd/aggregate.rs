@@ -210,7 +210,7 @@ impl Lowering<'_> {
     }
 
     /// The interned anonymous product schema of the given relevant width.
-    fn tuple_schema(&mut self, width: usize) -> curios_ersd::ProductId {
+    pub(super) fn tuple_schema(&mut self, width: usize) -> curios_ersd::ProductId {
         if let Some(schema) = self.environment.tuple_schema(width) {
             return schema;
         }

@@ -342,3 +342,57 @@ impl Lift for Vec<Handle> {
             .collect())
     }
 }
+
+/// A value a wire list or option holds, by the leaf it crosses as: what lets an option cross as the list of one its element's list would.
+pub trait Element: Sized {
+    const LEAF: WireLeaf;
+}
+
+impl Element for u64 {
+    const LEAF: WireLeaf = WireLeaf::Nat;
+}
+
+impl Element for i64 {
+    const LEAF: WireLeaf = WireLeaf::Int;
+}
+
+impl Element for bool {
+    const LEAF: WireLeaf = WireLeaf::Bool;
+}
+
+impl Element for Vec<u8> {
+    const LEAF: WireLeaf = WireLeaf::Bytes;
+}
+
+impl Element for Bits {
+    const LEAF: WireLeaf = WireLeaf::Bits;
+}
+
+impl Element for Handle {
+    const LEAF: WireLeaf = WireLeaf::Handle;
+}
+
+/// `Option(T)`: null for `none`, and for `some` the list of one its element's list would cross as, lifted as that list. A list of any other length is refused, since no guest builds one.
+impl<T: Element> Lift for Option<T>
+where
+    Vec<T>: Lift,
+{
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Option(T::LEAF)]
+    }
+
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        if let Val::AnyRef(None) = params[0] {
+            return Ok(None);
+        }
+
+        let mut values = Vec::<T>::lift(caller, params)?;
+
+        match values.len() {
+            1 => Ok(values.pop()),
+            length => Err(wasmtime::Error::msg(format!(
+                "an option holds one value where it holds any, and this one holds {length}"
+            ))),
+        }
+    }
+}
