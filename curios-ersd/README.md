@@ -6,7 +6,7 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 
 ### The Ersd optimizer is thin
 
-**Decision.** The Ersd optimizer runs exactly the transformations whose leverage is semantic — pruning, compile-time partial evaluation of closed terms and literal spines, and the monoid worker/wrapper rebase — and nothing else. Folding, dead code, inlining, contification and specialization belong to `curios-cont`, after the lowering.
+**Decision.** The Ersd optimizer runs exactly the transformations whose leverage is semantic — pruning, compile-time partial evaluation of closed terms and literal spines, reconstruction recovery, and the monoid worker/wrapper rebase — and nothing else. Folding, dead code, inlining, contification and specialization belong to `curios-cont`, after the lowering.
 
 **Rationale.** Ersd's leverage is what it still knows: hand Cont no work it can delete, run what compile time has decided, and re-base what would exhaust the runtime stack. A second local-rewrite engine would restate Cont's reductions over a second representation, and the two would drift.
 
@@ -21,3 +21,11 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 **Decision.** The erased carriers are Core's, unbounded — `Nat` and `Int` as `curios-num`'s `Natural` and `Integer`, `Flt` as binary64 — with the carrier methods every stage's constant folder shares. The runtime's split between an i31 and a boxed magnitude appears nowhere in the IR; it is `curios-cont`'s and `curios-emit`'s ([Nat and Int are an i31 until they outgrow it](../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)).
 
 **Rationale.** One shared semantics keeps the folders from drifting from each other or from emitted code, and keeping the runtime's representation out of the IR keeps a representation choice from becoming a semantic one.
+
+### Reconstruction recovers the existing value
+
+**Decision.** The erased optimizer removes complete, ordered product reconstruction and exhaustive constructor identity before layout selection. Constructor wrappers are recognized by their bodies, including acyclic forwarding, and removing a match proves every arm contains only safe administrative work. Substitution and removal of the bindings it strands are one transformation, so an immediately returned call reaches the existing tail-call lowering.
+
+**Rationale.** Erasure can leave runtime reconstruction around an answer whose source only restates evidence. Schema and constructor identities make equality explicit here, before layout encoding obscures it. Computed recursive members are forcing boundaries; effects, traps and unknown calls retain their order.
+
+**Rejected.** A second general simplifier in Ersd, constructor recognition by prelude names, and treating an arm's return value alone as proof that its evaluation can be deleted.

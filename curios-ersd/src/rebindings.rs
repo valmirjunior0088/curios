@@ -19,6 +19,16 @@ pub(crate) struct Rebindings {
 }
 
 impl Rebindings {
+    /// An alias's original operand, keeping projection provenance for reconstruction.
+    pub(crate) fn alias(&self, value: ValueId) -> Option<Atom> {
+        self.aliases.get(&value).copied()
+    }
+
+    /// Whether reading this atom forces a computed recursive member.
+    pub(crate) fn is_computed(&self, atom: Atom) -> bool {
+        matches!(atom, Atom::Value(value) if self.computed.contains(&value))
+    }
+
     pub(crate) fn analyze(module: &Module) -> Self {
         let mut bindings = Self::default();
         for statement in module.statements().iter().flatten() {
