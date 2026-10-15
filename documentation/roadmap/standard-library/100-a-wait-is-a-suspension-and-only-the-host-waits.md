@@ -43,7 +43,7 @@ Each settled on 2026-10-14.
 
 - **Nothing blocks: a wait is a suspension.** A forced `Io` description answers its value, or a suspension: the handles and the cells it waits on, the description that cancels it, and the rest of it. Whoever advances a description decides what a suspension means — the host waits on its handles, a combinator runs something else — so a lifted action is atomic only between its suspensions, and the lift stays.
 - **Only the host waits.** No host row sleeps. The host runs a program by advancing it, waiting between suspensions on the handles each names, and nothing in a program waits on its thread.
-- **Core states two operations, `Io/suspend` and `Io/advance`, over types it already has.** `Io` keeps no eliminator: `advance` answers an `Io`.
+- **Core states two operations, `Io/suspend` and `Io/advance`, over types it already has, and `/std` alone names them.** `Io` keeps no eliminator: `advance` answers an `Io`. A program waits through `/std`'s waits, brackets and combinators, which keep what the pair asks of whoever advances: a rest performed once, and a dropped rest's cancel performed. `/std` reaches the pair by its full `/sys` name, and `Io` re-exports only `pure` and `bind`.
 - **A suspension waits on handles the host can see and on cells the program fills.** A deadline is a timer's handle, a stream's readiness a watch's, an answer a pending handle. A condition on the program's own state — a future fulfilled, a channel holding an item or room — is a `Cell({})` the change fills, so whoever advances a suspension advances it again only once something it waits on has moved. The host never reads a cell: nothing of the program runs while it waits.
 - **Cancellation is structural.** A combinator that no longer needs a suspended branch performs the branch's cancel and drops its rest; a bracket's release rides each suspension that leaves it and learns whether its body finished or was cancelled. No code is resumed with a cancellation, so a wait cannot fail by one.
 - **Concurrency is structured combinators in `Io`**, in `/std/Io`, where `/std/Async`'s futures, channels, signals and offers move too: `both`, `all`, `first`, `race`, `timeout` and `scope`. A scope answers with its body, and the children still running when the body answers are cancelled where they wait — a description's answer is all it yields, so no child outlives the scope that runs it; `join` waits for one child and `join_all` for every one. The `Async` type retires.
@@ -72,7 +72,7 @@ Each settled on 2026-10-14.
 - **A turn that yields while work remains**, the callback ABI's YIELD, so a long computation hands the browser back its page.
 - **A WASI 0.3 target**: a suspension maps onto the callback ABI's WAIT, and a row answered later onto an `async` import.
 - **Reusable watches**, one handle a stream's interest instead of one a wait.
-- **WebAssembly stack switching** is not planned: the rest of a suspension is a value.
+- **WebAssembly stack switching**, once it is standard and every target has it: the pair is the seam, private to `/std`, so a suspension could become a captured continuation, and its cancel an unwinding of it, without any program changing.
 
 ## Stages
 

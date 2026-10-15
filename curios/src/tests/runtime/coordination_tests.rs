@@ -83,3 +83,17 @@ fn the_driver_of_branches_is_private() {
         .expect_err("a program cannot reach the driver");
     assert!(error.contains("private"), "{error}");
 }
+
+// The pair a description suspends and is advanced by is `/sys`'s, which `/std` names and `Io` does not re-export: a program waits through the waits, the brackets and the combinators, which perform a rest once and a dropped rest's cancel.
+#[test]
+fn a_program_names_neither_suspend_nor_advance() {
+    for name in [
+        "/std/Io/suspend",
+        "/std/Io/advance",
+        "/sys/Io/suspend",
+        "/sys/Io/advance",
+    ] {
+        typecheck(&format!("let d = {name}; /std/Io/pure(())"))
+            .expect_err("a program cannot name the pair");
+    }
+}

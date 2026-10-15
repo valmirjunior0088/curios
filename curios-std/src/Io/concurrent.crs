@@ -10,7 +10,7 @@ end
 
 -- `b` advanced until it ends or suspends: nothing where it ended, or the branch it suspended as.
 let step(b: Io({})) -> Io(Option(Branch)) =
-    Io/advance(
+    /sys/Io/advance(
         b,
         (_) => Io/pure(Option/none()),
         (on, filled, cancel, rest) =>
@@ -115,8 +115,8 @@ let drive(held: List(Branch), intake: Io(List(Branch)), settled: Io(Bool)) -> Io
                     match moved
                     | true =>
                         let cell = Io/ready()!;
-                        Io/suspend([], [cell], cancel_all(next), rest)
-                    | false => Io/suspend(handles(next), cells(next), cancel_all(next), rest)
+                        /sys/Io/suspend([], [cell], cancel_all(next), rest)
+                    | false => /sys/Io/suspend(handles(next), cells(next), cancel_all(next), rest)
                     end
                 end
             end

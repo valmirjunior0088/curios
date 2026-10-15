@@ -1,5 +1,5 @@
 pub use /sys/{Io};
-pub use /sys/Io/{pure, bind, suspend, advance};
+pub use /sys/Io/{pure, bind};
 use /std/{Monad, Bytes, Nat, List, Option, Result, Cell, Handle, Program};
 use /std/Bool/{Holds};
 use /std/time/{Duration, Instant};
@@ -49,16 +49,16 @@ satisfy Program(Io({})) {
 
 --- Until a handle of `on` is ready: a suspension that cancels nothing and goes on with nothing. On no handle, only what advances it can end it: at the top of a program, a deadlock the host reports.
 pub let wait(on: List(Handle)) -> Io({}) =
-    suspend(on, [], pure(()), pure(()));
+    /sys/Io/suspend(on, [], pure(()), pure(()));
 
 --- Until a cell of `cells` is filled: a suspension that cancels nothing and goes on with nothing. Only the program fills a cell, so what waits on cells alone at the top of a program is a deadlock the host reports.
 pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
-    suspend([], cells, pure(()), pure(()));
+    /sys/Io/suspend([], cells, pure(()), pure(()));
 
 --- Until the handle `mint` makes is ready, the handle closed whether the wait ends or is cancelled: every wait on a handle made for it alone, a timer or a watch, is this one.
 pub let wait_minted(mint: Io(Handle)) -> Io({}) =
     let h = mint!;
-    suspend([h], [], Handle/close(h), Handle/close(h));
+    /sys/Io/suspend([h], [], Handle/close(h), Handle/close(h));
 
 --- Until `d` has passed, on a timer of its own.
 pub let sleep(d: Duration) -> Io({}) =
@@ -86,11 +86,11 @@ end
 
 --- `body`, and then `release` told how it ended: `finished` where it ran to its end, and `cancelled` where whatever advances it drops it while it waits, which `release` hears as the cancel of every suspension the body passes out.
 pub let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
-    advance(
+    /sys/Io/advance(
         body,
         (a) => bind(release(Ended/finished()), (_) => pure(a)),
         (on, filled, cancel, rest) =>
-            suspend(
+            /sys/Io/suspend(
                 on,
                 filled,
                 bind(cancel, (_) => release(Ended/cancelled())),
@@ -233,7 +233,7 @@ pub let select(@A: Type, offers: List(Offer(A))) -> Io({Nat, A}) =
     | none() =>
         let ws = waits(offers)!;
         let release = released(ws);
-        suspend(
+        /sys/Io/suspend(
             List/flatten(List/map(ws, (w: Offer/Waiting) => w.on)),
             List/flatten(List/map(ws, (w: Offer/Waiting) => w.filled)),
             release,

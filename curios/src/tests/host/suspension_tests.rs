@@ -1,4 +1,4 @@
-//! A program that suspends: the host's turn loop advancing it — through a timer, through a cell already filled, through the binds a suspension passes out of, through `Io/advance`, through an abandon that suspends in turn, through a FIFO a branch waits on — and what it reports of one suspended on nothing it can wait for.
+//! A program that suspends: the host's turn loop advancing it — through a timer, through a cell already filled, through the binds a suspension passes out of, through a cancel that suspends in turn, through a FIFO a branch waits on — and what it reports of one suspended on nothing it can wait for.
 
 use {
     crate::run_wasm,
@@ -35,11 +35,9 @@ fn ended(source: &str) -> (u8, Vec<u8>, Vec<u8>) {
 fn a_program_suspended_on_a_timer_wakes_into_its_rest() {
     let (code, output, _) = ended(
         r#"
-        use /std/{Io, Handle, Nat};
-        use /std/time/{Instant, Duration};
-        let start = Instant/now()!;
-        let timer = Instant/timer(Instant/add(start, Duration/of_millis(50)))!;
-        let woke = Io/suspend([timer], [], Handle/close(timer), Io/pure(7))!;
+        use /std/{Io, Nat};
+        use /std/time/{Duration};
+        let woke = Io/bind(Io/sleep(Duration/of_millis(50)), (_) => Io/pure(7))!;
         /std/print(Nat/to_str(woke))
         "#,
     );
@@ -54,7 +52,7 @@ fn a_suspension_passed_out_through_binds_resumes_into_their_continuations_in_ord
         use /std/{Io, Nat};
         use /std/time/{Instant};
         let due = Instant/timer(Instant/now()!)!;
-        let suspended = Io/suspend([due], [], Io/pure(()), Io/pure(1));
+        let suspended = Io/bind(Io/wait([due]), (_) => Io/pure(1));
         let x = Io/bind(Io/bind(suspended, (a) => Io/pure(a + 1)), (b) => Io/pure(b * 10))!;
         /std/print(Nat/to_str(x))
         "#,
@@ -63,37 +61,25 @@ fn a_suspension_passed_out_through_binds_resumes_into_their_continuations_in_ord
     assert_eq!((code, output.as_slice()), (0, b"20".as_slice()));
 }
 
-#[test]
-fn advance_hands_a_suspension_to_its_handler_and_a_value_to_its_continuation() {
-    let (code, output, _) = ended(
-        r#"
-        use /std/{Io, Nat, Str};
-        use /std/time/{Instant};
-        let due = Instant/timer(Instant/now()!)!;
-        let suspended = Io/suspend([due], [], Io/pure(()), Io/pure(7));
-        let caught = Io/advance(suspended, (n) => Io/pure(n + 1), (_, _, _, rest) => Io/bind(rest, (n) => Io/pure(n + 100)))!;
-        let passed = Io/advance(Io/pure(3), (n) => Io/pure(n + 1), (_, _, _, rest) => rest)!;
-        /std/print(Str/flatten([Nat/to_str(caught), " ", Nat/to_str(passed)]))
-        "#,
-    );
-
-    assert_eq!((code, output.as_slice()), (0, b"107 4".as_slice()));
-}
-
 // The host reads no cell, so the entry goes on itself into the rest of a suspension whose cell is already filled.
 #[test]
 fn a_program_suspended_on_a_filled_cell_goes_on_into_its_rest() {
     let (code, output, _) = ended(
         r#"
         use /std/{Io, Cell};
+        let told(ended: Io/Ended) -> Io({}) =
+            /std/print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
         let cell = Cell/new()!;
         let _ = Cell/fill(cell, ())!;
-        let _ = Io/suspend([], [cell], /std/print("abandoned|"), /std/print("resumed|"))!;
+        let _ = Io/using(told, Io/bind(Io/wait_filled([cell]), (_) => /std/print("resumed|")))!;
         /std/print("after|")
         "#,
     );
 
-    assert_eq!((code, output.as_slice()), (0, b"resumed|after|".as_slice()));
+    assert_eq!(
+        (code, output.as_slice()),
+        (0, b"resumed|finished|after|".as_slice())
+    );
 }
 
 // Only the program fills a cell, and nothing of it runs while the host waits, so a cell still empty at the top is no more a wait than no handle is.
@@ -102,8 +88,10 @@ fn a_program_suspended_on_an_empty_cell_alone_ends_reporting_the_deadlock() {
     let (code, output, _) = ended(
         r#"
         use /std/{Io, Cell};
+        let told(ended: Io/Ended) -> Io({}) =
+            /std/print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
         let cell = Cell/new()!;
-        let _ = Io/suspend([], [cell], /std/print("abandoned|"), /std/print("resumed|"))!;
+        let _ = Io/using(told, Io/bind(Io/wait_filled([cell]), (_) => /std/print("resumed|")))!;
         /std/print("after|")
         "#,
     );
@@ -111,20 +99,20 @@ fn a_program_suspended_on_an_empty_cell_alone_ends_reporting_the_deadlock() {
     assert_eq!(code, 1);
     assert_eq!(
         output,
-        [b"abandoned|".as_slice(), curios_abi::DEADLOCK.as_bytes()].concat()
+        [b"cancelled|".as_slice(), curios_abi::DEADLOCK.as_bytes()].concat()
     );
 }
 
-// The host advances an abandon as it does a rest, so what the abandon answers is surfaced the same way: one that suspends inside a bind keeps the bind's continuation.
+// The host advances a cancel as it does a rest, so what the cancel answers is surfaced the same way: a release that suspends inside a bind keeps the bind's continuation.
 #[test]
-fn an_abandon_that_suspends_part_way_runs_to_its_end() {
+fn a_cancel_that_suspends_part_way_runs_to_its_end() {
     let (code, output, _) = ended(
         r#"
         use /std/{Io};
         use /std/time/{Instant};
         let due = Instant/timer(Instant/now()!)!;
-        let abandon = Io/bind(Io/wait([due]), (_) => /std/print("abandoned|"));
-        let _ = Io/suspend([], [], abandon, /std/print("resumed|"))!;
+        let release(_: Io/Ended) -> Io({}) = Io/bind(Io/wait([due]), (_) => /std/print("abandoned|"));
+        let _ = Io/using(release, Io/bind(Io/wait([]), (_) => /std/print("resumed|")))!;
         /std/print("after|")
         "#,
     );
@@ -141,7 +129,7 @@ fn a_program_suspended_on_no_handle_runs_its_cancel_and_ends_reporting_the_deadl
     let (code, output, errors) = ended(
         r#"
         use /std/{Io};
-        let _ = Io/suspend([], [], /std/print("abandoned|"), /std/print("resumed|"))!;
+        let _ = Io/using((_) => /std/print("abandoned|"), Io/bind(Io/wait([]), (_) => /std/print("resumed|")))!;
         /std/print("after|")
         "#,
     );
@@ -163,12 +151,11 @@ fn the_real_host_sleeps_a_suspension_on_a_timer_until_its_instant() {
     let path = report.to_str().expect("a UTF-8 temporary path");
     let source = format!(
         r#"
-        use /std/{{Io, Handle, Str, Path, File, Try}};
+        use /std/{{Io, Str, Path, File, Try}};
         use /std/time/{{Instant, Duration}};
         let main: Try(Io, Io/Error, {{}}) =
             let start = Instant/now()!;
-            let timer = Instant/timer(Instant/add(start, Duration/of_millis(30)))!;
-            let _ = Io/suspend([timer], [], Handle/close(timer), Handle/close(timer))!;
+            let _ = Io/sleep(Duration/of_millis(30))!;
             let slept = Duration/to_millis(Instant/diff(Instant/now()!, start));
             File/write_all(Path/of_str("{path}"), Str/to_bytes(match slept >= 30 | true => "slept" | false => "early" end));
         main
@@ -251,7 +238,7 @@ fn what_a_suspension_holds_survives_the_collections_between_its_turns() {
             | 0 => Io/pure(List/len(held))
             | m + 1 =>
                 let garbage = List/range(0, 2000);
-                let _ = Io/suspend([due], [], Io/pure(()), Io/pure(List/len(garbage)))!;
+                let _ = Io/bind(Io/wait([due]), (_) => Io/pure(List/len(garbage)))!;
                 turn(due, m, [n, ..held])
             end;
         let due = Instant/timer(Instant/now()!)!;
