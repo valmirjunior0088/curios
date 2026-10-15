@@ -2,25 +2,37 @@
 
 use {
     crate::run_wasm,
+    curios_abi::ForeignStore,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_runtime::{ForeignBindings, HostOps, MockHost, OsHost},
     curios_text::{Entrypoint, RootSource},
 };
 
-/// The status a program ended with under `host`.
-fn status<H: HostOps + Send + Sync + 'static>(source: &str, host: H) -> u8 {
+/// A program compiled, ready to run.
+fn compiled(source: &str) -> (curios_wasm::Module, ForeignStore) {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
-    let (module, foreigns) = compile_with_prelude(
+    compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},
     )
-    .expect("compile succeeded");
+    .expect("compile succeeded")
+}
 
+/// The status a compiled program ended with under `host`.
+fn ran<H: HostOps + Send + Sync + 'static>(
+    (module, foreigns): (curios_wasm::Module, ForeignStore),
+    host: H,
+) -> u8 {
     run_wasm(&module, foreigns, host, ForeignBindings::empty()).expect("execution succeeded")
+}
+
+/// The status a program ended with under `host`.
+fn status<H: HostOps + Send + Sync + 'static>(source: &str, host: H) -> u8 {
+    ran(compiled(source), host)
 }
 
 /// What a program came to under a scripted host: the status it ended with, everything it wrote, and the standard error half of that.
@@ -181,6 +193,25 @@ fn the_real_host_runs_a_branch_while_another_waits_on_a_fifo() {
         .expect("mkfifo runs");
     assert!(made.success(), "mkfifo made the FIFO");
 
+    let spelled =
+        |path: &std::path::Path| path.to_str().expect("a UTF-8 temporary path").to_string();
+    let source = format!(
+        r#"
+        use /std/{{Io, Str, Path, File, Try}};
+        let main: Try(Io, Io/Error, {{}}) =
+            let (read, marked) = Io/both(Try/run(File/read_all(Path/of_str("{}"))), Try/run(File/write_all(Path/of_str("{}"), Str/to_bytes("ran"))))!;
+            let _ = marked!;
+            let bytes = read!;
+            File/write_all(Path/of_str("{}"), bytes);
+        main
+        "#,
+        spelled(&fifo),
+        spelled(&marker),
+        spelled(&report),
+    );
+    // Compiled before the writer starts its clock, so the deadline bounds the run alone.
+    let program = compiled(&source);
+
     let writer = {
         let (fifo, marker) = (fifo.clone(), marker.clone());
         std::thread::spawn(move || {
@@ -200,22 +231,7 @@ fn the_real_host_runs_a_branch_while_another_waits_on_a_fifo() {
         })
     };
 
-    let spelled =
-        |path: &std::path::Path| path.to_str().expect("a UTF-8 temporary path").to_string();
-    let (fifo, marker, report) = (spelled(&fifo), spelled(&marker), spelled(&report));
-    let source = format!(
-        r#"
-        use /std/{{Io, Str, Path, File, Try}};
-        let main: Try(Io, Io/Error, {{}}) =
-            let (read, marked) = Io/both(Try/run(File/read_all(Path/of_str("{fifo}"))), Try/run(File/write_all(Path/of_str("{marker}"), Str/to_bytes("ran"))))!;
-            let _ = marked!;
-            let bytes = read!;
-            File/write_all(Path/of_str("{report}"), bytes);
-        main
-        "#
-    );
-
-    assert_eq!(status(&source, OsHost::with_args(vec![])), 0);
+    assert_eq!(ran(program, OsHost::with_args(vec![])), 0);
     assert!(
         writer.join().expect("the writer ends"),
         "the marker was written while the read waited"
