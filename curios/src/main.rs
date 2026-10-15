@@ -23,7 +23,6 @@ mod test_runner;
 use test_runner::*;
 
 use {
-    clap::Parser,
     curios::optimize,
     curios_abi::ForeignStore,
     curios_cranelift::module_exports,

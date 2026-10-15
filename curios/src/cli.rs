@@ -1,14 +1,20 @@
-//! The clap command-line surface: the `Cli` root and its `Mode` subcommands. Parsing only — the dispatch on the parsed value lives in `main.rs`, and what a TARGET's help says is computed from its command's contract, so the help cannot describe an argument its command admits another way.
+//! The command-line surface: clap reads compiler options and a verbatim `run` tail, then `Cli` separates that tail into its target and program arguments before dispatch or admission can read it. A target's help comes from its command's contract.
+
+#[cfg(test)]
+mod tests;
 
 use {
     crate::{
         AT, COMPILE, COST, DECLARATIONS, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, RUN, STAGE, TEST,
         TESTS,
     },
-    clap::{ArgGroup, Args, Parser, Subcommand, builder::PossibleValuesParser},
+    clap::{
+        ArgGroup, Args, Command, CommandFactory, Error, Parser, Subcommand,
+        builder::PossibleValuesParser, error::ErrorKind,
+    },
     curios_pipeline::Stage,
     curios_wonder::Place,
-    std::{ffi::OsString, path::PathBuf, sync::LazyLock},
+    std::{env, ffi::OsString, mem, path::PathBuf, sync::LazyLock},
 };
 
 /// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
@@ -44,9 +50,13 @@ pub(crate) struct Elaboration {
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
     /// What the four forms mean is `documentation/usage.md`'s Running and compiling. The dispatch is lexical and probes no disk: the four spaces cannot overlap, so nothing here needs to look before deciding.
-    #[command(about = "Execute an executable, a .crs file, or standard input")]
+    #[command(
+        about = "Execute an executable, a .crs file, or standard input",
+        override_usage = "curios run [OPTIONS] [TARGET] [ARGS]..."
+    )]
     Run {
-        #[arg(value_name = "TARGET", help = RUN.target_help())]
+        // Filled only by `Cli`: clap must stop recognizing options at the first word of the tail, including the target itself.
+        #[arg(skip)]
         target: Option<String>,
 
         #[command(flatten)]
@@ -54,9 +64,8 @@ pub(crate) enum Mode {
 
         #[arg(
             trailing_var_arg = true,
-            allow_hyphen_values = true,
-            value_name = "ARGS",
-            help = "Arguments passed to the program (read via /std/proc/args)"
+            value_name = "TARGET_OR_ARGS",
+            help = format!("{}. Following words are program arguments (read via /std/proc/args); begin with -- to omit TARGET", RUN.target_help())
         )]
         args: Vec<OsString>,
     },
@@ -414,10 +423,10 @@ pub(crate) enum Query {
 
 {all-args}{after-help}"
 )]
-pub(crate) struct Cli {
+struct ParsedCli {
     // Present only in profiling builds, and inert until asked for: the feature compiles the instrumentation in, and this decides whether anything listens to it. Without that, a build with the feature on would record on *every* invocation — including every one the integration suite spawns under `--all-features`, all of them onto one path.
     //
-    // It takes the destination rather than defaulting to one, so no path is spelled in the compiler at all. The reader chooses where the stream goes and reads it back from there, which is one spelling instead of two that have to agree. Global, because what it measures is the invocation rather than one command, so it may stand on either side of the command.
+    // It takes the destination rather than defaulting to one. Global, because what it measures is the invocation rather than one command, so it may stand on either side of the command, before `run` hands its tail to the program.
     //
     // A plain comment rather than documentation, because clap prints a field's documentation of more than one paragraph as the flag's long help, and a global flag's help is printed under every command.
     #[cfg(feature = "profile")]
@@ -431,4 +440,62 @@ pub(crate) struct Cli {
 
     #[command(subcommand)]
     pub(crate) mode: Mode,
+}
+
+/// A command line whose `run` target and program arguments have been separated. The private clap input cannot reach dispatch without this normalization.
+#[derive(Debug)]
+pub(crate) struct Cli {
+    #[cfg(feature = "profile")]
+    pub(crate) profile: Option<PathBuf>,
+    pub(crate) mode: Mode,
+}
+
+impl CommandFactory for Cli {
+    fn command() -> Command {
+        ParsedCli::command()
+    }
+
+    fn command_for_update() -> Command {
+        ParsedCli::command_for_update()
+    }
+}
+
+impl Cli {
+    /// Read the process's arguments, answering clap's help and failures before dispatch.
+    pub(crate) fn parse() -> Self {
+        Self::try_parse_from(env::args_os()).unwrap_or_else(|error| error.exit())
+    }
+
+    /// Parse once with clap, preserving the original OS words so a consumed leading separator can be distinguished from a target.
+    pub(crate) fn try_parse_from(
+        words: impl IntoIterator<Item = impl Into<OsString>>,
+    ) -> Result<Self, Error> {
+        let words = words.into_iter().map(Into::into).collect::<Vec<_>>();
+        let mut parsed = ParsedCli::try_parse_from(&words)?;
+
+        if let Mode::Run { target, args, .. } = &mut parsed.mode {
+            // This argument has no delimiter, defaults or transformations: trailing collection is exactly a suffix, including every option-looking word after its first word. Only clap's leading `--` is consumed before that suffix starts.
+            let start = words.len() - args.len();
+            debug_assert_eq!(&words[start..], args.as_slice());
+            let omitted = words[..start].last().is_some_and(|word| word == "--");
+            if !omitted && !args.is_empty() {
+                let mut tail = mem::take(args).into_iter().peekable();
+                *target = Some(tail.next().unwrap().into_string().map_err(|_| {
+                    let mut command = Self::command();
+                    Error::new(ErrorKind::InvalidUtf8)
+                        .with_cmd(command.find_subcommand_mut("run").unwrap())
+                })?);
+                if tail.peek().is_some_and(|word| word == "--") {
+                    tail.next();
+                }
+                *args = tail.collect();
+            }
+        }
+
+        Ok(Self {
+            #[cfg(feature = "profile")]
+            profile: parsed.profile,
+            mode: parsed.mode,
+        })
+    }
 }

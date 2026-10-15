@@ -100,9 +100,11 @@ Ten commands, and `wonder`'s seven queries — eleven where the compiler was bui
 curios run                       # the governing package's sole or `default` executable
 curios run serve --port 8080     # a declared executable, and its own arguments
 curios run scratch.crs           # a file
+curios run -- mock               # the default executable, with argument mock
+curios run serve --help          # the program's help
 ```
 
-Everything after the target belongs to the program, not to `curios`, and reaches it through `/std/proc/args`. It is collected verbatim, hyphens included, so a program's own flags never collide with the compiler's — which is also why `run`'s own flags go before the target.
+Everything after the target belongs to the program and reaches it through `/std/proc/args`, including `--help`, `--budget`, `--manifest` and, in a profiling build, `--profile`. Compiler flags go before the target. A leading `--` omits the target and passes the words after it to the governing package's sole or `default` executable. One `--` immediately after an explicit target is an optional separator too: `curios run serve -- --help` passes `--help`. Every later word is collected verbatim, hyphens and further separators included; `curios run -- -- mock` passes `--` and `mock`. Program arguments retain their OS bytes, including text that is not UTF-8; an explicit target must be UTF-8. A file whose name starts with a hyphen can be named with its directory, such as `./-sample.crs`.
 
 A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` argument to a `foreign` function past what the wire carries, a value past what the runtime can hold, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names. A call the runtime refuses where it crosses to what answers it is no panic: `execution failed:` and a sentence naming the declaration and what was wrong, as when a module answers `256` to a `foreign` declared `-> Byte`, or a host cannot answer a call that has no failure to report.
 

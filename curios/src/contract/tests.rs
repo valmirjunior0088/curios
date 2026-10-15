@@ -3,7 +3,7 @@
 use {
     super::*,
     crate::Cli,
-    clap::{CommandFactory, Parser},
+    clap::CommandFactory,
     curios_utilities::test_support::Temporary,
     std::{collections::BTreeSet, fmt::Write, fs, iter},
 };
