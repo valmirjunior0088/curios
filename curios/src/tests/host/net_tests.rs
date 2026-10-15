@@ -15,7 +15,7 @@ const CALL: &str = r#"
     let program: Io({}) =
         let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
         match r
-        | success(response) => Io/write(Io/stdout, response)
+        | success(response) => Io/bind(Io/Write/write(Io/stdout, response), (_) => Io/pure(()))
         | failure(e) => /std/print(Show/show(e))
         end;
     program
@@ -120,7 +120,7 @@ fn read_one_chunk(open: &str) -> String {
                 let c = Socket/read(s, 64)!;
                 Try/pure(match c | chunk(b, @_) => b | _ => x[] end)))!;
             match r
-            | success(bytes) => Io/write(Io/stdout, bytes)
+            | success(bytes) => Io/bind(Io/Write/write(Io/stdout, bytes), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program
@@ -294,7 +294,7 @@ fn an_embedder_ends_the_program_through_a_row_that_does_not_return() {
     let source = r#"
         foreign abort(Byte) -> Never;
         let _ = abort(@{}, 7)!;
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))!;
+        let _ = /std/print("unreachable")!;
         /std/Io/pure(())
         "#
     .parse::<Entrypoint>()
@@ -324,7 +324,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     let source = r#"
         foreign double(Nat) -> Nat;
         let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))!;
+        let _ = /std/print("unreachable")!;
         /std/Io/pure(())
         "#
     .parse::<Entrypoint>()

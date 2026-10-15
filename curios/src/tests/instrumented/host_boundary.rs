@@ -22,7 +22,7 @@ const STREAM_COPY: &str = r#"
         let c = Io/read(Io/stdin, 4096)!;
         match c
         | chunk(bytes, @_) =>
-            let _ = Io/write(Io/stdout, bytes)!;
+            let _ = Io/Write/write(Io/stdout, bytes)!;
             copy()
         | _ => Io/pure(())
         end;

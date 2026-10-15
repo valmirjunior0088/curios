@@ -22,7 +22,7 @@ fn vec_cons_with_nat_succ() {
             xs.0;
 
         let v : Vec(std/Nat, 1) = cons(std/Nat, 0, 42, ());
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(head(std/Nat, 0, v))))!;
+        let _ = /std/print(std/Nat/to_str(head(std/Nat, 0, v)))!;
         /std/Io/pure(())
     "#;
 
@@ -51,7 +51,7 @@ fn indexed_vec_append_executes() {
         let a : Vec(Nat)(2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat)(1) = Vec/cons(4, Vec/nil());
         let c : Vec(Nat)(3) = append(a, b);
-        let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(total(c, 0))))!;
+        let _ = /std/print(Nat/to_str(total(c, 0)))!;
         /std/Io/pure(())
         "#;
 

@@ -9,7 +9,7 @@ use {
 fn io_write() {
     assert_eq!(
         run(r#"
-let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("hello"))!;
+let _ = /std/print("hello")!;
 /std/Io/pure(())
 "#),
         b"hello"
@@ -20,7 +20,7 @@ let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("hello"))!;
 fn io_write_stderr() {
     assert_eq!(
         run(r#"
-let _ = std/Io/write(std/Io/stderr, /std/Str/to_bytes("oops"))!;
+let _ = /std/print_err("oops")!;
 /std/Io/pure(())
 "#),
         b"oops"
@@ -33,7 +33,7 @@ fn io_read() {
     run_text(
         r#"
         match std/Io/read(std/Io/stdin, 1024)! : (_) => /std/Io({})
-        | chunk(b, @_) => let w = std/Io/write(std/Io/stdout, b)!; /std/Io/pure(())
+        | chunk(b, @_) => let w = std/Io/Write/write(std/Io/stdout, b)!; /std/Io/pure(())
         | eof() => /std/Io/pure(())
         | error(_) => /std/Io/pure(())
         end
@@ -51,7 +51,7 @@ fn io_read_short_reads_and_eof() {
         use /std/{Io};
         let show(r : Io/Chunk) -> Io({}) =
             match r : (_) => Io({})
-            | chunk(b, @_) => let _ = Io/write(Io/stdout, b)!; /std/Io/pure(())
+            | chunk(b, @_) => let _ = Io/Write/write(Io/stdout, b)!; /std/Io/pure(())
             | eof() => /std/print("1")
             | error(_) => /std/print("e")
             end;

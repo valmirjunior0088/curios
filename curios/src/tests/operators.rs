@@ -13,7 +13,7 @@ fn bool_logic_and_of_str() {
             | some(b) => b
             | none() => true
             end;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Str/concat(Bool/to_str(computed), Bool/to_str(parsed))))!;
+        let _ = /std/print(Str/concat(Bool/to_str(computed), Bool/to_str(parsed)))!;
         /std/Io/pure(())
         "#),
         b"truefalse"
@@ -27,7 +27,7 @@ fn bool_xor_executes() {
         use /std/{Bool, Str, Io};
         let a = Bool/xor(true, false);
         let b = Bool/xor(true, true);
-        let _ = Io/write(Io/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))!;
+        let _ = /std/print(Str/concat(Bool/to_str(a), Bool/to_str(b)))!;
         /std/Io/pure(())
         "#),
         b"truefalse"
@@ -41,7 +41,7 @@ fn bool_eql_executes() {
         use /std/{Bool, Str, Io};
         let a = Bool/eql(true, true);
         let b = Bool/eql(true, false);
-        let _ = Io/write(Io/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))!;
+        let _ = /std/print(Str/concat(Bool/to_str(a), Bool/to_str(b)))!;
         /std/Io/pure(())
         "#),
         b"truefalse"
@@ -68,7 +68,7 @@ fn nat_bitwise_ops_execute() {
             Nat/to_str(Nat/shl(x, 20)), ",",
             Nat/to_str(Nat/shr(x, 1))
         ]);
-        let _ = Io/write(Io/stdout, Str/to_bytes(r))!;
+        let _ = /std/print(r)!;
         /std/Io/pure(())
         "#,
         system,
@@ -100,7 +100,7 @@ fn int_bitwise_ops_execute() {
             Int/to_str(Int/shr(neg, 1)), ",",
             Int/to_str(Int/not(x))
         ]);
-        let _ = Io/write(Io/stdout, Str/to_bytes(r))!;
+        let _ = /std/print(r)!;
         /std/Io/pure(())
         "#,
         system,
@@ -116,7 +116,7 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Str, Nat, Io};
-            let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(2 + 3 * 4)))!;
+            let _ = /std/print(Nat/to_str(2 + 3 * 4))!;
             /std/Io/pure(())
         "#),
         b"14"
@@ -124,7 +124,7 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Str, Nat, Io};
-            let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str((2 + 3) * 4)))!;
+            let _ = /std/print(Nat/to_str((2 + 3) * 4))!;
             /std/Io/pure(())
         "#),
         b"20"
@@ -132,7 +132,7 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Str, Nat, Io};
-            let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(10 - 3 - 2)))!;
+            let _ = /std/print(Nat/to_str(10 - 3 - 2))!;
             /std/Io/pure(())
         "#),
         b"5"
@@ -140,7 +140,7 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Str, Nat, Io};
-            let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(17 % 5)))!;
+            let _ = /std/print(Nat/to_str(17 % 5))!;
             /std/Io/pure(())
         "#),
         b"2"
@@ -181,7 +181,7 @@ fn infix_resolves_to_int_for_signed_literals() {
     assert_eq!(
         run(r#"
             use /std/{Str, Int, Io};
-            let _ = Io/write(Io/stdout, Str/to_bytes(Int/to_str(-2 - +3)))!;
+            let _ = /std/print(Int/to_str(-2 - +3))!;
             /std/Io/pure(())
         "#),
         b"-5"
@@ -195,7 +195,7 @@ fn infix_resolves_against_a_bound_variable_type() {
         run(r#"
             use /std/{Str, Int, Io};
             let x : Int = -10;
-            let _ = Io/write(Io/stdout, Str/to_bytes(Int/to_str(x + 1)))!;
+            let _ = /std/print(Int/to_str(x + 1))!;
             /std/Io/pure(())
         "#),
         b"-9"
@@ -209,8 +209,8 @@ fn infix_comparison_yields_a_bool_scrutinee() {
         run(r#"
             use /std/{Str, Io};
             let _ = (match 2 + 2 == 4
-            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
-            | false => Io/write(Io/stdout, Str/to_bytes("no"))
+            | true => /std/print("yes")
+            | false => /std/print("no")
             end)!;
             /std/Io/pure(())
         "#),
@@ -220,8 +220,8 @@ fn infix_comparison_yields_a_bool_scrutinee() {
         run(r#"
             use /std/{Str, Io};
             let _ = (match 3 < 1
-            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
-            | false => Io/write(Io/stdout, Str/to_bytes("no"))
+            | true => /std/print("yes")
+            | false => /std/print("no")
             end)!;
             /std/Io/pure(())
         "#),
@@ -236,8 +236,8 @@ fn infix_equality_is_overloaded_for_bool() {
         run(r#"
             use /std/{Str, Io};
             let _ = (match (1 < 2) == (3 < 4)
-            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
-            | false => Io/write(Io/stdout, Str/to_bytes("no"))
+            | true => /std/print("yes")
+            | false => /std/print("no")
             end)!;
             /std/Io/pure(())
         "#),
@@ -253,8 +253,8 @@ fn infix_mixes_a_float_variable_with_an_integer_literal() {
             use /std/{Str, Flt, Io};
             let x : Flt = 3.0;
             let _ = (match x + 1 < 4.5
-            | true => Io/write(Io/stdout, Str/to_bytes("less"))
-            | false => Io/write(Io/stdout, Str/to_bytes("more"))
+            | true => /std/print("less")
+            | false => /std/print("more")
             end)!;
             /std/Io/pure(())
         "#),
@@ -268,8 +268,8 @@ fn infix_undefined_operator_for_type_is_rejected() {
     let source = r#"
         use /std/{Str, Io};
         let _ = (match 1 && 2
-        | true => Io/write(Io/stdout, Str/to_bytes("yes"))
-        | false => Io/write(Io/stdout, Str/to_bytes("no"))
+        | true => /std/print("yes")
+        | false => /std/print("no")
         end)!;
         /std/Io/pure(())
     "#;
@@ -283,8 +283,8 @@ fn infix_rem_on_flt_computes_fmod() {
         run(r#"
             use /std/{Str, Io};
             let _ = (match 5.5 % 2.0 == 1.5
-            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
-            | false => Io/write(Io/stdout, Str/to_bytes("no"))
+            | true => /std/print("yes")
+            | false => /std/print("no")
             end)!;
             /std/Io/pure(())
         "#),
@@ -299,8 +299,8 @@ fn infix_not_equal_on_bool_resolves_to_bool_neq() {
         run(r#"
             use /std/{Str, Io};
             let _ = (match true != false
-            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
-            | false => Io/write(Io/stdout, Str/to_bytes("no"))
+            | true => /std/print("yes")
+            | false => /std/print("no")
             end)!;
             /std/Io/pure(())
         "#),
@@ -315,7 +315,7 @@ fn infix_mismatched_operand_types_are_rejected() {
         use /std/{Str, Int, Io};
         let n : Nat = 1;
         let i : Int = -1;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Int/to_str(n + i)))!;
+        let _ = /std/print(Int/to_str(n + i))!;
         /std/Io/pure(())
     "#;
     error(source);
@@ -336,7 +336,7 @@ fn infix_add_on_a_user_record_resolves_its_witness() {
             }
             let p : Point = Point { x = 3, y = 4 };
             let q : Point = p + p;
-            let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(q.y)))!;
+            let _ = /std/print(Nat/to_str(q.y))!;
             /std/Io/pure(())
         "#),
         b"8"
@@ -351,7 +351,7 @@ fn infix_resolves_against_a_local_use_premise() {
             use /std/{Nat, Str, Io};
             use /std/ops/{Add};
             pub let double(@A : Type, use Add(A), x : A) -> A = x + x;
-            let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(double(21))))!;
+            let _ = /std/print(Nat/to_str(double(21)))!;
             /std/Io/pure(())
         "#),
         b"42"
@@ -364,7 +364,7 @@ fn infix_equality_works_on_str() {
     assert_eq!(
         run(r#"
             use /std/{Bool, Str, Io};
-            let _ = Io/write(Io/stdout, Str/to_bytes(Bool/to_str("abc" == "abc")))!;
+            let _ = /std/print(Bool/to_str("abc" == "abc"))!;
             /std/Io/pure(())
         "#),
         b"true"
@@ -377,7 +377,7 @@ fn infix_without_witness_reports_no_witness() {
     let source = r#"
         use /std/{Bool, Str, Io};
         let b : Bool = true + false;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Bool/to_str(b)))!;
+        let _ = /std/print(Bool/to_str(b))!;
         /std/Io/pure(())
     "#;
     let error = error(source);
@@ -396,7 +396,7 @@ fn infix_literal_against_a_user_type_is_rejected() {
         }
         let p : Point = Point { x = 1, y = 2 };
         let q : Point = p + 1;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(q.x)))!;
+        let _ = /std/print(Nat/to_str(q.x))!;
         /std/Io/pure(())
     "#;
     error(source);
@@ -408,7 +408,7 @@ fn infix_literal_against_a_solved_operand_type_names_the_type() {
     let source = r#"
         use /std/{Nat, Str, Io};
         let s : Str = "a" + 1;
-        let _ = Io/write(Io/stdout, Str/to_bytes(s))!;
+        let _ = /std/print(s)!;
         /std/Io/pure(())
     "#;
     let error = error(source);
@@ -432,7 +432,7 @@ fn type_level_operator_indices_stay_convertible() {
                 Le/s(p);
             let base : Le(0, 1) = Le/z();
             let bumped : Le(1, 2) = step(base);
-            let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
+            let _ = /std/print("ok")!;
             /std/Io/pure(())
         "#),
         b"ok"
@@ -447,7 +447,7 @@ fn infix_equality_works_on_bin() {
             use /std/{Bool, Bytes, Str, Io};
             let a : Bytes = Str/to_bytes("xy");
             let b : Bytes = Str/to_bytes("xz");
-            let _ = Io/write(Io/stdout, Str/to_bytes(Bool/to_str(a != b)))!;
+            let _ = /std/print(Bool/to_str(a != b))!;
             /std/Io/pure(())
         "#),
         b"true"

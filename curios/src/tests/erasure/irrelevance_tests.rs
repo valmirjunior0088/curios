@@ -15,7 +15,7 @@ fn prop_irrelevance_equates_distinct_proofs() {
         let irrelevant(a : Nat, b : Nat, p : Le(a, b), q : Le(a, b))
             -> Same()(p, q) =
             Same/same();
-        let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
+        let _ = /std/print("ok")!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
@@ -27,7 +27,7 @@ fn data_is_not_proof_irrelevant() {
     let source = r#"
         use /std/{Str, Eq, Nat, Io};
         let bad(x : Nat, y : Nat) -> Eq()(x, y) = Eq/refl();
-        let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
+        let _ = /std/print("ok")!;
         /std/Io/pure(())
         "#;
     error(source);
@@ -47,7 +47,7 @@ fn large_elimination_of_a_prop_is_rejected() {
             | z(@_) => 0
             | s(@_, @_, _) => 1
             end;
-        let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
+        let _ = /std/print("ok")!;
         /std/Io/pure(())
         "#;
     let error = error(source);

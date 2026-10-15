@@ -127,6 +127,8 @@ pub enum Failure {
     NotDirectory,
     /// The peer reset the connection (`ErrorKind::ConnectionReset`).
     ConnectionReset,
+    /// A write to a pipe or socket whose reader has gone (`ErrorKind::BrokenPipe`).
+    BrokenPipe,
     /// An otherwise-unrecognized failure, carrying the OS errno that produced it.
     Other(u32),
 }

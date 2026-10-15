@@ -46,7 +46,7 @@ fn end_to_end() {
             | left(_) => +42
             | right(_) => +7
             end;
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(score(pair))))!;
+        let _ = /std/print(std/Int/to_str(score(pair)))!;
         /std/Io/pure(())
         "#;
 
@@ -67,7 +67,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
                 let probe : /std/Nat = (let go : /std/Nat = 3; go);
                 go;
         end
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))!;
+        let _ = /std/print(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling)))!;
         /std/Io/pure(())
         "#;
 
@@ -83,7 +83,7 @@ fn triangular_sum() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))!;
+        let _ = /std/print(std/Nat/to_str(result))!;
         /std/Io/pure(())
         "#;
 
@@ -94,7 +94,7 @@ fn triangular_sum() {
 fn multi_arg_function() {
     let source = r#"
         let add : (std/Int, std/Int) -> std/Int = (x, y) => std/Int/add(x, y);
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3, +4))))!;
+        let _ = /std/print(std/Int/to_str(add(+3, +4)))!;
         /std/Io/pure(())
         "#;
 
@@ -105,7 +105,7 @@ fn multi_arg_function() {
 fn curried_function() {
     let source = r#"
         let add : (std/Int) -> (std/Int) -> std/Int = (x) => (y) => std/Int/add(x, y);
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3)(+4))))!;
+        let _ = /std/print(std/Int/to_str(add(+3)(+4)))!;
         /std/Io/pure(())
         "#;
 

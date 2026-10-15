@@ -713,7 +713,7 @@ fn a_deaf_peer_refuses_a_write_and_is_still_read() {
 
     assert_eq!(
         host.handle_write(socket.clone(), b"request".to_vec()),
-        Err(Failure::Other(32))
+        Err(Failure::BrokenPipe)
     );
     assert_eq!(
         host.handle_read(socket.clone(), 8),

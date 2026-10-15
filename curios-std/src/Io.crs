@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Bytes, Nat, List, Option, Result, Cell, Handle, Program};
+use /std/{Monad, Bytes, Nat, List, Option, Result, Cell, Handle, Program, Try};
 use /std/Bool/{Holds};
 use /std/time/{Duration, Instant};
 
@@ -184,19 +184,15 @@ pub let read(i: Input, n: Nat, @positive: Holds(0 < n)) -> Io(Chunk) =
     Read/read(@Handle, i.0, n, @positive);
 
 --- The whole of `b`, a short write resent; the first failure is the answer.
-let written(o: Output, b: Bytes) -> Io(Result(Error, {})) =
-    Write/write(o.0, b);
-
---- The whole of `b`, a short write resent and a failure dropped.
-pub let write(o: Output, b: Bytes) -> Io({}) =
-    bind(written(o, b), (_) => pure(()));
+pub let write(o: Output, b: Bytes) -> Try(Io, Error, {}) =
+    Try/attempt(Write/write(o.0, b));
 
 satisfy Read(Input) {
     read(i, n, @positive) = read(i, n, @positive),
 }
 
 satisfy Write(Output) {
-    write(o, b) = written(o, b),
+    write(o, b) = Write/write(o.0, b),
     flush(o) = Write/flush(o.0),
 }
 

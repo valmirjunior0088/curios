@@ -137,7 +137,7 @@ fn every_direction_executes_as_the_model_rounds() {
             Rounding/toward_positive(),
             Rounding/toward_negative(),
         ], direction);
-        let _ = Io/write(Io/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes)))!;
+        let _ = Io/Write/write(Io/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes)))!;
         Io/pure(())
         "#
     );
@@ -213,7 +213,7 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
             Rounding/toward_positive(),
             Rounding/toward_negative(),
         ], direction);
-        let _ = Io/write(Io/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes)))!;
+        let _ = Io/Write/write(Io/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes)))!;
         Io/pure(())
         "#
     );
@@ -436,7 +436,7 @@ fn every_exception_is_raised_as_ieee_defines_it() {
             Rounding/toward_positive(),
             Rounding/toward_negative(),
         ], direction);
-        let _ = Io/write(Io/stdout, Bytes/flatten(List/map(results, (e) => x[code(e)])))!;
+        let _ = Io/Write/write(Io/stdout, Bytes/flatten(List/map(results, (e) => x[code(e)])))!;
         Io/pure(())
         "#
     );

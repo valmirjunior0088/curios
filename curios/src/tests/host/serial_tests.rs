@@ -58,7 +58,7 @@ fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
         let program: Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), exchange))!;
             match r
-            | success(line) => Io/write(Io/stdout, line)
+            | success(line) => Io/bind(Io/Write/write(Io/stdout, line), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program
@@ -115,7 +115,7 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
         let program: Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), reset))!;
             match r
-            | success(line) => Io/write(Io/stdout, line)
+            | success(line) => Io/bind(Io/Write/write(Io/stdout, line), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program

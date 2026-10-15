@@ -276,7 +276,7 @@ struct Chunked {
     position: usize,
     due: bool,
     ending: Ending,
-    /// Whether the peer has stopped reading: a write to it fails with [`EPIPE`], and what it sent is still served.
+    /// Whether the peer has stopped reading: a write to it fails with a broken pipe, and what it sent is still served.
     deaf: bool,
 }
 
@@ -575,9 +575,6 @@ impl<T: Unpin> Future for Looked<T> {
 
 /// `SIGKILL`, the signal a killed child ends by — `9` on both release targets, Linux and macOS.
 const SIGKILL: NonZeroU32 = NonZeroU32::new(9).unwrap();
-
-/// `EPIPE`, the errno a write reports once its peer has stopped reading — `32` on both release targets, Linux and macOS.
-const EPIPE: u32 = 32;
 
 /// `ENOTTY`, the errno a terminal `ioctl` reports on a descriptor that is not a terminal — `25` on both release targets, Linux and macOS.
 const ENOTTY: u32 = 25;
@@ -1122,7 +1119,7 @@ impl HostOps for MockHost {
                 Ok(full)
             }
             // A peer that has stopped reading takes nothing, as a connection whose far end is closed.
-            Some(MockResource::Outbound(stream)) if stream.deaf => Err(Failure::Other(EPIPE)),
+            Some(MockResource::Outbound(stream)) if stream.deaf => Err(Failure::BrokenPipe),
             // Outbound connection: accept and discard (the in-memory test host does not capture request bytes).
             Some(MockResource::Outbound(_)) => {
                 self.wrote(bytes.len());

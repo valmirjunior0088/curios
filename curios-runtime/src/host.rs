@@ -83,6 +83,7 @@ pub(crate) fn failure_from_error(error: Error) -> Failure {
         ErrorKind::IsADirectory => Failure::IsDirectory,
         ErrorKind::NotADirectory => Failure::NotDirectory,
         ErrorKind::ConnectionReset => Failure::ConnectionReset,
+        ErrorKind::BrokenPipe => Failure::BrokenPipe,
         _ => match error.raw_os_error() {
             Some(errno) => Failure::Other(errno as u32),
             None => Failure::Other(0),

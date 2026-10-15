@@ -24,7 +24,7 @@ fn erased_param_unused_is_accepted() {
         use /std/{Str, Nat, Io};
         let f : (T : Type, m : Nat) -> Nat = (T, m) => m;
         let r : Nat = f(Nat, 3);
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        let _ = /std/print(Nat/to_str(r))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"3");
@@ -38,7 +38,7 @@ fn erased_param_is_dropped_at_runtime() {
         let h : (m : Type) -> Nat = (m) => 0;
         let g : (n : Type) -> Nat = (n) => h(n);
         let r : Nat = g(Nat);
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        let _ = /std/print(Nat/to_str(r))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"0");
@@ -52,7 +52,7 @@ fn erased_struct_field_collapses_to_bare_value() {
         struct Wrap : pub Type { val : Nat, ghost : Type }
         let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
         let r : Nat = make(Nat).val;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        let _ = /std/print(Nat/to_str(r))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"5");
@@ -98,7 +98,7 @@ fn erased_tuple_field_is_a_subset_type() {
         use /std/{Str, Nat, Io};
         let make : (n : Type) -> { val : Nat, Type } = (n) => (5, n);
         let r : Nat = make(Nat).0;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        let _ = /std/print(Nat/to_str(r))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"5");
@@ -112,7 +112,7 @@ fn erased_definition_param_is_dropped_at_runtime() {
         let h(m : Type) -> Nat = 0;
         let g(n : Type) -> Nat = h(n);
         let r : Nat = g(Nat);
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        let _ = /std/print(Nat/to_str(r))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"0");
@@ -132,7 +132,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
             | box(ghost, val) => val
             end;
         let r : Nat = get(make(Nat));
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))!;
+        let _ = /std/print(Nat/to_str(r))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"5");

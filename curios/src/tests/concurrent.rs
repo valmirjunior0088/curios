@@ -25,7 +25,7 @@ fn a_read_waits_and_resumes_across_a_chunk_boundary() {
         let program: Io({}) =
             let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
             match r
-            | success(response) => Io/write(Io/stdout, response)
+            | success(response) => Io/bind(Io/Write/write(Io/stdout, response), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program
@@ -46,7 +46,7 @@ fn a_stream_read_sequences_into_a_write() {
         let program: Io({}) =
             let r = Io/Read/read(Io/stdin, 1024)!;
             match r : (_) => Io({})
-            | chunk(bytes, @_) => Io/write(Io/stdout, bytes)
+            | chunk(bytes, @_) => Io/bind(Io/Write/write(Io/stdout, bytes), (_) => Io/pure(()))
             | eof() => Io/pure(())
             | error(_) => Io/pure(())
             end;
@@ -66,15 +66,15 @@ fn a_scope_answers_with_its_body_after_the_child_it_joins() {
         use /std/{Str, Nat, Io};
         let child: Io(Nat) =
             let _ = Io/yield()!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("child;"))!;
+            let _ = /std/print("child;")!;
             Io/pure(5);
         let root(s: Io/Scope) -> Io(Nat) =
             let f = Io/spawn(s, child)!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("root;"))!;
+            let _ = /std/print("root;")!;
             let c = Io/join(f)!;
             Io/pure(c + 2);
         let n = Io/scope(root)!;
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(n)))
+        /std/print(Nat/to_str(n))
         "#),
         b"root;child;7"
     );
@@ -95,11 +95,11 @@ fn a_scope_inside_a_child_of_another_composes() {
             Io/pure(n + 1);
         let outer(s: Io/Scope) -> Io(Nat) =
             let f = Io/spawn(s, Io/scope(inner))!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("outer;"))!;
+            let _ = /std/print("outer;")!;
             let n = Io/join(f)!;
             Io/pure(n * 10);
         let n = Io/scope(outer)!;
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(n)))
+        /std/print(Nat/to_str(n))
         "#),
         b"outer;40"
     );
@@ -113,10 +113,10 @@ fn all_answers_in_the_order_of_its_actions() {
         use /std/{Str, Nat, List, Io};
         let program: Io({}) =
             let rs = Io/all([
-                Io/bind(Io/write(Io/stdout, Str/to_bytes("a;")), (_) => Io/pure(1)),
-                Io/bind(Io/write(Io/stdout, Str/to_bytes("b;")), (_) => Io/pure(2))
+                Io/bind(/std/print("a;"), (_) => Io/pure(1)),
+                Io/bind(/std/print("b;"), (_) => Io/pure(2))
             ])!;
-            Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(List/try_get(rs, 0), 0), /std/Option/unwrap_or(List/try_get(rs, 1), 0)))));
+            /std/print(Nat/to_str(Nat/add(/std/Option/unwrap_or(List/try_get(rs, 0), 0), /std/Option/unwrap_or(List/try_get(rs, 1), 0))));
         program
         "#),
         b"a;b;3"
@@ -133,14 +133,14 @@ fn race_cancels_a_started_loser_and_runs_its_release_before_answering() {
         use /std/time/{Duration};
         let slow: Io(Nat) =
             let _ = Io/sleep(Duration/of_secs(60))!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("slow;"))!;
+            let _ = /std/print("slow;")!;
             Io/pure(20);
         let program: Io({}) =
             let v = Io/race([
                 Io/using((_) => /std/print("released;"), slow),
-                Io/bind(Io/write(Io/stdout, Str/to_bytes("fast;")), (_) => Io/pure(10))
+                Io/bind(/std/print("fast;"), (_) => Io/pure(10))
             ])!;
-            Io/write(Io/stdout, Str/to_bytes(Nat/to_str(v)));
+            /std/print(Nat/to_str(v));
         program
         "#,
         system,
@@ -159,9 +159,9 @@ fn constructing_a_read_performs_no_effect() {
         let discarded: Io(Io/Chunk) = Io/Read/read(Io/stdin, 100);
         let r = Io/read(Io/stdin, 100)!;
         match r : (_) => /std/Io({})
-        | chunk(bytes, @_) => Io/write(Io/stdout, bytes)
-        | eof() => Io/write(Io/stdout, Str/to_bytes("<eof>"))
-        | error(_) => Io/write(Io/stdout, Str/to_bytes("<err>"))
+        | chunk(bytes, @_) => Io/bind(Io/Write/write(Io/stdout, bytes), (_) => Io/pure(()))
+        | eof() => /std/print("<eof>")
+        | error(_) => /std/print("<err>")
         end
         "#,
         system,
@@ -182,14 +182,14 @@ fn a_scope_cancels_a_child_still_waiting_when_its_body_answers() {
         let child(started: Signal) -> Io({}) =
             let _ = Signal/notify(started)!;
             let _ = Io/sleep(Duration/of_secs(1000))!;
-            Io/write(Io/stdout, Str/to_bytes("child;"));
+            /std/print("child;");
         let body(s: Io/Scope) -> Io({}) =
             let started = Signal/new()!;
             let _ = Io/spawn(s, Io/using((_) => /std/print("released;"), child(started)))!;
             let _ = Signal/wait(started)!;
-            Io/write(Io/stdout, Str/to_bytes("root;"));
+            /std/print("root;");
         let _ = Io/scope(body)!;
-        Io/write(Io/stdout, Str/to_bytes("ended"))
+        /std/print("ended")
         "#,
         system,
     )
@@ -207,13 +207,13 @@ fn join_all_holds_the_body_until_every_child_has_ended() {
         use /std/time/{Duration};
         let child(seconds: Nat, mark: Str) -> Io({}) =
             let _ = Io/sleep(Duration/of_secs(seconds))!;
-            Io/write(Io/stdout, Str/to_bytes(mark));
+            /std/print(mark);
         let body(s: Io/Scope) -> Io({}) =
             let _ = Io/spawn(s, child(5, "late;"))!;
             let _ = Io/spawn(s, child(2, "early;"))!;
             Io/join_all(s);
         let _ = Io/scope(body)!;
-        Io/write(Io/stdout, Str/to_bytes("done"))
+        /std/print("done")
         "#,
         system,
     )
@@ -228,7 +228,7 @@ fn a_brackets_release_runs_when_its_body_completes() {
         run(r#"
         use /std/{Str, Io};
         let program: Io({}) =
-            Io/using((_) => /std/print("closed;"), Io/write(Io/stdout, Str/to_bytes("body;")));
+            Io/using((_) => /std/print("closed;"), /std/print("body;"));
         program
         "#),
         b"body;closed;"
@@ -242,8 +242,8 @@ fn a_brackets_release_runs_once() {
         run(r#"
         use /std/{Str, Io};
         let program: Io({}) =
-            let _ = Io/using((_) => /std/print("closed;"), Io/write(Io/stdout, Str/to_bytes("body;")))!;
-            Io/write(Io/stdout, Str/to_bytes("after;"));
+            let _ = Io/using((_) => /std/print("closed;"), /std/print("body;"))!;
+            /std/print("after;");
         program
         "#),
         b"body;closed;after;"
@@ -268,7 +268,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
             | now(a) => (b.A, Susp/now(a))
             | later(k) => (b.A, k())
             end);
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(List/len(stepped))))!;
+        let _ = /std/print(Nat/to_str(List/len(stepped)))!;
         /std/Io/pure(())
         "#),
         b"2"
@@ -285,7 +285,7 @@ fn sleep_waits_until_the_clock_passes_the_deadline() {
         use /std/time/{Duration};
         let program: Io({}) =
             let _ = Io/sleep(Duration/of_secs(5))!;
-            Io/write(Io/stdout, Str/to_bytes("woke;"));
+            /std/print("woke;");
         program
         "#,
         system,
@@ -303,7 +303,7 @@ fn both_wakes_its_sleepers_in_deadline_order() {
         use /std/{Str, Io};
         use /std/time/{Duration};
         let mark(m: Str) -> Io({}) =
-            Io/write(Io/stdout, Str/to_bytes(m));
+            /std/print(m);
         let program: Io({}) =
             let _ = Io/both(
                 Io/bind(Io/sleep(Duration/of_secs(6)), (_) => mark("b;")),
@@ -328,8 +328,8 @@ fn timeout_answers_some_when_the_body_finishes_first() {
         let program: Io({}) =
             let r = Io/timeout(Duration/of_secs(5), Io/pure(42))!;
             match r : (_) => Io({})
-            | some(v) => Io/write(Io/stdout, Str/to_bytes(Nat/to_str(v)))
-            | none() => Io/write(Io/stdout, Str/to_bytes("none"))
+            | some(v) => /std/print(Nat/to_str(v))
+            | none() => /std/print("none")
             end;
         program
         "#,
@@ -349,15 +349,15 @@ fn timeout_cancels_the_body_and_runs_its_release_before_answering_none() {
         use /std/time/{Duration};
         let body: Io(Nat) =
             let _ = Io/sleep(Duration/of_secs(50))!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("body;"))!;
+            let _ = /std/print("body;")!;
             Io/pure(0);
         let released(ended: Io/Ended) -> Io({}) =
             /std/print(match ended | finished() => "finished;" | cancelled() => "cancelled;" end);
         let program: Io({}) =
             let r = Io/timeout(Duration/of_secs(2), Io/using(released, body))!;
             match r : (_) => Io({})
-            | some(v) => Io/write(Io/stdout, Str/to_bytes("some"))
-            | none() => Io/write(Io/stdout, Str/to_bytes("none;"))
+            | some(v) => /std/print("some")
+            | none() => /std/print("none;")
             end;
         program
         "#,
@@ -377,15 +377,15 @@ fn race_of_two_sleeps_answers_the_earlier_and_cancels_the_later() {
         use /std/time/{Duration};
         let quick: Io(Nat) =
             let _ = Io/sleep(Duration/of_secs(2))!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("quick;"))!;
+            let _ = /std/print("quick;")!;
             Io/pure(1);
         let slow: Io(Nat) =
             let _ = Io/sleep(Duration/of_secs(60))!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("slow;"))!;
+            let _ = /std/print("slow;")!;
             Io/pure(2);
         let program: Io({}) =
             let v = Io/race([quick, Io/using((_) => /std/print("released;"), slow)])!;
-            Io/write(Io/stdout, Str/to_bytes(Nat/to_str(v)));
+            /std/print(Nat/to_str(v));
         program
         "#,
         system,

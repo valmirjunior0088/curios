@@ -90,7 +90,7 @@ foreign poke() -> {};
 let b = x[0x61, 0x62, 0x63];
 let r = keep(b)!;
 let _ = poke()!;
-let _ = Io/write(Io/stdout, b)!;
+let _ = Io/Write/write(Io/stdout, b)!;
 Io/write(Io/stdout, r)
 `;
 

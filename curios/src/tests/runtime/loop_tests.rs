@@ -28,8 +28,8 @@ fn accumulation_loops_are_linear_by_construction() {
             end;
         let built = go(25000, x[]);
         let head = Bytes/slice(built, 0, 10);
-        let _ = Io/write(Io/stdout, head)!;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))!;
+        let _ = Io/Write/write(Io/stdout, head)!;
+        let _ = /std/print(Nat/to_str(Bytes/len(built)))!;
         /std/Io/pure(())
         "#),
         b"0123456789250000"
@@ -63,7 +63,7 @@ fn peel_loops_are_linear_by_construction() {
                 end
             end;
         let total = drain(c, Bytes/len(built) + 1, 0)!;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(total)))!;
+        let _ = /std/print(Nat/to_str(total))!;
         /std/Io/pure(())
         "#),
         b"450000"
@@ -195,9 +195,9 @@ fn arena_pure_computation_hugs_a_host_effect() {
             | 0 => 0
             | p + 1; ih => n + ih
             end;
-        let before = Io/write(Io/stdout, Str/to_bytes("a"))!;
+        let before = /std/print("a")!;
         let pure = triangle(100);
-        let after = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(pure)))!;
+        let after = /std/print(Nat/to_str(pure))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"a10000".to_vec());
@@ -227,7 +227,7 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
             | 0 => acc
             | p + 1; ih => build(p, x[0x61, ..acc])
             end;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x[])))))!;
+        let _ = /std/print(Nat/to_str(count(build({depth}, x[]))))!;
         /std/Io/pure(())
         "#
         )
@@ -325,9 +325,9 @@ fn a_recursion_as_deep_as_its_data_runs() {
         let numbers = List/range(0, 100000);
         let pairs = List/zip(numbers, List/take(numbers, 100000));
         let walked = List/traverse(numbers, (n: Nat) => Io/pure(n + 1))!;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(List/len(pairs))))!;
-        let _ = Io/write(Io/stdout, Str/to_bytes(" "))!;
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(List/len(walked))))!;
+        let _ = /std/print(Nat/to_str(List/len(pairs)))!;
+        let _ = /std/print(" ")!;
+        let _ = /std/print(Nat/to_str(List/len(walked)))!;
         /std/Io/pure(())
         "#),
         b"100000 100000".to_vec()
@@ -342,7 +342,7 @@ fn a_recursion_with_no_end_stops_on_the_stack_it_was_given() {
         r#"
         use /std/{Nat, List, Str, Io};
         let forever(n : Nat) -> List(Nat) = [n, ..forever(n + 1)];
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(List/len(forever(0)))))!;
+        let _ = /std/print(Nat/to_str(List/len(forever(0))))!;
         /std/Io/pure(())
         "#,
         system,

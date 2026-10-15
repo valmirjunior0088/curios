@@ -10,8 +10,8 @@ fn read_all_reads_a_seeded_file() {
     let source = r#"
         use /std/{File, Path, Try, Io};
         match Try/run(File/read_all(Path/of_str("data.txt")))!
-        | success(contents) => Io/write(Io/stdout, contents)
-        | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("error"))
+        | success(contents) => Io/bind(Io/Write/write(Io/stdout, contents), (_) => Io/pure(()))
+        | failure(_) => /std/print("error")
         end
         "#;
 
@@ -40,6 +40,7 @@ fn read_all_of_a_missing_path_is_not_found() {
             | is_directory() => /std/print("is a directory")
             | not_directory() => /std/print("not a directory")
             | reset() => /std/print("reset")
+            | broken_pipe() => /std/print("broken pipe")
             | too_long() => /std/print("too long")
             | not_text(_) => /std/print("not text")
             | other(_) => /std/print("other")
@@ -96,8 +97,8 @@ fn read_pulls_bytes_inside_the_bracket() {
             let c = File/read(f, 1024)!;
             Try/pure(match c | chunk(b, @_) => b | eof() => x[] | error(_) => x[] end)))!;
         match bytes
-        | success(b) => Io/write(Io/stdout, b)
-        | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
+        | success(b) => Io/bind(Io/Write/write(Io/stdout, b), (_) => Io/pure(()))
+        | failure(_) => /std/print("error")
         end
         "#;
 
@@ -122,8 +123,8 @@ fn a_bracketed_file_reads_through_its_stream_witness_across_a_suspension() {
         let main: Io({}) =
             let r = Try/run(program)!;
             match r
-            | success(b) => Io/write(Io/stdout, b)
-            | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
+            | success(b) => Io/bind(Io/Write/write(Io/stdout, b), (_) => Io/pure(()))
+            | failure(_) => /std/print("error")
             end;
         main
         "#;

@@ -1,6 +1,6 @@
 //! End-to-end tests of the `compile` subcommand's bundler: compile a package's program to a native executable, run it, and check what it produced.
 //!
-//! Two of them exec what they produced, and run with the ordinary suite all the same: the compiler embeds its launcher, so the produced executable is self-contained, and a build of this crate already has the launcher it embeds.
+//! Those that exec what they produced run with the ordinary suite all the same: the compiler embeds its launcher, so the produced executable is self-contained, and a build of this crate already has the launcher it embeds.
 
 use {
     curios_utilities::{digest, test_support::Temporary},
@@ -325,6 +325,91 @@ fn compile_produces_a_runnable_executable() {
         run.status
     );
     assert_eq!(String::from_utf8_lossy(&run.stdout), "hello");
+}
+
+/// A program that writes a line and then a second on the other stream: to standard output first with no argument, and to standard error first with one.
+fn printer(root: &Path) -> std::path::PathBuf {
+    let package = root.join("printer");
+    let output = root.join("printer.out");
+    fs::create_dir_all(&package).expect("create the temp package");
+    fs::write(package.join("curios.toml"), "name = \"printer\"\n").expect("write the manifest");
+    fs::write(
+        package.join("exe.crs"),
+        r#"use /std/{List, print, print_err};
+let arguments = /std/proc/args()!;
+match List/try_get(arguments, 1)
+| some(_) =>
+    let _ = print_err("written\n")!;
+    print("after\n")
+| none() =>
+    let _ = print("written\n")!;
+    print_err("after\n")
+end
+"#,
+    )
+    .expect("write the temp source");
+
+    compile(&package, &output);
+
+    output
+}
+
+/// The writing end of a pipe whose reading end is already closed.
+fn deaf_pipe() -> std::io::PipeWriter {
+    let (reader, writer) = std::io::pipe().expect("open a pipe");
+    drop(reader);
+    writer
+}
+
+/// A `print` whose reader has gone ends the program with 141, the status a shell reports for a process `SIGPIPE` ended, and says nothing.
+#[test]
+fn a_print_whose_reader_has_gone_ends_the_program_with_141_and_says_nothing() {
+    let root = Temporary::new("cli-bundle", "print-reader-gone");
+    let printer = printer(&root);
+
+    let run = Command::new(&printer)
+        .stdout(deaf_pipe())
+        .output()
+        .expect("exec the bundle");
+
+    assert_eq!(run.status.code(), Some(141), "{run:?}");
+    assert_eq!(String::from_utf8_lossy(&run.stderr), "");
+}
+
+/// A `print` that cannot write for any other reason ends the program with 1 once standard error says which stream failed and why: here a standard output open only for reading, which both release targets refuse with `EBADF`.
+#[test]
+fn a_print_that_cannot_write_ends_the_program_with_1_and_says_why() {
+    let root = Temporary::new("cli-bundle", "print-refused");
+    let printer = printer(&root);
+    let file = root.join("read-only");
+    fs::write(&file, "").expect("write the file standard output reads");
+
+    let run = Command::new(&printer)
+        .stdout(fs::File::open(&file).expect("open the file for reading"))
+        .output()
+        .expect("exec the bundle");
+
+    assert_eq!(run.status.code(), Some(1), "{run:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&run.stderr),
+        "standard output could not be written: other(9)\n"
+    );
+}
+
+/// A `print_err` whose reader has gone ends the program as `print`'s does, before the line it would have printed next.
+#[test]
+fn a_print_err_whose_reader_has_gone_ends_the_program_with_141() {
+    let root = Temporary::new("cli-bundle", "print-err-reader-gone");
+    let printer = printer(&root);
+
+    let run = Command::new(&printer)
+        .arg("stderr first")
+        .stderr(deaf_pipe())
+        .output()
+        .expect("exec the bundle");
+
+    assert_eq!(run.status.code(), Some(141), "{run:?}");
+    assert_eq!(String::from_utf8_lossy(&run.stdout), "");
 }
 
 /// A branch reading standard input waits alone: the other branch ticks meanwhile, and the input is written only once a tick has been read off the output, so the read can end only where the ticker ran while it waited. Input written anyway after a bound ends a run whose read held the whole program, which then answers with no tick before it.

@@ -14,7 +14,7 @@ fn args_indexes_the_argv_snapshot() {
     // argv crosses as a host-built `List(Bytes)`; indexing it round-trips one entry.
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     run_text(r#"
-let _ = std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args()!, 1), x[]))!;
+let _ = std/Io/Write/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args()!, 1), x[]))!;
 /std/Io/pure(())
 "#,
         system,
@@ -31,8 +31,8 @@ fn env_found_unwraps_to_some() {
         r#"
         use /std/{Io};
         match /std/proc/env("HOME")! : (_) => Io({})
-        | some(v) => let _ = std/Io/write(std/Io/stdout, v)!; /std/Io/pure(())
-        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("missing"))!; /std/Io/pure(())
+        | some(v) => let _ = std/Io/Write/write(std/Io/stdout, v)!; /std/Io/pure(())
+        | none() => let _ = /std/print("missing")!; /std/Io/pure(())
         end
         "#,
         system,
@@ -48,8 +48,8 @@ fn env_absent_is_none() {
         run(r#"
         use /std/{Io};
         match /std/proc/env("NOPE")! : (_) => Io({})
-        | some(v) => let _ = std/Io/write(std/Io/stdout, v)!; /std/Io/pure(())
-        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("missing"))!; /std/Io/pure(())
+        | some(v) => let _ = std/Io/Write/write(std/Io/stdout, v)!; /std/Io/pure(())
+        | none() => let _ = /std/print("missing")!; /std/Io/pure(())
         end
         "#),
         b"missing"
@@ -61,7 +61,7 @@ fn exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs. The result type is supplied because the exit yields whatever its region wants, and a `_` nothing reads wants nothing in particular; an annotation on the binder would instead make it a top-level item with a region of its own.
     let entrypoint = r#"
         let _ = /std/proc/exit(@{}, 7)!;
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))!;
+        let _ = /std/print("unreachable")!;
         /std/Io/pure(())
         "#
     .parse::<Entrypoint>()
@@ -102,7 +102,7 @@ fn exit_in_local_binding_halts() {
             let dead : {} = /std/proc/exit(3)!;
             Io/pure(n);
         let v = go(1)!;
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(v)))!;
+        let _ = /std/print(std/Nat/to_str(v))!;
         /std/Io/pure(())
         "#
     .parse::<Entrypoint>()
@@ -135,7 +135,7 @@ fn an_exit_ends_a_region_of_any_type() {
             | _ => Io/pure("ok")
             end;
         let s = f(0)!;
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(s))!;
+        let _ = /std/print(s)!;
         /std/Io/pure(())
         "#
     .parse::<Entrypoint>()

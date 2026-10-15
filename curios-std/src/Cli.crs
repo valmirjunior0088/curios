@@ -1,4 +1,4 @@
-use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, proc};
+use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, print_err, proc};
 use /std/Bool/{True, False};
 
 --- How an argument's text is read into a value: the placeholder shown in help, and the reader.
@@ -650,7 +650,7 @@ let decode(raw: List(Bytes)) -> Result(Nat, List(Str)) =
     walk(raw, 0);
 
 let fail_with(text: Str) -> Io({}) =
-    let _ = Io/write(Io/stderr, Str/to_bytes(text))!;
+    let _ = print_err(text)!;
     proc/exit(2);
 
 -- One line against the command reached through the commands `within`, descending while the command is a group. Each step consumes the token that named the subcommand, so the line strictly shortens and the descent ends whatever the declaration's depth.

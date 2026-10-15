@@ -23,6 +23,8 @@ pub induct Error: pub Type
 | not_directory()
 --- The peer reset the connection.
 | reset()
+--- The reader has gone: a write to a pipe or socket nobody reads.
+| broken_pipe()
 --- What was read is past the bound its reader states.
 | too_long()
 --- What was read is not text: the length of its longest prefix that is.
@@ -44,7 +46,8 @@ let errors: List({Nat, Error}) =
         (/sys/status/not_empty, Error/not_empty()),
         (/sys/status/is_directory, Error/is_directory()),
         (/sys/status/not_directory, Error/not_directory()),
-        (/sys/status/reset, Error/reset())];
+        (/sys/status/reset, Error/reset()),
+        (/sys/status/broken_pipe, Error/broken_pipe())];
 
 satisfy Show(Error) {
     show(e) =
@@ -59,6 +62,7 @@ satisfy Show(Error) {
         | is_directory() => "is_directory"
         | not_directory() => "not_directory"
         | reset() => "reset"
+        | broken_pipe() => "broken_pipe"
         | too_long() => "too_long"
         | not_text(valid) => Str/flatten(["not_text(", Nat/to_str(valid), ")"])
         | other(n) => Str/flatten(["other(", Nat/to_str(n), ")"])

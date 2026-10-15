@@ -343,7 +343,7 @@ fn a_bytes_payload_arrives_whole() {
         r#"
         use /std/{Io, Path, Try, fs};
         let r = Try/run(fs/cwd())!;
-        match r | success(p) => Io/write(Io/stdout, Path/to_bytes(p)) | failure(_) => Io/pure(()) end
+        match r | success(p) => Io/bind(Io/Write/write(Io/stdout, Path/to_bytes(p)), (_) => Io/pure(())) | failure(_) => Io/pure(()) end
         "#,
     )
     .expect("the program compiles");

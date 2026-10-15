@@ -13,7 +13,7 @@ fn match_omitted_motive_infers() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))!;
+        let _ = /std/print(std/Nat/to_str(result))!;
         /std/Io/pure(())
         "#;
 

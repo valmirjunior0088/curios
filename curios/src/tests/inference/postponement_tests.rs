@@ -19,7 +19,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         let direct : Eq2()(2, 2) = sym2(Eq2/refl());
         let chained : Eq2()(3, 3) = sym2(sym2(Eq2/refl()));
         match chained : (_, _, _) => /std/Io({})
-        | refl(@z) => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(z)))!; /std/Io/pure(())
+        | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
         end
         "#;
 
@@ -61,7 +61,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2()(2, 3) = Eq2/refl();
-        let _ = Io/write(Io/stdout, /std/Str/to_bytes("no"))!;
+        let _ = /std/print("no")!;
         /std/Io/pure(())
         "#;
 
@@ -97,7 +97,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let v : List({ Nat, Nat }) = use_(mk((1, 2)));
         match v : (_) => /std/Io({})
         | [] => /std/Io/pure(())
-        | [p, ..rest] => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(p.1)))!; /std/Io/pure(())
+        | [p, ..rest] => let _ = /std/print(Nat/to_str(p.1))!; /std/Io/pure(())
         end
         "#;
 

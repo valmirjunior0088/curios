@@ -9,7 +9,7 @@ use {
 #[test]
 fn random_bin_returns_requested_length() {
     let output = run(r#"
-let _ = std/Io/write(std/Io/stdout, /std/rand/bytes(8)!)!;
+let _ = std/Io/Write/write(std/Io/stdout, /std/rand/bytes(8)!)!;
 /std/Io/pure(())
 "#);
     assert_eq!(output.len(), 8);
@@ -24,7 +24,7 @@ fn nat_of_str_returns_option() {
         let ok = Option/unwrap_or(Nat/of_str("123"), 0);
         let bad = Option/unwrap_or(Nat/of_str("12a"), 7);
         let empty = Option/unwrap_or(Nat/of_str(""), 9);
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))!;
+        let _ = /std/print(Nat/to_str(Nat/add(Nat/add(ok, bad), empty)))!;
         /std/Io/pure(())
         "#),
         b"139"
@@ -40,7 +40,7 @@ fn int_of_str_returns_option() {
         let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
         let pos = Int/abs(Option/unwrap_or(Int/of_str("+7"), +0));
         let bad = Int/abs(Option/unwrap_or(Int/of_str("x"), +3));
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))!;
+        let _ = /std/print(Nat/to_str(Nat/add(Nat/add(neg, pos), bad)))!;
         /std/Io/pure(())
         "#),
         b"15"
@@ -59,7 +59,7 @@ fn flt_of_str_returns_option() {
         let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
         let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
         let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))!;
+        let _ = /std/print(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad))))!;
         /std/Io/pure(())
         "#),
         b"1017"
@@ -75,7 +75,7 @@ fn option_result_char_helpers() {
         let res0 : Result(Nat, Nat) = Result/success(5);
         let res = Result/unwrap_or(Result/map_success(res0, (x : Nat) => Nat/mul(x, 2)), 0);
         let up = Char/to_ascii_upper('a');
-        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up)))))!;
+        let _ = /std/print(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up))))!;
         /std/Io/pure(())
         "#),
         // opt = 5, res = 10, up = 'A' = 65  ->  80
@@ -87,11 +87,12 @@ fn option_result_char_helpers() {
 fn clock_diff_of_two_distinct_now_readings() {
     // Two scripted monotonic readings 30 s + 400 ns apart. `time/Instant/now` referenced twice must perform two *distinct* host calls (the nullary-effect distinctness the struct-head reduction relies on), so the diff is the gap between them, not zero.
     let (system, io) = MockHost::builder().mono([(100, 500), (130, 900)]).build();
-    run_text(r#"
+    run_text(
+        r#"
         let a = /std/time/Instant/now()!;
         let b = /std/time/Instant/now()!;
         let d = /std/time/Instant/diff(b, a);
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(d))))!;
+        let _ = /std/print(/std/Nat/to_str(/std/time/Duration/secs(d)))!;
         /std/Io/pure(())
         "#,
         system,
@@ -134,11 +135,12 @@ fn a_timestamp_reads_the_wall_clock_canonicalises_and_shows_as_epoch_seconds() {
 #[test]
 fn clock_mono_reads_scripted_elapsed() {
     let (system, io) = MockHost::builder().mono([(2, 7), (5, 9)]).build();
-    run_text(r#"
+    run_text(
+        r#"
         let earlier = /std/time/Instant/now()!;
         let later = /std/time/Instant/now()!;
         let e = /std/time/Instant/diff(later, earlier);
-        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))!;
+        let _ = /std/print(/std/Nat/to_str(/std/time/Duration/secs(e)))!;
         /std/Io/pure(())
         "#,
         system,

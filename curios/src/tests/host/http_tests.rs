@@ -509,5 +509,5 @@ fn a_reply_sent_ahead_of_a_failed_write_is_the_answer(client: &Compiled) {
 
     let silent = MockHost::builder().net_deaf([("example.com:80", Vec::<&str>::new())]);
 
-    assert_eq!(got(client, silent), "net other(32)");
+    assert_eq!(got(client, silent), "net broken_pipe");
 }

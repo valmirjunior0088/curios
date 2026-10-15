@@ -238,10 +238,24 @@ pub use Cli/{let Cli};
 pub mod Tui;
 pub use Tui/{let Tui};
 
---- `s` to standard output. A failed write is dropped.
-pub let print(s: Str) -> Io({}) =
-    Io/write(Io/stdout, Str/to_bytes(s));
+-- What a write to `name` answered, taken as the printers take it: nothing where it succeeded, and otherwise the program ended, with 141 where the reader has gone and with 1 once standard error is told why, a failure there discarded so that it cannot recurse. A declaration of its own, so a constant `print`'s description stays under the evaluator's copy cap.
+let answered(name: Str, r: Result(Io/Error, {})) -> Io({}) =
+    match r
+    | success(_) => Io/pure(())
+    | failure(e) =>
+        match e
+        | broken_pipe() => proc/exit(141)
+        | _ =>
+            let why = Str/flatten([name, " could not be written: ", Show/show(e), "\n"]);
+            let _ = Io/Write/write(Io/stderr, Str/to_bytes(why))!;
+            proc/exit(1)
+        end
+    end;
 
---- `s` to standard error.
+--- `s` to standard output. A failed write ends the program: 141 where the reader has gone, 1 otherwise.
+pub let print(s: Str) -> Io({}) =
+    answered("standard output", Io/Write/write(Io/stdout, Str/to_bytes(s))!);
+
+--- `s` to standard error. A failed write ends the program as `print`'s does.
 pub let print_err(s: Str) -> Io({}) =
-    Io/write(Io/stderr, Str/to_bytes(s));
+    answered("standard error", Io/Write/write(Io/stderr, Str/to_bytes(s))!);

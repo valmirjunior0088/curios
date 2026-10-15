@@ -75,7 +75,7 @@ fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under()
     let module = compile(
         r#"
             foreign frobnicate(Nat) -> Nat;
-            let _ = /std/Io/write(/std/Io/stdout, x[0x00])!;
+            let _ = /std/Io/Write/write(/std/Io/stdout, x[0x00])!;
             let n = frobnicate(5)!;
             /std/print(/std/Nat/to_str(n))
         "#,

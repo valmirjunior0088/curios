@@ -18,7 +18,7 @@ fn an_implicit_solves_against_a_reduction_through_a_let() {
             end;
 
         let probe(x : Nat) -> Eq()(through(x), through(x)) = Eq/refl();
-        let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
+        let _ = /std/print("ok")!;
         /std/Io/pure(())
         "#;
 
@@ -41,7 +41,7 @@ fn implicit_inductive_type_param_executes() {
         let proof : Eq2()(2, 2) = Eq2/refl();
         let inferred : Eq2()(2, 2) = sym2(proof);
         match inferred : (_, _, _) => /std/Io({})
-        | refl(@z) => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(z)))!; /std/Io/pure(())
+        | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
         end
         "#;
 
@@ -57,7 +57,7 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat)(2, 2) = Eq2/refl();
-        let _ = Io/write(Io/stdout, /std/Str/to_bytes("no"))!;
+        let _ = /std/print("no")!;
         /std/Io/pure(())
         "#;
 
@@ -107,7 +107,7 @@ fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
             match bits | b[] => b[] | b[head, ..tail]; ih => combine(head, ih) end;
         let through(@t : Bits, q : Eq()(trim(t), b[])) -> Eq()(trim(t), b[]) = q;
         let probe(x : Bits, q : Eq()(trim(b[0, ..x]), b[])) -> Eq()(trim(b[0, ..x]), b[]) = through(q);
-        let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
+        let _ = /std/print("ok")!;
         /std/Io/pure(())
         "#;
 
@@ -122,7 +122,7 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
         use /std/Bool/{Holds};
         let constant(n : Nat) -> Nat = 0;
         let same : Eq()(constant(2), constant(1)) = Eq/refl();
-        let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
+        let _ = /std/print("ok")!;
         /std/Io/pure(())
         "#;
 
@@ -663,7 +663,7 @@ fn a_lists_unknown_tail_is_solved_to_what_the_other_side_has_left() {
             List/map(
                 [longer_prefix(1, 2, [3]), two_tails(1, [2], [3]), literal(1, 2)],
                 (l : List(Nat)) => Nat/to_str(List/len(l)));
-        let _ = Io/write(Io/stdout, Str/to_bytes(Str/join(" ", lengths)))!;
+        let _ = /std/print(Str/join(" ", lengths))!;
         /std/Io/pure(())
         "#;
 
