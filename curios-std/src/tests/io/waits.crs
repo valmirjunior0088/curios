@@ -25,13 +25,15 @@ test a_yield_at_the_top_of_a_program_goes_on =
 
 test a_sleep_holds_only_its_own_branch =
     Test/perform(() =>
-        let n = Io/race([Io/bind(Io/sleep(Duration/of_secs(3600)), (_) => Io/pure(1)), Io/pure(2)])!;
+        let n =
+            Io/race([Io/bind(Io/sleep(Duration/of_secs(3600)), (_) => Io/pure(1)), Io/pure(2)])!;
         Io/pure(Test/assert(n == 2)));
 
 test a_wait_on_a_cell_goes_on_once_the_branch_beside_it_fills_it =
     Test/perform(() =>
         let cell = Cell/new()!;
-        let (waited, filled) = Io/both(Io/bind(Io/wait_filled([cell]), (_) => Io/pure(true)), Cell/fill(cell, ()))!;
+        let (waited, filled) =
+            Io/both(Io/bind(Io/wait_filled([cell]), (_) => Io/pure(true)), Cell/fill(cell, ()))!;
         Io/pure(Test/assert(waited && filled)));
 
 test using_tells_its_finalizer_a_body_ran_to_its_end =
@@ -45,7 +47,10 @@ test using_tells_its_finalizer_a_body_was_dropped_while_it_waited =
     Test/perform(() =>
         let ends = Channel/new(@Io/Ended, 1)!;
         let never = Cell/new()!;
-        let body = Io/using((ended) => told(ends.0, ended), Io/bind(Io/wait_filled([never]), (_) => Io/pure(3)));
+        let body =
+            Io/using(
+                (ended) => told(ends.0, ended),
+                Io/bind(Io/wait_filled([never]), (_) => Io/pure(3)));
         let _ = Io/race([body, Io/pure(4)])!;
         let cancelled = heard(ends.1, false)!;
         Io/pure(Test/assert(cancelled)));
