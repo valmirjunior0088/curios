@@ -7,7 +7,7 @@
 use {
     super::{
         Analysis, Atom, BlockId, FunctionId, Intrinsic, LocalBehavior, Module, ObservableBehavior,
-        ProductId, Rhs, Semantics, Statement, ValueId,
+        Rebindings, Rhs, Semantics, Statement,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -16,22 +16,14 @@ use {
 #[derive(Debug, Clone, Default)]
 pub struct Summary {
     functions: BTreeMap<FunctionId, LocalBehavior>,
-    /// The computation-free rebindings between a callee spelled as a value and the function it names, so a call through one is judged as that function rather than as an unknown — see [`resolve_callee`].
+    /// The computation-free rebindings between a callee spelled as a value and the function it names, so a call through one is judged as that function rather than as an unknown — see [`Rebindings::resolve`].
     rebindings: Rebindings,
-}
-
-/// What stands between a value and the atom it is, without computing anything: an [`Rhs::Alias`], and an [`Rhs::Project`] of a product the module constructs, whose field the [`Rhs::Product`] already holds.
-#[derive(Debug, Clone, Default)]
-struct Rebindings {
-    aliases: BTreeMap<ValueId, Atom>,
-    products: BTreeMap<ValueId, (ProductId, Vec<Atom>)>,
-    projections: BTreeMap<ValueId, (ProductId, Atom, u32)>,
 }
 
 impl Summary {
     /// Compute the summary to a fixed point over a verified module and its analysis.
     pub fn analyze(module: &Module, analysis: &Analysis) -> Self {
-        let rebindings = rebindings(module);
+        let rebindings = Rebindings::analyze(module);
         // Seed: a recursive component's members may diverge *unless the definition they erased from was proved total*; everything else starts pure. The seed persists because updates join the previous summary in (the lattice only grows).
         let mut current = BTreeMap::<FunctionId, LocalBehavior>::new();
         for id in module.function_ids() {
@@ -157,7 +149,7 @@ fn callee_behavior(
     summaries: &BTreeMap<FunctionId, LocalBehavior>,
     rebindings: &Rebindings,
 ) -> LocalBehavior {
-    match resolve_callee(atom, rebindings) {
+    match rebindings.resolve(atom) {
         // The seed covers every live function and a verified module references only live functions, so a miss is a broken snapshot discipline, never a program property.
         Atom::Function(function) => summaries
             .get(&function)
@@ -165,74 +157,6 @@ fn callee_behavior(
             .expect("a live callee has a summary"),
         _ => LocalBehavior::unknown(),
     }
-}
-
-/// Follow a callee atom through the [`Rebindings`] that stand between it and the function it names.
-///
-/// **An alias is computation-free, so a call through one is a call to what it rebinds** — and reading it as an unknown callee costs the whole conservative top. That is not a missed refinement but a retention bug with a price: a top-level `apply` whose callee is an alias — `/std/Json/decode/decode`'s, of `/std/Parse/bind` — would be judged observable and kept, and through it the recursive parser group and the entire `Json`/`Parse` web, in *every* program, `/std/print("hi")` included.
-///
-/// **So is a projection of a product the module constructs**: the field it reads is an atom the construction already holds, so a call through `dict.bind` is a call to whatever `dict`'s construction put there. It is the shape a concept method's call erases to — the method projected off the witness, applied — and so the other way the same web would be kept. A projection whose product is not one the walk can see constructed resolves to nothing, and its callee stays unknown.
-///
-/// The walk is bounded by the maps, not by trust: a verified module's rebindings form a dag, and the visited set is what makes that an assumption this function does not have to make. It is iterative, as every traversal here is: the projections still to apply wait on a stack, innermost last, for the product the walk reaches next.
-fn resolve_callee(atom: Atom, rebindings: &Rebindings) -> Atom {
-    let mut current = atom;
-    let mut pending = Vec::<(ProductId, u32)>::new();
-    let mut seen = BTreeSet::new();
-    while let Atom::Value(value) = current {
-        if !seen.insert(value) {
-            break;
-        }
-        if let Some(&next) = rebindings.aliases.get(&value) {
-            current = next;
-        } else if let Some(&(schema, product, field)) = rebindings.projections.get(&value) {
-            pending.push((schema, field));
-            current = product;
-        } else if let Some(&(schema, field)) = pending.last()
-            && let Some((built, fields)) = rebindings.products.get(&value)
-            && *built == schema
-            && let Some(&next) = fields.get(field as usize)
-        {
-            pending.pop();
-            current = next;
-        } else {
-            break;
-        }
-    }
-    match pending.is_empty() {
-        true => current,
-        false => atom,
-    }
-}
-
-/// Every [`Rebindings`] entry, module-wide. Scanned from the statement arena rather than walked per region, because a callee's alias or dictionary is frequently bound at top level while the call sits inside a nested body.
-fn rebindings(module: &Module) -> Rebindings {
-    let mut rebindings = Rebindings::default();
-    for statement in module.statements().iter().flatten() {
-        let Statement::Let { result, rhs } = statement else {
-            continue;
-        };
-        match rhs {
-            Rhs::Alias(atom) => {
-                rebindings.aliases.insert(*result, *atom);
-            }
-            Rhs::Product { schema, fields } => {
-                rebindings
-                    .products
-                    .insert(*result, (*schema, fields.clone()));
-            }
-            Rhs::Project {
-                schema,
-                product,
-                field,
-            } => {
-                rebindings
-                    .projections
-                    .insert(*result, (*schema, *product, *field));
-            }
-            _ => {}
-        }
-    }
-    rebindings
 }
 
 #[cfg(test)]

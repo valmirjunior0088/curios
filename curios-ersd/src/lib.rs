@@ -50,6 +50,9 @@ pub mod test_support;
 mod semantics;
 pub use semantics::*;
 
+mod rebindings;
+pub(crate) use rebindings::*;
+
 mod summary;
 pub use summary::*;
 
