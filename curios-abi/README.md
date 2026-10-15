@@ -36,6 +36,14 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 **Rejected.** `Bits` carrying its own length, a two-field encoding all four implementations would carry for a case a host handles by sending a length in band; spelling only `Bytes` and leaving the grain to prose; an option crossing as its list with `none` the empty one, which allocates for every `none` a host answers; `some` crossing as a reference leaf's own payload, a second crossing path to save one small array where a value is present.
 
+### Every row that returns carries one lane, which its import adds
+
+**Decision.** What an import is typed as is a fixed function of its declaration, stated once: `WireSignature::imported_params` is the declared operands followed by `LANE_IN`, the token of a call still pending and whether it is dropped, and `WireSignature::imported_results` the declared results followed by `LANE_OUT`, the token of a call left pending; a row that does not return carries no lane. The emitter's import section, the verifiers' arities, the runtime's import types and the browser's `laned` read those two, and nothing else spells the shape an import crosses as. A program that can suspend exports `ADVANCE` beside `ENTRY`, both answering turns, and `DEADLOCK` is what every host reports of one suspended on nothing it can wait for.
+
+**Rationale.** Whether an answer comes later is its answerer's, decided where the program is linked ([A host operation is a foreign declaration](../documentation/design/runtime/a-host-operation-is-a-foreign-declaration-whose-types-are-its-whole-contract.md)), so the compiler and every answerer agree on the import only where the lane depends on nothing either of them knows. The token is an `Option(Handle)`, whose `none` crosses as null, so a call answered at once pays a null each way.
+
+**Rejected.** A flag on `WireSignature` marking the rows that may be answered later, read off the host's table or off a manifest, which makes adding a module change how every call of a row crosses; the token as a `List(Handle)`, a list of one where an option says what it is.
+
 ### A row's results cross in the order written, a reference in any slot
 
 **Decision.** `WireResults` is the ordered list of a row's results, labelled where they are a record's fields, each a scalar or a reference in whatever slot the row gives it, as many references as the row has. It is built as what it is — none, one bare, or a record from its first two fields — so no label is handed to a shape that keeps none. The guest keeps a row's results in locals and boxes or embeds each where it stands, the runtime lowers each into its own slot, and the surface keeps a `foreign` declaration's fields in the order written.

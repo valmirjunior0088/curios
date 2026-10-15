@@ -327,6 +327,73 @@ fn compile_produces_a_runnable_executable() {
     assert_eq!(String::from_utf8_lossy(&run.stdout), "hello");
 }
 
+/// A branch reading standard input waits alone: the other branch ticks meanwhile, and the input is written only once a tick has been read off the output, so the read can end only where the ticker ran while it waited. Input written anyway after a bound ends a run whose read held the whole program, which then answers with no tick before it.
+#[test]
+fn a_branch_ticks_while_another_reads_standard_input() {
+    let root = Temporary::new("cli-bundle", "stdin-ticker");
+    let package = root.join("ticker");
+    let output = root.join("ticker.out");
+    fs::create_dir_all(&package).expect("create the temp package");
+    fs::write(package.join("curios.toml"), "name = \"ticker\"\n").expect("write the manifest");
+    fs::write(
+        package.join("exe.crs"),
+        r#"use /std/{Io, Nat, Str, Bytes};
+use /std/time/{Duration};
+let ticks(n: Nat) -> Io({}) =
+    match n
+    | 0 => Io/pure(())
+    | m + 1 =>
+        let _ = Io/sleep(Duration/of_millis(10))!;
+        let _ = /std/print("tick\n")!;
+        ticks(m)
+    end;
+let reading: Io({}) =
+    let read = Io/read_all(Io/stdin)!;
+    match read
+    | success(bytes) => /std/print(Str/concat("read ", Nat/to_str(Bytes/len(bytes))))
+    | failure(_) => /std/print("failed")
+    end;
+Io/race([reading, ticks(3000)])
+"#,
+    )
+    .expect("write the temp source");
+
+    compile(&package, &output);
+
+    let mut run = Command::new(&output)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("exec the bundle");
+    let mut input = run.stdin.take().expect("the input was piped");
+    let mut ticked = run.stdout.take().expect("the output was piped");
+
+    let (tick, ticking) = std::sync::mpsc::channel::<()>();
+    let writer = std::thread::spawn(move || {
+        let _ = ticking.recv_timeout(std::time::Duration::from_secs(20));
+        input
+            .write_all(b"line\n")
+            .expect("the bundle takes its input");
+    });
+
+    let mut seen = Vec::new();
+    let mut byte = [0];
+    while std::io::Read::read(&mut ticked, &mut byte).expect("the output reads") == 1 {
+        seen.push(byte[0]);
+        if seen.ends_with(b"tick\n") {
+            let _ = tick.send(());
+        }
+    }
+    writer.join().expect("the writer ends");
+
+    assert!(run.wait().expect("the bundle ends").success());
+    let seen = String::from_utf8_lossy(&seen);
+    assert!(
+        seen.starts_with("tick\n") && seen.ends_with("read 5"),
+        "a tick before the read's answer: {seen:?}"
+    );
+}
+
 /// A program keeps the modules answering its `foreign` declarations when it leaves the machine that built it.
 ///
 /// **This is what the bundle format is for.** `curios run` links a plugin by reading the manifest, hashing the `.wasm` beside it and compiling it; none of those three things exist where a compiled executable runs. So the module is precompiled into the tail and the launcher deserializes it — and the executable is run from a directory holding nothing else, which is the only way to show that no part of the package was still being reached.

@@ -798,7 +798,7 @@ impl HostOps for OsHost {
     }
 
     fn socket_accept(&self, io: Handle) -> Result<Handle, Failure> {
-        // The listener is non-blocking, so the accept answers at once under the lock: `WouldBlock` with nothing pending, else the stream. `accept4` hands the stream over blocking whatever the listener's flag, so it is switched here, since a fiber will drain it.
+        // The listener is non-blocking, so the accept answers at once under the lock: `WouldBlock` with nothing pending, else the stream. `accept4` hands the stream over blocking whatever the listener's flag, so it is switched here, since its reader suspends on it rather than block.
         let mut table = self.table.lock().unwrap();
         let accepted = match table.get(&io) {
             Some(OsResource::Listener(socket)) => socket.accept(),
@@ -1465,7 +1465,7 @@ fn finish_tls<Data>(conn: &mut ConnectionCommon<Data>, sock: &mut Socket) -> Res
     finish(sock)
 }
 
-/// What a TLS stream's socket is watched for on behalf of a standing that asked for `asked`. While the handshake is under way `rustls`'s own demand replaces the guest's: a socket is nearly always writable, so a fiber that parked to write its request would spin while `rustls` was in fact waiting to read the server's reply. Afterwards the guest's interest stands, beside readiness to write whenever `rustls` still holds records to push.
+/// What a TLS stream's socket is watched for on behalf of a standing that asked for `asked`. While the handshake is under way `rustls`'s own demand replaces the guest's: a socket is nearly always writable, so a description suspended to write its request would spin while `rustls` was in fact waiting to read the server's reply. Afterwards the guest's interest stands, beside readiness to write whenever `rustls` still holds records to push.
 fn tls_watch(conn: &rustls::CommonState, asked: PollFlags) -> PollFlags {
     let read = match conn.wants_read() {
         true => PollFlags::IN,

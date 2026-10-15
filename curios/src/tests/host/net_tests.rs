@@ -36,7 +36,7 @@ fn call_to_an_unscripted_endpoint_is_refused() {
     assert_eq!(run(CALL), b"refused");
 }
 
-// A connect to a remote peer goes pending: the fiber parks on the socket's writability, `finish_connect` reads the outcome once `poll` has reported it, and only then is the request sent. A refusal arrives the same way, deferred to the settle, and decodes to `refused()` as a synchronous one does.
+// A connect to a remote peer goes pending: the connect suspends on a watch of the socket's writability, `finish_connect` reads the outcome once the host's wait has reported it, and only then is the request sent. A refusal arrives the same way, deferred to the settle, and decodes to `refused()` as a synchronous one does.
 #[test]
 fn a_pending_connect_is_awaited_before_the_request_is_sent() {
     let (system, io) = MockHost::builder()
@@ -51,7 +51,7 @@ fn a_pending_connect_is_awaited_before_the_request_is_sent() {
     assert_eq!(io.output(), b"refused");
 }
 
-// The one case that needs the network: an HTTPS request against a public host, driven end to end by the scheduler over the real host — the resolution, the pending connect and the handshake each park on `poll` between the fiber's reads and writes. Ignored by default; run by hand on a networked machine with `cargo test -p curios --lib -- --ignored https_perform`. The real host's output cannot be captured, so the program reports through a file.
+// The one case that needs the network: an HTTPS request against a public host, driven end to end over the real host — the resolution answered later, the pending connect and the handshake each suspend between the program's reads and writes. Ignored by default; run by hand on a networked machine with `cargo test -p curios --lib -- --ignored https_perform`. The real host's output cannot be captured, so the program reports through a file.
 #[test]
 #[ignore = "needs the network"]
 fn https_perform_reaches_a_public_host_over_the_real_host() {

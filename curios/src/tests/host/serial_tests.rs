@@ -45,7 +45,7 @@ fn an_open_asks_the_host_for_the_configured_speed_and_frame() {
     );
 }
 
-// Under `with`, a command lands on the device whole and the reply is read as one line across two arrivals: the fiber parks between the carriage return and the newline, `poll` brings the second, and the line ending is dropped whole. The body ended well, so the port is drained before it closes.
+// Under `with`, a command lands on the device whole and the reply is read as one line across two arrivals: the reader suspends between the carriage return and the newline, the host's wait brings the second, and the line ending is dropped whole. The body ended well, so the port is drained before it closes.
 #[test]
 fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
     let source = r#"

@@ -1,4 +1,4 @@
-//! Opening, reading and writing a file, and the bracket its handle lives inside — synchronous in `Io`, and inside a fiber through the stream witnesses.
+//! Opening, reading and writing a file, and the bracket its handle lives inside — synchronous, and across a suspension through the stream witnesses.
 
 use {
     crate::tests::{run, run_text},
@@ -108,9 +108,9 @@ fn read_pulls_bytes_inside_the_bracket() {
     assert_eq!(io.output(), b"first\nsecond\n");
 }
 
-// The same bracket inside a fiber: the file reads through its stream witness, the body may yield, and the bracket is a scheduler guard, so the close is owed to the scheduler rather than to the body reaching its end.
+// The same bracket over a body that suspends: the file reads through its stream witness after the body yields, and the close rides the suspension, so it is owed to whoever advances the body rather than to the body reaching its end.
 #[test]
-fn with_async_reads_through_the_stream_witness_inside_a_fiber() {
+fn a_bracketed_file_reads_through_its_stream_witness_across_a_suspension() {
     let source = r#"
         use /std/{File, Path, Str, Bytes, Try, Io};
         use /std/Monad/{Lift};

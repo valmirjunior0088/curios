@@ -2,7 +2,7 @@
 
 use {crate::tests::run_text, curios_runtime::OsHost, curios_utilities::test_support::Temporary};
 
-// A child's piped outputs are drained by the scheduler: the pipe answers would-block until the child writes, the fiber parks, `poll` wakes it, and both drains join before the child is reaped. `/bin/echo` and `/bin/cat` are present on both release targets; `cat` on the null device exits at once with nothing written.
+// A child's piped outputs are drained side by side: the pipe answers would-block until the child writes, the reader suspends on a watch, the host's wait wakes it, and both drains join before the child is reaped. `/bin/echo` and `/bin/cat` are present on both release targets; `cat` on the null device exits at once with nothing written.
 #[test]
 fn run_drains_a_real_child_through_the_scheduler() {
     let root = Temporary::new("host", "os-report");

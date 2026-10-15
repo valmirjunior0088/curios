@@ -80,7 +80,7 @@ fn valid(argv: &[Vec<u8>], cwd: &[u8], env: &[Vec<u8>]) -> bool {
             .all(|entry| no_nul(entry) && !entry.is_empty() && entry[0] != b'=')
 }
 
-/// One standard stream's wiring, and the parent's end of its pipe when it is piped. The parent's end is non-blocking, since a fiber drains it and a read that blocked on one pipe while the child filled the other is the deadlock every process library documents; the child's end stays blocking, as a program expects its standard streams to be. Both ends are close-on-exec, so no other child inherits either.
+/// One standard stream's wiring, and the parent's end of its pipe when it is piped. The parent's end is non-blocking, since its reader suspends on it and a read that blocked on one pipe while the child filled the other is the deadlock every process library documents; the child's end stays blocking, as a program expects its standard streams to be. Both ends are close-on-exec, so no other child inherits either.
 fn wiring(mode: StdioMode, parent_reads: bool) -> Result<(Stdio, Option<OwnedFd>), Failure> {
     match mode {
         StdioMode::Inherit => Ok((Stdio::inherit(), None)),

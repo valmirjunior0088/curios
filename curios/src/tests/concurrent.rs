@@ -80,6 +80,31 @@ fn a_scope_answers_with_its_body_after_the_child_it_joins() {
     );
 }
 
+// A scope composes inside a child of another: the inner scope's child yields and answers 3, the inner body answers 4, and the outer body, which wrote while its child ran, answers 40.
+#[test]
+fn a_scope_inside_a_child_of_another_composes() {
+    assert_eq!(
+        run(r#"
+        use /std/{Str, Nat, Io};
+        let leaf: Io(Nat) =
+            let _ = Io/yield()!;
+            Io/pure(3);
+        let inner(s: Io/Scope) -> Io(Nat) =
+            let f = Io/spawn(s, leaf)!;
+            let n = Io/join(f)!;
+            Io/pure(n + 1);
+        let outer(s: Io/Scope) -> Io(Nat) =
+            let f = Io/spawn(s, Io/scope(inner))!;
+            let _ = Io/write(Io/stdout, Str/to_bytes("outer;"))!;
+            let n = Io/join(f)!;
+            Io/pure(n * 10);
+        let n = Io/scope(outer)!;
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(n)))
+        "#),
+        b"outer;40"
+    );
+}
+
 // `all` answers each action's answer in the actions' order: both complete when first advanced, writing "a;" then "b;", and the answers [1, 2] sum to 3.
 #[test]
 fn all_answers_in_the_order_of_its_actions() {
@@ -314,7 +339,7 @@ fn timeout_answers_some_when_the_body_finishes_first() {
     assert_eq!(io.output(), b"42");
 }
 
-// The deadline passes first: the two-second timer wakes and wins, and the fifty-second body, which holds a bracket, is cancelled while it sleeps — its release runs before the timeout answers `none`.
+// The deadline passes first: the two-second timer wakes and wins, and the fifty-second body, which holds a bracket, is cancelled while it sleeps — its release runs, told it was cancelled, before the timeout answers `none`.
 #[test]
 fn timeout_cancels_the_body_and_runs_its_release_before_answering_none() {
     let (system, io) = ticking();
@@ -326,8 +351,10 @@ fn timeout_cancels_the_body_and_runs_its_release_before_answering_none() {
             let _ = Io/sleep(Duration/of_secs(50))!;
             let _ = Io/write(Io/stdout, Str/to_bytes("body;"))!;
             Io/pure(0);
+        let released(ended: Io/Ended) -> Io({}) =
+            /std/print(match ended | finished() => "finished;" | cancelled() => "cancelled;" end);
         let program: Io({}) =
-            let r = Io/timeout(Duration/of_secs(2), Io/using((_) => /std/print("released;"), body))!;
+            let r = Io/timeout(Duration/of_secs(2), Io/using(released, body))!;
             match r : (_) => Io({})
             | some(v) => Io/write(Io/stdout, Str/to_bytes("some"))
             | none() => Io/write(Io/stdout, Str/to_bytes("none;"))
@@ -337,7 +364,7 @@ fn timeout_cancels_the_body_and_runs_its_release_before_answering_none() {
         system,
     )
     .expect("expected result");
-    assert_eq!(io.output(), b"released;none;");
+    assert_eq!(io.output(), b"cancelled;none;");
 }
 
 // Both branches sleep: the two-second branch wakes, writes and wins with 1, and the sixty-second loser is cancelled where it sleeps, its release running before the race answers and its body never.

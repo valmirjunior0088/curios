@@ -81,9 +81,9 @@ fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
     assert_eq!(io.raw_modes(), Vec::<bool>::new());
 }
 
-// `with_raw_async` is the same bracket inside a fiber: the body parks and resumes under raw mode, and the scheduler's guard restores it once around the result.
+// The same bracket over a body that suspends: the body yields and resumes under raw mode, and the mode is restored once around the result.
 #[test]
-fn with_raw_async_brackets_a_parking_body_inside_a_fiber() {
+fn with_raw_brackets_a_body_that_suspends() {
     let source = r#"
         use /std/{Nat, Show, Try, Io, Tty};
         let body: Try(Io, Io/Error, Nat) =
