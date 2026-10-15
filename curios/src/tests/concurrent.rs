@@ -447,8 +447,7 @@ fn a_signal_wakes_its_waiter_once_notified_and_keeps_an_early_notify() {
 fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
     assert_eq!(
         run(r#"
-        use /std/{Str, Nat, Option, Io};
-        use /std/Io/{Channel};
+        use /std/{Str, Nat, Option, Io, Channel};
         let shown(o: Option(Nat)) -> Str =
             match o | some(n) => Nat/to_str(n) | none() => "none" end;
         let left(t: Channel/Take(Nat)) -> Str =
@@ -475,8 +474,7 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
 fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Cell, Option, Io, print};
-        use /std/Io/{Channel};
+        use /std/{Nat, Cell, Option, Io, print, Channel};
         let feeder(s: Channel/Sender({Nat, Cell({})})) -> Io({}) =
             let ack = Cell/new()!;
             let _ = Channel/send(s, (7, ack))!;
@@ -508,8 +506,7 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
 fn a_closed_channel_drains_before_it_ends() {
     assert_eq!(
         run(r#"
-        use /std/{Str, Nat, Bool, Option, Io};
-        use /std/Io/{Channel};
+        use /std/{Str, Nat, Bool, Option, Io, Channel};
         let shown(o: Option(Nat)) -> Str =
             match o | some(n) => Nat/to_str(n) | none() => "end" end;
         let said(b: Bool) -> Str =
@@ -555,14 +552,13 @@ fn a_closed_channel_drains_before_it_ends() {
     );
 }
 
-// The channel a program reaches is the one behind its two ends: the operations `/sys` declares over the bare channel are no part of `/std/Io/Channel`, so no program holds a channel whose changes wake nothing.
+// The channel a program reaches is the one behind its two ends: the operations `/sys` declares over the bare channel are no part of `/std/Channel`, so no program holds a channel whose changes wake nothing.
 #[test]
 fn the_bare_channel_operations_are_not_reachable() {
     let (system, _io) = MockHost::builder().build();
     let refusal = run_text(
         r#"
-        use /std/{Nat, Io};
-        use /std/Io/{Channel};
+        use /std/{Nat, Io, Channel};
         let c = Channel/Channel/new(@Nat, 1)!;
         Io/pure(())
         "#,

@@ -11,8 +11,7 @@ struct Edge {
     outside: &'static str,
 }
 
-const HEADER: &str =
-    "use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Bits, List, Io}; use /std/Io/{Channel};";
+const HEADER: &str = "use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Bits, List, Io, Channel};";
 
 const EDGES: &[Edge] = &[
     Edge {

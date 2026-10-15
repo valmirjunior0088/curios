@@ -1,5 +1,5 @@
-use /std/{Io};
-use /std/Io/{Channel, Offer};
+use /std/{Io, Channel};
+use /std/Io/{Offer};
 
 --- A flag one branch raises and another waits on. Notifications coalesce while its one slot is full.
 pub struct Signal: Type {

@@ -1,7 +1,6 @@
-use /std/{Nat, Bytes, Byte, Bool, Str, Option, Result, Spell, Io, Try};
+use /std/{Nat, Bytes, Byte, Bool, Str, Option, Result, Spell, Io, Try, Channel};
 use /std/ops/{Eql};
 use /std/Io/{Error};
-use /std/Io/{Channel};
 
 --- What a piece made of the bytes it was asked of: the piece and the bytes after it, a refusal, or that it has not all arrived — with where to resume and the bytes still held, so the next look reads none of them twice. A piece holds no stream: a reader asks it again once more bytes have arrived, and whoever asked the reader decides what a stream that ended means.
 pub induct Step(St: Type, R: Type, A: Type): pub Type

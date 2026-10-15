@@ -1,6 +1,5 @@
 -- Waiting in `Io`: what a wait holds of the branch beside it, and what a bracket tells its finalizer.
-use /std/{Bool, Cell, Io, Test};
-use /std/Io/{Channel};
+use /std/{Bool, Cell, Io, Test, Channel};
 use /std/time/{Duration};
 
 -- A finalizer that leaves how its body ended where a take finds it.

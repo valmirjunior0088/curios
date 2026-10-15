@@ -1,6 +1,5 @@
-use /std/{Nat, Bool, Str, List, Option, Io, Try, Tty};
+use /std/{Nat, Bool, Str, List, Option, Io, Try, Tty, Channel};
 use /std/time/{Duration};
-use /std/Io/{Channel};
 
 --- A terminal colour, in the four forms a terminal understands.
 pub mod Color;

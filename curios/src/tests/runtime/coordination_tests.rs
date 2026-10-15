@@ -6,8 +6,7 @@ use crate::tests::{run, typecheck};
 fn a_channel_preserves_fifo_through_wraparound_and_close() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Io, print};
-        use /std/Io/{Channel};
+        use /std/{Nat, Str, Io, print, Channel};
         let pushed(p: Channel/Push) -> Io({}) =
             print(match p | taken() => "taken " | full() => "full " | closed() => "closed " end);
         let taken(t: Channel/Take(Nat)) -> Io({}) =
@@ -34,8 +33,7 @@ fn a_channel_preserves_fifo_through_wraparound_and_close() {
 fn evidence_payloads_still_occupy_storage() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Eq, Option, Cell, Io, print};
-        use /std/Io/{Channel};
+        use /std/{Nat, Eq, Option, Cell, Io, print, Channel};
         let proof = Cell/new(@Option(Eq()(1, 1)))!;
         let _ = Cell/fill(proof, Option/some(Eq/refl()))!;
         let _ = print(match Cell/poll(proof)! | some(_) => "proof " | none() => "missing " end)!;
@@ -52,8 +50,7 @@ fn evidence_payloads_still_occupy_storage() {
 fn type_payloads_still_occupy_storage() {
     assert_eq!(
         run(r#"
-        use /std/{Cell, Nat, Io, print};
-        use /std/Io/{Channel};
+        use /std/{Cell, Nat, Io, print, Channel};
         Io/bind(Cell/new(@Type), (c) =>
         Io/bind(Cell/fill(c, Nat), (_) =>
         Io/bind(Cell/poll(c), (held) =>
@@ -71,7 +68,7 @@ fn type_payloads_still_occupy_storage() {
 
 #[test]
 fn a_zero_capacity_is_refused_at_the_public_constructor() {
-    let error = typecheck("let c = /std/Io/Channel/new(@/std/Nat, 0)!; /std/Io/pure(())")
+    let error = typecheck("let c = /std/Channel/new(@/std/Nat, 0)!; /std/Io/pure(())")
         .expect_err("zero has no positive-capacity evidence");
     assert!(error.contains("Holds") || error.contains("Lt"), "{error}");
 }

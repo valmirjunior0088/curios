@@ -16,10 +16,6 @@ pub use Offer/{let Offer};
 pub mod Future;
 pub use Future/{let Future};
 
---- A bounded queue values are handed through, its two ends waited on.
-pub mod Channel;
-pub use Channel/{let Channel};
-
 --- A flag one branch raises and another waits on: a wait on no handle and no timer.
 pub mod Signal;
 pub use Signal/{let Signal};

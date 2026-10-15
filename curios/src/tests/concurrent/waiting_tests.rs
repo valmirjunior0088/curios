@@ -31,8 +31,7 @@ fn a_fulfilment_wakes_a_waiter_once_across_duplicate_offers() {
 fn two_woken_receivers_retry_after_only_one_can_take() {
     assert_eq!(
         run(r#"
-        use /std/{Cell, Nat, Option, print, Io};
-        use /std/Io/{Channel};
+        use /std/{Cell, Nat, Option, print, Io, Channel};
         let body(s: Io/Scope) -> Io({}) =
             let c = Channel/new(@Nat, 1)!;
             let first = Cell/new(@{})!;
@@ -62,8 +61,8 @@ fn two_woken_receivers_retry_after_only_one_can_take() {
 fn a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it() {
     assert_eq!(
         run(r#"
-        use /std/{Cell, Nat, Option, print, Io};
-        use /std/Io/{Channel, Offer};
+        use /std/{Cell, Nat, Option, print, Io, Channel};
+        use /std/Io/{Offer};
         let body(s: Io/Scope) -> Io({}) =
             let messages = Channel/new(@{Nat, Cell({})}, 1)!;
             let other = Channel/new(@Nat, 1)!;

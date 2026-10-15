@@ -1,5 +1,5 @@
-use /std/{Nat, Bool, List, Option, Cell, Io, Handle};
-use /std/Io/{Future, Channel, Signal};
+use /std/{Nat, Bool, List, Option, Cell, Io, Handle, Channel};
+use /std/Io/{Future, Signal};
 use /std/time/{Duration};
 
 -- A branch the driver holds: one still to start, or one suspended on what its suspension named, with what cancels it and the rest of it. A branch that ran to its end is dropped, its answer in whatever it wrote to.
