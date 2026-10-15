@@ -1,10 +1,14 @@
 //! Turning a function into a continuation, and the call shapes that forbid it.
 
 use {
-    super::contify_calls,
+    super::{contify_calls, separate_loop_entries},
     crate::{
-        Atom, Callee, Continuation, Edge, Function, Literal, Module, Node, optimize,
-        test_support::{capture_unmentioned_by_owner, helper_called},
+        Atom, Callee, Continuation, Edge, Function, Literal, Module, Node, SCC_CLONE_NODE_LIMIT,
+        function_nodes, optimize,
+        test_support::{
+            PolymorphicLoop, capture_unmentioned_by_owner, helper_called, nest_helpers,
+            polymorphic_loop,
+        },
     },
     curios_num::Natural,
     std::collections::BTreeMap,
@@ -229,4 +233,47 @@ fn contifies_a_callee_whose_capture_the_owner_never_mentions() {
         module.function(helper).is_none(),
         "the capturing helper is contified:\n{module}"
     );
+}
+
+#[test]
+fn nested_definitions_count_toward_the_copy_limit() {
+    for size in [SCC_CLONE_NODE_LIMIT, SCC_CLONE_NODE_LIMIT + 1] {
+        let PolymorphicLoop {
+            mut module,
+            loop_fn,
+            ..
+        } = polymorphic_loop(true, 0);
+        nest_helpers(&mut module, loop_fn, size);
+        assert!(function_nodes(&module, loop_fn).len() < SCC_CLONE_NODE_LIMIT);
+        let before = (
+            module.nodes().len(),
+            module.functions().len(),
+            module.continuations().len(),
+            module.values().len(),
+        );
+        let original = module.to_string();
+        let mut budget = 1;
+        let changed = separate_loop_entries(&mut module, &mut budget);
+        assert_eq!(
+            changed,
+            size <= SCC_CLONE_NODE_LIMIT,
+            "extent of {size} nodes"
+        );
+        if changed {
+            assert_eq!(budget, 0);
+            module.verify().unwrap();
+        } else {
+            assert_eq!(budget, 1);
+            assert_eq!(module.to_string(), original);
+            assert_eq!(
+                before,
+                (
+                    module.nodes().len(),
+                    module.functions().len(),
+                    module.continuations().len(),
+                    module.values().len()
+                )
+            );
+        }
+    }
 }

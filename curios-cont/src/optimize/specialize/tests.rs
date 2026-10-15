@@ -8,8 +8,8 @@ use {
         SCC_CLONE_NODE_LIMIT, Slot, ValueExpr, forward_aggregate_projections, function_nodes,
         known_values, simplify_nodes,
         test_support::{
-            PolymorphicLoop, has_switch, known_callee, polymorphic_loop, tagged_consumer,
-            tagged_family, tagged_join,
+            PolymorphicLoop, has_switch, known_callee, nest_helpers, polymorphic_loop,
+            tagged_consumer, tagged_family, tagged_join,
         },
     },
     curios_num::Natural,
@@ -663,6 +663,49 @@ fn a_jump_handed_no_family_row_is_no_pattern() {
                 panic!("the predecessor stays a jump")
             };
             assert_eq!(edge.target, join);
+        }
+    }
+}
+
+#[test]
+fn nested_definitions_count_toward_the_copy_limit() {
+    for size in [SCC_CLONE_NODE_LIMIT, SCC_CLONE_NODE_LIMIT + 1] {
+        let PolymorphicLoop {
+            mut module,
+            loop_fn,
+            ..
+        } = polymorphic_loop(true, 0);
+        nest_helpers(&mut module, loop_fn, size);
+        assert!(function_nodes(&module, loop_fn).len() < SCC_CLONE_NODE_LIMIT);
+        let before = (
+            module.nodes().len(),
+            module.functions().len(),
+            module.continuations().len(),
+            module.values().len(),
+        );
+        let original = module.to_string();
+        let mut budget = 1;
+        let changed = specialize_scc_calls(&mut module, &mut budget);
+        assert_eq!(
+            changed,
+            size <= SCC_CLONE_NODE_LIMIT,
+            "extent of {size} nodes"
+        );
+        if changed {
+            assert_eq!(budget, 0);
+            module.verify().unwrap();
+        } else {
+            assert_eq!(budget, 1);
+            assert_eq!(module.to_string(), original);
+            assert_eq!(
+                before,
+                (
+                    module.nodes().len(),
+                    module.functions().len(),
+                    module.continuations().len(),
+                    module.values().len()
+                )
+            );
         }
     }
 }

@@ -100,23 +100,17 @@ pub(crate) fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> 
         let reentered = external
             .iter()
             .any(|site| function_reaches(&analysis.call_graph, callee, analysis.node_owners[site]));
-        if internal.is_empty()
-            || external.len() < 2
-            || !tail
-            || reentered
-            || function_nodes(module, callee).len() > SCC_CLONE_NODE_LIMIT
-        {
+        if internal.is_empty() || external.len() < 2 || !tail || reentered {
             return None;
         }
 
-        introducing_letfun(module, &BTreeSet::from([callee])).map(|intro| {
-            (
-                callee,
-                intro,
-                external[1],
-                CopyPlan::functions(module, BTreeSet::from([callee])),
-            )
-        })
+        let plan = CopyPlan::functions(module, BTreeSet::from([callee]));
+        if plan.nodes.len() > SCC_CLONE_NODE_LIMIT {
+            return None;
+        }
+
+        introducing_letfun(module, &BTreeSet::from([callee]))
+            .map(|intro| (callee, intro, external[1], plan))
     });
     let Some((callee, intro, site, plan)) = chosen else {
         return false;

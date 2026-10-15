@@ -807,3 +807,67 @@ pub(super) fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId)
     module.set_entry(entry);
     (module, join, some_jump, none_jump, x)
 }
+
+/// Nest two helpers in `owner`, both capturing its first parameter, and pad the inner helper until the owner's complete copied extent reaches `nodes`.
+pub(super) fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> FunctionId {
+    let captured = module.function(owner).unwrap().params[0];
+    let inner = module.reserve_function();
+    let inner_return = module.reserve_continuation();
+    let body = module.add_node(Node::ApplyCont(Edge {
+        target: inner_return,
+        args: vec![Atom::Value(captured)],
+    }));
+    module.define_function(
+        inner,
+        Function {
+            debug_name: Some("nested inner".into()),
+            params: vec![],
+            return_cont: inner_return,
+            body,
+            droppable: false,
+        },
+    );
+    let outer = module.reserve_function();
+    let outer_return = module.reserve_continuation();
+    let returned = module.add_node(Node::ApplyCont(Edge {
+        target: outer_return,
+        args: vec![Atom::Fun(inner)],
+    }));
+    let body = module.add_node(Node::LetFun {
+        functions: vec![inner],
+        body: returned,
+    });
+    module.define_function(
+        outer,
+        Function {
+            debug_name: Some("nested outer".into()),
+            params: vec![],
+            return_cont: outer_return,
+            body,
+            droppable: false,
+        },
+    );
+    let body = module.add_node(Node::LetFun {
+        functions: vec![outer],
+        body: module.function(owner).unwrap().body,
+    });
+    module.function_mut(owner).unwrap().body = body;
+    let size = crate::CopyPlan::functions(module, std::collections::BTreeSet::from([owner]))
+        .nodes
+        .len();
+    for _ in size..nodes {
+        let result = module.add_value(None);
+        let body = module.add_node(Node::LetIntrinsic {
+            result,
+            op: Intrinsic::NatAdd,
+            args: vec![
+                Atom::Literal(Literal::Nat(Natural::from(0u32))),
+                Atom::Literal(Literal::Nat(Natural::from(0u32))),
+            ],
+            next: module.function(inner).unwrap().body,
+        });
+        module.function_mut(inner).unwrap().body = body;
+    }
+    module.verify().unwrap();
+    inner
+}

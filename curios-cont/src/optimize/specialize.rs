@@ -168,18 +168,14 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut usize) -> b
 
     for members in eligible_sccs(module, &analysis) {
         let member_set: BTreeSet<FunctionId> = members.iter().copied().collect();
-        let node_count: usize = members
-            .iter()
-            .map(|&m| function_nodes(module, m).len())
-            .sum();
-        if node_count > SCC_CLONE_NODE_LIMIT {
+        let plan = CopyPlan::functions(module, member_set.clone());
+        if plan.nodes.len() > SCC_CLONE_NODE_LIMIT {
             continue;
         }
         let Some(intro) = introducing_letfun(module, &member_set) else {
             continue;
         };
 
-        let plan = CopyPlan::functions(module, member_set.clone());
         let params_of: BTreeMap<FunctionId, Vec<ValueId>> = members
             .iter()
             .map(|&m| (m, module.function(m).unwrap().params.clone()))
