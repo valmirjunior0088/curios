@@ -239,3 +239,29 @@ fn a_blank_line_inside_an_indent_carries_no_trailing_whitespace() {
 
     assert_eq!(render(document, None), "  first\n\n  second");
 }
+
+#[test]
+fn a_name_respelled_before_rendering_is_laid_out_at_its_new_width() {
+    // The long spelling overruns ten columns and the short one fits: the group renders flat only because the name was respelled before anything measured it, including the one a thunk builds.
+    let mut document = group(flat([
+        named("/long/path/a"),
+        line(),
+        deferred(|| named("/long/path/b")),
+    ]));
+    let mut seen = Vec::new();
+    each_named(&mut document, |text| {
+        seen.push(text.clone());
+        *text = text.trim_start_matches("/long/path/").to_string();
+    });
+
+    let (text, annotations) = render_annotated(document, 2, 10);
+    assert_eq!(seen, ["/long/path/a", "/long/path/b"]);
+    assert_eq!(text, "a b");
+    assert_eq!(
+        annotations
+            .iter()
+            .map(|annotation| annotation.name.as_str())
+            .collect::<Vec<_>>(),
+        ["a", "b"]
+    );
+}

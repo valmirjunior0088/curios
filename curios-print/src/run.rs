@@ -947,5 +947,33 @@ pub fn render_annotated(
     (text, rendering.annotations.into_inner())
 }
 
+/// Hand every [`Printer::Named`] in `printer` to `visit`, in the order a render emits them, before anything measures them: what a name prints as is the caller's to decide there, so the layout is the one its final text takes. Forces every [`Printer::Deferred`] it reaches in place, as a render would, and iteratively, like every other walk over this type.
+pub fn each_named(printer: &mut Printer, mut visit: impl FnMut(&mut String)) {
+    let mut stack = vec![printer];
+
+    while let Some(node) = stack.pop() {
+        if let Printer::Deferred(slot) = &mut *node {
+            let thunk = slot
+                .take()
+                .expect("a deferred thunk is present until forced");
+            *node = thunk();
+            stack.push(node);
+            continue;
+        }
+
+        match node {
+            Printer::Named(text) => visit(text),
+            Printer::Concat(parts) | Printer::Fill(parts) => stack.extend(parts.iter_mut().rev()),
+            Printer::Indent(inner) | Printer::Group(inner) => stack.push(inner),
+            Printer::Text(_)
+            | Printer::Line { .. }
+            | Printer::IfBreak { .. }
+            | Printer::Mark(_)
+            | Printer::Ends => {}
+            Printer::Deferred(_) => unreachable!("forced above"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

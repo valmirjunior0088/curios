@@ -607,7 +607,7 @@ fn print_literal(literal: Literal) -> Printer {
     }
 }
 
-/// `/sys`'s own trees as they stand: each operand as it is, and each declaration of `/sys` a form names by the path it is declared at, which is the name a page resolves and links it by.
+/// `/sys`'s own trees as they stand: each operand as it is, and each declaration of `/sys` a form names by the path a reader writes it by ([`curios_core::intrinsic_path`]) — `/sys/Bool`, a carrier by the name `/sys` hoists it to. Absolute, because `/sys` imports nothing, so it is the name a page resolves to link it and spells below `/sys` to show it.
 struct Quoted;
 
 impl Writer<Term> for Quoted {
@@ -616,9 +616,7 @@ impl Writer<Term> for Quoted {
     }
 
     fn sys(&self, path: &str) -> Option<Term> {
-        let qualifier = *curios_core::intrinsic_global(path).qualifier()?;
-
-        Some(Subterm::Name(Name::new(true, qualifier)).into())
+        Some(Subterm::Name(Name::new(true, curios_core::intrinsic_path(path))).into())
     }
 }
 

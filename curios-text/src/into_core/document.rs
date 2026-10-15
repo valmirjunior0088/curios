@@ -20,7 +20,7 @@ use {
     curios_document::{
         Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
     },
-    curios_print::{Printer, render_annotated},
+    curios_print::{Printer, each_named, render_annotated},
     curios_utilities::{Mount, Qualifier, RootKind, Source, Span},
     std::{
         cell::RefCell,
@@ -90,6 +90,11 @@ pub(super) fn document(
             root.join()
         );
     }
+    let internal = mounts
+        .iter()
+        .filter(|mount| mount.kind == RootKind::Internal)
+        .map(|mount| mount.prefix)
+        .collect::<Vec<_>>();
     let mut reader = Reader {
         modules,
         table,
@@ -97,6 +102,7 @@ pub(super) fn document(
         imports,
         prefix,
         adopted: &adopted,
+        internal: &internal,
         records,
         public_names: HashMap::new(),
         spellings: RefCell::new(HashMap::new()),
@@ -123,6 +129,8 @@ struct Reader<'a> {
     prefix: &'a Qualifier,
     /// The unit's own roots that no consumer may name — its internal mounts. Their declarations reach a consumer only through a `pub use` in the documented mount, so a page shows them and no page names where they were written.
     adopted: &'a [(Qualifier, Option<String>)],
+    /// Every root this unit mounts that no consumer may name, the documented one among them where it is one: what a path the compiler wrote into is shown below ([`Reader::shown`]). `/sys` documents itself under this rule, which is what spells the declarations `/std` adopts out of its record.
+    internal: &'a [Qualifier],
     /// The records of the units this one adopts a root of, which is where an adopted declaration is read from.
     ///
     /// **An adopted root is a different unit, and a unit keeps no surface tree.** Its declarations are rendered from its own source, by its own record, which is made before this one. So a `pub use` into an adopted root is answered out of that record rather than re-derived from items nothing here can reach; re-derived, the adopted half would go missing silently, because every check of it asserts the absence of a path rather than the presence of a card.
@@ -263,36 +271,42 @@ impl Reader<'_> {
         }
     }
 
-    /// `signature` as this unit shows it: every referent under the name a consumer writes here, and every absolute spelling into an adopted root replaced by it.
+    /// `signature` as this unit shows it: its text as the root that wrote it rendered it, and every referent under the name a consumer writes here.
     ///
-    /// **A record is rendered text, so this rewrites over marks where the walk rewrites over annotations.** A mark carries the byte range its name occupies and the declaration it names, which is the same pair an annotation carries — so mapping each referent through [`Reader::public_name`] and splicing its range states exactly the rule the walk states: only an absolute spelling into a root this unit keeps to itself is rewritten, and everything an author wrote is shown as written.
+    /// **The text is kept, because the layout is.** Where a signature breaks was decided when it was rendered, over the text it renders to ([`Reader::shown`]), so splicing other text into a mark would keep the breaks of the old one.
     fn adopt_signature(&self, signature: &Signature) -> Signature {
-        let mut text = String::new();
-        let mut marks = Vec::new();
-        let mut at = 0;
+        Signature {
+            text: signature.text.clone(),
+            marks: signature
+                .marks
+                .iter()
+                .map(|mark| {
+                    let referent = self.public_name(&mark.referent);
 
-        for mark in &signature.marks {
-            text.push_str(&signature.text[at..mark.start]);
-            at = mark.end;
-
-            let spelling = &signature.text[mark.start..mark.end];
-            let referent = self.public_name(&mark.referent);
-            let start = text.len();
-            match spelling.starts_with('/') && self.adopted_root(&mark.referent).is_some() {
-                true => text.push_str(&referent.join()),
-                false => text.push_str(spelling),
-            }
-
-            marks.push(Mark {
-                start,
-                end: text.len(),
-                within: referent.is_within(self.prefix),
-                referent,
-            });
+                    Mark {
+                        start: mark.start,
+                        end: mark.end,
+                        within: referent.is_within(self.prefix),
+                        referent,
+                    }
+                })
+                .collect(),
         }
-        text.push_str(&signature.text[at..]);
+    }
 
-        Signature { text, marks }
+    /// What a name written `spelling` shows on a page — decided before the signature is laid out, so it breaks where its shown text does.
+    ///
+    /// **Everything an author wrote is shown as written, and a path the compiler wrote is spelled for a consumer.** `/sys` is generated, and its declarations spell what they name by absolute `/sys` paths, which resolve against the compilation root and which no consumer may write. Such a spelling — absolute, into a root no consumer can name — shows the path below that root, as core's table writes it (`curios_core::intrinsic_form`): `Option`, `Bool/Holds`, `Bytes/len`. `/std` re-exports what `/sys` declares under those same paths, so it is what a consumer writes once the first segment is in scope, and the mark links the declaration wherever a page shows it.
+    fn shown(&self, spelling: &str) -> String {
+        let Some(path) = spelling.strip_prefix('/') else {
+            return spelling.to_string();
+        };
+        let written = Qualifier::from(path.split('/'));
+
+        match self.internal.iter().find(|root| written.is_within(root)) {
+            Some(root) => written.segments()[root.segments().len()..].join("/"),
+            None => spelling.to_string(),
+        }
     }
 
     /// The adopted root `name` lies within, when it lies within one.
@@ -592,48 +606,45 @@ impl Reader<'_> {
     }
 
     /// `head` rendered, with every name in it that resolves marked.
+    ///
+    /// **Each name is resolved and spelled before the layout is decided** ([`each_named`]), so the signature breaks where the text it shows does. A render emits the names in the order the walk met them, which is what pairs each with its referent.
     fn signature(
         &self,
         module: &Qualifier,
         imports: &HashMap<String, Qualifier>,
         binders: &HashSet<String>,
-        head: Printer,
+        mut head: Printer,
     ) -> Signature {
         curios_profile::profile!("document::signature");
-        let (rendered, annotations) = render_annotated(head, INDENT, WIDTH);
-
-        let mut text = String::new();
-        let mut marks = Vec::new();
-        let mut at = 0;
-        for annotation in annotations {
-            text.push_str(&rendered[at..annotation.start]);
-            at = annotation.end;
-
-            let Some(referent) = self.resolve(&annotation.name, module, imports, binders) else {
-                text.push_str(&rendered[annotation.start..annotation.end]);
-                continue;
-            };
-            let referent = self.public_name(&referent);
-
-            // **A declaration may spell a name no consumer may write.** `/sys`'s rows state their preconditions as absolute `/sys` paths, because the module is generated and resolves against the compilation root — so the page shows the name that reaches the same declaration through the standard library instead of the one the compiler emitted. Only an absolute spelling into a root this unit keeps to itself is rewritten; everything an author wrote is shown as written.
-            let start = text.len();
-            match annotation.name.starts_with('/')
-                && self.adopted.iter().any(|(root, _)| {
-                    Qualifier::from(annotation.name.trim_start_matches('/').split('/'))
-                        .is_within(root)
-                }) {
-                true => text.push_str(&referent.join()),
-                false => text.push_str(&rendered[annotation.start..annotation.end]),
+        let mut referents = Vec::new();
+        each_named(&mut head, |text| {
+            let referent = self.resolve(text, module, imports, binders);
+            if referent.is_some() {
+                *text = self.shown(text);
             }
+            referents.push(referent.map(|referent| self.public_name(&referent)));
+        });
+        let (text, annotations) = render_annotated(head, INDENT, WIDTH);
+        assert_eq!(
+            annotations.len(),
+            referents.len(),
+            "a render emits every name the walk met, once"
+        );
 
-            marks.push(Mark {
-                start,
-                end: text.len(),
-                within: referent.is_within(self.prefix),
-                referent,
-            });
-        }
-        text.push_str(&rendered[at..]);
+        let marks = annotations
+            .into_iter()
+            .zip(referents)
+            .filter_map(|(annotation, referent)| {
+                let referent = referent?;
+
+                Some(Mark {
+                    start: annotation.start,
+                    end: annotation.end,
+                    within: referent.is_within(self.prefix),
+                    referent,
+                })
+            })
+            .collect();
 
         Signature { text, marks }
     }

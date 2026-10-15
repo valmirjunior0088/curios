@@ -323,6 +323,40 @@ fn an_adopted_signature_marks_its_carriers_and_operations() {
     );
 }
 
+/// **A path the compiler wrote is spelled as a consumer writes it, and laid out as it is spelled.** `/sys` names what its declarations build on by absolute `/sys` paths, which no consumer may write; an adopted card shows each by its path below `/sys`, which `/std` re-exports it under, rather than in full beside names an author chose. The spelling is decided before the line is laid out, so `get` stays on the one line its shown text fits.
+#[test]
+fn an_adopted_signature_spells_its_names_below_their_root() {
+    let documentation = standard_library();
+
+    let (fill, _) = card(&documentation, "std/Cell", "fill");
+    assert_eq!(fill, "pub let fill(@T: Sort, c: Cell(T), v: T) -> Io(Bool)");
+    let (poll, _) = card(&documentation, "std/Cell", "poll");
+    assert_eq!(poll, "pub let poll(@T: Sort, c: Cell(T)) -> Io(Option(T))");
+    let (get, _) = card(&documentation, "std/Bytes", "get");
+    assert_eq!(
+        get,
+        "pub let get(b: Bytes, i: Nat, @ok: Bool/Holds(i < Bytes/len(b))) -> Byte"
+    );
+
+    let in_full = documentation
+        .modules
+        .iter()
+        .flat_map(|page| &page.declarations)
+        .filter(|declaration| declaration.chip.as_deref() == Some("intrinsic"))
+        .flat_map(|declaration| {
+            std::iter::once(&declaration.signature)
+                .chain(declaration.members.iter().map(|member| &member.signature))
+                .filter(|signature| signature.text.contains("/std/"))
+                .map(move |signature| format!("{}: {}", declaration.home.join(), signature.text))
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        in_full.is_empty(),
+        "an adopted card spells a name in full:\n{}",
+        in_full.join("\n")
+    );
+}
+
 /// **No page names a root a consumer may not write.** `/sys` is adopted rather than linked: its declarations appear under the `/std` module that exposes them, and their own paths appear nowhere a reader can see — not in a signature, a card header, a search row or a crumb.
 ///
 /// Rendered and read back rather than checked against the record, because the record is only half the claim. A path can reach a reader through a template as easily as through a field, and the file is the thing a reader opens.

@@ -1539,16 +1539,19 @@ pub enum IntrinsicForm<T = Term> {
     Handle(u32),
 }
 
+/// The absolute path a reader writes an intrinsic's `path` by: an operation at its own path, and a carrier's type at the root, where `/sys` hoists it — `/sys/Bool`.
+pub fn intrinsic_path(path: &str) -> Qualifier {
+    Qualifier::from(std::iter::once("sys").chain(path.split('/')))
+}
+
 /// The declaration under `/sys` an intrinsic's `path` names: a carrier's type `X` at `X/X`, an operation at its own path.
 pub fn intrinsic_global(path: &str) -> Global {
-    let mut segments = std::iter::once("sys")
-        .chain(path.split('/'))
-        .collect::<Vec<_>>();
-    if segments.len() == 2 {
-        segments.push(segments[1]);
-    }
+    let written = intrinsic_path(path);
 
-    Global::Authored(Qualifier::from(segments))
+    Global::Authored(match written.segments().len() {
+        2 => written.with(written.last()),
+        _ => written,
+    })
 }
 
 /// How `intrinsic` is written: see [`IntrinsicForm`]. Under `grouped` a nested concatenation stays the operand it is (axis (g)), where the splice would hide how a run is grouped.
