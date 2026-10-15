@@ -1,7 +1,7 @@
 use /std/{Nat, Bool, Char, Str, Option, Parse};
 use /std/Toml/scan/{hex_val};
 
-let hex_digit: Parse(Str, Nat) =
+let hex_digit() -> Parse(Str, Nat) =
     let next = Parse/text/peek!;
     match next
     | none() => Parse/fail("unterminated escape")
@@ -18,7 +18,7 @@ let hex_digits(count: Nat, acc: Nat) -> Parse(Str, Nat) =
     match count
     | 0 => Parse/pure(acc)
     | pred + 1 =>
-        let v = hex_digit!;
+        let v = hex_digit()!;
         hex_digits(pred, acc * 0x10 + v)
     end;
 
@@ -30,7 +30,7 @@ let scalar(code: Nat) -> Parse(Str, Str) =
     end;
 
 --- What follows a backslash: the character the escape names.
-let escape: Parse(Str, Str) =
+let escape() -> Parse(Str, Str) =
     let next = Parse/text/peek!;
     match next
     | none() => Parse/fail("unterminated escape")
@@ -76,18 +76,18 @@ let basic_body(acc: Str) -> Parse(Str, Str) =
             Parse/pure(here)
         | c == '\\' =>
             let _ = Parse/text/char!;
-            let piece = escape!;
+            let piece = escape()!;
             basic_body(Str/concat(here, piece))
         | _ => Parse/fail("control character in string")
         end
     end;
 
-let basic_str_scan: Parse(Str, Str) =
+let basic_str_scan() -> Parse(Str, Str) =
     let _ = Parse/label(Parse/text/expect('"'), "expected string")!;
     basic_body("");
 
 --- A literal string's body: the piece of the input up to the closing quote, taken as written.
-let literal_body: Parse(Str, Str) =
+let literal_body() -> Parse(Str, Str) =
     let run = Parse/text/take_while((c) => is_text(c) && c != '\'')!;
     let next = Parse/text/peek!;
     match next
@@ -101,9 +101,9 @@ let literal_body: Parse(Str, Str) =
         end
     end;
 
-let literal_str_scan: Parse(Str, Str) =
+let literal_str_scan() -> Parse(Str, Str) =
     let _ = Parse/label(Parse/text/expect('\''), "expected string")!;
-    literal_body;
+    literal_body();
 
 let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
     let stop: Parse(Str, {}) =
@@ -132,7 +132,7 @@ let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
         end
     end;
 
-let skip_opening_newline: Parse(Str, {}) =
+let skip_opening_newline() -> Parse(Str, {}) =
     let lf = Parse/optional(Parse/text/expect('\n'))!;
     match lf
     | some(_) => Parse/pure(())
@@ -173,11 +173,11 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
                     let _ = trim_run(false)!;
                     ml_basic_body(here)
                 | false =>
-                    let piece = escape!;
+                    let piece = escape()!;
                     ml_basic_body(Str/concat(here, piece))
                 end
             | none() =>
-                let piece = escape!;
+                let piece = escape()!;
                 ml_basic_body(Str/concat(here, piece))
             end
         | c == '\n' =>
@@ -219,20 +219,20 @@ let ml_literal_body(acc: Str) -> Parse(Str, Str) =
 
 --- A basic string, delimited by `"`, with its escapes resolved.
 pub let str_basic: Parse(Str, Str) =
-    basic_str_scan;
+    basic_str_scan();
 
 --- A literal string, delimited by `'`, taken as written.
 pub let str_literal: Parse(Str, Str) =
-    literal_str_scan;
+    literal_str_scan();
 
 --- A multi-line basic string, delimited by `"""`, with its escapes resolved and the opening line break dropped.
-pub let str_ml_basic: Parse(Str, Str) =
+pub let str_ml_basic() -> Parse(Str, Str) =
     let _ = Parse/text/literal("\"\"\"")!;
-    let _ = skip_opening_newline!;
+    let _ = skip_opening_newline()!;
     ml_basic_body("");
 
 --- A multi-line literal string, delimited by `'''`, taken as written with the opening line break dropped.
-pub let str_ml_literal: Parse(Str, Str) =
+pub let str_ml_literal() -> Parse(Str, Str) =
     let _ = Parse/text/literal("'''")!;
-    let _ = skip_opening_newline!;
+    let _ = skip_opening_newline()!;
     ml_literal_body("");

@@ -27,7 +27,7 @@ pub let hex_val(n: Nat) -> Option(Nat) =
 pub let ws: Parse(Str, {}) =
     Parse/map(Parse/text/take_while(is_ws_char), (_) => ());
 
-let comment: Parse(Str, {}) =
+let comment() -> Parse(Str, {}) =
     let _ = Parse/text/expect('#')!;
     Parse/map(Parse/text/take_while(is_comment_char), (_) => ());
 
@@ -45,11 +45,11 @@ pub let trivia: Parse(Str, {}) =
                 Parse/map(Parse/text/expect(' '), (_) => ()),
                 Parse/or(
                     Parse/map(Parse/text/expect('\t'), (_) => ()),
-                    Parse/or(newline, comment)))),
+                    Parse/or(newline, comment())))),
         (_) => ());
 
 --- The end of a line: trailing whitespace, an optional comment, then a line break or the end of the input.
-pub let line_end: Parse(Str, {}) =
+pub let line_end() -> Parse(Str, {}) =
     let _ = ws!;
-    let _ = Parse/or(comment, Parse/pure(()))!;
+    let _ = Parse/or(comment(), Parse/pure(()))!;
     Parse/label(Parse/or(newline, Parse/eof()), "expected end of line");

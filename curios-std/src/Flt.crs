@@ -734,7 +734,7 @@ let of_str_in(r: Rounding, s: Str) -> Option(Flt) =
     Result/to_option(Parse/run(number(r, true), s));
 
 --- An optional sign: whether it is `-`.
-let sign: Parse(Str, Bool) =
+let sign() -> Parse(Str, Bool) =
     let written = Parse/optional(Parse/text/char_if((c) => c == '+' || c == '-'))!;
     Parse/pure(match written | some(c) => c == '-' | none() => false end);
 
@@ -747,7 +747,7 @@ let hex_run: Parse(Str, Str) =
     Parse/text/take_while((c) => Option/is_some(Char/of_hex_digit(c)));
 
 --- `0x`, in either case.
-let hex_mark: Parse(Str, {}) =
+let hex_mark() -> Parse(Str, {}) =
     let _ = Parse/text/expect('0')!;
     let _ = Parse/text/char_if((c) => c == 'x' || c == 'X')!;
     Parse/pure(());
@@ -758,7 +758,7 @@ let exponent_after(lower: Char, upper: Char) -> Parse(Str, Int) =
     match marker
     | none() => Parse/pure(+0)
     | some(_) =>
-        let negative = sign!;
+        let negative = sign()!;
         let run = decimal_run!;
         match Str/is_empty(run)
         | true => Parse/fail("expected an exponent")
@@ -779,7 +779,7 @@ let nan_payload(signaling: Bool) -> Parse(Str, Nat) =
     match open
     | none() => Parse/pure(match signaling | true => 1 | false => 0 end)
     | some(_) =>
-        let _ = hex_mark!;
+        let _ = hex_mark()!;
         let run = hex_run!;
         let _ = Parse/text/expect(')')!;
         match hex_value(run)
@@ -812,7 +812,7 @@ let special(negative: Bool) -> Parse(Str, Flt) =
 
 --- Hex text after its sign, rounded once in the direction `r`: `0x`, hex digits with an optional point and at least one digit among them, and an optional `p` exponent. A nonzero significand is the exact dyadic `rounded/of_dyadic` rounds, whatever its exponent; a zero takes its sign here, since a dyadic's zero has none.
 let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
-    let _ = hex_mark!;
+    let _ = hex_mark()!;
     let whole = hex_run!;
     let fraction = fraction_of(hex_run)!;
     let exponent = exponent_after('p', 'P')!;
@@ -850,7 +850,7 @@ let decimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
 
 --- A whole number text, read to its end: a sign, then a special name, hex text, or — where `decimals` — decimal text.
 let number(r: Rounding, decimals: Bool) -> Parse(Str, Flt) =
-    let negative = sign!;
+    let negative = sign()!;
     let finite: Parse(Str, Flt) =
         match decimals
         | true => Parse/or(hexadecimal(r, negative), decimal(r, negative))

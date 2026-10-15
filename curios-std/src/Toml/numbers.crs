@@ -61,7 +61,7 @@ let leading_zero: Parse(Str, Bool) =
                 (_) => true),
             Parse/pure(false)));
 
-let sign: Parse(Str, {Bool, Bool}) =
+let sign() -> Parse(Str, {Bool, Bool}) =
     let s = Parse/optional(Parse/text/char_if((c) => c == '+' || c == '-'))!;
     match s | some(c) => Parse/pure((c == '-', true)) | none() => Parse/pure((false, false)) end;
 
@@ -73,7 +73,7 @@ let is_radix_marker(c: Char) -> Bool =
     | _ => false
     end;
 
-let prefixed: Parse(Str, Nat) =
+let prefixed() -> Parse(Str, Nat) =
     let _ = Parse/text/expect('0')!;
     let marker = Parse/text/char!;
     match Char/to_nat(marker)
@@ -88,7 +88,7 @@ let refuse_leading_zero(@A: Type) -> Parse(Str, A) =
     let _ = Parse/text/take_while((c) => Char/is_digit(c) || c == '_')!;
     Parse/fail("leading zero");
 
-let decimal: Parse(Str, Nat) =
+let decimal() -> Parse(Str, Nat) =
     let leading = leading_zero!;
     match leading
     | true => Parse/commit(refuse_leading_zero())
@@ -97,18 +97,18 @@ let decimal: Parse(Str, Nat) =
 
 let int_magnitude(signed: Bool) -> Parse(Str, Nat) =
     match signed
-    | true => decimal
+    | true => decimal()
     | false =>
         let marked =
             Parse/optional(
                 Parse/lookahead(
                     Parse/and(Parse/text/expect('0'), Parse/text/char_if(is_radix_marker))))!;
-        match marked | some(_) => prefixed | none() => decimal end
+        match marked | some(_) => prefixed() | none() => decimal() end
     end;
 
 --- An integer in any of the bases TOML writes, refused past the range an `Int` holds.
-pub let int_value: Parse(Str, Toml) =
-    let (negative, signed) = sign!;
+pub let int_value() -> Parse(Str, Toml) =
+    let (negative, signed) = sign()!;
     let mag = int_magnitude(signed)!;
     -- `magnitude` already refused past `2⁶³`, the most negative integer's magnitude and one past the most positive's.
     match negative
@@ -196,8 +196,8 @@ let exp_digits: Parse(Str, Nat) =
     go(0, false, false);
 
 --- A float's named values, `inf` and `nan`, under either sign.
-pub let flt_special: Parse(Str, Toml) =
-    let (negative, _) = sign!;
+pub let flt_special() -> Parse(Str, Toml) =
+    let (negative, _) = sign()!;
     Parse/or(
         Parse/map(
             Parse/text/literal("inf"),
@@ -217,28 +217,28 @@ let frac_part(sig0: Nat, count0: Nat) -> Parse(Str, {Nat, Nat, Nat, Bool}) =
     | some(_) => Parse/commit(frac_fields(sig0, count0))
     end;
 
-let exp_fields: Parse(Str, {Nat, Bool, Bool}) =
-    let (eneg, _) = sign!;
+let exp_fields() -> Parse(Str, {Nat, Bool, Bool}) =
+    let (eneg, _) = sign()!;
     let emag = exp_digits!;
     Parse/pure((emag, eneg, true));
 
-let exp_part: Parse(Str, {Nat, Bool, Bool}) =
+let exp_part() -> Parse(Str, {Nat, Bool, Bool}) =
     let marker = Parse/optional(Parse/text/char_if((c) => c == 'e' || c == 'E'))!;
     match marker
     | none() => Parse/pure((0, false, false))
-    | some(_) => Parse/commit(exp_fields)
+    | some(_) => Parse/commit(exp_fields())
     end;
 
 --- A float written out: digits, an optional fraction and an optional exponent, with a leading zero refused.
-pub let flt_number: Parse(Str, Toml) =
-    let (negative, _) = sign!;
+pub let flt_number() -> Parse(Str, Toml) =
+    let (negative, _) = sign()!;
     let leading = leading_zero!;
     match leading
     | true => Parse/commit(refuse_leading_zero())
     | false =>
         let (sig1, count1, _) = flt_digits(0, 0, false)!;
         let (sig2, count2, down2, has_frac) = frac_part(sig1, count1)!;
-        let (emag, eneg, has_exp) = exp_part!;
+        let (emag, eneg, has_exp) = exp_part()!;
         match has_frac || has_exp
         | true =>
             let exponent =

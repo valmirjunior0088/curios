@@ -413,7 +413,7 @@ let token_walk: Parse(Bytes, List(Bytes)) =
 let work(mode: Str, n: Nat) -> Nat =
     choose
     | Str/eql(mode, "json") =>
-        match Parse/run(Json/decode, Str/flatten(["[", Str/repeat("1, ", n), "1]"]))
+        match Parse/run(Json/decode(), Str/flatten(["[", Str/repeat("1, ", n), "1]"]))
         | success(value) => match value | arr(items) => List/len(items) | _ => 0 end
         | failure(_) => 0
         end

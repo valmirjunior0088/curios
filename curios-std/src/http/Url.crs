@@ -59,7 +59,7 @@ let part(s: Str) -> Parse(Str, Str) =
             "a URL holds no space, control octet or octet past ASCII, each of which is written percent-encoded")
     end;
 
-let scheme: Parse(Str, Scheme) =
+let scheme() -> Parse(Str, Scheme) =
     let name = Parse/text/take_while(until([':']))!;
     let _ = Parse/text/literal("://")!;
     choose
@@ -113,31 +113,31 @@ let port_of(s: Scheme) -> Parse(Str, Nat) =
     | none() => Parse/pure(default_port(s))
     end;
 
-let path: Parse(Str, Str) =
+let path() -> Parse(Str, Str) =
     let written = Parse/text/take_while(until(['?', '#']))!;
     let s = part(written)!;
     match Str/is_empty(s) | true => Parse/pure("/") | false => Parse/pure(s) end;
 
-let query_text: Parse(Str, Option(Str)) =
+let query_text() -> Parse(Str, Option(Str)) =
     let _ = Parse/text/expect('?')!;
     let written = Parse/text/take_while(until(['#']))!;
     let s = part(written)!;
     Parse/pure(Option/some(s));
 
-let query: Parse(Str, Option(Str)) =
+let query() -> Parse(Str, Option(Str)) =
     let next = Parse/text/peek!;
     match next
-    | some(c) => match Char/to_nat(c) | '?' => query_text | _ => Parse/pure(Option/none()) end
+    | some(c) => match Char/to_nat(c) | '?' => query_text() | _ => Parse/pure(Option/none()) end
     | none() => Parse/pure(Option/none())
     end;
 
-let url: Parse(Str, Url) =
-    let s = scheme!;
+let url() -> Parse(Str, Url) =
+    let s = scheme()!;
     let h = Parse/text/take_while(until([':', '/', '?', '#']))!;
     let host = part(h)!;
     let p = port_of(s)!;
-    let pa = path!;
-    let q = query!;
+    let pa = path()!;
+    let q = query()!;
     let _ = Parse/text/rest!;
     match Str/is_empty(host)
     | true => Parse/fail("a URL names a host")
@@ -146,7 +146,7 @@ let url: Parse(Str, Url) =
 
 --- `s` read as a URL, or why it is not: a scheme other than `http` and `https`, a missing host, or a port that is no number of at most 65535. A port left empty, as in `http://h:/`, is the scheme's.
 pub let of_str(s: Str) -> Result(Parse/Error, Url) =
-    Parse/run(url, s);
+    Parse/run(url(), s);
 
 --- That `r` is a URL that read.
 pub let Read(r: Result(Parse/Error, Url)) -> Prop =

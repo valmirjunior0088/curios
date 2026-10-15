@@ -72,7 +72,7 @@ pub let text(r: Response) -> Result(Nat, Str) =
 --- The body decoded as JSON, or the decoder's refusal. A body that is not UTF-8 is refused where it stops being text.
 pub let json(r: Response) -> Result(Parse/Error, Json) =
     match Str/of_bytes(r.body)
-    | success(text) => Parse/run(Json/decode, text)
+    | success(text) => Parse/run(Json/decode(), text)
     | failure(at) => Result/failure(Parse/Error/declined("a JSON body is text", at))
     end;
 

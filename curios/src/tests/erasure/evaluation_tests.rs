@@ -110,7 +110,7 @@ fn proof_in_an_erased_position_is_not_evaluated() {
 
 /// A program pays only for what it names: the standard library's parser web reaches a trivial entry not at all.
 ///
-/// **Pruning is what stands between a program and everything the library computes as it is initialized**, and one spelling can defeat it: `/std/Json/decode/decode` is a top-level `apply` whose callee is an *alias* of `/std/Parse/bind` rather than a bare function atom, and an effect summary taking its conservative top there would read the item as observably effectful and keep it — and with it the recursive parser group it names and the entire `Json`/`Parse`/`Flt/of_str` web, in every program.
+/// Parser factories and the descriptions the library still constructs are unreachable here. Pruning keeps their recursive grammars and the `Json`/`Parse`/`Flt/of_str` web out of an unrelated entry.
 ///
 /// Asserted on the *optimized* Cont, which is the last place anything could still drop it, and by name rather than by size, so the reason a regression fails here is legible.
 #[test]
@@ -130,6 +130,21 @@ fn a_trivial_program_retains_none_of_the_parser_web() {
             &cont[..cont.len().min(4000)]
         );
     }
+}
+
+/// An application through a witness method is pure when the method it selects is pure, even though its callee is no bare function atom. Keep this initializer case independent of how the library spells its parser factories.
+#[test]
+fn an_unused_parser_built_through_a_witness_method_is_pruned() {
+    let cont = cont_optm(
+        r#"
+        use /std/{Monad, Parse, Bytes, Nat};
+        let unused: Parse(Bytes, Nat) =
+            Monad/bind(Parse/pure(@Bytes, use _, @Nat, 7), (n: Nat) => Parse/pure(n + 1));
+        /std/print("hi")
+        "#,
+    );
+    assert!(!cont.contains("/unused"), "{cont}");
+    assert!(!cont.contains("/std/Parse/"), "{cont}");
 }
 
 // A recursion on a bound runs as its step and nothing else: the proofs that keep the measure under the bound are erased, and `descend` is a wrapper around a local loop, so inlining the wrapper fuses the step into the loop. A `recurse` passing `step` to itself would survive to the optimized program as a function of its own, calling the step through a closure at every level.

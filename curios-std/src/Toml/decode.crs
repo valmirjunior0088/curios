@@ -34,14 +34,14 @@ let header(double: Bool) -> Parse(Str, List(Str)) =
     | false => Parse/pure(path)
     end;
 
-let stmt: Parse(Str, Stmt) =
+let stmt() -> Parse(Str, Stmt) =
     let bracket = Parse/optional(Parse/text/expect('['))!;
     match bracket
     | none() =>
         let path = key_path([])!;
         let _ = Parse/label(Parse/text/expect('='), "expected '=' after key")!;
         let _ = ws!;
-        let value = value_parse!;
+        let value = value_parse()!;
         Parse/pure(Stmt/assign(path, value))
     | some(_) =>
         let doubled = Parse/optional(Parse/text/expect('['))!;
@@ -61,8 +61,8 @@ let stmts(acc: List(Stmt)) -> Parse(Str, List(Stmt)) =
     match done
     | some(_) => Parse/pure(acc)
     | none() =>
-        let s = stmt!;
-        let _ = line_end!;
+        let s = stmt()!;
+        let _ = line_end()!;
         stmts([..acc, s])
     end;
 

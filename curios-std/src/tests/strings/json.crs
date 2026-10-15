@@ -3,14 +3,14 @@ use /std/{Json, Parse, Str, Flt, Bool, List, Test};
 
 -- The document decoded and re-encoded, or the refusal that stopped it.
 let decoded(input: Str) -> Str =
-    match Parse/run(Json/decode, input): (_) => Str
+    match Parse/run(Json/decode(), input): (_) => Str
     | success(value) => Json/encode(value)
     | failure(e) => e.message
     end;
 
 -- The string a document carries, for the escape rows below, or the refusal that stopped it.
 let decoded_str(input: Str) -> Str =
-    match Parse/run(Json/decode, input): (_) => Str
+    match Parse/run(Json/decode(), input): (_) => Str
     | success(value) => match value: (_) => Str | str(s) => s | _ => "wrong" end
     | failure(e) => e.message
     end;
@@ -86,7 +86,7 @@ test a_document_is_refused_when_anything_follows_the_value =
 
 -- Whether a document reads.
 let reads(input: Str) -> Bool =
-    match Parse/run(Json/decode, input) | success(_) => true | failure(_) => false end;
+    match Parse/run(Json/decode(), input) | success(_) => true | failure(_) => false end;
 
 -- A number is finite, so every number the encoder writes is a JSON number: a literal's proof discharges where it is written, a computed float passes `Flt/finite` or has no `Json/num`, and there is no `null` for the encoder to invent.
 test a_number_is_built_from_a_finite_float_alone =
