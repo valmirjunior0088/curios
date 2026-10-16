@@ -568,6 +568,7 @@ dependencies = [
  "curios-cranelift",
  "curios-document",
  "curios-elab",
+ "curios-emit",
  "curios-ersd",
  "curios-num",
  "curios-package",

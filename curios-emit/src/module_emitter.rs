@@ -1001,7 +1001,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         // The entrypoint is what the host invokes, under the wire name `curios-abi` states rather than under whatever the naming scheme spelled the function. A program that can suspend exports its turns instead, the advance beside the entry; every other function, closure, and const is reached only internally.
         if let Some(name) = module.entry() {
             let func_name = self.table.find_func(name).func_name();
-            match module.suspension() {
+            match module.entry_suspension() {
                 None => self
                     .module
                     .add_export(ENTRY, curios_wasm::Export::Func(func_name)),

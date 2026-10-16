@@ -393,6 +393,14 @@ pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cont::Mo
 
 /// `main` builds a closure of `target` and passes it to `apply`, which invokes it indirectly — an unknown callee that must go through the closure ABI.
 pub(super) fn indirect_apply() -> curios_cont::Module {
+    indirect_application(false)
+}
+
+pub(super) fn indirect_apply_discarding_result() -> curios_cont::Module {
+    indirect_application(true)
+}
+
+fn indirect_application(discard_result: bool) -> curios_cont::Module {
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let target = module.reserve_function();
@@ -433,15 +441,39 @@ pub(super) fn indirect_apply() -> curios_cont::Module {
     );
 
     let main_return = module.reserve_continuation();
+    let resume = discard_result.then(|| {
+        let continuation = module.reserve_continuation();
+        let ignored = module.add_value(None);
+        let body = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+            target: main_return,
+            args: vec![nat(7)],
+        }));
+        module.define_continuation(
+            continuation,
+            curios_cont::Continuation {
+                debug_name: None,
+                params: vec![ignored],
+                body,
+            },
+        );
+        continuation
+    });
     let call = module.add_node(curios_cont::Node::ApplyFun {
         callee: curios_cont::Callee::Known(apply),
         args: vec![curios_cont::Atom::Fun(target)],
-        return_to: main_return,
+        return_to: resume.unwrap_or(main_return),
     });
     let body = module.add_node(curios_cont::Node::LetFun {
         functions: vec![target, apply],
         body: call,
     });
+    let body = match resume {
+        Some(resume) => module.add_node(curios_cont::Node::LetCont {
+            continuations: vec![resume],
+            body,
+        }),
+        None => body,
+    };
     module.define_function(
         main,
         curios_cont::Function {

@@ -70,6 +70,8 @@ mod aggregate_tests;
 #[cfg(test)]
 mod capacity_tests;
 #[cfg(test)]
+mod entry_tests;
+#[cfg(test)]
 mod foreign_tests;
 #[cfg(test)]
 mod hoist_tests;
