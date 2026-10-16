@@ -1,11 +1,11 @@
 use /std/{Io};
 
---- What may close a program: a type whose value is performed as one.
+--- What may close a program: a type whose value is executed as one.
 ---
---- The compiler writes `perform` around the term a program closes with, so that term is of any type with a witness here. One witness may occupy a head, so a type closes a program in one way: `Io` at `{}` and no other payload, `Try` over `Io` and no other base.
+--- The compiler writes `execute` around the term a program closes with, so that term is of any type with a witness here. One witness may occupy a head, so a type closes a program in one way: `Io` at `{}` and no other payload, `Try` over `Io` and no other base.
 pub concept Program(T: Type): pub Type {
-    --- The value performed as a whole program. Where it does not succeed it says why and ends the process with a status that is not `0`.
-    perform(T) -> Io({}),
+    --- The value executed as a whole program. Where it does not succeed it says why and ends the process with a status that is not `0`.
+    execute(T) -> Io({}),
 }
 
 pub use Program/*;

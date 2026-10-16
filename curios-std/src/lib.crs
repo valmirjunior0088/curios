@@ -161,7 +161,7 @@ pub use Serial/{let Serial};
 --- TCP over the host's sockets: connections and listeners as streams, waiting by suspending wherever a peer decides.
 pub mod tcp;
 
---- What may close a program: the concept the compiler performs a program's closing term through, witnessed by a description that yields nothing, by one over `Io` that may fail, and by a `Test`.
+--- What may close a program: the concept the compiler executes a program's closing term through, witnessed by a description that yields nothing, by one over `Io` that may fail, and by a `Test`.
 pub mod Program;
 pub use Program/{let Program};
 

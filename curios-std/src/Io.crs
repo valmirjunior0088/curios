@@ -36,7 +36,7 @@ satisfy Monad/Lift(Io, Io) {
 
 --- A description that yields nothing is the program it describes.
 satisfy Program(Io({})) {
-    perform(program) = program,
+    execute(program) = program,
 }
 
 --- Until a handle of `on` is ready: a suspension that cancels nothing and goes on with nothing. On no handle, only what advances it can end it: at the top of a program, a deadlock the host reports.

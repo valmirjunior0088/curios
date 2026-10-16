@@ -128,7 +128,7 @@ impl SyntaxRegistry {
         operator
             .concept_fields()
             .chain([lift.lift])
-            .chain([program.perform])
+            .chain([program.execute])
             .chain(derivations.concept_fields())
     }
 }
@@ -530,17 +530,17 @@ impl OrderSyntax {
     }
 }
 
-/// What closes a program is performed through: `/std/Program`'s `perform` method, projected from the witness the closing term's type resolves. Written by `curios-pipeline` around each tail of an authored entry's final term, and read by the elaborator to say what a missing witness of it was needed for.
+/// What closes a program is executed through: `/std/Program`'s `execute` method, projected from the witness the closing term's type resolves. Written by `curios-pipeline` around each tail of an authored entry's final term, and read by the elaborator to say what a missing witness of it was needed for.
 #[derive(Debug, Clone, Copy)]
 pub struct ProgramSyntax {
-    pub perform: ConceptField,
+    pub execute: ConceptField,
 }
 
 impl ProgramSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self { perform } = self;
+        let Self { execute } = self;
 
-        [perform.concept].into_iter()
+        [execute.concept].into_iter()
     }
 }
 

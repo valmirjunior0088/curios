@@ -127,7 +127,7 @@ pub struct Joining {
 pub enum Need {
     /// To carry an action into its region: the goal is the registry's `Lift`.
     Embedding(EmbeddingDiagnosis),
-    /// To perform what closes a program: the goal is the registry's `Program`, at this type.
+    /// To execute what closes a program: the goal is the registry's `Program`, at this type.
     Closing(Box<Term>),
     /// To add two texts: the goal is the registry's `Add` at `/std/Str`, which is no operator's carrier.
     Joining(Box<Joining>),

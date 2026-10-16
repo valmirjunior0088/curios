@@ -1,4 +1,4 @@
-//! What closes a program: each type `/std/Program` performs, by what the program wrote and the status it ended with, and what a term nothing performs is told.
+//! What closes a program: each type `/std/Program` executes, by what the program wrote and the status it ended with, and what a term nothing executes is told.
 
 use {
     crate::{run_wasm, tests::typecheck},
@@ -100,9 +100,9 @@ fn a_test_that_closes_a_program_is_reported_and_decides_its_status() {
     }
 }
 
-/// Each way a program closes is performed at its own type: an arm that prints and an arm that may fail stand in one `match`, which states no type for both.
+/// Each way a program closes is executed at its own type: an arm that prints and an arm that may fail stand in one `match`, which states no type for both.
 #[test]
-fn the_arms_of_a_match_that_closes_a_program_are_each_performed() {
+fn the_arms_of_a_match_that_closes_a_program_are_each_executed() {
     for (choice, status, written) in [(0, 0, "usage"), (1, 1, "not_found\n")] {
         let source = format!(
             r#"
@@ -147,12 +147,12 @@ fn a_step_that_may_fail_is_refused_in_an_io_function() {
     );
 }
 
-/// A term of a type nothing performs is told so as what closes the program, not as the premise of a call its author never wrote.
+/// A term of a type nothing executes is told so as what closes the program, not as the premise of a call its author never wrote.
 #[test]
-fn a_term_nothing_performs_is_refused_as_what_closes_the_program() {
+fn a_term_nothing_executes_is_refused_as_what_closes_the_program() {
     for (closing, type_) in [("7", "Nat"), ("() => print(\"x\")", "() -> Io({})")] {
         let source = format!("use /std/{{Nat, Io, print}};\n{closing}\n");
-        let error = typecheck(&source).expect_err("nothing performs it");
+        let error = typecheck(&source).expect_err("nothing executes it");
 
         assert!(
             error.contains(&format!(
@@ -164,7 +164,7 @@ fn a_term_nothing_performs_is_refused_as_what_closes_the_program() {
     }
 }
 
-/// A description that yields a value closes no program: `Io` is performed at `{}` alone, and the refusal is the payload's.
+/// A description that yields a value closes no program: `Io` is executed at `{}` alone, and the refusal is the payload's.
 #[test]
 fn a_description_that_yields_a_value_closes_no_program() {
     let error = typecheck("use /std/{Nat, Io};\nIo/pure(3)\n").expect_err("an `Io(Nat)`");

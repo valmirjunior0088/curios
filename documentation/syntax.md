@@ -782,14 +782,14 @@ Each selected arm receives the same definitional refinement that an equivalent n
 
 An entrypoint consists of zero or more top-level items followed by exactly one final term — the description the program performs. Its entry contract is `Io({})`: a program describes doing something and yielding nothing. Its final term may sequence with `!` directly. A module file consists of top-level items only and has no final term.
 
-What closes the program is performed through `/std/Program`, the concept whose `perform` says what a value of a type does as a whole program, so it is a term of any type with a witness there:
+What closes the program is executed through `/std/Program`, the concept whose `execute` says what a value of a type does as a whole program, so it is a term of any type with a witness there:
 
 - an `Io({})` is the program itself, and no other payload has a witness: a tail that computes a result must discard it explicitly rather than have the result dropped for it;
 - a `Try(Io, E, {})` whose `E` has a `Show` witness is run, and a failure is written to standard error as it is shown and ends the program with status `1`;
 - a `/std/Test({})` is reported as `curios test` reports one, and ends the program with status `1` where it did not hold;
 - a `()` is an empty program.
 
-What closes a program is each tail of its final term: a tail is reached through a local `let` and through a `match` that writes no motive to each of its arms, so two arms may close one program at two types. A `match` whose motive is written is one term of the type it states, and a written goal is asked at `Io({})`. An entry function has its natural result type and is called directly. A program that may fail states so on the function; its final call receives the entrypoint adaptation automatically, without an explicit `Program/perform`:
+What closes a program is each tail of its final term: a tail is reached through a local `let` and through a `match` that writes no motive to each of its arms, so two arms may close one program at two types. A `match` whose motive is written is one term of the type it states, and a written goal is asked at `Io({})`. An entry function has its natural result type and is called directly. A program that may fail states so on the function; its final call receives the entrypoint adaptation automatically, without an explicit `Program/execute`:
 
 ```crs
 use /std/{Io, Try, File, Path, print};

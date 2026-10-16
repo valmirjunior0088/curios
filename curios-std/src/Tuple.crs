@@ -553,5 +553,5 @@ satisfy (
 
 --- A program that closes with `()` has done what it does by its last `!`.
 satisfy Program({}) {
-    perform(_) = Io/pure(()),
+    execute(_) = Io/pure(()),
 }

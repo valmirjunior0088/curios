@@ -147,7 +147,7 @@ let report(name: Str, test: Test({})) -> Io(Bool) =
     end;
 
 satisfy Program(Test({})) {
-    perform(test) =
+    execute(test) =
         let held = report("program", test)!;
         match held | true => Io/pure(()) | false => proc/exit(1) end,
 }

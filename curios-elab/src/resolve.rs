@@ -170,14 +170,14 @@ fn diagnose_joining(context: &mut Context, goal: &Term) -> Option<Box<Joining>> 
     })
 }
 
-/// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form: the type of a term that closes a program, which no witness performs.
+/// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form: the type of a term that closes a program, which no witness executes.
 fn diagnose_closing(context: &mut Context, goal: &Term) -> Option<Box<Term>> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
     let Global::Authored(concept_path) = &concept_name else {
         return None;
     };
-    if *concept_path != context.syntax().program.perform.concept.qualifier() {
+    if *concept_path != context.syntax().program.execute.concept.qualifier() {
         return None;
     }
     let [closing] = params.as_slice() else {

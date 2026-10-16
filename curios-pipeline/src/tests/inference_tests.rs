@@ -4,7 +4,7 @@ use super::test_support::*;
 
 #[test]
 fn an_entry_that_describes_nothing_closes_no_program() {
-    // What closes a program is performed through `/std/Program`, and no caller states another contract for it: a `Str` describes nothing to perform, so it is refused as what closes the program, by its type.
+    // What closes a program is executed through `/std/Program`, and no caller states another contract for it: a `Str` describes nothing to perform, so it is refused as what closes the program, by its type.
     let error = compile(r#""zero""#).unwrap_err();
 
     assert!(

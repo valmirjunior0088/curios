@@ -88,7 +88,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         main: name(&["std", "Test", "main"]),
     },
     program: ProgramSyntax {
-        perform: field(&["std", "Program"], "perform"),
+        execute: field(&["std", "Program"], "execute"),
     },
     report: ReportSyntax {
         try_type: name(&["std", "Try"]),

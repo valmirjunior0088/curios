@@ -339,11 +339,11 @@ pub fn typecheck_entrypoint(
     })
 }
 
-/// Put `entry` to what `tail` judges an authored entry at: the program contract, with what closes the program performed ([`performed`]), or the empty proposition where it is put as a proof. A test program's entry is left as it stands: its tail is the elaborator's to synthesize and to state the type of.
+/// Put `entry` to what `tail` judges an authored entry at: the program contract, with what closes the program executed ([`executed`]), or the empty proposition where it is put as a proof. A test program's entry is left as it stands: its tail is the elaborator's to synthesize and to state the type of.
 fn state(entry: &mut curios_core::Entrypoint, tail: EntryTail, syntax: &SyntaxRegistry) {
     match tail {
         EntryTail::Program => {
-            entry.body = performed(&entry.body, syntax);
+            entry.body = executed(&entry.body, syntax);
             entry.type_ = Some(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())));
         }
         EntryTail::False => {
@@ -355,23 +355,23 @@ fn state(entry: &mut curios_core::Entrypoint, tail: EntryTail, syntax: &SyntaxRe
     }
 }
 
-/// `term` with each of its tails handed to `/std/Program`'s `perform`, which says what a value of the tail's type does as a whole program: the tail's type is the call's implicit, read by inference, and its witness is resolved as an operator's is.
+/// `term` with each of its tails handed to `/std/Program`'s `execute`, which says what a value of the tail's type does as a whole program: the tail's type is the call's implicit, read by inference, and its witness is resolved as an operator's is.
 ///
 /// A tail is reached through a block of local definitions to what the block closes with, through a `!` to what its continuation closes with, and through a `match` that writes no motive to each of its arms. Anything else is one — a `match` whose motive is written among them, being one term of the type it states. A written goal is left as it stands, so it is asked at the entry's own type.
 ///
-/// The whole term is not what is performed: a `!` reads its region from the type it is checked against, and a term handed to `perform` is checked against that call's unsolved implicit. With the tails performed, the entry's stated type is every region's on the way to them, as it is where nothing is performed.
+/// The whole term is not what is executed: a `!` reads its region from the type it is checked against, and a term handed to `execute` is checked against that call's unsolved implicit. With the tails executed, the entry's stated type is every region's on the way to them, as it is where nothing is executed.
 ///
 /// The call binds nothing, so no scope is opened: each body is rewritten where it lies.
-fn performed(term: &Term, syntax: &SyntaxRegistry) -> Term {
+fn executed(term: &Term, syntax: &SyntaxRegistry) -> Term {
     let rebuilt = recurse(|| match &**term {
         Subterm::Let(block) => Term::from(Subterm::Let(Let {
             bindings: block.bindings.clone(),
-            tail: block.tail.map_body(|tail| performed(tail, syntax)),
+            tail: block.tail.map_body(|tail| executed(tail, syntax)),
         })),
         // A block whose tail selects a member is that member's occurrence: one term, and so a tail.
         Subterm::Rec(block) if block.as_proj().is_none() => Term::from(Subterm::Rec(Rec {
             group: block.group.clone(),
-            tail: block.tail.map_body(|tail| performed(tail, syntax)),
+            tail: block.tail.map_body(|tail| executed(tail, syntax)),
         })),
         Subterm::Transient(Transient::Bang(bang)) => {
             Term::bang(bang.action.clone(), closing(&bang.continuation, syntax))
@@ -392,11 +392,11 @@ fn performed(term: &Term, syntax: &SyntaxRegistry) -> Term {
         }
         Subterm::Metavar(metavar) if matches!(metavar.origin, MetavarOrigin::Goal) => term.clone(),
         _ => {
-            let field = syntax.program.perform;
-            let perform =
+            let field = syntax.program.execute;
+            let execute =
                 Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));
 
-            Term::apply(perform, vec![term.clone()])
+            Term::apply(execute, vec![term.clone()])
         }
     });
 
@@ -406,13 +406,13 @@ fn performed(term: &Term, syntax: &SyntaxRegistry) -> Term {
     }
 }
 
-/// A `!`'s continuation or a match arm's body, each a function over the binders written before it, with the tails of what it answers performed.
+/// A `!`'s continuation or a match arm's body, each a function over the binders written before it, with the tails of what it answers executed.
 fn closing(function: &Term, syntax: &SyntaxRegistry) -> Term {
     let Subterm::Func(func) = &**function else {
         panic!("a continuation and an arm's body are lowered as function literals");
     };
     let rebuilt = Term::from(Subterm::Func(Func {
-        telescope: func.telescope.map_terminal(|body| performed(body, syntax)),
+        telescope: func.telescope.map_terminal(|body| executed(body, syntax)),
     }));
 
     match function.extent() {
@@ -652,7 +652,7 @@ where
 
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry. An entry put as a proof states the empty proposition instead, and those two are the whole choice: the surface entry carries no type, so no caller states another. A test program's tail replaces the written entry, and the elaborator that synthesizes it states its type.
     //
-    // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, which would leave the contract a post-hoc head test on the inferred type. What closes a program is of any type `/std/Program` performs, and that costs the contract nothing: the dispatch is a call inside the entry, at each of its tails, and the call answers `Io({})`.
+    // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, which would leave the contract a post-hoc head test on the inferred type. What closes a program is of any type `/std/Program` executes, and that costs the contract nothing: the dispatch is a call inside the entry, at each of its tails, and the call answers `Io({})`.
     state(&mut lowered.entry, tail, syntax);
     let elab_tail = tail.closing(&lowered.entry, &scheduled);
 

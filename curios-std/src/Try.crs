@@ -98,7 +98,7 @@ satisfy (
 
 --- A description that may fail is run: a failure is written to standard error as it is shown, and the program ends with status `1`.
 satisfy (@E: Type, use Show(E)) => Program(Try(Io, E, {})) {
-    perform(program) =
+    execute(program) =
         let outcome = run(program)!;
         match outcome
         | success(_) => Io/pure(())
