@@ -183,7 +183,10 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
         .collect();
     let expected_type = curios_core::Term::func_type(
         [] as [(curios_core::Free, curios_core::Term); 0],
-        curios_core::Term::var(curios_core::Var::free(global("std/Test/Test"))),
+        curios_core::Term::apply(
+            curios_core::Term::var(curios_core::Var::free(global("std/Test/Test"))),
+            [curios_core::Term::tuple_type_unit()],
+        ),
     );
     for name in ["Inner/inner_holds", "outer_holds"] {
         let (_, kind, type_) = kinds
@@ -197,7 +200,7 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
 
 #[test]
 fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
-    // A test takes no parameters, but it is still a `() -> Test` in Core: `Test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value, and the empty telescope is the thunk.
+    // A test takes no parameters, but it is still a `() -> Test({})` in Core: `Test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value, and the empty telescope is the thunk.
     let module = lowered_module("test t = Type;\n()");
     let definition = module
         .items
@@ -214,7 +217,10 @@ fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
     assert!(func_type.plicities().is_empty());
     assert_eq!(
         *func_type.telescope.terminal(),
-        curios_core::Term::var(curios_core::Var::free(global("std/Test/Test")))
+        curios_core::Term::apply(
+            curios_core::Term::var(curios_core::Var::free(global("std/Test/Test"))),
+            [curios_core::Term::tuple_type_unit()]
+        )
     );
     let curios_core::Subterm::Func(func) = &*definition.body else {
         panic!("expected a lambda, got {:?}", definition.body);

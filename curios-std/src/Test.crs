@@ -1,7 +1,8 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Spell, Show, Program, print, proc};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Program, print,
+    proc};
 use /std/ops/{Eql};
 
---- How a test came out.
+--- How a terminal test came out.
 pub induct Verdict: pub Type
 --- It held.
 | passed()
@@ -9,98 +10,124 @@ pub induct Verdict: pub Type
 | failed(Str)
 end
 
---- A check `curios test` runs, and what a `test` declaration declares.
----
---- Its representation is sealed, so one is built through the combinators below rather than by naming a constructor.
-pub induct Test: Type
-| verdict(Verdict)
-| action(Io(Test))
+struct Failure: Type {
+    message: Str,
+    contexts: List(Str),
+}
+
+--- A computation that succeeds with an `A` or ends the current test with a diagnostic.
+--- Its private representation keeps interpretation inside the test runner and resource combinators.
+pub induct Test(A: Type): Type
+| success(A)
+| failed(Failure)
+| action(Io(Test(A)))
 end
 
+--- Succeed with `a` without performing an effect.
+pub let pure(@A: Type, a: A) -> Test(A) =
+    Test/success(a);
+
+--- End the current test with `message`, skipping its remaining continuations.
+pub let fail(@A: Type, message: Str) -> Test(A) =
+    Test/failed(Failure { message = message, contexts = [] });
+
+--- Continue a successful computation; a failure skips `next`.
+pub let bind(@A: Type, @B: Type, test: Test(A), next: (A) -> Test(B)) -> Test(B) =
+    match test
+    | success(a) => next(a)
+    | failed(failure) => Test/failed(failure)
+    | action(io) => Test/action(Io/bind(io, (inner) => Io/pure(bind(inner, next))))
+    end;
+
+satisfy Monad(Test) {
+    pure(@_, a) = pure(a),
+    bind(@_, @_, test, next) = bind(test, next),
+}
+
+satisfy Monad/Lift(Io, Test) {
+    lift(@_, action) = Test/action(Io/bind(action, (a) => Io/pure(pure(a)))),
+}
+
+satisfy Monad/Lift(Test, Test) {
+    lift(@_, test) = test,
+}
+
+satisfy (
+    @M: (Type) -> Type,
+    @E: Type,
+    use Monad(M),
+    use Monad/Lift(M, Test),
+    use Show(E),
+) => Monad/Lift((A: Type) => Try(M, E, A), Test) {
+    lift(@_, action) =
+        bind(
+            Monad/lift(Try/run(action)),
+            (result) =>
+                match result | success(a) => pure(a) | failure(e) => fail(Show/show(e)) end),
+}
+
 --- The test that holds when `condition` is true.
-pub let assert(condition: Bool) -> Test =
-    Test/verdict(
-        match condition
-        | true => Verdict/passed()
-        | false => Verdict/failed("the condition was false")
-        end);
+pub let assert(condition: Bool) -> Test({}) =
+    match condition | true => pure(()) | false => fail("the condition was false") end;
 
 --- The test that holds when the two are equal, reporting both when they are not.
-pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test =
+pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test({}) =
     match actual == expected
-    | true => Test/verdict(Verdict/passed())
+    | true => pure(())
     | false =>
-        Test/verdict(
-            Verdict/failed(
-                Str/concat(
-                    "expected ",
-                    Str/concat(
-                        Spell/spell(expected),
-                        Str/concat(" but got ", Spell/spell(actual))))))
+        fail(Str/flatten(["expected ", Spell/spell(expected), " but got ", Spell/spell(actual)]))
     end;
 
---- A test out of an effectful thunk, which is how a test reaches `Io`.
-pub let perform(thunk: () -> Io(Test)) -> Test =
+--- Flatten an effectful thunk returning a test. A function returning `Test(A)` can instead sequence its `Io` actions directly.
+pub let perform(@A: Type, thunk: () -> Io(Test(A))) -> Test(A) =
     Test/action(thunk());
 
---- One test over many: it fails at the first that fails, naming that one's position.
-pub let all(tests: List(Test)) -> Test =
-    let (conjunction, _) =
-        List/fold(
-            tests,
-            (Test/verdict(Verdict/passed()), 0),
-            (t, state: {Test, Nat}) =>
-                let (acc, index) = state;
-                (conjoin(acc, case(index, t)), index + 1));
-    conjunction;
+--- Flatten a fallible thunk returning a test, reporting its error when it fails.
+pub let try(@E: Type, @A: Type, use Show(E), thunk: () -> Try(Io, E, Test(A))) -> Test(A) =
+    bind(Monad/lift(thunk()), (inner) => inner);
 
-let case(index: Nat, t: Test) -> Test =
-    match t
-    | verdict(passed()) => t
-    | verdict(failed(message)) =>
-        Test/verdict(
-            Verdict/failed(
-                Str/concat("case ", Str/concat(Nat/to_str(index), Str/concat(": ", message)))))
-    | action(io) =>
-        perform(() =>
-            let inner = io!;
-            Io/pure(case(index, inner)))
+let context(@A: Type, label: Str, test: Test(A)) -> Test(A) =
+    match test
+    | success(_) => test
+    | failed(failure) => Test/failed(Failure { ..failure, contexts = [label, ..failure.contexts] })
+    | action(io) => Test/action(Io/bind(io, (inner) => Io/pure(context(label, inner))))
     end;
 
-let conjoin(left: Test, right: Test) -> Test =
-    match left
-    | verdict(passed()) => right
-    | verdict(failed(_)) => left
-    | action(io) =>
-        perform(() =>
-            let inner = io!;
-            Io/pure(conjoin(inner, right)))
+--- Check each test in order, stopping at the first failure and naming its zero-based case index.
+pub let all(tests: List(Test({}))) -> Test({}) =
+    List/fold(
+        tests,
+        (test = pure(()), index = 0),
+        (next, state: {test: Test({}), index: Nat}) =>
+            (
+                test =
+                    bind(state.test, (_) =>
+                        context(Str/concat("case ", Nat/to_str(state.index)), next)),
+                index = state.index + 1)).test;
+
+-- Keeping an outcome inside Io lets a bracket release before the failure resumes propagating through Test.
+let finish(@A: Type, test: Test(A)) -> Io(Result(Failure, A)) =
+    match test
+    | success(a) => Io/pure(Result/success(a))
+    | failed(failure) => Io/pure(Result/failure(failure))
+    | action(io) => Io/bind(io, (inner) => finish(inner))
     end;
 
-let outcome(@E: Type, use Show(E), io: Io(Result(E, Test))) -> Io(Test) =
-    let r = io!;
-    Io/pure(
-        match r | success(t) => t | failure(e) => Test/verdict(Verdict/failed(Show/show(e))) end);
+let message(failure: Failure) -> Str =
+    Str/join(": ", [..failure.contexts, failure.message]);
 
---- A test out of a thunk that may fail, reporting the error when it does.
-pub let try(@E: Type, use Show(E), thunk: () -> Try(Io, E, Test)) -> Test =
-    Test/action(outcome(Try/run(thunk())));
-
-let report(name: Str, t: Test) -> Io(Bool) =
-    match t
-    | verdict(passed()) =>
+let report(name: Str, test: Test({})) -> Io(Bool) =
+    let result = finish(test)!;
+    match result
+    | success(_) =>
         let _ = print(Str/concat(name, ": passed\n"))!;
         Io/pure(true)
-    | verdict(failed(message)) =>
-        let _ = print(Str/concat(name, Str/concat(": failed\n  ", Str/concat(message, "\n"))))!;
+    | failure(failure) =>
+        let _ = print(Str/flatten([name, ": failed\n  ", message(failure), "\n"]))!;
         Io/pure(false)
-    | action(io) =>
-        let inner = io!;
-        report(name, inner)
     end;
 
---- A test that closes a program is reported as `curios test` reports one, under the name `program`, and the program ends with status `1` where it did not hold.
-satisfy Program(Test) {
+satisfy Program(Test({})) {
     perform(test) =
         let held = report("program", test)!;
         match held | true => Io/pure(()) | false => proc/exit(1) end,
@@ -109,7 +136,7 @@ satisfy Program(Test) {
 let parse_index(raw: Bytes) -> Option(Nat) =
     match Str/of_bytes(raw) | success(s) => Nat/of_str(s) | failure(_) => Option/none() end;
 
-let run_all(tests: List({Str, () -> Test})) -> Io(Bool) =
+let run_all(tests: List({Str, () -> Test({})})) -> Io(Bool) =
     List/fold(
         tests,
         Io/pure(true),
@@ -118,8 +145,8 @@ let run_all(tests: List({Str, () -> Test})) -> Io(Bool) =
             let here = report(name, body())!;
             Io/pure(earlier && here));
 
---- The tail `curios test` runs: it performs each named test, reports what each came to, and answers whether every one held.
-pub let main(tests: List({Str, () -> Test})) -> Io(Bool) =
+--- Run the selected test, or every named test in order, and answer whether each one held.
+pub let main(tests: List({Str, () -> Test({})})) -> Io(Bool) =
     let arguments = proc/args()!;
     match List/try_get(arguments, 1)
     | some(raw) =>

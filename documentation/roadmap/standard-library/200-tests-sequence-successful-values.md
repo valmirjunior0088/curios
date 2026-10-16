@@ -1,6 +1,6 @@
 # Tests sequence successful values
 
-The current `/std/Test` is terminal and cannot witness `Monad`. Its adapters embed `Io` and `Try` into a description, but assertions cannot sequence alongside those operations in a function returning `Test`.
+`/std/Test` sequences successful values through a sealed `Test(A)` monad, and its declaration lowering and consumers use terminal `Test({})` descriptions. Protected interpretation under brackets, scopes and timeouts remains pending.
 
 The goal is one sealed `Test(A)` carrier with success payloads, first-failure sequencing, explicit monad embeddings, and resource protection around complete test interpretation. Test declarations remain explicit registrations and source functions remain the eligibility boundary for `!`.
 
@@ -14,7 +14,7 @@ The goal is one sealed `Test(A)` carrier with success payloads, first-failure se
 
 ## Stages and checks
 
-1. Generalize the carrier, combinators, lifts, declaration lowering and all consumers atomically. Check payload flow, three sequential assertions, skipped effects, Try over both bases, expected errors inspected as data, privacy and non-unit terminal refusal.
+1. The carrier, combinators, lifts, declaration lowering and consumers are implemented. Their checks cover payload flow, three sequential assertions, skipped effects, Try over both bases, expected errors inspected as data, privacy and non-unit terminal refusal.
 2. Add protected interpretation under brackets, scopes and timeouts. Check failure after yielding, normal release, cancellation release, a started child's cancellation, and timeout cleanup.
 3. Update the syntax reference and existing test design decision, migrate examples, and run default-feature workspace checks.
 

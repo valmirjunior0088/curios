@@ -262,7 +262,7 @@ impl PartialEq for TopWitness {
     }
 }
 
-/// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to a `() -> Test` thunk: only the selected test's body is forced.
+/// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to a `() -> Test({})` thunk: only the selected test's body is forced.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopTest {
     pub label: Label,

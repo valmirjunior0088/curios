@@ -114,7 +114,7 @@ let counted(n: Nat, each: (Nat) -> Nat) -> List(Nat) =
         match left | 0 => acc | fewer + 1 => go(i + 1, fewer, [..acc, each(i)]) end;
     go(0, n, []);
 
-let whole_and_in_order(l: List(Nat)) -> Test =
+let whole_and_in_order(l: List(Nat)) -> Test({}) =
     let sorted = List/sort(l);
     Test/all([
         Test/equal(List/len(sorted), List/len(l)),

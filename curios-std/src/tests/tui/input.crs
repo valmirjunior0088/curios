@@ -144,7 +144,7 @@ test flush_reads_a_lone_escape_as_the_key =
         Test/equal(input/flush(@Nat, x[0x1B, '[']), [k(Code/escape()), k(Code/char('['))])]);
 
 -- `rest` is a suffix of the input: nothing is invented and nothing before the cut is kept. An open claim rather than a test, because the kernel does not settle it — the declaration below states it over the inputs whose branches it is worth stating over.
-let rest_is_a_suffix(b: Bytes) -> Test =
+let rest_is_a_suffix(b: Bytes) -> Test({}) =
     let d = input/decode(@Nat, b);
     let cut = Bytes/len(b) - Bytes/len(d.rest);
     match Nat/le/try(cut, Bytes/len(b))

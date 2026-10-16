@@ -1,5 +1,7 @@
 //! The test harness across the stages: the `Test` description, its combinators, `Test/main`'s dispatch, the `Spell` witnesses the reports rely on, the `test` declaration, and the synthesized tail a unit's test program runs.
 
+mod sequence_tests;
+
 use {
     super::{error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text},
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
@@ -14,7 +16,7 @@ fn the_description_schedules_every_rung() {
         run(r#"
         use /std/{Nat, Str, Io, Eq, Test};
         let double(n: Nat) -> Nat = n * 2;
-        let an_action() -> Io(Test) =
+        let an_action() -> Io(Test({})) =
             let s = Io/pure("x")!;
             Io/pure(Test/equal(s, "x"));
         let entry() -> /std/Io({}) =
@@ -38,10 +40,10 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Try, Path, fs, Test};
-        let exists() -> Try(Io, Io/Error, Test) =
+        let exists() -> Try(Io, Io/Error, Test({})) =
             let here = fs/exists(Path/of_str("data"))!;
             Try/pure(Test/assert(here == false));
-        let missing() -> Try(Io, Io/Error, Test) =
+        let missing() -> Try(Io, Io/Error, Test({})) =
             let m = fs/stat(Path/of_str("nope"))!;
             Try/pure(Test/assert(true));
         let entry() -> /std/Io({}) =
@@ -98,7 +100,7 @@ fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Eq, Test};
-        let counter() -> Io(Test) =
+        let counter() -> Io(Test({})) =
             let _ = /std/print("performed\n")!;
             Io/pure(Test/assert(true));
         let entry() -> /std/Io({}) =
@@ -123,9 +125,9 @@ fn a_declared_test_applied_to_a_table_is_one_test() {
         run_tests_program(
             r#"
         use /std/{Nat, Str, List, Io, Test};
-        let add_commutes(n: Nat, m: Nat) -> Test =
+        let add_commutes(n: Nat, m: Nat) -> Test({}) =
             Test/assert(n + m == m + n);
-        let small(n: Nat) -> Test =
+        let small(n: Nat) -> Test({}) =
             Test/assert(n < 3);
         let cases: List({Nat, Nat}) = [(1, 2), (3, 4)];
         test table =
@@ -145,11 +147,14 @@ fn a_description_is_matched_only_by_its_own_module() {
     let report = error(
         r#"
         use /std/{Io, Test};
-        let t: Test = Test/assert(true);
-        match t | verdict(v) => /std/print("leaked\n") | _ => /std/print("hidden\n") end
+        let t: Test({}) = Test/assert(true);
+        match t | success(_) => /std/print("leaked\n") | _ => /std/print("hidden\n") end
         "#,
     );
-    assert!(report.contains("Test"), "{report}");
+    assert!(
+        report.contains("representation of type 'Test' is private"),
+        "{report}"
+    );
 }
 
 #[test]
@@ -284,7 +289,7 @@ fn a_test_declaration_compiles_beside_the_entry() {
 
 #[test]
 fn a_test_body_is_checked_against_the_description_type() {
-    // The declared type is `() -> /std/Test` whatever the body: a `Nat` body is a type error at the declaration, not a value the runner later chokes on.
+    // The declared type is `() -> /std/Test({})` whatever the body: a `Nat` body is a type error at the declaration, not a value the runner later chokes on.
     let error = error(
         r#"
         use /std/{Nat, Str, Io, Test};
@@ -368,7 +373,7 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
         test application =
             Test/assert(1 + 1 == 2);
         test matching =
-            match 1 + 1 == 2 : (_) => Test | true => Test/assert(true) | false => Test/assert(false) end;
+            match 1 + 1 == 2 : (_) => Test({}) | true => Test/assert(true) | false => Test/assert(false) end;
         test binding =
             let x = 1 + 1;
             Test/assert(x == 2);
@@ -393,24 +398,8 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
             .collect::<Vec<_>>(),
         [
             "Test/assert(1 + 1 == 2)",
-            "match 1 + 1 == 2 : (_) => Test | true => Test/assert(true) | false => Test/assert(false) end",
+            "match 1 + 1 == 2 : (_) => Test({}) | true => Test/assert(true) | false => Test/assert(false) end",
             "let x = 1 + 1;\n            Test/assert(x == 2)",
         ]
-    );
-}
-
-/// A written function satisfies the source boundary, but the current terminal Test still has no Monad witness.
-#[test]
-fn a_function_returning_test_still_needs_a_monadic_adapter_for_io() {
-    let refusal = error(
-        r#"
-        use /std/{Io, Test};
-        let check() -> Test = Test/assert(Io/pure(true)!);
-        check()
-    "#,
-    );
-    assert!(
-        refusal.contains("Test") && refusal.contains("no monad"),
-        "{refusal}"
     );
 }

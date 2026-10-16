@@ -12,17 +12,17 @@ let seen(s: Str) -> Result(Refusal, {Nat, Option(Str)}) =
         read(Method/get(), s),
         (r) => (r.status.code, Result/to_option(Str/of_bytes(r.body))));
 
-let is(s: Str, code: Nat, body: Str) -> Test =
+let is(s: Str, code: Nat, body: Str) -> Test({}) =
     Test/equal(seen(s), Result/success((code, Option/some(body))));
 
-let malformed(s: Str) -> Test =
+let malformed(s: Str) -> Test({}) =
     Test/assert(
         match read(Method/get(), s)
         | failure(why) => match why | malformed(_) => true | _ => false end
         | success(_) => false
         end);
 
-let incomplete(s: Str) -> Test =
+let incomplete(s: Str) -> Test({}) =
     Test/equal(read(Method/get(), s), Result/failure(Refusal/incomplete()));
 
 -- A reply reads by its chunks, by its length, or to the close where it states neither, and what follows a length is left alone.

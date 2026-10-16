@@ -1258,15 +1258,18 @@ fn process_items(
                     false => FlatItem::Let(items.pop().expect("a `let` item has a member")),
                 });
             }
-            // A test takes no parameters, so it is not function sugar — but it lowers to a `() -> Test` thunk, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on the declaration being importable.
+            // A test takes no parameters, so it is not function sugar — but it lowers to a `() -> Test({})` thunk, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on the declaration being importable.
             TopItem::Test(test) => {
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
                 context.record_import_scope(Some(&name));
                 let lower = Lowerer::new(context, Some(name));
-                let output = curios_core::Term::var(curios_core::Var::free(
-                    curios_core::Free::global(context.syntax().test.test_type.qualifier()),
-                ));
-                // The empty telescope is not vestigial: it is the thunk. A test lowers to `() -> Test` so `Test/main` can hold it unforced and run only the one it selected.
+                let output = curios_core::Term::apply(
+                    curios_core::Term::var(curios_core::Var::free(curios_core::Free::global(
+                        context.syntax().test.test_type.qualifier(),
+                    ))),
+                    [curios_core::Term::tuple_type_unit()],
+                );
+                // The empty telescope is not vestigial: it is the thunk. A test lowers to `() -> Test({})` so `Test/main` can hold it unforced and run only the one it selected.
                 let type_ = lower.func_type_under(&func_sugar_type_params(&[]), || Ok(output))?;
                 let body = curios_core::Term::func_marked(
                     Vec::<(Plicity, curios_core::Free, curios_core::Term)>::new(),

@@ -786,7 +786,7 @@ What closes the program is performed through `/std/Program`, the concept whose `
 
 - an `Io({})` is the program itself, and no other payload has a witness: a tail that computes a result must discard it explicitly rather than have the result dropped for it;
 - a `Try(Io, E, {})` whose `E` has a `Show` witness is run, and a failure is written to standard error as it is shown and ends the program with status `1`;
-- a `/std/Test` is reported as `curios test` reports one, and ends the program with status `1` where it did not hold;
+- a `/std/Test({})` is reported as `curios test` reports one, and ends the program with status `1` where it did not hold;
 - a `()` is an empty program.
 
 What closes a program is each tail of its final term: a tail is reached through a local `let` and through a `match` that writes no motive to each of its arms, so two arms may close one program at two types. A `match` whose motive is written is one term of the type it states, and a written goal is asked at `Io({})`. An entry function has its natural result type and is called directly. A program that may fail states so on the function; its final call receives the entrypoint adaptation automatically, without an explicit `Program/perform`:
@@ -820,7 +820,7 @@ A top-level definition is in scope of its own body, and definitions that referen
 
 ### Test declarations
 
-A `test` declaration names a check: a description of type `/std/Test`, built from that module's combinators, collected per unit in declaration order and run by `curios test`, which owns [what it reports](usage.md#test).
+A `test` declaration names a check: a description of type `/std/Test({})`, built from that module's combinators, collected per unit in declaration order and run by `curios test`, which owns [what it reports](usage.md#test).
 
 ```crs
 use /std/{Nat, Eq, Test};
@@ -834,9 +834,9 @@ let _right_identity(n: Nat) -> Eq()(n + 0, n) =
 
 A test takes no parameters. A claim about *every* instantiation is a proposition rather than a description, so it is a `let` whose type states the claim and whose body proves it, checked by the kernel on every build — the second declaration above, its leading `_` marking a declaration that exists for its type rather than its callers ([A test is a declared description, and a proof is a `let`](design/tools/a-test-is-a-declared-description-and-a-proof-is-a-let.md)).
 
-To check a claim at instances you choose, make it an ordinary definition returning `Test` and schedule a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's own cases, whose failure names the case's position. A test registers like a private definition of type `() -> Test`: referable within its subtree, and colliding with a sibling of the same name.
+To check a claim at instances you choose, make it an ordinary definition returning `Test({})` and schedule a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's own cases, whose failure names the case's position. A test registers like a private definition of type `() -> Test({})`: referable within its subtree, and colliding with a sibling of the same name.
 
-`test` is contextual: a keyword only where an item may start, an ordinary name everywhere else. A test is never `pub`, its name being a report line rather than an export, and no documentation comment may precede one. The generated thunk is not a source function, so a bare `!` in the test body is refused where it is written. `Test` is no monad; an effectful test enters `Io` through the explicit lambda passed to `Test/perform`, or a fallible computation through `Test/try`.
+`test` is contextual: a keyword only where an item may start, an ordinary name everywhere else. A test is never `pub`, its name being a report line rather than an export, and no documentation comment may precede one. The generated thunk is not a source function, so a bare `!` in the test body is refused where it is written. `Test(A)` is a monad: a written function returning `Test({})` sequences assertions, `Io` actions and fallible actions through the declared embeddings. A failed assertion or lifted error stops that test's continuation. `Test/perform` and `Test/try` remain adapters for thunks returning test descriptions.
 
 ### Modules
 

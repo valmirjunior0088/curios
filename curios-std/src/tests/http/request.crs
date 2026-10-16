@@ -13,7 +13,7 @@ let seen(s: Str) -> Result(Refusal, {Method, Str, Option(Str)}) =
         read(s),
         (r) => (r.method, Url/to_str(r.url), Result/to_option(Str/of_bytes(r.body))));
 
-let is(s: Str, method: Method, url: Str, body: Str) -> Test =
+let is(s: Str, method: Method, url: Str, body: Str) -> Test({}) =
     Test/equal(seen(s), Result/success((method, url, Option/some(body))));
 
 -- The status a server answers `s` with, or `none` where it reads.
@@ -23,7 +23,7 @@ let refused(s: Str) -> Option(Nat) =
     | failure(why) => Option/some(Response/of_refusal(why).status.code)
     end;
 
-let answers(s: Str, code: Nat) -> Test =
+let answers(s: Str, code: Nat) -> Test({}) =
     Test/equal(refused(s), Option/some(code));
 
 -- A request reads by its length, by its chunks, or as bodiless where it states neither, and what follows it is left alone.
