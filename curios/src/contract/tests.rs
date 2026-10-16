@@ -92,7 +92,10 @@ fn tree() -> Temporary {
     let root = Temporary::new("contract", "table");
 
     for (path, text) in [
-        ("work/curios.toml", "members = [\"app\"]\n"),
+        (
+            "work/curios.toml",
+            "compiler = \"0.0.0\"\nmembers = [\"app\"]\n",
+        ),
         (
             "work/app/curios.toml",
             "name = \"app\"\ndefault = \"serve\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
@@ -103,7 +106,10 @@ fn tree() -> Temporary {
         ("work/app/serve.crs", "mod helper;\n/std/print(\"\")\n"),
         ("work/app/serve/helper.crs", ""),
         ("work/app/bench.crs", "/std/print(\"\")\n"),
-        ("work/app/nested/curios.toml", "name = \"nested\"\n"),
+        (
+            "work/app/nested/curios.toml",
+            "compiler = \"0.0.0\"\nname = \"nested\"\n",
+        ),
         ("work/app/nested/lib.crs", ""),
         ("scratch.crs", ""),
     ] {

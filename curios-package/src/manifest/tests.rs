@@ -92,6 +92,7 @@ fn a_name_alone_is_a_package() {
 fn an_umbrella_parses() {
     let Manifest::Umbrella(umbrella) = parse(&format!(
         r#"
+            compiler = "0.0.0"
             members = ["json", "http_client", "tools/cli"]
 
             [catalog]
@@ -370,6 +371,7 @@ fn a_dangling_default_is_refused() {
 fn a_marker_in_the_catalog_is_refused() {
     let refusal = refuse(
         r#"
+            compiler = "0.0.0"
             members = ["json"]
 
             [catalog]

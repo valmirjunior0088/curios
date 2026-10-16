@@ -88,7 +88,7 @@ enum Asked {
     },
 
     #[command(
-        about = "Bump the workspace version, commit it, tag the release, and push main and the tag"
+        about = "Bump the workspace version and bundled library's compiler minimum, commit them, tag the release, and push main and the tag"
     )]
     Release {
         #[arg(

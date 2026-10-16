@@ -17,7 +17,7 @@ use {
         module_of, nearest_manifest, order, reachable, stem_module_of,
     },
     curios_text::{Entrypoint, Form, Overlay, RootSource, identity},
-    curios_utilities::Qualifier,
+    curios_utilities::{Qualifier, RootKind},
     std::path::{Path, PathBuf},
 };
 
@@ -88,12 +88,15 @@ impl Selection {
             Spelling::File(path) => placed(path, manifest, overlay)?,
             Spelling::Name(name) => {
                 let governing = Governing::found(manifest, directory)?;
+                governing.check_compiler()?;
                 let executable = named(&governing.package, &name)?;
                 Self::Program(program(&governing, executable)?)
             }
-            Spelling::Nothing => Self::Entire(Entire {
-                governing: Governing::found(manifest, directory)?,
-            }),
+            Spelling::Nothing => {
+                let governing = Governing::found(manifest, directory)?;
+                governing.check_compiler()?;
+                Self::Entire(Entire { governing })
+            }
         })
     }
 }
@@ -411,11 +414,14 @@ fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<S
         return Ok(unlinked(file, &governing, UNSPELLED.to_string()));
     };
 
-    let mut units = order(&governing)?;
-    let library = units
-        .pop()
-        .expect("a package with a library compiles it last")
-        .with_overlay(overlay.clone());
+    // Placement reads only the module chain: an unlinked file inherits neither this package's dependencies nor its compiler requirement.
+    let library = RootSource::mounted(
+        &governing.package.name,
+        RootKind::Ordinary,
+        directory.join(LIBRARY),
+        &directory,
+    )
+    .with_overlay(overlay.clone());
     // A header on the chain that cannot be read places the file in the library anyway: the compilation reports that fault on its own account.
     if !library.declares_module(&module).unwrap_or(true) {
         let remedy = declaration(
@@ -426,6 +432,11 @@ fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<S
         );
         return Ok(unlinked(file, &governing, remedy));
     }
+    let mut units = order(&governing)?;
+    let library = units
+        .pop()
+        .expect("a package with a library compiles it last")
+        .with_overlay(overlay.clone());
     units.push(library);
 
     Ok(Selection::Library(Library {

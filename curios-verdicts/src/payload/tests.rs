@@ -134,7 +134,7 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(&root, "lib.crs", &library("library"));
     write(&root, "app.crs", "/std/print(/app/word)\n");
@@ -249,7 +249,11 @@ fn an_edited_dependency_is_not_reused() {
 #[test]
 fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
     let shape = temporary("addressed-shape");
-    write(&shape, "curios.toml", "name = \"shape\"\n");
+    write(
+        &shape,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"shape\"\n",
+    );
     write(&shape, "lib.crs", "pub let side : /std/Nat = 4;\n");
 
     let root = project("addressed");
@@ -287,7 +291,7 @@ fn two_executables_occupy_two_slots() {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"one\"\n\n[[executables]]\nname = \"two\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"one\"\n\n[[executables]]\nname = \"two\"\n",
     );
     write(&root, "lib.crs", &library("shared"));
     write(&root, "one.crs", "/std/print(/app/word)\n");
@@ -369,10 +373,14 @@ fn no_state_a_store_is_left_in_reads_as_a_hit_it_is_not() {
 #[test]
 fn a_slot_does_not_answer_for_another_projects_program() {
     let shape = temporary("aliasing-shape");
-    write(&shape, "curios.toml", "name = \"shape\"\n");
+    write(
+        &shape,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"shape\"\n",
+    );
     write(&shape, "lib.crs", "pub let word : /std/Str = \"shared\";\n");
 
-    let manifest = "name = \"tool\"\n\n[[executables]]\nname = \"tool\"\n";
+    let manifest = "compiler = \"0.0.0\"\nname = \"tool\"\n\n[[executables]]\nname = \"tool\"\n";
     let (mine, theirs) = (temporary("aliasing-mine"), temporary("aliasing-theirs"));
     write(&mine, "curios.toml", manifest);
     write(&theirs, "curios.toml", manifest);

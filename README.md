@@ -99,7 +99,7 @@ cd hello
 curios run
 ```
 
-That gives you a whole package, and the manifest is one line — `name = "hello"`. Everything else is found rather than declared: `lib.crs` is the library, `exe.crs` is the program.
+That gives you a whole package, and the manifest declares its name and minimum compiler version. Everything else is found rather than declared: `lib.crs` is the library, `exe.crs` is the program.
 
 ```crs
 -- lib.crs

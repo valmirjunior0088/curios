@@ -133,7 +133,7 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
         .collect::<String>();
     fs::write(
         package.join("curios.toml"),
-        format!("name = \"{name}\"\n{rows}"),
+        format!("compiler = \"0.0.0\"\nname = \"{name}\"\n{rows}"),
     )
     .expect("write the manifest");
 
@@ -180,7 +180,11 @@ fn compile_refuses_a_row_nothing_answers_and_says_what_would() {
     let root = Temporary::new("cli-bundle", "unanswered");
     let package = root.join("unanswered");
     fs::create_dir_all(&package).expect("create the temp package");
-    fs::write(package.join("curios.toml"), "name = \"unanswered\"\n").expect("write the manifest");
+    fs::write(
+        package.join("curios.toml"),
+        "compiler = \"0.0.0\"\nname = \"unanswered\"\n",
+    )
+    .expect("write the manifest");
     fs::write(package.join("exe.crs"), UNANSWERED).expect("write the temp source");
 
     let refusal = refused(&package, &root.join("unanswered.out"), &[]);
@@ -312,7 +316,11 @@ fn compile_produces_a_runnable_executable() {
     let package = root.join("bundle");
     let output = root.join("bundle.out");
     fs::create_dir_all(&package).expect("create the temp package");
-    fs::write(package.join("curios.toml"), "name = \"bundle\"\n").expect("write the manifest");
+    fs::write(
+        package.join("curios.toml"),
+        "compiler = \"0.0.0\"\nname = \"bundle\"\n",
+    )
+    .expect("write the manifest");
     fs::write(package.join("exe.crs"), r#"/std/print("hello")"#).expect("write the temp source");
 
     compile(&package, &output);
@@ -331,7 +339,11 @@ fn printer(root: &Path) -> std::path::PathBuf {
     let package = root.join("printer");
     let output = root.join("printer.out");
     fs::create_dir_all(&package).expect("create the temp package");
-    fs::write(package.join("curios.toml"), "name = \"printer\"\n").expect("write the manifest");
+    fs::write(
+        package.join("curios.toml"),
+        "compiler = \"0.0.0\"\nname = \"printer\"\n",
+    )
+    .expect("write the manifest");
     fs::write(
         package.join("exe.crs"),
         r#"use /std/{List, print, print_err};
@@ -420,7 +432,11 @@ fn a_branch_ticks_while_another_reads_standard_input() {
     let package = root.join("ticker");
     let output = root.join("ticker.out");
     fs::create_dir_all(&package).expect("create the temp package");
-    fs::write(package.join("curios.toml"), "name = \"ticker\"\n").expect("write the manifest");
+    fs::write(
+        package.join("curios.toml"),
+        "compiler = \"0.0.0\"\nname = \"ticker\"\n",
+    )
+    .expect("write the manifest");
     fs::write(
         package.join("exe.crs"),
         r#"use /std/{Io, Nat, Str, Bytes};

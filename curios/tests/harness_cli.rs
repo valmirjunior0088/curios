@@ -31,7 +31,7 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(
         &root,
@@ -156,7 +156,7 @@ fn a_test_that_exits_before_it_reports_is_exited_whatever_its_code() {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(
         &root,
@@ -242,7 +242,7 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(
         &root,
@@ -387,7 +387,7 @@ fn wonder_tests_lists_declared_paths_per_target_form() {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(
         &root,
@@ -427,7 +427,7 @@ fn wonder_tests_on_a_testless_package_lists_nothing_and_exits_zero() {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(&root, "lib.crs", "pub let zero: /std/Nat = 0;\n");
     write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
@@ -443,7 +443,7 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[[executables]]\nname = \"other\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[[executables]]\nname = \"other\"\n",
     );
     write(
         &root,
@@ -483,7 +483,7 @@ fn a_goal_beside_a_refusal_exits_one_with_both_reported() {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(
         &root,

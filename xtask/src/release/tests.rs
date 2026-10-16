@@ -4,7 +4,7 @@
 
 use super::*;
 
-/// The shape `git diff` gives a bump, trimmed to one member: the two file headers, a hunk header, context lines, and the version pair.
+/// The shape `git diff` gives Cargo's part of a bump, trimmed to one member: the two file headers, a hunk header, context lines, and the version pair.
 const BUMP: &str = "\
 diff --git a/Cargo.lock b/Cargo.lock
 index ecf729fc..6eabedfc 100644
@@ -31,7 +31,18 @@ index 1d112d84..ab77b38a 100644
  edition = \"2024\"
 ";
 
-const NAMES: &str = "Cargo.lock\nCargo.toml\n";
+const STANDARD_BUMP: &str = "\
+diff --git a/curios-std/src/curios.toml b/curios-std/src/curios.toml
+--- a/curios-std/src/curios.toml
++++ b/curios-std/src/curios.toml
+@@ -1,3 +1,3 @@
+ name = \"std\"
+-compiler = \"0.14.5\"
++compiler = \"0.14.6\"
+ description = \"The standard library\"
+";
+
+const NAMES: &str = "Cargo.lock\nCargo.toml\ncurios-std/src/curios.toml\n";
 
 fn version(major: u64, minor: u64, patch: u64) -> Version {
     Version {
@@ -113,25 +124,124 @@ fn no_argument_names_the_current_version_and_the_three_candidates() {
 #[test]
 fn the_diff_of_a_bump_is_accepted() {
     assert_eq!(
-        verify(NAMES, BUMP, version(0, 14, 5), version(0, 14, 6)),
+        verify(
+            NAMES,
+            BUMP,
+            STANDARD_BUMP,
+            version(0, 14, 5),
+            version(0, 14, 6)
+        ),
         Ok(())
     );
 }
 
 #[test]
-fn a_third_changed_file_is_refused() {
+fn an_unrelated_changed_file_or_a_missing_manifest_is_refused() {
     let names = format!("{NAMES}README.md\n");
 
-    assert!(verify(&names, BUMP, version(0, 14, 5), version(0, 14, 6)).is_err());
-    assert!(verify("Cargo.toml\n", BUMP, version(0, 14, 5), version(0, 14, 6)).is_err());
+    for names in [&names, "Cargo.toml\n", "Cargo.lock\nCargo.toml\n"] {
+        assert!(
+            verify(
+                names,
+                BUMP,
+                STANDARD_BUMP,
+                version(0, 14, 5),
+                version(0, 14, 6)
+            )
+            .is_err()
+        );
+    }
 }
 
 #[test]
 fn a_changed_line_that_is_not_the_version_is_refused() {
     let edition = BUMP.replace(" edition = \"2024\"", "+edition = \"2024\"");
-    assert!(verify(NAMES, &edition, version(0, 14, 5), version(0, 14, 6)).is_err());
+    assert!(
+        verify(
+            NAMES,
+            &edition,
+            STANDARD_BUMP,
+            version(0, 14, 5),
+            version(0, 14, 6)
+        )
+        .is_err()
+    );
 
     // The versions the diff carries are the ones being checked, so a diff for another bump is not this bump's.
-    assert!(verify(NAMES, BUMP, version(0, 14, 5), version(0, 15, 0)).is_err());
-    assert!(verify(NAMES, BUMP, version(0, 14, 4), version(0, 14, 6)).is_err());
+    assert!(
+        verify(
+            NAMES,
+            BUMP,
+            STANDARD_BUMP,
+            version(0, 14, 5),
+            version(0, 15, 0)
+        )
+        .is_err()
+    );
+    assert!(
+        verify(
+            NAMES,
+            BUMP,
+            STANDARD_BUMP,
+            version(0, 14, 4),
+            version(0, 14, 6)
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn a_bump_preserves_both_manifests_beside_the_versions_it_owns() {
+    let workspace = "# workspace\n[workspace.package]\nversion = \"0.14.5\"\nedition = \"2024\"\n";
+    let standard = "# bundled library\nname = \"std\" # its name stays\ncompiler = \"0.14.5\"\ndescription = \"The standard library\"\n";
+    let mut document = workspace.parse::<DocumentMut>().unwrap();
+    let mut library = standard.parse::<DocumentMut>().unwrap();
+
+    bump_manifests(
+        &mut document,
+        &mut library,
+        version(0, 14, 5),
+        version(0, 14, 6),
+    )
+    .unwrap();
+
+    assert_eq!(document.to_string(), workspace.replace("0.14.5", "0.14.6"));
+    assert_eq!(library.to_string(), standard.replace("0.14.5", "0.14.6"));
+}
+
+#[test]
+fn a_missing_or_stale_library_minimum_is_refused_before_mutation() {
+    let workspace = "[workspace.package]\nversion = \"0.14.5\"\n";
+    for standard in [
+        "name = \"std\"\n",
+        "name = \"std\"\ncompiler = \"0.14.4\"\n",
+    ] {
+        let mut document = workspace.parse::<DocumentMut>().unwrap();
+        let mut library = standard.parse::<DocumentMut>().unwrap();
+        let error = bump_manifests(
+            &mut document,
+            &mut library,
+            version(0, 14, 5),
+            version(0, 14, 6),
+        )
+        .unwrap_err();
+        assert!(error.contains(STANDARD_MANIFEST), "{error}");
+        assert_eq!(document.to_string(), workspace);
+        assert_eq!(library.to_string(), standard);
+    }
+}
+
+#[test]
+fn an_unrelated_library_change_is_refused() {
+    let renamed = STANDARD_BUMP.replace(" name = \"std\"", "+name = \"other\"");
+    assert!(verify(NAMES, BUMP, &renamed, version(0, 14, 5), version(0, 14, 6)).is_err());
+}
+
+#[test]
+fn a_compiler_field_in_cargo_or_a_version_field_in_the_library_is_refused() {
+    let cargo = BUMP.replace("version =", "compiler =");
+    let standard = STANDARD_BUMP.replace("compiler =", "version =");
+    for (cargo, standard) in [(&cargo[..], STANDARD_BUMP), (BUMP, &standard[..])] {
+        assert!(verify(NAMES, cargo, standard, version(0, 14, 5), version(0, 14, 6)).is_err());
+    }
 }

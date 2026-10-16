@@ -1,10 +1,10 @@
-//! The release dance: the version in `Cargo.toml`, the lock file beside it, one commit, one tag, and the push that publishes them — along with whatever else `main` had not published yet.
+//! The release dance: the version in `Cargo.toml`, the lock file beside it, the bundled standard library's compiler minimum, one commit, one tag, and the push that publishes them — along with whatever else `main` had not published yet.
 //!
 //! **Invoking this recipe is the intent to publish.** `.github/workflows/release.yml` fires on a `release/*` tag and creates the public GitHub release from it, so once the preflight passes the dance runs to the end without asking again. Every precondition is therefore a refusal taken before anything is written: a dirty tree, a branch that is not `main`, a `main` that origin has moved past, a tag that already exists, or a version that is not above the one in the manifest stops the recipe with nothing done.
 //!
 //! **Nothing here builds, and nothing here undoes.** The check workflow runs on every push to `main` and has already had its say on the commits being released; the tag's own workflow builds and publishes without running it again. And removing a local commit or tag is destructive, so a failure past the commit prints what exists and what would undo it rather than doing it — that is the user's to ask for.
 //!
-//! **The write is checked by reading it back.** `toml_edit` preserves every byte it did not set and `cargo update --workspace --offline` rewrites one version per workspace member, so a bump is exactly one line in `Cargo.toml` and one per member in `Cargo.lock`. [`verify`] asserts that against the diff, which is what makes the mutation a fact rather than a hope.
+//! **The write is checked by reading it back.** `toml_edit` preserves every byte it did not set and `cargo update --workspace --offline` rewrites one version per workspace member, so a bump is exactly one line in `Cargo.toml`, one per member in `Cargo.lock`, and the `compiler` line in the standard library's manifest. [`verify`] asserts that against the diff, which is what makes the mutation a fact rather than a hope.
 
 use {
     crate::{ask, cargo, root, run},
@@ -14,6 +14,8 @@ use {
 
 #[cfg(test)]
 mod tests;
+
+const STANDARD_MANIFEST: &str = "curios-std/src/curios.toml";
 
 /// A release version, as every tag in this repository's history spells one: three numbers and nothing else.
 ///
@@ -102,7 +104,7 @@ fn git_ask(arguments: &[&str]) -> Result<String, String> {
     ask(Command::new("git"), arguments)
 }
 
-/// The workspace version in the root manifest — the only place a release version is written, which every crate inherits and `Cargo.lock` records once per member.
+/// The workspace version in the root manifest — the authority every crate inherits and `Cargo.lock` records once per member; the standard library's compiler minimum follows it when a release is cut.
 fn declared(document: &DocumentMut) -> Result<Version, String> {
     let version = document
         .get("workspace")
@@ -140,21 +142,55 @@ fn resolve(bump: Option<&str>, current: Version) -> Result<Version, String> {
     }
 }
 
-/// What the bump was allowed to do: the two manifests changed, and every changed line in them the version and nothing else.
-///
-/// Neither assertion needs to know which file a hunk came from. The file list already says both were touched, and a line that is neither version is refused wherever it appeared — which is what catches a `toml_edit` write that reached a dependency's version row, or a `cargo update` that moved something under the release.
-fn verify(names: &str, diff: &str, current: Version, target: Version) -> Result<(), String> {
-    let mut changed = names.split_whitespace().collect::<Vec<_>>();
-    changed.sort_unstable();
-
-    if changed != ["Cargo.lock", "Cargo.toml"] {
+/// Move the compiler and its bundled library together, refusing a stale library declaration before either manifest is written.
+fn bump_manifests(
+    document: &mut DocumentMut,
+    standard: &mut DocumentMut,
+    current: Version,
+    target: Version,
+) -> Result<(), String> {
+    let minimum = standard
+        .get("compiler")
+        .and_then(|compiler| compiler.as_str())
+        .ok_or_else(|| format!("{STANDARD_MANIFEST} has no `compiler` minimum"))?;
+    if minimum != current.to_string() {
         return Err(format!(
-            "the bump changed {changed:?}, not Cargo.toml and Cargo.lock alone"
+            "{STANDARD_MANIFEST} declares compiler {minimum:?}, which must match the workspace version {current} before a release"
         ));
     }
 
-    let added = format!("version = \"{target}\"");
-    let removed = format!("version = \"{current}\"");
+    document["workspace"]["package"]["version"] = value(target.to_string());
+    standard["compiler"] = value(target.to_string());
+    Ok(())
+}
+
+/// What the bump was allowed to do: the workspace version, its lock records, and the bundled library's compiler minimum, with nothing else changed.
+///
+/// Each diff is scoped by its git invocation: a `compiler` line is admitted only in the library's manifest, and a `version` line only in Cargo's two files. A field moved elsewhere cannot pass as a release bump.
+fn verify(
+    names: &str,
+    diff: &str,
+    standard_diff: &str,
+    current: Version,
+    target: Version,
+) -> Result<(), String> {
+    let mut changed = names.split_whitespace().collect::<Vec<_>>();
+    changed.sort_unstable();
+
+    if changed != ["Cargo.lock", "Cargo.toml", STANDARD_MANIFEST] {
+        return Err(format!(
+            "the bump changed {changed:?}, not Cargo.toml, Cargo.lock and {STANDARD_MANIFEST} alone"
+        ));
+    }
+
+    verify_lines(diff, "version", current, target)?;
+    verify_lines(standard_diff, "compiler", current, target)
+}
+
+/// Every changed line in a scoped diff sets exactly the field the release owns there.
+fn verify_lines(diff: &str, field: &str, current: Version, target: Version) -> Result<(), String> {
+    let added = format!("{field} = \"{target}\"");
+    let removed = format!("{field} = \"{current}\"");
 
     for line in diff.lines() {
         // The file headers carry the same signs as the bodies and say nothing about content.
@@ -170,7 +206,7 @@ fn verify(names: &str, diff: &str, current: Version, target: Version) -> Result<
 
         if offending {
             return Err(format!(
-                "the bump changed a line that is not the version: {line}"
+                "the bump changed a line that is not the {field}: {line}"
             ));
         }
     }
@@ -220,21 +256,30 @@ pub(crate) fn release(bump: Option<&str>) -> Result<(), String> {
         .parse::<DocumentMut>()
         .map_err(|error| format!("cannot read {}: {error}", manifest.display()))?;
 
+    let standard_manifest = root().join(STANDARD_MANIFEST);
+    let mut standard = fs::read_to_string(&standard_manifest)
+        .map_err(|error| format!("cannot read {}: {error}", standard_manifest.display()))?
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("cannot read {}: {error}", standard_manifest.display()))?;
+
     let current = declared(&document)?;
     let target = resolve(bump, current)?;
     let tag = format!("release/{target}");
+    bump_manifests(&mut document, &mut standard, current, target)?;
 
     preflight(&tag)?;
 
-    document["workspace"]["package"]["version"] = value(target.to_string());
     fs::write(&manifest, document.to_string())
         .map_err(|error| format!("cannot write {}: {error}", manifest.display()))?;
+    fs::write(&standard_manifest, standard.to_string())
+        .map_err(|error| format!("cannot write {}: {error}", standard_manifest.display()))?;
 
     cargo(&["update", "--workspace", "--offline"])?;
 
     verify(
         &git_ask(&["diff", "--name-only"])?,
-        &git_ask(&["diff"])?,
+        &git_ask(&["diff", "--", "Cargo.toml", "Cargo.lock"])?,
+        &git_ask(&["diff", "--", STANDARD_MANIFEST])?,
         current,
         target,
     )?;
@@ -243,6 +288,7 @@ pub(crate) fn release(bump: Option<&str>) -> Result<(), String> {
         "commit",
         "Cargo.toml",
         "Cargo.lock",
+        STANDARD_MANIFEST,
         "-m",
         &format!("Bump the version to {target}"),
     ])?;

@@ -23,6 +23,7 @@ fn a_scaffolded_package_is_one_this_crate_reads() {
     scaffold(&root).expect("a fresh directory");
 
     let (package, source) = package_at(&root).expect("what was written parses and resolves");
+    assert_eq!(package.compiler, Some(CompilerVersion::current()));
 
     assert_eq!(package.executables.len(), 1);
     assert_eq!(
@@ -33,6 +34,23 @@ fn a_scaffolded_package_is_one_this_crate_reads() {
 
     assert!(source.is_some(), "the library header resolves");
     assert!(root.join(LIBRARY).is_file());
+}
+
+#[test]
+fn a_scaffolded_member_inherits_instead_of_declaring_a_local_minimum() {
+    let (temporary, root) = fresh("member");
+    fs::create_dir_all(&temporary).unwrap();
+    fs::write(
+        temporary.join(MANIFEST),
+        format!(
+            "compiler = \"{}\"\nmembers = [\"member\"]\n",
+            CompilerVersion::current()
+        ),
+    )
+    .unwrap();
+    scaffold(&root).expect("a fresh enumerated member");
+    let (package, _) = package_at(&root).expect("the member inherits its umbrella's minimum");
+    assert!(package.compiler.is_none());
 }
 
 /// The name is checked before anything is written, so a refusal leaves nothing behind to clean up.

@@ -758,6 +758,7 @@ version = "0.16.7"
 dependencies = [
  "curios-text",
  "curios-utilities",
+ "semver",
  "serde",
  "toml",
  "toml_edit",

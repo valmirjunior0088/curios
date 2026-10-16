@@ -18,7 +18,10 @@ fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
 /// A delivery that hashes to what it was pinned to is accepted and placed under that hash.
 #[test]
 fn a_delivery_matching_its_pin_is_placed() {
-    let root = tree("curate-accept", &[("curios.toml", "name = \"app\"\n")]);
+    let root = tree(
+        "curate-accept",
+        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+    );
     let scratch = root.join("scratch");
     fs::create_dir_all(&scratch).unwrap();
     fs::write(scratch.join("lib.crs"), "pub let x : Type = Type;").unwrap();
@@ -44,7 +47,10 @@ fn a_delivery_matching_its_pin_is_placed() {
 /// **The hash.** A delivery that is not what it was pinned to is refused, and the refusal states what actually arrived — because nobody writes a hash by hand, so the only way to fix a wrong one is to be told the right one.
 #[test]
 fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
-    let root = tree("curate-refuse", &[("curios.toml", "name = \"app\"\n")]);
+    let root = tree(
+        "curate-refuse",
+        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+    );
     let scratch = root.join("scratch");
     fs::create_dir_all(&scratch).unwrap();
     fs::write(scratch.join("lib.crs"), "pub let x : Type = Type;").unwrap();
@@ -80,10 +86,13 @@ fn a_live_project_acquires_nothing() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
             ),
             ("app/lib.crs", ""),
-            ("base/curios.toml", "name = \"base\"\n"),
+            (
+                "base/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"base\"\n",
+            ),
             ("base/lib.crs", ""),
         ],
     );
@@ -99,7 +108,10 @@ fn a_pin_of_a_live_member_is_not_acquired() {
     let root = tree(
         "curate-pinned-member",
         &[
-            ("curios.toml", "members = [\"app\", \"base\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+            ),
             (
                 "app/curios.toml",
                 "name = \"app\"\n\n[dependencies]\nbase = { source = \"git\", url = \"https://example/base\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n",
@@ -125,7 +137,7 @@ fn a_fetchable_catalog_row_is_acquired() {
         &[
             (
                 "curios.toml",
-                "members = [\"app\"]\n\n[catalog]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n",
+                "compiler = \"0.0.0\"\nmembers = [\"app\"]\n\n[catalog]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n",
             ),
             (
                 "app/curios.toml",
@@ -153,7 +165,7 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
         &[
             (
                 "curios.toml",
-                "members = [\"app\"]\n\n[catalog]\nbase = { source = \"path\", path = \"vendor/base\" }\n",
+                "compiler = \"0.0.0\"\nmembers = [\"app\"]\n\n[catalog]\nbase = { source = \"path\", path = \"vendor/base\" }\n",
             ),
             (
                 "app/curios.toml",
@@ -163,7 +175,7 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
             // Reached only if the base is the umbrella's root: from `app/` this path names nothing.
             (
                 "vendor/base/curios.toml",
-                "name = \"base\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"def456\", hash = \"c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\" }\n",
+                "compiler = \"0.0.0\"\nname = \"base\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"def456\", hash = \"c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\" }\n",
             ),
             ("vendor/base/lib.crs", ""),
         ],
@@ -188,7 +200,7 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
 #[ignore = "shells out to git; the remote is local, so this needs no network"]
 fn a_fetched_revision_is_verified_and_placed() {
     let files = &[
-        ("curios.toml", "name = \"http\"\n"),
+        ("curios.toml", "compiler = \"0.0.0\"\nname = \"http\"\n"),
         ("lib.crs", "pub let get : Type = Type;"),
     ];
 
@@ -198,7 +210,10 @@ fn a_fetched_revision_is_verified_and_placed() {
 
     let (origin, revision) = origin("curate-origin", files);
 
-    let root = tree("curate-fetch", &[("curios.toml", "name = \"app\"\n")]);
+    let root = tree(
+        "curate-fetch",
+        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+    );
     let acquisition = Acquisition {
         name: "http".to_string(),
         url: format!("file://{}", origin.display()),
@@ -270,14 +285,17 @@ fn pinned(origin: &Path, rev: &str, hash: &TreeHash) -> Acquisition {
 #[ignore = "shells out to git; the remote is local, so this needs no network"]
 fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
     let files = &[
-        ("curios.toml", "name = \"http\"\n"),
+        ("curios.toml", "compiler = \"0.0.0\"\nname = \"http\"\n"),
         ("lib.crs", "pub let get : Type = Type;"),
     ];
     let measured = tree("curate-absent-expected", files);
     let expected = TreeHash::of(&measured).unwrap();
     let (origin, _) = origin("curate-absent-origin", files);
 
-    let root = tree("curate-absent", &[("curios.toml", "name = \"app\"\n")]);
+    let root = tree(
+        "curate-absent",
+        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+    );
     let absent = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
     let refusal = fetch(
@@ -300,7 +318,7 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
 #[ignore = "shells out to git; the remote is local, so this needs no network"]
 fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
     let files = &[
-        ("curios.toml", "name = \"http\"\n"),
+        ("curios.toml", "compiler = \"0.0.0\"\nname = \"http\"\n"),
         ("lib.crs", "pub let get : Type = Type;"),
     ];
     let measured = tree("curate-refs-expected", files);
@@ -308,7 +326,10 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
     let (origin, revision) = origin("curate-refs-origin", files);
 
     for rev in [revision.as_str(), "v1", "master", "main"] {
-        let root = tree("curate-refs", &[("curios.toml", "name = \"app\"\n")]);
+        let root = tree(
+            "curate-refs",
+            &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+        );
         let store = Store::at(root.to_path_buf());
 
         // Whichever name `git init` gave the branch is the one that exists; the other is simply absent from this remote.
@@ -331,7 +352,7 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
 #[ignore = "shells out to git; the remote is local, so this needs no network"]
 fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
     let files = &[
-        ("curios.toml", "name = \"shape\"\n"),
+        ("curios.toml", "compiler = \"0.0.0\"\nname = \"shape\"\n"),
         ("lib.crs", "pub let message : /std/Str = \"shape\";"),
     ];
     let measured = tree("curate-mirrors-expected", files);
@@ -363,14 +384,17 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
             (
                 "app/curios.toml",
                 &format!(
-                    "name = \"app\"\n\n[dependencies]\n{}mid = {{ source = \"path\", path = \"../mid\" }}\n",
+                    "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\n{}mid = {{ source = \"path\", path = \"../mid\" }}\n",
                     pin(&origin)
                 ),
             ),
             ("app/lib.crs", ""),
             (
                 "mid/curios.toml",
-                &format!("name = \"mid\"\n\n[dependencies]\n{}", pin(&mirror)),
+                &format!(
+                    "compiler = \"0.0.0\"\nname = \"mid\"\n\n[dependencies]\n{}",
+                    pin(&mirror)
+                ),
             ),
             ("mid/lib.crs", ""),
         ],
@@ -396,7 +420,10 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
 /// It does mean this exercises `curl` specifically: `wget` speaks no `file://`, so on a machine with only the fallback installed this fails where the product would not. That is a property of the scheme a test can reach without a network, not of the fetch.
 #[test]
 fn a_fetched_module_matching_its_pin_is_placed() {
-    let root = tree("curate-module", &[("curios.toml", "name = \"app\"\n")]);
+    let root = tree(
+        "curate-module",
+        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+    );
     let module = root.join("libsha2.wasm");
     fs::write(&module, b"\0asm\x01\0\0\0").unwrap();
 
@@ -419,7 +446,7 @@ fn a_fetched_module_matching_its_pin_is_placed() {
 fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
     let root = tree(
         "curate-module-refuse",
-        &[("curios.toml", "name = \"app\"\n")],
+        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
     );
     let module = root.join("libsha2.wasm");
     fs::write(&module, b"\0asm\x01\0\0\0").unwrap();

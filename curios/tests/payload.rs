@@ -31,7 +31,7 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(&root, "lib.crs", "pub let word : /std/Str = \"reused\";\n");
     write(

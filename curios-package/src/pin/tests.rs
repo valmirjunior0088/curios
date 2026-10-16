@@ -28,7 +28,7 @@ fn carried(root: &Temporary, path: &str, bytes: &[u8]) -> FileHash {
 
 #[test]
 fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
-    let (root, governing) = governed("carried", "name = \"app\"\n");
+    let (root, governing) = governed("carried", "compiler = \"0.0.0\"\nname = \"app\"\n");
     let hash = carried(&root, "foreign/probe.wasm", b"\0asm\x01\0\0\0");
 
     let pinned = pin(
@@ -50,7 +50,7 @@ fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
 
 #[test]
 fn pinning_a_row_to_what_it_already_says_writes_nothing() {
-    let (root, governing) = governed("idempotent", "name = \"app\"\n");
+    let (root, governing) = governed("idempotent", "compiler = \"0.0.0\"\nname = \"app\"\n");
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
     let repoint = Repoint::Carried("probe.wasm".into());
@@ -72,7 +72,7 @@ fn pinning_a_row_to_what_it_already_says_writes_nothing() {
 /// `--check` is the same question without the answer being written down, which is what makes it usable in CI.
 #[test]
 fn a_checked_pin_reports_what_it_would_write_and_writes_nothing() {
-    let (root, governing) = governed("checked", "name = \"app\"\n");
+    let (root, governing) = governed("checked", "compiler = \"0.0.0\"\nname = \"app\"\n");
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
     let before = fs::read_to_string(&governing.manifest).expect("read it back");
@@ -96,7 +96,7 @@ fn a_checked_pin_reports_what_it_would_write_and_writes_nothing() {
 /// Everything the manifest already said is still there, byte for byte, including what TOML gives no structure to.
 #[test]
 fn a_written_row_disturbs_nothing_beside_it() {
-    let manifest = "# the package\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\npath = \"serve.crs\"\n";
+    let manifest = "# the package\ncompiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\npath = \"serve.crs\"\n";
     let (root, governing) = governed("undisturbed", manifest);
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
@@ -113,12 +113,13 @@ fn a_written_row_disturbs_nothing_beside_it() {
     assert!(written.contains("# the package"), "{written}");
     assert!(written.contains("[[executables]]"), "{written}");
     assert!(written.contains("name = \"serve\""), "{written}");
+    assert!(written.contains("compiler = \"0.0.0\""), "{written}");
 }
 
 /// Repointing from one delivery to the other has to remove the key it is leaving behind, or the row states two and is refused where it is read.
 #[test]
 fn repointing_a_module_to_a_url_clears_the_path_it_carried() {
-    let (root, governing) = governed("repointed", "name = \"app\"\n");
+    let (root, governing) = governed("repointed", "compiler = \"0.0.0\"\nname = \"app\"\n");
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
     pin(
@@ -140,7 +141,7 @@ fn repointing_a_module_to_a_url_clears_the_path_it_carried() {
 
 #[test]
 fn a_row_that_is_not_there_cannot_be_refreshed() {
-    let (_root, governing) = governed("absent", "name = \"app\"\n");
+    let (_root, governing) = governed("absent", "compiler = \"0.0.0\"\nname = \"app\"\n");
 
     let refusal = pin(
         &governing,
@@ -163,7 +164,7 @@ fn a_row_that_is_not_there_cannot_be_refreshed() {
 
 #[test]
 fn a_module_outside_the_package_is_refused_as_no_plain_relative_path() {
-    let (_root, governing) = governed("outside", "name = \"app\"\n");
+    let (_root, governing) = governed("outside", "compiler = \"0.0.0\"\nname = \"app\"\n");
 
     let refusal = pin(
         &governing,
@@ -185,8 +186,10 @@ fn a_dependency_named_otherwise_than_it_declares_itself_is_refused() {
     let dep = root.join("dep");
     fs::create_dir_all(&app).expect("create the package");
     fs::create_dir_all(&dep).expect("create the dependency");
-    fs::write(app.join(MANIFEST), "name = \"app\"\n").expect("write the manifest");
-    fs::write(dep.join(MANIFEST), "name = \"dep\"\n").expect("write the dependency's manifest");
+    fs::write(app.join(MANIFEST), "compiler = \"0.0.0\"\nname = \"app\"\n")
+        .expect("write the manifest");
+    fs::write(dep.join(MANIFEST), "compiler = \"0.0.0\"\nname = \"dep\"\n")
+        .expect("write the dependency's manifest");
 
     let governing = Governing::of(&app).expect("the package governs itself");
     let refusal = pin(

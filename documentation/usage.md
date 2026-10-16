@@ -318,6 +318,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 | Package key | Is |
 | --- | --- |
 | `name` | required: the package's canonical name, its mount prefix and every consumer's only way to refer to it |
+| `compiler` | required for a standalone package: its minimum Curios version, a bare SemVer version; an umbrella member inherits this from its umbrella instead |
 | `description` | one line, which opens the landing page [`document`](#document) writes |
 | `default` | which executable a bare `run`, `compile` or `test` means; it may name a declared row or the package's own `exe.crs` program |
 | `[dependencies]` | one row per package this one reaches, keyed by that package's name |
@@ -326,6 +327,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 
 ```toml
 name = "hello"
+compiler = "0.16.7"
 default = "bench"
 
 [[executables]]
@@ -337,6 +339,10 @@ path = "tools/serve.crs"  # unless the row says otherwise
 ```
 
 An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the stem-space checks compare it as written.
+
+`compiler` states a minimum, not a range or an exact toolchain pin: `compiler = "0.16.7"` accepts that version and newer, using SemVer precedence and ignoring build metadata. An older compiler is refused before compilation or cached execution, naming the manifest, the required minimum and the running version. Every dependency is checked against its own effective requirement too. There is no implicit minimum for a standalone package, and `curios new` writes the running compiler's version when it starts one. Loose programs and standard input have no manifest requirement.
+
+An umbrella must declare `compiler`, and every package its `members` enumerates inherits that minimum. A member cannot declare a local override; the refusal points to its umbrella. A package merely beneath an umbrella directory is still standalone unless enumerated. Inheritance follows each dependency's own membership, never its consumer's umbrella. A dependency delivered without the umbrella it needs cannot inherit and must declare a standalone minimum in its own manifest.
 
 A `[[foreign]]` row names a module and says which of its exports answers each of the package's `foreign` declarations it is named for:
 
@@ -360,6 +366,7 @@ A `foreign` no entry names is the host's to answer. A program asks only for what
 
 | Umbrella key | Is |
 | --- | --- |
+| `compiler` | required: the minimum Curios version all enumerated members inherit |
 | `members` | the packages this umbrella governs, as paths; an umbrella governs a package **only if it enumerates it**, so a directory nothing enumerates is governed by nothing above it, however deep it sits |
 | `catalog` | pins the members may draw on, keyed as a dependency table is |
 
@@ -367,6 +374,7 @@ A dependency is pinned exactly, and its name is how every consumer refers to it.
 
 ```toml
 name = "app"
+compiler = "0.16.7"
 
 [dependencies]
 json = { source = "git", url = "https://github.com/you/json", rev = "…", hash = "c1:…" }
@@ -383,6 +391,7 @@ shape = { source = "path", path = "../shape" }
 No `url` or `rev` may begin with `-`: [`curate`](#curate) hands both to `git` as positional arguments, which would read a leading `-` as an option. `member` and `catalog` are markers rather than resolvers, so a `[catalog]` row may name neither — umbrellas do not nest, and nothing sits above one to answer a marker it wrote. A catalog row on its own fetches nothing: activation lives in the package that names it.
 
 ```toml
+compiler = "0.16.7"
 members = ["app", "base"]
 
 [catalog]

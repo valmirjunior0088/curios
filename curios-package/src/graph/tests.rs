@@ -31,7 +31,10 @@ fn mounts(directory: &Path) -> Result<Vec<String>, String> {
 fn a_lone_package_is_one_unit() {
     let root = tree(
         "graph-lone",
-        &[("curios.toml", "name = \"json\"\n"), ("lib.crs", "")],
+        &[
+            ("curios.toml", "compiler = \"0.0.0\"\nname = \"json\"\n"),
+            ("lib.crs", ""),
+        ],
     );
 
     assert_eq!(mounts(&root).unwrap(), vec!["/json".to_string()]);
@@ -45,10 +48,13 @@ fn a_path_dependency_lands_before_its_dependent() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
             ),
             ("app/lib.crs", ""),
-            ("base/curios.toml", "name = \"base\"\n"),
+            (
+                "base/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"base\"\n",
+            ),
             ("base/lib.crs", ""),
         ],
     );
@@ -67,20 +73,23 @@ fn a_diamond_compiles_its_point_once() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n",
             ),
             ("app/lib.crs", ""),
             (
                 "left/curios.toml",
-                "name = \"left\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
+                "compiler = \"0.0.0\"\nname = \"left\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
             ),
             ("left/lib.crs", ""),
             (
                 "right/curios.toml",
-                "name = \"right\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
+                "compiler = \"0.0.0\"\nname = \"right\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
             ),
             ("right/lib.crs", ""),
-            ("base/curios.toml", "name = \"base\"\n"),
+            (
+                "base/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"base\"\n",
+            ),
             ("base/lib.crs", ""),
         ],
     );
@@ -103,22 +112,22 @@ fn two_dependents_resolving_one_name_two_ways_is_refused() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n",
             ),
             ("app/lib.crs", ""),
             (
                 "left/curios.toml",
-                "name = \"left\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../one\" }\n",
+                "compiler = \"0.0.0\"\nname = \"left\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../one\" }\n",
             ),
             ("left/lib.crs", ""),
             (
                 "right/curios.toml",
-                "name = \"right\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../two\" }\n",
+                "compiler = \"0.0.0\"\nname = \"right\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../two\" }\n",
             ),
             ("right/lib.crs", ""),
-            ("one/curios.toml", "name = \"base\"\n"),
+            ("one/curios.toml", "compiler = \"0.0.0\"\nname = \"base\"\n"),
             ("one/lib.crs", ""),
-            ("two/curios.toml", "name = \"base\"\n"),
+            ("two/curios.toml", "compiler = \"0.0.0\"\nname = \"base\"\n"),
             ("two/lib.crs", ""),
         ],
     );
@@ -139,12 +148,12 @@ fn a_dependency_with_no_library_is_refused() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\ntool = { source = \"path\", path = \"../tool\" }\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\ntool = { source = \"path\", path = \"../tool\" }\n",
             ),
             ("app/lib.crs", ""),
             (
                 "tool/curios.toml",
-                "name = \"tool\"\n\n[[executables]]\nname = \"tool\"\n",
+                "compiler = \"0.0.0\"\nname = \"tool\"\n\n[[executables]]\nname = \"tool\"\n",
             ),
             ("tool/tool.crs", ""),
         ],
@@ -162,7 +171,10 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
     let root = tree(
         "graph-pin-conflict",
         &[
-            ("curios.toml", "members = [\"app\", \"left\", \"right\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"app\", \"left\", \"right\"]\n",
+            ),
             ("app/lib.crs", ""),
             ("left/lib.crs", ""),
             ("right/lib.crs", ""),
@@ -172,7 +184,11 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
     // One delivery, in the store, under the hash it actually hashes to.
     let delivered = root.join("delivered");
     fs::create_dir_all(&delivered).unwrap();
-    fs::write(delivered.join("curios.toml"), "name = \"http\"\n").unwrap();
+    fs::write(
+        delivered.join("curios.toml"),
+        "compiler = \"0.0.0\"\nname = \"http\"\n",
+    )
+    .unwrap();
     fs::write(delivered.join("lib.crs"), "").unwrap();
     let hash = TreeHash::of(&delivered).unwrap();
 
@@ -253,7 +269,11 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
     // The catalogued delivery, in the store under the hash it hashes to; the direct pin's never arrives.
     let delivered = root.join("delivered");
     fs::create_dir_all(&delivered).unwrap();
-    fs::write(delivered.join("curios.toml"), "name = \"http\"\n").unwrap();
+    fs::write(
+        delivered.join("curios.toml"),
+        "compiler = \"0.0.0\"\nname = \"http\"\n",
+    )
+    .unwrap();
     fs::write(delivered.join("lib.crs"), "").unwrap();
     let hash = TreeHash::of(&delivered).unwrap();
     let placed = crate::Store::at(root.to_path_buf()).source(&hash);
@@ -269,7 +289,7 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
     fs::write(
         root.join("curios.toml"),
         format!(
-            "members = [\"app\", \"left\", \"right\"]\n\n[catalog]\n{}\n",
+            "compiler = \"0.0.0\"\nmembers = [\"app\", \"left\", \"right\"]\n\n[catalog]\n{}\n",
             row("abc123", &hash)
         ),
     )
@@ -304,12 +324,12 @@ fn a_dependency_cycle_is_refused() {
         &[
             (
                 "a/curios.toml",
-                "name = \"a\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n",
+                "compiler = \"0.0.0\"\nname = \"a\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n",
             ),
             ("a/lib.crs", ""),
             (
                 "b/curios.toml",
-                "name = \"b\"\n\n[dependencies]\na = { source = \"path\", path = \"../a\" }\n",
+                "compiler = \"0.0.0\"\nname = \"b\"\n\n[dependencies]\na = { source = \"path\", path = \"../a\" }\n",
             ),
             ("b/lib.crs", ""),
         ],
@@ -333,17 +353,17 @@ fn a_cycle_reached_through_a_placed_name_is_refused() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n",
             ),
             ("app/lib.crs", ""),
             (
                 "b/curios.toml",
-                "name = \"b\"\n\n[dependencies]\nc = { source = \"path\", path = \"../c\" }\n",
+                "compiler = \"0.0.0\"\nname = \"b\"\n\n[dependencies]\nc = { source = \"path\", path = \"../c\" }\n",
             ),
             ("b/lib.crs", ""),
             (
                 "c/curios.toml",
-                "name = \"c\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n",
+                "compiler = \"0.0.0\"\nname = \"c\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n",
             ),
             ("c/lib.crs", ""),
         ],
@@ -365,10 +385,13 @@ fn a_row_keyed_by_the_wrong_name_is_refused() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nnope = { source = \"path\", path = \"../base\" }\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nnope = { source = \"path\", path = \"../base\" }\n",
             ),
             ("app/lib.crs", ""),
-            ("base/curios.toml", "name = \"base\"\n"),
+            (
+                "base/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"base\"\n",
+            ),
             ("base/lib.crs", ""),
         ],
     );
@@ -390,12 +413,15 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
             &[
                 (
                     "app/curios.toml",
-                    "name = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n",
+                    "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n",
                 ),
                 ("app/lib.crs", ""),
                 ("left/lib.crs", ""),
                 ("right/lib.crs", ""),
-                ("http/curios.toml", "name = \"http\"\n"),
+                (
+                    "http/curios.toml",
+                    "compiler = \"0.0.0\"\nname = \"http\"\n",
+                ),
                 ("http/lib.crs", ""),
             ],
         );
@@ -403,7 +429,11 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
         // One delivery in the store, under the hash it hashes to, so the pin can be placed.
         let delivered = root.join("delivered");
         fs::create_dir_all(&delivered).unwrap();
-        fs::write(delivered.join("curios.toml"), "name = \"http\"\n").unwrap();
+        fs::write(
+            delivered.join("curios.toml"),
+            "compiler = \"0.0.0\"\nname = \"http\"\n",
+        )
+        .unwrap();
         fs::write(delivered.join("lib.crs"), "").unwrap();
         let hash = TreeHash::of(&delivered).unwrap();
         let placed = crate::Store::at(root.join("app")).source(&hash);
@@ -413,14 +443,14 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
         fs::write(
             root.join(pinned).join("curios.toml"),
             format!(
-                "name = \"{pinned}\"\n\n[dependencies]\nhttp = {{ source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"{hash}\" }}\n"
+                "compiler = \"0.0.0\"\nname = \"{pinned}\"\n\n[dependencies]\nhttp = {{ source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"{hash}\" }}\n"
             ),
         )
         .unwrap();
         fs::write(
             root.join(live).join("curios.toml"),
             format!(
-                "name = \"{live}\"\n\n[dependencies]\nhttp = {{ source = \"path\", path = \"../http\" }}\n"
+                "compiler = \"0.0.0\"\nname = \"{live}\"\n\n[dependencies]\nhttp = {{ source = \"path\", path = \"../http\" }}\n"
             ),
         )
         .unwrap();
@@ -445,11 +475,14 @@ fn the_four_marker_mismatches_are_four_refusals() {
     let shared = &[
         (
             "curios.toml",
-            "members = [\"app\", \"base\"]\n\n[catalog]\nvendored = { source = \"path\", path = \"vendor/vendored\" }\n",
+            "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n\n[catalog]\nvendored = { source = \"path\", path = \"vendor/vendored\" }\n",
         ),
         ("base/curios.toml", "name = \"base\"\n"),
         ("base/lib.crs", ""),
-        ("vendor/vendored/curios.toml", "name = \"vendored\"\n"),
+        (
+            "vendor/vendored/curios.toml",
+            "compiler = \"0.0.0\"\nname = \"vendored\"\n",
+        ),
         ("vendor/vendored/lib.crs", ""),
         ("app/lib.crs", ""),
     ];
@@ -499,7 +532,7 @@ fn a_catalog_row_pointing_nowhere_is_refused_against_the_umbrella() {
         &[
             (
                 "curios.toml",
-                "members = [\"app\"]\n\n[catalog]\nshape = { source = \"path\", path = \"vendor/shape\" }\n",
+                "compiler = \"0.0.0\"\nmembers = [\"app\"]\n\n[catalog]\nshape = { source = \"path\", path = \"vendor/shape\" }\n",
             ),
             (
                 "app/curios.toml",
@@ -528,7 +561,7 @@ fn a_dependency_with_no_manifest_is_refused_against_the_row() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
             ),
             ("app/lib.crs", ""),
             ("base/README.md", ""),
@@ -556,14 +589,14 @@ fn a_marker_in_an_ungoverned_package_is_refused_for_the_missing_governance() {
             &[
                 (
                     "curios.toml",
-                    "members = [\"base\"]\n\n[catalog]\nbase = { source = \"path\", path = \"base\" }\n",
+                    "compiler = \"0.0.0\"\nmembers = [\"base\"]\n\n[catalog]\nbase = { source = \"path\", path = \"base\" }\n",
                 ),
                 ("base/curios.toml", "name = \"base\"\n"),
                 ("base/lib.crs", ""),
                 (
                     "app/curios.toml",
                     &format!(
-                        "name = \"app\"\n\n[dependencies]\nbase = {{ source = \"{marker}\" }}\n"
+                        "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = {{ source = \"{marker}\" }}\n"
                     ),
                 ),
                 ("app/lib.crs", ""),
@@ -590,7 +623,7 @@ fn the_markers_resolve_through_the_lists_that_answer_them() {
         &[
             (
                 "curios.toml",
-                "members = [\"app\", \"base\"]\n\n[catalog]\nvendored = { source = \"path\", path = \"vendor/vendored\" }\n",
+                "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n\n[catalog]\nvendored = { source = \"path\", path = \"vendor/vendored\" }\n",
             ),
             (
                 "app/curios.toml",
@@ -599,7 +632,10 @@ fn the_markers_resolve_through_the_lists_that_answer_them() {
             ("app/lib.crs", ""),
             ("base/curios.toml", "name = \"base\"\n"),
             ("base/lib.crs", ""),
-            ("vendor/vendored/curios.toml", "name = \"vendored\"\n"),
+            (
+                "vendor/vendored/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"vendored\"\n",
+            ),
             ("vendor/vendored/lib.crs", ""),
         ],
     );
@@ -620,7 +656,7 @@ fn an_unmaterialized_fetchable_row_names_curate() {
             (
                 "curios.toml",
                 &format!(
-                    "name = \"app\"\n\n[dependencies]\nhttp = {{ source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:{}\" }}\n",
+                    "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nhttp = {{ source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:{}\" }}\n",
                     "a".repeat(64)
                 ),
             ),

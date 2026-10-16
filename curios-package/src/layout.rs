@@ -12,7 +12,7 @@
 mod tests;
 
 use {
-    crate::{EXTENSION, LIBRARY, MANIFEST, Manifest, Package},
+    crate::{EXTENSION, LIBRARY, MANIFEST, Manifest, Package, require_compiler, umbrella_over},
     curios_text::{Module, RootSource, TopItem},
     curios_utilities::{Qualifier, RootKind, is_identifier},
     std::{
@@ -108,6 +108,14 @@ fn spelled_segments(relative: &Path) -> Option<Vec<String>> {
 ///
 /// The header is read here and read again when discovery asks for it. That is deliberate: the stem refusal below has to fire before elaboration, and a header is one small file — paying for it twice is cheaper than a refusal arriving as an unbound name. Read from disk both times; a source overlay reaches discovery's read and not this one, so a stem collision is judged on what is saved, which is the only thing a collision can be between.
 pub fn package_source(package: &Package, directory: &Path) -> Result<Option<RootSource>, String> {
+    let umbrella = umbrella_over(directory)?;
+    require_compiler(
+        package,
+        directory,
+        umbrella
+            .as_ref()
+            .map(|(umbrella, root)| (umbrella, root.as_path())),
+    )?;
     let header = directory.join(LIBRARY);
     let present = header.is_file();
 

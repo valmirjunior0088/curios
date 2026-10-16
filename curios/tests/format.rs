@@ -47,7 +47,11 @@ const UNFORMATTED: &str = "    pub let word: /std/Str = \"formatted\";\n";
 #[test]
 fn no_target_formats_what_the_package_declares_and_nothing_else() {
     let root = temporary("package");
-    write(&root, "curios.toml", "name = \"app\"\n");
+    write(
+        &root,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"app\"\n",
+    );
     write(&root, "lib.crs", "pub mod util;\n");
     write(&root, "util.crs", UNFORMATTED);
     write(&root, "stray.crs", UNFORMATTED);

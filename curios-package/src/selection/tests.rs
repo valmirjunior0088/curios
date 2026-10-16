@@ -79,7 +79,7 @@ fn a_bare_run_means_the_sole_executable() {
         &[
             (
                 "curios.toml",
-                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -98,7 +98,7 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
         let mut files = files.to_vec();
         files.push((
             "curios.toml",
-            "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
+            "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
         ));
         files
     });
@@ -116,7 +116,7 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
         let mut files = files.to_vec();
         files.push((
             "curios.toml",
-            "name = \"app\"\ndefault = \"bench\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
+            "compiler = \"0.0.0\"\nname = \"app\"\ndefault = \"bench\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
         ));
         files
     });
@@ -132,7 +132,7 @@ fn a_name_selects_a_declared_executable() {
         &[
             (
                 "curios.toml",
-                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\npath = \"tools/bench.crs\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\npath = \"tools/bench.crs\"\n",
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -161,7 +161,7 @@ fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
         &[
             (
                 "curios.toml",
-                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("lib.crs", ""),
             ("serve.crs", "/std/print(\"\")\n"),
@@ -218,7 +218,10 @@ fn a_declared_executable_builds_into_the_store() {
     let root = tree(
         "run-output",
         &[
-            ("curios.toml", "members = [\"json\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"json\"]\n",
+            ),
             (
                 "json/curios.toml",
                 "name = \"json\"\n\n[[executables]]\nname = \"serve\"\n",
@@ -249,7 +252,7 @@ fn a_dash_is_standard_input_everywhere() {
         &[
             (
                 "curios.toml",
-                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -277,7 +280,10 @@ fn standard_input_has_no_entry_file() {
 /// Standard input is answered before any manifest is looked for, so naming one beside it is refused rather than ignored.
 #[test]
 fn standard_input_is_governed_by_no_manifest() {
-    let root = tree("stdin-manifest", &[("curios.toml", "name = \"app\"\n")]);
+    let root = tree(
+        "stdin-manifest",
+        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+    );
 
     let Err(refusal) = Selection::of(
         Spelling::Stdin,
@@ -298,10 +304,13 @@ fn a_package_of_programs_alone_runs_them() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("app/serve.crs", ""),
-            ("base/curios.toml", "name = \"base\"\n"),
+            (
+                "base/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"base\"\n",
+            ),
             ("base/lib.crs", ""),
         ],
     );
@@ -320,11 +329,14 @@ fn an_executable_compiles_against_its_package_and_its_dependencies() {
         &[
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("app/lib.crs", ""),
             ("app/serve.crs", ""),
-            ("base/curios.toml", "name = \"base\"\n"),
+            (
+                "base/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"base\"\n",
+            ),
             ("base/lib.crs", ""),
         ],
     );
@@ -349,7 +361,7 @@ fn a_found_executable_is_listed_with_the_file_that_declares_it() {
         &[
             (
                 "curios.toml",
-                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("serve.crs", ""),
             ("exe.crs", ""),
@@ -373,7 +385,7 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
         &[
             (
                 "curios.toml",
-                "name = \"app\"\ndefault = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\ndefault = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -399,7 +411,10 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
 fn a_bare_target_on_a_package_of_a_library_alone_says_how_to_declare_one() {
     let root = tree(
         "run-no-executable",
-        &[("lib.crs", ""), ("curios.toml", "name = \"app\"\n")],
+        &[
+            ("lib.crs", ""),
+            ("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n"),
+        ],
     );
 
     let refusal = entry(None, &root).expect_err("no executable to mean");
@@ -417,7 +432,7 @@ fn no_argument_selects_the_package_entire() {
         &[
             (
                 "curios.toml",
-                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -455,7 +470,7 @@ fn a_declared_library_module_selects_the_library_through_it() {
     let root = tree(
         "placed-library",
         &[
-            ("curios.toml", "name = \"app\"\n"),
+            ("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n"),
             ("lib.crs", "pub mod util;\n"),
             ("util.crs", ""),
         ],
@@ -478,7 +493,7 @@ fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose()
         &[
             (
                 "curios.toml",
-                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("serve.crs", "mod helper;\n/std/print(\"\")\n"),
             ("serve/helper.crs", ""),
@@ -510,7 +525,7 @@ fn an_unlinked_file_is_told_what_would_declare_it() {
     let root = tree(
         "unlinked-remedies",
         &[
-            ("curios.toml", "name = \"app\"\n"),
+            ("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n"),
             ("lib.crs", "pub mod parse;\n"),
             ("parse.crs", ""),
             ("parse/lexer.crs", ""),
@@ -544,7 +559,7 @@ fn an_unlinked_file_is_told_what_would_declare_it() {
     let programs = tree(
         "unlinked-no-library",
         &[
-            ("curios.toml", "name = \"tool\"\n"),
+            ("curios.toml", "compiler = \"0.0.0\"\nname = \"tool\"\n"),
             ("exe.crs", "/std/print(\"\")\n"),
             ("stray.crs", ""),
         ],
@@ -577,7 +592,7 @@ fn umbrella(name: &str) -> Temporary {
     tree(
         name,
         &[
-            ("curios.toml", "members = [\"app\"]\n"),
+            ("curios.toml", "compiler = \"0.0.0\"\nmembers = [\"app\"]\n"),
             ("app/curios.toml", "name = \"app\"\n"),
             ("app/lib.crs", "pub mod util;\n"),
             ("app/util.crs", ""),

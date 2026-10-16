@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{EXECUTABLE, LIBRARY, MANIFEST, STORE, canonical},
+    crate::{CompilerVersion, EXECUTABLE, LIBRARY, MANIFEST, STORE, canonical, umbrella_over},
     std::{
         fs,
         path::{Path, PathBuf},
@@ -56,7 +56,11 @@ pub fn scaffold(directory: &Path) -> Result<Vec<PathBuf>, String> {
     fs::create_dir_all(directory)
         .map_err(|error| format!("failed to create {}: {error}", directory.display()))?;
 
-    write(&manifest, &format!("name = {name:?}\n"))?;
+    let compiler = match umbrella_over(directory)? {
+        Some(_) => String::new(),
+        None => format!("compiler = \"{}\"\n", CompilerVersion::current()),
+    };
+    write(&manifest, &format!("name = {name:?}\n{compiler}"))?;
     // The program reads its own library rather than printing a literal, so the two files it starts with demonstrate the one thing a package *is*: a namespace mounted at its declared name. Neither file is named after the package, which is what keeps `use /hello/{message}` from reading `hello` twice for two different things.
     write(
         &library,

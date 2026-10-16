@@ -329,7 +329,11 @@ fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
         "after /alpha"
     );
 
-    write(&root, "b/curios.toml", "name = \"beta\"\n");
+    write(
+        &root,
+        "b/curios.toml",
+        "compiler = \"0.0.0\"\nname = \"beta\"\n",
+    );
     assert_eq!(
         folded_reusing(&root, &overlay, &session),
         ["compiling /beta"],
@@ -409,7 +413,11 @@ fn a_unit_compiled_whole_in_a_new_scope_is_filed_there() {
     let before = slots(&root);
     assert_eq!(before.len(), 2, "/alpha, and /beta after it");
 
-    write(&root, "b/curios.toml", "name = \"beta\"\n");
+    write(
+        &root,
+        "b/curios.toml",
+        "compiler = \"0.0.0\"\nname = \"beta\"\n",
+    );
     assert_eq!(
         folded_reusing(&root, &Overlay::default(), &session),
         ["compiling /beta"],

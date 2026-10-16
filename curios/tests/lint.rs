@@ -48,7 +48,11 @@ fn stdout(output: &Output) -> String {
 #[test]
 fn a_clean_file_no_mod_declares_lints_clean_behind_its_note() {
     let root = temporary("unlinked");
-    write(&root, "curios.toml", "name = \"app\"\n");
+    write(
+        &root,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"app\"\n",
+    );
     write(&root, "lib.crs", "");
     write(&root, "stray.crs", "pub let word : /std/Str = \"clean\";\n");
 
@@ -114,14 +118,22 @@ fn goals_alone_exit_two_and_a_lint_beside_one_exits_one() {
 #[test]
 fn an_unused_dependency_is_reported_for_the_package_entire() {
     let root = temporary("dependency");
-    write(&root, "shape/curios.toml", "name = \"shape\"\n");
+    write(
+        &root,
+        "shape/curios.toml",
+        "compiler = \"0.0.0\"\nname = \"shape\"\n",
+    );
     write(&root, "shape/lib.crs", "pub let sides : /std/Nat = 4;\n");
-    write(&root, "json/curios.toml", "name = \"json\"\n");
+    write(
+        &root,
+        "json/curios.toml",
+        "compiler = \"0.0.0\"\nname = \"json\"\n",
+    );
     write(&root, "json/lib.crs", "pub let depth : /std/Nat = 1;\n");
     write(
         &root,
         "app/curios.toml",
-        "name = \"app\"\n\n[dependencies]\nshape = { source = \"path\", path = \"../shape\" }\njson = { source = \"path\", path = \"../json\" }\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nshape = { source = \"path\", path = \"../shape\" }\njson = { source = \"path\", path = \"../json\" }\n",
     );
     write(
         &root,
@@ -154,7 +166,7 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
         write(
             &root,
             "curios.toml",
-            "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+            "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
         );
         write(&root, "lib.crs", "pub let word : /std/Str = \"clean\";\n");
         write(&root, "app.crs", "/std/print(/app/word)\n");

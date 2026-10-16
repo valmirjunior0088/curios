@@ -24,7 +24,7 @@ fn package(name: &str, manifest: &str, files: &[(&str, &str)]) -> Temporary {
 fn a_package_mounts_its_declared_name_over_its_manifest_directory() {
     let directory = package(
         "layout-package",
-        "name = \"json\"\n",
+        "compiler = \"0.0.0\"\nname = \"json\"\n",
         &[
             ("lib.crs", "pub mod parse;"),
             ("parse.crs", "pub mod lexer;"),
@@ -50,7 +50,7 @@ fn a_package_mounts_its_declared_name_over_its_manifest_directory() {
 fn a_package_with_no_library_header_has_no_library() {
     let directory = package(
         "layout-headerless",
-        "name = \"json\"\n\n[[executables]]\nname = \"serve\"\n",
+        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"serve\"\n",
         &[("serve.crs", "")],
     );
 
@@ -65,7 +65,7 @@ fn a_package_with_no_library_header_has_no_library() {
 fn an_unparsable_library_header_is_mounted_for_discovery_to_refuse() {
     let directory = package(
         "layout-broken-header",
-        "name = \"json\"\n",
+        "compiler = \"0.0.0\"\nname = \"json\"\n",
         &[("lib.crs", "pub let x : = ;")],
     );
 
@@ -78,7 +78,7 @@ fn an_unparsable_library_header_is_mounted_for_discovery_to_refuse() {
 fn a_stem_claimed_twice_is_refused() {
     let directory = package(
         "layout-stem-clash",
-        "name = \"json\"\n\n[[executables]]\nname = \"parse\"\n",
+        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\n",
         &[("lib.crs", "pub mod parse;"), ("parse.crs", "")],
     );
 
@@ -100,7 +100,7 @@ fn a_stem_claimed_twice_is_refused() {
 fn a_stem_claimed_twice_is_refused_without_a_library() {
     let directory = package(
         "layout-stem-clash-programs",
-        "name = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
+        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
         &[("exe.crs", "")],
     );
 
@@ -123,7 +123,7 @@ fn a_stem_claimed_twice_is_refused_without_a_library() {
 fn an_unparseable_header_still_leaves_the_executables_checked() {
     let directory = package(
         "layout-stem-clash-unparseable",
-        "name = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
+        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
         &[("lib.crs", "pub let ="), ("exe.crs", "")],
     );
 
@@ -138,7 +138,7 @@ fn an_unparseable_header_still_leaves_the_executables_checked() {
 fn an_executable_outside_the_root_claims_no_stem_in_it() {
     let directory = package(
         "layout-stem-elsewhere",
-        "name = \"json\"\n\n[[executables]]\nname = \"parse\"\npath = \"tools/parse.crs\"\n",
+        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\npath = \"tools/parse.crs\"\n",
         &[("lib.crs", "pub mod parse;"), ("parse.crs", "")],
     );
 
@@ -150,7 +150,7 @@ fn an_executable_outside_the_root_claims_no_stem_in_it() {
 fn an_executable_the_library_declares_as_a_module_is_refused() {
     let directory = package(
         "layout-program-as-module",
-        "name = \"nested\"\n\n[[executables]]\nname = \"tool\"\npath = \"app/main.crs\"\n",
+        "compiler = \"0.0.0\"\nname = \"nested\"\n\n[[executables]]\nname = \"tool\"\npath = \"app/main.crs\"\n",
         &[
             ("lib.crs", "pub mod app;"),
             ("app.crs", "pub mod main;"),
@@ -171,7 +171,11 @@ fn an_executable_the_library_declares_as_a_module_is_refused() {
 /// An umbrella compiles nothing of its own, and saying so beats an absent-library refusal about a file it never wanted.
 #[test]
 fn an_umbrella_is_not_a_unit() {
-    let directory = package("layout-umbrella", "members = [\"json\"]\n", &[]);
+    let directory = package(
+        "layout-umbrella",
+        "compiler = \"0.0.0\"\nmembers = [\"json\"]\n",
+        &[],
+    );
 
     let refusal = package_at(&directory)
         .map(|_| ())

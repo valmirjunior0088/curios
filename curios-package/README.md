@@ -4,6 +4,14 @@ What a Curios package is, and everything that reads one: the `curios.toml` manif
 
 ## Design
 
+### A compiler minimum belongs to the package or its enumerating umbrella
+
+**Decision.** The effective `compiler` minimum is mandatory. A standalone package declares it; an umbrella declares it once and every enumerated member inherits it without a local override. The existing governance walk decides membership, so a directory beneath an umbrella is not enough. Each dependency resolves its own owner. The minimum is a bare SemVer version, checked against the running compiler before compilation or cached execution; it neither pins a toolchain nor downloads one. The field's syntax and diagnostics are [the manifest reference](../documentation/usage.md#the-manifest)'s.
+
+**Rationale.** Missing metadata cannot say whether a compiler is too old, and a parser error inside newer source does not identify that mismatch. Membership already owns project-wide configuration, while a package outside that membership owns its own contract. Requiring the declaration at that owner gives every package one requirement and every refusal the manifest somebody can edit. The existing compiler identity still keys cached verdicts: a release version is a compatibility floor and cannot identify a developing compiler's implementation.
+
+**Rejected.** An optional field leaves the requirement unknown. A range or upper bound can exclude a newer compiler that accepts the source. An exact version confuses the minimum with a reproducible development-toolchain choice. A per-member override duplicates the umbrella's declaration. Inheriting from a consuming package gives a dependency a requirement its author never declared.
+
 ### The four laws
 
 1. **Declaration decides; location does not.** Modules exist because a header declares `mod`, artifacts because the manifest declares them, members because the umbrella enumerates them — a file nothing names is inert, wherever it sits. The two exceptions are a package's own `lib.crs` and `exe.crs`, whose presence beside the manifest is their declaration, for the reason `layout.rs` states.

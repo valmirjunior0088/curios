@@ -110,7 +110,11 @@ fn temporary(name: &str) -> Temporary {
 fn project(name: &str) -> Temporary {
     let root = temporary(name);
 
-    write(&root, "shape/curios.toml", "name = \"shape\"\n");
+    write(
+        &root,
+        "shape/curios.toml",
+        "compiler = \"0.0.0\"\nname = \"shape\"\n",
+    );
     write(&root, "shape/lib.crs", &library("first"));
     write(&root, "exe.crs", ENTRY);
 
@@ -266,7 +270,7 @@ fn an_edited_unit_is_not_reused() {
 /// A unit is reused only under the claims its package made when it was compiled. A manifest whose `[foreign.answers]` has changed since is a disagreement like an edited source, so what it claims now is held to the unit's declarations again, where a slot that still answered would vouch for claims nobody checked.
 #[test]
 fn a_unit_is_not_reused_under_other_claims() {
-    const ROW: &str = "name = \"shape\"\n\n[[foreign]]\nname = \"probe\"\npath = \"probe.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n";
+    const ROW: &str = "compiler = \"0.0.0\"\nname = \"shape\"\n\n[[foreign]]\nname = \"probe\"\npath = \"probe.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n";
     let root = project("claims");
     let library = format!(
         "{}\npub foreign one(Nat) -> Nat;\n\npub foreign two(Nat) -> Nat;\n",
@@ -320,7 +324,11 @@ fn a_slot_does_not_answer_for_another_projects_source() {
 #[test]
 fn a_slot_answers_for_a_dependency_both_projects_read() {
     let materialized = temporary("materialized");
-    write(&materialized, "curios.toml", "name = \"shape\"\n");
+    write(
+        &materialized,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"shape\"\n",
+    );
     write(&materialized, "lib.crs", &library("first"));
 
     let theirs = temporary("theirs-sharing");

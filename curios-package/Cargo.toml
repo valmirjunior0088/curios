@@ -24,6 +24,7 @@ toml = { version = "0.9.12", default-features = false, features = [
     "std",
 ] }
 toml_edit = { version = "0.25.15" }
+semver = "1.0.28"
 
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.

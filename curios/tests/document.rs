@@ -29,7 +29,7 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "curios.toml",
-        "name = \"shapes\"\ndescription = \"Shapes & their areas.\"\n",
+        "compiler = \"0.0.0\"\nname = \"shapes\"\ndescription = \"Shapes & their areas.\"\n",
     );
     write(
         &root,
@@ -185,7 +185,11 @@ fn the_standard_library_documents_into_the_directory_std_names() {
 #[test]
 fn a_package_without_a_library_is_refused_by_name() {
     let root = temporary("no-library");
-    write(&root, "curios.toml", "name = \"tool\"\n");
+    write(
+        &root,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"tool\"\n",
+    );
     write(&root, "exe.crs", "/std/print(\"hi\")\n");
 
     let output = curios(&root, &["document"]);

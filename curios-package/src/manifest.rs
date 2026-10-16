@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{FileHash, Store, TreeHash},
+    crate::{CompilerVersion, FileHash, Store, TreeHash},
     curios_utilities::{is_identifier, is_keyword},
     serde::Deserialize,
     std::{
@@ -76,6 +76,8 @@ impl FromStr for Manifest {
 pub struct Package {
     /// The canonical name, which is this package's mount prefix and the only way any consumer refers to it. Declared here and nowhere else — no umbrella contributes to it, so reorganizing a tree renames nothing.
     pub name: String,
+    /// The standalone package's minimum compiler. An umbrella member leaves this absent and inherits its umbrella's requirement.
+    pub compiler: Option<CompilerVersion>,
     /// What the package is, in a sentence or a few, for the landing page of its documentation. A fact about the package as a whole, which is what the manifest declares and no source file does — the library root is declared by no `mod`, so it has nowhere else to carry prose.
     pub description: Option<String>,
     /// Which executable a bare `curios run` means. `None` when there is at most one for it to mean.
@@ -125,6 +127,8 @@ impl Package {
 /// A namespace for packages: the ones inside its tree, and the pinned rows those may share.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Umbrella {
+    /// The minimum compiler every enumerated member inherits.
+    pub compiler: CompilerVersion,
     /// Where each member's own manifest sits, relative to this one. A member may lie arbitrarily deep on disk; umbrellas themselves do not nest.
     pub members: Vec<PathBuf>,
     /// The rows a member reaches by declaring `source = "catalog"`. A row here fetches nothing by itself — activation lives in the package that names it.
@@ -187,6 +191,7 @@ pub struct Snapshot {
 #[serde(deny_unknown_fields)]
 struct Document {
     name: Option<String>,
+    compiler: Option<String>,
     description: Option<String>,
     default: Option<String>,
     dependencies: Option<BTreeMap<String, DependencyRow>>,
@@ -257,6 +262,7 @@ impl Document {
 
         Ok(Package {
             name,
+            compiler: self.compiler.map(|version| version.parse()).transpose()?,
             description: self.description,
             default: self.default,
             dependencies: table(self.dependencies.unwrap_or_default(), "dependency row")?,
@@ -280,6 +286,13 @@ impl Document {
         }
 
         Ok(Umbrella {
+            compiler: self
+                .compiler
+                .ok_or_else(|| {
+                    "an umbrella must declare its members' minimum compiler version in `compiler`"
+                        .to_string()
+                })?
+                .parse()?,
             members: self
                 .members
                 .unwrap_or_default()

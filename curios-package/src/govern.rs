@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{MANIFEST, Manifest, Package, Store, Umbrella},
+    crate::{MANIFEST, Manifest, Package, Store, Umbrella, compiler_requirement, require_compiler},
     curios_text::identity,
     std::{
         collections::BTreeMap,
@@ -37,6 +37,17 @@ pub struct Governing {
 }
 
 impl Governing {
+    /// Check the selected package's effective minimum before compiling or reusing a cached executable.
+    pub(crate) fn check_compiler(&self) -> Result<(), String> {
+        require_compiler(
+            &self.package,
+            &self.directory,
+            self.umbrella
+                .as_ref()
+                .map(|umbrella| (umbrella, self.root.as_path())),
+        )
+    }
+
     /// Where this project's generated things go — its own beside it, and the shared ones in the cache every project uses.
     pub fn store(&self) -> Store {
         Store::at(self.root.clone())
@@ -96,6 +107,13 @@ impl Governing {
     /// `package`, read from `manifest` at `at`, under whichever umbrella enumerates it.
     fn rooted(package: Package, manifest: PathBuf, at: PathBuf) -> Result<Self, String> {
         let umbrella = umbrella_over(&at)?;
+        compiler_requirement(
+            &package,
+            &at,
+            umbrella
+                .as_ref()
+                .map(|(umbrella, root)| (umbrella, root.as_path())),
+        )?;
 
         Ok(match umbrella {
             Some((umbrella, root)) => Self {
@@ -210,7 +228,7 @@ pub(crate) fn nearest_manifest(directory: &Path) -> Option<PathBuf> {
 /// The umbrella above `directory` that enumerates it, and the directory that umbrella's manifest sits in.
 ///
 /// The first umbrella found decides the answer either way. Umbrellas do not nest, so there is no second one above it to ask, and one that does not enumerate this package governs nothing rather than deferring upward.
-fn umbrella_over(directory: &Path) -> Result<Option<(Umbrella, PathBuf)>, String> {
+pub(crate) fn umbrella_over(directory: &Path) -> Result<Option<(Umbrella, PathBuf)>, String> {
     for at in directory.ancestors().skip(1) {
         let path = at.join(MANIFEST);
         if !path.is_file() {

@@ -21,7 +21,7 @@ pub(super) fn mounted_project(name: &str) -> Temporary {
         write(
             &root,
             &format!("{directory}/curios.toml"),
-            &format!("name = \"{package}\"\n{dependency}"),
+            &format!("compiler = \"0.0.0\"\nname = \"{package}\"\n{dependency}"),
         );
         write(
             &root,

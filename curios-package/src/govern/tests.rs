@@ -20,7 +20,10 @@ fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
 fn a_lone_package_governs_itself() {
     let root = tree(
         "govern-lone",
-        &[("curios.toml", "name = \"json\"\n"), ("lib.crs", "")],
+        &[
+            ("curios.toml", "compiler = \"0.0.0\"\nname = \"json\"\n"),
+            ("lib.crs", ""),
+        ],
     );
 
     let governing = Governing::of(&root).expect("a package governs the directory it is in");
@@ -37,7 +40,7 @@ fn a_subdirectory_of_a_package_is_governed_by_that_package() {
     let root = tree(
         "govern-subdirectory",
         &[
-            ("curios.toml", "name = \"json\"\n"),
+            ("curios.toml", "compiler = \"0.0.0\"\nname = \"json\"\n"),
             ("lib.crs", "pub mod parse;"),
             ("parse/lexer.crs", ""),
         ],
@@ -58,9 +61,12 @@ fn a_nested_package_governs_its_own_directory() {
     let root = tree(
         "govern-nested",
         &[
-            ("curios.toml", "name = \"json\"\n"),
+            ("curios.toml", "compiler = \"0.0.0\"\nname = \"json\"\n"),
             ("lib.crs", ""),
-            ("tools/curios.toml", "name = \"tools\"\n"),
+            (
+                "tools/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"tools\"\n",
+            ),
             ("tools/lib.crs", ""),
             ("tools/src/extra.crs", ""),
         ],
@@ -96,7 +102,10 @@ fn an_umbrella_governs_a_member_it_enumerates() {
     let root = tree(
         "govern-member",
         &[
-            ("curios.toml", "members = [\"json\", \"tools/cli\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"json\", \"tools/cli\"]\n",
+            ),
             ("json/curios.toml", "name = \"json\"\n"),
             ("json/lib.crs", ""),
             ("tools/cli/curios.toml", "name = \"cli\"\n"),
@@ -120,10 +129,16 @@ fn an_umbrella_governs_nothing_it_does_not_enumerate() {
     let root = tree(
         "govern-unenumerated",
         &[
-            ("curios.toml", "members = [\"json\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"json\"]\n",
+            ),
             ("json/curios.toml", "name = \"json\"\n"),
             ("json/lib.crs", ""),
-            ("scratch/curios.toml", "name = \"scratch\"\n"),
+            (
+                "scratch/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"scratch\"\n",
+            ),
             ("scratch/lib.crs", ""),
         ],
     );
@@ -140,7 +155,10 @@ fn an_umbrella_root_is_governed_by_no_package() {
     let root = tree(
         "govern-umbrella-root",
         &[
-            ("curios.toml", "members = [\"json\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"json\"]\n",
+            ),
             ("json/curios.toml", "name = \"json\"\n"),
             ("json/lib.crs", ""),
             ("notes/plan.md", ""),
@@ -165,13 +183,19 @@ fn a_member_with_no_manifest_is_refused_against_the_umbrella() {
     let root = tree(
         "govern-member-missing",
         &[
-            ("curios.toml", "members = [\"app\", \"bsae\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"app\", \"bsae\"]\n",
+            ),
             (
                 "app/curios.toml",
                 "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n",
             ),
             ("app/lib.crs", ""),
-            ("base/curios.toml", "name = \"base\"\n"),
+            (
+                "base/curios.toml",
+                "compiler = \"0.0.0\"\nname = \"base\"\n",
+            ),
             ("base/lib.crs", ""),
         ],
     );
@@ -193,7 +217,10 @@ fn a_member_listed_twice_is_refused_as_listed_twice() {
     let root = tree(
         "govern-member-twice",
         &[
-            ("curios.toml", "members = [\"base\", \"./base\", \"app\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"base\", \"./base\", \"app\"]\n",
+            ),
             (
                 "app/curios.toml",
                 "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n",

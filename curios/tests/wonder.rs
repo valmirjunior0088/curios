@@ -38,7 +38,7 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "curios.toml",
-        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(&root, "lib.crs", "pub mod util;\n");
     write(&root, "util.crs", "pub let word : /std/Str = \"placed\";\n");
@@ -629,7 +629,11 @@ fn a_reopened_document_is_published_again() {
 #[test]
 fn a_warming_check_never_publishes() {
     let root = temporary("warmed");
-    write(&root, "curios.toml", "name = \"app\"\n");
+    write(
+        &root,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"app\"\n",
+    );
     write(&root, "lib.crs", "pub mod util;\n");
     write(&root, "util.crs", "pub let word : /std/Str = ?;\n");
     write(&root, "scratch.crs", "/std/print(\"\")\n");

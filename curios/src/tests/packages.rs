@@ -104,7 +104,7 @@ fn a_package_runs_its_sole_executable() {
         &[
             (
                 "curios.toml",
-                "name = \"hello\"\n\n[[executables]]\nname = \"hello\"\n",
+                "compiler = \"0.0.0\"\nname = \"hello\"\n\n[[executables]]\nname = \"hello\"\n",
             ),
             (
                 "lib.crs",
@@ -127,7 +127,7 @@ fn a_librarys_modules_read_from_the_manifests_directory() {
         &[
             (
                 "curios.toml",
-                "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
             ),
             ("lib.crs", "pub mod parse;\n"),
             ("parse.crs", "pub mod lexer;\n"),
@@ -150,7 +150,10 @@ fn a_member_reaches_another_member_through_its_umbrella() {
     let root = tree(
         "e2e-umbrella",
         &[
-            ("curios.toml", "members = [\"app\", \"base\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+            ),
             ("base/curios.toml", "name = \"base\"\n"),
             ("base/lib.crs", "pub let answer : /std/Nat = 42;\n"),
             (
@@ -174,7 +177,10 @@ fn a_package_with_no_library_still_runs_its_program() {
     let root = tree(
         "e2e-programs-only",
         &[
-            ("curios.toml", "members = [\"tool\", \"base\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"tool\", \"base\"]\n",
+            ),
             ("base/curios.toml", "name = \"base\"\n"),
             ("base/lib.crs", "pub let word : /std/Str = \"tool\";\n"),
             (
@@ -196,7 +202,7 @@ fn a_file_no_unit_declares_compiles_loose_inside_a_package() {
         &[
             (
                 "curios.toml",
-                "name = \"hello\"\n\n[[executables]]\nname = \"hello\"\n",
+                "compiler = \"0.0.0\"\nname = \"hello\"\n\n[[executables]]\nname = \"hello\"\n",
             ),
             ("lib.crs", "pub let greeting : /std/Str = \"library\";\n"),
             ("hello.crs", "/std/print(/hello/greeting)\n"),
@@ -269,7 +275,10 @@ fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
         tree(
             name,
             &[
-                ("curios.toml", "members = [\"app\", \"base\"]\n"),
+                (
+                    "curios.toml",
+                    "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+                ),
                 ("base/curios.toml", "name = \"base\"\n"),
                 ("base/lib.crs", base),
                 ("app/curios.toml", manifest),
@@ -312,7 +321,10 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
     let root = tree(
         "e2e-cache",
         &[
-            ("curios.toml", "members = [\"app\", \"base\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+            ),
             ("base/curios.toml", "name = \"base\"\n"),
             ("base/lib.crs", "pub let answer : /std/Nat = 42;\n"),
             (
@@ -361,7 +373,10 @@ fn a_library_test_declaration_rides_through_the_store() {
     let root = tree(
         "e2e-test-decl",
         &[
-            ("curios.toml", "members = [\"app\", \"base\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+            ),
             ("base/curios.toml", "name = \"base\"\n"),
             (
                 "base/lib.crs",
@@ -393,7 +408,10 @@ fn siblings(name: &str) -> Temporary {
     tree(
         name,
         &[
-            ("curios.toml", "members = [\"app\", \"alpha\", \"beta\"]\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nmembers = [\"app\", \"alpha\", \"beta\"]\n",
+            ),
             ("alpha/curios.toml", "name = \"alpha\"\n"),
             ("alpha/lib.crs", "pub let one : /std/Nat = 1;\n"),
             ("beta/curios.toml", "name = \"beta\"\n"),
@@ -448,7 +466,7 @@ fn a_unit_reached_after_different_others_is_filed_once() {
         &[
             (
                 "curios.toml",
-                "members = [\"left\", \"right\", \"alpha\", \"beta\"]\n",
+                "compiler = \"0.0.0\"\nmembers = [\"left\", \"right\", \"alpha\", \"beta\"]\n",
             ),
             ("alpha/curios.toml", "name = \"alpha\"\n"),
             ("alpha/lib.crs", "pub let one : /std/Nat = 1;\n"),
