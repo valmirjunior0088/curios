@@ -3,6 +3,7 @@ use /std/Bool/{True, Holds};
 use /std/Cli/{Value};
 use /std/ops/{Eql};
 use /std/Cli/{SpecError};
+use /std/Cli/SpecError/{Certificate};
 
 --- The names and help attached to one named argument.
 pub struct Named: pub Type {
@@ -234,11 +235,6 @@ pub struct Grammar(A: Type): pub Type {
     tree: Node(A),
     @sound: Sound(tree),
 }
-
-induct Certificate(P: Prop): Type
-| valid(P)
-| invalid(SpecError)
-end
 
 let certify_named(names: Named) -> Certificate(Holds(valid_named(names))) =
     match valid_long(names.long)

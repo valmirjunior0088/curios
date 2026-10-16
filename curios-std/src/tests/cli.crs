@@ -14,7 +14,3 @@ mod prepared;
 mod interpret;
 
 mod validation;
-use /std/{Cli, Str, Result};
-
-pub let rendered(value: Result(Cli/SpecError, Str)) -> Str =
-    match value | success(text) => text | failure(error) => Cli/SpecError/to_str(error) end;

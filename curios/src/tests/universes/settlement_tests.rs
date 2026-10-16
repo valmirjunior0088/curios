@@ -401,8 +401,8 @@ fn the_command_line_parser_takes_a_spec_at_any_universe_instance() {
     };
 
     let described = program(
-        r#"let cli: Cli = Cli/leaf("probe", "a probe", Option/none(), Cli/record(spec), (_) => Io/pure(()));
-        match help([], cli) | success(text) => /std/print(text) | failure(error) => /std/print(/std/Cli/SpecError/to_str(error)) end"#,
+        r#"let cli: Cli = Cli/declare(Cli/leaf("probe", "a probe", Option/none(), Cli/record(spec), (_) => Io/pure(())));
+        /std/print(help([], cli))"#,
     );
     let printed = String::from_utf8(run(&described)).expect("help prints text");
     assert!(printed.contains("--t <T>"), "got: {printed}");

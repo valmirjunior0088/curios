@@ -52,10 +52,10 @@ test a_dash_leading_numeric_value_belongs_to_its_option =
         "-10");
 
 test disabled_version_is_an_ordinary_option_name =
-    let prepared = Cli/prepare(Grammar/option(named("version"), Cli/str));
+    let prepared = Cli/Prepared/prepare(Grammar/option(named("version"), Cli/str));
     Test/equal(
         match Cli/interpret(prepared, ["--version", "mine"], Option/none())
-        | parsed(value) => value
+        | success(reading) => match reading | parsed(value) => value | _ => "failed" end
         | _ => "failed"
         end,
         "mine");

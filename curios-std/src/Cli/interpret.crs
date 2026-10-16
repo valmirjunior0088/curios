@@ -1,20 +1,43 @@
 mod scan;
 use scan/{Raw};
 use /std/{Str, Nat, Bool, List, Option, Result, Map};
-use /std/Bool/{Holds};
+use /std/Bool/{Holds, True};
+use /std/Cli/SpecError/{Certificate};
 use /std/Cli/{Failure, SpecError, Prepared, Reading};
-use /std/Cli/Grammar/{Node, Sound, Reader, Multiplicity};
+use /std/Cli/Grammar/{Node, Sound, Reader, Multiplicity, Alias};
 use /std/Cli/{Grammar};
 
-pub let builtin_collision(
-    @A: Type,
-    prepared: Prepared(A),
+--- The declared aliases leave each active built-in spelling available. Preparation separately proves that the scanner's lookup corresponds to this grammar.
+pub let Available(names: List(Alias), version: Option(Str)) -> Prop =
+    {
+        Holds(Grammar/disjoint([Alias/long("help")], names)),
+        Holds(Grammar/disjoint([Alias/short('h')], names)),
+        Holds(
+            match version
+            | none() => true
+            | some(_) => Grammar/disjoint([Alias/long("version")], names)
+            end)};
+
+pub let certify_builtins(
+    names: List(Alias),
     version: Option(Str),
-) -> Option(SpecError) =
-    let reserved = ["--help", "-h", ..match version | none() => [] | some(_) => ["--version"] end];
-    Option/map(
-        List/find(reserved, (name) => Map/has(prepared.lookup, name)),
-        SpecError/builtin_collision);
+) -> Certificate(Available(names, version)) =
+    match Grammar/disjoint([Alias/long("help")], names)
+    | false => Certificate/invalid(SpecError/builtin_collision("--help"))
+    | true =>
+        match Grammar/disjoint([Alias/short('h')], names)
+        | false => Certificate/invalid(SpecError/builtin_collision("-h"))
+        | true =>
+            match version
+            | none() => Certificate/valid((True/qed(), True/qed(), True/qed()))
+            | some(_) =>
+                match Grammar/disjoint([Alias/long("version")], names)
+                | false => Certificate/invalid(SpecError/builtin_collision("--version"))
+                | true => Certificate/valid((True/qed(), True/qed(), True/qed()))
+                end
+            end
+        end
+    end;
 
 struct Assigned(limit: Nat): Type {
     raw: Raw(limit),
@@ -223,32 +246,38 @@ let decode(
     | repeat(inner) => repeated(inner, start + 1, assigned.raw, @sound.1)
     end;
 
---- Own tokens once, select and allocate structurally, then decode only the selected leaves. Specification errors precede owned help, which precedes version and invocation errors.
+--- Own tokens once, allocate structurally, and decode only selected leaves. The caller supplies compatibility with active built-ins.
+pub let certified(
+    @A: Type,
+    prepared: Prepared(A),
+    argv: List(Str),
+    version: Option(Str),
+    @_: Available(Grammar/aliases(prepared.grammar.tree), version),
+) -> Reading(A) =
+    let raw = scan/scan(prepared.lookup, argv, Option/is_some(version));
+    choose
+    | raw.help => Reading/help()
+    | some(text) = Option/filter(version, (_) => raw.version) => Reading/version(text)
+    | some(failure) = raw.failure => Reading/failure(failure)
+    | _ =>
+        let parsed() -> Result(Failure, A) =
+            let assigned =
+                allocate(prepared.grammar.tree, 0, Assigned { raw = raw, choices = Map/empty() })!;
+            match assigned.raw.positional
+            | [value, .._] => Result/failure(Failure/unexpected(value))
+            | [] => decode(prepared.grammar.tree, 0, assigned, @prepared.grammar.sound)
+            end;
+        match parsed() | failure(f) => Reading/failure(f) | success(a) => Reading/parsed(a) end
+    end;
+
+--- Check dynamic built-in compatibility before interpreting a standalone grammar.
 pub let interpret(
     @A: Type,
     prepared: Prepared(A),
     argv: List(Str),
     version: Option(Str),
-) -> Reading(A) =
-    match builtin_collision(prepared, version)
-    | some(error) => Reading/invalid(error)
-    | none() =>
-        let raw = scan/scan(prepared.lookup, argv, Option/is_some(version));
-        choose
-        | raw.help => Reading/help()
-        | some(text) = Option/filter(version, (_) => raw.version) => Reading/version(text)
-        | some(failure) = raw.failure => Reading/failure(failure)
-        | _ =>
-            let parsed() -> Result(Failure, A) =
-                let assigned =
-                    allocate(
-                        prepared.grammar.tree,
-                        0,
-                        Assigned { raw = raw, choices = Map/empty() })!;
-                match assigned.raw.positional
-                | [value, .._] => Result/failure(Failure/unexpected(value))
-                | [] => decode(prepared.grammar.tree, 0, assigned, @prepared.grammar.sound)
-                end;
-            match parsed() | failure(f) => Reading/failure(f) | success(a) => Reading/parsed(a) end
-        end
+) -> Result(SpecError, Reading(A)) =
+    match certify_builtins(Grammar/aliases(prepared.grammar.tree), version)
+    | invalid(error) => Result/failure(error)
+    | valid(available) => Result/success(certified(prepared, argv, version, @available))
     end;

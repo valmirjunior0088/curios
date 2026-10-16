@@ -9,22 +9,25 @@ pub let position(name: Str) -> Positional =
     Positional { name = name, help = "" };
 
 pub let text(@A: Type, grammar: Grammar(A), argv: List(Str), show: (A) -> Str) -> Str =
-    match Cli/interpret(Cli/prepare(grammar), argv, Option/some("1.0"))
-    | parsed(value) => show(value)
-    | help() => "help"
-    | version(value) => Str/concat("version ", value)
-    | invalid(error) => Cli/SpecError/to_str(error)
-    | failure(f) =>
-        match f
-        | missing_required(name) => Str/concat("missing ", name)
-        | missing_value(name) => Str/concat("missing value ", name)
-        | unknown_option(name) => Str/concat("unknown ", name)
-        | unexpected(value) => Str/concat("unexpected ", value)
-        | bad_value(name, _) => Str/concat("bad ", name)
-        | repeated(name) => Str/concat("repeated ", name)
-        | conflict(_) => "conflict"
-        | missing_alternative(_) => "missing alternative"
-        | validation(reason) => reason
-        | _ => "command failure"
+    match Cli/interpret(Cli/Prepared/prepare(grammar), argv, Option/some("1.0"))
+    | failure(error) => Cli/SpecError/to_str(error)
+    | success(reading) =>
+        match reading
+        | parsed(value) => show(value)
+        | help() => "help"
+        | version(value) => Str/concat("version ", value)
+        | failure(f) =>
+            match f
+            | missing_required(name) => Str/concat("missing ", name)
+            | missing_value(name) => Str/concat("missing value ", name)
+            | unknown_option(name) => Str/concat("unknown ", name)
+            | unexpected(value) => Str/concat("unexpected ", value)
+            | bad_value(name, _) => Str/concat("bad ", name)
+            | repeated(name) => Str/concat("repeated ", name)
+            | conflict(_) => "conflict"
+            | missing_alternative(_) => "missing alternative"
+            | validation(reason) => reason
+            | _ => "command failure"
+            end
         end
     end;

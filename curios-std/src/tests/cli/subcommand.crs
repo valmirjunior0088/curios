@@ -1,32 +1,33 @@
 -- Choosing a subcommand by the first token, refusing a name that is not there, and the `Commands:` section a group's help grows. A group takes no arguments of its own, which is why it is a shape of its own rather than a leaf that happens to declare none.
 use /std/{Cli, Str, Option, List, Test};
-use /cli/{rendered};
 
 let add: Cli =
-    Cli/leaf(
-        "add",
-        "Add a dependency",
-        Option/none(),
-        Cli/record([Cli/positional("name", Cli/str, "What to add")]),
-        (_) => /std/print("never"));
+    Cli/declare(
+        Cli/leaf(
+            "add",
+            "Add a dependency",
+            Option/none(),
+            Cli/record([Cli/positional("name", Cli/str, "What to add")]),
+            (_) => /std/print("never")));
 
 let remove: Cli =
-    Cli/leaf(
-        "remove",
-        "Remove a dependency",
-        Option/none(),
-        Cli/record([Cli/positional("name", Cli/str, "What to remove")]),
-        (_) => /std/print("never"));
+    Cli/declare(
+        Cli/leaf(
+            "remove",
+            "Remove a dependency",
+            Option/none(),
+            Cli/record([Cli/positional("name", Cli/str, "What to remove")]),
+            (_) => /std/print("never")));
 
 let app: Cli =
-    Cli/group("deps", "Manage dependencies", Option/some("0.1.0"), [add, remove]);
+    Cli/declare(
+        Cli/group("deps", "Manage dependencies", Option/some("0.1.0"), [add.tree, remove.tree]));
 
 let chose(argv: List(Str)) -> Str =
     match Cli/select(app, argv)
     | wanted_help() => "help"
     | wanted_version(text) => Str/concat("version ", text)
-    | invalid(error) => Cli/SpecError/to_str(error)
-    | refused(f) => rendered(Cli/report([], app, f))
+    | refused(f) => Cli/report([], app, f)
     | chose(sub, rest) => Str/flatten([Cli/name(sub), "(", Str/join(",", rest), ")"])
     end;
 
@@ -54,15 +55,12 @@ test an_unknown_or_absent_subcommand_lists_the_ones_there_are =
 -- A parent's usage names `<COMMAND>` rather than options it does not have, and its help grows the section its children fill.
 test a_parents_help_lists_its_children =
     Test/all([
-        Test/equal(rendered(Cli/usage([], app)), "Usage: deps <COMMAND>"),
-        Test/assert(
-            Str/has_substr(rendered(Cli/help([], app)), "Commands:\n  add     Add a dependency\n")),
-        Test/assert(
-            Str/has_substr(rendered(Cli/help([], app)), "  remove  Remove a dependency\n"))]);
+        Test/equal(Cli/usage([], app), "Usage: deps <COMMAND>"),
+        Test/assert(Str/has_substr(Cli/help([], app), "Commands:\n  add     Add a dependency\n")),
+        Test/assert(Str/has_substr(Cli/help([], app), "  remove  Remove a dependency\n"))]);
 
 -- A subcommand's usage names the commands that lead to it, so the line it prints is the line that reaches it, and the command's own name comes from the command rather than from its caller.
 test a_subcommands_usage_names_the_path_that_reaches_it =
     Test/all([
-        Test/equal(rendered(Cli/usage(["deps"], add)), "Usage: deps add <NAME>"),
-        Test/assert(
-            Str/has_substr(rendered(Cli/help(["deps"], add)), "\n\nUsage: deps add <NAME>\n\n"))]);
+        Test/equal(Cli/usage(["deps"], add), "Usage: deps add <NAME>"),
+        Test/assert(Str/has_substr(Cli/help(["deps"], add), "\n\nUsage: deps add <NAME>\n\n"))]);

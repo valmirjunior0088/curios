@@ -101,14 +101,14 @@ test the_record_adapter_preserves_its_dependent_result_type =
 
 test a_dynamic_record_reports_its_duplicate_field =
     let duplicate = [Cli/flag("same", ""), Cli/flag("same", "")];
-    match Cli/checked_record(duplicate)
+    match Cli/record/checked_record(duplicate)
     | success(_) => Test/fail("the duplicate was accepted")
     | failure(error) => Test/equal(SpecError/to_str(error), "duplicate record field \"same\"")
     end;
 
 test a_positional_record_field_cannot_silently_drop_a_short_alias =
     let field = Cli/Arg { ..Cli/positional("path", Cli/str, "Path"), short = Option/some('p') };
-    match Cli/checked_record([field])
+    match Cli/record/checked_record([field])
     | success(_) => Test/fail("the positional alias was accepted")
     | failure(error) =>
         Test/equal(SpecError/to_str(error), "positional \"path\" cannot own short option -p")

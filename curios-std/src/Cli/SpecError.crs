@@ -22,6 +22,12 @@ end
 
 pub use SpecError/*;
 
+--- Certification either carries evidence about its exact subject or explains why it cannot.
+pub induct Certificate(P: Prop): pub Type
+| valid(P)
+| invalid(SpecError)
+end
+
 --- The declaration problem, including the command that owns it when available.
 pub let to_str(error: SpecError) -> Str =
     match error

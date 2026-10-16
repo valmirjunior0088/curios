@@ -1,0 +1,116 @@
+use /std/{Str, List, Option, Io, Result, Bool};
+use /std/Bool/{Holds, True};
+use /std/Cli/{Grammar, Prepared, SpecError, interpret};
+use /std/Cli/SpecError/{Certificate};
+
+--- A complete command declaration, before its names and built-in compatibility are certified.
+pub induct Declaration: pub Type
+| command(
+    @A: Type,
+    name: Str,
+    about: Str,
+    version: Option(Str),
+    grammar: Prepared(A),
+    run: (A) -> Io({}))
+| group(name: Str, about: Str, version: Option(Str), commands: List(Declaration))
+end
+
+pub use Declaration/*;
+
+pub let name(tree: Declaration) -> Str =
+    match tree | command(n, _, _, _, _) => n | group(n, _, _, _) => n end;
+
+pub let about(tree: Declaration) -> Str =
+    match tree | command(_, a, _, _, _) => a | group(_, a, _, _) => a end;
+
+pub let version(tree: Declaration) -> Option(Str) =
+    match tree | command(_, _, v, _, _) => v | group(_, _, v, _) => v end;
+
+--- Every name is valid, every leaf leaves its active built-ins available, and every sibling subtree is sound and uniquely named.
+pub let Sound(tree: Declaration) -> Prop =
+    {
+        Holds(Grammar/valid_long(name(tree))),
+        match tree
+        | command(_, _, v, prepared, _) =>
+            interpret/Available(Grammar/aliases(prepared.grammar.tree), v)
+        | group(_, _, _, children) => ChildrenSound(children)
+        end}
+pub and ChildrenSound(children: List(Declaration)) -> Prop =
+    match children
+    | [] => True
+    | [child, ..more] =>
+        {
+            Holds(Bool/not(List/any(more, (other) => name(child) == name(other)))),
+            Sound(child),
+            ChildrenSound(more)}
+    end;
+
+let certify_name(value: Str) -> Certificate(Holds(Grammar/valid_long(value))) =
+    match Grammar/valid_long(value)
+    | false => Certificate/invalid(SpecError/invalid_command(value))
+    | true => Certificate/valid(True/qed())
+    end;
+
+let certify(tree: Declaration) -> Certificate(Sound(tree)) =
+    let inspect() -> Certificate(Sound(tree)) =
+        match tree
+        | command(n, _, v, prepared, _) =>
+            match certify_name(n)
+            | invalid(error) => Certificate/invalid(error)
+            | valid(named) =>
+                match interpret/certify_builtins(Grammar/aliases(prepared.grammar.tree), v)
+                | invalid(error) => Certificate/invalid(error)
+                | valid(available) => Certificate/valid((named, available))
+                end
+            end
+        | group(n, _, _, children) =>
+            match certify_name(n)
+            | invalid(error) => Certificate/invalid(error)
+            | valid(named) =>
+                match certify_children(children)
+                | invalid(error) => Certificate/invalid(error)
+                | valid(held) => Certificate/valid((named, held))
+                end
+            end
+        end;
+    match inspect()
+    | valid(held) => Certificate/valid(held)
+    | invalid(error) => Certificate/invalid(SpecError/context(name(tree), error))
+    end
+and certify_children(children: List(Declaration)) -> Certificate(ChildrenSound(children)) =
+    match children
+    | [] => Certificate/valid(True/qed())
+    | [child, ..more] =>
+        match Bool/not(List/any(more, (other) => name(child) == name(other)))
+        | false => Certificate/invalid(SpecError/duplicate_command(name(child)))
+        | true =>
+            match certify(child)
+            | invalid(error) => Certificate/invalid(error)
+            | valid(head) =>
+                match certify_children(more)
+                | invalid(error) => Certificate/invalid(error)
+                | valid(tail) => Certificate/valid((True/qed(), head, tail))
+                end
+            end
+        end
+    end;
+
+--- Certify this exact declaration, including every unselected sibling.
+pub let checked(tree: Declaration) -> Result(SpecError, /std/Cli) =
+    match certify(tree)
+    | valid(held) => Result/success(/std/Cli { tree = tree, @sound = held })
+    | invalid(error) => Result/failure(error)
+    end;
+
+let accepted(@P: Prop, certificate: Certificate(P)) -> Bool =
+    match certificate | valid(_) => true | invalid(_) => false end;
+
+--- A fixed declaration guard; the resulting `Cli` carries structural `Sound` evidence.
+pub let Declared(tree: Declaration) -> Prop =
+    Holds(accepted(certify(tree)));
+
+pub let declare(tree: Declaration, @valid: Declared(tree)) -> /std/Cli =
+    match certify(tree): (certificate) => (held: Holds(accepted(certificate))) -> /std/Cli
+    | valid(held) => (_) => /std/Cli { tree = tree, @sound = held }
+    | invalid(_) => (impossible) => match impossible end
+    end(valid);

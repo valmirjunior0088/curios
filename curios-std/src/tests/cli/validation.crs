@@ -1,37 +1,46 @@
-use /std/{Cli, Option, Test};
+use /std/{Cli, Str, Option, Result, Test, Io};
 use /std/Cli/{Grammar};
-use /cli/{rendered};
 
-let tree() -> Cli =
-    let good = Cli/leaf("good", "", Option/none(), Grammar/pure(()), (_) => /std/Io/pure(()));
-    let bad =
-        Cli/checked_leaf(
-            "bad",
-            "",
-            Option/none(),
-            Cli/checked_record([Cli/flag("same", ""), Cli/flag("same", "")]),
-            (_) => /std/Io/pure(()));
-    Cli/group("app", "", Option/none(), [good, bad]);
+let child(name: Str) -> Cli/Declaration =
+    Cli/leaf(name, "", Option/none(), Grammar/pure(()), (_) => Io/pure(()));
 
-test pure_renderers_report_an_invalid_unselected_sibling =
-    let expected = "in command \"app\": in command \"bad\": duplicate record field \"same\"";
-    Test/all([
-        Test/equal(rendered(Cli/help([], tree())), expected),
-        Test/equal(rendered(Cli/usage([], tree())), expected),
-        Test/equal(rendered(Cli/report([], tree(), Cli/Failure/unexpected("x"))), expected)]);
+let build(name: Str) -> Result(Cli/SpecError, Cli) =
+    Cli/checked(Cli/group("app", "", Option/none(), [child("good"), child(name)]));
 
-test pure_selection_reports_an_invalid_unselected_sibling =
+let problem(result: Result(Cli/SpecError, Cli)) -> Str =
+    match result | failure(error) => Cli/SpecError/to_str(error) | success(_) => "accepted" end;
+
+test construction_reports_an_invalid_unselected_sibling =
     Test/equal(
-        match Cli/select(tree(), ["good"])
-        | invalid(error) => Cli/SpecError/to_str(error)
-        | _ => "accepted"
+        problem(build("bad name")),
+        "in command \"app\": in command \"bad name\": invalid command name \"bad name\"");
+
+test construction_reports_duplicate_sibling_names =
+    Test/equal(problem(build("good")), "in command \"app\": duplicate subcommand \"good\"");
+
+test a_dynamic_grammar_error_is_propagated_before_the_tree_is_constructed =
+    let dynamic() -> Result(Cli/SpecError, Cli) =
+        let grammar = Cli/record/checked_record([Cli/flag("same", ""), Cli/flag("same", "")])!;
+        let bad = Cli/leaf("bad", "", Option/none(), grammar, (_) => Io/pure(()));
+        Cli/checked(Cli/group("app", "", Option/none(), [child("good"), bad]));
+    Test/equal(problem(dynamic()), "duplicate record field \"same\"");
+
+test selection_extracts_a_certified_child_from_a_dynamic_tree =
+    Test/equal(
+        match build("other")
+        | failure(error) => Cli/SpecError/to_str(error)
+        | success(cli) =>
+            match Cli/select(cli, ["other", "--help"])
+            | chose(selected, rest) => Str/concat(Cli/usage(["app"], selected), Str/join("", rest))
+            | _ => "not selected"
+            end
         end,
-        "in command \"app\": in command \"bad\": duplicate record field \"same\"");
+        "Usage: app other--help");
 
 test the_record_parse_adapter_reports_specification_errors_before_help =
     Test/equal(
         match Cli/parse([Cli/flag("same", ""), Cli/flag("same", "")], ["--help"], Option/none())
-        | invalid(error) => Cli/SpecError/to_str(error)
-        | _ => "accepted"
+        | failure(error) => Cli/SpecError/to_str(error)
+        | success(_) => "accepted"
         end,
         "duplicate record field \"same\"");

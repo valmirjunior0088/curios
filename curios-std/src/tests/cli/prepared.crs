@@ -11,7 +11,7 @@ let grammar() -> Grammar({{}, Str}) =
         Grammar/positional(Positional { name = "path", help = "Path" }, Cli/str));
 
 test every_metadata_id_and_ownership_path_is_bounded_by_its_actual_tree =
-    let prepared = Cli/prepare(grammar());
+    let prepared = Cli/Prepared/prepare(grammar());
     let limit = Cli/Prepared/size(prepared.grammar.tree);
     Test/assert(
         List/all(prepared.metadata.named, (entry) =>
@@ -23,14 +23,14 @@ test independent_choices_keep_their_own_routes =
         Grammar/choice(
             Grammar/choice(Grammar/flag(names("c")), Grammar/flag(names("d"))),
             Grammar/flag(names("e")));
-    let prepared = Cli/prepare(Grammar/product(pair, triple));
+    let prepared = Cli/Prepared/prepare(Grammar/product(pair, triple));
     Test/all([
         Test/equal(List/len(prepared.metadata.named), 5),
         Test/equal(Map/len(prepared.lookup), 5)]);
 
 test long_and_short_aliases_find_the_same_leaf =
     let prepared =
-        Cli/prepare(
+        Cli/Prepared/prepare(
             Grammar/option(
                 Named { long = "port", short = Option/some('p'), help = "Port" },
                 Cli/nat));
@@ -41,7 +41,7 @@ test long_and_short_aliases_find_the_same_leaf =
 
 test positional_entries_retain_their_order_and_rest_shape =
     let prepared =
-        Cli/prepare(
+        Cli/Prepared/prepare(
             Cli/record([Cli/positional("first", Cli/str, ""), Cli/rest("remaining", Cli/str, "")]));
     Test/equal(
         List/map(prepared.metadata.positional, (entry) => (entry.names.name, entry.rest)),
@@ -49,7 +49,7 @@ test positional_entries_retain_their_order_and_rest_shape =
 
 test nested_choice_owners_have_distinct_node_identifiers =
     let prepared =
-        Cli/prepare(
+        Cli/Prepared/prepare(
             Grammar/choice(
                 Grammar/choice(Grammar/flag(names("a")), Grammar/flag(names("b"))),
                 Grammar/flag(names("c"))));

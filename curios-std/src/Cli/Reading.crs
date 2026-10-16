@@ -1,5 +1,5 @@
 use /std/{Str};
-use /std/Cli/{Failure, SpecError};
+use /std/Cli/{Failure};
 
 --- The result of interpreting one certified grammar.
 pub induct Reading(A: Type): pub Type
@@ -7,7 +7,6 @@ pub induct Reading(A: Type): pub Type
 | help()
 | version(Str)
 | failure(Failure)
-| invalid(SpecError)
 end
 
 pub use Reading/*;

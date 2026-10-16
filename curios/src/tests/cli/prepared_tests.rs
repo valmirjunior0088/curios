@@ -7,7 +7,7 @@ const DECLARATION: &str = r#"
     use /std/Cli/{Grammar, Prepared};
     use /std/Cli/Grammar/{Named};
     let grammar = Grammar/flag(Named { long = "port", short = Option/none(), help = "" });
-    let original = Cli/prepare(grammar);
+    let original = Cli/Prepared/prepare(grammar);
 "#;
 
 #[test]
@@ -54,7 +54,7 @@ fn metadata_of_another_grammar_requires_new_correspondence_evidence() {
     let refusal = error(&format!(
         r#"{DECLARATION}
         let other = Grammar/flag(Named {{ long = "different", short = Option/none(), help = "" }});
-        let bad = Prepared {{ ..original, metadata = Cli/prepare(other).metadata }};
+        let bad = Prepared {{ ..original, metadata = Cli/Prepared/prepare(other).metadata }};
         ()
     "#
     ));

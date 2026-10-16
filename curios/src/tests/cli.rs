@@ -8,6 +8,8 @@ mod validation_tests;
 
 mod command_tests;
 
+mod declaration_tests;
+
 use {
     super::{compile, error},
     curios_runtime::{Compiled, ForeignBindings, MockHost},
@@ -45,7 +47,7 @@ fn serve() -> Compiled {
         r#"
         use /std/{Cli, Nat, Str, Option, Io, print};
 
-        let serve: Cli =
+        let serve: Cli/Declaration =
             Cli/leaf(
                 "serve",
                 "Serve a directory over HTTP",
@@ -60,7 +62,7 @@ fn serve() -> Compiled {
                     let root = Cli/get(v, "root");
                     print(Str/flatten(["serving ", root, " on ", Nat/to_str(port), "\n"])));
 
-        Cli/main(serve)
+        Cli/main(Cli/declare(serve))
         "#,
     )
     .expect("the entry compiles")
@@ -145,7 +147,7 @@ fn deps() -> Compiled {
         r#"
         use /std/{Cli, Str, Option, print};
 
-        let add: Cli =
+        let add: Cli/Declaration =
             Cli/leaf(
                 "add",
                 "Add a dependency",
@@ -153,13 +155,13 @@ fn deps() -> Compiled {
                 Cli/record([Cli/positional("name", Cli/str, "What to add")]),
                 (v) => print(Str/flatten(["adding ", Cli/get(v, "name"), "\n"])));
 
-        let registry: Cli =
+        let registry: Cli/Declaration =
             Cli/group("registry", "Manage registry dependencies", Option/none(), [add]);
 
-        let deps: Cli =
+        let deps: Cli/Declaration =
             Cli/group("deps", "Manage dependencies", Option/some("0.1.0"), [registry]);
 
-        Cli/main(deps)
+        Cli/main(Cli/declare(deps))
         "#,
     )
     .expect("the entry compiles")
