@@ -38,29 +38,37 @@ const stopped = async (source, hooks, pattern) => {
 const BYTE = `
 use /std/{Byte, Nat, print};
 foreign byte(Byte) -> Byte;
-let b = byte(7)!;
-print(Nat/to_str(Byte/to_nat(b)))
+let main() -> /std/Io({}) =
+    let b = byte(7)!;
+    print(Nat/to_str(Byte/to_nat(b)));
+main()
 `;
 
 const FLAG = `
 use /std/{print};
 foreign flag() -> Bool;
-let b = flag()!;
-print(match b | true => "yes" | false => "no" end)
+let main() -> /std/Io({}) =
+    let b = flag()!;
+    print(match b | true => "yes" | false => "no" end);
+main()
 `;
 
 const PAIR = `
 use /std/{Nat, Str, print};
 foreign pair(Nat, Bytes) -> {code: Nat, ok: Bool};
-let r = pair(1, x[])!;
-print(Str/flatten([Nat/to_str(r.code), " ", match r.ok | true => "ok" | false => "not ok" end]))
+let main() -> /std/Io({}) =
+    let r = pair(1, x[])!;
+    print(Str/flatten([Nat/to_str(r.code), " ", match r.ok | true => "ok" | false => "not ok" end]));
+main()
 `;
 
 const SPLIT = `
 use /std/{Bytes, List, Nat, Str, print};
 foreign split(Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
-let r = split(x[1, 2, 3])!;
-print(Str/flatten([Nat/to_str(Bytes/to_nat(r.head)), " ", Nat/to_str(r.count), " ", Str/join(",", List/map(r.rest, (b) => Nat/to_str(Bytes/to_nat(b))))]))
+let main() -> /std/Io({}) =
+    let r = split(x[1, 2, 3])!;
+    print(Str/flatten([Nat/to_str(Bytes/to_nat(r.head)), " ", Nat/to_str(r.count), " ", Str/join(",", List/map(r.rest, (b) => Nat/to_str(Bytes/to_nat(b))))]));
+main()
 `;
 
 const TAKE = `
@@ -71,27 +79,33 @@ take(18446744073709551615, -5, true, 200, 1.5, x[1, 2], b[1, 0, 1], [1, 2], [-1,
 const LISTS = `
 use /std/{Nat, Str, List, print};
 foreign lists() -> List(Nat);
-let l = lists()!;
-print(Str/join(",", List/map(l, Nat/to_str)))
+let main() -> /std/Io({}) =
+    let l = lists()!;
+    print(Str/join(",", List/map(l, Nat/to_str)));
+main()
 `;
 
 const OPTIONS = `
 use /std/{Nat, Str, Option, print};
 foreign maybe(Option(Nat), Option(Bytes)) -> Option(Nat);
-let a = maybe(Option/some(5), Option/none())!;
-let b = maybe(Option/none(), Option/some(x[1, 2]))!;
-print(Str/flatten([Nat/to_str(Option/unwrap_or(a, 0)), " ", match b | some(_) => "some" | none() => "none" end]))
+let main() -> /std/Io({}) =
+    let a = maybe(Option/some(5), Option/none())!;
+    let b = maybe(Option/none(), Option/some(x[1, 2]))!;
+    print(Str/flatten([Nat/to_str(Option/unwrap_or(a, 0)), " ", match b | some(_) => "some" | none() => "none" end]));
+main()
 `;
 
 const KEEP = `
 use /std/{Io};
 foreign keep(Bytes) -> Bytes;
 foreign poke() -> {};
-let b = x[0x61, 0x62, 0x63];
-let r = keep(b)!;
-let _ = poke()!;
-let _ = Io/Write/write(Io/stdout, b)!;
-Io/write(Io/stdout, r)
+let main() -> /std/Try(Io, Io/Error, {}) =
+    let b = x[0x61, 0x62, 0x63];
+    let r = keep(b)!;
+    let _ = poke()!;
+    let _ = Io/Write/write(Io/stdout, b)!;
+    Io/write(Io/stdout, r);
+main()
 `;
 
 const ABORT = `
@@ -102,43 +116,51 @@ abort(3)
 const WRITE = `
 use /std/{Handle, Io, Show, print};
 foreign token() -> Handle;
-let h = token()!;
-let r = Io/Write/write(h, x[0x68, 0x69])!;
-match r
-| success(_) => print(" wrote")
-| failure(e) => print(Show/show(e))
-end
+let main() -> /std/Io({}) =
+    let h = token()!;
+    let r = Io/Write/write(h, x[0x68, 0x69])!;
+    match r
+    | success(_) => print(" wrote")
+    | failure(e) => print(Show/show(e))
+    end;
+main()
 `;
 
 const DIRECTION = `
 use /std/{Handle, Io, Show, Str, print};
 foreign token() -> Handle;
-let said(c: Io/Chunk) -> Str =
-    match c | chunk(_, @_) => "chunk" | eof() => "eof" | error(e) => Show/show(e) end;
-let w = Io/Write/write(Handle/stdin, x[1])!;
-let out = Io/Read/read(Handle/stdout, 4)!;
-let rest = Io/Read/read(Handle/stdin, 4)!;
-let h = token()!;
-let unknown = Io/Read/read(h, 4)!;
-print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f) end, said(out), said(rest), said(unknown)]))
+let main() -> /std/Io({}) =
+    let said(c: Io/Chunk) -> Str =
+        match c | chunk(_, @_) => "chunk" | eof() => "eof" | error(e) => Show/show(e) end;
+    let w = Io/Write/write(Handle/stdin, x[1])!;
+    let out = Io/Read/read(Handle/stdout, 4)!;
+    let rest = Io/Read/read(Handle/stdin, 4)!;
+    let h = token()!;
+    let unknown = Io/Read/read(h, 4)!;
+    print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f) end, said(out), said(rest), said(unknown)]));
+main()
 `;
 
 const WATCH = `
 use /std/{Handle, print};
 use /std/Handle/{Interest};
 foreign token() -> Handle;
-let h = token()!;
-let _ = Handle/wait(h, Interest/readable)!;
-let _ = Handle/wait(Handle/stdout, Interest/writable)!;
-let _ = Handle/wait(Handle/stdin, Interest/readable)!;
-print("ready")
+let main() -> /std/Io({}) =
+    let h = token()!;
+    let _ = Handle/wait(h, Interest/readable)!;
+    let _ = Handle/wait(Handle/stdout, Interest/writable)!;
+    let _ = Handle/wait(Handle/stdin, Interest/readable)!;
+    print("ready");
+main()
 `;
 
 const HOOKS = `
 foreign used() -> Nat;
 foreign _unused() -> Nat;
-let _ = used()!;
-/std/print("ran")
+let main() -> /std/Io({}) =
+    let _ = used()!;
+    /std/print("ran");
+main()
 `;
 
 test("compile hands back the program beside the foreign rows it reaches as plain data", () => {
@@ -407,8 +429,10 @@ test("a wait on a handle answers at once, on a handle this host never minted as 
 test("listing a directory is denied rather than refused", async () => {
   const { stdout } = await execute(`
 use /std/{Try, Show, Path, print};
-let r = Try/run(/std/fs/list(Path/of_str(".")))!;
-match r | success(_) => print("listed") | failure(e) => print(Show/show(e)) end
+let main() -> /std/Io({}) =
+    let r = Try/run(/std/fs/list(Path/of_str(".")))!;
+    match r | success(_) => print("listed") | failure(e) => print(Show/show(e)) end;
+main()
 `);
 
   assert.equal(stdout, "permission_denied");
@@ -418,8 +442,10 @@ test("a program that reads its arguments is refused by the row, which has none t
   await stopped(
     `
 use /std/{List, Nat, print};
-let args = /std/proc/args()!;
-print(Nat/to_str(List/len(args)))
+let main() -> /std/Io({}) =
+    let args = /std/proc/args()!;
+    print(Nat/to_str(List/len(args)));
+main()
 `,
     {},
     /proc_args: the playground runs a program with no arguments/,
@@ -429,8 +455,10 @@ print(Nat/to_str(List/len(args)))
 test("random bytes are exactly as many as were asked for, past one Web Crypto call", async () => {
   const { stdout } = await execute(`
 use /std/{Bytes, Nat, print};
-let b = /std/rand/bytes(70000)!;
-print(Nat/to_str(Bytes/len(b)))
+let main() -> /std/Io({}) =
+    let b = /std/rand/bytes(70000)!;
+    print(Nat/to_str(Bytes/len(b)));
+main()
 `);
 
   assert.equal(stdout, "70000");
@@ -447,10 +475,12 @@ test("the monotonic clock answers the nanoseconds within a second, a reading jus
   const { stdout } = await execute(`
 use /std/{Nat, Str, print};
 use /std/time/{Instant, Duration};
-let a = Instant/now()!;
-let b = Instant/now()!;
-let d = Instant/diff(b, a);
-print(Str/flatten([Nat/to_str(Duration/secs(d)), " ", Nat/to_str(Duration/nanos(d))]))
+let main() -> /std/Io({}) =
+    let a = Instant/now()!;
+    let b = Instant/now()!;
+    let d = Instant/diff(b, a);
+    print(Str/flatten([Nat/to_str(Duration/secs(d)), " ", Nat/to_str(Duration/nanos(d))]));
+main()
 `);
 
   assert.equal(stdout, "1 999999999");
@@ -459,8 +489,10 @@ print(Str/flatten([Nat/to_str(Duration/secs(d)), " ", Nat/to_str(Duration/nanos(
 test("an exit ends the run with its code", async () => {
   for (const code of [0, 3, 255]) {
     const outcome = await execute(`
-let _ = /std/print("bye")!;
-/std/proc/exit(@{}, ${code})
+let main() -> /std/Io({}) =
+    let _ = /std/print("bye")!;
+    /std/proc/exit(@{}, ${code});
+main()
 `);
 
     assert.deepEqual(
@@ -483,11 +515,13 @@ test("a program suspended on a timer wakes into its rest, and the event loop run
     `
 use /std/{Io, Nat, Str, print};
 use /std/time/{Instant, Duration};
-let _ = print("slept ")!;
-let start = Instant/now()!;
-let woke = Io/bind(Io/sleep(Duration/of_millis(20)), (_) => Io/pure(7))!;
-let slept = Duration/to_millis(Instant/diff(Instant/now()!, start));
-print(Str/concat(Nat/to_str(woke), match slept >= 20 | true => "" | false => " early" end))
+let main() -> /std/Io({}) =
+    let _ = print("slept ")!;
+    let start = Instant/now()!;
+    let woke = Io/bind(Io/sleep(Duration/of_millis(20)), (_) => Io/pure(7))!;
+    let slept = Duration/to_millis(Instant/diff(Instant/now()!, start));
+    print(Str/concat(Nat/to_str(woke), match slept >= 20 | true => "" | false => " early" end));
+main()
 `,
     { onStdout },
   );
@@ -498,8 +532,10 @@ print(Str/concat(Nat/to_str(woke), match slept >= 20 | true => "" | false => " e
 test("a program suspended on no handle runs its cancel, reports the deadlock and ends with code 1", async () => {
   const { exitCode, stdout, stderr } = await execute(`
 use /std/{Io, print};
-let _ = Io/using((_) => print("abandoned"), Io/bind(Io/wait([]), (_) => print("resumed")))!;
-print("after")
+let main() -> /std/Io({}) =
+    let _ = Io/using((_) => print("abandoned"), Io/bind(Io/wait([]), (_) => print("resumed")))!;
+    print("after");
+main()
 `);
 
   assert.deepEqual([exitCode, stdout], [1, "abandoned"]);
@@ -512,9 +548,11 @@ test("a hook's promise answers its row later, and the rest of the program runs w
 foreign fetch(Nat) -> Nat;
 use /std/{Io, Nat, print};
 use /std/time/{Duration};
-let tick = Io/bind(Io/sleep(Duration/of_millis(5)), (_) => print("tick "));
-let (n, _) = Io/both(fetch(3), tick)!;
-print(Nat/to_str(n))
+let main() -> /std/Io({}) =
+    let tick = Io/bind(Io/sleep(Duration/of_millis(5)), (_) => print("tick "));
+    let (n, _) = Io/both(fetch(3), tick)!;
+    print(Nat/to_str(n));
+main()
 `,
     {
       foreign: {
@@ -537,8 +575,10 @@ test("a call cancelled while its hook's promise is pending aborts the hook's sig
 foreign hang(Nat) -> Nat;
 use /std/{Io, print};
 use /std/time/{Duration};
-let came = Io/timeout(Duration/of_millis(10), hang(1))!;
-print(match came | some(_) => "came" | none() => "timed out" end)
+let main() -> /std/Io({}) =
+    let came = Io/timeout(Duration/of_millis(10), hang(1))!;
+    print(match came | some(_) => "came" | none() => "timed out" end);
+main()
 `,
     {
       foreign: {
@@ -561,9 +601,11 @@ test("each write reaches its stream and its hook in the order the program made i
   const outcome = await execute(
     `
 use /std/{print, print_err};
-let _ = print("one ")!;
-let _ = print_err("two ")!;
-print("three")
+let main() -> /std/Io({}) =
+    let _ = print("one ")!;
+    let _ = print_err("two ")!;
+    print("three");
+main()
 `,
     {
       onStdout: (bytes) => heard.push(["out", text(bytes)]),
