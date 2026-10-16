@@ -24,25 +24,8 @@ test the_control_bytes_are_the_named_keys_and_ctrl_letters =
 
 test the_legacy_sequences_name_their_keys =
     Test/equal(
-        keys(x[
-            0x1B,
-            '[',
-            'A',
-            0x1B,
-            '[',
-            'H',
-            0x1B,
-            '[',
-            '3',
-            '~',
-            0x1B,
-            '[',
-            '1',
-            '5',
-            '~',
-            0x1B,
-            'O',
-            'P']),
+        keys(x[0x1B, '[', 'A', 0x1B, '[', 'H', 0x1B, '[', '3', '~', 0x1B, '[', '1', '5', '~', 0x1B,
+            'O', 'P']),
         [k(Code/up()), k(Code/home()), k(Code/delete()), k(Code/f(5)), k(Code/f(1))]);
 
 test a_modifier_parameter_sets_the_modifiers =

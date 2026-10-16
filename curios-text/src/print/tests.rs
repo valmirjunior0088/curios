@@ -115,6 +115,43 @@ fn nested_lists_and_spreads_retain_their_structure_when_wrapping() {
 }
 
 #[test]
+fn every_list_form_packs_atoms_and_separates_spreads_and_calls() {
+    for open in ["[", "b[", "x["] {
+        let source = format!("{open}1, 2, ..tail, 3, 4, build(alpha, bravo, charlie), 5, 6]");
+        let output = render(&source, 24);
+        assert!(
+            output.contains("\n    1, 2,\n    ..tail,\n    3, 4,\n"),
+            "{output}"
+        );
+        assert!(output.contains("build(\n"), "{output}");
+        assert!(output.ends_with("\n    5, 6]"), "{output}");
+        assert!(
+            output.lines().all(|line| line.chars().count() <= 24),
+            "{output}"
+        );
+        assert_eq!(
+            source.parse::<Term>().unwrap(),
+            output.parse::<Term>().unwrap()
+        );
+        assert_eq!(render(&output, 24), output);
+        assert_eq!(
+            render(&format!("{open}1, ..tail, 2]"), 80),
+            format!("{open}1, ..tail, 2]")
+        );
+    }
+}
+
+#[test]
+fn compact_literal_and_projection_entries_pack_together() {
+    for open in ["[", "b[", "x["] {
+        assert_eq!(
+            render(&format!("{open}'a', \"b\", c.d, [], x[], b[], ()]"), 80),
+            format!("{open}'a', \"b\", c.d, [], x[], b[], ()]")
+        );
+    }
+}
+
+#[test]
 fn an_overflowing_application_breaks_one_argument_per_line_with_a_riding_closer() {
     // No trailing comma and no line of its own for the closer: the last argument already ends the call, and saying so with `,` and a lone `)` spends two lines.
     assert_eq!(render("f(alpha, bravo)", 10), "f(\n    alpha,\n    bravo)");

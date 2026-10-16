@@ -13,6 +13,41 @@ fn canonical_within_width(source: &str) -> String {
 }
 
 #[test]
+fn a_wire_literal_packs_byte_runs_and_separates_every_spread() {
+    let source = "let wire = x[0x00, 0x55, 0xFD, 0xFE, 0x02, 0xFD, 0x55, 0xFE, 0xFD, 0x01, 0x55, 0xFE, ..Bytes/replicate(36, 0), 0x55, 0xFE, 0x03, ..Bytes/drop(fixture, 2), 0xFE, 0x02, ..fixture];\n()\n";
+    assert_eq!(
+        canonical_within_width(source),
+        concat!(
+            "let wire =\n",
+            "    x[\n",
+            "        0x00, 0x55, 0xFD, 0xFE, 0x02, 0xFD, 0x55, 0xFE, 0xFD, 0x01, 0x55, 0xFE,\n",
+            "        ..Bytes/replicate(36, 0),\n",
+            "        0x55, 0xFE, 0x03,\n",
+            "        ..Bytes/drop(fixture, 2),\n",
+            "        0xFE, 0x02,\n",
+            "        ..fixture];\n",
+            "()\n",
+        )
+    );
+}
+
+#[test]
+fn spread_calls_and_nested_packed_literals_remain_breakable() {
+    for open in ["[", "b[", "x["] {
+        let source = format!(
+            "let out: Shape = f({open}1, 2, ..build(long_argument_one, long_argument_two, long_argument_three, long_argument_four, long_argument_five), x[3, 4, ..tail], 5, ..rest], another_argument);\n"
+        );
+        let output = canonical_within_width(&source);
+        assert!(output.contains("..build(\n"), "{output}");
+        assert!(output.contains("x[3, 4, ..tail]"), "{output}");
+        assert!(
+            output.lines().any(|line| line.trim() == "..rest],"),
+            "{output}"
+        );
+    }
+}
+
+#[test]
 fn a_wrapped_argument_does_not_flatten_the_calls_later_arguments() {
     let output = canonical_within_width(
         "pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =\n\

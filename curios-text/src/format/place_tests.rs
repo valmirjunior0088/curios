@@ -15,7 +15,7 @@ const MARKER: &str = "-- MARK";
 /// Every syntactic position a comment can be written in, one fixture each: a `let` signature over a `choose`, documentation comments, an `induct` and a `struct`, a `match` with a local `let`, an `induct` of bare cases, a `concept` body, a `satisfy` body, the expressions that break over lines, and the declarations that do.
 ///
 /// Unbound names are deliberate — formatting is syntax-only, so these need to parse and nothing more.
-const POSITIONS: [&str; 9] = [
+const POSITIONS: [&str; 10] = [
     "use /std/{Bool, Str, Option};\n\npub let of_str(s: Str) -> Option(Bool) =\n    choose\n    | s == \"true\" => Option/some(true)\n    | _ => Option/none()\n    end;\n",
     "use /std/{Nat};\n\n--- Doubles.\npub let double(n: Nat) -> Nat =\n    n + n;\n\n--- Nothing.\nlet zero: Nat =\n    0\n--- One more.\nand one: Nat =\n    1;\n",
     "--- Shapes.\npub induct Shape: pub Type\n--- Round.\n| circle(Nat)\n| square(Nat)\nend\n\n--- A point.\nstruct Point: pub Type {\n    --- Across.\n    x: Nat,\n    y: Nat,\n}\n",
@@ -89,6 +89,7 @@ const POSITIONS: [&str; 9] = [
         "\n",
         "concept Marker(A: Type): Type {}\n",
     ),
+    "let packed: Bytes =\n    x[\n        1, 2,\n        ..build(first_long_argument, second_long_argument, third_long_argument, fourth_long_argument),\n        3, 4,\n        ..tail];\n",
 ];
 
 /// What `text` holds ahead of its marker, blanks and commas dropped: the tokens a comment written there stands after. A comma is dropped because a list's last one is the printer's to write or leave out.

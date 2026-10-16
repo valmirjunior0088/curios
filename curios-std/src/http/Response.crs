@@ -40,8 +40,7 @@ pub let render_head(r: Response, body: Bytes) -> Bytes =
         | false => length_line(Bytes/len(body))
         end,
         ..Field/lines(r.headers, owned),
-        '\r',
-        '\n'];
+        '\r', '\n'];
 
 --- The reply as the bytes sent on the wire: its head, then its body. Every reply is one a wire can carry, so there is nothing to refuse.
 pub let render(r: Response) -> Bytes =

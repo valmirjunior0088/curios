@@ -31,7 +31,7 @@ fn print_plicity(plicity: Plicity) -> Printer {
 
 /// A bracketed **sequence**: flat when the group fits (`f(a, b)`), otherwise one element per line at the next indent with the closer *riding* the last one (`c)`).
 ///
-/// The closer rides because the last element already ends the sequence; following it with `,` and a bracket on a line of its own spends two lines on punctuation. Calls, structured packed literals, tuple literals and types, and variant payloads are all this shape — what they delimit is a run of expressions, and none of them cares what kind the last one is. [`listed_block`] is this shape padded, for the brace forms that read as records.
+/// The closer rides because the last element already ends the sequence; following it with `,` and a bracket on a line of its own spends two lines on punctuation. Calls, tuple literals and types, and variant payloads are all this shape — what they delimit is a run of expressions, and none of them cares what kind the last one is. [`listed_block`] is this shape padded, for the brace forms that read as records.
 fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> Printer {
     let open = pure(open);
     if items.is_empty() {
@@ -48,58 +48,28 @@ fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> 
     ]))
 }
 
-/// A bracketed **block**: flat when it fits, and otherwise broken open with its elements *wrapped* across as many lines as they need rather than stacked one per line.
-///
-/// **The shape a run of values takes, which is neither of the two either side of it.** [`listed`] gives a group and stacks when it breaks, which is right for a structure and spends a line per element on a table of 256 bytes. [`filled`] wraps but has no group at all, which is right for an import that owns its whole line and wrong for anything nested: the group is a *break opportunity the enclosing construct relies on*, and a literal that drops it leaves a deeply nested arm ladder with nowhere to split, printing wide however the fill itself is measured. This keeps the group and fills the broken form.
-///
-/// The closer rides the last element, as [`listed`]'s does and for the same reason.
-fn listed_block_wrapped(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
-    if items.is_empty() {
-        return flat([pure(open), indent(ends()), pure(close)]);
-    }
-    group(flat([
-        pure(open),
-        indent(flat([soft_line(), fill(punctuated(items)), ends()])),
-        pure(close),
-    ]))
-}
-
-/// Attach each separator to the item before it, leaving the wrapping engine to choose only the gaps.
-fn punctuated(items: Vec<Printer>) -> Vec<Printer> {
-    let last = items.len() - 1;
-    items
-        .into_iter()
-        .enumerate()
-        .map(|(index, item)| match index == last {
-            true => item,
-            false => flat([item, pure(",")]),
-        })
-        .collect()
-}
-
-/// A run of simple values packs from the opener; a list containing structure groups its layout so that a broken form gives each structured element its own line. Both forms measure flat for their enclosing expressions and keep block-relative indentation.
-fn wrapped_list(entries: Vec<ListEntry>) -> Printer {
+/// Simple entries pack together; spreads and structured expressions stand apart in a broken layout. Packed literals always retain their outer group as a break opportunity for enclosing expressions; a plain list of atoms packs directly from its opener.
+fn wrapped_list(open: &'static str, entries: Vec<ListEntry>) -> Printer {
     if entries.is_empty() {
-        return flat([pure("["), indent(ends()), pure("]")]);
+        return flat([pure(open), indent(ends()), pure("]")]);
     }
     let last = entries.len() - 1;
     let items = entries
         .into_iter()
         .enumerate()
         .map(|(index, entry)| {
-            let term = match &entry {
-                ListEntry::Elem(term) | ListEntry::Spread(term) => term,
-            };
-            let compact = is_atom(term)
-                || match term.as_subterm() {
-                    Subterm::Literal(Literal::List(entries)) => entries.is_empty(),
-                    Subterm::Literal(Literal::Bin(_, segments)) => segments.is_empty(),
-                    Subterm::Tuple(Tuple { fields }) => fields.is_empty(),
-                    _ => false,
-                };
-            let printer = match entry {
-                ListEntry::Elem(term) => print_term(term),
-                ListEntry::Spread(term) => flat([pure(".."), print_term(term)]),
+            let (printer, compact) = match entry {
+                ListEntry::Elem(term) => {
+                    let compact = is_atom(&term)
+                        || match term.as_subterm() {
+                            Subterm::Literal(Literal::List(entries)) => entries.is_empty(),
+                            Subterm::Literal(Literal::Bin(_, segments)) => segments.is_empty(),
+                            Subterm::Tuple(Tuple { fields }) => fields.is_empty(),
+                            _ => false,
+                        };
+                    (print_term(term), compact)
+                }
+                ListEntry::Spread(term) => (flat([pure(".."), print_term(term)]), false),
             };
             FillItem {
                 printer: if index == last {
@@ -112,28 +82,21 @@ fn wrapped_list(entries: Vec<ListEntry>) -> Printer {
         })
         .collect::<Vec<_>>();
     let structured = items.iter().any(|item| !item.compact);
+    let grouped = open != "[" || structured;
     let body = flat([
-        pure("["),
+        pure(open),
         indent(flat([
-            if structured { soft_line() } else { flat([]) },
-            flow(items),
+            if grouped { soft_line() } else { flat([]) },
+            if open == "[" || structured {
+                flow(items)
+            } else {
+                fill(items.into_iter().map(|item| item.printer))
+            },
             ends(),
         ])),
         pure("]"),
     ]);
-    if structured { group(body) } else { body }
-}
-
-/// Whether every element of a packed literal is an atom — a plain numeral or a name — so that printing one flat costs nothing.
-///
-/// **What decides between [`listed_block_wrapped`] and [`listed`], and the reason the choice is about content rather than length.** A fill lays out the *gaps* between items and prints each item flat, never breaking inside one; that is right for a run of bytes and wrong for an element with structure of its own, which would be laid out on a single line however wide it grows. The corpus fixture `/big_nat`'s proofs pack whole `Eq/trans(…)` chains into their literals, which a fill would print hundreds of columns wide. [`listed`] gives each element a line and lets it break within itself, which is what such an element needs.
-fn packs_atoms(segments: &[BinSegment]) -> bool {
-    segments.iter().all(|segment| match segment {
-        BinSegment::Atom(term) => {
-            matches!(term.as_subterm(), Subterm::NumLit(_) | Subterm::Name(_))
-        }
-        BinSegment::Spread(_) => false,
-    })
+    if grouped { group(body) } else { body }
 }
 
 /// A bracketed **record**: [`listed`] with its braces padded — `{ a, b }` flat, and broken one field per line with the closer riding the last after a space (`c }`). Struct literals and patterns take this shape.
@@ -627,22 +590,16 @@ fn print_literal(literal: Literal) -> Printer {
                 Grain::B => "b[",
                 Grain::X => "x[",
             };
-            // A run of atoms wraps as a block; anything with structure in it takes a line per element, so each may break within itself — see `packs_atoms`.
-            let wrapped = packs_atoms(&segments);
             let entries = segments
                 .into_iter()
                 .map(|segment| match segment {
-                    BinSegment::Atom(operand) => print_term(operand),
-                    BinSegment::Spread(operand) => flat([pure(".."), print_term(operand)]),
+                    BinSegment::Atom(operand) => ListEntry::Elem(operand),
+                    BinSegment::Spread(operand) => ListEntry::Spread(operand),
                 })
                 .collect();
-
-            match wrapped {
-                true => listed_block_wrapped(open, entries, "]"),
-                false => listed(open, entries, "]"),
-            }
+            wrapped_list(open, entries)
         }
-        Literal::List(entries) => wrapped_list(entries),
+        Literal::List(entries) => wrapped_list("[", entries),
     }
 }
 

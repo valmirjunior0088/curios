@@ -84,8 +84,7 @@ pub let render(r: Request) -> Bytes =
         ..Str/to_bytes("\r\nConnection: close\r\n"),
         ..length_line(r),
         ..Field/lines(r.headers, owned),
-        '\r',
-        '\n',
+        '\r', '\n',
         ..r.body];
 
 --- A request's head as it is read: the method, the target as its request line spells it, the version it states and its headers.
