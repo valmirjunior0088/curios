@@ -856,7 +856,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     // After a struct's own vector, which its former's body is read by. A witness that names itself becomes a group of one below, and a member carries none.
     let variances = match recursive_witness {
         true => Vec::new(),
-        false => definition_variances(context, &universe_context, &type_, &body),
+        false => definition_variances(context, &universe_context, &type_, &body)?,
     };
 
     context.restore_checked_site(outer_site);

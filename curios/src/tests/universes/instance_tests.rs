@@ -234,6 +234,24 @@ fn a_definition_carries_the_levels_its_value_holds() {
     );
 }
 
+// **A definition whose levels the budget cannot read is refused where it is declared.** `D`'s value is read by reducing `Pick(spin(n), A)`, and a reduction the budget cuts short tells nothing of what the value holds, so the declaration is refused for the budget, as a family's group is. Read as holding every level, `D` was accepted, and the reduction that outran it outran `keep`, which compares two instances of it, there.
+#[test]
+fn a_definition_whose_levels_outrun_the_budget_is_refused_where_it_is_declared() {
+    let source = r#"
+        use /std/{Nat};
+        pub let spin(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => spin(k) end;
+        pub let Pick(n: Nat, _A: Type) -> Type = match n: (_) => Type | 0 => Nat | _k + 1 => Nat end;
+        pub let D(A: Type) -> Type = Pick(spin(50000), A);
+        pub let keep(x: D(Nat)) -> D(Nat) = x;
+        /std/print("declared")
+        "#;
+
+    let report = typecheck_within(400_000, source).expect_err("the budget cuts `D`'s reading");
+
+    assert!(report.contains("while elaborating D"), "{report}");
+    assert!(report.contains("ran out of steps"), "{report}");
+}
+
 // **A case equation read at another instance holds the two to one.** `even_at(U, n)` is stuck on `n`, and each `U` written mints an instance of its own: the scrutinee's closes at zero and the arm's, which holds a `Type`, at one. The arm's proof rests on the equation the scrutinee recorded, so the two are one instance or the arm proves nothing. The elaborator commits them equal where it reads the equation, and the kernel's key, which keeps its levels, answers the term it is handed. With `Nat` for the inhabitant the two close together unasked, which is the control.
 #[test]
 fn a_case_equation_read_at_another_instance_holds_the_two_to_one() {

@@ -155,16 +155,16 @@ fn spliced(
 ///
 /// **Any other definition is read as written.** Every level its body mentions beneath its own binders is held. The walk forces each closed part of what it reads, which for a type is how an alias is seen through and for a function's body is its closed computations run, the cost a vector exists to save; and a level a value's term mentions is nearly always one its instances differ in.
 ///
-/// Either way a vector claims an irrelevance only where unfolding two instances at the same arguments gives one term, which is what lets conversion require nothing of that level. A reduction the budget refuses reads the term as written, and is no error here: the vector it leaves claims less.
+/// Either way a vector claims an irrelevance only where unfolding two instances at the same arguments gives one term, which is what lets conversion require nothing of that level. A reduction the budget refuses refuses the definition, as it refuses a family's group ([`record_variances`]): read as holding every level it carries, it left a vector that claims less, and every later comparison of two instances unfolded them through the reduction that had outrun this one.
 pub(crate) fn definition_variances(
     context: &mut Context,
     universe_context: &UniverseContext,
     type_: &Term,
     body: &Term,
-) -> Vec<Variance> {
+) -> Result<Vec<Variance>, Error> {
     let parameters = universe_context.parameter_count;
     if parameters == 0 {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     curios_profile::profile!("definition_variances");
 
@@ -188,7 +188,10 @@ pub(crate) fn definition_variances(
                 }
                 None => body.clone(),
             };
-            let found = held_levels(context, &[applied]);
+            let mut found = held_levels(context, &[applied]);
+            if let Some(error) = found.exhausted.take() {
+                return Err(error);
+            }
 
             Box::new(move |parameter| found.holds(LevelHead::Param(parameter)))
         }
@@ -206,12 +209,12 @@ pub(crate) fn definition_variances(
         }
     };
 
-    (0..parameters)
+    Ok((0..parameters)
         .map(|index| match held(UniverseParam(index)) {
             true => Variance::Invariant,
             false => Variance::Irrelevant,
         })
-        .collect()
+        .collect())
 }
 
 /// The levels `type_`, a declaration's signature while its levels are still open, holds where conversion compares them: in each of its domains and in a terminal that is no sort, at a position no family or definition is irrelevant in. They are what [`UniverseSolver::finalize`](crate::UniverseSolver::finalize) holds as the declaration's parameters.
