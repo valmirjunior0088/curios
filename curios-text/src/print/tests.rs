@@ -251,3 +251,98 @@ fn a_match_operand_or_callee_prints_bare() {
         "match b | true => f | false => g end(x)"
     );
 }
+
+#[test]
+fn a_ladders_call_participates_in_its_flat_layout() {
+    for (ladder, broken) in [
+        (
+            "match b | true => f | false => g end",
+            "match b\n| true => f\n| false => g\nend",
+        ),
+        (
+            "choose | b => f | _ => g end",
+            "choose\n| b => f\n| _ => g\nend",
+        ),
+    ] {
+        let source = format!("{ladder}(p)");
+        let width = source.len();
+        assert_eq!(render(&source, width), source);
+        assert_eq!(render(&source, width - 1), format!("{broken}(p)"));
+        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+    }
+}
+
+#[test]
+fn long_arguments_can_wrap_after_a_ladders_arms_break() {
+    for (ladder, broken) in [
+        (
+            "match b | true => f | false => g end",
+            "match b\n| true => f\n| false => g\nend",
+        ),
+        (
+            "choose | b => f | _ => g end",
+            "choose\n| b => f\n| _ => g\nend",
+        ),
+    ] {
+        assert_eq!(
+            render(
+                &format!("{ladder}(first_long_argument, second_long_argument)"),
+                32
+            ),
+            format!("{broken}(\n    first_long_argument,\n    second_long_argument)")
+        );
+    }
+}
+
+#[test]
+fn every_call_in_a_postfix_chain_participates_in_the_ladders_layout() {
+    for (ladder, broken) in [
+        (
+            "match b | true => f | false => g end",
+            "match b\n| true => f\n| false => g\nend",
+        ),
+        (
+            "choose | b => f | _ => g end",
+            "choose\n| b => f\n| _ => g\nend",
+        ),
+    ] {
+        for suffix in [
+            "(p)(q)",
+            ".field(p)",
+            "(p)!(q)",
+            "!(p)",
+            "(p).field(q)",
+            "(@A, use witness, p)",
+        ] {
+            let source = format!("{ladder}{suffix}");
+            assert_eq!(
+                render(&source, source.len() - 1),
+                format!("{broken}{suffix}")
+            );
+        }
+    }
+}
+
+#[test]
+fn a_forced_ladder_keeps_its_call_attached() {
+    for (source, expected) in [
+        (
+            "match n | 0 => f | 1 => g | 2 => h | _ => i end(p)",
+            "match n\n| 0 => f\n| 1 => g\n| 2 => h\n| _ => i\nend(p)",
+        ),
+        (
+            "choose | a => f | b => g | c => h | _ => i end(p)",
+            "choose\n| a => f\n| b => g\n| c => h\n| _ => i\nend(p)",
+        ),
+        (
+            "match b | true => match c | true => f | false => g end | false => h end(p)",
+            "match b\n| true => match c | true => f | false => g end\n| false => h\nend(p)",
+        ),
+        (
+            "choose | b => choose | c => f | _ => g end | _ => h end(p)",
+            "choose\n| b => choose | c => f | _ => g end\n| _ => h\nend(p)",
+        ),
+    ] {
+        assert_eq!(render(source, 200), expected);
+    }
+}

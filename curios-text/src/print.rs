@@ -192,7 +192,7 @@ fn carries_its_own_break(term: &Term) -> bool {
 /// The hug is bounded by what the leading arguments can do. An unbounded trailing-lambda hug would make the layout depend on the *kind* of the final argument, and a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — would strand the block after its own closing bracket. Atoms cannot break, so a hugged argument's opener is always on the head's line, and that argument's own group is the only decision the call makes; a call led by anything else keeps the one shape.
 ///
 /// It is `listed` minus two things: no trailing comma, and no break before the closer. The last argument already ends the call, and saying so with `,` and a lone `)` spends two lines on punctuation.
-fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
+fn riding_call(head: Term, arguments: Vec<Argument>, suffix: Printer) -> Printer {
     let hugs = arguments.split_last().is_some_and(|(last, leading)| {
         carries_its_own_break(&last.term) && leading.iter().all(|argument| is_atom(&argument.term))
     });
@@ -201,26 +201,32 @@ fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
         .map(print_argument)
         .collect::<Vec<_>>();
     if hugs {
-        return flat([
-            print_suffix_head(head),
-            pure("("),
-            sep_flat(items, || pure(", ")),
-            indent(ends()),
-            pure(")"),
-        ]);
+        return print_suffix_head(
+            head,
+            flat([
+                pure("("),
+                sep_flat(items, || pure(", ")),
+                indent(ends()),
+                pure(")"),
+                suffix,
+            ]),
+        );
     }
-    flat([
-        print_suffix_head(head),
-        group(flat([
-            pure("("),
-            indent(flat([
-                soft_line(),
-                sep_flat(items, || flat([pure(","), line()])),
-                ends(),
+    print_suffix_head(
+        head,
+        flat([
+            group(flat([
+                pure("("),
+                indent(flat([
+                    soft_line(),
+                    sep_flat(items, || flat([pure(","), line()])),
+                    ends(),
+                ])),
+                pure(")"),
             ])),
-            pure(")"),
-        ])),
-    ])
+            suffix,
+        ]),
+    )
 }
 
 /// A block string literal, printed as the lines of its value one level in from the opener's line, with the closer at that level. Each line prints as itself: the leading whitespace lines share puts them right of the closer, which is exactly what a reader strips, so nothing is removed here — while trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form, but for any other control character, which prints as its braced escape.
@@ -627,11 +633,19 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
 }
 
 pub(crate) fn print_term(term: Term) -> Printer {
+    print_term_followed(term, flat([]))
+}
+
+/// A postfix chain stays inside its head's layout decision: a ladder that fits only before its call breaks its arms first. Source marks still end each term before its suffix, so following the original sees the same token boundaries.
+fn print_term_followed(term: Term, suffix: Printer) -> Printer {
     // The whole of what the printer tells a formatter's renderer: where the term's own text begins and ends in the source. The renderer follows the source by itself and needs neither to place a comment; they are where it picks the text up again past a literal this printer spells another way than it was written — see `Printer::Mark`. Outside a format run both emit nothing.
     // With room to recurse: a term a report prints is as deep as the reduction that built it, a type a recursion nested once a step among them.
     recurse(|| match term.span().map(|span| (span.start, span.end)) {
-        Some((start, end)) => flat([reached(start), print_term_inner(term), reached(end)]),
-        None => print_term_inner(term),
+        Some((start, end)) => flat([
+            reached(start),
+            print_term_inner(term, flat([reached(end), suffix])),
+        ]),
+        None => print_term_inner(term, suffix),
     })
 }
 
@@ -664,19 +678,28 @@ fn print_operand(term: Term, min_prec: u8) -> Printer {
 }
 
 /// [`print_operand`] for the head of an application, projection, or bang — a position above every operator, so any infix parenthesizes. A numeric literal parenthesizes too: `(1).0` must not reprint as the float literal `1.0`.
-fn print_suffix_head(term: Term) -> Printer {
+fn print_suffix_head(term: Term, suffix: Printer) -> Printer {
     match term.as_subterm() {
-        Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) => {
-            flat([pure("("), print_term(term), indent(ends()), pure(")")])
-        }
-        _ => print_operand(term, u8::MAX),
+        Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) => flat([
+            pure("("),
+            print_term(term),
+            indent(ends()),
+            pure(")"),
+            suffix,
+        ]),
+        Subterm::Apply(_)
+        | Subterm::Proj(_)
+        | Subterm::Bang(_)
+        | Subterm::Match(_)
+        | Subterm::Choose(_) => print_term_followed(term, suffix),
+        _ => flat([print_operand(term, u8::MAX), suffix]),
     }
 }
 
-fn print_term_inner(term: Term) -> Printer {
+fn print_term_inner(term: Term, suffix: Printer) -> Printer {
     // Where a name was written, which a page asks the lowering about instead of resolving the text again.
     let written = term.span().map(|span| span.start..span.end);
-    match term.into_subterm() {
+    let body = match term.into_subterm() {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
         Subterm::Sort => pure("Sort"),
@@ -728,7 +751,7 @@ fn print_term_inner(term: Term) -> Printer {
             ),
             attached_body(" =>", body),
         ]),
-        Subterm::Apply(Apply { head, arguments }) => riding_call(head, arguments),
+        Subterm::Apply(Apply { head, arguments }) => return riding_call(head, arguments, suffix),
         Subterm::TupleType(TupleType { fields }) => {
             listed("{", fields.into_iter().map(print_field).collect(), "}")
         }
@@ -757,7 +780,7 @@ fn print_term_inner(term: Term) -> Printer {
                 Field::Index(index) => format!(".{index}"),
                 Field::Label(label) => format!(".{label}"),
             };
-            flat([print_suffix_head(head), pure(field)])
+            return print_suffix_head(head, flat([pure(field), suffix]));
         }
         Subterm::StructLit(StructLit {
             head,
@@ -788,7 +811,7 @@ fn print_term_inner(term: Term) -> Printer {
                 true => hard_line,
                 false => line,
             };
-            group(flat([
+            return group(flat([
                 pure("choose"),
                 flat(
                     arms.into_iter()
@@ -813,7 +836,8 @@ fn print_term_inner(term: Term) -> Printer {
                 attached_body(" =>", default),
                 separator(),
                 pure("end"),
-            ]))
+                suffix,
+            ]));
         }
         Subterm::Match(Match { head, motive, arms }) => {
             let forced =
@@ -822,7 +846,7 @@ fn print_term_inner(term: Term) -> Printer {
                 true => hard_line,
                 false => line,
             };
-            group(flat([
+            return group(flat([
                 pure("match "),
                 print_term(head),
                 print_motive(motive),
@@ -846,7 +870,8 @@ fn print_term_inner(term: Term) -> Printer {
                 ),
                 separator(),
                 pure("end"),
-            ]))
+                suffix,
+            ]));
         }
         Subterm::Let(Let { groups, tail }) => {
             let statements = groups
@@ -873,7 +898,7 @@ fn print_term_inner(term: Term) -> Printer {
                 .collect::<Vec<_>>();
             flat(statements.into_iter().chain([print_term(tail)]))
         }
-        Subterm::Bang(term) => flat([print_suffix_head(term), pure("!")]),
+        Subterm::Bang(term) => return print_suffix_head(term, flat([pure("!"), suffix])),
         // An overflowing operator chain breaks with the operator leading the continuation line.
         Subterm::Infix(Infix { op, left, right }) => {
             let precedence = op_precedence(op);
@@ -895,7 +920,8 @@ fn print_term_inner(term: Term) -> Printer {
             sign.symbol(),
             format_radix(&magnitude, radix)
         )),
-    }
+    };
+    flat([body, suffix])
 }
 
 /// A character literal as written: the five escapes by their spellings, any other control character by its braced escape, anything else verbatim — shared by the expression and match-pattern positions.

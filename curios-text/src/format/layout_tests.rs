@@ -1,4 +1,4 @@
-//! Wrapping lists keep the surrounding expression breakable and use structural indentation.
+//! Structural layouts keep their surrounding expressions breakable and use structural indentation.
 
 use super::{WIDTH, test_support::formatted};
 
@@ -140,5 +140,39 @@ fn a_multiline_html_child_ends_before_its_next_sibling_begins() {
     assert!(
         output.contains("\n            element(\"body\", [], body)"),
         "{output}"
+    );
+}
+
+#[test]
+fn an_applied_match_breaks_its_arms_to_keep_the_argument_attached() {
+    assert_eq!(
+        canonical_within_width(
+            "pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =\n\
+             match a: (s) => (Holds(s && b)) -> Holds(s) | true => (_) => True/qed() | false => (h) => h end(p);\n",
+        ),
+        concat!(
+            "pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =\n",
+            "    match a: (s) => (Holds(s && b)) -> Holds(s)\n",
+            "    | true => (_) => True/qed()\n",
+            "    | false => (h) => h\n",
+            "    end(p);\n",
+        )
+    );
+}
+
+#[test]
+fn an_applied_choose_breaks_its_arms_to_keep_the_argument_attached() {
+    assert_eq!(
+        canonical_within_width(
+            "let selected: Holds(a) =\n\
+             choose | a => (_) => first_long_function_name() | _ => (h) => second_long_function_name(h) end(p);\n",
+        ),
+        concat!(
+            "let selected: Holds(a) =\n",
+            "    choose\n",
+            "    | a => (_) => first_long_function_name()\n",
+            "    | _ => (h) => second_long_function_name(h)\n",
+            "    end(p);\n",
+        )
     );
 }

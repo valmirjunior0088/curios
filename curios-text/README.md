@@ -69,3 +69,11 @@ The Curios surface language: the scannerless parser, surface AST, printer and fo
 **Rationale.** A run of values is easier to read when short elements share a line, while a long call or nested expression needs its own break opportunities. Atomic fills remain appropriate for import names and packed atoms; list elements use structural wrapping.
 
 **Rejected.** Stacking every element when a list outgrows one line, forcing complex elements flat merely to pack the gaps between them, and attaching a sibling to the closing line of a multiline element.
+
+### An applied ladder measures its calls with its arms
+
+**Decision.** A `match` or `choose` stays flat only when its whole postfix chain fits. Otherwise its arms and `end` take separate lines, and each attached call lays out its arguments within the room left after `end`. Short arguments stay attached as `end(p)`; longer argument lists may wrap in their ordinary shape.
+
+**Rationale.** An application belongs to the expression whose result it calls. Measuring the ladder apart from its calls can keep every arm on a crowded line and send a single short argument to the next. Giving the ladder the whole chain to measure lets its structural breaks make room for the call. The call's own nested group still decides whether its arguments fit after that break.
+
+**Rejected.** Measuring only through `end`, which leaves the application out of the decision; adding an outer group while keeping an independent inner ladder group, which still lets the ladder stay flat after the outer group breaks; and forcing argument lists flat, which cannot accommodate long arguments or comments.
