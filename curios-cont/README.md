@@ -22,6 +22,14 @@ Specialization spends a non-refundable, module-wide allowance of copied nodes, i
 
 **Rejected.** Draining one-step passes by rebuilding their analyses after each candidate; holding executable copy plans across mutation; resetting or refunding expansion fuel; moving all specialization after shrinking has settled; and a general analysis cache or speculative optimizer for work that pass-local snapshots can decide.
 
+### A dead-parameter phase repairs the graph once
+
+**Decision.** Dead-parameter cleanup reads one demand snapshot and commits continuation removals before taking the escape snapshot that admits function removals. Each phase repairs the complete live node arena once, with removal masks in original parameter positions: signatures and incoming arguments lose the same positions, remaining inert occurrences become fillers, and removed bindings are tombstoned after the repair. Continuation field records follow their complete removal mask. Result receivers and escaping functions keep their signatures.
+
+**Rationale.** Removing uses cannot falsify `Unused`, and different targets own different argument vectors, so one phase can repair every admitted removal together. The escape boundary preserves which opportunities an invocation takes: a function reference dropped from a continuation argument permits immediate cleanup, while one dropped from a function argument permits cleanup on the next invocation. An arena-wide walk reaches nested captures and live nodes awaiting pruning without maintaining an occurrence index.
+
+**Rejected.** A graph scan per entity or removed binding; discovering function removals before continuation cleanup; refreshing escape facts during function cleanup; and persistent use lists or a general graph-edit framework for edits one phase can commit.
+
 ### Mutation hides behind instruction atomicity
 
 **Decision.** Each write-once cell and bounded channel operation ([A wait is a suspension, and only the host waits](../documentation/design/standard-library/a-wait-is-a-suspension-and-only-the-host-waits.md)) is a CPS node that completes before invoking its continuation: the emitter performs its state transition and chooses its outcome without calling the host or suspending, optimizers preserve these nodes and their order, and a readiness query observes state without reserving a later operation's outcome. Compiler-generated knots use the same operations: a result cell and a capacity-one initializer channel per computed member, every storage object and closure bound and every initializer enqueued before forcing starts. A force polls the result, otherwise takes and runs the initializer, then fills the result; an empty result beside an empty initializer channel is recursive re-entry and emits `Panic::Cycle`. The force captures only the two storage objects, so taking the initializer releases the knot's reference to its captures. The lowering and its structural tests live in `curios-ersd/src/into_cont/`.

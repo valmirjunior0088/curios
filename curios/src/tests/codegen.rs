@@ -11,6 +11,7 @@ pub(super) use census::*;
 
 mod churn;
 mod copying;
+mod dead_parameters;
 mod entry;
 mod fields;
 mod ladder;

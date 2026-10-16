@@ -45,110 +45,95 @@ impl std::io::Write for Rows {
 ///
 /// # Comparison protocol
 ///
-/// Use isolated source revisions and Cargo target directories, the same lockfile and Rust toolchain, release `opt-level = 3` and build-script `opt-level = 3`. Finish all builds and checks before timing. A temporary native probe depends on the revision's pipeline, text, Wasm, Binaryen, Cranelift, runtime, ABI and archive crates. Its compilation operation reads a source string, parses `Entrypoint`, calls `compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none(), |_| {})`, and passes the result through `std::hint::black_box`. It uses no package cache, stage rendering, Binaryen or Cranelift during the compilation measurement.
+/// Use isolated source revisions and separate Cargo target directories for default-feature and profiling builds, the same lockfile and Rust toolchain, release `opt-level = 3` and build-script `opt-level = 3`. Copy each revision's executable before building the next, and finish every build and check before timing. A temporary native probe depends on the revision's pipeline, text, Wasm, Binaryen, ABI, archive and profile crates; its source is identical for both revisions. Its compilation operation reads a source string, parses `Entrypoint`, calls `compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none(), |_| {})`, and passes the result through `std::hint::black_box`. It uses no package cache, stage rendering, Binaryen or Cranelift during the compilation measurement.
 ///
 /// The common source cohort is copied from the measurement checkout before preparing the compiler revisions. Sources are `TOML_DRIVER` in `codegen/census.rs`; `JUMPS`, `WORKERS`, `UNCURRY`, `CALLS` and `SCCS` in `codegen/sweeps/test_support.rs`; `LISTING_PROGRAM` in `tui.rs`; and `programs/{parse_digits,monad_io,monad_suspend,walk_mirror_held_scan}.crs`. Copy their literal contents to temporary source files. The source tests keep their small runtime answers, including the escaping uses that keep the call-pattern consumer outside inlining and worker splitting.
 ///
 /// For unprofiled compilation, build the probe with default features. Take one unmeasured warm batch and seven measured batches per source and revision, running the two revisions consecutively for each source and alternating which goes first each batch. A batch is ten fresh probe processes, except TOML and TUI, whose batch is one. Time the batch with `/usr/bin/time -f '%e'`, divide its process wall time by the batch size, and report the median and observed span of the seven readings. Startup, source reading, parsing, prelude restoration and teardown are included; Cargo, prelude construction, serialization and native precompilation are excluded. The clock prints in 10 ms increments: expand each observed span by one tick divided by its batch size before deciding whether spans are disjoint.
 ///
-/// For pass attribution, build both probes with a `profile` feature forwarding `curios-pipeline/profile`, `curios-runtime/profile` and `curios-profile/enabled`. Trace the same TOML compilation with `curios_profile::trace` to `Destination::File`, fold its stream and require every span to close. Take one warmup and seven interleaved readings, alternating the first revision. The table below gives medians and observed spans of each pass's aggregate time; rounds and allocations are read from the same captures. The observer still renders nothing. The command above uses an in-memory stream for inspection; paired figures use the file-stream protocol on both revisions.
+/// For pass attribution, build both probes with a `profile` feature forwarding `curios-pipeline/profile` and `curios-profile/enabled`. Trace the same TOML compilation with `curios_profile::trace` to `Destination::File`, fold its stream and require every span to close. Take one warmup and seven interleaved readings, alternating the first revision. The table below gives medians and observed spans of each pass's aggregate time; rounds and allocations are read from the same captures. The observer renders nothing. The command above uses an in-memory stream for inspection; paired figures use the file-stream protocol on both revisions.
 ///
-/// For counted sizes, serialize the emitted module with `curios_wasm::to_bytes` (names retained), validate it and call `curios_binaryen::optimize(raw, false, |_| {})` (names removed). Keep the existing Binaryen configuration. Precompile those optimized bytes with `curios_cranelift::precompile` and archive the harvested `ForeignStore` beside the probe's own machine code. Use one unchanged default-feature runtime probe for both revisions' artifacts, holding the native host and engine constant. The runtime probe deserializes that pair once per batch and repeatedly runs it with a fresh `MockHost`, checking successful exit, empty stderr and stable stdout on every execution.
+/// To separate dead-parameter demand solving from the remainder of the pass, add temporary `cont::dead_parameter_demands` and `cont::dead_parameter_rewrite` spans to the isolated source copies: wrap the initial `demands(module)` call with the former, and scope the latter over the rest of `eliminate_dead_parameters`. These spans and the repair-visit sample described below exist only in the comparison copies. Profile timings include their instrumentation and the counting allocator; default-feature process times establish the product comparison.
 ///
-/// Runtime arguments are eight copies of `"argument"` for each small source fixture, `["program", "answer = 42"]` for TOML, and `["program", n]` for the corpus: `n = 10000` for parsing and suspension, `100000` for monadic IO and `1000` for the rope walk. TUI uses a fixed 12×5 terminal, 100 down/up pairs and `q`, the first down escape split into two chunks. Its monotonic-clock script contains 100,000 readings advancing by 1 ms. Require terminal entry and restoration, raw mode on then off, selection `one`, a titled border, one screen clear and no stderr. This fixed-size workload does not assert the resizes the older coordination measurement scripts.
+/// For counted artifacts, compile each common source with an observer that writes `Stage::ContOptm`'s printed graph, serialize the module with `curios_wasm::to_bytes` (names retained), call `curios_binaryen::optimize(raw, false, |_| {})` (names removed), and archive the harvested `ForeignStore` with `curios_archive::to_bytes`. Compare all four outputs byte for byte. The codegen consumers validate and execute their raw and optimized modules. Identical runtime artifacts are not retimed.
 ///
-/// Batch counts, selected by separate calibration to run for about half a second, are 3,000 executions for each small fixture, 2,500 for TOML, 150 for parsing, 200 for monadic IO, 30 for suspension, 500 for the rope walk and 10 for TUI. Calibration is excluded from the reported samples.
-///
-/// Runtime uses five groups of five measured batches, one unmeasured warm batch opening each group. Within each source and batch, interleave the revisions and alternate which goes first. Divide GNU time's process wall time by the batch's execution count; this includes deserialization, host construction, instantiation, execution and teardown, amortizing the fixed process cost. Report the median of the five group medians and their span. Expand spans by the clock tick per execution before comparison. Overlapping spans establish no difference; disjoint spans establish the direction, without a percentage threshold.
+/// For counted repair work, build temporary Cont tests in the two isolated revisions with `profile` enabled. Construct `N = 64, 128, 256` pairs: a non-escaping known function taking one unread parameter and returning zero, and a continuation taking one unread parameter and passing it to that function, with the call returning to the entry's sentinel. The nullary entry binds all functions and continuations and switches between jumps passing zero into each continuation. Each function body is one node, each continuation body one node, and the entry adds a switch and the two binding nodes: `2N + 3` live nodes with no tombstones. Verify before and after one invocation of `eliminate_dead_parameters`, tracing only that invocation. In temporary pass instrumentation, count each actual repair traversal by adding the invocation's live-node count; include every baseline `Module::replace_atom` walk. The pass never mints or removes nodes, so that count stays exact throughout the invocation. Record the sum once as `cont::dead_parameter_repair_visits`, and read it with `curios_profile::fold`. Exclude demand iterations and read-only scans for result receivers and escaping functions. Remove the tests and instrumentation after the investigation; no production counter or metric API is retained.
 ///
 /// # Latest reading
 ///
-/// Mixed: counted Wasm bytes, rounds and allocation figures; timed default-release process wall times and matched profile attribution. Taken at `ce963cf3f` against `eb40b82e9`, AMD Ryzen 7 5800X3D, x86-64 Linux `7.2.9-ogc3.1.fc44.x86_64`, Rust `1.95.0`, Wasmtime `47.0.3`, default engine configuration, frequency scaling and boost enabled. The profile builds are isolated from the default-feature builds.
+/// Mixed: counted artifact identity, optimizer rounds, repair visits and allocation work; timed default-release process wall times and matched profile attribution. Taken at `812080299` against `62cf6687d`, AMD Ryzen 7 5800X3D, x86-64 Linux `7.2.9-ogc3.1.fc44.x86_64`, Rust `1.95.0`, frequency scaling and boost enabled. Default and profile executables are built separately; the profiling copies alone carry the temporary attribution spans and repair-visit sample.
 ///
 /// Default-feature compilation, process wall time per compilation:
 ///
 /// | Consumer | Baseline ms [span] | Candidate ms [span] | Span comparison |
 /// | --- | ---: | ---: | --- |
-/// | `calls` | 116 [115–117] | 105 [104–106] | faster |
-/// | `jumps` | 123 [121–123] | 123 [122–123] | overlap |
-/// | `monad_io` | 280 [279–281] | 277 [276–279] | overlap |
-/// | `monad_suspend` | 513 [509–515] | 504 [500–506] | faster |
-/// | `parse_digits` | 272 [270–273] | 270 [267–271] | overlap |
-/// | `sccs` | 86 [85–86] | 85 [84–86] | overlap |
-/// | `toml` | 9530 [9490–9610] | 4010 [3990–4030] | faster |
-/// | `tui` | 2760 [2750–2780] | 2670 [2640–2680] | faster |
-/// | `uncurry` | 89 [88–89] | 88 [86–88] | overlap |
-/// | `walk_mirror_held_scan` | 317 [314–319] | 314 [311–316] | overlap |
-/// | `workers` | 86 [84–86] | 86 [84–86] | overlap |
+/// | `calls` | 108 [107–110] | 108 [107–110] | overlap |
+/// | `jumps` | 126 [125–132] | 128 [126–132] | overlap |
+/// | `monad_io` | 285 [283–287] | 284 [282–286] | overlap |
+/// | `monad_suspend` | 516 [514–520] | 516 [510–521] | overlap |
+/// | `parse_digits` | 276 [274–278] | 277 [272–279] | overlap |
+/// | `sccs` | 89 [86–90] | 89 [87–91] | overlap |
+/// | `toml` | 4060 [4040–4150] | 3740 [3700–3770] | faster |
+/// | `tui` | 2720 [2690–2740] | 2670 [2670–2750] | overlap |
+/// | `uncurry` | 90 [90–93] | 91 [90–92] | overlap |
+/// | `walk_mirror_held_scan` | 322 [320–327] | 321 [319–325] | overlap |
+/// | `workers` | 88 [87–89] | 88 [87–90] | overlap |
 ///
-/// Runtime, amortized process wall time per execution:
+/// TOML compilation is faster; every other span overlaps its control after accounting for clock resolution. All eleven consumers have byte-identical optimized Cont, raw Wasm, Binaryen-optimized Wasm and archived foreign declarations. Runtime artifacts are identical and are not retimed. The two consumers in `codegen/dead_parameters.rs` validate and execute both Wasm paths at four host-tainted inputs, preserving an effect computed solely for an unused argument and a nested capture across suspension.
 ///
-/// | Consumer | Baseline ms [span] | Candidate ms [span] | Span comparison |
-/// | --- | ---: | ---: | --- |
-/// | `calls` | 0.163 [0.160–0.163] | 0.163 [0.160–0.163] | overlap |
-/// | `jumps` | 0.160 [0.160–0.163] | 0.160 [0.160–0.163] | overlap |
-/// | `monad_io` | 2.40 [2.40–2.45] | 2.40 [2.40–2.45] | overlap |
-/// | `monad_suspend` | 17.0 [17.0–17.3] | 17.0 [17.0–17.3] | overlap |
-/// | `parse_digits` | 2.60 [2.60–2.60] | 2.60 [2.60–2.60] | overlap |
-/// | `sccs` | 0.163 [0.160–0.163] | 0.163 [0.160–0.163] | overlap |
-/// | `toml` | 0.208 [0.208–0.208] | 0.208 [0.208–0.208] | overlap |
-/// | `tui` | 45 [45–46] | 45 [45–46] | overlap |
-/// | `uncurry` | 0.163 [0.160–0.163] | 0.163 [0.160–0.163] | overlap |
-/// | `walk_mirror_held_scan` | 0.94 [0.94–0.94] | 0.92 [0.92–0.92] | overlap |
-/// | `workers` | 0.160 [0.160–0.160] | 0.160 [0.160–0.160] | overlap |
+/// Matched TOML profile attribution:
 ///
-/// | Consumer | Raw bytes: baseline → candidate | Optimized bytes: baseline → candidate |
+/// | Span | Baseline ms [span] | Candidate ms [span] |
 /// | --- | ---: | ---: |
-/// | `calls` | 51,334 → 51,334 | 19,674 → 19,674 |
-/// | `jumps` | 46,071 → 45,869 | 16,388 → 16,470 |
-/// | `monad_io` | 122,086 → 121,763 | 33,307 → 33,289 |
-/// | `monad_suspend` | 186,317 → 185,994 | 50,990 → 50,972 |
-/// | `parse_digits` | 118,805 → 118,495 | 33,025 → 33,007 |
-/// | `sccs` | 44,514 → 44,514 | 16,978 → 16,978 |
-/// | `toml` | 755,931 → 711,929 | 200,748 → 193,464 |
-/// | `tui` | 708,215 → 701,711 | 182,524 → 181,264 |
-/// | `uncurry` | 43,963 → 43,963 | 16,948 → 16,948 |
-/// | `walk_mirror_held_scan` | 139,690 → 139,367 | 35,144 → 35,126 |
-/// | `workers` | 45,832 → 45,832 | 17,178 → 17,174 |
+/// | `compile_entrypoint` | 4306.2 [4284.7–4346.5] | 3962.4 [3941.0–3991.9] |
+/// | `cont_optimize` | 3779.9 [3758.7–3809.1] | 3434.0 [3414.2–3463.6] |
+/// | `cont::eliminate_dead_parameters` | 363.4 [355.6–369.0] | 57.2 [56.0–58.0] |
+/// | `cont::dead_parameter_demands` | 45.0 [44.4–45.3] | 44.4 [43.7–45.2] |
+/// | `cont::dead_parameter_rewrite` | 317.4 [310.4–323.0] | 11.9 [11.5–12.1] |
 ///
-/// The join consumer's sole size increase is 82 optimized code bytes. Its raw code shrinks by 100 bytes and its name section by 102. Raw and optimized function counts and type sections, and raw `struct.new*` and `array.new*` instruction counts, are unchanged; the changed join layout alters Binaryen's flattening of the entry and `io/surface`, leaving one optimized function body at 617 rather than 535 bytes. All other sections are identical. The existing growth ceilings remain unchanged.
-///
-/// | Profile span | Baseline ms [span] | Candidate ms [span] |
-/// | --- | ---: | ---: |
-/// | `compile_entrypoint` | 10200 [10140–10280] | 4230 [4220–4270] |
-/// | `cont_optimize` | 9670 [9610–9750] | 3720 [3700–3750] |
+/// Both revisions settle in eleven rounds, with dead-parameter cleanup changing six invocations. Every Cont fired count and graph-size sample agrees. Demand solving overlaps its control; the reduction is in the remainder of dead-parameter cleanup. The extra removal maps and binding sets keep allocations bounded by the admitted edits: cumulative Cont allocation work is 2,797.3 MiB over 36,502,710 allocator calls at the baseline and 2,797.4 MiB over 36,503,120 calls at the candidate. These figures include temporary profile instrumentation and measure allocation work, not peak resident memory.
 ///
 /// | Candidate pass | ms [span] | Fired / calls | Allocated MiB | Allocation calls |
 /// | --- | ---: | ---: | ---: | ---: |
-/// | `inline_known_calls` | 491 [489–495] | 5 / 11 | 508.0 | 6,292,859 |
-/// | `answer_row_tests` | 428 [427–432] | 0 / 11 | 352.0 | 4,798,544 |
-/// | `split_parameters` | 408 [405–413] | 6 / 11 | 203.5 | 2,452,167 |
-/// | `split_workers` | 398 [396–400] | 2 / 11 | 351.8 | 4,255,474 |
-/// | `eliminate_dead_parameters` | 397 [396–404] | 6 / 11 | 31.4 | 357,213 |
-/// | `known_values` | 242 [239–245] | — / 11 | 264.4 | 3,614,207 |
-/// | `split_returns` | 203 [202–204] | 6 / 11 | 190.3 | 2,399,815 |
-/// | `uncurry_returns` | 156 [155–157] | 3 / 11 | 162.7 | 2,104,178 |
-/// | `flatten_indexed_lists` | 155 [154–156] | 1 / 11 | 68.4 | 1,181,005 |
-/// | `contify_calls` | 137 [136–139] | 5 / 11 | 148.9 | 1,896,062 |
-/// | `specialize_scc_calls` | 135 [134–137] | 0 / 11 | 149.6 | 1,902,926 |
-/// | `separate_loop_entries` | 129.5 [129.1–130.2] | 5 / 11 | 148.5 | 1,904,264 |
-/// | `inline_single_use_continuations` | 51.2 [50.6–51.7] | 7 / 11 | 15.1 | 294,304 |
-/// | `eliminate_dead_calls` | 45.6 [45.2–46.0] | 1 / 11 | 27.2 | 253,845 |
-/// | `eliminate_dead_bindings` | 38.0 [37.6–38.3] | 8 / 11 | 12.5 | 285,515 |
-/// | `prune_unreachable` | 35.3 [34.8–35.6] | 6 / 11 | 5.0 | 122,716 |
-/// | `split_windows` | 23.4 [23.2–23.8] | 1 / 2 | 8.8 | 159,530 |
-/// | `dedupe_intrinsics` | 19.7 [19.6–19.9] | 5 / 11 | 7.3 | 104,920 |
-/// | `specialize_jump_patterns` | 18.5 [18.5–18.8] | 3 / 11 | 9.4 | 168,294 |
-/// | `fuse_append_chains` | 12.8 [12.7–13.0] | 1 / 11 | 4.6 | 104,904 |
-/// | `forward_aggregate_projections` | 12.2 [12.0–12.3] | 8 / 11 | 1.8 | 9,479 |
-/// | `fold_intrinsic_identities` | 11.1 [11.0–11.2] | 5 / 11 | 0.0 | 78 |
-/// | `specialize_call_patterns` | 5.88 [5.84–5.99] | 2 / 11 | 2.1 | 16,263 |
-/// | `forward_continuations` | 5.2 [5.1–5.3] | 7 / 11 | 5.7 | 104,093 |
-/// | `rewrite_atoms` | 3.44 [3.40–3.52] | 5 / 11 | 0.0 | 54 |
-/// | `forward_calls` | 2.96 [2.92–2.99] | 2 / 11 | 0.5 | 3,361 |
-/// | `simplify_nodes` | 1.22 [1.20–1.30] | 5 / 11 | 0.0 | 973 |
+/// | `inline_known_calls` | 501.1 [496.3–502.4] | 5 / 11 | 508.0 | 6,292,858 |
+/// | `answer_row_tests` | 436.9 [434.6–439.9] | 0 / 11 | 352.0 | 4,798,544 |
+/// | `split_parameters` | 407.8 [403.4–411.4] | 6 / 11 | 203.5 | 2,452,167 |
+/// | `split_workers` | 403.6 [401.9–412.1] | 2 / 11 | 351.8 | 4,255,474 |
+/// | `known_values` | 248.2 [244.6–251.0] | — / 11 | 264.4 | 3,614,207 |
+/// | `split_returns` | 207.3 [205.4–211.5] | 6 / 11 | 190.3 | 2,399,815 |
+/// | `uncurry_returns` | 159.6 [157.0–162.1] | 3 / 11 | 162.7 | 2,104,178 |
+/// | `flatten_indexed_lists` | 158.3 [156.6–159.2] | 1 / 11 | 68.4 | 1,181,005 |
+/// | `contify_calls` | 139.6 [138.0–142.4] | 5 / 11 | 148.9 | 1,896,062 |
+/// | `specialize_scc_calls` | 137.6 [136.1–140.7] | 0 / 11 | 149.6 | 1,902,926 |
+/// | `separate_loop_entries` | 132.3 [131.0–132.7] | 5 / 11 | 148.5 | 1,904,264 |
+/// | `eliminate_dead_parameters` | 57.2 [56.0–58.0] | 6 / 11 | 31.5 | 358,076 |
+/// | `inline_single_use_continuations` | 52.4 [51.7–53.9] | 7 / 11 | 15.1 | 294,303 |
+/// | `eliminate_dead_calls` | 46.4 [45.6–46.6] | 1 / 11 | 27.2 | 253,844 |
+/// | `eliminate_dead_bindings` | 38.9 [38.1–39.6] | 8 / 11 | 12.5 | 285,515 |
+/// | `prune_unreachable` | 35.7 [35.3–37.9] | 6 / 11 | 5.0 | 122,716 |
+/// | `split_windows` | 24.1 [23.6–24.2] | 1 / 2 | 8.8 | 159,530 |
+/// | `dedupe_intrinsics` | 20.3 [20.0–21.0] | 5 / 11 | 7.3 | 104,920 |
+/// | `specialize_jump_patterns` | 18.9 [18.7–19.5] | 3 / 11 | 9.4 | 168,294 |
+/// | `fuse_append_chains` | 12.9 [12.7–13.3] | 1 / 11 | 4.6 | 104,904 |
+/// | `forward_aggregate_projections` | 12.8 [12.3–13.7] | 8 / 11 | 1.8 | 9,479 |
+/// | `fold_intrinsic_identities` | 11.4 [10.9–11.8] | 5 / 11 | 0.0 | 78 |
+/// | `specialize_call_patterns` | 6.1 [6.0–6.5] | 2 / 11 | 2.1 | 16,263 |
+/// | `forward_continuations` | 5.2 [5.2–5.9] | 7 / 11 | 5.7 | 104,093 |
+/// | `rewrite_atoms` | 3.4 [3.4–3.9] | 5 / 11 | 0.0 | 54 |
+/// | `forward_calls` | 3.1 [3.0–3.1] | 2 / 11 | 0.5 | 3,361 |
+/// | `simplify_nodes` | 1.2 [1.2–1.3] | 5 / 11 | 0.0 | 973 |
 ///
-/// The TOML fixpoint takes 39 rounds at the baseline and 11 at the candidate. Its cumulative allocations fall from 7,872.4 MiB over 101,127,354 allocator calls to 2,797.3 MiB over 36,502,263 calls; these are allocation work, not peak resident memory. Jump specialization changes 34 baseline rounds and 3 candidate rounds, uncurrying 25 and 3, worker splitting 8 and 2, and call specialization 4 and 2. SCC specialization changes no TOML round; its independent contexts are covered by the direct and source consumers. The boolean totals do not count candidates. `split_windows` runs only on otherwise idle rounds, so its denominator is two invocations, not eleven rounds. Loop-entry separation changes five rounds in both revisions: its separately bounded, atomic copy-and-contify policy stays unchanged, and these counts do not establish that its remaining cases are independent. The default-feature comparison establishes the compilation improvement; every runtime span overlaps its control after accounting for clock resolution.
+/// `split_windows` runs only on otherwise idle rounds: two invocations rather than eleven. Fired samples count invocations changing the graph, not candidates.
+///
+/// Counted repair visits in one invocation, with `N` function/continuation pairs:
+///
+/// | Pairs | Arena nodes | Baseline visits | Candidate visits |
+/// | ---: | ---: | ---: | ---: |
+/// | 64 | 131 | 33,536 | 262 |
+/// | 128 | 259 | 132,608 | 518 |
+/// | 256 | 515 | 527,360 | 1,030 |
+///
+/// The baseline repairs `4N` times and the candidate twice. Across TOML's eleven optimizer rounds, repair visits fall from 67,639,772 to 139,185; the totals include live nodes awaiting pruning. The counts establish the repair bound independently of the timed improvement and exclude the solver and read-only boundary scans.
 
 #[test]
 #[ignore = "measurement, mixed: reports what each pass of the fixpoint costs rather than asserting"]
