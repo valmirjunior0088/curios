@@ -343,3 +343,112 @@ page
         (escape_sequence)))
     (path
       (identifier))))
+
+================================================================================
+Contextual words and sorts remain names in tuple fields
+================================================================================
+
+let row = (test = 1, concept = 2, satisfy = 3, and = 4, Type = 5, Prop = 6, Sort = 7);
+row
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (tuple
+        (tuple_field
+          (field_definition
+            (identifier)
+            (number)))
+        (tuple_field
+          (field_definition
+            (identifier)
+            (number)))
+        (tuple_field
+          (field_definition
+            (identifier)
+            (number)))
+        (tuple_field
+          (field_definition
+            (identifier)
+            (number)))
+        (tuple_field
+          (field_definition
+            (identifier)
+            (number)))
+        (tuple_field
+          (field_definition
+            (identifier)
+            (number)))
+        (tuple_field
+          (field_definition
+            (identifier)
+            (number)))))
+    (path
+      (identifier))))
+
+================================================================================
+The contextual word concept can head a final call
+================================================================================
+
+concept(1)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (call
+    (path
+      (identifier))
+    (arguments
+      (argument
+        (number)))))
+
+================================================================================
+The contextual word satisfy can head a final call
+================================================================================
+
+satisfy(1)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (call
+    (path
+      (identifier))
+    (arguments
+      (argument
+        (number)))))
+
+================================================================================
+The contextual word and can head a final call
+================================================================================
+
+and(1)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (call
+    (path
+      (identifier))
+    (arguments
+      (argument
+        (number)))))
+
+================================================================================
+The contextual word test can head a final call
+================================================================================
+
+test(1)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (call
+    (path
+      (identifier))
+    (arguments
+      (argument
+        (number)))))

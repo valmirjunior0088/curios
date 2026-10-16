@@ -179,7 +179,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -283,7 +283,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -463,7 +463,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         }
       ]
@@ -533,7 +533,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -655,7 +655,7 @@
               "name": "name",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -811,7 +811,7 @@
               "name": "name",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -850,7 +850,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -1011,7 +1011,7 @@
               "name": "name",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -1116,7 +1116,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -1260,7 +1260,7 @@
               "name": "name",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -1293,7 +1293,7 @@
               "name": "name",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -1381,7 +1381,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -1664,7 +1664,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -1789,7 +1789,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -1843,7 +1843,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -1884,7 +1884,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -2130,7 +2130,7 @@
               "name": "name",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -3125,15 +3125,6 @@
           "name": "path"
         },
         {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "keyword_head_path"
-          },
-          "named": true,
-          "value": "path"
-        },
-        {
           "type": "SYMBOL",
           "name": "sort"
         },
@@ -3247,51 +3238,9 @@
             },
             {
               "type": "SYMBOL",
-              "name": "identifier"
+              "name": "_path_head"
             }
           ]
-        },
-        {
-          "type": "REPEAT",
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "IMMEDIATE_TOKEN",
-                "content": {
-                  "type": "STRING",
-                  "value": "/"
-                }
-              },
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "IMMEDIATE_TOKEN",
-                  "content": {
-                    "type": "PATTERN",
-                    "value": "[\\p{Alphabetic}\\p{N}_]+",
-                    "flags": "u"
-                  }
-                },
-                "named": true,
-                "value": "identifier"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    "keyword_head_path": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "STRING",
-            "value": "test"
-          },
-          "named": true,
-          "value": "identifier"
         },
         {
           "type": "REPEAT",
@@ -4052,7 +4001,7 @@
       "members": [
         {
           "type": "SYMBOL",
-          "name": "identifier"
+          "name": "_name"
         },
         {
           "type": "SYMBOL",
@@ -4149,7 +4098,7 @@
                   "name": "name",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "identifier"
+                    "name": "_name"
                   }
                 },
                 {
@@ -4181,7 +4130,7 @@
               "name": "name",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -4333,7 +4282,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "identifier"
+          "name": "_name"
         }
       ]
     },
@@ -4345,7 +4294,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -4437,7 +4386,7 @@
           "name": "predecessor",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_name"
           }
         },
         {
@@ -4503,7 +4452,7 @@
               "name": "head",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -4519,7 +4468,7 @@
               "name": "tail",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -4596,7 +4545,7 @@
               "name": "head",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -4612,7 +4561,7 @@
               "name": "tail",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -4716,7 +4665,7 @@
                   "name": "name",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "identifier"
+                    "name": "_name"
                   }
                 },
                 {
@@ -4748,7 +4697,7 @@
               "name": "name",
               "content": {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_name"
               }
             },
             {
@@ -4855,6 +4804,87 @@
         }
       ]
     },
+    "_name": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_path_head"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "Type"
+          },
+          "named": true,
+          "value": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "Prop"
+          },
+          "named": true,
+          "value": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "Sort"
+          },
+          "named": true,
+          "value": "identifier"
+        }
+      ]
+    },
+    "_path_head": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "concept"
+          },
+          "named": true,
+          "value": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "satisfy"
+          },
+          "named": true,
+          "value": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "and"
+          },
+          "named": true,
+          "value": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "test"
+          },
+          "named": true,
+          "value": "identifier"
+        }
+      ]
+    },
     "identifier": {
       "type": "PATTERN",
       "value": "[\\p{Alphabetic}\\p{N}_]+",
@@ -4901,30 +4931,33 @@
       "tuple_field"
     ],
     [
-      "field_definition",
-      "path"
-    ],
-    [
-      "path",
-      "_pattern"
-    ],
-    [
       "function_type_parameter",
       "_pattern"
-    ],
-    [
-      "field_declaration",
-      "path"
     ],
     [
       "let_member",
       "_pattern"
     ],
     [
+      "satisfy_item",
+      "_path_head"
+    ],
+    [
+      "sort",
+      "_name"
+    ],
+    [
+      "path",
+      "_name"
+    ],
+    [
       "struct_item"
     ],
     [
       "concept_item"
+    ],
+    [
+      "satisfy_item"
     ],
     [
       "_atom",

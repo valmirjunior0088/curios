@@ -4,6 +4,8 @@
 
 // An identifier is a nonempty run of Unicode alphanumerics and `_` (`curios_utilities::is_identifier`).
 const IDENTIFIER = /[\p{Alphabetic}\p{N}_]+/u;
+const CONTEXTUAL_WORDS = ["concept", "satisfy", "and", "test"];
+const SORT_WORDS = ["Type", "Prop", "Sort"];
 
 // Higher binds tighter, every level left-associative (`curios_text::op_precedence`).
 const PRECEDENCE = {
@@ -35,14 +37,17 @@ module.exports = grammar({
     [$.lambda_parameter, $.pattern_field],
     [$.function_type_parameter, $.parenthesized],
     [$.function_type_parameter, $.tuple_field],
-    [$.field_definition, $.path],
-    [$.path, $._pattern],
     [$.function_type_parameter, $._pattern],
-    [$.field_declaration, $.path],
     [$.let_member, $._pattern],
+    // `satisfy(...)` starts either a witness telescope or a contextual function call; what follows the parentheses decides.
+    [$.satisfy_item, $._path_head],
+    // A sort word in parentheses may be a term or a lambda binder; the closing suffix decides.
+    [$.sort, $._name],
+    [$.path, $._name],
     // After a member, `pub` may begin the next item or the group's next `and` member; the parser forks and the second token decides.
     [$.struct_item],
     [$.concept_item],
+    [$.satisfy_item],
     [$._atom, $.struct_literal],
   ],
 
@@ -83,7 +88,7 @@ module.exports = grammar({
         ),
       ),
 
-    let_member: ($) => seq(field("name", $.identifier), $._signature),
+    let_member: ($) => seq(field("name", $._name), $._signature),
 
     // `(params) -> type = body` or `: type = body`.
     _signature: ($) =>
@@ -102,7 +107,7 @@ module.exports = grammar({
       seq(
         optional("pub"),
         "mod",
-        field("name", $.identifier),
+        field("name", $._name),
         choice(";", seq(repeat($._item), "end")),
       ),
 
@@ -121,7 +126,7 @@ module.exports = grammar({
     use_glob: (_) => "/*",
 
     use_entry: ($) =>
-      seq(optional(choice("mod", "let")), field("name", $.identifier)),
+      seq(optional(choice("mod", "let")), field("name", $._name)),
 
     induct_item: ($) =>
       seq(
@@ -134,7 +139,7 @@ module.exports = grammar({
 
     induct_body: ($) =>
       seq(
-        field("name", $.identifier),
+        field("name", $._name),
         optional(field("parameters", $.type_parameters)),
         ":",
         $._arity,
@@ -146,12 +151,7 @@ module.exports = grammar({
     // A named parameter, plain or `@`, or a `use` premise, which has no name.
     type_parameter: ($) =>
       choice(
-        seq(
-          optional("@"),
-          field("name", $.identifier),
-          ":",
-          field("type", $._term),
-        ),
+        seq(optional("@"), field("name", $._name), ":", field("type", $._term)),
         seq("use", field("type", $._term)),
       ),
 
@@ -164,14 +164,14 @@ module.exports = grammar({
 
     index: ($) =>
       choice(
-        seq(field("name", $.identifier), ":", field("type", $._term)),
+        seq(field("name", $._name), ":", field("type", $._term)),
         field("type", $._term),
       ),
 
     constructor: ($) =>
       seq(
         "|",
-        field("name", $.identifier),
+        field("name", $._name),
         "(",
         commaList($.payload),
         ")",
@@ -181,12 +181,7 @@ module.exports = grammar({
     // Plain or `@`, named or the type alone.
     payload: ($) =>
       choice(
-        seq(
-          optional("@"),
-          field("name", $.identifier),
-          ":",
-          field("type", $._term),
-        ),
+        seq(optional("@"), field("name", $._name), ":", field("type", $._term)),
         seq(optional("@"), field("type", $._term)),
       ),
 
@@ -201,7 +196,7 @@ module.exports = grammar({
 
     struct_member: ($) =>
       seq(
-        field("name", $.identifier),
+        field("name", $._name),
         optional(field("parameters", $.type_parameters)),
         ":",
         optional("pub"),
@@ -216,12 +211,12 @@ module.exports = grammar({
     field_declaration: ($) =>
       choice(
         seq(
-          field("name", $.identifier),
+          field("name", $._name),
           field("parameters", $.function_type_parameters),
           "->",
           field("type", $._term),
         ),
-        seq(field("name", $.identifier), ":", field("type", $._term)),
+        seq(field("name", $._name), ":", field("type", $._term)),
         field("type", $._term),
       ),
 
@@ -236,7 +231,7 @@ module.exports = grammar({
 
     concept_member: ($) =>
       seq(
-        field("name", $.identifier),
+        field("name", $._name),
         optional(field("parameters", $.type_parameters)),
         ":",
         optional("pub"),
@@ -266,7 +261,7 @@ module.exports = grammar({
     // `label = value` or the definition sugar `label(params) = value`.
     field_definition: ($) =>
       seq(
-        field("name", $.identifier),
+        field("name", $._name),
         optional(field("parameters", $.sugar_parameters)),
         "=",
         field("value", $._term),
@@ -277,7 +272,7 @@ module.exports = grammar({
     sugar_parameter: ($) =>
       seq(
         optional(choice("@", "use")),
-        field("name", $.identifier),
+        field("name", $._name),
         optional(seq(":", field("type", $._term))),
       ),
 
@@ -286,7 +281,7 @@ module.exports = grammar({
       seq(
         optional("pub"),
         "foreign",
-        field("name", $.identifier),
+        field("name", $._name),
         field("operands", $.function_type_parameters),
         "->",
         field("result", $._term),
@@ -295,13 +290,7 @@ module.exports = grammar({
 
     // A test declaration: `test name = body;`. Never `pub`, and never parameterized — a claim about every instantiation is a `let` whose type states it, so there is no telescope here to hold.
     test_item: ($) =>
-      seq(
-        "test",
-        field("name", $.identifier),
-        "=",
-        field("body", $._term),
-        ";",
-      ),
+      seq("test", field("name", $._name), "=", field("body", $._term), ";"),
 
     // ---- Telescopes ----
 
@@ -325,12 +314,7 @@ module.exports = grammar({
     function_type_parameter: ($) =>
       choice(
         seq("use", field("type", $._term)),
-        seq(
-          optional("@"),
-          field("name", $.identifier),
-          ":",
-          field("type", $._term),
-        ),
+        seq(optional("@"), field("name", $._name), ":", field("type", $._term)),
         seq(optional("@"), field("type", $._term)),
       ),
 
@@ -478,7 +462,6 @@ module.exports = grammar({
         $.goal,
         $.struct_literal,
         $.path,
-        alias($.keyword_head_path, $.path),
         $.sort,
         $.boolean,
         $.number,
@@ -495,7 +478,7 @@ module.exports = grammar({
 
     goal: (_) => "?",
 
-    sort: (_) => choice("Type", "Prop", "Sort"),
+    sort: (_) => choice(...SORT_WORDS),
 
     boolean: (_) => choice("true", "false"),
 
@@ -504,20 +487,8 @@ module.exports = grammar({
       seq(
         choice(
           seq("/", alias(token.immediate(IDENTIFIER), $.identifier)),
-          $.identifier,
+          $._path_head,
         ),
-        repeat(
-          seq(
-            token.immediate("/"),
-            alias(token.immediate(IDENTIFIER), $.identifier),
-          ),
-        ),
-      ),
-
-    // A term-position path whose head is the lexed `test` keyword, shown as the path it spells. Keyword extraction lexes `test` over `identifier` wherever an item may start, so a term spelled `test` there — `let x: Nat = 1; test(1)` — would strand the keyword in an ERROR node without this alternative. Term position only: binder and pattern paths never compete with an item start, and the compiler's parser backtracks out of the same overlap by itself.
-    keyword_head_path: ($) =>
-      seq(
-        alias("test", $.identifier),
         repeat(
           seq(
             token.immediate("/"),
@@ -631,7 +602,7 @@ module.exports = grammar({
 
     _pattern: ($) =>
       choice(
-        $.identifier,
+        $._name,
         $.tuple_pattern,
         $.struct_pattern,
         $.parenthesized_pattern,
@@ -642,13 +613,13 @@ module.exports = grammar({
         "(",
         choice(
           seq($.pattern_field, ",", commaList($.pattern_field)),
-          seq(field("name", $.identifier), "=", $._pattern),
+          seq(field("name", $._name), "=", $._pattern),
         ),
         ")",
       ),
 
     pattern_field: ($) =>
-      choice(seq(field("name", $.identifier), "=", $._pattern), $._pattern),
+      choice(seq(field("name", $._name), "=", $._pattern), $._pattern),
 
     struct_pattern: ($) =>
       seq(field("type", $.path), "{", commaList($.pattern_field), "}"),
@@ -669,27 +640,17 @@ module.exports = grammar({
         $.tuple_match_pattern,
         $.struct_match_pattern,
         $.parenthesized_match_pattern,
-        $.identifier,
+        $._name,
       ),
 
     constructor_pattern: ($) =>
-      seq(
-        field("name", $.identifier),
-        "(",
-        commaList($.constructor_argument),
-        ")",
-      ),
+      seq(field("name", $._name), "(", commaList($.constructor_argument), ")"),
 
     constructor_argument: ($) => seq(optional("@"), $._match_pattern),
 
     // `pred + 1`, with an optional `; hypothesis` receiving the fold result.
     successor_pattern: ($) =>
-      seq(
-        field("predecessor", $.identifier),
-        "+",
-        $.number,
-        optional($.hypothesis),
-      ),
+      seq(field("predecessor", $._name), "+", $.number, optional($.hypothesis)),
 
     hypothesis: ($) => seq(";", $._pattern),
 
@@ -698,10 +659,10 @@ module.exports = grammar({
         seq("[", "]"),
         seq(
           "[",
-          field("head", $.identifier),
+          field("head", $._name),
           ",",
           "..",
-          field("tail", $.identifier),
+          field("tail", $._name),
           "]",
           optional($.hypothesis),
         ),
@@ -712,10 +673,10 @@ module.exports = grammar({
         seq(field("grain", choice("b[", "x[")), "]"),
         seq(
           field("grain", choice("b[", "x[")),
-          field("head", $.identifier),
+          field("head", $._name),
           ",",
           "..",
-          field("tail", $.identifier),
+          field("tail", $._name),
           "]",
           optional($.hypothesis),
         ),
@@ -726,14 +687,14 @@ module.exports = grammar({
         "(",
         choice(
           seq($.match_pattern_field, ",", commaList($.match_pattern_field)),
-          seq(field("name", $.identifier), "=", $._match_pattern),
+          seq(field("name", $._name), "=", $._match_pattern),
         ),
         ")",
       ),
 
     match_pattern_field: ($) =>
       choice(
-        seq(field("name", $.identifier), "=", $._match_pattern),
+        seq(field("name", $._name), "=", $._match_pattern),
         $._match_pattern,
       ),
 
@@ -741,6 +702,19 @@ module.exports = grammar({
       seq(field("type", $.path), "{", commaList($.match_pattern_field), "}"),
 
     parenthesized_match_pattern: ($) => seq("(", $._match_pattern, ")"),
+
+    // Keyword extraction still takes a keyword token when an identifier is also viable. Alias it back in name positions; sorts remain sorts at a term's head.
+    _name: ($) =>
+      choice(
+        $._path_head,
+        ...SORT_WORDS.map((word) => alias(word, $.identifier)),
+      ),
+
+    _path_head: ($) =>
+      choice(
+        $.identifier,
+        ...CONTEXTUAL_WORDS.map((word) => alias(word, $.identifier)),
+      ),
 
     identifier: (_) => IDENTIFIER,
   },
