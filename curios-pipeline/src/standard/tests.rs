@@ -1074,18 +1074,18 @@ const REFUSED: [&str; 0] = [];
 
 /// The `let`s of the library whose printed form elaborates and is not proved to be the `let`.
 const UNPROVED: [&str; 1] = [
-    // Its printed form is generalized over nine universe levels the `let` holds at zero, and the proof asks that their maximum be zero, which elaboration does not solve for.
+    // Its printed form is generalized over nine universe levels the `let` holds at zero, and the proof asks that their maximum be zero, which elaboration does not solve for: `documentation/roadmap/tools/100-a-reports-term-elaborates-back-to-the-term-shown.md`.
     "/std/Command/spawn",
 ];
 
-/// The `let`s of the library whose printed form or whose proof elaboration accepts and the kernel refuses, each a finding of `documentation/roadmap/soundness/000-findings.md`.
+/// The `let`s of the library whose printed form or whose proof elaboration accepts and the kernel refuses, each named where its cause is filed.
 const UNCERTIFIED: [&str; 15] = [
-    // Each runs an effect: the kernel holds no two such definitions to be one, whatever they unfold to.
+    // Each runs an effect: the kernel holds no two such definitions to be one, whatever they unfold to (`documentation/roadmap/soundness/000-findings.md`).
     "/std/Command/Pipe/close",
     "/std/File/close",
-    // Its printed body holds a bound's proof the kernel refuses: a comparison it decides under one order of its atoms and not under another.
+    // Its printed body holds a bound's proof the kernel refuses: a comparison it decides under one order of its atoms and not under another (`documentation/roadmap/arithmetic/100-an-atom-is-ranked-by-where-its-binder-stands.md`).
     "/std/Flt/of_decimal_in",
-    // The kernel's conversion stops short of elaboration's between the body and its printed form.
+    // The kernel's conversion stops short of elaboration's between the body and its printed form (`documentation/roadmap/arithmetic/101-a-classing-reads-an-atom-as-its-reader-meets-it.md`).
     "/std/Flt/signals/scaled_prod_diff",
     "/std/Flt/signals/scaled_prod_sum",
     "/std/Flt/significant",
