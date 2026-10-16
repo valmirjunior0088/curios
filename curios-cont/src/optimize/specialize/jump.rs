@@ -191,7 +191,11 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
         if carriers.is_empty() {
             continue;
         }
-        let plan = CopyPlan::continuation(module, candidate.target);
+        let Some(plan) =
+            CopyPlan::continuation_with_limit(module, candidate.target, candidate.extent.len())
+        else {
+            continue;
+        };
         if plan.nodes != candidate.extent {
             continue;
         }

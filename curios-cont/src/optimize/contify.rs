@@ -105,10 +105,9 @@ impl LoopEntryPlan {
         if internal.is_empty() || external.len() < 2 || !tail || reentered {
             return None;
         }
-        let copy = CopyPlan::functions(module, BTreeSet::from([callee]));
-        if copy.nodes.len() + CONTIFICATION_NODE_OVERHEAD > SCC_CLONE_NODE_LIMIT
-            || external.iter().any(|site| copy.nodes.contains(site))
-        {
+        let body_limit = SCC_CLONE_NODE_LIMIT.checked_sub(CONTIFICATION_NODE_OVERHEAD)?;
+        let copy = CopyPlan::functions_with_limit(module, BTreeSet::from([callee]), body_limit)?;
+        if external.iter().any(|site| copy.nodes.contains(site)) {
             return None;
         }
         Some(Self {

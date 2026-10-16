@@ -4,6 +4,14 @@ The Curios continuation-passing IR and its optimizer: `curios_ersd::lower_to_con
 
 ## Design
 
+### A copy is planned within its allowance
+
+**Decision.** A budgeted copy selects its node allowance before requesting its complete lexical extent, including nested definitions. Planning stops at the first excess distinct node and returns a complete executable plan only where the extent fits. Binding-group members are enumerated when their node is visited, so the node allowance does not bound that metadata work. A plan reads the current graph and is consumed without an intervening rewrite; specialization's final revalidation remains an exact comparison with its admitted extent. Refusal mints no identities and spends no expansion allowance.
+
+**Rationale.** A callee refused for its size should not be traversed in full at every call site. The same bounded planner supplies admission and execution, so a successful copy retains its extent and identity allocation order. Fresh planning also accounts for a callee whose internal call was inlined earlier in the same sweep.
+
+**Rejected.** A separate counting walk before copying, which walks accepted bodies twice and separates admission from execution; retaining executable plans by callee across rewrites, which requires invalidation; and lowering allowances to reduce planning cost, which changes optimization policy.
+
 ### A loop copy finishes the contification it admits
 
 **Decision.** A loop copied for an additional caller is admitted over its complete lexical extent, including nested definitions and the contification scaffolding, and is contified at that caller in the same rewrite. A nested function that calls the loop would give the copy another external entry, so that extent is declined. Every copying transformation uses one plan for admission and execution; its own parameter and backedge mapping remains its own.

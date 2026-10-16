@@ -148,7 +148,7 @@ pub(crate) fn clone_node(node: &Node, map: &Mapping<'_>) -> Node {
 ///
 /// Admission reads the same nodes execution copies, closed transitively over nested definitions. A nested body may read values bound in its enclosing body, so both must be renamed together. Explicit roots remain distinct from nested functions: a function root's recursive calls follow its copy, a continuation root's backedges retain the original target, and the inliner substitutes a function root's parameters rather than minting them.
 ///
-/// Planning reads the module without minting identities. A plan is consumed before any intervening graph mutation; it is not an analysis kept across rewrites. Continuations and owned values are derived from these nodes and roots by the executing transformation, in its existing allocation order.
+/// Planning reads the module without minting identities. A bounded request stops at the first excess distinct node and discards its partial extent; binding-group members are enumerated at their binding node, so their width is not bounded by the node allowance. A plan is consumed before any intervening graph mutation; it is not an analysis kept across rewrites. Continuations and owned values are derived from these nodes and roots by the executing transformation, in its existing allocation order.
 pub(crate) struct CopyPlan {
     functions: BTreeSet<FunctionId>,
     continuations: BTreeSet<ContinuationId>,
@@ -157,10 +157,12 @@ pub(crate) struct CopyPlan {
 }
 
 impl CopyPlan {
+    #[cfg(test)]
     pub(crate) fn functions(module: &Module, functions: BTreeSet<FunctionId>) -> Self {
         Self::new(module, functions, BTreeSet::new())
     }
 
+    #[cfg(test)]
     pub(crate) fn continuation(module: &Module, continuation: ContinuationId) -> Self {
         Self::new(module, BTreeSet::new(), BTreeSet::from([continuation]))
     }
@@ -187,6 +189,7 @@ impl CopyPlan {
         )
     }
 
+    #[cfg(test)]
     fn new(
         module: &Module,
         functions: BTreeSet<FunctionId>,

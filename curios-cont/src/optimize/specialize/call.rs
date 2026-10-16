@@ -170,7 +170,13 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBud
         if sites.is_empty() {
             continue;
         }
-        let plan = CopyPlan::functions(module, BTreeSet::from([candidate.callee]));
+        let Some(plan) = CopyPlan::functions_with_limit(
+            module,
+            BTreeSet::from([candidate.callee]),
+            candidate.extent.len(),
+        ) else {
+            continue;
+        };
         if plan.nodes != candidate.extent {
             continue;
         }

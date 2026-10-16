@@ -1,8 +1,8 @@
 # A copy is planned within its allowance
 
-## What is missing
+## What remains
 
-Loop-entry separation (`curios-cont/src/optimize/contify.rs`) constructs a complete `CopyPlan` before checking its copied-node allowance. Call and jump specialization still request an unlimited plan during final extent revalidation. Known-call inlining selects its allowance first and requests a fresh bounded plan before cloning arguments; its boundary and same-sweep tests hold the unchanged decisions.
+The bounded requests are in place for known-call inlining, loop-entry separation and call/jump specialization's final revalidation. Their contracts belong to `CopyPlan`'s rustdoc and the Cont README. The remaining work is the paired comparison below and the final workspace checks.
 
 The current pass timings belong to `curios`'s `tests::instrumented::fixpoint_pass_measurements`. They include analysis and execution, so they do not establish the fraction bounded planning removes. The next comparison separates those costs and counts rejected planning work.
 
@@ -16,10 +16,7 @@ The current pass timings belong to `curios`'s `tests::instrumented::fixpoint_pas
 
 ## Stages and checks
 
-The inliner tests pin inclusive boundaries for single-site, multiple-site and escaping callees, including nested extents, refusal without minting, and a callee enlarged earlier in a sweep. They pass against unchanged production behavior, whose revision is the measurement baseline. Existing planner and loop-separation tests hold their boundaries and atomicity.
-
-1. Bound loop planning and specialization revalidation, preserving the nested-entry guard and atomic copy-and-contify. Put contracts in rustdoc and the owning README. Check the affected pass and codegen tests.
-2. Verify counted work, consumer identity and default-release cost; complete workspace format, Clippy and tests, including the standard-library corpus. Retire this specification.
+Verify counted work, consumer identity and default-release cost; complete workspace format, Clippy and tests, including the standard-library corpus. Retire this specification. The last pre-production-change revision, `3afb81c44`, is the measurement baseline; its new boundary and same-sweep tests pass against the former implementation.
 
 ## Verification
 
