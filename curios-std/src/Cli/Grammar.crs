@@ -2,8 +2,8 @@ use /std/{Str, Char, Nat, Bool, List, Option, Result};
 use /std/Bool/{True, Holds};
 use /std/Cli/{Value};
 use /std/ops/{Eql};
-use /std/Cli/{SpecError};
-use /std/Cli/SpecError/{Certificate};
+use /std/Cli/{Error};
+use /std/Cli/Error/{Certificate};
 
 --- The names and help attached to one named argument.
 pub struct Named: pub Type {
@@ -238,14 +238,14 @@ pub struct Grammar(A: Type): pub Type {
 
 let certify_named(names: Named) -> Certificate(Holds(valid_named(names))) =
     match valid_long(names.long)
-    | false => Certificate/invalid(SpecError/invalid_long(names.long))
+    | false => Certificate/invalid(Error/invalid_long(names.long))
     | true =>
         match names.short
         | none() => Certificate/valid(True/qed())
         | some(c) =>
             match valid_short(names.short)
             | true => Certificate/valid(True/qed())
-            | false => Certificate/invalid(SpecError/invalid_short(c))
+            | false => Certificate/invalid(Error/invalid_short(c))
             end
         end
     end;
@@ -253,11 +253,11 @@ let certify_named(names: Named) -> Certificate(Holds(valid_named(names))) =
 let certify_positional(names: Positional) -> Certificate(Holds(valid_positional(names.name))) =
     match valid_positional(names.name)
     | true => Certificate/valid(True/qed())
-    | false => Certificate/invalid(SpecError/invalid_positional(names.name))
+    | false => Certificate/invalid(Error/invalid_positional(names.name))
     end;
 
-let overlaps(left: List(Alias), right: List(Alias)) -> SpecError =
-    SpecError/duplicate_options(
+let overlaps(left: List(Alias), right: List(Alias)) -> Error =
+    Error/duplicate_options(
         List/map(List/filter(left, (name) => List/contains(right, name)), alias_text));
 
 let certify(@A: Type, tree: Node(A)) -> Certificate(Sound(tree)) =
@@ -280,7 +280,7 @@ let certify(@A: Type, tree: Node(A)) -> Certificate(Sound(tree)) =
                 | false => Certificate/invalid(overlaps(aliases(left), aliases(right)))
                 | true =>
                     match ordered_positions(left, right)
-                    | false => Certificate/invalid(SpecError/positional_order())
+                    | false => Certificate/invalid(Error/positional_order())
                     | true => Certificate/valid((first, second, True/qed(), True/qed()))
                     end
                 end
@@ -301,10 +301,10 @@ let certify(@A: Type, tree: Node(A)) -> Certificate(Sound(tree)) =
                     | false =>
                         choose
                         | Bool/not(required_block(left) && required_block(right)) =>
-                            Certificate/invalid(SpecError/nonfixed_choice())
+                            Certificate/invalid(Error/nonfixed_choice())
                         | Bool/not(owns_input(left) && owns_input(right)) =>
-                            Certificate/invalid(SpecError/unselectable_choice())
-                        | _ => Certificate/invalid(SpecError/ambiguous_choice())
+                            Certificate/invalid(Error/unselectable_choice())
+                        | _ => Certificate/invalid(Error/ambiguous_choice())
                         end
                     end
                 end
@@ -316,7 +316,7 @@ let certify(@A: Type, tree: Node(A)) -> Certificate(Sound(tree)) =
         | valid(child) =>
             match required_block(inner)
             | true => Certificate/valid((child, True/qed()))
-            | false => Certificate/invalid(SpecError/nonfixed_optional())
+            | false => Certificate/invalid(Error/nonfixed_optional())
             end
         end
     | default(inner, _) =>
@@ -325,7 +325,7 @@ let certify(@A: Type, tree: Node(A)) -> Certificate(Sound(tree)) =
         | valid(child) =>
             match required_block(inner)
             | true => Certificate/valid((child, True/qed()))
-            | false => Certificate/invalid(SpecError/nonfixed_optional())
+            | false => Certificate/invalid(Error/nonfixed_optional())
             end
         end
     | repeat(inner) =>
@@ -334,13 +334,13 @@ let certify(@A: Type, tree: Node(A)) -> Certificate(Sound(tree)) =
         | valid(child) =>
             match named_leaf(inner)
             | true => Certificate/valid((child, True/qed()))
-            | false => Certificate/invalid(SpecError/repeated_group())
+            | false => Certificate/invalid(Error/repeated_group())
             end
         end
     end;
 
 --- Certify a dynamically constructed tree without changing it.
-pub let checked(@A: Type, tree: Node(A)) -> Result(SpecError, Grammar(A)) =
+pub let checked(@A: Type, tree: Node(A)) -> Result(Error, Grammar(A)) =
     match certify(tree)
     | valid(proof) => Result/success(Grammar { tree = tree, @sound = proof })
     | invalid(error) => Result/failure(error)

@@ -7,8 +7,8 @@ pub use Grammar/{let Grammar};
 pub mod Prepared;
 pub use Prepared/{let Prepared};
 
-pub mod SpecError;
-pub use SpecError/{let SpecError};
+pub mod Error;
+pub use Error/{let Error};
 
 pub mod record;
 pub use record/{let record};
@@ -22,7 +22,7 @@ pub mod interpret;
 pub use interpret/{let interpret};
 
 pub mod Declaration;
-pub use Declaration/{let Declaration, group, checked, declare, Sound, Declared};
+pub use Declaration/{let Declaration};
 
 --- How an argument's text is read into a value: the placeholder shown in help, and the reader.
 pub struct Value: pub Type {
@@ -208,7 +208,7 @@ pub let get(
 --- A transparent command tree whose evidence certifies every declaration before invocation processing.
 pub struct Cli: pub Type {
     tree: Declaration,
-    @sound: Sound(tree),
+    @sound: Declaration/Sound(tree),
 }
 
 --- Declare a command whose handler receives exactly the result of its certified grammar.
@@ -259,7 +259,7 @@ end
 
 --- The record adapter distinguishes specification errors from invocation outcomes.
 pub let Outcome(spec: List(Arg)) -> Type =
-    Result(SpecError, Reading(Values(spec)));
+    Result(Error, Reading(Values(spec)));
 
 pub let parse(spec: List(Arg), argv: List(Str), version: Option(Str)) -> Outcome(spec) =
     let grammar = record/checked_record(spec)!;
@@ -395,13 +395,10 @@ let fail_with(text: Str) -> Io({}) =
     proc/exit(2);
 
 --- Report a construction failure on standard error and exit 1 before invocation processing.
-pub let specification_error(error: SpecError) -> Io({}) =
+pub let specification_error(error: Error) -> Io({}) =
     let _ =
         print_err(
-            Str/flatten([
-                "error: invalid command specification: ",
-                SpecError/to_str(error),
-                "\n"]))!;
+            Str/flatten(["error: invalid command specification: ", Error/to_str(error), "\n"]))!;
     proc/exit(1);
 
 let drive(within: List(Str), cli: Cli, argv: List(Str)) -> Io({}) =

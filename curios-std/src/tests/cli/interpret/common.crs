@@ -10,7 +10,7 @@ pub let position(name: Str) -> Positional =
 
 pub let text(@A: Type, grammar: Grammar(A), argv: List(Str), show: (A) -> Str) -> Str =
     match Cli/interpret(Cli/Prepared/prepare(grammar), argv, Option/some("1.0"))
-    | failure(error) => Cli/SpecError/to_str(error)
+    | failure(error) => Cli/Error/to_str(error)
     | success(reading) =>
         match reading
         | parsed(value) => show(value)

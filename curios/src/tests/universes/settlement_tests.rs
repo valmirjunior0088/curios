@@ -401,7 +401,7 @@ fn the_command_line_parser_takes_a_spec_at_any_universe_instance() {
     };
 
     let described = program(
-        r#"let cli: Cli = Cli/declare(Cli/leaf("probe", "a probe", Option/none(), Cli/record(spec), (_) => Io/pure(())));
+        r#"let cli: Cli = Cli/Declaration/declare(Cli/leaf("probe", "a probe", Option/none(), Cli/record(spec), (_) => Io/pure(())));
         /std/print(help([], cli))"#,
     );
     let printed = String::from_utf8(run(&described)).expect("help prints text");

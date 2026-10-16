@@ -2,7 +2,7 @@
 use /std/{Cli, Str, Option, List, Test};
 
 let add: Cli =
-    Cli/declare(
+    Cli/Declaration/declare(
         Cli/leaf(
             "add",
             "Add a dependency",
@@ -11,7 +11,7 @@ let add: Cli =
             (_) => /std/print("never")));
 
 let remove: Cli =
-    Cli/declare(
+    Cli/Declaration/declare(
         Cli/leaf(
             "remove",
             "Remove a dependency",
@@ -20,8 +20,12 @@ let remove: Cli =
             (_) => /std/print("never")));
 
 let app: Cli =
-    Cli/declare(
-        Cli/group("deps", "Manage dependencies", Option/some("0.1.0"), [add.tree, remove.tree]));
+    Cli/Declaration/declare(
+        Cli/Declaration/group(
+            "deps",
+            "Manage dependencies",
+            Option/some("0.1.0"),
+            [add.tree, remove.tree]));
 
 let chose(argv: List(Str)) -> Str =
     match Cli/select(app, argv)

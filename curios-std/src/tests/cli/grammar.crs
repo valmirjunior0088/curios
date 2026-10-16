@@ -1,5 +1,5 @@
 use /std/{Cli, Str, Nat, List, Option, Test};
-use /std/Cli/{Grammar, SpecError};
+use /std/Cli/{Grammar, Error};
 use /std/Cli/Grammar/{Node, Named, Positional};
 
 let named(long: Str) -> Named =
@@ -17,7 +17,7 @@ let raw_position(name: Str) -> Node(Str) =
 let problem(@A: Type, tree: Node(A)) -> Str =
     match Grammar/checked(tree)
     | success(_) => "accepted"
-    | failure(error) => SpecError/to_str(error)
+    | failure(error) => Error/to_str(error)
     end;
 
 let fixed() -> Grammar({{}, Option(Nat)}) =
@@ -103,7 +103,7 @@ test a_dynamic_record_reports_its_duplicate_field =
     let duplicate = [Cli/flag("same", ""), Cli/flag("same", "")];
     match Cli/record/checked_record(duplicate)
     | success(_) => Test/fail("the duplicate was accepted")
-    | failure(error) => Test/equal(SpecError/to_str(error), "duplicate record field \"same\"")
+    | failure(error) => Test/equal(Error/to_str(error), "duplicate record field \"same\"")
     end;
 
 test a_positional_record_field_cannot_silently_drop_a_short_alias =
@@ -111,5 +111,5 @@ test a_positional_record_field_cannot_silently_drop_a_short_alias =
     match Cli/record/checked_record([field])
     | success(_) => Test/fail("the positional alias was accepted")
     | failure(error) =>
-        Test/equal(SpecError/to_str(error), "positional \"path\" cannot own short option -p")
+        Test/equal(Error/to_str(error), "positional \"path\" cannot own short option -p")
     end;

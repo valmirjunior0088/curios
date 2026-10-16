@@ -23,11 +23,11 @@ fn refused(declaration: &str, args: &[&str], expected: &str) {
 
 const INVALID_SIBLING: &str = r#"
     let arguments: List(Cli/Arg) = [Cli/flag("same", ""), Cli/flag("same", "")];
-    let build() -> Result(Cli/SpecError, Cli) =
+    let build() -> Result(Cli/Error, Cli) =
         let grammar = Cli/record/checked_record(arguments)!;
         let good = Cli/leaf("good", "", Option/none(), Grammar/pure(()), (_) => print("ran"));
         let bad = Cli/leaf("bad", "", Option/none(), grammar, (_) => print("bad ran"));
-        Cli/checked(Cli/group("app", "", Option/some("1"), [good, bad]));
+        Cli/Declaration/checked(Cli/Declaration/group("app", "", Option/some("1"), [good, bad]));
 "#;
 
 #[test]
@@ -67,7 +67,7 @@ fn a_duplicate_subcommand_is_a_specification_error() {
     refused(
         r#"
         let child = Cli/leaf("same", "", Option/none(), Grammar/pure(()), (_) => print("ran"));
-        let build() -> Result(Cli/SpecError, Cli) = Cli/checked(Cli/group("app", "", Option/none(), [child, child]));
+        let build() -> Result(Cli/Error, Cli) = Cli/Declaration/checked(Cli/Declaration/group("app", "", Option/none(), [child, child]));
     "#,
         &["app", "--help"],
         "duplicate subcommand",
@@ -79,7 +79,7 @@ fn an_invalid_command_name_is_a_specification_error() {
     refused(
         r#"
         let app = Cli/leaf("bad name", "", Option/none(), Grammar/pure(()), (_) => print("ran"));
-        let build() -> Result(Cli/SpecError, Cli) = Cli/checked(app);
+        let build() -> Result(Cli/Error, Cli) = Cli/Declaration/checked(app);
     "#,
         &["app", "--help"],
         "invalid command name",
@@ -91,7 +91,7 @@ fn a_long_help_collision_is_a_specification_error() {
     refused(
         r#"
         let app = Cli/leaf("app", "", Option/none(), Grammar/switch(Named { long = "help", short = Option/none(), help = "" }), (_) => print("ran"));
-        let build() -> Result(Cli/SpecError, Cli) = Cli/checked(app);
+        let build() -> Result(Cli/Error, Cli) = Cli/Declaration/checked(app);
     "#,
         &["app", "--help"],
         "collides with an active built-in",
@@ -103,7 +103,7 @@ fn a_short_help_collision_is_a_specification_error() {
     refused(
         r#"
         let app = Cli/leaf("app", "", Option/none(), Grammar/switch(Named { long = "other", short = Option/some('h'), help = "" }), (_) => print("ran"));
-        let build() -> Result(Cli/SpecError, Cli) = Cli/checked(app);
+        let build() -> Result(Cli/Error, Cli) = Cli/Declaration/checked(app);
     "#,
         &["app", "--help"],
         "collides with an active built-in",
@@ -115,7 +115,7 @@ fn an_active_version_collision_is_a_specification_error() {
     refused(
         r#"
         let app = Cli/leaf("app", "", Option/some("1"), Grammar/switch(Named { long = "version", short = Option/none(), help = "" }), (_) => print("ran"));
-        let build() -> Result(Cli/SpecError, Cli) = Cli/checked(app);
+        let build() -> Result(Cli/Error, Cli) = Cli/Declaration/checked(app);
     "#,
         &["app", "--help"],
         "collides with an active built-in",
@@ -145,8 +145,8 @@ fn an_invalid_nested_sibling_is_rejected_when_the_root_is_constructed() {
     let declaration = r#"
         let good = Cli/leaf("good", "", Option/none(), Grammar/pure(()), (_) => print("ran"));
         let bad = Cli/leaf("bad name", "", Option/none(), Grammar/pure(()), (_) => print("bad ran"));
-        let nested = Cli/group("nested", "", Option/none(), [bad]);
-        let build() -> Result(Cli/SpecError, Cli) = Cli/checked(Cli/group("app", "", Option/none(), [good, nested]));
+        let nested = Cli/Declaration/group("nested", "", Option/none(), [bad]);
+        let build() -> Result(Cli/Error, Cli) = Cli/Declaration/checked(Cli/Declaration/group("app", "", Option/none(), [good, nested]));
     "#;
     for args in [vec!["app", "good"], vec!["app", "--help"]] {
         refused(
@@ -162,7 +162,7 @@ fn builtin_collisions_in_unselected_siblings_are_rejected_during_construction() 
     let declaration = r#"
         let good = Cli/leaf("good", "", Option/none(), Grammar/pure(()), (_) => print("ran"));
         let bad = Cli/leaf("bad", "", Option/none(), Grammar/switch(Named { long = "help", short = Option/none(), help = "" }), (_) => print("bad ran"));
-        let build() -> Result(Cli/SpecError, Cli) = Cli/checked(Cli/group("app", "", Option/none(), [good, bad]));
+        let build() -> Result(Cli/Error, Cli) = Cli/Declaration/checked(Cli/Declaration/group("app", "", Option/none(), [good, bad]));
     "#;
     for args in [vec!["app", "good"], vec!["app", "--help"]] {
         refused(

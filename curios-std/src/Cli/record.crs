@@ -3,7 +3,7 @@ use /std/Bool/{Holds};
 use /std/Cli/{Arg, Kind, Carrier, Values};
 use /std/Cli/{Grammar};
 use /std/Cli/Grammar/{Node, Named, Positional, Multiplicity};
-use /std/Cli/{SpecError};
+use /std/Cli/{Error};
 
 pub let argument_tree(a: Arg) -> Node(Carrier(a)) =
     let named = Named { long = a.long, short = a.short, help = a.help };
@@ -57,19 +57,19 @@ pub let valid_fields(args: List(Arg)) -> Bool =
                     && (allows_short(a.kind)
                         || match a.short | none() => true | some(_) => false end));
 
-let check_fields(args: List(Arg)) -> Result(SpecError, {}) =
+let check_fields(args: List(Arg)) -> Result(Error, {}) =
     match args
     | [] => Result/success(())
     | [a, ..rest] =>
         match List/contains(List/map(rest, (b) => b.long), a.long)
-        | true => Result/failure(SpecError/duplicate_field(a.long))
+        | true => Result/failure(Error/duplicate_field(a.long))
         | false =>
             match allows_short(a.kind)
             | true => check_fields(rest)
             | false =>
                 match a.short
                 | none() => check_fields(rest)
-                | some(c) => Result/failure(SpecError/positional_alias(a.long, c))
+                | some(c) => Result/failure(Error/positional_alias(a.long, c))
                 end
             end
         end
@@ -84,6 +84,6 @@ pub let record(
     Grammar/declare(@Values(args), record_tree(args), @valid);
 
 --- Validate dynamic record metadata and return the same certified, typed record grammar.
-pub let checked_record(args: List(Arg)) -> Result(SpecError, Grammar(Values(args))) =
+pub let checked_record(args: List(Arg)) -> Result(Error, Grammar(Values(args))) =
     let _ = check_fields(args)!;
     Grammar/checked(record_tree(args));

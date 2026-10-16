@@ -2,7 +2,7 @@
 use /std/{Cli, Str, Option, Test};
 
 let serve: Cli =
-    Cli/declare(
+    Cli/Declaration/declare(
         Cli/leaf(
             "serve",
             "Serve a directory over HTTP",
@@ -34,7 +34,7 @@ test a_refusal_names_the_offender_and_points_at_help =
 -- A command declaring no options gets no `[OPTIONS]`, and a `rest` entry is bracketed to say it collects rather than requires.
 test the_usage_line_says_only_what_the_specification_declares =
     let bare: Cli =
-        Cli/declare(
+        Cli/Declaration/declare(
             Cli/leaf(
                 "cat",
                 "Concatenate",

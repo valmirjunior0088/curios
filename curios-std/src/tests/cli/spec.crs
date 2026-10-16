@@ -34,7 +34,7 @@ test get_reads_each_carrier_at_the_type_its_entry_decides =
         Test/equal(Cli/get(sample, "root"), "/srv")]);
 
 let serve: Cli =
-    Cli/declare(
+    Cli/Declaration/declare(
         Cli/leaf(
             "serve",
             "Serve a directory over HTTP",

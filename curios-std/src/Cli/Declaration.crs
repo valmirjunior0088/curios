@@ -1,7 +1,7 @@
 use /std/{Str, List, Option, Io, Result, Bool};
 use /std/Bool/{Holds, True};
-use /std/Cli/{Grammar, Prepared, SpecError, interpret};
-use /std/Cli/SpecError/{Certificate};
+use /std/Cli/{Grammar, Prepared, Error, interpret};
+use /std/Cli/Error/{Certificate};
 
 --- A complete command declaration, before its names and built-in compatibility are certified.
 pub induct Declaration: pub Type
@@ -47,7 +47,7 @@ pub and ChildrenSound(children: List(Declaration)) -> Prop =
 
 let certify_name(value: Str) -> Certificate(Holds(Grammar/valid_long(value))) =
     match Grammar/valid_long(value)
-    | false => Certificate/invalid(SpecError/invalid_command(value))
+    | false => Certificate/invalid(Error/invalid_command(value))
     | true => Certificate/valid(True/qed())
     end;
 
@@ -75,14 +75,14 @@ let certify(tree: Declaration) -> Certificate(Sound(tree)) =
         end;
     match inspect()
     | valid(held) => Certificate/valid(held)
-    | invalid(error) => Certificate/invalid(SpecError/context(name(tree), error))
+    | invalid(error) => Certificate/invalid(Error/context(name(tree), error))
     end
 and certify_children(children: List(Declaration)) -> Certificate(ChildrenSound(children)) =
     match children
     | [] => Certificate/valid(True/qed())
     | [child, ..more] =>
         match Bool/not(List/any(more, (other) => name(child) == name(other)))
-        | false => Certificate/invalid(SpecError/duplicate_command(name(child)))
+        | false => Certificate/invalid(Error/duplicate_command(name(child)))
         | true =>
             match certify(child)
             | invalid(error) => Certificate/invalid(error)
@@ -96,7 +96,7 @@ and certify_children(children: List(Declaration)) -> Certificate(ChildrenSound(c
     end;
 
 --- Certify this exact declaration, including every unselected sibling.
-pub let checked(tree: Declaration) -> Result(SpecError, /std/Cli) =
+pub let checked(tree: Declaration) -> Result(Error, /std/Cli) =
     match certify(tree)
     | valid(held) => Result/success(/std/Cli { tree = tree, @sound = held })
     | invalid(error) => Result/failure(error)

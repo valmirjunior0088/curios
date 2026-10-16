@@ -15,7 +15,7 @@ fn a_leaf_handler_receives_the_selected_sum_variant() {
             Grammar/map(Grammar/flag(Named { long = "mock", short = Option/none(), help = "Mock" }), (_) => Mode/mock()));
         let app = Cli/leaf("app", "", Option/none(), grammar,
             (mode) => print(match mode | path(value) => value | mock() => "mock" end));
-        Cli/main(Cli/declare(app))
+        Cli/main(Cli/Declaration/declare(app))
     "#).expect("the sum grammar compiles");
     for (args, status, output) in [
         (vec!["app", "file.crs"], 0, "file.crs"),
@@ -42,7 +42,7 @@ fn help_and_version_owned_as_values_reach_the_handler() {
         use /std/Cli/{Grammar};
         use /std/Cli/Grammar/{Named};
         let grammar = Grammar/option(Named { long = "value", short = Option/some('v'), help = "" }, Cli/str);
-        Cli/main(Cli/declare(Cli/leaf("app", "", Option/some("1"), grammar, print)))
+        Cli/main(Cli/Declaration/declare(Cli/leaf("app", "", Option/some("1"), grammar, print)))
     "#).expect("the option grammar compiles");
     for (args, output) in [
         (vec!["app", "--value", "--help"], "--help"),
@@ -64,7 +64,7 @@ fn a_disabled_version_builtin_can_be_a_user_option() {
         use /std/Cli/{Grammar};
         use /std/Cli/Grammar/{Named};
         let grammar = Grammar/option(Named { long = "version", short = Option/none(), help = "" }, Cli/str);
-        Cli/main(Cli/declare(Cli/leaf("app", "", Option/none(), grammar, print)))
+        Cli/main(Cli/Declaration/declare(Cli/leaf("app", "", Option/none(), grammar, print)))
     "#).expect("the inactive builtin name is legal");
     let (host, streams) = MockHost::builder()
         .args(["app", "--version", "mine"])

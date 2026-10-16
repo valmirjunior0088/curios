@@ -4,11 +4,12 @@ use /std/Cli/{Grammar};
 let child(name: Str) -> Cli/Declaration =
     Cli/leaf(name, "", Option/none(), Grammar/pure(()), (_) => Io/pure(()));
 
-let build(name: Str) -> Result(Cli/SpecError, Cli) =
-    Cli/checked(Cli/group("app", "", Option/none(), [child("good"), child(name)]));
+let build(name: Str) -> Result(Cli/Error, Cli) =
+    Cli/Declaration/checked(
+        Cli/Declaration/group("app", "", Option/none(), [child("good"), child(name)]));
 
-let problem(result: Result(Cli/SpecError, Cli)) -> Str =
-    match result | failure(error) => Cli/SpecError/to_str(error) | success(_) => "accepted" end;
+let problem(result: Result(Cli/Error, Cli)) -> Str =
+    match result | failure(error) => Cli/Error/to_str(error) | success(_) => "accepted" end;
 
 test construction_reports_an_invalid_unselected_sibling =
     Test/equal(
@@ -19,16 +20,17 @@ test construction_reports_duplicate_sibling_names =
     Test/equal(problem(build("good")), "in command \"app\": duplicate subcommand \"good\"");
 
 test a_dynamic_grammar_error_is_propagated_before_the_tree_is_constructed =
-    let dynamic() -> Result(Cli/SpecError, Cli) =
+    let dynamic() -> Result(Cli/Error, Cli) =
         let grammar = Cli/record/checked_record([Cli/flag("same", ""), Cli/flag("same", "")])!;
         let bad = Cli/leaf("bad", "", Option/none(), grammar, (_) => Io/pure(()));
-        Cli/checked(Cli/group("app", "", Option/none(), [child("good"), bad]));
+        Cli/Declaration/checked(
+            Cli/Declaration/group("app", "", Option/none(), [child("good"), bad]));
     Test/equal(problem(dynamic()), "duplicate record field \"same\"");
 
 test selection_extracts_a_certified_child_from_a_dynamic_tree =
     Test/equal(
         match build("other")
-        | failure(error) => Cli/SpecError/to_str(error)
+        | failure(error) => Cli/Error/to_str(error)
         | success(cli) =>
             match Cli/select(cli, ["other", "--help"])
             | chose(selected, rest) => Str/concat(Cli/usage(["app"], selected), Str/join("", rest))
@@ -40,7 +42,7 @@ test selection_extracts_a_certified_child_from_a_dynamic_tree =
 test the_record_parse_adapter_reports_specification_errors_before_help =
     Test/equal(
         match Cli/parse([Cli/flag("same", ""), Cli/flag("same", "")], ["--help"], Option/none())
-        | failure(error) => Cli/SpecError/to_str(error)
+        | failure(error) => Cli/Error/to_str(error)
         | success(_) => "accepted"
         end,
         "duplicate record field \"same\"");

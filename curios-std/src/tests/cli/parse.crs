@@ -22,7 +22,7 @@ let why(f: Cli/Failure) -> Str =
 -- One rendering for every outcome, so a row's expectation is one string whichever way the line went.
 let read(argv: List(Str)) -> Str =
     match Cli/parse(spec, argv, Option/some("1.0.0"))
-    | failure(error) => Cli/SpecError/to_str(error)
+    | failure(error) => Cli/Error/to_str(error)
     | success(reading) =>
         match reading
         | help() => "help"

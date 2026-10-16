@@ -62,7 +62,7 @@ fn serve() -> Compiled {
                     let root = Cli/get(v, "root");
                     print(Str/flatten(["serving ", root, " on ", Nat/to_str(port), "\n"])));
 
-        Cli/main(Cli/declare(serve))
+        Cli/main(Cli/Declaration/declare(serve))
         "#,
     )
     .expect("the entry compiles")
@@ -156,12 +156,12 @@ fn deps() -> Compiled {
                 (v) => print(Str/flatten(["adding ", Cli/get(v, "name"), "\n"])));
 
         let registry: Cli/Declaration =
-            Cli/group("registry", "Manage registry dependencies", Option/none(), [add]);
+            Cli/Declaration/group("registry", "Manage registry dependencies", Option/none(), [add]);
 
         let deps: Cli/Declaration =
-            Cli/group("deps", "Manage dependencies", Option/some("0.1.0"), [registry]);
+            Cli/Declaration/group("deps", "Manage dependencies", Option/some("0.1.0"), [registry]);
 
-        Cli/main(Cli/declare(deps))
+        Cli/main(Cli/Declaration/declare(deps))
         "#,
     )
     .expect("the entry compiles")

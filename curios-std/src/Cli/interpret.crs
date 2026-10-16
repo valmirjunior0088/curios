@@ -2,8 +2,8 @@ mod scan;
 use scan/{Raw};
 use /std/{Str, Nat, Bool, List, Option, Result, Map};
 use /std/Bool/{Holds, True};
-use /std/Cli/SpecError/{Certificate};
-use /std/Cli/{Failure, SpecError, Prepared, Reading};
+use /std/Cli/Error/{Certificate};
+use /std/Cli/{Failure, Error, Prepared, Reading};
 use /std/Cli/Grammar/{Node, Sound, Reader, Multiplicity, Alias};
 use /std/Cli/{Grammar};
 
@@ -23,16 +23,16 @@ pub let certify_builtins(
     version: Option(Str),
 ) -> Certificate(Available(names, version)) =
     match Grammar/disjoint([Alias/long("help")], names)
-    | false => Certificate/invalid(SpecError/builtin_collision("--help"))
+    | false => Certificate/invalid(Error/builtin_collision("--help"))
     | true =>
         match Grammar/disjoint([Alias/short('h')], names)
-        | false => Certificate/invalid(SpecError/builtin_collision("-h"))
+        | false => Certificate/invalid(Error/builtin_collision("-h"))
         | true =>
             match version
             | none() => Certificate/valid((True/qed(), True/qed(), True/qed()))
             | some(_) =>
                 match Grammar/disjoint([Alias/long("version")], names)
-                | false => Certificate/invalid(SpecError/builtin_collision("--version"))
+                | false => Certificate/invalid(Error/builtin_collision("--version"))
                 | true => Certificate/valid((True/qed(), True/qed(), True/qed()))
                 end
             end
@@ -276,7 +276,7 @@ pub let interpret(
     prepared: Prepared(A),
     argv: List(Str),
     version: Option(Str),
-) -> Result(SpecError, Reading(A)) =
+) -> Result(Error, Reading(A)) =
     match certify_builtins(Grammar/aliases(prepared.grammar.tree), version)
     | invalid(error) => Result/failure(error)
     | valid(available) => Result/success(certified(prepared, argv, version, @available))
