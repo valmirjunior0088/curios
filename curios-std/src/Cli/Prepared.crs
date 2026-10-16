@@ -1,0 +1,158 @@
+use /std/{Str, Nat, Bool, List, Option, Map, Eq};
+use /std/Bool/{Holds};
+use /std/Cli/{Grammar};
+use /std/Cli/Grammar/{Node, Named, Positional};
+
+--- The number of nodes, including groups, used to bound every ownership identifier.
+pub let size(@A: Type, tree: Node(A)) -> Nat =
+    match tree
+    | pure(_) => 1
+    | flag(_) => 1
+    | option(_, _, _) => 1
+    | positional(_, _) => 1
+    | rest(_, _) => 1
+    | map(inner, _) => 1 + size(inner)
+    | validate(inner, _) => 1 + size(inner)
+    | optional(inner) => 1 + size(inner)
+    | default(inner, _) => 1 + size(inner)
+    | repeat(inner) => 1 + size(inner)
+    | product(left, right) => 1 + size(left) + size(right)
+    | choice(left, right) => 1 + size(left) + size(right)
+    end;
+
+--- An ownership identifier within this prepared grammar.
+pub struct Id(limit: Nat): pub Type {
+    value: Nat,
+    @within: Holds(value < limit),
+}
+
+pub struct NamedEntry(limit: Nat): pub Type {
+    id: Id(limit),
+    owners: List(Id(limit)),
+    names: Named,
+    takes_value: Bool,
+    metavar: Option(Str),
+}
+
+pub struct PositionalEntry(limit: Nat): pub Type {
+    id: Id(limit),
+    owners: List(Id(limit)),
+    names: Positional,
+    rest: Bool,
+}
+
+pub struct Metadata(limit: Nat): pub Type {
+    named: List(NamedEntry(limit)),
+    positional: List(PositionalEntry(limit)),
+}
+
+let empty(limit: Nat) -> Metadata(limit) =
+    Metadata { named = [], positional = [] };
+
+let join(@limit: Nat, first: Metadata(limit), second: Metadata(limit)) -> Metadata(limit) =
+    Metadata {
+        named = [..first.named, ..second.named],
+        positional = [..first.positional, ..second.positional] };
+
+--- Canonical routing derived from the typed tree, with every identifier bounded by its root.
+pub let collect(
+    @A: Type,
+    tree: Node(A),
+    start: Nat,
+    limit: Nat,
+    ancestors: List(Id(limit)),
+    @bounded: Holds(start + size(tree) <= limit),
+) -> Metadata(limit) =
+    match tree
+    | pure(_) => empty(limit)
+    | flag(names) =>
+        let id: Id(limit) = Id { value = start };
+        Metadata {
+            named =
+                [
+                    NamedEntry {
+                        id = id,
+                        owners = [id, ..ancestors],
+                        names = names,
+                        takes_value = false,
+                        metavar = Option/none() }],
+            positional = [] }
+    | option(names, reader, _) =>
+        let id: Id(limit) = Id { value = start };
+        Metadata {
+            named =
+                [
+                    NamedEntry {
+                        id = id,
+                        owners = [id, ..ancestors],
+                        names = names,
+                        takes_value = true,
+                        metavar = Option/some(reader.metavar) }],
+            positional = [] }
+    | positional(names, _) =>
+        let id: Id(limit) = Id { value = start };
+        Metadata {
+            named = [],
+            positional =
+                [
+                    PositionalEntry {
+                        id = id,
+                        owners = [id, ..ancestors],
+                        names = names,
+                        rest = false }] }
+    | rest(names, _) =>
+        let id: Id(limit) = Id { value = start };
+        Metadata {
+            named = [],
+            positional =
+                [
+                    PositionalEntry {
+                        id = id,
+                        owners = [id, ..ancestors],
+                        names = names,
+                        rest = true }] }
+    | map(child, _) => collect(child, start + 1, limit, [Id { value = start }, ..ancestors])
+    | validate(child, _) => collect(child, start + 1, limit, [Id { value = start }, ..ancestors])
+    | optional(child) => collect(child, start + 1, limit, [Id { value = start }, ..ancestors])
+    | default(child, _) => collect(child, start + 1, limit, [Id { value = start }, ..ancestors])
+    | repeat(child) => collect(child, start + 1, limit, [Id { value = start }, ..ancestors])
+    | product(first, second) =>
+        let owners = [Id { value = start }, ..ancestors];
+        join(
+            collect(first, start + 1, limit, owners),
+            collect(second, start + 1 + size(first), limit, owners))
+    | choice(first, second) =>
+        let owners = [Id { value = start }, ..ancestors];
+        join(
+            collect(first, start + 1, limit, owners),
+            collect(second, start + 1 + size(first), limit, owners))
+    end;
+
+--- Both namespaces use their rendered spelling, so a short name never aliases a long name.
+pub let index(@limit: Nat, entries: List(NamedEntry(limit))) -> Map(Str, NamedEntry(limit)) =
+    List/fold(
+        entries,
+        Map/empty(),
+        (entry, held) =>
+            List/fold(
+                Grammar/aliases_of(entry.names),
+                held,
+                (alias, held) => Map/insert(held, Grammar/alias_text(alias), entry)));
+
+--- A transparent preparation whose lookup, positional routes and ownership paths correspond to its actual grammar.
+pub struct Prepared(A: Type): pub Type {
+    grammar: Grammar(A),
+    metadata: Metadata(size(grammar.tree)),
+    lookup: Map(Str, NamedEntry(size(grammar.tree))),
+    @metadata_matches: Eq()(metadata, collect(grammar.tree, 0, size(grammar.tree), [])),
+    @lookup_matches: Eq()(lookup, index(metadata.named)),
+}
+
+pub let prepare(@A: Type, grammar: Grammar(A)) -> Prepared(A) =
+    let metadata = collect(grammar.tree, 0, size(grammar.tree), []);
+    Prepared {
+        grammar = grammar,
+        metadata = metadata,
+        lookup = index(metadata.named),
+        @metadata_matches = Eq/refl(),
+        @lookup_matches = Eq/refl() };

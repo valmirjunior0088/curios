@@ -1,5 +1,8 @@
 pub mod Grammar;
 
+pub mod Prepared;
+pub use Prepared/{let Prepared, prepare};
+
 pub mod SpecError;
 
 pub mod record;

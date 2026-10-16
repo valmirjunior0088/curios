@@ -2,6 +2,8 @@
 
 mod grammar_tests;
 
+mod prepared_tests;
+
 use {
     super::{compile, error},
     curios_runtime::{Compiled, ForeignBindings, MockHost},
