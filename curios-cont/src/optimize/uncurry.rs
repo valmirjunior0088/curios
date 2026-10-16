@@ -16,9 +16,11 @@ use {
 /// Each function some caller observes, with the width every one of its call sites is admitted at — or `None` where a site refuses.
 ///
 /// The three answers are three different things, and [`uncurry_returns`] needs them apart: `Some(width)` is a function whose every non-tail caller applies what it returns, at that one width; `None` is one with a caller that does something else, which no class-mate's width may overrule; and absence is a function reached only by a class-mate's tail call — *unobserved*, with no caller of its own to disagree, taking its width from the class. Both halves of a verdict are [`admit_site`]'s, per site, and [`rewritable`]'s, per function; nothing here judges a site a second way.
-pub(crate) fn uncurryable(module: &Module) -> BTreeMap<FunctionId, Option<usize>> {
-    let calls = analyze_calls(module);
-    let entries = continuation_entries(module);
+fn uncurryable(
+    module: &Module,
+    calls: &CallAnalysis,
+    observations: &BTreeMap<ContinuationId, Option<Site>>,
+) -> BTreeMap<FunctionId, Option<usize>> {
     let mut verdicts = BTreeMap::<FunctionId, Option<usize>>::new();
 
     for owner in module.function_ids().collect::<Vec<_>>() {
@@ -36,7 +38,10 @@ pub(crate) fn uncurryable(module: &Module) -> BTreeMap<FunctionId, Option<usize>
             if *return_to == sentinel {
                 continue;
             }
-            let observed = admit_site(module, &entries, *return_to).map(|site| site.passed.len());
+            let observed = observations
+                .get(return_to)
+                .and_then(Option::as_ref)
+                .map(|site| site.passed.len());
             let verdict = verdicts.entry(*callee).or_insert(observed);
             *verdict = match (*verdict, observed) {
                 (Some(seen), Some(width)) if seen == width => Some(width),
@@ -46,7 +51,7 @@ pub(crate) fn uncurryable(module: &Module) -> BTreeMap<FunctionId, Option<usize>
     }
 
     for (function, verdict) in &mut verdicts {
-        if !rewritable(module, &calls, *function) {
+        if !rewritable(module, calls, *function) {
             *verdict = None;
         }
     }
@@ -83,6 +88,7 @@ fn returns_functions(module: &Module, function: FunctionId) -> bool {
 }
 
 /// One call site the rewrite can absorb: what the callee takes over, and how the site resumes without the closure.
+#[derive(Clone)]
 struct Site {
     passed: Vec<Atom>,
     resume: Resume,
@@ -241,6 +247,7 @@ fn values_bound_in(module: &Module, body: NodeId) -> BTreeSet<ValueId> {
 }
 
 /// How a call site resumes once the callee hands back the answer instead of the closure that produced it.
+#[derive(Clone, Copy)]
 enum Resume {
     /// Resume where the *application* did, bypassing the continuation that received the closure.
     ///
@@ -256,34 +263,113 @@ enum Resume {
     },
 }
 
-/// Absorb the application, for the first class every one of whose sites [`admit_site`] admits.
-///
-/// Each member takes the applied arguments as extra parameters; each return edge `jump k[Fun(g)]` becomes the tail call `apply Known(g)` on them; and each call site passes them and resumes by whichever [`Resume`] form its shape admits.
+/// A complete class judgment, including the bodies, signatures and resumes whose assumptions must survive earlier rewrites.
+struct ClassPlan {
+    members: Vec<FunctionId>,
+    width: usize,
+    sites: Vec<(NodeId, Site)>,
+    reads: BTreeSet<NodeId>,
+    functions: BTreeSet<FunctionId>,
+}
+
+/// Absorb every independent tail class admitted by one call/entry snapshot. A class whose body, caller or resume an earlier rewrite touches waits for the next round; in particular a retargeted caller can introduce a tail edge joining previously separate classes.
 pub(crate) fn uncurry_returns(module: &mut Module) -> bool {
-    let verdicts = uncurryable(module);
-    if !verdicts.values().any(Option::is_some) {
-        return false;
-    }
     let calls = analyze_calls(module);
     let entries = continuation_entries(module);
-    // A class that cannot be planned is declined, not fatal: aborting here would leave every later class untried, and one unrewritable site would silently disable the whole pass.
-    let Some((members, width, plan)) = tail_classes(module).into_iter().find_map(|members| {
-        // Tail-forwarding makes one return stream of the whole class, so a width observed anywhere in it is the width of all of it, and a member with no caller of its own has nothing to disagree with — while a member whose caller refused is refused whatever its class-mates observed. What every member must satisfy is [`rewritable`], which its width says nothing about.
+    let observed = calls
+        .call_sites
+        .values()
+        .flatten()
+        .filter_map(|id| match module.node(*id).unwrap() {
+            Node::ApplyFun { return_to, .. } => Some(*return_to),
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    let observations = observed
+        .into_iter()
+        .map(|resume| (resume, admit_site(module, &entries, resume)))
+        .collect::<BTreeMap<_, _>>();
+    let verdicts = uncurryable(module, &calls, &observations);
+    let mut plans = Vec::new();
+    for members in tail_classes(module) {
         let mut widths = members.iter().filter_map(|member| verdicts.get(member));
-        let width = (*widths.next()?)?;
-        widths.all(|other| *other == Some(width)).then_some(())?;
-        members
+        let Some(Some(width)) = widths.next().copied() else {
+            continue;
+        };
+        if !widths.all(|other| *other == Some(width))
+            || !members
+                .iter()
+                .all(|member| rewritable(module, &calls, *member))
+        {
+            continue;
+        }
+        let Some(sites) = plan_class(module, &calls, &observations, &members) else {
+            continue;
+        };
+        let mut reads = members
             .iter()
-            .all(|member| rewritable(module, &calls, *member))
-            .then_some(())?;
-        let plan = plan_class(module, &entries, &members)?;
-        Some((members, width, plan))
-    }) else {
-        return false;
-    };
+            .flat_map(|member| function_nodes(module, *member))
+            .collect::<BTreeSet<_>>();
+        let mut functions = members.iter().copied().collect::<BTreeSet<_>>();
+        for &id in &reads {
+            for atom in atoms(module.node(id).unwrap()) {
+                if let Atom::Fun(function) = atom {
+                    functions.insert(*function);
+                }
+            }
+        }
+        for (id, _) in &sites {
+            reads.insert(*id);
+            let Node::ApplyFun { return_to, .. } = *module.node(*id).unwrap() else {
+                unreachable!()
+            };
+            if let Some(resume) = module.continuation(return_to) {
+                reads.extend(region_nodes(module, resume.body));
+            }
+        }
+        plans.push(ClassPlan {
+            members,
+            width,
+            sites,
+            reads,
+            functions,
+        });
+    }
+    let mut touched = BTreeSet::new();
+    let mut changed_functions = BTreeSet::new();
+    let mut changed = false;
+    for plan in plans {
+        if !plan.reads.is_disjoint(&touched) || !plan.functions.is_disjoint(&changed_functions) {
+            continue;
+        }
+        let mutations = plan
+            .members
+            .iter()
+            .flat_map(|member| function_nodes(module, *member))
+            .chain(plan.sites.iter().flat_map(|(id, site)| {
+                let mut nodes = vec![*id];
+                if let Resume::Jump { site, .. } = site.resume {
+                    nodes.push(site);
+                }
+                nodes
+            }))
+            .collect::<BTreeSet<_>>();
+        changed_functions.extend(plan.members.iter().copied());
+        apply_class(module, &plan.members, plan.width, plan.sites);
+        touched.extend(mutations);
+        changed = true;
+    }
+    changed
+}
 
+fn apply_class(
+    module: &mut Module,
+    members: &[FunctionId],
+    width: usize,
+    plan: Vec<(NodeId, Site)>,
+) {
     let mut extra = BTreeMap::new();
-    for &member in &members {
+    for &member in members {
         let params = (0..width)
             .map(|index| module.add_value(Some(format!("applied/{}/{index}", member.index()))))
             .collect::<Vec<_>>();
@@ -291,7 +377,7 @@ pub(crate) fn uncurry_returns(module: &mut Module) -> bool {
         extra.insert(member, params);
     }
 
-    for &member in &members {
+    for &member in members {
         let sentinel = module.function(member).unwrap().return_cont;
         let carried = extra[&member]
             .iter()
@@ -377,7 +463,6 @@ pub(crate) fn uncurry_returns(module: &mut Module) -> bool {
             },
         );
     }
-    true
 }
 
 /// Every call site the rewrite must change, each with what [`admit_site`] admitted at it, or `None` if any of them refuses.
@@ -385,11 +470,16 @@ pub(crate) fn uncurry_returns(module: &mut Module) -> bool {
 /// Parameters are added to a whole class at once, so a site discovered later to be unrewritable would leave a callee expecting an argument nobody passes. The transform has to be decided before it is begun — and it is decided by the same judgment that observed the widths, so nothing a site refused can be planned on its class-mates' account.
 fn plan_class(
     module: &Module,
-    entries: &BTreeMap<ContinuationId, Vec<Option<FunctionId>>>,
+    calls: &CallAnalysis,
+    observations: &BTreeMap<ContinuationId, Option<Site>>,
     members: &[FunctionId],
 ) -> Option<Vec<(NodeId, Site)>> {
     let mut plan = Vec::new();
-    for node_id in module.node_ids().collect::<Vec<_>>() {
+    for node_id in members
+        .iter()
+        .flat_map(|member| calls.call_sites[member].iter())
+        .copied()
+    {
         let Some(Node::ApplyFun {
             callee: Callee::Known(callee),
             return_to,
@@ -405,7 +495,7 @@ fn plan_class(
         if module.continuation(*return_to).is_none() {
             continue;
         }
-        let site = admit_site(module, entries, *return_to)?;
+        let site = observations.get(return_to)?.clone()?;
         // A kept resume is rewritten for every call entering it, so a call to anything outside the class would still hand it a closure.
         if !site.callers.iter().all(|caller| members.contains(caller)) {
             return None;

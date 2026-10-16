@@ -1,10 +1,12 @@
 use {
-    super::{uncurry_returns, uncurryable},
+    super::{admit_site, uncurry_returns, uncurryable},
     crate::{
-        Atom, Callee, Continuation, Edge, Function, FunctionId, Literal, Module, Node, NodeId,
-        ValueExpr, test_support::halt_zero,
+        Atom, Callee, Continuation, CopyPlan, Edge, Function, FunctionId, Literal, Module, Node,
+        NodeId, ValueExpr, analyze_calls, continuation_entries, copy_bodies,
+        test_support::halt_zero,
     },
     curios_num::Natural,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// How the caller of a class member uses what it hands back.
@@ -268,7 +270,7 @@ fn a_tail_forwarded_chain_is_uncurried_together() {
     let (mut module, leader, forwarder) = chain(Use::Applied, Use::Applied);
     assert_eq!(widths(&module, leader, forwarder), (1, 1));
 
-    let admissible = uncurryable(&module);
+    let admissible = verdicts(&module);
     assert_eq!(
         (admissible.get(&leader), admissible.get(&forwarder)),
         (Some(&Some(1)), Some(&Some(1))),
@@ -304,7 +306,7 @@ fn a_member_observed_only_through_forwarding_takes_the_class_width() {
         };
         // The mechanism, not just the outcome: no width is observed for this member, and it is rewritten regardless.
         assert!(
-            !uncurryable(&module).contains_key(&unobserved),
+            !verdicts(&module).contains_key(&unobserved),
             "{label}: no width is observed for it",
         );
         assert!(
@@ -336,7 +338,7 @@ fn a_chain_declines_when_either_member_cannot() {
             _ => forwarder,
         };
         assert_eq!(
-            uncurryable(&module).get(&kept),
+            verdicts(&module).get(&kept),
             Some(&None),
             "{label}: the member is inadmissible, which is not the same as unobserved",
         );
@@ -373,7 +375,7 @@ fn a_closure_captured_by_a_nested_function_declines_uncurrying() {
             _ => forwarder,
         };
         assert_eq!(
-            uncurryable(&module).get(&captured),
+            verdicts(&module).get(&captured),
             Some(&None),
             "{label}: the capture is a use the site cannot absorb",
         );
@@ -410,7 +412,7 @@ fn a_closure_applied_and_also_kept_declines_the_class() {
             _ => forwarder,
         };
         assert_eq!(
-            uncurryable(&module).get(&kept),
+            verdicts(&module).get(&kept),
             Some(&None),
             "{label}: one visible application does not make the closure's other use disappear",
         );
@@ -519,7 +521,7 @@ fn a_forwarded_application_declines_uncurrying() {
     module.set_entry(caller);
 
     assert_eq!(
-        uncurryable(&module).get(&producer),
+        verdicts(&module).get(&producer),
         Some(&None),
         "an application behind a forwarding jump is not one the transform can move",
     );
@@ -700,10 +702,10 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
 #[test]
 fn a_resume_a_closure_is_jumped_into_declines_uncurrying() {
     let (module, producer) = shared_resume(Beside::Jump);
-    assert_eq!(uncurryable(&module).get(&producer), Some(&None));
+    assert_eq!(verdicts(&module).get(&producer), Some(&None));
 
     let (module, producer) = shared_resume(Beside::Nothing);
-    assert_eq!(uncurryable(&module).get(&producer), Some(&Some(1)));
+    assert_eq!(verdicts(&module).get(&producer), Some(&Some(1)));
 }
 
 /// A kept resume shared with a call to another class declines both classes, since rewriting either would leave the other's call handing it a closure; shared between two calls to one function, it is rewritten once for both.
@@ -715,4 +717,99 @@ fn a_resume_shared_with_another_class_declines_uncurrying() {
     let (mut module, _) = shared_resume(Beside::Producer);
     assert!(uncurry_returns(&mut module));
     module.verify().expect("the rewrite leaves valid CPS");
+}
+
+fn verdicts(module: &Module) -> BTreeMap<FunctionId, Option<usize>> {
+    let calls = analyze_calls(module);
+    let entries = continuation_entries(module);
+    let observations = entries
+        .keys()
+        .copied()
+        .map(|resume| (resume, admit_site(module, &entries, resume)))
+        .collect();
+    uncurryable(module, &calls, &observations)
+}
+
+#[test]
+fn independent_tail_classes_advance_in_one_invocation() {
+    let (mut module, leader, forwarder) = chain(Use::Applied, Use::Applied);
+    let entry = module.entry().unwrap();
+    let calls = analyze_calls(&module);
+    let site = calls.call_sites[&forwarder]
+        .iter()
+        .copied()
+        .find(|id| calls.node_owners[id] == entry)
+        .unwrap();
+    let plan = CopyPlan::functions(&module, BTreeSet::from([leader, forwarder]));
+    let copies = copy_bodies(&mut module, plan).functions;
+    let copied_leader = copies[&leader];
+    let copied_forwarder = copies[&forwarder];
+    let anchor = module.function(entry).unwrap().body;
+    let Node::LetFun { functions, .. } = module.node_mut(anchor).unwrap() else {
+        unreachable!()
+    };
+    functions.extend([copied_leader, copied_forwarder]);
+    let Node::ApplyFun { callee, .. } = module.node_mut(site).unwrap() else {
+        unreachable!()
+    };
+    *callee = Callee::Known(copied_forwarder);
+    module.verify().unwrap();
+    assert!(uncurry_returns(&mut module));
+    for member in [leader, forwarder, copied_leader, copied_forwarder] {
+        assert_eq!(module.function(member).unwrap().params.len(), 2);
+    }
+    module.verify().unwrap();
+}
+
+#[test]
+fn a_new_tail_edge_defers_a_class_until_its_new_members_can_agree() {
+    let (mut module, leader, forwarder) = chain(Use::Unobserved, Use::Applied);
+    let Node::LetFun { ref functions, .. } =
+        *module.node(module.function(leader).unwrap().body).unwrap()
+    else {
+        unreachable!()
+    };
+    let step = functions[0];
+    let final_step = unary(&mut module, "final step");
+    let body = module.function(step).unwrap().body;
+    let Node::ApplyCont(edge) = module.node_mut(body).unwrap() else {
+        unreachable!()
+    };
+    edge.args = vec![Atom::Fun(final_step)];
+    let scope = module.add_node(Node::LetFun {
+        functions: vec![final_step],
+        body,
+    });
+    module.function_mut(step).unwrap().body = scope;
+    let definition = module.function(forwarder).unwrap();
+    let body = definition.body;
+    let param = definition.params[0];
+    let ret = definition.return_cont;
+    let held = module.add_value(None);
+    let apply = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(held),
+        args: vec![Atom::Value(param)],
+        return_to: ret,
+    });
+    let resume = module.add_continuation(Continuation {
+        debug_name: None,
+        params: vec![held],
+        body: apply,
+    });
+    let Node::ApplyFun { return_to, .. } = module.node_mut(body).unwrap() else {
+        unreachable!()
+    };
+    *return_to = resume;
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![resume],
+        body,
+    });
+    module.function_mut(forwarder).unwrap().body = scope;
+    module.verify().unwrap();
+    assert!(uncurry_returns(&mut module));
+    assert_eq!(widths(&module, leader, forwarder), (2, 1));
+    module.verify().unwrap();
+    assert!(uncurry_returns(&mut module));
+    assert_eq!(widths(&module, leader, forwarder), (3, 2));
+    module.verify().unwrap();
 }
