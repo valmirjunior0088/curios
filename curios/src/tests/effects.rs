@@ -125,15 +125,15 @@ fn a_program_cannot_register_a_second_monad_witness_for_io() {
 
 // === `/std/State`: pure, deterministic state threading. ==========================
 
-/// The full vocabulary in one region: `get`, `put`, `modify`, and the `state` constructor, sequenced with `!` and run purely at the boundary.
+/// The full vocabulary in one region: `get`, `set`, `modify`, and the `state` constructor, sequenced with `!` and run purely at the boundary.
 #[test]
 fn state_threads_through_a_bang_region() {
     let source = r#"
         use /std/{Nat, State, print};
-        use /std/State/{state, get, put, modify};
+        use /std/State/{state, get, set, modify};
         pub let fresh() -> State(Nat, Nat) =
             let n = get()!;
-            let _ = put(n + 1)!;
+            let _ = set(n + 1)!;
             State/pure(n);
         pub let steps() -> State(Nat, {Nat, Nat}) =
             let a = fresh()!;

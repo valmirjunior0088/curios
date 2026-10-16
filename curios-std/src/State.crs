@@ -25,12 +25,12 @@ pub let get(@S: Type) -> State(S, S) =
     State { (s) => (s, s) };
 
 --- `s` as the state.
-pub let put(@S: Type, s: S) -> State(S, {}) =
+pub let set(@S: Type, s: S) -> State(S, {}) =
     State { (_) => ((), s) };
 
 --- `f` on the current state.
 pub let modify(@S: Type, f: (S) -> S) -> State(S, {}) =
-    bind(get(), (s) => put(f(s)));
+    bind(get(), (s) => set(f(s)));
 
 --- `m` from `init`: its answer and the final state.
 pub let run(@S: Type, @A: Type, m: State(S, A), init: S) -> {A, S} =
