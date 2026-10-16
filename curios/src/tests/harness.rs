@@ -1,5 +1,6 @@
 //! The test harness across the stages: the `Test` description, its combinators, `Test/main`'s dispatch, the `Spell` witnesses the reports rely on, the `test` declaration, and the synthesized tail a unit's test program runs.
 
+mod resource_tests;
 mod sequence_tests;
 
 use {

@@ -1,6 +1,7 @@
 use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Program, print,
     proc};
 use /std/ops/{Eql};
+use /std/time/{Duration};
 
 --- How a terminal test came out.
 pub induct Verdict: pub Type
@@ -112,6 +113,24 @@ let finish(@A: Type, test: Test(A)) -> Io(Result(Failure, A)) =
     | failed(failure) => Io/pure(Result/failure(failure))
     | action(io) => Io/bind(io, (inner) => finish(inner))
     end;
+
+let from_result(@A: Type, result: Result(Failure, A)) -> Test(A) =
+    match result | success(a) => pure(a) | failure(failure) => Test/failed(failure) end;
+
+--- Protect the complete interpretation of `body`; release runs after success or assertion failure, and when a suspended body is cancelled.
+pub let using(@A: Type, release: (Io/Ended) -> Io({}), body: () -> Test(A)) -> Test(A) =
+    let result = Io/using(release, finish(body()))!;
+    from_result(result);
+
+--- Run `body` in a task scope; its children are cancelled before a success or failure leaves the scope.
+pub let scope(@A: Type, body: (Io/Scope) -> Test(A)) -> Test(A) =
+    let result = Io/scope((s) => finish(body(s)))!;
+    from_result(result);
+
+--- Fail if the deadline wins, after cancelling the suspended body and running its releases.
+pub let timeout(@A: Type, d: Duration, body: () -> Test(A)) -> Test(A) =
+    let result = Io/timeout(d, finish(body()))!;
+    match result | some(outcome) => from_result(outcome) | none() => fail("the test timed out") end;
 
 let message(failure: Failure) -> Str =
     Str/join(": ", [..failure.contexts, failure.message]);
