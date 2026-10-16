@@ -150,9 +150,11 @@ pub struct Prepared(A: Type): pub Type {
 
 pub let prepare(@A: Type, grammar: Grammar(A)) -> Prepared(A) =
     let metadata = collect(grammar.tree, 0, size(grammar.tree), []);
+    -- The explicit reflexivity argument keeps the map's private representation out of the evidence.
+    let lookup = index(metadata.named);
     Prepared {
         grammar = grammar,
         metadata = metadata,
-        lookup = index(metadata.named),
+        lookup = lookup,
         @metadata_matches = Eq/refl(),
-        @lookup_matches = Eq/refl() };
+        @lookup_matches = Eq/refl(@_, @lookup) };

@@ -1,4 +1,4 @@
-use /std/{Cli, Nat, Str, List, Option, Map, Test};
+use /std/{Cli, Str, List, Option, Map, Test};
 use /std/Cli/{Grammar};
 use /std/Cli/Grammar/{Named, Positional};
 

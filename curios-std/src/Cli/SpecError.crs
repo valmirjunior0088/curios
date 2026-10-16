@@ -35,13 +35,11 @@ pub let to_str(error: SpecError) -> Str =
             Spell/spell(name),
             " cannot own short option -",
             Str/of_char(short)])
-    | positional_order() =>
-        "a nullable positional group or rest collector must be the final positional suffix"
+    | positional_order() => "nullable positional groups and rest must end the positional list"
     | ambiguous_choice() => "at most one alternative may lack a required named selector"
-    | unselectable_choice() => "each alternative must own a named occurrence or a positional value"
+    | unselectable_choice() => "each alternative must own a named or positional occurrence"
     | nonfixed_choice() => "alternatives must contain fixed required positional blocks"
-    | nonfixed_optional() =>
-        "an optional or defaulted positional group must contain a fixed required block"
+    | nonfixed_optional() => "optional positional groups must contain a fixed required block"
     | repeated_group() => "only a named leaf may be repeated"
     | duplicate_field(name) => Str/flatten(["duplicate record field ", Spell/spell(name)])
     | builtin_collision(name) =>

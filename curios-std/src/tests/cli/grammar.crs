@@ -56,14 +56,14 @@ test a_nullable_positional_cannot_precede_another_positional =
     let second = raw_position("second");
     Test/equal(
         problem(Node/product(Node/optional(first), second)),
-        "a nullable positional group or rest collector must be the final positional suffix");
+        "nullable positional groups and rest must end the positional list");
 
 test two_rest_collectors_cannot_compete_for_the_suffix =
     let first = Node/rest(position("first"), Grammar/reader(Cli/str));
     let second = Node/rest(position("second"), Grammar/reader(Cli/str));
     Test/equal(
         problem(Node/product(first, second)),
-        "a nullable positional group or rest collector must be the final positional suffix");
+        "nullable positional groups and rest must end the positional list");
 
 test two_positional_alternatives_have_no_distinguishing_selector =
     Test/equal(
@@ -73,7 +73,7 @@ test two_positional_alternatives_have_no_distinguishing_selector =
 test defaults_do_not_make_an_empty_alternative_selectable =
     Test/equal(
         problem(Node/choice(Node/pure(()), raw_flag("flag"))),
-        "each alternative must own a named occurrence or a positional value");
+        "each alternative must own a named or positional occurrence");
 
 test repetition_accepts_named_leaves_and_refuses_groups =
     let repeated = Grammar/repeat(Grammar/option(named("item"), Cli/str));
@@ -87,7 +87,7 @@ test optional_positionals_are_fixed_blocks =
     let rest = Node/rest(position("remaining"), Grammar/reader(Cli/str));
     Test/equal(
         problem(Node/optional(rest)),
-        "an optional or defaulted positional group must contain a fixed required block");
+        "optional positional groups must contain a fixed required block");
 
 test a_singular_option_can_explicitly_keep_its_last_occurrence =
     let grammar =
