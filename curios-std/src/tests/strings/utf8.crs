@@ -6,7 +6,7 @@ let rejected(bytes: Bytes) -> Bool =
     match Str/of_bytes(bytes) | success(_) => false | failure(_) => true end;
 
 test of_bytes_accepts_multibyte_utf8 =
-    match Str/of_bytes(x[0xC3, 0xA9]): (_) => Test
+    match Str/of_bytes(x[0xC3, 0xA9]): (_) => Test({})
     | success(s) => Test/equal(s, "é")
     | failure(_) => Test/assert(false)
     end;

@@ -164,10 +164,10 @@ fn a_test_that_exits_before_it_reports_is_exited_whatever_its_code() {
         r#"use /std/{Test, proc};
 
 test quits_early =
-    Test/perform(() => proc/exit(@Test, 0));
+    Test/perform(() => proc/exit(@Test({}), 0));
 
 test fails_quietly =
-    Test/perform(() => proc/exit(@Test, 1));
+    Test/perform(() => proc/exit(@Test({}), 1));
 "#,
     );
     write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
@@ -176,7 +176,7 @@ test fails_quietly =
 
     assert_eq!(
         stdout(&output),
-        "/app/quits_early: exited 0\n    Test/perform(() => proc/exit(@Test, 0))\n/app/fails_quietly: exited 1\n    Test/perform(() => proc/exit(@Test, 1))\n0 passed, 0 failed, 2 exited\n",
+        "/app/quits_early: exited 0\n    Test/perform(() => proc/exit(@Test({}), 0))\n/app/fails_quietly: exited 1\n    Test/perform(() => proc/exit(@Test({}), 1))\n0 passed, 0 failed, 2 exited\n",
         "stderr: {}",
         stderr(&output)
     );
