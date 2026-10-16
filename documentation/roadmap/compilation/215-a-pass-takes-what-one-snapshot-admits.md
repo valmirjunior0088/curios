@@ -10,7 +10,6 @@ Specialization uses non-refundable module-wide copied-node allowances: jump and 
 
 ## Remaining stages
 
-2. Batch independent worker parameter splits, consolidating caller edits, substitutions and predecessor redirections.
 3. Batch independent returned-closure uncurrying, reusing resume judgments and declining changed tail classes.
 4. Batch independent call-pattern specializations, preserving recursive peeling and lexical scope.
 5. Batch independent SCC specializations, revalidating contexts locally without rebuilding whole-module analyses per context.

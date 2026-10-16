@@ -1,11 +1,13 @@
 use {
     super::{split_parameters, split_workers},
     crate::{
-        Atom, Callee, Continuation, ContinuationId, Edge, FieldGroup, Function, FunctionId,
-        Intrinsic, Literal, Module, Node, Row, Slot, ValueExpr, ValueId, optimize,
+        Atom, Callee, Continuation, ContinuationId, CopyPlan, Edge, FieldGroup, Function,
+        FunctionId, Intrinsic, Literal, Module, Node, Row, Slot, ValueExpr, ValueId, copy_bodies,
+        optimize,
         test_support::{halt, halt_zero},
     },
     curios_num::{Grain, Natural},
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// The canonical loop-carried product: a seed pair enters a header, one arm projects field 0 and jumps back with a fresh pair, the other hands the parameter to an exit that projects field 0 and nothing else. The accumulator of `/std/Str/fold`, in miniature.
@@ -1278,4 +1280,197 @@ fn a_family_parameter_is_split_into_a_worker() {
     assert!(split_workers(&mut module), "a product row has no padding");
     assert_eq!(module.function(consume).unwrap().params.len(), 2);
     module.verify().expect("the split preserves the module");
+}
+
+fn sibling_worker(module: &mut Module, original: FunctionId) -> FunctionId {
+    let plan = CopyPlan::functions(module, BTreeSet::from([original]));
+    let sibling = copy_bodies(module, plan).functions[&original];
+    let entry = module.entry().unwrap();
+    let intro = module.function(entry).unwrap().body;
+    let Node::LetFun { functions, .. } = module.node_mut(intro).unwrap() else {
+        unreachable!()
+    };
+    functions.push(sibling);
+    sibling
+}
+
+#[test]
+fn independent_workers_split_in_one_invocation() {
+    let (mut module, first) = row_consumer(vec![Slot::Nat, Slot::Nat], false);
+    let calls = module
+        .live_nodes()
+        .filter_map(|(id, node)| {
+            matches!(node, Node::ApplyFun { callee: Callee::Known(target), .. } if *target == first)
+                .then_some(id)
+        })
+        .collect::<Vec<_>>();
+    let second = sibling_worker(&mut module, first);
+    let Node::ApplyFun { callee, .. } = module.node_mut(calls[0]).unwrap() else {
+        unreachable!()
+    };
+    *callee = Callee::Known(second);
+    module.verify().unwrap();
+    assert!(split_workers(&mut module));
+    for worker in [first, second] {
+        assert_eq!(module.function(worker).unwrap().params.len(), 2);
+    }
+    module.verify().unwrap();
+}
+
+#[test]
+fn a_worker_reached_through_a_fresh_rebuild_waits_for_new_origins() {
+    let (mut module, first) = row_consumer(vec![Slot::Nat, Slot::Nat], false);
+    let second = sibling_worker(&mut module, first);
+    let definition = module.function(first).unwrap();
+    let param = definition.params[0];
+    let ret = definition.return_cont;
+    let Node::LetIntrinsic { next, .. } = *module.node(definition.body).unwrap() else {
+        unreachable!()
+    };
+    module.set_node(
+        next,
+        Node::ApplyFun {
+            callee: Callee::Known(second),
+            args: vec![Atom::Value(param)],
+            return_to: ret,
+        },
+    );
+    module.verify().unwrap();
+    assert!(split_workers(&mut module));
+    assert_eq!(module.function(first).unwrap().params.len(), 2);
+    assert_eq!(module.function(second).unwrap().params.len(), 1);
+    module.verify().unwrap();
+    assert!(split_workers(&mut module));
+    assert_eq!(module.function(second).unwrap().params.len(), 2);
+    module.verify().unwrap();
+}
+
+#[test]
+fn multiple_aggregate_parameters_split_without_shifting_each_others_positions() {
+    let (mut module, worker) = row_consumer(vec![Slot::Nat, Slot::Nat], false);
+    let body = module.function(worker).unwrap().body;
+    let Node::LetIntrinsic {
+        result: left,
+        op: Intrinsic::RowGet(row, _),
+        next,
+        ..
+    } = *module.node(body).unwrap()
+    else {
+        unreachable!()
+    };
+    let other = module.add_value(None);
+    let right = module.add_value(None);
+    let sum = module.add_value(None);
+    module.function_mut(worker).unwrap().params.push(other);
+    let Node::ApplyCont(edge) = module.node_mut(next).unwrap() else {
+        unreachable!()
+    };
+    edge.args = vec![Atom::Value(sum)];
+    let add = module.add_node(Node::LetIntrinsic {
+        result: sum,
+        op: Intrinsic::NatAdd,
+        args: vec![Atom::Value(left), Atom::Value(right)],
+        next,
+    });
+    let read = module.add_node(Node::LetIntrinsic {
+        result: right,
+        op: Intrinsic::RowGet(row, 1),
+        args: vec![Atom::Value(other)],
+        next: add,
+    });
+    let Node::LetIntrinsic { next, .. } = module.node_mut(body).unwrap() else {
+        unreachable!()
+    };
+    *next = read;
+    let calls = module.live_nodes().filter_map(|(id, node)| {
+        matches!(node, Node::ApplyFun { callee: Callee::Known(target), .. } if *target == worker).then_some(id)
+    }).collect::<Vec<_>>();
+    for caller in calls {
+        let value = module.add_value(None);
+        let build = module.add_node(Node::LetValue {
+            result: value,
+            value: ValueExpr::Row(
+                row,
+                vec![
+                    Atom::Literal(Literal::Nat(Natural::from(3u32))),
+                    Atom::Literal(Literal::Nat(Natural::from(13u32))),
+                ],
+            ),
+            next: caller,
+        });
+        let predecessor = module
+            .live_nodes()
+            .find_map(|(id, node)| {
+                matches!(node, Node::LetValue { next, .. } if *next == caller && id != build)
+                    .then_some(id)
+            })
+            .unwrap();
+        let Node::LetValue { next, .. } = module.node_mut(predecessor).unwrap() else {
+            unreachable!()
+        };
+        *next = build;
+        let Node::ApplyFun { args, .. } = module.node_mut(caller).unwrap() else {
+            unreachable!()
+        };
+        args.push(Atom::Value(value));
+    }
+    module.verify().unwrap();
+    assert!(split_workers(&mut module));
+    assert_eq!(module.function(worker).unwrap().params.len(), 4);
+    module.verify().unwrap();
+    assert!(!split_workers(&mut module));
+}
+
+#[test]
+fn a_worker_backedge_projects_its_own_rebuilt_parameter() {
+    let (mut module, worker) = row_consumer(vec![Slot::Nat, Slot::Nat], false);
+    let definition = module.function(worker).unwrap();
+    let param = definition.params[0];
+    let ret = definition.return_cont;
+    let body = definition.body;
+    let Node::LetIntrinsic {
+        result: read, next, ..
+    } = *module.node(body).unwrap()
+    else {
+        unreachable!()
+    };
+    let backedge = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(worker),
+        args: vec![Atom::Value(param)],
+        return_to: ret,
+    });
+    let repeat = module.add_continuation(Continuation {
+        debug_name: None,
+        params: vec![],
+        body: backedge,
+    });
+    module.set_node(
+        next,
+        Node::Switch {
+            scrutinee: Atom::Value(read),
+            cases: BTreeMap::from([(
+                0,
+                Edge {
+                    target: ret,
+                    args: vec![Atom::Value(read)],
+                },
+            )]),
+            default: Some(Edge {
+                target: repeat,
+                args: vec![],
+            }),
+        },
+    );
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![repeat],
+        body,
+    });
+    module.function_mut(worker).unwrap().body = scope;
+    module.verify().unwrap();
+    assert!(split_workers(&mut module));
+    let Node::ApplyFun { args, .. } = module.node(backedge).unwrap() else {
+        unreachable!()
+    };
+    assert_eq!(args.len(), 2);
+    module.verify().unwrap();
 }

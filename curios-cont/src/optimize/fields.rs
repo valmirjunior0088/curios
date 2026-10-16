@@ -15,9 +15,9 @@ mod tests;
 
 use {
     crate::{
-        Atom, Callee, ContinuationId, Demand, Edge, FunctionId, Intrinsic, Literal, Module, Node,
-        NodeId, Origin, PARAM_SPLIT_GROWTH_LIMIT, RowId, UseTarget, ValueExpr, ValueId,
-        analyze_calls, atoms, demand_of, demands, origins, rewire_node,
+        Atom, CallAnalysis, Callee, ContinuationId, Demand, Edge, FunctionId, Intrinsic, Literal,
+        Module, Node, NodeId, Origin, PARAM_SPLIT_GROWTH_LIMIT, RowId, UseTarget, ValueExpr,
+        ValueId, analyze_calls, atoms, demand_of, demands, origins, rewire_node, visit_atoms_mut,
     },
     curios_num::{Grain, Natural},
     std::collections::{BTreeMap, BTreeSet},
@@ -295,13 +295,15 @@ struct Worker {
     row: Option<RowId>,
 }
 
-/// The first admissible worker split in deterministic order, if any.
-fn admit_worker(module: &Module, origins: &BTreeMap<ValueId, Origin>) -> Option<Worker> {
-    let demands = demands(module);
-    let calls = analyze_calls(module);
-
+/// Every admissible worker split in function/position order, against one shared forward and backward snapshot.
+fn admit_workers(
+    module: &Module,
+    origins: &BTreeMap<ValueId, Origin>,
+    demands: &BTreeMap<ValueId, Demand>,
+    calls: &CallAnalysis,
+) -> Vec<Worker> {
+    let mut workers = Vec::new();
     for (function, definition) in module.live_functions() {
-        // An escaping function is reached by callers this rewrite cannot see, and the module entry by the host, which is not rewritten with the module.
         if calls.escaping.contains(&function) || module.entry() == Some(function) {
             continue;
         }
@@ -309,30 +311,21 @@ fn admit_worker(module: &Module, origins: &BTreeMap<ValueId, Origin>) -> Option<
             let Some(width) = origins.get(&param).and_then(Origin::width) else {
                 continue;
             };
-            let Demand::Projected(read) = demand_of(&demands, param) else {
+            let Demand::Projected(read) = demand_of(demands, param) else {
                 continue;
             };
-            if width < 2 || read.last().is_some_and(|&last| last >= width) {
-                continue;
-            }
-            if definition.params.len() - 1 + width > PARAM_SPLIT_GROWTH_LIMIT {
-                continue;
-            }
-            if !calls
-                .call_sites
-                .get(&function)
-                .map_or(&[][..], Vec::as_slice)
-                .iter()
-                .all(|site| match module.node(*site) {
-                    Some(Node::ApplyFun { args, .. }) => args
-                        .get(position)
-                        .is_some_and(|atom| takeable(origins, param, atom)),
-                    _ => false,
-                })
+            if width < 2
+                || read.last().is_some_and(|&last| last >= width)
+                || definition.params.len() - 1 + width > PARAM_SPLIT_GROWTH_LIMIT
             {
                 continue;
             }
-            return Some(Worker {
+            if !calls.call_sites[&function].iter().all(|site| {
+                matches!(module.node(*site), Some(Node::ApplyFun { args, .. }) if args.get(position).is_some_and(|atom| takeable(origins, param, atom)))
+            }) {
+                continue;
+            }
+            workers.push(Worker {
                 function,
                 position,
                 param,
@@ -341,87 +334,173 @@ fn admit_worker(module: &Module, origins: &BTreeMap<ValueId, Origin>) -> Option<
             });
         }
     }
-    None
+    workers
 }
 
-/// Split one admissible known function's parameter into its fields, and leave the cleanup to the chain — the same three local edits [`split_parameters`] performs, with call sites in place of edges.
-pub(crate) fn split_workers(module: &mut Module) -> bool {
-    let origins = origins(module);
-    let Some(worker) = admit_worker(module, &origins) else {
-        return false;
-    };
+/// Compatible worker edits accumulated before a single substitution and predecessor-redirection walk.
+#[derive(Default)]
+struct WorkerEdits {
+    substitutions: BTreeMap<ValueId, Atom>,
+    projections: BTreeMap<NodeId, Vec<Node>>,
+}
 
-    let fields = (0..worker.width)
-        .map(|index| module.add_value(Some(format!("worker/{}/{index}", worker.function.index()))))
-        .collect::<Vec<_>>();
-    let definition = module
-        .function_mut(worker.function)
-        .expect("admitted function is live");
-    definition
-        .params
-        .splice(worker.position..=worker.position, fields.iter().copied());
-    let body = definition.body;
-
-    // The head rebuild, standing in for the old parameter everywhere. Projection forwarding erases it wherever the body only reads fields, which the admitted demand guarantees it does.
-    let rebuilt = module.add_value(Some(format!("rebuilt/{}", worker.function.index())));
-    let head = module.add_node(Node::LetValue {
-        result: rebuilt,
-        value: rebuild_of(worker.row, &fields),
-        next: body,
-    });
-    module
-        .function_mut(worker.function)
-        .expect("admitted function is live")
-        .body = head;
-    module.replace_atom(UseTarget::Value(worker.param), Atom::Value(rebuilt));
-    module.remove_value(worker.param);
-
-    // Every call site projects its argument into fields above the call, filling what its own construction does not carry.
-    let callers = module
-        .live_nodes()
-        .filter(|(_, node)| {
-            matches!(
-                node,
-                Node::ApplyFun { callee: Callee::Known(callee), .. } if *callee == worker.function
-            )
-        })
-        .map(|(id, _)| id)
-        .collect::<Vec<_>>();
-    for caller in callers {
-        let mut node = module.node(caller).expect("caller is live").clone();
-        let Node::ApplyFun { args, .. } = &mut node else {
-            unreachable!("the callers were selected as known applications");
-        };
-        let Atom::Value(source) = &args[worker.position] else {
-            unreachable!("a construction origin admits only value arguments");
-        };
-        let source = *source;
-        let carried = origins
-            .get(&source)
-            .and_then(Origin::settled_width)
-            .unwrap_or(worker.width);
-        let mut inserted = Vec::new();
-        let mut replacement = Vec::with_capacity(worker.width);
-        for index in 0..carried {
-            let projection = module.add_value(Some(format!("worker/{}/{index}", caller.index())));
-            inserted.push(Node::LetIntrinsic {
-                result: projection,
-                op: projection_of(worker.row, index),
-                args: vec![Atom::Value(source)],
-                next: caller,
-            });
-            replacement.push(Atom::Value(projection));
+impl WorkerEdits {
+    fn apply(
+        &mut self,
+        module: &mut Module,
+        origins: &BTreeMap<ValueId, Origin>,
+        callers: &[NodeId],
+        worker: &Worker,
+    ) {
+        let fields = (0..worker.width)
+            .map(|index| {
+                module.add_value(Some(format!("worker/{}/{index}", worker.function.index())))
+            })
+            .collect::<Vec<_>>();
+        let definition = module.function_mut(worker.function).unwrap();
+        definition
+            .params
+            .splice(worker.position..=worker.position, fields.iter().copied());
+        let body = definition.body;
+        let rebuilt = module.add_value(Some(format!("rebuilt/{}", worker.function.index())));
+        let head = module.add_node(Node::LetValue {
+            result: rebuilt,
+            value: rebuild_of(worker.row, &fields),
+            next: body,
+        });
+        module.function_mut(worker.function).unwrap().body = head;
+        self.substitutions
+            .insert(worker.param, Atom::Value(rebuilt));
+        for &caller in callers {
+            let Node::ApplyFun { args, .. } = module.node(caller).unwrap() else {
+                unreachable!()
+            };
+            let Atom::Value(source) = args[worker.position] else {
+                unreachable!()
+            };
+            let carried = origins
+                .get(&source)
+                .and_then(Origin::settled_width)
+                .unwrap_or(worker.width);
+            let mut replacement = Vec::with_capacity(worker.width);
+            let projections = self.projections.entry(caller).or_default();
+            for index in 0..carried {
+                let projection =
+                    module.add_value(Some(format!("worker/{}/{index}", caller.index())));
+                projections.push(Node::LetIntrinsic {
+                    result: projection,
+                    op: projection_of(worker.row, index),
+                    args: vec![Atom::Value(source)],
+                    next: caller,
+                });
+                replacement.push(Atom::Value(projection));
+            }
+            replacement.extend((carried..worker.width).map(|index| module.pad(worker.row, index)));
+            let Node::ApplyFun { args, .. } = module.node_mut(caller).unwrap() else {
+                unreachable!()
+            };
+            args.splice(worker.position..=worker.position, replacement);
         }
-        replacement.extend((carried..worker.width).map(|index| module.pad(worker.row, index)));
-        let Node::ApplyFun { args, .. } = &mut node else {
-            unreachable!("the callers were selected as known applications");
-        };
-        args.splice(worker.position..=worker.position, replacement);
-        insert_above(module, caller, inserted);
-        module.set_node(caller, node);
     }
 
-    true
+    fn finish(self, module: &mut Module) {
+        // Redirect only the preexisting chains: a fresh projection chain's tail deliberately retains its original carrier.
+        let boundary = module.nodes().len();
+        let mut redirects = BTreeMap::new();
+        for (carrier, nodes) in self.projections {
+            let ids = nodes
+                .iter()
+                .map(|_| module.reserve_node())
+                .collect::<Vec<_>>();
+            if let Some(&head) = ids.first() {
+                redirects.insert(carrier, head);
+            }
+            for (index, mut node) in nodes.into_iter().enumerate() {
+                let Node::LetIntrinsic { next, .. } = &mut node else {
+                    unreachable!()
+                };
+                *next = ids.get(index + 1).copied().unwrap_or(carrier);
+                module.define_node(ids[index], node);
+            }
+        }
+        let redirect = |id: &mut NodeId| {
+            if let Some(&head) = redirects.get(id) {
+                *id = head;
+            }
+        };
+        for (_, function) in module.live_functions_mut() {
+            redirect(&mut function.body);
+        }
+        for (_, continuation) in module.live_continuations_mut() {
+            redirect(&mut continuation.body);
+        }
+        for (id, node) in module.live_nodes_mut() {
+            if id.index() < boundary {
+                match node {
+                    Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => redirect(next),
+                    Node::LetFun { body, .. } | Node::LetCont { body, .. } => redirect(body),
+                    _ => {}
+                }
+            }
+            visit_atoms_mut(node, &mut |atom| {
+                if let Atom::Value(value) = atom
+                    && let Some(replacement) = self.substitutions.get(value)
+                {
+                    *atom = replacement.clone();
+                }
+            });
+        }
+        for param in self.substitutions.keys() {
+            module.remove_value(*param);
+        }
+    }
+}
+
+/// Split every independent known-function parameter admitted by one snapshot. Earlier positions survive descending splices; a newly rebuilt argument waits for fresh origins. Caller projections and parameter substitutions commit together, so a sweep scans the module once to redirect them.
+pub(crate) fn split_workers(module: &mut Module) -> bool {
+    let origins = origins(module);
+    let demands = demands(module);
+    let calls = analyze_calls(module);
+    let mut workers = admit_workers(module, &origins, &demands, &calls);
+    workers.sort_by_key(|worker| (worker.function, std::cmp::Reverse(worker.position)));
+    let mut edits = WorkerEdits::default();
+    let mut changed = false;
+    for worker in workers {
+        let definition = module.function(worker.function).unwrap();
+        if definition.params.get(worker.position) != Some(&worker.param)
+            || definition.params.len() - 1 + worker.width > PARAM_SPLIT_GROWTH_LIMIT
+        {
+            continue;
+        }
+        let callers = &calls.call_sites[&worker.function];
+        if !callers.iter().all(|site| {
+            let Some(Node::ApplyFun {
+                callee: Callee::Known(target),
+                args,
+                ..
+            }) = module.node(*site)
+            else {
+                return false;
+            };
+            if *target != worker.function {
+                return false;
+            }
+            let Some(Atom::Value(source)) = args.get(worker.position) else {
+                return false;
+            };
+            (*source == worker.param
+                || !edits.substitutions.contains_key(source) && origins.contains_key(source))
+                && takeable(&origins, worker.param, &Atom::Value(*source))
+        }) {
+            continue;
+        }
+        edits.apply(module, &origins, callers, &worker);
+        changed = true;
+    }
+    if changed {
+        edits.finish(module);
+    }
+    changed
 }
 
 // -- prepared windows --------------------------------------------------------
