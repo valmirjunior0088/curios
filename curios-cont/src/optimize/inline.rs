@@ -9,7 +9,7 @@ use {
 
 pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
     let mut changed = false;
-    // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline would make this quadratic on a large unoptimized module. Per-callee facts (the body's shape and extent) are stable across a sweep because inlining a call copies the callee rather than mutating it, and a surviving call node keeps its owner; only the site counts go stale within a sweep, and a stale count only tightens the size budget, so the calls it defers are picked up by the next sweep's fresh analysis. Inlining that exposes a call inside a copied body is likewise handled by the following sweep.
+    // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline would make this quadratic on a large unoptimized module. Each call and its complete copy extent are read from the current graph: an earlier inline inside a callee can enlarge its body in this sweep. Snapshot site counts only tighten the size budget as calls disappear, so deferred work is picked up by the next sweep's fresh analysis. New calls inside a copied body likewise wait for the following sweep.
     for _ in 0..10_000 {
         let analysis = analyze_calls(module);
         let mut inlined_any = false;
@@ -24,7 +24,7 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
             else {
                 continue;
             };
-            let (callee, args, return_to) = (*callee, args.clone(), *return_to);
+            let (callee, return_to) = (*callee, *return_to);
             if Some(callee) == module.entry()
                 || analysis.recursive.contains(&callee)
                 || module.is_out_of_line(callee)
@@ -34,8 +34,6 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
             if !analysis.node_owners.contains_key(&node_id) {
                 continue;
             }
-            // The extent rather than the body: `function_nodes` walks a `LetFun`'s continuation and not its members, so it understates the duplication of a body that nests definitions — and a multi-site inline copies those members once per site.
-            let plan = CopyPlan::functions(module, BTreeSet::from([callee]));
             let sites = analysis.call_sites.get(&callee).map_or(0, Vec::len);
             let duplicated = sites > 1 || analysis.escaping.contains(&callee);
             let limit = if duplicated {
@@ -43,9 +41,13 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
             } else {
                 SCC_CLONE_NODE_LIMIT
             };
-            if plan.nodes.len() > limit {
+            // The extent rather than the body: `function_nodes` walks a `LetFun`'s continuation and not its members, so it understates the duplication of a body that nests definitions — and a multi-site inline copies those members once per site. Bound the request itself so an oversized callee is not walked in full at every site.
+            let Some(plan) =
+                CopyPlan::functions_with_limit(module, BTreeSet::from([callee]), limit)
+            else {
                 continue;
-            }
+            };
+            let args = args.clone();
             if inline_call(module, node_id, callee, &args, return_to, plan) {
                 changed = true;
                 inlined_any = true;

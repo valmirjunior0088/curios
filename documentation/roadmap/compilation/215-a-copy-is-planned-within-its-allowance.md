@@ -2,7 +2,7 @@
 
 ## What is missing
 
-Known-call inlining and loop-entry separation (`curios-cont/src/optimize/inline.rs` and `contify.rs`) construct a complete `CopyPlan` before checking its copied-node allowance. An oversized callee is walked in full at every attempted inline. The shared planner already offers bounded function and continuation requests, used during specialization discovery. Call and jump specialization still request an unlimited plan during final extent revalidation.
+Loop-entry separation (`curios-cont/src/optimize/contify.rs`) constructs a complete `CopyPlan` before checking its copied-node allowance. Call and jump specialization still request an unlimited plan during final extent revalidation. Known-call inlining selects its allowance first and requests a fresh bounded plan before cloning arguments; its boundary and same-sweep tests hold the unchanged decisions.
 
 The current pass timings belong to `curios`'s `tests::instrumented::fixpoint_pass_measurements`. They include analysis and execution, so they do not establish the fraction bounded planning removes. The next comparison separates those costs and counts rejected planning work.
 
@@ -18,9 +18,8 @@ The current pass timings belong to `curios`'s `tests::instrumented::fixpoint_pas
 
 The inliner tests pin inclusive boundaries for single-site, multiple-site and escaping callees, including nested extents, refusal without minting, and a callee enlarged earlier in a sweep. They pass against unchanged production behavior, whose revision is the measurement baseline. Existing planner and loop-separation tests hold their boundaries and atomicity.
 
-1. Bound known-call planning before argument cloning; retain the existing inlining transformation and correct the sweep comment. Check Cont tests and the copying, sweeps and dead-parameter codegen consumers.
-2. Bound loop planning and specialization revalidation, preserving the nested-entry guard and atomic copy-and-contify. Put contracts in rustdoc and the owning README. Check the affected pass and codegen tests.
-3. Verify counted work, consumer identity and default-release cost; complete workspace format, Clippy and tests, including the standard-library corpus. Retire this specification.
+1. Bound loop planning and specialization revalidation, preserving the nested-entry guard and atomic copy-and-contify. Put contracts in rustdoc and the owning README. Check the affected pass and codegen tests.
+2. Verify counted work, consumer identity and default-release cost; complete workspace format, Clippy and tests, including the standard-library corpus. Retire this specification.
 
 ## Verification
 
