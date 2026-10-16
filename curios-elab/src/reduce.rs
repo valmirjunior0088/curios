@@ -334,9 +334,10 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
                 let tail = unfold_rec(context, rec)?;
                 term = reduce(context, tail)?;
             }
-            Subterm::Apply(apply) => match unfold_rec_apply(context, apply)? {
+            // An application no unfolding opens is neutral as a `match` on a variable is, and kept by the same test.
+            Subterm::Apply(apply) => match unfold_rec_apply(context, apply.clone())? {
                 Some(unfolded) => term = reduce(context, unfolded)?,
-                None => return Ok(folded),
+                None => return finished(context, folded, Subterm::Apply(apply).into()),
             },
             other => {
                 let neutral = matches!(
@@ -350,14 +351,18 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
                     return Ok(reduct);
                 }
 
-                // Neutral: keep it only if the group is gone from it, and fall back to the folded spelling otherwise.
-                return Ok(match demanded_group(context, &folded)? {
-                    Some(group) if reduct.mentions_rec_member(&group) => folded,
-                    _ => reduct,
-                });
+                return finished(context, folded, reduct);
             }
         }
     }
+}
+
+/// What [`force_rec`] keeps of a neutral `reduct`: it, where the group `folded` is a call on is gone from it, and the folded spelling otherwise.
+fn finished(context: &mut Context, folded: Term, reduct: Term) -> Result<Term, ReduceError> {
+    Ok(match demanded_group(context, &folded)? {
+        Some(group) if reduct.mentions_rec_member(&group) => folded,
+        _ => reduct,
+    })
 }
 
 /// The group whose call `folded` is, for [`force_rec`]'s occurrence test.

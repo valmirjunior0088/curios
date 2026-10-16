@@ -31,6 +31,8 @@ pub(super) enum Runaway {
     Nests(u32),
     /// `g(tower(g, k))` against `stack(g, k, g(top))` at so many steps: one term built by two recursions, the second of which a checker opens alone a step at a time, a comparison nested in the last at each.
     Stacks(u32),
+    /// `walk(g, k, top)` at so many steps, against `g(top)`: a recursion whose last step applies a variable.
+    Walks(u32),
 }
 
 const POWER: &str =
@@ -112,6 +114,12 @@ pub(super) fn runaway(shape: Runaway) -> String {
                 format!("let claim(g: (Nat) -> Nat) -> Eq()(tower(g, {steps}), stack(g, {steps}, 0))"),
             )
         }
+        Runaway::Walks(steps) => (
+            "Nat, Eq, Io",
+            "let walk(g: (Nat) -> Nat, n: Nat, top: Nat) -> Nat = match n | 0 => g(top) | k + 1 => walk(g, k, top) end;"
+                .to_string(),
+            format!("let claim(g: (Nat) -> Nat, x: Nat) -> Eq()(walk(g, {steps}, x), g(x))"),
+        ),
     };
 
     format!(
@@ -182,6 +190,15 @@ fn a_power_widened_at_every_step_is_reduced_inside_its_budget() {
 fn a_side_opened_alone_a_step_at_a_time_is_held_inside_its_budget() {
     assert_eq!(
         typecheck_within(400_000, &runaway(Runaway::Stacks(500))),
+        Ok(())
+    );
+}
+
+/// A recursion whose last step applies a variable is held two thousand steps deep inside three hundred thousand units, as the same recursion ending at its argument is: forcing it keeps the application it ends at, where keeping the call made conversion run what was left of the recursion again at every step it opened.
+#[test]
+fn a_recursion_that_ends_at_an_applied_variable_is_held_inside_its_budget() {
+    assert_eq!(
+        typecheck_within(300_000, &runaway(Runaway::Walks(2000))),
         Ok(())
     );
 }

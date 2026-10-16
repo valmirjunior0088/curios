@@ -785,9 +785,10 @@ fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
 
         match Term::unwrap_or_clone(term) {
             Subterm::Rec(rec) => term = whnf(kernel, unfold_rec(rec))?,
-            Subterm::Apply(apply) => match unfold_rec_apply(kernel, apply)? {
+            // An application no unfolding opens is stuck as a `match` on a variable is: kept where the recursion is finished, its group gone from it, and the folded call otherwise.
+            Subterm::Apply(apply) => match unfold_rec_apply(kernel, apply.clone())? {
                 Some(unfolded) => term = whnf(kernel, unfolded)?,
-                None => return Ok(folded),
+                None => return finished(kernel, folded, Subterm::Apply(apply).into()),
             },
             other => {
                 let stuck = matches!(
@@ -800,13 +801,18 @@ fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                     return Ok(value);
                 }
 
-                return Ok(match forced_group(kernel, &folded)? {
-                    Some(group) if value.mentions_rec_member(&group) => folded,
-                    _ => value,
-                });
+                return finished(kernel, folded, value);
             }
         }
     }
+}
+
+/// What [`force`] keeps of a neutral `value` the unfolding of `folded` reached: `value` where the recursion is finished, no member of the group `folded` is a call on standing in it, and `folded` otherwise.
+fn finished(kernel: &mut Kernel, folded: Term, value: Term) -> Result<Term, ReduceError> {
+    Ok(match forced_group(kernel, &folded)? {
+        Some(group) if value.mentions_rec_member(&group) => folded,
+        _ => value,
+    })
 }
 
 /// The group `folded` denotes a call on, which is what [`force`] asks its occurrence question about.
