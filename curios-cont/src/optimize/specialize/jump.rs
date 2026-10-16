@@ -1,10 +1,10 @@
 //! Snapshot-based join specialization: equivalent entries share a peeled copy, and dependent joins wait for fresh facts.
 
 use {
-    super::tagged_row_values,
+    super::{ConstructorPattern, tagged_row_values},
     crate::{
         Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, ContinuationId, CopyBudget, CopyPlan,
-        CopyPriority, Edge, Intrinsic, Literal, Module, Node, NodeId, RowId, ValueExpr,
+        CopyPriority, Edge, Intrinsic, Literal, Module, Node, NodeId, ValueExpr,
         collect_control_targets, continuation_transfers, copy_bodies, nodes_from,
     },
     curios_num::Natural,
@@ -12,30 +12,9 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct Pattern {
-    index: usize,
-    tag: u32,
-    width: usize,
-    row: RowId,
-}
-
-impl Pattern {
-    fn matches(&self, edge: &Edge, constructors: &Constructors) -> bool {
-        let Some(Atom::Value(value)) = edge.args.get(self.index) else {
-            return false;
-        };
-        constructors.get(value).is_some_and(|(tag, fields, row)| {
-            *tag == self.tag && fields.len() == self.width && *row == self.row
-        })
-    }
-}
-
-type Constructors = BTreeMap<crate::ValueId, (u32, Vec<Atom>, RowId)>;
-
 struct Candidate {
     target: ContinuationId,
-    pattern: Pattern,
+    pattern: ConstructorPattern,
     intro: NodeId,
     extent: BTreeSet<NodeId>,
     carriers: BTreeSet<NodeId>,
@@ -79,10 +58,14 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
         if transfers.get(&target).is_none_or(|sites| sites.len() < 2) {
             continue;
         }
-        let extent = CopyPlan::continuation(module, target).nodes;
-        if extent.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
+        let Some(plan) = CopyPlan::continuation_with_limit(
+            module,
+            target,
+            BRANCH_SPECIALIZATION_GROWTH_LIMIT - 1,
+        ) else {
             continue;
-        }
+        };
+        let extent = plan.nodes;
         let projected = nodes_from(module, definition.body)
             .into_iter()
             .filter_map(|id| match module.node(id).unwrap() {
@@ -99,7 +82,7 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
             .collect::<BTreeSet<_>>();
         roots.insert(target, (intro, extent, projected));
     }
-    let mut grouped = BTreeMap::<(ContinuationId, Pattern), BTreeSet<NodeId>>::new();
+    let mut grouped = BTreeMap::<(ContinuationId, ConstructorPattern), BTreeSet<NodeId>>::new();
     for (id, node) in module.live_nodes() {
         for edge in edges(node) {
             let Some((_, _, projected)) = roots.get(&edge.target) else {
@@ -122,7 +105,7 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
                 grouped
                     .entry((
                         edge.target,
-                        Pattern {
+                        ConstructorPattern {
                             index,
                             tag: *tag,
                             width: fields.len(),
@@ -186,7 +169,10 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
             .filter(|id| {
                 edges(module.node(*id).unwrap()).iter().any(|edge| {
                     edge.target == candidate.target
-                        && candidate.pattern.matches(edge, &constructors)
+                        && candidate
+                            .pattern
+                            .fields(&edge.args, &constructors)
+                            .is_some()
                 })
             })
             .collect::<Vec<_>>();
@@ -227,7 +213,11 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
         for id in carriers {
             let node = module.node_mut(id).unwrap();
             let repoint = |edge: &mut Edge| {
-                if edge.target == candidate.target && candidate.pattern.matches(edge, &constructors)
+                if edge.target == candidate.target
+                    && candidate
+                        .pattern
+                        .fields(&edge.args, &constructors)
+                        .is_some()
                 {
                     let Atom::Value(value) = edge.args[candidate.pattern.index] else {
                         unreachable!()

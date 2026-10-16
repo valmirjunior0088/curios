@@ -3,17 +3,17 @@
 use {
     super::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
     crate::{
-        Atom, BRANCH_CLONE_LIMIT, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, Continuation,
-        CopyBudget, CopyPlan, Edge, Function, Intrinsic, Literal, Module, Node, Row, RowId,
-        SCC_CLONE_LIMIT, SCC_CLONE_NODE_LIMIT, Slot, ValueExpr, forward_aggregate_projections,
-        function_nodes, known_values, simplify_nodes,
+        Atom, BRANCH_COPY_NODE_LIMIT, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, Continuation,
+        CopyBudget, CopyPlan, Edge, Function, Intrinsic, JUMP_COPY_NODE_LIMIT, Literal, Module,
+        Node, Row, RowId, SCC_CLONE_LIMIT, SCC_CLONE_NODE_LIMIT, Slot, ValueExpr,
+        forward_aggregate_projections, function_nodes, known_values, simplify_nodes,
         test_support::{
             PolymorphicLoop, has_switch, known_callee, nest_helpers, polymorphic_loop,
             tagged_consumer, tagged_family, tagged_join,
         },
     },
     curios_num::Natural,
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 #[test]
@@ -239,15 +239,19 @@ fn specialization_is_deterministic() {
 #[test]
 fn specializes_a_constructor_argument_and_collapses_the_switch() {
     let (mut module, calls, consume) = tagged_consumer(0, &[0]);
-    let mut budget = BRANCH_CLONE_LIMIT;
+    let copy_cost = CopyPlan::functions(&module, BTreeSet::from([consume]))
+        .nodes
+        .len()
+        + 1;
+    let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
     assert!(
         specialize_call_patterns(&mut module, &mut budget),
         "a family's construction of known tag is specialized"
     );
     assert_eq!(
         budget,
-        BRANCH_CLONE_LIMIT - 1,
-        "one clone consumed the budget"
+        CopyBudget::new(BRANCH_COPY_NODE_LIMIT - copy_cost),
+        "the copy and rebuild consumed the allowance"
     );
     module.verify().unwrap();
 
@@ -272,7 +276,7 @@ fn equivalent_constructor_sites_share_one_clone() {
     // Two tag-0 sites match one pattern; a tag-1 site is a different pattern.
     let (mut module, calls, consume) = tagged_consumer(0, &[0, 0, 1]);
     let before = module.functions().iter().flatten().count();
-    let mut budget = BRANCH_CLONE_LIMIT;
+    let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
     assert!(specialize_call_patterns(&mut module, &mut budget));
     module.verify().unwrap();
 
@@ -297,19 +301,19 @@ fn call_pattern_specialization_respects_the_growth_budget() {
     // Inflate `consume` past BRANCH_SPECIALIZATION_GROWTH_LIMIT live nodes.
     let (mut module, calls, consume) =
         tagged_consumer(BRANCH_SPECIALIZATION_GROWTH_LIMIT + 1, &[0]);
-    let mut budget = BRANCH_CLONE_LIMIT;
+    let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
     assert!(
         !specialize_call_patterns(&mut module, &mut budget),
         "an oversized callee is not specialized"
     );
-    assert_eq!(budget, BRANCH_CLONE_LIMIT);
+    assert_eq!(budget, CopyBudget::new(BRANCH_COPY_NODE_LIMIT));
     assert_eq!(known_callee(&module, calls[0]), consume);
 }
 
 #[test]
 fn call_pattern_specialization_respects_the_clone_budget() {
     let (mut module, calls, consume) = tagged_consumer(0, &[0]);
-    let mut budget = 0;
+    let mut budget = CopyBudget::new(0);
     assert!(
         !specialize_call_patterns(&mut module, &mut budget),
         "an exhausted budget makes no clone"
@@ -321,7 +325,7 @@ fn call_pattern_specialization_respects_the_clone_budget() {
 fn call_pattern_specialization_is_deterministic() {
     let run = || {
         let (mut module, calls, _) = tagged_consumer(0, &[0, 0]);
-        let mut budget = BRANCH_CLONE_LIMIT;
+        let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
         specialize_call_patterns(&mut module, &mut budget);
         (
             known_callee(&module, calls[0]).0,
@@ -446,7 +450,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     module.set_entry(entry);
     module.verify().unwrap();
 
-    let mut budget = BRANCH_CLONE_LIMIT;
+    let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
     assert!(specialize_call_patterns(&mut module, &mut budget));
     module.verify().unwrap();
 
@@ -554,7 +558,11 @@ fn call_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
     let second = tagged_family(&mut module, "second");
     set_constructor_rows(&mut module, &[Some(first), Some(first), Some(second), None]);
 
-    let mut budget = BRANCH_CLONE_LIMIT;
+    let copy_cost = CopyPlan::functions(&module, BTreeSet::from([consume]))
+        .nodes
+        .len()
+        + 1;
+    let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
     assert!(specialize_call_patterns(&mut module, &mut budget));
     module.verify().unwrap();
     let clone = known_callee(&module, calls[0]);
@@ -571,7 +579,7 @@ fn call_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
             "a different vocabulary keeps the general function"
         );
     }
-    assert_eq!(budget, BRANCH_CLONE_LIMIT - 1);
+    assert_eq!(budget, CopyBudget::new(BRANCH_COPY_NODE_LIMIT - copy_cost));
 }
 
 #[test]
@@ -596,7 +604,7 @@ fn jump_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
         };
         module.verify().unwrap();
         let cost = CopyPlan::continuation(&module, join).nodes.len() + 1;
-        let mut budget = CopyBudget::new(BRANCH_CLONE_LIMIT);
+        let mut budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
         assert!(specialize_jump_patterns(&mut module, &mut budget));
         module.verify().unwrap();
         let Some(Node::Switch {
@@ -622,7 +630,7 @@ fn jump_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
             "a different vocabulary keeps the general join"
         );
         assert_eq!(other.args.len(), 1);
-        assert_eq!(budget, CopyBudget::new(BRANCH_CLONE_LIMIT - cost));
+        assert_eq!(budget, CopyBudget::new(JUMP_COPY_NODE_LIMIT - cost));
     }
 }
 
@@ -634,12 +642,12 @@ fn a_call_handed_no_family_row_is_no_pattern() {
         let row = product.then(|| product_row(&mut module));
         set_constructor_rows(&mut module, &[row, row]);
 
-        let mut budget = BRANCH_CLONE_LIMIT;
+        let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
         assert!(
             !specialize_call_patterns(&mut module, &mut budget),
             "a first field that is data selects nothing"
         );
-        assert_eq!(budget, BRANCH_CLONE_LIMIT);
+        assert_eq!(budget, CopyBudget::new(BRANCH_COPY_NODE_LIMIT));
         for &call in &calls {
             assert_eq!(known_callee(&module, call), consume);
         }
@@ -654,12 +662,12 @@ fn a_jump_handed_no_family_row_is_no_pattern() {
         let row = product.then(|| product_row(&mut module));
         set_constructor_rows(&mut module, &[row, row]);
 
-        let mut budget = CopyBudget::new(BRANCH_CLONE_LIMIT);
+        let mut budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
         assert!(
             !specialize_jump_patterns(&mut module, &mut budget),
             "a first field that is data selects nothing"
         );
-        assert_eq!(budget, CopyBudget::new(BRANCH_CLONE_LIMIT));
+        assert_eq!(budget, CopyBudget::new(JUMP_COPY_NODE_LIMIT));
         for jump in [some_jump, none_jump] {
             let Some(Node::ApplyCont(edge)) = module.node(jump) else {
                 panic!("the predecessor stays a jump")

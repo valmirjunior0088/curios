@@ -7,7 +7,7 @@
 use {
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Module, Node,
-        NodeId, ValueExpr, ValueId, function_nodes, nodes_from,
+        NodeId, ValueExpr, ValueId,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -165,45 +165,93 @@ impl CopyPlan {
         Self::new(module, BTreeSet::new(), BTreeSet::from([continuation]))
     }
 
+    /// Decline as soon as the complete lexical extent crosses `limit`, before traversing the rest of an ineligible body.
+    pub(crate) fn functions_with_limit(
+        module: &Module,
+        functions: BTreeSet<FunctionId>,
+        limit: usize,
+    ) -> Option<Self> {
+        Self::limited(module, functions, BTreeSet::new(), limit)
+    }
+
+    pub(crate) fn continuation_with_limit(
+        module: &Module,
+        continuation: ContinuationId,
+        limit: usize,
+    ) -> Option<Self> {
+        Self::limited(
+            module,
+            BTreeSet::new(),
+            BTreeSet::from([continuation]),
+            limit,
+        )
+    }
+
     fn new(
         module: &Module,
         functions: BTreeSet<FunctionId>,
         continuations: BTreeSet<ContinuationId>,
     ) -> Self {
-        let mut nodes: BTreeSet<NodeId> = functions
+        Self::limited(module, functions, continuations, usize::MAX)
+            .expect("an unlimited copy extent fits")
+    }
+
+    fn limited(
+        module: &Module,
+        functions: BTreeSet<FunctionId>,
+        continuations: BTreeSet<ContinuationId>,
+        limit: usize,
+    ) -> Option<Self> {
+        let mut pending = functions
             .iter()
-            .flat_map(|&id| function_nodes(module, id))
+            .map(|id| module.function(*id).unwrap().body)
             .chain(
                 continuations
                     .iter()
-                    .flat_map(|&id| nodes_from(module, module.continuation(id).unwrap().body)),
+                    .map(|id| module.continuation(*id).unwrap().body),
             )
-            .collect();
+            .collect::<Vec<_>>();
+        let mut nodes = BTreeSet::new();
         let mut nested = BTreeSet::new();
-        let mut pending: Vec<NodeId> = nodes.iter().copied().collect();
-
-        while let Some(node_id) = pending.pop() {
-            let definitions = match module.node(node_id) {
-                Some(Node::LetFun { functions, .. }) => functions,
-                _ => continue,
-            };
-            for &function in definitions {
-                if !nested.insert(function) {
-                    continue;
+        while let Some(id) = pending.pop() {
+            if !nodes.insert(id) {
+                continue;
+            }
+            if nodes.len() > limit {
+                return None;
+            }
+            match module.node(id).unwrap() {
+                Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
+                    pending.push(*next)
                 }
-                for inner in function_nodes(module, function) {
-                    if nodes.insert(inner) {
-                        pending.push(inner);
+                Node::LetCont {
+                    continuations,
+                    body,
+                } => {
+                    pending.push(*body);
+                    pending.extend(continuations.iter().filter_map(|id| {
+                        module.continuation(*id).map(|definition| definition.body)
+                    }));
+                }
+                Node::LetFun { functions, body } => {
+                    pending.push(*body);
+                    for function in functions {
+                        if let Some(definition) = module.function(*function)
+                            && nested.insert(*function)
+                        {
+                            pending.push(definition.body);
+                        }
                     }
                 }
+                _ => {}
             }
         }
-        Self {
+        Some(Self {
             functions,
             continuations,
             nodes,
             nested,
-        }
+        })
     }
 }
 

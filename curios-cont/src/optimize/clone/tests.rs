@@ -271,3 +271,17 @@ fn a_peeled_continuation_keeps_its_backedge_and_renames_nested_captures() {
         ]
     );
 }
+
+#[test]
+fn a_bounded_plan_includes_nested_captures_and_rejects_the_first_excess_node() {
+    let (module, outer, inner) = nesting_module();
+    let original = module.to_string();
+    let full = CopyPlan::functions(&module, BTreeSet::from([outer]));
+    let bound = full.nodes.len();
+    assert!(full.nested.contains(&inner));
+    let exact = CopyPlan::functions_with_limit(&module, BTreeSet::from([outer]), bound).unwrap();
+    assert_eq!(exact.nodes, full.nodes);
+    assert_eq!(exact.nested, full.nested);
+    assert!(CopyPlan::functions_with_limit(&module, BTreeSet::from([outer]), bound - 1).is_none());
+    assert_eq!(module.to_string(), original);
+}

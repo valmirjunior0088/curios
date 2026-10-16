@@ -1,14 +1,18 @@
+mod pattern;
+pub(crate) use pattern::*;
+
+mod call;
+pub(crate) use call::*;
+
 mod jump;
 pub(crate) use jump::*;
 
 use {
     crate::{
-        Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, CallAnalysis, Callee, CopyPlan, FunctionId,
-        Intrinsic, Lattice, Literal, Module, Node, NodeId, RowId, SCC_CLONE_NODE_LIMIT, Slot,
-        Solver, ValueExpr, ValueId, analyze_calls, copy_bodies, function_nodes, resolve_atom,
-        visit_atoms_mut,
+        Atom, CallAnalysis, Callee, CopyPlan, FunctionId, Lattice, Literal, Module, Node, NodeId,
+        SCC_CLONE_NODE_LIMIT, Slot, Solver, ValueExpr, ValueId, analyze_calls, copy_bodies,
+        resolve_atom,
     },
-    curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -240,158 +244,10 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut usize) -> b
     }
     false
 }
-/// SpecConstr-style call-pattern specialization. When a known-callee call passes a variant family's construction whose tag is known ([`tagged_row_values`]) into a parameter the callee deconstructs, clone the callee with that constructor rebuilt at its entry so the existing aggregate-projection and known-switch simplifications collapse the deconstruction on a later iteration. The constructor's dynamic fields are threaded as fresh parameters (a worker/wrapper rebuild) and the clone's recursive self-calls fall back to the general function, so it peels the one matched level rather than assuming the recursion stays in pattern. Every call sharing the `(callee, index, tag, arity, row)` pattern repoints to the single clone, so equivalent sites specialize once. The row identity distinguishes two families' constructors of the same width and tag, since the clone rebuilds the selected one. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
-pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) -> bool {
-    if *budget == 0 {
-        return false;
-    }
-    let constructors = tagged_row_values(module);
-    if constructors.is_empty() {
-        return false;
-    }
-
-    // The first specializable pattern in deterministic (node, then argument) order: a known-callee call whose argument is a family's construction of known tag that the callee deconstructs, whose callee has a lexical `LetFun` owner and a clonable body within the growth budget.
-    let mut chosen = None;
-    'search: for (_, node) in module.live_nodes() {
-        let Node::ApplyFun {
-            callee: Callee::Known(callee),
-            args,
-            ..
-        } = node
-        else {
-            continue;
-        };
-        if Some(*callee) == module.entry() || module.is_out_of_line(*callee) {
-            continue;
-        }
-        let params = &module.function(*callee).unwrap().params;
-        for (index, arg) in args.iter().enumerate() {
-            let Atom::Value(value) = arg else { continue };
-            let Some((tag, fields, row)) = constructors.get(value) else {
-                continue;
-            };
-            let Some(&param) = params.get(index) else {
-                continue;
-            };
-            if !deconstructs_param(module, *callee, param) {
-                continue;
-            }
-            let member = BTreeSet::from([*callee]);
-            if introducing_letfun(module, &member).is_none() {
-                continue;
-            }
-            // The extent rather than the body: a definition nested in the callee is copied along with it, and counting only the outer body would price the clone at a fraction of what it duplicates.
-            let plan = CopyPlan::functions(module, member);
-            if plan.nodes.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
-                continue;
-            }
-            chosen = Some((*callee, index, *tag, fields.len(), *row, plan));
-            break 'search;
-        }
-    }
-    let Some((callee, index, tag, arity, row, plan)) = chosen else {
-        return false;
-    };
-
-    let member = BTreeSet::from([callee]);
-    let intro = introducing_letfun(module, &member).unwrap();
-    let clones = copy_bodies(module, plan).functions;
-    let clone = clones[&callee];
-
-    // Peel: the clone recurses into the general function, not itself, so a recursive call that does not carry the matched constructor stays valid.
-    //
-    // Over every copied function rather than the entry alone. The entry's parameters are about to be respliced, so a call to it that kept the old argument list would not merely be unpeeled — it would carry the wrong arity, and a definition copied from inside the entry's own body is exactly where such a call can hide.
-    let peeled = clones
-        .values()
-        .flat_map(|&id| function_nodes(module, id))
-        .collect::<Vec<_>>();
-    for node_id in peeled {
-        let node = module.node_mut(node_id).unwrap();
-        if let Node::ApplyFun {
-            callee: Callee::Known(target),
-            ..
-        } = node
-            && *target == clone
-        {
-            *target = callee;
-        }
-        visit_atoms_mut(node, &mut |atom| {
-            if let Atom::Fun(function) = atom
-                && *function == clone
-            {
-                *atom = Atom::Fun(callee);
-            }
-        });
-    }
-
-    // Rebuild the constructor at the clone entry, threading its dynamic fields as fresh parameters in place of the specialized parameter.
-    let clone_function = module.function(clone).unwrap();
-    let mut params = clone_function.params.clone();
-    let clone_body = clone_function.body;
-    let old_param = params[index];
-    let field_params: Vec<ValueId> = (1..arity)
-        .map(|field| module.add_value(Some(format!("field#{field}"))))
-        .collect();
-    let mut rebuilt = Vec::with_capacity(arity);
-    rebuilt.push(Atom::Literal(Literal::Nat(Natural::from(tag))));
-    rebuilt.extend(field_params.iter().map(|&p| Atom::Value(p)));
-    let entry = module.add_node(Node::LetValue {
-        result: old_param,
-        value: ValueExpr::Row(row, rebuilt),
-        next: clone_body,
-    });
-    params.splice(index..=index, field_params);
-    let clone_function = module.function_mut(clone).unwrap();
-    clone_function.params = params;
-    clone_function.body = entry;
-
-    // Introduce the clone in the callee's lexical scope.
-    if let Some(Node::LetFun { functions, .. }) = module.node_mut(intro) {
-        functions.push(clone);
-    }
-
-    // Repoint every call sharing the pattern to the single clone, splicing each site's own constructor fields in place of the constructed argument.
-    for node_id in 0..module.nodes().len() {
-        let Some(Node::ApplyFun {
-            callee: Callee::Known(target),
-            args,
-            ..
-        }) = module.node(NodeId(node_id as u32))
-        else {
-            continue;
-        };
-        if *target != callee {
-            continue;
-        }
-        let Some(Atom::Value(value)) = args.get(index) else {
-            continue;
-        };
-        let Some((site_tag, site_fields, site_row)) = constructors.get(value) else {
-            continue;
-        };
-        if *site_tag != tag || site_fields.len() != arity || *site_row != row {
-            continue;
-        }
-        let spliced = site_fields[1..].to_vec();
-        let Some(Node::ApplyFun {
-            callee: target,
-            args,
-            ..
-        }) = module.node_mut(NodeId(node_id as u32))
-        else {
-            unreachable!()
-        };
-        *target = Callee::Known(clone);
-        args.splice(index..=index, spliced);
-    }
-
-    *budget -= 1;
-    true
-}
 /// The `LetValue`-bound constructions of a variant family whose tag is known: a construction of a row that carries [`Slot::Tag`] at slot zero, with a `Nat` literal standing there. These are the constructor call patterns branch specialization can bake into a callee.
 ///
 /// A family's row alone carries a tag. A product row's first field and a structural tuple's are data, so a literal there selects nothing: a product has one pattern, its construction, which is `split_workers`' to deliver.
-pub(crate) fn tagged_row_values(module: &Module) -> BTreeMap<ValueId, (u32, Vec<Atom>, RowId)> {
+pub(crate) fn tagged_row_values(module: &Module) -> TaggedRows {
     let mut result = BTreeMap::new();
     for (_, node) in module.live_nodes() {
         let Node::LetValue {
@@ -412,19 +268,6 @@ pub(crate) fn tagged_row_values(module: &Module) -> BTreeMap<ValueId, (u32, Vec<
         }
     }
     result
-}
-/// Whether `function` projects a field out of `param`, i.e. contains a `RowGet` on it, the one projection a family's value has. This is the profitability gate: baking a known constructor into a parameter only pays off when the body actually deconstructs it.
-pub(crate) fn deconstructs_param(module: &Module, function: FunctionId, param: ValueId) -> bool {
-    function_nodes(module, function).iter().any(|&id| {
-        matches!(
-            module.node(id),
-            Some(Node::LetIntrinsic {
-                op: Intrinsic::RowGet(..),
-                args,
-                ..
-            }) if args.first() == Some(&Atom::Value(param))
-        )
-    })
 }
 /// The literal results of `LetValue` bindings, used to resolve caller values already known to be constant.
 pub(crate) fn literal_value_map(module: &Module) -> BTreeMap<ValueId, Atom> {

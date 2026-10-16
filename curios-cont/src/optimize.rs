@@ -51,7 +51,8 @@ pub(crate) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
 pub(crate) const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
 pub(crate) const SCC_CLONE_LIMIT: usize = 64;
 pub(crate) const SCC_CLONE_NODE_LIMIT: usize = 256;
-pub(crate) const BRANCH_CLONE_LIMIT: usize = 64;
+/// Maximum cumulative call-pattern copying, including head rebuilds.
+pub(crate) const BRANCH_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
 /// Maximum cumulative jump-specialization copying, including head rebuilds.
 pub(crate) const JUMP_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
 /// How many loops [`separate_loop_entries`] may copy for one more call site each, across a module.
@@ -72,7 +73,7 @@ pub fn optimize(module: &mut Module) {
         .expect("invalid high CPS before optimization");
 
     let mut scc_clone_budget = SCC_CLONE_LIMIT;
-    let mut branch_clone_budget = BRANCH_CLONE_LIMIT;
+    let mut branch_clone_budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
     let mut jump_clone_budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
     let mut entry_clone_budget = ENTRY_CLONE_LIMIT;
     // Name and time one pass, and record whether it fired. The two together are what separate the fixpoint's hypotheses: a pass that admits one candidate per call fires on as many rounds as it has candidates, while a pair undoing each other's work fires in lockstep for rounds neither needed.
