@@ -178,7 +178,7 @@ fn a_trailing_comment_after_a_separator_rides_the_line_it_was_written_on() {
 
     for (comment, rides) in [
         ("-- after a", "let a = 1;"),
-        ("-- one", "1,"),
+        ("-- one", "[1,"),
         ("-- two", "2"),
         ("-- first", "a,"),
         ("-- the call", "n);"),

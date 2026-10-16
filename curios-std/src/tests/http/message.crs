@@ -154,8 +154,7 @@ test a_json_body_that_is_not_text_is_refused_where_it_stops =
             answer(x['[', '0', 0xE5, ']', '\n']),
             answer(x['[', '1', 'e', 0xE5, ']']),
             answer(Str/to_bytes("[1, 2]"))]),
-        Str/flatten([
-            "a JSON body is text at byte 4|a JSON body is text at byte 4|",
+        Str/flatten(["a JSON body is text at byte 4|a JSON body is text at byte 4|",
             "a JSON body is text at byte 2|a JSON body is text at byte 3|read"]));
 
 -- A name is a token and a value holds no control octet but the tab: text met at run time is read as one or refused, octets past ASCII are a value's to hold, and names are one name whatever their case.

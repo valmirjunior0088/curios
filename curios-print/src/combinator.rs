@@ -1,7 +1,7 @@
 //! The public builders: every document is made by composing these.
 
 use {
-    super::{FillStyle, Printer},
+    super::{FillItem, FillStyle, Printer},
     std::ops::Range,
 };
 
@@ -88,13 +88,19 @@ pub fn hard_line() -> Printer {
 /// Use this where the items are short and interchangeable — the names of an import — and [`group`] where they are structural parts that belong together or apart as a unit. Each item is measured and printed flat, so a fill never breaks *inside* an item; give it items that are already whole.
 pub fn fill(items: impl IntoIterator<Item = Printer>) -> Printer {
     Printer::Fill {
-        items: items.into_iter().collect(),
+        items: items
+            .into_iter()
+            .map(|printer| FillItem {
+                printer,
+                compact: true,
+            })
+            .collect(),
         style: FillStyle::Atomic,
     }
 }
 
-/// A wrapping sequence whose items retain their own groups and internal breaks. Each gap is decided independently, as in [`fill`], without forcing a structured item onto one line.
-pub fn flow(items: impl IntoIterator<Item = Printer>) -> Printer {
+/// A wrapping sequence whose items retain their own groups and internal breaks. In a broken layout, adjacent compact items pack independently while noncompact items stand apart. An enclosing fitting group keeps the whole sequence on one line.
+pub fn flow(items: impl IntoIterator<Item = FillItem>) -> Printer {
     Printer::Fill {
         items: items.into_iter().collect(),
         style: FillStyle::Structural,

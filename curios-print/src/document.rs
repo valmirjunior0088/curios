@@ -11,6 +11,13 @@ pub enum FillStyle {
     Structural,
 }
 
+/// One item of a wrapping sequence, with its boundary policy in a broken layout.
+pub struct FillItem {
+    pub printer: Printer,
+    /// Adjacent compact items may share a line; a noncompact item stands apart when its enclosing group breaks.
+    pub compact: bool,
+}
+
 /// A pretty-printing document: what to emit, as data.
 ///
 /// # Why this is an enum and not a closure
@@ -44,9 +51,9 @@ pub enum Printer {
     ///
     /// A [`Printer::Group`] is all-or-nothing — when its flat form does not fit, every [`Printer::Line`] inside it breaks — which is right for a structure whose parts belong on separate lines once any of them does. It is wrong for a run of short interchangeable items: a twenty-name import does not fit on one line, so a group puts each name on a line of its own and spends twenty lines on what two would hold. Each item carries its own separator, so this variant inserts only the gap and never invents punctuation. Its style decides whether items render flat or retain their own layout choices.
     ///
-    /// The gaps are decided while printing and owe nothing to the mode the fill was reached in: a fill inside a *flat* group still wraps. That is why `fits` reads a fill that runs out of room as the line ending rather than as the scan failing — any other reading would let a group render flat over a fill that then wrapped underneath it.
+    /// The gaps are decided while printing. An atomic fill can wrap under a flat group; a structural fill must fit in full for that group to stay flat, so its enclosing expression can break when the run needs more than one line. In a broken layout, structural items share a line only when both are compact.
     Fill {
-        items: Vec<Printer>,
+        items: Vec<FillItem>,
         style: FillStyle,
     },
     /// The width-adaptive unit: renders flat — every enclosed [`Printer::Line`] as its flat spelling — when its flat form fits the room left on the line, and broken otherwise. Nested groups measured inside a fitting parent render flat with it; under a broken parent each decides for itself. With no width configured every group fits.
@@ -73,7 +80,8 @@ impl Printer {
     fn is_dismantled(&self) -> bool {
         match self {
             Printer::Text(_) | Printer::Named { .. } | Printer::Mark(_) | Printer::Ends => true,
-            Printer::Concat(parts) | Printer::Fill { items: parts, .. } => parts.is_empty(),
+            Printer::Concat(parts) => parts.is_empty(),
+            Printer::Fill { items, .. } => items.is_empty(),
             Printer::Indent(inner) | Printer::Group(inner) => {
                 matches!(**inner, Printer::Text(_))
             }
@@ -100,8 +108,11 @@ impl Drop for Printer {
         while let Some(mut printer) = pending.pop() {
             match &mut printer {
                 Printer::Text(_) | Printer::Named { .. } => {}
-                Printer::Concat(parts) | Printer::Fill { items: parts, .. } => {
+                Printer::Concat(parts) => {
                     pending.extend(mem::take(parts));
+                }
+                Printer::Fill { items, .. } => {
+                    pending.extend(mem::take(items).into_iter().map(|item| item.printer));
                 }
                 Printer::Indent(inner) | Printer::Group(inner) => pending.push(inner.take()),
                 Printer::Deferred(_) => {}

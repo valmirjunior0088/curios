@@ -23,10 +23,15 @@ test integer_keys_keep_their_signs_apart =
 
 -- A digest's eight bytes at the empty run, whose three lanes each stand at their seed, at a short text and at eight bytes of ones. Pinned, and not stable: a digest may change between compiler versions, and this is where a change shows.
 test a_digest_is_eight_bytes_of_its_three_lanes =
-    Test/equal([Hash/digest(x[]), Hash/digest(Str/to_bytes("curios")), Hash/digest(x[0xFF, 0xFF,
-                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])], [x[0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01,
-                0x00], x[0x92, 0xFE, 0x2C, 0x0A, 0xB2, 0x2F, 0x89, 0x23], x[0x2E, 0x53, 0x52, 0x90,
-                0x8B, 0x42, 0xD9, 0x43]]);
+    Test/equal(
+        [
+            Hash/digest(x[]),
+            Hash/digest(Str/to_bytes("curios")),
+            Hash/digest(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])],
+        [
+            x[0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00],
+            x[0x92, 0xFE, 0x2C, 0x0A, 0xB2, 0x2F, 0x89, 0x23],
+            x[0x2E, 0x53, 0x52, 0x90, 0x8B, 0x42, 0xD9, 0x43]]);
 
 -- A natural's first byte holds how many bytes follow it and its top four bits, so a number below sixteen is one byte, one below 4 096 two, and one below `2^20` three.
 test a_natural_encodes_its_length_and_its_top_in_its_first_byte =
@@ -40,28 +45,22 @@ test a_natural_encodes_its_length_and_its_top_in_its_first_byte =
             Hash/hash(4096),
             Hash/hash(1048575),
             Hash/hash(1048576)],
-        [x[0x80], x[0x8F], x[0x90, 0x10], x[0x90, 0xFF], x[0x9F, 0xFF], x[0xA0, 0x10, 0x00], x[0xAF,
-                0xFF, 0xFF], x[0xB0, 0x10, 0x00, 0x00]]);
+        [
+            x[0x80],
+            x[0x8F],
+            x[0x90, 0x10],
+            x[0x90, 0xFF],
+            x[0x9F, 0xFF],
+            x[0xA0, 0x10, 0x00],
+            x[0xAF, 0xFF, 0xFF],
+            x[0xB0, 0x10, 0x00, 0x00]]);
 
 -- A map of naturals enumerates them in their order, across every boundary of the first byte: the top four bits, each rank, and the run that writes a rank past six.
 test natural_keys_enumerate_in_number_order =
     let edge(rank: Nat) -> Nat = 16 * Nat/pow(256, rank);
     let keys: List(Nat) =
         [
-            256,
-            1,
-            2,
-            65536,
-            255,
-            257,
-            0,
-            513,
-            15,
-            16,
-            4095,
-            4096,
-            1048575,
-            1048576,
+            256, 1, 2, 65536, 255, 257, 0, 513, 15, 16, 4095, 4096, 1048575, 1048576,
             edge(6) - 1,
             edge(6),
             edge(13),
@@ -88,28 +87,22 @@ test an_integer_encodes_as_its_natural_or_as_a_complement =
             Hash/hash(-16),
             Hash/hash(-17),
             Hash/hash(-1048576)],
-        [x[0x80], x[0x8F], x[0xB0, 0x10, 0x00, 0x00], Hash/hash(4096), x[0x7F], x[0x70], x[0x6F,
-                0xEF], x[0x50, 0x00, 0x00]]);
+        [
+            x[0x80],
+            x[0x8F],
+            x[0xB0, 0x10, 0x00, 0x00],
+            Hash/hash(4096),
+            x[0x7F],
+            x[0x70],
+            x[0x6F, 0xEF],
+            x[0x50, 0x00, 0x00]]);
 
 -- A map of integers enumerates them in their order: every boundary of a natural's first byte, and the `-1 - n` that mirrors each below zero.
 test integer_keys_enumerate_in_number_order =
     let edge(rank: Nat) -> Nat = 16 * Nat/pow(256, rank);
     let naturals: List(Nat) =
         [
-            256,
-            1,
-            2,
-            65536,
-            255,
-            257,
-            0,
-            513,
-            15,
-            16,
-            4095,
-            4096,
-            1048575,
-            1048576,
+            256, 1, 2, 65536, 255, 257, 0, 513, 15, 16, 4095, 4096, 1048575, 1048576,
             edge(6) - 1,
             edge(6),
             edge(13),

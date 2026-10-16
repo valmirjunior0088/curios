@@ -51,8 +51,7 @@ test structural_refusals_name_what_was_expected =
             decoded("tru"),
             decoded("["),
             decoded("")]),
-        Str/flatten([
-            "[]|{}|[true,[null],{\"a\":[]}]|expected value|expected value|",
+        Str/flatten(["[]|{}|[true,[null],{\"a\":[]}]|expected value|expected value|",
             "expected ',' or ']'|expected ':'|expected '\"'|expected '\"'|",
             "expected \"true\"|unexpected end of input|unexpected end of input"]));
 
@@ -79,10 +78,8 @@ test a_document_is_refused_when_anything_follows_the_value =
             decoded("\"a\"\"b\""),
             decoded("  { \"a\" : 1 }  \n"),
             decoded("[]")]),
-        Str/flatten([
-            "expected end of input|expected end of input|expected end of input|",
-            "expected end of input|expected end of input|expected end of input|",
-            "{\"a\":1}|[]"]));
+        Str/flatten(["expected end of input|expected end of input|expected end of input|",
+            "expected end of input|expected end of input|expected end of input|", "{\"a\":1}|[]"]));
 
 -- Whether a document reads.
 let reads(input: Str) -> Bool =
@@ -229,7 +226,6 @@ test a_number_past_binary64_is_refused_and_one_below_it_is_zero =
             decoded("[100000000000000000000]"),
             Bool/to_str(reads("[-123123123123123123123123123123]")),
             Bool/to_str(reads("[-237462374673276894279832749832423479823246327846]"))]),
-        Str/flatten([
-            "[0]|[0]|[-0]|number out of range|number out of range|number out of range|",
+        Str/flatten(["[0]|[0]|[-0]|number out of range|number out of range|number out of range|",
             "number out of range|number out of range|number out of range|number out of range|",
             "[100000000000000000000]|true|true"]));

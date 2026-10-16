@@ -72,6 +72,24 @@ fn a_deep_grouped_document_is_printed_and_measured_without_recursing() {
 }
 
 #[test]
+fn a_deep_flow_is_walked_and_freed_without_recursing() {
+    let nested = || {
+        let mut document = named("x");
+        for _ in 0..100_000 {
+            document = flow([FillItem {
+                printer: document,
+                compact: false,
+            }]);
+        }
+        document
+    };
+    drop(nested());
+    let mut document = nested();
+    each_named(&mut document, |text, _| *text = "y".to_string());
+    assert_eq!(render(document, None), "y");
+}
+
+#[test]
 fn without_a_width_every_group_is_flat() {
     assert_eq!(render(pair(), None), "aaa bbb");
 }
@@ -203,6 +221,26 @@ fn a_wrapping_fill_does_not_break_its_group() {
         pure(")"),
     ]));
     assert_eq!(render(document, Some(9)), "(aaa,\nbbb, ccc)");
+}
+
+#[test]
+fn a_wrapping_flow_preserves_its_enclosing_groups_breaks() {
+    let document = group(flat([
+        pure("head"),
+        line(),
+        pure("["),
+        indent(flow(["aaa,", "bbb,", "ccc"].map(|text| FillItem {
+            printer: pure(text),
+            compact: true,
+        }))),
+        pure("]"),
+        line(),
+        pure("longtail"),
+    ]));
+    assert_eq!(
+        render(document, Some(10)),
+        "head\n[aaa, bbb,\n  ccc]\nlongtail"
+    );
 }
 
 #[test]

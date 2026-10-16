@@ -15,8 +15,8 @@ use {
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
     curios_num::{Floating, Grain, Natural},
     curios_print::{
-        Printer, ends, fill, flat, flow, group, hard_line, if_break, indent, line, named, named_at,
-        pure, reached, sep_flat, soft_line,
+        FillItem, Printer, ends, fill, flat, flow, group, hard_line, if_break, indent, line, named,
+        named_at, pure, reached, sep_flat, soft_line,
     },
     curios_utilities::{Plicity, recurse},
 };
@@ -54,35 +54,74 @@ fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> 
 ///
 /// The closer rides the last element, as [`listed`]'s does and for the same reason.
 fn listed_block_wrapped(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
-    listed_wrapped(open, items, close, fill)
-}
-
-/// A run of expressions wraps between items while retaining each item's own layout.
-fn listed_wrapped(
-    open: &'static str,
-    items: Vec<Printer>,
-    close: &'static str,
-    layout: fn(Vec<Printer>) -> Printer,
-) -> Printer {
     if items.is_empty() {
         return flat([pure(open), indent(ends()), pure(close)]);
     }
+    group(flat([
+        pure(open),
+        indent(flat([soft_line(), fill(punctuated(items)), ends()])),
+        pure(close),
+    ]))
+}
 
+/// Attach each separator to the item before it, leaving the wrapping engine to choose only the gaps.
+fn punctuated(items: Vec<Printer>) -> Vec<Printer> {
     let last = items.len() - 1;
-    let entries = items
+    items
         .into_iter()
         .enumerate()
         .map(|(index, item)| match index == last {
             true => item,
             false => flat([item, pure(",")]),
         })
-        .collect::<Vec<_>>();
+        .collect()
+}
 
-    group(flat([
-        pure(open),
-        indent(flat([soft_line(), layout(entries), ends()])),
-        pure(close),
-    ]))
+/// A run of simple values packs from the opener; a list containing structure groups its layout so that a broken form gives each structured element its own line. Both forms measure flat for their enclosing expressions and keep block-relative indentation.
+fn wrapped_list(entries: Vec<ListEntry>) -> Printer {
+    if entries.is_empty() {
+        return flat([pure("["), indent(ends()), pure("]")]);
+    }
+    let last = entries.len() - 1;
+    let items = entries
+        .into_iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            let term = match &entry {
+                ListEntry::Elem(term) | ListEntry::Spread(term) => term,
+            };
+            let compact = is_atom(term)
+                || match term.as_subterm() {
+                    Subterm::Literal(Literal::List(entries)) => entries.is_empty(),
+                    Subterm::Literal(Literal::Bin(_, segments)) => segments.is_empty(),
+                    Subterm::Tuple(Tuple { fields }) => fields.is_empty(),
+                    _ => false,
+                };
+            let printer = match entry {
+                ListEntry::Elem(term) => print_term(term),
+                ListEntry::Spread(term) => flat([pure(".."), print_term(term)]),
+            };
+            FillItem {
+                printer: if index == last {
+                    printer
+                } else {
+                    flat([printer, pure(",")])
+                },
+                compact,
+            }
+        })
+        .collect::<Vec<_>>();
+    let structured = items.iter().any(|item| !item.compact);
+    let body = flat([
+        pure("["),
+        indent(flat([
+            if structured { soft_line() } else { flat([]) },
+            flow(items),
+            ends(),
+        ])),
+        pure("]"),
+    ]);
+    if structured { group(body) } else { body }
 }
 
 /// Whether every element of a packed literal is an atom — a plain numeral or a name — so that printing one flat costs nothing.
@@ -174,7 +213,7 @@ fn is_atom(term: &Term) -> bool {
     }
 }
 
-/// Whether a term carries a break of its own that a call can hand its layout to — a list, a packed literal or a tuple of two or more fields, whose group breaks inside the brackets, or a lambda, whose body rides its arrow and breaks below it: see [`riding_call`].
+/// Whether a term carries a break of its own that a call can hand its layout to — a list, a packed literal or a tuple of two or more fields, which break inside the brackets, or a lambda, whose body rides its arrow and breaks below it: see [`riding_call`].
 fn carries_its_own_break(term: &Term) -> bool {
     match term.as_subterm() {
         Subterm::Literal(Literal::List(entries)) => !entries.is_empty(),
@@ -603,18 +642,7 @@ fn print_literal(literal: Literal) -> Printer {
                 false => listed(open, entries, "]"),
             }
         }
-        Literal::List(entries) => listed_wrapped(
-            "[",
-            entries
-                .into_iter()
-                .map(|entry| match entry {
-                    ListEntry::Elem(term) => print_term(term),
-                    ListEntry::Spread(term) => flat([pure(".."), print_term(term)]),
-                })
-                .collect(),
-            "]",
-            flow,
-        ),
+        Literal::List(entries) => wrapped_list(entries),
     }
 }
 

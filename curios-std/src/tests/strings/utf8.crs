@@ -21,10 +21,19 @@ test of_bytes_rejects_a_truncated_multibyte =
 
 -- Overlong encodings, a surrogate, a scalar past `U+10FFFF`, a bare continuation byte, and three truncations: every shape the automaton must refuse.
 test of_bytes_rejects_every_invalid_shape =
-    Test/assert(List/fold([x[0xC0, 0xAF], x[0xE0, 0x80, 0x80], x[0xED, 0xA0, 0x80], x[0xF4, 0x90,
-                    0x80,
-                    0x80], x[0x80], x[0xC2], x[0xE2,
-                    0x82], x[0xF0, 0x9F, 0x98]], true, (bytes, ok) => ok && rejected(bytes)));
+    Test/assert(
+        List/fold(
+            [
+                x[0xC0, 0xAF],
+                x[0xE0, 0x80, 0x80],
+                x[0xED, 0xA0, 0x80],
+                x[0xF4, 0x90, 0x80, 0x80],
+                x[0x80],
+                x[0xC2],
+                x[0xE2, 0x82],
+                x[0xF0, 0x9F, 0x98]],
+            true,
+            (bytes, ok) => ok && rejected(bytes)));
 
 -- Where text stops: `of_bytes` answers the length of the longest valid prefix, which is where the first character that is not text begins, as Rust's `Utf8Error::valid_up_to` does. Each shape — a truncated sequence, two overlong ones, a surrogate, a value past `U+10FFFF` and a stray continuation byte — stands at the start, between two characters and at the end, after a two-byte character; two more cut a four-byte character short and run one byte past it.
 test of_bytes_answers_where_text_stops =
@@ -42,16 +51,8 @@ test of_bytes_answers_where_text_stops =
     let one_past = stops(x[0xF0, 0x9F, 0x98, 0x80, 0x80]);
     let whole = stops(x['a', 0xC3, 0xA9]);
     Test/equal(
-        Str/join("|", [
-            truncated,
-            overlong_two,
-            overlong_three,
-            surrogate,
-            past_the_last,
-            continuation,
-            cut_short,
-            one_past,
-            whole]),
+        Str/join("|", [truncated, overlong_two, overlong_three, surrogate, past_the_last,
+            continuation, cut_short, one_past, whole]),
         "0,1,3|0,1,3|0,1,3|0,1,3|0,1,3|0,1,3|1|4|text");
 
 -- The surrogate range and everything above `U+10FFFF` are excluded, and the scalars either side of each boundary are admitted.

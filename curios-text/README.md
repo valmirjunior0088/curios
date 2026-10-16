@@ -64,8 +64,8 @@ The Curios surface language: the scannerless parser, surface AST, printer and fo
 
 ### Lists wrap between items and preserve each item's layout
 
-**Decision.** List literals pack successive elements onto each line within the formatter's width, wrapping at the next separator and continuing at the members' indentation. A structured element retains its own layout and may break internally. Comments keep their source position, and closing punctuation shares the final element's line where it fits.
+**Decision.** A list that fits stays on one line. When it spans lines, runs of simple values pack within the formatter's width, wrapping at the next separator and continuing one indentation level inside the enclosing block, independently of the opening bracket's column. Calls, nested structures and spreads of structured expressions each stand on their own line and retain their internal break opportunities; a following sibling starts on a fresh line. A list that needs to wrap also lets its enclosing call, tuple or arm ladder break. Comments keep their source position, and closing punctuation shares the final element's line where it fits.
 
 **Rationale.** A run of values is easier to read when short elements share a line, while a long call or nested expression needs its own break opportunities. Atomic fills remain appropriate for import names and packed atoms; list elements use structural wrapping.
 
-**Rejected.** Stacking every element when a list outgrows one line, and forcing complex elements flat merely to pack the gaps between them.
+**Rejected.** Stacking every element when a list outgrows one line, forcing complex elements flat merely to pack the gaps between them, and attaching a sibling to the closing line of a multiline element.

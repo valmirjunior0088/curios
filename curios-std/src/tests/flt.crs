@@ -255,14 +255,7 @@ test ord_is_the_order_of_its_key =
     let specimens =
         [
             Flt/neg(Flt/signaling_nan(+1.0)),
-            -nan.0,
-            -inf.0,
-            -1.5,
-            -0.0,
-            +0.0,
-            +1.5,
-            +inf.0,
-            +nan.0,
+            -nan.0, -inf.0, -1.5, -0.0, +0.0, +1.5, +inf.0, +nan.0,
             Flt/signaling_nan(+1.0)];
     Test/equal(
         List/concat_map(specimens, (x: Flt) => List/map(specimens, (y: Flt) => Flt/ord(x, y))),
@@ -300,8 +293,10 @@ test of_str_reads_back_what_to_str_writes =
 let _the_remainder_takes_the_nearest_quotient: Eq()(Flt/to_str(Flt/remainder(+7.0, +2.0)), "-1") =
     Eq/refl();
 
-let _next_up_steps_onto_negative_zero: Eq()(Flt/to_str(Flt/next_up(Flt/neg(Flt/of_le_bytes(x[0x01,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])))), "-0") =
+let _next_up_steps_onto_negative_zero: Eq()(
+    Flt/to_str(
+        Flt/next_up(Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])))),
+    "-0") =
     Eq/refl();
 
 let _log_b_reads_the_leading_bit: Eq()(Flt/try_log_b(+8.0), Option/some(+3)) =
@@ -391,10 +386,20 @@ test payloads_are_set_and_read =
 
 -- Every class IEEE names, and the predicates that answer it.
 test the_ten_classes =
-    Test/equal(List/map([Flt/signaling_nan(+1.0), +nan.0, -inf.0, -1.0, Flt/neg(Flt/of_le_bytes(x[0x01,
-                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])), -0.0, +0.0, Flt/of_le_bytes(x[0x01,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00]), +1.0, +inf.0], (f) => Spell/spell(Flt/class(f))), ["Class/signaling_nan()", "Class/quiet_nan()", "Class/negative_infinity()", "Class/negative_normal()", "Class/negative_subnormal()", "Class/negative_zero()", "Class/positive_zero()", "Class/positive_subnormal()", "Class/positive_normal()", "Class/positive_infinity()"]);
+    Test/equal(
+        List/map(
+            [
+                Flt/signaling_nan(+1.0),
+                +nan.0, -inf.0, -1.0,
+                Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])),
+                -0.0, +0.0,
+                Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+                +1.0, +inf.0],
+            (f) => Spell/spell(Flt/class(f))),
+        ["Class/signaling_nan()", "Class/quiet_nan()", "Class/negative_infinity()",
+            "Class/negative_normal()", "Class/negative_subnormal()", "Class/negative_zero()",
+            "Class/positive_zero()", "Class/positive_subnormal()", "Class/positive_normal()",
+            "Class/positive_infinity()"]);
 
 -- Conversion to an integer in each direction, and `logB` where it is defined.
 test to_int_rounds_in_its_direction =
@@ -485,20 +490,13 @@ test every_class_reads_back_from_its_text =
     Test/equal(
         List/map(
             [
-                +nan.0,
-                -nan.0,
+                +nan.0, -nan.0,
                 Flt/signaling_nan(+1.0),
                 Flt/neg(Flt/signaling_nan(+18.0)),
                 Flt/quiet_nan(+5.0),
-                +inf.0,
-                -inf.0,
-                +0.0,
-                -0.0,
-                least,
+                +inf.0, -inf.0, +0.0, -0.0, least,
                 Flt/neg(least),
-                largest,
-                +0.1,
-                -2.5,
+                largest, +0.1, -2.5,
                 +1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0],
             reads_back),
         List/map(List/range(0, 15), (_) => true));
@@ -508,8 +506,14 @@ test nan_and_hex_text_spell_as_ieee_writes_them =
         Test/equal(
             List/map([+nan.0, -nan.0, Flt/signaling_nan(+1.0), Flt/quiet_nan(+5.0)], Flt/to_str),
             ["+nan", "-nan", "+snan", "+nan(0x5)"]),
-        Test/equal(List/map([+3.0, -0.0, Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                        0x00]), +1.0], Flt/to_hex_str), ["+0x1.8p+1", "-0x0p+0", "+0x0.0000000000001p-1022", "+0x1p+0"]),
+        Test/equal(
+            List/map(
+                [
+                    +3.0, -0.0,
+                    Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+                    +1.0],
+                Flt/to_hex_str),
+            ["+0x1.8p+1", "-0x0p+0", "+0x0.0000000000001p-1022", "+0x1p+0"]),
         Test/equal(
             List/map(
                 ["snan(0x0)", "nan(0x)", "NaN(0X5)", "0x1p-1074", "-0x1.8P1", "0x"],
@@ -518,8 +522,8 @@ test nan_and_hex_text_spell_as_ieee_writes_them =
                 Option/none(),
                 Option/none(),
                 Option/some("+nan(0x5)"),
-                Option/some(Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                            0x00]))),
+                Option/some(
+                    Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
                 Option/some("-3"),
                 Option/none()])]);
 
@@ -530,10 +534,12 @@ test text_reads_in_a_direction =
     Test/all([
         Test/equal(read(Rounding/toward_positive(), "0.1"), Flt/to_str(+0.1)),
         Test/equal(read(Rounding/toward_negative(), "0.1"), Flt/to_str(Flt/next_down(+0.1))),
-        Test/equal(read(Rounding/toward_zero(), "1e400"), Flt/to_str(Flt/of_le_bytes(x[0xFF, 0xFF,
-                    0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]))),
-        Test/equal(read(Rounding/toward_positive(), "1e-400"), Flt/to_str(Flt/of_le_bytes(x[0x01,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
+        Test/equal(
+            read(Rounding/toward_zero(), "1e400"),
+            Flt/to_str(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]))),
+        Test/equal(
+            read(Rounding/toward_positive(), "1e-400"),
+            Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
         Test/equal(
             read(Rounding/toward_negative(), "-0x1.00000000000008p0"),
             Flt/to_str(Flt/neg(Flt/next_up(+1.0))))]);

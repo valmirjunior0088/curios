@@ -161,6 +161,8 @@ fn verify(input: &FormatInput, expected_comments: usize, output: &str) -> Result
 }
 
 #[cfg(test)]
+mod layout_tests;
+#[cfg(test)]
 mod place_tests;
 #[cfg(test)]
 mod test_support;

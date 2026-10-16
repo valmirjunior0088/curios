@@ -5,7 +5,7 @@
 //! A formatter's run additionally *follows* the text its document was read from, which is how what that text held and the document does not — a comment — goes back between the characters it was written between: see [`Original`].
 
 use {
-    super::{FillStyle, Printer},
+    super::{FillItem, FillStyle, Printer},
     std::{
         cell::RefCell,
         collections::VecDeque,
@@ -291,8 +291,16 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
 enum Step {
     Print(Printer, bool),
     /// The remaining items of a [`Printer::Fill`], resumed after the one before them has been emitted — the gap decision needs the column the previous item actually left behind, which only exists once it is printed.
-    Fill(Vec<Printer>, FillStyle),
+    Fill(Filling),
     Dedent,
+}
+
+/// A run resumed at the gap after its previous item, in the mode its enclosing group chose.
+struct Filling {
+    items: Vec<FillItem>,
+    style: FillStyle,
+    flat: bool,
+    previous_compact: bool,
 }
 
 /// One comment the original held: where it was written and how it reads.
@@ -453,8 +461,10 @@ struct Measured<'a> {
     flat: bool,
     /// Inside the measured group's own subtree, where a mandatory break refuses flatness instead of ending the line.
     inside: bool,
-    /// Inside a [`Printer::Fill`], where running out of room means the fill *wraps* there rather than the scan failing.
+    /// Inside a fill allowed to wrap during this scan: an atomic fill or one beyond the measured group.
     filling: bool,
+    /// A nested group or structural run inside the measured group must fit flat, including any atomic fills it holds.
+    strict: bool,
 }
 
 /// What a scan has learned of the comments its group would write past, were it flat.
@@ -515,12 +525,12 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
         let Some((node, flat)) = stack.pop() else {
             match rest.next()? {
                 Step::Dedent => {}
-                Step::Fill(items, style) => stack.extend(
-                    items
-                        .iter_mut()
-                        .rev()
-                        .map(|item| (item, matches!(style, FillStyle::Atomic))),
-                ),
+                Step::Fill(filling) => stack.extend(filling.items.iter_mut().rev().map(|item| {
+                    (
+                        &mut item.printer,
+                        matches!(filling.style, FillStyle::Atomic),
+                    )
+                })),
                 Step::Print(printer, mode) => stack.push((printer, *mode)),
             }
             continue;
@@ -549,8 +559,11 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
                     return Some(found);
                 }
             }
-            Printer::Concat(parts) | Printer::Fill { items: parts, .. } => {
+            Printer::Concat(parts) => {
                 stack.extend(parts.iter_mut().rev().map(|part| (part, flat)));
+            }
+            Printer::Fill { items, .. } => {
+                stack.extend(items.iter_mut().rev().map(|item| (&mut item.printer, flat)));
             }
             Printer::Indent(inner) | Printer::Group(inner) => stack.push((inner, flat)),
             Printer::Line { .. } | Printer::Mark(_) | Printer::Ends => {}
@@ -563,7 +576,7 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
 ///
 /// The scan does not stop at the group's edge: a group that fits exactly while unbreakable content trails it would otherwise overrun the line, so measurement continues into `rest` — the renderer's remaining work, in its recorded modes — until the line provably ends. Beyond the group the polarity of a mandatory break flips: a hard line, a text newline, or a soft [`Printer::Line`] in broken surroundings simply ends the line, deciding the scan in favor, and a comment is not looked for — a trailing comment never reflows the code it rides.
 ///
-/// A [`Printer::Fill`] is measured with the gap spaces its own layout will emit, and running out of room *inside* one also decides the scan in favor: the fill wraps at that gap, so the line ends within budget. A fill therefore never forces an enclosing group to break — which is the only answer consistent with printing, where a fill re-decides every gap regardless of the mode it was reached in.
+/// An atomic [`Printer::Fill`] directly inside the measured group is measured with its gap spaces, and running out of room inside one decides the scan in favor: the fill wraps at that gap. Nested groups and structural fills must fit wholly flat instead: treating their overflow as a successful flat layout would leave the enclosing group's other parts flat across their breaks. Beyond the measured group a mandatory gap or a wrapping fill can end the line.
 ///
 /// Measuring forces every [`Printer::Deferred`] it reaches, replacing the node in place with the built document — the thunk is `FnOnce`, so a peek that discarded the result would lose it. The bounded lookahead is what keeps that cheap: at most one line width of document is ever materialized per decision, and what is materialized is exactly what printing consumes next. Iterative, like every other walk over this type.
 fn fits(
@@ -574,8 +587,6 @@ fn fits(
     following: Option<(&Original<'_>, Cursor)>,
 ) -> bool {
     let mut used = 0usize;
-    // A structural run can move its last item to make room for trailing closers. Its gap decision measures those closers again when the item is actually placed.
-    let mut wrapping = false;
     // A copy of the cursor, walked through the group as printing would walk the real one.
     let mut arriving = following.map(|(original, cursor)| Arriving {
         original,
@@ -588,6 +599,7 @@ fn fits(
         flat: true,
         inside,
         filling: false,
+        strict: false,
     }]);
     let mut rest_iter = rest.iter_mut().rev();
 
@@ -597,6 +609,7 @@ fn fits(
             flat,
             inside,
             filling,
+            strict,
         }) = stack.pop()
         else {
             match rest_iter.next() {
@@ -604,17 +617,25 @@ fn fits(
                 None => return true,
                 Some(Step::Dedent) => continue,
                 // A pending fill measures as its items would print. One gap *per item* rather than one fewer, unlike the node below: these are the items still owed a gap, the one before them having already been emitted.
-                Some(Step::Fill(items, style)) => {
-                    wrapping |= matches!(style, FillStyle::Structural);
+                Some(Step::Fill(filling)) => {
+                    if matches!(filling.style, FillStyle::Structural)
+                        && !filling.flat
+                        && (!filling.previous_compact
+                            || filling.items.first().is_some_and(|item| !item.compact))
+                    {
+                        return true;
+                    }
+                    let items = &mut filling.items;
                     used += items.len();
                     if used > available {
                         return true;
                     }
                     stack.extend(items.iter_mut().rev().map(|item| Measured {
-                        node: item,
+                        node: &mut item.printer,
                         flat: true,
                         inside: false,
                         filling: true,
+                        strict: false,
                     }));
                     continue;
                 }
@@ -624,6 +645,7 @@ fn fits(
                         flat: *mode,
                         inside: false,
                         filling: false,
+                        strict: false,
                     });
                     continue;
                 }
@@ -644,6 +666,7 @@ fn fits(
                 flat,
                 inside,
                 filling,
+                strict,
             });
             continue;
         }
@@ -664,7 +687,7 @@ fn fits(
                 }
                 *used += 1;
                 if *used > available {
-                    return Some(filling || wrapping);
+                    return Some(filling);
                 }
             }
 
@@ -717,20 +740,23 @@ fn fits(
                     flat,
                     inside,
                     filling,
+                    strict,
                 }));
             }
-            // A fill measures as it prints: each item flat, one space per gap — charged up front, since every item is measured or the scan has already ended inside one. Whichever it is, `filling` is what decides the overflow, so the gaps need no running position of their own.
+            // A structural fill must fit in full before its enclosing group can render flat. Its own gap decisions still wrap independently once that group breaks.
             Printer::Fill { items, style } => {
-                wrapping |= matches!(style, FillStyle::Structural);
+                let strict = strict || (inside && matches!(style, FillStyle::Structural));
+                let filling = !strict && (matches!(style, FillStyle::Atomic) || !inside);
                 used += items.len().saturating_sub(1);
                 if used > available {
-                    return true;
+                    return filling;
                 }
                 stack.extend(items.iter_mut().rev().map(|item| Measured {
-                    node: item,
+                    node: &mut item.printer,
                     flat: true,
                     inside,
-                    filling: true,
+                    filling,
+                    strict,
                 }));
             }
             Printer::Indent(inner) => stack.push(Measured {
@@ -738,13 +764,15 @@ fn fits(
                 flat,
                 inside,
                 filling,
+                strict,
             }),
-            // A nested group inside a fitting parent renders flat with it; a look-ahead group is measured flat too — if its flat form shares the line, the line holds either rendering of it.
+            // A nested group inside a fitting parent must fit wholly flat, including any fills it holds. Only an atomic fill in the measured group itself may wrap without breaking that group.
             Printer::Group(inner) => stack.push(Measured {
                 node: inner,
                 flat,
                 inside,
                 filling,
+                strict: strict || inside,
             }),
             Printer::Deferred(_) => unreachable!("materialized above"),
         }
@@ -846,16 +874,34 @@ fn run<'b, 'c>(
                             || state.width.is_none_or(|width| {
                                 let room = width.saturating_sub(state.effective_column());
                                 match items.is_empty() {
-                                    true => {
-                                        fits(&mut first, &mut stack, room, true, state.following)
-                                    }
-                                    false => fits(&mut first, &mut [], room, true, state.following),
+                                    true => fits(
+                                        &mut first.printer,
+                                        &mut stack,
+                                        room,
+                                        true,
+                                        state.following,
+                                    ),
+                                    false => fits(
+                                        &mut first.printer,
+                                        &mut [],
+                                        room,
+                                        true,
+                                        state.following,
+                                    ),
                                 }
                             });
                         if !items.is_empty() {
-                            stack.push(Step::Fill(items, *style));
+                            stack.push(Step::Fill(Filling {
+                                items,
+                                style: *style,
+                                flat,
+                                previous_compact: first.compact,
+                            }));
                         }
-                        stack.push(Step::Print(first, matches!(style, FillStyle::Atomic)));
+                        stack.push(Step::Print(
+                            first.printer,
+                            matches!(style, FillStyle::Atomic),
+                        ));
                         if !first_fits && !state.should_indent {
                             state.line_ends(&mut stack)?;
                         }
@@ -890,8 +936,8 @@ fn run<'b, 'c>(
                 Printer::Ends => state.ends(&mut stack)?,
             },
             // A gap is measured after the previous item has actually rendered. Structural items keep their groups even when they start on a fresh line; an atomic fill forces each item flat.
-            Step::Fill(mut items, style) => {
-                let mut item = items.remove(0);
+            Step::Fill(mut filling) => {
+                let mut item = filling.items.remove(0);
                 // Whether the item shares the line, where a line is open for it to share.
                 let placed = (!state.should_indent).then(|| {
                     let room = match state.width {
@@ -903,15 +949,22 @@ fn run<'b, 'c>(
                         !state.suffix.is_empty() || !state.due.is_empty() || state.after_comment;
                     // The last item is measured against what follows the fill, for the reason a group is: whatever trails it — a closing bracket, a semicolon — has no break point before it and must share its line. A middle item is measured alone, since the items still to come will push that content onto a later line anyway.
                     !owes
-                        && match items.is_empty() {
-                            true => fits(&mut item, &mut stack, room, true, state.following),
-                            false => fits(&mut item, &mut [], room, true, state.following),
+                        && (matches!(filling.style, FillStyle::Atomic)
+                            || filling.flat
+                            || (filling.previous_compact && item.compact))
+                        && match filling.items.is_empty() {
+                            true => {
+                                fits(&mut item.printer, &mut stack, room, true, state.following)
+                            }
+                            false => fits(&mut item.printer, &mut [], room, true, state.following),
                         }
                 });
-                if !items.is_empty() {
-                    stack.push(Step::Fill(items, style));
+                let atomic = matches!(filling.style, FillStyle::Atomic);
+                if !filling.items.is_empty() {
+                    filling.previous_compact = item.compact;
+                    stack.push(Step::Fill(filling));
                 }
-                stack.push(Step::Print(item, matches!(style, FillStyle::Atomic)));
+                stack.push(Step::Print(item.printer, atomic));
                 // Written with the item already queued, so a line that ends here sees what follows it.
                 match placed {
                     Some(true) => state.text(" ")?,
@@ -991,8 +1044,9 @@ pub fn each_named(
 
         match node {
             Printer::Named { text, written } => visit(text, written.as_ref()),
-            Printer::Concat(parts) | Printer::Fill { items: parts, .. } => {
-                stack.extend(parts.iter_mut().rev())
+            Printer::Concat(parts) => stack.extend(parts.iter_mut().rev()),
+            Printer::Fill { items, .. } => {
+                stack.extend(items.iter_mut().rev().map(|item| &mut item.printer))
             }
             Printer::Indent(inner) | Printer::Group(inner) => stack.push(inner),
             Printer::Text(_)

@@ -61,6 +61,18 @@ fn a_list_packs_each_run_before_wrapping() {
 }
 
 #[test]
+fn wrapped_list_indentation_is_independent_of_the_openers_column() {
+    for head in ["f", "long_name"] {
+        let source = format!("{head}([alpha, bravo, charlie, delta])");
+        let output = render(&source, 24);
+        assert_eq!(
+            output,
+            format!("{head}([alpha, bravo,\n    charlie, delta])")
+        );
+    }
+}
+
+#[test]
 fn a_wrapping_list_keeps_its_items_breakable() {
     let source = "[small, build(alpha, bravo, charlie), next, last]";
     let output = render(source, 24);
@@ -70,6 +82,21 @@ fn a_wrapping_list_keeps_its_items_breakable() {
         "{output}"
     );
     assert_eq!(render(&output, 24), output);
+}
+
+#[test]
+fn a_multiline_list_separates_structure_and_packs_each_simple_run() {
+    let source = "[alpha, beta, build(short), gamma, delta, other(value)]";
+    let output = render(source, 24);
+    assert_eq!(
+        output,
+        "[\n    alpha, beta,\n    build(short),\n    gamma, delta,\n    other(value)]"
+    );
+    assert_eq!(render(&output, 24), output);
+    assert_eq!(
+        render("[build(short), other(value)]", 80),
+        "[build(short), other(value)]"
+    );
 }
 
 #[test]
@@ -111,10 +138,10 @@ fn a_trailing_literal_or_lambda_after_atoms_hugs_the_call() {
         render("List/map(names, (name) => Str/concat(name, suffix))", 30),
         "List/map(names, (name) =>\n    Str/concat(name, suffix))"
     );
-    // A wrapping list supplies its own break even when an earlier argument is structured.
+    // A structured leading argument keeps the call's ordinary break opportunities.
     assert_eq!(
         render("f(g(alpha), [bravo])", 14),
-        "f(g(alpha), [\n        bravo])"
+        "f(\n    g(alpha),\n    [bravo])"
     );
 }
 
