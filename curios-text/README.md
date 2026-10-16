@@ -61,3 +61,11 @@ The Curios surface language: the scannerless parser, surface AST, printer and fo
 **Decision.** `/sys/Option` and `/sys/Result` are ordinary universe-polymorphic inductives, `some` before `none` and `success` before `failure`, the failure's type first; `/std/Option` and `/std/Result` re-export each family and its constructors, and their functions, witnesses and derivations stay in `/std`. The registry names each declaration and its constructors directly. The generated declaration keeps source identities for its `Type` occurrences, so its type former and constructor signatures share their universe seeds.
 
 **Rationale.** `/sys` constructs them without reaching into `/std`, as a cell's poll answers an `Option`. Anonymous generated occurrences would assign unrelated levels and specialize consumers such as `Cli` wrongly.
+
+### Lists wrap between items and preserve each item's layout
+
+**Decision.** List literals pack successive elements onto each line within the formatter's width, wrapping at the next separator and continuing at the members' indentation. A structured element retains its own layout and may break internally. Comments keep their source position, and closing punctuation shares the final element's line where it fits.
+
+**Rationale.** A run of values is easier to read when short elements share a line, while a long call or nested expression needs its own break opportunities. Atomic fills remain appropriate for import names and packed atoms; list elements use structural wrapping.
+
+**Rejected.** Stacking every element when a list outgrows one line, and forcing complex elements flat merely to pack the gaps between them.

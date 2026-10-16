@@ -2,6 +2,15 @@
 
 use std::{mem, ops::Range};
 
+/// How a wrapping sequence lays out each item after choosing its gap.
+#[derive(Clone, Copy)]
+pub enum FillStyle {
+    /// Items are indivisible and render flat.
+    Atomic,
+    /// Items retain their own layout choices.
+    Structural,
+}
+
 /// A pretty-printing document: what to emit, as data.
 ///
 /// # Why this is an enum and not a closure
@@ -33,10 +42,13 @@ pub enum Printer {
     Line { flat: String, hard: bool },
     /// The width-adaptive *sequence*: its items are laid out left to right, and each gap independently becomes a space or a newline according to whether the item after it still fits the line.
     ///
-    /// A [`Printer::Group`] is all-or-nothing — when its flat form does not fit, every [`Printer::Line`] inside it breaks — which is right for a structure whose parts belong on separate lines once any of them does. It is wrong for a run of short interchangeable items: a twenty-name import does not fit on one line, so a group puts each name on a line of its own and spends twenty lines on what two would hold. Each item carries its own separator, so this variant inserts only the gap and never invents punctuation.
+    /// A [`Printer::Group`] is all-or-nothing — when its flat form does not fit, every [`Printer::Line`] inside it breaks — which is right for a structure whose parts belong on separate lines once any of them does. It is wrong for a run of short interchangeable items: a twenty-name import does not fit on one line, so a group puts each name on a line of its own and spends twenty lines on what two would hold. Each item carries its own separator, so this variant inserts only the gap and never invents punctuation. Its style decides whether items render flat or retain their own layout choices.
     ///
     /// The gaps are decided while printing and owe nothing to the mode the fill was reached in: a fill inside a *flat* group still wraps. That is why `fits` reads a fill that runs out of room as the line ending rather than as the scan failing — any other reading would let a group render flat over a fill that then wrapped underneath it.
-    Fill(Vec<Printer>),
+    Fill {
+        items: Vec<Printer>,
+        style: FillStyle,
+    },
     /// The width-adaptive unit: renders flat — every enclosed [`Printer::Line`] as its flat spelling — when its flat form fits the room left on the line, and broken otherwise. Nested groups measured inside a fitting parent render flat with it; under a broken parent each decides for itself. With no width configured every group fits.
     Group(Box<Printer>),
     /// Mode-dependent text that is *not* itself a break point: `flat` under a fitting group, `broken` under a broken one. The formatter's broken-only trailing comma is `IfBreak { flat: "", broken: "," }`. Measured at its flat spelling, so it never breaks a group by itself.
@@ -61,7 +73,7 @@ impl Printer {
     fn is_dismantled(&self) -> bool {
         match self {
             Printer::Text(_) | Printer::Named { .. } | Printer::Mark(_) | Printer::Ends => true,
-            Printer::Concat(parts) | Printer::Fill(parts) => parts.is_empty(),
+            Printer::Concat(parts) | Printer::Fill { items: parts, .. } => parts.is_empty(),
             Printer::Indent(inner) | Printer::Group(inner) => {
                 matches!(**inner, Printer::Text(_))
             }
@@ -88,7 +100,9 @@ impl Drop for Printer {
         while let Some(mut printer) = pending.pop() {
             match &mut printer {
                 Printer::Text(_) | Printer::Named { .. } => {}
-                Printer::Concat(parts) | Printer::Fill(parts) => pending.extend(mem::take(parts)),
+                Printer::Concat(parts) | Printer::Fill { items: parts, .. } => {
+                    pending.extend(mem::take(parts));
+                }
                 Printer::Indent(inner) | Printer::Group(inner) => pending.push(inner.take()),
                 Printer::Deferred(_) => {}
                 Printer::Line { .. } => {}

@@ -5,7 +5,7 @@
 //! A formatter's run additionally *follows* the text its document was read from, which is how what that text held and the document does not — a comment — goes back between the characters it was written between: see [`Original`].
 
 use {
-    super::Printer,
+    super::{FillStyle, Printer},
     std::{
         cell::RefCell,
         collections::VecDeque,
@@ -291,7 +291,7 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
 enum Step {
     Print(Printer, bool),
     /// The remaining items of a [`Printer::Fill`], resumed after the one before them has been emitted — the gap decision needs the column the previous item actually left behind, which only exists once it is printed.
-    Fill(Vec<Printer>),
+    Fill(Vec<Printer>, FillStyle),
     Dedent,
 }
 
@@ -515,7 +515,12 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
         let Some((node, flat)) = stack.pop() else {
             match rest.next()? {
                 Step::Dedent => {}
-                Step::Fill(items) => stack.extend(items.iter_mut().rev().map(|item| (item, true))),
+                Step::Fill(items, style) => stack.extend(
+                    items
+                        .iter_mut()
+                        .rev()
+                        .map(|item| (item, matches!(style, FillStyle::Atomic))),
+                ),
                 Step::Print(printer, mode) => stack.push((printer, *mode)),
             }
             continue;
@@ -544,7 +549,7 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
                     return Some(found);
                 }
             }
-            Printer::Concat(parts) | Printer::Fill(parts) => {
+            Printer::Concat(parts) | Printer::Fill { items: parts, .. } => {
                 stack.extend(parts.iter_mut().rev().map(|part| (part, flat)));
             }
             Printer::Indent(inner) | Printer::Group(inner) => stack.push((inner, flat)),
@@ -569,6 +574,8 @@ fn fits(
     following: Option<(&Original<'_>, Cursor)>,
 ) -> bool {
     let mut used = 0usize;
+    // A structural run can move its last item to make room for trailing closers. Its gap decision measures those closers again when the item is actually placed.
+    let mut wrapping = false;
     // A copy of the cursor, walked through the group as printing would walk the real one.
     let mut arriving = following.map(|(original, cursor)| Arriving {
         original,
@@ -597,7 +604,8 @@ fn fits(
                 None => return true,
                 Some(Step::Dedent) => continue,
                 // A pending fill measures as its items would print. One gap *per item* rather than one fewer, unlike the node below: these are the items still owed a gap, the one before them having already been emitted.
-                Some(Step::Fill(items)) => {
+                Some(Step::Fill(items, style)) => {
+                    wrapping |= matches!(style, FillStyle::Structural);
                     used += items.len();
                     if used > available {
                         return true;
@@ -656,7 +664,7 @@ fn fits(
                 }
                 *used += 1;
                 if *used > available {
-                    return Some(filling);
+                    return Some(filling || wrapping);
                 }
             }
 
@@ -712,7 +720,8 @@ fn fits(
                 }));
             }
             // A fill measures as it prints: each item flat, one space per gap — charged up front, since every item is measured or the scan has already ended inside one. Whichever it is, `filling` is what decides the overflow, so the gaps need no running position of their own.
-            Printer::Fill(items) => {
+            Printer::Fill { items, style } => {
+                wrapping |= matches!(style, FillStyle::Structural);
                 used += items.len().saturating_sub(1);
                 if used > available {
                     return true;
@@ -828,15 +837,28 @@ fn run<'b, 'c>(
                     true => state.text(spelling)?,
                     false => state.line_ends(&mut stack)?,
                 },
-                Printer::Fill(items) => {
+                Printer::Fill { items, style } => {
                     // The first item is printed directly, so `Step::Fill` always owns a *gap* and never has to ask whether one is due.
                     let mut items = mem::take(items);
                     if !items.is_empty() {
-                        let first = items.remove(0);
+                        let mut first = items.remove(0);
+                        let first_fits = matches!(style, FillStyle::Atomic)
+                            || state.width.is_none_or(|width| {
+                                let room = width.saturating_sub(state.effective_column());
+                                match items.is_empty() {
+                                    true => {
+                                        fits(&mut first, &mut stack, room, true, state.following)
+                                    }
+                                    false => fits(&mut first, &mut [], room, true, state.following),
+                                }
+                            });
                         if !items.is_empty() {
-                            stack.push(Step::Fill(items));
+                            stack.push(Step::Fill(items, *style));
                         }
-                        stack.push(Step::Print(first, true));
+                        stack.push(Step::Print(first, matches!(style, FillStyle::Atomic)));
+                        if !first_fits && !state.should_indent {
+                            state.line_ends(&mut stack)?;
+                        }
                     }
                 }
                 Printer::Group(inner) => {
@@ -867,8 +889,8 @@ fn run<'b, 'c>(
                 Printer::Mark(at) => state.reach(*at),
                 Printer::Ends => state.ends(&mut stack)?,
             },
-            // One item per turn: measure it against what is left of the line, emit the gap it earned, print it flat, and queue the remainder. Printing the item flat is what makes it atomic — a fill decides *between* items, never inside one.
-            Step::Fill(mut items) => {
+            // A gap is measured after the previous item has actually rendered. Structural items keep their groups even when they start on a fresh line; an atomic fill forces each item flat.
+            Step::Fill(mut items, style) => {
                 let mut item = items.remove(0);
                 // Whether the item shares the line, where a line is open for it to share.
                 let placed = (!state.should_indent).then(|| {
@@ -887,9 +909,9 @@ fn run<'b, 'c>(
                         }
                 });
                 if !items.is_empty() {
-                    stack.push(Step::Fill(items));
+                    stack.push(Step::Fill(items, style));
                 }
-                stack.push(Step::Print(item, true));
+                stack.push(Step::Print(item, matches!(style, FillStyle::Atomic)));
                 // Written with the item already queued, so a line that ends here sees what follows it.
                 match placed {
                     Some(true) => state.text(" ")?,
@@ -969,7 +991,9 @@ pub fn each_named(
 
         match node {
             Printer::Named { text, written } => visit(text, written.as_ref()),
-            Printer::Concat(parts) | Printer::Fill(parts) => stack.extend(parts.iter_mut().rev()),
+            Printer::Concat(parts) | Printer::Fill { items: parts, .. } => {
+                stack.extend(parts.iter_mut().rev())
+            }
             Printer::Indent(inner) | Printer::Group(inner) => stack.push(inner),
             Printer::Text(_)
             | Printer::Line { .. }

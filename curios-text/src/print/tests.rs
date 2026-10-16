@@ -51,6 +51,43 @@ fn a_fitting_application_stays_flat() {
 }
 
 #[test]
+fn a_list_packs_each_run_before_wrapping() {
+    assert_eq!(
+        render("[alpha, beta, gamma, delta, epsilon, zeta, eta, theta]", 30),
+        "[alpha, beta, gamma, delta,\n    epsilon, zeta, eta, theta]"
+    );
+    assert_eq!(render("[a, b, c]", 80), "[a, b, c]");
+    assert_eq!(render("[a, b, c]", 8), "[a, b,\n    c]");
+}
+
+#[test]
+fn a_wrapping_list_keeps_its_items_breakable() {
+    let source = "[small, build(alpha, bravo, charlie), next, last]";
+    let output = render(source, 24);
+    assert!(output.contains("build(\n"), "{output}");
+    assert!(
+        output.lines().all(|line| line.chars().count() <= 24),
+        "{output}"
+    );
+    assert_eq!(render(&output, 24), output);
+}
+
+#[test]
+fn nested_lists_and_spreads_retain_their_structure_when_wrapping() {
+    let source = "[[alpha, bravo, charlie], ..rest, [delta, echo, foxtrot]]";
+    let output = render(source, 24);
+    assert!(
+        output.lines().all(|line| line.chars().count() <= 24),
+        "{output}"
+    );
+    assert_eq!(
+        source.parse::<Term>().unwrap(),
+        output.parse::<Term>().unwrap()
+    );
+    assert_eq!(render(&output, 24), output);
+}
+
+#[test]
 fn an_overflowing_application_breaks_one_argument_per_line_with_a_riding_closer() {
     // No trailing comma and no line of its own for the closer: the last argument already ends the call, and saying so with `,` and a lone `)` spends two lines.
     assert_eq!(render("f(alpha, bravo)", 10), "f(\n    alpha,\n    bravo)");
@@ -74,10 +111,10 @@ fn a_trailing_literal_or_lambda_after_atoms_hugs_the_call() {
         render("List/map(names, (name) => Str/concat(name, suffix))", 30),
         "List/map(names, (name) =>\n    Str/concat(name, suffix))"
     );
-    // A leading argument that could break of its own keeps the one shape, so the literal never strands after it.
+    // A wrapping list supplies its own break even when an earlier argument is structured.
     assert_eq!(
         render("f(g(alpha), [bravo])", 14),
-        "f(\n    g(alpha),\n    [bravo])"
+        "f(g(alpha), [\n        bravo])"
     );
 }
 

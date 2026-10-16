@@ -1,6 +1,9 @@
 //! The public builders: every document is made by composing these.
 
-use {super::Printer, std::ops::Range};
+use {
+    super::{FillStyle, Printer},
+    std::ops::Range,
+};
 
 /// Emits a literal string. Not a raw write: any newline it contains arms the pending-indentation logic, so multi-line literals indent correctly under [`indent`].
 pub fn pure<A>(a: A) -> Printer
@@ -84,7 +87,18 @@ pub fn hard_line() -> Printer {
 ///
 /// Use this where the items are short and interchangeable — the names of an import — and [`group`] where they are structural parts that belong together or apart as a unit. Each item is measured and printed flat, so a fill never breaks *inside* an item; give it items that are already whole.
 pub fn fill(items: impl IntoIterator<Item = Printer>) -> Printer {
-    Printer::Fill(items.into_iter().collect())
+    Printer::Fill {
+        items: items.into_iter().collect(),
+        style: FillStyle::Atomic,
+    }
+}
+
+/// A wrapping sequence whose items retain their own groups and internal breaks. Each gap is decided independently, as in [`fill`], without forcing a structured item onto one line.
+pub fn flow(items: impl IntoIterator<Item = Printer>) -> Printer {
+    Printer::Fill {
+        items: items.into_iter().collect(),
+        style: FillStyle::Structural,
+    }
 }
 
 /// The width-adaptive unit: renders `printer` flat — every enclosed `line` as its flat spelling — when that fits the room left on the line ([`run_printer_within`](crate::run_printer_within)), and broken otherwise. Without a width every group is flat, so grouping is behavior-neutral on the unbounded [`run_printer`](crate::run_printer) path.

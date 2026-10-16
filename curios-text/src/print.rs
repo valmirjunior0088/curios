@@ -15,8 +15,8 @@ use {
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
     curios_num::{Floating, Grain, Natural},
     curios_print::{
-        Printer, ends, fill, flat, group, hard_line, if_break, indent, line, named, named_at, pure,
-        reached, sep_flat, soft_line,
+        Printer, ends, fill, flat, flow, group, hard_line, if_break, indent, line, named, named_at,
+        pure, reached, sep_flat, soft_line,
     },
     curios_utilities::{Plicity, recurse},
 };
@@ -31,7 +31,7 @@ fn print_plicity(plicity: Plicity) -> Printer {
 
 /// A bracketed **sequence**: flat when the group fits (`f(a, b)`), otherwise one element per line at the next indent with the closer *riding* the last one (`c)`).
 ///
-/// The closer rides because the last element already ends the sequence; following it with `,` and a bracket on a line of its own spends two lines on punctuation. Calls, list and packed literals, tuple literals and types, and variant payloads are all this shape — what they delimit is a run of expressions, and none of them cares what kind the last one is. [`listed_block`] is this shape padded, for the brace forms that read as records.
+/// The closer rides because the last element already ends the sequence; following it with `,` and a bracket on a line of its own spends two lines on punctuation. Calls, structured packed literals, tuple literals and types, and variant payloads are all this shape — what they delimit is a run of expressions, and none of them cares what kind the last one is. [`listed_block`] is this shape padded, for the brace forms that read as records.
 fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> Printer {
     let open = pure(open);
     if items.is_empty() {
@@ -54,6 +54,16 @@ fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> 
 ///
 /// The closer rides the last element, as [`listed`]'s does and for the same reason.
 fn listed_block_wrapped(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
+    listed_wrapped(open, items, close, fill)
+}
+
+/// A run of expressions wraps between items while retaining each item's own layout.
+fn listed_wrapped(
+    open: &'static str,
+    items: Vec<Printer>,
+    close: &'static str,
+    layout: fn(Vec<Printer>) -> Printer,
+) -> Printer {
     if items.is_empty() {
         return flat([pure(open), indent(ends()), pure(close)]);
     }
@@ -70,7 +80,7 @@ fn listed_block_wrapped(open: &'static str, items: Vec<Printer>, close: &'static
 
     group(flat([
         pure(open),
-        indent(flat([soft_line(), fill(entries), ends()])),
+        indent(flat([soft_line(), layout(entries), ends()])),
         pure(close),
     ]))
 }
@@ -593,7 +603,7 @@ fn print_literal(literal: Literal) -> Printer {
                 false => listed(open, entries, "]"),
             }
         }
-        Literal::List(entries) => listed(
+        Literal::List(entries) => listed_wrapped(
             "[",
             entries
                 .into_iter()
@@ -603,6 +613,7 @@ fn print_literal(literal: Literal) -> Printer {
                 })
                 .collect(),
             "]",
+            flow,
         ),
     }
 }
