@@ -32,7 +32,7 @@ pub struct Module {
     field_groups: BTreeMap<ContinuationId, Vec<FieldGroup>>,
     /// The nominal rows this module's [`ValueExpr::Row`](super::ValueExpr::Row)s belong to, appended by the Ersd door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
     rows: Vec<Option<Row>>,
-    /// The row a forced description's suspension is built as, registered by the door at the first suspension operation it lowers. Its presence is the module saying it can suspend, which is what gives the entry the shape a host advances.
+    /// The row a forced description's suspension is built as, registered by the door at the first suspension operation it lowers. This identity survives optimization independently of whether the entry can return a suspension; `entry_suspension` answers that from the current graph.
     suspension: Option<RowId>,
     /// The functions no pass copies into a caller — not the inliner, contification or specialization — so a call of one stays a call. What a caller reaches only on a path it rarely takes belongs here: the path it does take stays small enough for the caller itself to be copied where it is called.
     out_of_line: BTreeSet<FunctionId>,
@@ -109,7 +109,7 @@ impl Module {
         self.out_of_line.contains(&function)
     }
 
-    /// The row a suspension is built as, where the program can suspend.
+    /// The registered suspension representation, independent of the entry capability [`Self::entry_suspension`] derives.
     pub fn suspension(&self) -> Option<RowId> {
         self.suspension
     }

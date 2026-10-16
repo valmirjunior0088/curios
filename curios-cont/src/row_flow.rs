@@ -2,7 +2,7 @@
 //!
 //! The fact is a may-set. A construction contributes its own row; a number, a word, a sequence, a closure, a literal and null contribute none; and what this analysis cannot see into — a reference read out of a value, an indirect call's result, a cell's or a channel's — contributes every row. A set never says that a value *is* a row, only which rows it could be, so the one question it answers is the one a row test asks when the answer is no: a value no flow builds a row for is not a struct of it. What a test asks of a forced description's answer is the case it exists for — an action that never suspends answers no suspension, and its bind's test folds.
 //!
-//! A function's returns arrive wherever its calls resume, and a call in tail position resumes wherever its caller's calls do: the targets close over the tail calls once, before the rounds, since inlining a call changes the graph only between passes. The boundaries are seeded with every row each round, as `origins` seeds them opaque: an escaping function's parameters and the entry's are its callers', which this module does not see.
+//! Each function-return position has its own fact, even where no caller receives it. Known calls deliver those facts to their resumes, including a caller's own return positions for tail calls, so recursion and ordinary value flow settle together. The boundaries are seeded with every row each round, as `origins` seeds them opaque: an escaping function's parameters and the entry's are its callers', which this module does not see. Only facts that reach the entry's returns determine its suspension capability; an internally consumed suspension does not escape merely because it was constructed.
 
 use {
     super::{
@@ -49,94 +49,102 @@ impl Lattice for Rows {
     }
 }
 
-/// Where each function's returns arrive: the continuations its calls resume, and, through a call in tail position, the ones its caller's returns arrive at.
-fn resume_targets(
-    module: &Module,
-    returns: &BTreeMap<ContinuationId, FunctionId>,
-) -> BTreeMap<FunctionId, BTreeSet<ContinuationId>> {
-    let mut targets = BTreeMap::<FunctionId, BTreeSet<ContinuationId>>::new();
-    let mut tails = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
-    for (_, node) in module.live_nodes() {
-        let Node::ApplyFun {
-            callee: Callee::Known(callee),
-            return_to,
-            ..
-        } = node
-        else {
-            continue;
-        };
-        match returns.get(return_to) {
-            Some(&caller) => {
-                tails.entry(*callee).or_default().insert(caller);
-            }
-            None => {
-                targets.entry(*callee).or_default().insert(*return_to);
-            }
-        }
-    }
-
-    // A tail call's targets are its caller's, which may come from a tail call in turn, so the sets grow to a fixpoint.
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for (callee, callers) in &tails {
-            let inherited = callers
-                .iter()
-                .filter_map(|caller| targets.get(caller))
-                .flatten()
-                .copied()
-                .collect::<Vec<_>>();
-            let own = targets.entry(*callee).or_default();
-            for target in inherited {
-                changed |= own.insert(target);
-            }
-        }
-    }
-
-    targets
+/// Function results bind no value; their positions have identities distinct from all ordinary values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum RowKey {
+    Value(ValueId),
+    Returned(FunctionId, usize),
 }
 
-/// The rows each value may be a struct of, to their least fixpoint.
-pub(crate) fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
-    let escaping = analyze_calls(module).escaping;
-    let returns = module
-        .live_functions()
-        .map(|(function, definition)| (definition.return_cont, function))
-        .collect::<BTreeMap<_, _>>();
-    let targets = resume_targets(module, &returns);
-    let seeds = module.value_ids().collect::<Vec<_>>();
+impl Module {
+    /// The registered suspension row when an entry result may carry it; `None` when return flow excludes it, or this module has no entry or suspension row.
+    ///
+    /// This reads the current graph without caching or changing its row vocabulary. Unknown results retain the row; a computation that never returns contributes no returned row and need not be proved terminating.
+    pub fn entry_suspension(&self) -> Option<RowId> {
+        let entry = self.entry()?;
+        let row = self.suspension()?;
+        let facts = row_facts(self);
+        let mut returned = facts
+            .iter()
+            .filter_map(|(key, rows)| match key {
+                RowKey::Returned(function, _) if *function == entry => Some(rows),
+                _ => None,
+            })
+            .peekable();
+        match returned.peek().is_none() || returned.any(|rows| rows.may_be(row)) {
+            true => Some(row),
+            false => None,
+        }
+    }
+}
 
-    // What arrives at `target`, one fact a parameter: its own parameters where it is defined, and where it is a function's return, those of every continuation its calls resume.
-    let deliver =
-        |solver: &mut Solver<Rows>, target: ContinuationId, facts: &dyn Fn(usize) -> Rows| {
-            let receivers = match returns.get(&target) {
-                Some(function) => targets
-                    .get(function)
-                    .into_iter()
-                    .flatten()
+/// The rows each ordinary value may be a struct of, including facts propagated through function results.
+pub(crate) fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
+    row_facts(module)
+        .into_iter()
+        .filter_map(|(key, rows)| match key {
+            RowKey::Value(value) => Some((value, rows)),
+            RowKey::Returned(_, _) => None,
+        })
+        .collect()
+}
+
+/// Value and return-position facts solved together, so a recursive call reads the same least fixpoint as a continuation transfer.
+fn row_facts(module: &Module) -> BTreeMap<RowKey, Rows> {
+    let escaping = analyze_calls(module).escaping;
+    let arities = module.return_arities();
+    let receivers = module
+        .live_continuations()
+        .map(|(id, definition)| {
+            (
+                id,
+                definition
+                    .params
+                    .iter()
                     .copied()
+                    .map(RowKey::Value)
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .chain(module.live_functions().map(|(id, definition)| {
+            (
+                definition.return_cont,
+                (0..arities[&id])
+                    .map(|index| RowKey::Returned(id, index))
                     .collect(),
-                None => vec![target],
-            };
-            for receiver in receivers {
-                if let Some(continuation) = module.continuation(receiver) {
-                    for (index, param) in continuation.params.iter().enumerate() {
-                        solver.join(*param, facts(index));
-                    }
-                }
+            )
+        }))
+        .collect::<BTreeMap<_, _>>();
+    let seeds = receivers
+        .values()
+        .flatten()
+        .copied()
+        .chain(module.value_ids().map(RowKey::Value));
+
+    let deliver = |solver: &mut Solver<Rows, RowKey>,
+                   target: ContinuationId,
+                   facts: &dyn Fn(usize) -> Rows| {
+        if let Some(keys) = receivers.get(&target) {
+            for (index, key) in keys.iter().enumerate() {
+                solver.join(*key, facts(index));
             }
-        };
+        }
+    };
 
     Solver::solve(seeds, |solver| {
-        let fact = |solver: &Solver<Rows>, atom: &Atom| match atom {
-            Atom::Value(value) => solver.facts().get(value).cloned().unwrap_or(Rows::Any),
+        let fact = |solver: &Solver<Rows, RowKey>, atom: &Atom| match atom {
+            Atom::Value(value) => solver
+                .facts()
+                .get(&RowKey::Value(*value))
+                .cloned()
+                .unwrap_or(Rows::Any),
             Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => Rows::none(),
         };
 
         for (function, definition) in module.live_functions() {
             if escaping.contains(&function) || module.entry() == Some(function) {
                 for param in &definition.params {
-                    solver.join(*param, Rows::Any);
+                    solver.join(RowKey::Value(*param), Rows::Any);
                 }
             }
         }
@@ -150,14 +158,14 @@ pub(crate) fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
                             Rows::none()
                         }
                     };
-                    solver.join(*result, rows);
+                    solver.join(RowKey::Value(*result), rows);
                 }
                 Node::LetIntrinsic { result, op, .. } => {
                     let rows = match op.reads_reference() {
                         true => Rows::Any,
                         false => Rows::none(),
                     };
-                    solver.join(*result, rows);
+                    solver.join(RowKey::Value(*result), rows);
                 }
                 Node::ApplyFun {
                     callee,
@@ -172,8 +180,20 @@ pub(crate) fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
                                 .map(|atom| fact(solver, atom))
                                 .collect::<Vec<_>>();
                             for (rows, param) in passed.into_iter().zip(&function.params) {
-                                solver.join(*param, rows);
+                                solver.join(RowKey::Value(*param), rows);
                             }
+                            let returned = (0..arities[callee])
+                                .map(|index| {
+                                    solver
+                                        .facts()
+                                        .get(&RowKey::Returned(*callee, index))
+                                        .cloned()
+                                        .unwrap_or(Rows::Any)
+                                })
+                                .collect::<Vec<_>>();
+                            deliver(solver, *return_to, &|index| {
+                                returned.get(index).cloned().unwrap_or(Rows::Any)
+                            });
                         }
                     }
                     Callee::Closure(_) => deliver(solver, *return_to, &|_| Rows::Any),
@@ -219,3 +239,6 @@ pub(crate) fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod entry_tests;

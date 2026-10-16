@@ -8,9 +8,8 @@ Keep suspension representation separate from the entry's residual return capabil
 
 ## Remaining stages
 
-1. Track row flow through function-return positions and expose `Module::entry_suspension()`. Check direct and tail calls, recursive components, multiple results, opaque boundaries and fresh answers after mutation; emission remains unchanged.
-2. Carry residual capability through machine lowering and structurization, selecting entry exports and turn-only dispatch from it. Check emitter structure and raw/optimized native execution with registered-but-unused rows, internally consumed suspensions, escaping suspensions and unknown results.
-3. Check browser direct execution, promised foreign replies, repeated resumption and cancellation that suspends. Run the hand-off gate and retire this specification.
+1. Carry residual capability through machine lowering and structurization, selecting entry exports and turn-only dispatch from it. Check emitter structure and raw/optimized native execution with registered-but-unused rows, internally consumed suspensions, escaping suspensions and unknown results.
+2. Check browser direct execution, promised foreign replies, repeated resumption and cancellation that suspends. Run the hand-off gate and retire this specification.
 
 ## Verification and retirement
 
