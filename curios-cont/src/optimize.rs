@@ -14,6 +14,9 @@ pub(crate) use contify::*;
 mod cse;
 pub(crate) use cse::*;
 
+mod dead_parameters;
+pub(crate) use dead_parameters::*;
+
 mod evaluate;
 pub(crate) use evaluate::*;
 

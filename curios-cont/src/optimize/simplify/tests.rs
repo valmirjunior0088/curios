@@ -2,9 +2,8 @@
 
 use {
     super::{
-        eliminate_dead_bindings, eliminate_dead_calls, eliminate_dead_parameters,
-        fold_intrinsic_identities, forward_aggregate_projections, forward_calls,
-        forward_continuations, rewrite_atoms,
+        eliminate_dead_bindings, eliminate_dead_calls, fold_intrinsic_identities,
+        forward_aggregate_projections, forward_calls, forward_continuations, rewrite_atoms,
     },
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
@@ -64,63 +63,6 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
             next,
             ..
         }) if *next == return_node
-    ));
-    module.verify().unwrap();
-}
-
-#[test]
-fn dead_parameter_elimination_rewrites_known_calls() {
-    let mut module = Module::new();
-    let main = module.reserve_function();
-    let callee = module.reserve_function();
-    let kept = module.add_value(Some("kept".into()));
-    let removed = module.add_value(Some("removed".into()));
-    let callee_return = module.reserve_continuation();
-    let callee_body = module.add_node(Node::ApplyCont(Edge {
-        target: callee_return,
-        args: vec![Atom::Value(kept)],
-    }));
-    module.define_function(
-        callee,
-        Function {
-            debug_name: Some("callee".into()),
-            params: vec![kept, removed],
-            return_cont: callee_return,
-            body: callee_body,
-            droppable: false,
-        },
-    );
-    let main_return = module.reserve_continuation();
-    let call = module.add_node(Node::ApplyFun {
-        callee: Callee::Known(callee),
-        args: vec![
-            Atom::Literal(Literal::Nat(Natural::from(1u32))),
-            Atom::Literal(Literal::Nat(Natural::from(2u32))),
-        ],
-        return_to: main_return,
-    });
-    let body = module.add_node(Node::LetFun {
-        functions: vec![callee],
-        body: call,
-    });
-    module.define_function(
-        main,
-        Function {
-            debug_name: Some("main".into()),
-            params: vec![],
-            return_cont: main_return,
-            body,
-            droppable: false,
-        },
-    );
-    module.set_entry(main);
-
-    assert!(eliminate_dead_parameters(&mut module));
-    assert_eq!(module.function(callee).unwrap().params, vec![kept]);
-    assert!(matches!(
-        module.node(call),
-        Some(Node::ApplyFun { args, .. })
-            if args == &[Atom::Literal(Literal::Nat(Natural::from(1u32)))]
     ));
     module.verify().unwrap();
 }
