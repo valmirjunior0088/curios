@@ -16,6 +16,5 @@
 
 ## Stages and checks
 
-1. Implement ownership, structural selection, decoding, rendering and multiplicity. Check both/neither/exactly-one inputs, a shared destination, partial groups, invalid selected values, defaults, repetition, clusters, attached values and help used as data.
-2. Migrate command trees and callers, remove the old engine, and check deep dispatch, error streams/statuses, UTF-8 rejection, invalid siblings and typed record lookup.
-3. Update authoritative documentation, run default-feature workspace checks and retire this specification after redirecting references. No measurement is retaken.
+1. Migrate command trees and callers, remove the old engine, and check deep dispatch, error streams/statuses, UTF-8 rejection, invalid siblings and typed record lookup.
+2. Update authoritative documentation, run default-feature workspace checks and retire this specification after redirecting references. No measurement is retaken.

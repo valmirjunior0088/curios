@@ -6,6 +6,11 @@ pub use Prepared/{let Prepared, prepare};
 pub mod SpecError;
 
 pub mod record;
+
+pub mod render;
+
+mod interpret;
+pub use interpret/{let Reading, interpret, builtin_collision};
 pub use Grammar/{let Grammar};
 pub use SpecError/{let SpecError};
 pub use record/{let record, checked_record};
@@ -235,6 +240,14 @@ pub induct Failure: pub Type
 | unexpected(token: Str)
 --- The value was read and refused, for this reason.
 | bad_value(name: Str, reason: Str)
+--- A singular value-taking option appeared more than once.
+| repeated(name: Str)
+--- Explicit occurrences selected incompatible alternatives.
+| conflict(names: List(Str))
+--- No alternative received a distinguishing occurrence or positional value.
+| missing_alternative(names: List(Str))
+--- A validation of a parsed group refused its result.
+| validation(reason: Str)
 --- A subcommand no declaration names, beside those that do.
 | unknown_command(name: Str, known: List(Str))
 --- A subcommand was owed and none was given, beside those that would do.
@@ -582,6 +595,11 @@ let complaint(f: Failure) -> Str =
     | missing_required(n) => Str/flatten(["the argument '", shout(n), "' is required"])
     | unexpected(t) => Str/flatten(["unexpected argument '", t, "'"])
     | bad_value(n, r) => Str/flatten(["invalid value for '--", n, "': ", r])
+    | repeated(n) => Str/flatten(["the argument '--", n, "' cannot be used more than once"])
+    | conflict(names) => Str/concat("conflicting arguments: ", Str/join(", ", names))
+    | missing_alternative(names) =>
+        Str/concat("one of these arguments is required: ", Str/join(", ", names))
+    | validation(reason) => reason
     | unknown_command(n, known) =>
         Str/flatten(["unrecognized subcommand '", n, "'\n  available: ", Str/join(", ", known)])
     | missing_command(known) =>

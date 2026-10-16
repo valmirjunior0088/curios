@@ -1,0 +1,73 @@
+use /std/{Str, Char, Nat, List, Option};
+use /std/Cli/{Prepared};
+use /std/Cli/Grammar/{Node};
+use /std/Cli/Prepared/{NamedEntry, PositionalEntry};
+
+let shout(s: Str) -> Str =
+    Str/flatten(List/map(Str/to_list(s), (c) => Str/of_char(Char/to_ascii_upper(c))));
+
+let words(parts: List(Str)) -> Str =
+    Str/join(" ", List/filter(parts, (part) => part != ""));
+
+let bracket(s: Str) -> Str =
+    match s == "" | true => "" | false => Str/flatten(["[", s, "]"]) end;
+
+--- The syntax follows the grammar's groups, including exclusive alternatives and nullable suffixes.
+pub let synopsis(@A: Type, tree: Node(A)) -> Str =
+    match tree
+    | pure(_) => ""
+    | flag(names) => Str/concat("--", names.long)
+    | option(names, reader, _) => Str/flatten(["--", names.long, " <", reader.metavar, ">"])
+    | positional(names, _) => Str/flatten(["<", shout(names.name), ">"])
+    | rest(names, _) => Str/flatten(["[", shout(names.name), "]..."])
+    | map(inner, _) => synopsis(inner)
+    | validate(inner, _) => synopsis(inner)
+    | product(left, right) => words([synopsis(left), synopsis(right)])
+    | choice(left, right) => Str/flatten(["(", synopsis(left), " | ", synopsis(right), ")"])
+    | optional(inner) => bracket(synopsis(inner))
+    | default(inner, _) => bracket(synopsis(inner))
+    | repeat(inner) => Str/concat(bracket(synopsis(inner)), "...")
+    end;
+
+pub let usage(@A: Type, invoked: List(Str), prepared: Prepared(A)) -> Str =
+    Str/concat("Usage: ", words([Str/join(" ", invoked), synopsis(prepared.grammar.tree)]));
+
+pub let section(heading: Str, rows: List({Str, Str})) -> Str =
+    match rows
+    | [] => ""
+    | [_, .._] =>
+        let width = List/fold(rows, 0, ((left, _), held) => Nat/max(Str/len(left), held));
+        Str/flatten([
+            heading, "\n",
+            ..List/map(rows, ((left, right)) =>
+                Str/flatten(["  ", Str/pad_end(left, width, ' '), "  ", right, "\n"])),
+            "\n"])
+    end;
+
+let named_row(@limit: Nat, entry: NamedEntry(limit)) -> {Str, Str} =
+    let short =
+        match entry.names.short
+        | none() => "    "
+        | some(c) => Str/flatten(["-", Str/of_char(c), ", "])
+        end;
+    let value =
+        match entry.metavar | none() => "" | some(name) => Str/flatten([" <", name, ">"]) end;
+    (Str/flatten([short, "--", entry.names.long, value]), entry.names.help);
+
+let positional_row(@limit: Nat, entry: PositionalEntry(limit)) -> {Str, Str} =
+    (
+        match entry.rest
+        | true => Str/flatten(["[", shout(entry.names.name), "]..."])
+        | false => Str/flatten(["<", shout(entry.names.name), ">"])
+        end,
+        entry.names.help);
+
+pub let builtins(version: Option(Str)) -> List({Str, Str}) =
+    [
+        ("-h, --help", "Print help"),
+        ..match version | none() => [] | some(_) => [("    --version", "Print version")] end];
+
+pub let sections(@A: Type, prepared: Prepared(A), version: Option(Str)) -> Str =
+    Str/concat(
+        section("Arguments:", List/map(prepared.metadata.positional, positional_row)),
+        section("Options:", [..List/map(prepared.metadata.named, named_row), ..builtins(version)]));

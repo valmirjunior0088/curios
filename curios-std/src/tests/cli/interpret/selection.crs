@@ -1,0 +1,143 @@
+use /std/{Cli, Str, Nat, Bool, List, Result, Test};
+use /std/Cli/{Grammar};
+use /cli/interpret/common/{named, position, text};
+
+let path_or_mock() -> Grammar(Str) =
+    Grammar/choice(
+        Grammar/positional(position("path"), Cli/str),
+        Grammar/map(Grammar/flag(named("mock")), (_) => "mock"));
+
+test a_path_and_a_flag_can_produce_the_same_destination_type =
+    Test/all([
+        Test/equal(text(path_or_mock(), ["file.crs"], (s) => s), "file.crs"),
+        Test/equal(text(path_or_mock(), ["--mock"], (s) => s), "mock"),
+        Test/equal(text(path_or_mock(), [], (s) => s), "missing alternative"),
+        Test/equal(text(path_or_mock(), ["--mock", "file.crs"], (s) => s), "unexpected file.crs")]);
+
+test explicit_named_occurrences_select_before_any_reader_runs =
+    let failing =
+        Cli/reader(@Str, "X", (_) => Result/failure("this reader must not select a branch"));
+    let choice =
+        Grammar/choice(
+            Grammar/option(named("first"), failing),
+            Grammar/option(named("second"), Cli/str));
+    Test/all([
+        Test/equal(text(choice, ["--second", "yes"], (s) => s), "yes"),
+        Test/equal(text(choice, ["--first", "no"], (s) => s), "bad first"),
+        Test/equal(text(choice, ["--first", "no", "--second", "yes"], (s) => s), "conflict")]);
+
+test partial_occurrence_commits_to_its_choice_group =
+    let group =
+        Grammar/map(
+            Grammar/product(Grammar/flag(named("a")), Grammar/option(named("b"), Cli/str)),
+            ((_, value)) => value);
+    let choice = Grammar/choice(group, Grammar/map(Grammar/flag(named("c")), (_) => "c"));
+    Test/equal(text(choice, ["--a"], (s) => s), "missing b");
+
+test partial_optional_groups_report_the_missing_member =
+    let group =
+        Grammar/optional(Grammar/product(Grammar/flag(named("a")), Grammar/flag(named("b"))));
+    Test/all([
+        Test/equal(text(group, [], (_) => "none"), "none"),
+        Test/equal(text(group, ["--a"], (_) => "some"), "missing b"),
+        Test/equal(text(group, ["--a", "--b"], (_) => "some"), "some")]);
+
+test a_nullable_terminal_positional_block_commits_on_its_first_value =
+    let group =
+        Grammar/optional(
+            Grammar/product(
+                Grammar/positional(position("first"), Cli/str),
+                Grammar/positional(position("second"), Cli/str)));
+    Test/all([
+        Test/equal(text(group, [], (_) => "none"), "none"),
+        Test/equal(text(group, ["one"], (_) => "some"), "missing second"),
+        Test/equal(text(group, ["one", "two"], (_) => "some"), "some")]);
+
+test selected_fixed_positional_blocks_keep_following_positionals =
+    let choice =
+        Grammar/choice(
+            Grammar/product(
+                Grammar/flag(named("a")),
+                Grammar/positional(position("first"), Cli/str)),
+            Grammar/product(
+                Grammar/flag(named("b")),
+                Grammar/positional(position("other"), Cli/str)));
+    let grammar = Grammar/product(choice, Grammar/positional(position("last"), Cli/str));
+    Test/equal(
+        text(grammar, ["--b", "one", "two"], (((_, first), last)) => Str/concat(first, last)),
+        "onetwo");
+
+test defaults_cannot_select_an_alternative =
+    let choice =
+        Grammar/choice(
+            Grammar/default(Grammar/option(named("first"), Cli/str), "fallback"),
+            Grammar/option(named("second"), Cli/str));
+    Test/all([
+        Test/equal(text(choice, [], (s) => s), "missing alternative"),
+        Test/equal(text(choice, ["--second", "selected"], (s) => s), "selected")]);
+
+test nested_and_independent_choices_select_without_expanding_variants =
+    let flag(name: Str, @valid: /std/Bool/Holds(Grammar/valid_named(named(name)))) -> Grammar(Str) =
+        Grammar/map(Grammar/flag(named(name)), (_) => name);
+    let grammar =
+        Grammar/product(
+            Grammar/choice(Grammar/choice(flag("a"), flag("b")), flag("c")),
+            Grammar/choice(flag("d"), flag("e")));
+    Test/equal(text(grammar, ["--b", "--e"], ((a, b)) => Str/concat(a, b)), "be");
+
+test singular_options_reject_repetition_unless_last_is_explicit =
+    let option = Grammar/option(named("port"), Cli/nat);
+    Test/all([
+        Test/equal(text(option, ["--port", "1", "--port", "2"], Nat/to_str), "repeated port"),
+        Test/equal(
+            text(
+                Grammar/on_repeat(option, Grammar/Multiplicity/last()),
+                ["--port", "bad", "--port", "2"],
+                Nat/to_str),
+            "2")]);
+
+test repeated_named_leaves_read_every_occurrence_in_order =
+    let grammar = Grammar/repeat(Grammar/option(named("item"), Cli/nat));
+    Test/all([
+        Test/equal(
+            text(
+                grammar,
+                ["--item", "1", "--item", "2"],
+                (items) => Str/join(",", List/map(items, Nat/to_str))),
+            "1,2"),
+        Test/equal(text(grammar, ["--item", "bad", "--item", "2"], (_) => "accepted"), "bad item"),
+        Test/equal(text(grammar, [], (_) => "empty"), "empty")]);
+
+test switches_are_idempotent_and_repeated_flags_retain_their_count =
+    Test/all([
+        Test/equal(
+            text(Grammar/switch(named("quiet")), ["--quiet", "--quiet"], Bool/to_str),
+            "true"),
+        Test/equal(
+            text(
+                Grammar/repeat(Grammar/flag(named("quiet"))),
+                ["--quiet", "--quiet"],
+                (items) => Nat/to_str(List/len(items))),
+            "2")]);
+
+test validation_runs_on_the_selected_typed_result =
+    let grammar =
+        Grammar/validate(
+            Grammar/option(named("port"), Cli/nat),
+            (value) =>
+                match value < 10
+                | true => Result/success(value)
+                | false => Result/failure("too large")
+                end);
+    Test/equal(text(grammar, ["--port", "20"], Nat/to_str), "too large");
+
+test the_synopsis_preserves_exclusive_alternatives =
+    Test/equal(Cli/render/synopsis(path_or_mock().tree), "(<PATH> | --mock)");
+
+test the_synopsis_preserves_group_optionality_and_repetition =
+    let group =
+        Grammar/optional(Grammar/product(Grammar/flag(named("a")), Grammar/flag(named("b"))));
+    let repeated = Grammar/repeat(Grammar/option(named("item"), Cli/nat));
+    Test/equal(
+        Cli/render/synopsis(Grammar/product(group, repeated).tree),
+        "[--a --b] [--item <N>]...");
