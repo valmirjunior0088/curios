@@ -53,87 +53,109 @@ impl std::io::Write for Rows {
 ///
 /// For pass attribution, build both probes with a `profile` feature forwarding `curios-pipeline/profile` and `curios-profile/enabled`. Trace the same TOML compilation with `curios_profile::trace` to `Destination::File`, fold its stream and require every span to close. Take one warmup and seven interleaved readings, alternating the first revision. The table below gives medians and observed spans of each pass's aggregate time; rounds and allocations are read from the same captures. The observer renders nothing. The command above uses an in-memory stream for inspection; paired figures use the file-stream protocol on both revisions.
 ///
-/// To separate dead-parameter demand solving from the remainder of the pass, add temporary `cont::dead_parameter_demands` and `cont::dead_parameter_rewrite` spans to the isolated source copies: wrap the initial `demands(module)` call with the former, and scope the latter over the rest of `eliminate_dead_parameters`. These spans and the repair-visit sample described below exist only in the comparison copies. Profile timings include their instrumentation and the counting allocator; default-feature process times establish the product comparison.
+/// To attribute bounded copy admission, add temporary spans in the isolated profiling copies around the inliner and loop separator's call analysis, planning and execution, and the call/jump specializers' planning and copy execution. Wrap the shared planner in a span and sample its encountered distinct nodes and enumerated binding-group members at every return; sample whether each inline is declined for its size. These instruments exist only in the comparison copies. Default-feature executables are frozen before instrumentation. Profile timings include tracing and the counting allocator; default-feature process times establish the product comparison.
 ///
 /// For counted artifacts, compile each common source with an observer that writes `Stage::ContOptm`'s printed graph, serialize the module with `curios_wasm::to_bytes` (names retained), call `curios_binaryen::optimize(raw, false, |_| {})` (names removed), and archive the harvested `ForeignStore` with `curios_archive::to_bytes`. Compare all four outputs byte for byte. The codegen consumers validate and execute their raw and optimized modules. Identical runtime artifacts are not retimed.
 ///
-/// For counted repair work, build temporary Cont tests in the two isolated revisions with `profile` enabled. Construct `N = 64, 128, 256` pairs: a non-escaping known function taking one unread parameter and returning zero, and a continuation taking one unread parameter and passing it to that function, with the call returning to the entry's sentinel. The nullary entry binds all functions and continuations and switches between jumps passing zero into each continuation. Each function body is one node, each continuation body one node, and the entry adds a switch and the two binding nodes: `2N + 3` live nodes with no tombstones. Verify before and after one invocation of `eliminate_dead_parameters`, tracing only that invocation. In temporary pass instrumentation, count each actual repair traversal by adding the invocation's live-node count; include every baseline `Module::replace_atom` walk. The pass never mints or removes nodes, so that count stays exact throughout the invocation. Record the sum once as `cont::dead_parameter_repair_visits`, and read it with `curios_profile::fold`. Exclude demand iterations and read-only scans for result receivers and escaping functions. Remove the tests and instrumentation after the investigation; no production counter or metric API is retained.
+/// For counted planning work, add temporary Cont tests to the two isolated revisions and run them with `profile` enabled. Build one non-escaping callee with a spine of `N = 512, 1024, 2048` nodes (one return, preceded by literal bindings), reached by `K = 1, 16, 64` known sites in continuation arms of an entry switch. Trace only the production inliner, excluding fixture construction and verification. Repeat with accepted one-, eight- and sixteen-node spines and with `N` one-node nested functions introduced by one wide `LetFun` in a two-node root body. Fold node and group-member samples separately and compare resulting Cont text. Read each shared-planner sample under its enclosing planning span to attribute consumer counts by caller; no per-node event or production test hook is added.
 ///
 /// # Latest reading
 ///
-/// Mixed: counted artifact identity, optimizer rounds, repair visits and allocation work; timed default-release process wall times and matched profile attribution. Taken at `812080299` against `62cf6687d`, AMD Ryzen 7 5800X3D, x86-64 Linux `7.2.9-ogc3.1.fc44.x86_64`, Rust `1.95.0`, frequency scaling and boost enabled. Default and profile executables are built separately; the profiling copies alone carry the temporary attribution spans and repair-visit sample.
+/// Mixed: counted artifact identity, optimizer rounds, planning visits and allocation work; timed default-release process wall times and matched profile attribution. Taken at `98c8c3647` against `3afb81c44`, AMD Ryzen 7 5800X3D, x86-64 Linux `7.2.9-ogc3.1.fc44.x86_64`, Rust `1.95.0`, frequency scaling and boost enabled. Default and profile executables are built separately; the profiling copies alone carry temporary attribution spans and planning samples.
 ///
 /// Default-feature compilation, process wall time per compilation:
 ///
 /// | Consumer | Baseline ms [span] | Candidate ms [span] | Span comparison |
 /// | --- | ---: | ---: | --- |
-/// | `calls` | 108 [107–110] | 108 [107–110] | overlap |
-/// | `jumps` | 126 [125–132] | 128 [126–132] | overlap |
-/// | `monad_io` | 285 [283–287] | 284 [282–286] | overlap |
-/// | `monad_suspend` | 516 [514–520] | 516 [510–521] | overlap |
-/// | `parse_digits` | 276 [274–278] | 277 [272–279] | overlap |
-/// | `sccs` | 89 [86–90] | 89 [87–91] | overlap |
-/// | `toml` | 4060 [4040–4150] | 3740 [3700–3770] | faster |
-/// | `tui` | 2720 [2690–2740] | 2670 [2670–2750] | overlap |
-/// | `uncurry` | 90 [90–93] | 91 [90–92] | overlap |
-/// | `walk_mirror_held_scan` | 322 [320–327] | 321 [319–325] | overlap |
-/// | `workers` | 88 [87–89] | 88 [87–90] | overlap |
+/// | `calls` | 109 [109–111] | 109 [109–111] | overlap |
+/// | `jumps` | 130 [128–131] | 129 [129–131] | overlap |
+/// | `monad_io` | 285 [282–289] | 284 [281–287] | overlap |
+/// | `monad_suspend` | 516 [513–522] | 519 [512–521] | overlap |
+/// | `parse_digits` | 277 [276–279] | 277 [276–278] | overlap |
+/// | `sccs` | 89 [87–89] | 88 [88–89] | overlap |
+/// | `toml` | 3740 [3730–3770] | 3780 [3760–3800] | overlap |
+/// | `tui` | 2680 [2670–2730] | 2700 [2670–2720] | overlap |
+/// | `uncurry` | 91 [90–93] | 92 [90–92] | overlap |
+/// | `walk_mirror_held_scan` | 323 [321–323] | 323 [320–324] | overlap |
+/// | `workers` | 89 [87–94] | 89 [88–90] | overlap |
 ///
-/// TOML compilation is faster; every other span overlaps its control after accounting for clock resolution. All eleven consumers have byte-identical optimized Cont, raw Wasm, Binaryen-optimized Wasm and archived foreign declarations. Runtime artifacts are identical and are not retimed. The two consumers in `codegen/dead_parameters.rs` validate and execute both Wasm paths at four host-tainted inputs, preserving an effect computed solely for an unused argument and a nested capture across suspension.
+/// Every default-feature compilation span overlaps its control after accounting for clock resolution, so this campaign establishes no compilation speedup or regression.
+///
+/// All eleven consumers have byte-identical optimized Cont, raw Wasm, Binaryen-optimized Wasm and archived foreign declarations. Runtime artifacts are identical and are not retimed. The copying, sweep and dead-parameter codegen consumers validate and execute both Wasm paths, including suspension and nested captures.
 ///
 /// Matched TOML profile attribution:
 ///
 /// | Span | Baseline ms [span] | Candidate ms [span] |
 /// | --- | ---: | ---: |
-/// | `compile_entrypoint` | 4306.2 [4284.7–4346.5] | 3962.4 [3941.0–3991.9] |
-/// | `cont_optimize` | 3779.9 [3758.7–3809.1] | 3434.0 [3414.2–3463.6] |
-/// | `cont::eliminate_dead_parameters` | 363.4 [355.6–369.0] | 57.2 [56.0–58.0] |
-/// | `cont::dead_parameter_demands` | 45.0 [44.4–45.3] | 44.4 [43.7–45.2] |
-/// | `cont::dead_parameter_rewrite` | 317.4 [310.4–323.0] | 11.9 [11.5–12.1] |
+/// | `compile_entrypoint` | 4244.7 [4212.7–4269.6] | 4301.1 [4283.6–4385.7] |
+/// | `cont_optimize` | 3704.7 [3676.6–3737.1] | 3760.2 [3748.8–3842.1] |
+/// | `cont::inline_known_calls` | 718.5 [712.2–725.4] | 715.6 [709.8–733.5] |
+/// | `cont::inline_analysis` | 380.0 [375.5–383.8] | 395.5 [391.3–414.0] |
+/// | `cont::inline_planning` | 150.3 [149.8–151.4] | 135.4 [134.7–137.4] |
+/// | `cont::inline_execution` | 29.1 [28.4–30.0] | 28.7 [28.2–30.2] |
+/// | `cont::separate_loop_entries` | 134.0 [132.4–138.1] | 138.7 [135.2–141.7] |
+/// | `cont::loop_analysis` | 129.2 [127.6–133.4] | 134.0 [130.5–137.0] |
+/// | `cont::loop_planning` | 0.1 [0.1–0.1] | 0.1 [0.1–0.1] |
+/// | `cont::loop_execution` | 0.5 [0.5–0.6] | 0.5 [0.5–0.5] |
 ///
-/// Both revisions settle in eleven rounds, with dead-parameter cleanup changing six invocations. Every Cont fired count and graph-size sample agrees. Demand solving overlaps its control; the reduction is in the remainder of dead-parameter cleanup. The extra removal maps and binding sets keep allocations bounded by the admitted edits: cumulative Cont allocation work is 2,797.3 MiB over 36,502,710 allocator calls at the baseline and 2,797.4 MiB over 36,503,120 calls at the candidate. These figures include temporary profile instrumentation and measure allocation work, not peak resident memory.
+/// Both revisions settle in eleven optimizer rounds. Every Cont fired count and graph-size sample agrees. Planning is a portion of each pass: the analysis and successful rewrites remain, and the complete pass time is not the saving. The profiling build has higher candidate compile and Cont totals despite the smaller planner workload; the default-feature readings above establish the product comparison. Per-attempt tracing contributes to the planning spans and is absent from those default executables. Allocation figures include temporary profile instrumentation and measure cumulative allocation work, not peak resident memory.
+///
+/// | Planning caller | Attempts, both | Baseline nodes | Candidate nodes | Baseline group members | Candidate group members |
+/// | --- | ---: | ---: | ---: | ---: | ---: |
+/// | `cont::inline_planning` | 14,485 | 756,142 | 257,961 | 231,599 | 98,516 |
+/// | `cont::loop_planning` | 11 | 291 | 291 | 116 | 116 |
+/// | `cont::call_planning` | 39 | 852 | 852 | 393 | 393 |
+/// | `cont::jump_planning` | 1,052 | 17,868 | 17,868 | 6,137 | 6,137 |
+///
+/// Both revisions decline 10,950 of the inliner's 14,485 planning attempts for their size. Inliner call analysis retains the same 5,693,518 allocation calls in both revisions. Total Cont allocation work is 2,813.0 MiB over 37,504,052 calls at the baseline and 2,806.9 MiB over 37,410,058 calls at the candidate.
 ///
 /// | Candidate pass | ms [span] | Fired / calls | Allocated MiB | Allocation calls |
 /// | --- | ---: | ---: | ---: | ---: |
-/// | `inline_known_calls` | 501.1 [496.3–502.4] | 5 / 11 | 508.0 | 6,292,858 |
-/// | `answer_row_tests` | 436.9 [434.6–439.9] | 0 / 11 | 352.0 | 4,798,544 |
-/// | `split_parameters` | 407.8 [403.4–411.4] | 6 / 11 | 203.5 | 2,452,167 |
-/// | `split_workers` | 403.6 [401.9–412.1] | 2 / 11 | 351.8 | 4,255,474 |
-/// | `known_values` | 248.2 [244.6–251.0] | — / 11 | 264.4 | 3,614,207 |
-/// | `split_returns` | 207.3 [205.4–211.5] | 6 / 11 | 190.3 | 2,399,815 |
-/// | `uncurry_returns` | 159.6 [157.0–162.1] | 3 / 11 | 162.7 | 2,104,178 |
-/// | `flatten_indexed_lists` | 158.3 [156.6–159.2] | 1 / 11 | 68.4 | 1,181,005 |
-/// | `contify_calls` | 139.6 [138.0–142.4] | 5 / 11 | 148.9 | 1,896,062 |
-/// | `specialize_scc_calls` | 137.6 [136.1–140.7] | 0 / 11 | 149.6 | 1,902,926 |
-/// | `separate_loop_entries` | 132.3 [131.0–132.7] | 5 / 11 | 148.5 | 1,904,264 |
-/// | `eliminate_dead_parameters` | 57.2 [56.0–58.0] | 6 / 11 | 31.5 | 358,076 |
-/// | `inline_single_use_continuations` | 52.4 [51.7–53.9] | 7 / 11 | 15.1 | 294,303 |
-/// | `eliminate_dead_calls` | 46.4 [45.6–46.6] | 1 / 11 | 27.2 | 253,844 |
-/// | `eliminate_dead_bindings` | 38.9 [38.1–39.6] | 8 / 11 | 12.5 | 285,515 |
-/// | `prune_unreachable` | 35.7 [35.3–37.9] | 6 / 11 | 5.0 | 122,716 |
-/// | `split_windows` | 24.1 [23.6–24.2] | 1 / 2 | 8.8 | 159,530 |
-/// | `dedupe_intrinsics` | 20.3 [20.0–21.0] | 5 / 11 | 7.3 | 104,920 |
-/// | `specialize_jump_patterns` | 18.9 [18.7–19.5] | 3 / 11 | 9.4 | 168,294 |
-/// | `fuse_append_chains` | 12.9 [12.7–13.3] | 1 / 11 | 4.6 | 104,904 |
-/// | `forward_aggregate_projections` | 12.8 [12.3–13.7] | 8 / 11 | 1.8 | 9,479 |
-/// | `fold_intrinsic_identities` | 11.4 [10.9–11.8] | 5 / 11 | 0.0 | 78 |
-/// | `specialize_call_patterns` | 6.1 [6.0–6.5] | 2 / 11 | 2.1 | 16,263 |
-/// | `forward_continuations` | 5.2 [5.2–5.9] | 7 / 11 | 5.7 | 104,093 |
-/// | `rewrite_atoms` | 3.4 [3.4–3.9] | 5 / 11 | 0.0 | 54 |
-/// | `forward_calls` | 3.1 [3.0–3.1] | 2 / 11 | 0.5 | 3,361 |
+/// | `inline_known_calls` | 715.6 [709.8–733.5] | 5 / 11 | 516.5 | 7,131,197 |
+/// | `answer_row_tests` | 456.3 [449.4–462.5] | 0 / 11 | 352.0 | 4,798,544 |
+/// | `split_parameters` | 425.1 [422.2–436.1] | 6 / 11 | 203.5 | 2,452,167 |
+/// | `split_workers` | 422.3 [416.7–431.6] | 2 / 11 | 351.8 | 4,255,474 |
+/// | `known_values` | 260.2 [256.5–267.9] | — / 11 | 264.4 | 3,614,207 |
+/// | `split_returns` | 213.8 [211.1–215.1] | 6 / 11 | 190.3 | 2,399,815 |
+/// | `uncurry_returns` | 164.8 [162.9–169.2] | 3 / 11 | 162.7 | 2,104,178 |
+/// | `flatten_indexed_lists` | 158.7 [157.5–161.1] | 1 / 11 | 68.4 | 1,181,005 |
+/// | `specialize_scc_calls` | 145.3 [144.2–151.0] | 0 / 11 | 149.7 | 1,911,317 |
+/// | `contify_calls` | 145.3 [141.3–148.4] | 5 / 11 | 148.9 | 1,896,062 |
+/// | `separate_loop_entries` | 138.7 [135.2–141.7] | 5 / 11 | 148.5 | 1,905,120 |
+/// | `eliminate_dead_parameters` | 57.0 [56.6–58.4] | 6 / 11 | 31.5 | 357,630 |
+/// | `inline_single_use_continuations` | 52.0 [51.4–53.4] | 7 / 11 | 15.1 | 294,303 |
+/// | `eliminate_dead_calls` | 46.7 [46.2–47.3] | 1 / 11 | 27.2 | 253,844 |
+/// | `eliminate_dead_bindings` | 38.8 [38.4–39.7] | 8 / 11 | 12.5 | 285,515 |
+/// | `prune_unreachable` | 36.2 [35.3–37.4] | 6 / 11 | 5.0 | 122,716 |
+/// | `specialize_jump_patterns` | 32.5 [32.0–33.0] | 3 / 11 | 10.3 | 225,772 |
+/// | `split_windows` | 23.8 [23.6–26.5] | 1 / 2 | 8.8 | 159,530 |
+/// | `dedupe_intrinsics` | 20.8 [20.1–22.4] | 5 / 11 | 7.3 | 104,920 |
+/// | `fuse_append_chains` | 13.2 [12.8–14.0] | 1 / 11 | 4.6 | 104,904 |
+/// | `forward_aggregate_projections` | 12.5 [12.3–12.9] | 8 / 11 | 1.8 | 9,479 |
+/// | `fold_intrinsic_identities` | 11.1 [11.0–11.6] | 5 / 11 | 0.0 | 78 |
+/// | `specialize_call_patterns` | 6.7 [6.6–7.2] | 2 / 11 | 2.1 | 18,583 |
+/// | `forward_continuations` | 5.3 [5.1–5.7] | 7 / 11 | 5.7 | 104,093 |
+/// | `rewrite_atoms` | 3.5 [3.4–3.6] | 5 / 11 | 0.0 | 54 |
+/// | `forward_calls` | 3.1 [3.0–3.2] | 2 / 11 | 0.5 | 3,361 |
 /// | `simplify_nodes` | 1.2 [1.2–1.3] | 5 / 11 | 0.0 | 973 |
 ///
-/// `split_windows` runs only on otherwise idle rounds: two invocations rather than eleven. Fired samples count invocations changing the graph, not candidates.
+/// `split_windows` runs only on otherwise idle rounds. Fired samples count invocations changing the graph, not candidates.
 ///
-/// Counted repair visits in one invocation, with `N` function/continuation pairs:
+/// Counted distinct nodes encountered while rejecting oversized spines:
 ///
-/// | Pairs | Arena nodes | Baseline visits | Candidate visits |
+/// | Body nodes | Known sites | Baseline visits | Candidate visits |
 /// | ---: | ---: | ---: | ---: |
-/// | 64 | 131 | 33,536 | 262 |
-/// | 128 | 259 | 132,608 | 518 |
-/// | 256 | 515 | 527,360 | 1,030 |
+/// | 512 | 1 | 512 | 257 |
+/// | 512 | 16 | 8,192 | 272 |
+/// | 512 | 64 | 32,768 | 1,088 |
+/// | 1,024 | 1 | 1,024 | 257 |
+/// | 1,024 | 16 | 16,384 | 272 |
+/// | 1,024 | 64 | 65,536 | 1,088 |
+/// | 2,048 | 1 | 2,048 | 257 |
+/// | 2,048 | 16 | 32,768 | 272 |
+/// | 2,048 | 64 | 131,072 | 1,088 |
 ///
-/// The baseline repairs `4N` times and the candidate twice. Across TOML's eleven optimizer rounds, repair visits fall from 67,639,772 to 139,185; the totals include live nodes awaiting pruning. The counts establish the repair bound independently of the timed improvement and exclude the solver and read-only boundary scans.
+/// A single-site attempt encounters 257 nodes and a duplicated-site attempt seventeen, independent of the oversized spine length. The accepted one-, eight- and sixteen-node controls encounter the same nodes at all three site counts, and all twenty-seven synthetic resulting Cont graphs are byte-identical. Wide groups still enumerate every member at their binding node: the `N`-member, `K`-site controls enumerate `N × K` members in both revisions while bounding body-node visits. The allowance bounds body traversal, not arbitrary binding-group width.
 
 #[test]
 #[ignore = "measurement, mixed: reports what each pass of the fixpoint costs rather than asserting"]
