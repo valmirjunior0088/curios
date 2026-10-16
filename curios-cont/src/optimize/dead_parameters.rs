@@ -1,8 +1,11 @@
 //! Dead-parameter cleanup over one demand snapshot, with continuation edits preceding the escape snapshot that admits function edits.
 
 use {
-    crate::{Atom, Callee, Demand, Module, Node, UseTarget, ValueId, atoms, demand_of, demands},
-    std::collections::BTreeSet,
+    crate::{
+        Atom, Callee, Demand, Edge, Module, Node, UseTarget, ValueId, atoms, demand_of, demands,
+        visit_atoms_mut,
+    },
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// Drop every entity's unread parameters, and the arguments every caller passes into them.
@@ -43,31 +46,32 @@ pub(crate) fn eliminate_dead_parameters(module: &mut Module) -> bool {
             let dead = dead_indices(&definition.params);
             (!dead.is_empty()).then_some((id, dead))
         })
-        .collect::<Vec<_>>();
-    for (continuation, dead) in continuations {
-        let removed = remove_parameter_indices(
+        .collect::<BTreeMap<_, _>>();
+    let mut removed = BTreeSet::new();
+    for (&continuation, dead) in &continuations {
+        removed.extend(remove_parameter_indices(
             &mut module.continuation_mut(continuation).unwrap().params,
-            &dead,
-        );
-        module.remove_params_from_record(continuation, &dead);
+            dead,
+        ));
+        module.remove_params_from_record(continuation, dead);
+    }
+    if !continuations.is_empty() {
+        let repair = |edge: &mut Edge| {
+            if let Some(dead) = continuations.get(&edge.target) {
+                remove_parameter_indices(&mut edge.args, dead);
+            }
+        };
         for (_, node) in module.live_nodes_mut() {
             match node {
-                Node::ApplyCont(edge) if edge.target == continuation => {
-                    remove_parameter_indices(&mut edge.args, &dead);
-                }
+                Node::ApplyCont(edge) => repair(edge),
                 Node::Switch { cases, default, .. } => {
                     for edge in cases.values_mut().chain(default.iter_mut()) {
-                        if edge.target == continuation {
-                            remove_parameter_indices(&mut edge.args, &dead);
-                        }
+                        repair(edge);
                     }
                 }
                 _ => {}
             }
-        }
-        // `Unused` means never *consumed*, not never occurring: the deferral arms of the demand walk leave a dropped parameter standing as a known call's argument, or in an edge into some other continuation whose receiving parameter is itself unused. Those occurrences are proven inert, so they become fillers — arity intact, and the receiving side's own dead-parameter drop erases them on a later round.
-        for &value in &removed {
-            module.replace_atom(UseTarget::Value(value), Atom::Filler);
+            fill_removed_operands(node, &removed);
         }
         for value in removed {
             module.remove_value(value);
@@ -118,6 +122,24 @@ pub(crate) fn eliminate_dead_parameters(module: &mut Module) -> bool {
     }
     changed
 }
+/// `Unused` excludes consumption, not occurrences: a removed binding may still be passed into a retained signature whose receiving parameter is also unused. A filler preserves that arity without retaining a dead name. The demand of an indirect callee is `Applied`, so the operand visitor's omission of it cannot leave a removed binding behind.
+fn fill_removed_operands(node: &mut Node, removed: &BTreeSet<ValueId>) {
+    if let Node::ApplyFun {
+        callee: Callee::Closure(value),
+        ..
+    } = node
+    {
+        debug_assert!(!removed.contains(value));
+    }
+    visit_atoms_mut(node, &mut |atom| {
+        if let Atom::Value(value) = atom
+            && removed.contains(value)
+        {
+            *atom = Atom::Filler;
+        }
+    });
+}
+
 pub(crate) fn remove_parameter_indices<T>(
     values: &mut Vec<T>,
     removed: &BTreeSet<usize>,

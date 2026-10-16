@@ -2,7 +2,7 @@
 
 ## What is missing
 
-`eliminate_dead_parameters` in `curios-cont/src/optimize/dead_parameters.rs` decides removals from one demand snapshot, but repairs the node arena once per affected continuation or function and again per removed binding. The recorded TOML reading of `fixpoint_pass_measurements`, at `ce963cf3f`, attributes 397 ms across eleven invocations to the entire pass, including demand analysis; it does not establish the removable fraction.
+`eliminate_dead_parameters` in `curios-cont/src/optimize/dead_parameters.rs` repairs continuation removals together from one demand snapshot, but still repairs the node arena once per affected function and again per removed function binding. The recorded TOML reading of `fixpoint_pass_measurements`, at `ce963cf3f`, attributes 397 ms across eleven invocations to the entire pass, including demand analysis; it does not establish the removable fraction.
 
 ## Goal and decisions
 
@@ -14,9 +14,8 @@ Operation and call result receivers keep their signatures, as do escaping functi
 
 ## Stages and checks
 
-1. Batch continuation removals and their graph repair. Check repeated switch targets, default edges, nested bodies, transient live nodes and exact field-record shifts, shrinking and deletion.
-2. Batch known-function removals and their graph repair. Check distinct masks, self and mutual recursion, all-parameter removal, retained escaping signatures and unchanged invocations.
-3. Check source consumers through raw and Binaryen-optimized Wasm, including argument order, effects and suspension. Record the contract in rustdoc and the owning crate's decision; finish formatting, Clippy and workspace tests.
+1. Batch known-function removals and their graph repair. Check distinct masks, self and mutual recursion, all-parameter removal, retained escaping signatures and unchanged invocations.
+2. Check source consumers through raw and Binaryen-optimized Wasm, including argument order, effects and suspension. Record the contract in rustdoc and the owning crate's decision; finish formatting, Clippy and workspace tests.
 
 ## Verification
 
