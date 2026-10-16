@@ -3,10 +3,12 @@
 use {
     super::{inline_known_calls, inline_single_use_continuations},
     crate::{
-        Atom, Callee, Continuation, Edge, Function, Literal, Module, Node,
-        test_support::capture_unmentioned_by_owner,
+        Atom, Callee, Continuation, CopyPlan, Edge, Function, FunctionId, Literal,
+        MULTI_SITE_INLINE_LIMIT, Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueExpr,
+        test_support::{capture_unmentioned_by_owner, nest_helpers},
     },
     curios_num::Natural,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 #[test]
@@ -242,4 +244,209 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
         module.values().len(),
     );
     assert_eq!(before, after, "a declined attempt mints nothing:\n{module}");
+}
+
+fn arenas(module: &Module) -> [usize; 4] {
+    [
+        module.nodes().len(),
+        module.functions().len(),
+        module.continuations().len(),
+        module.values().len(),
+    ]
+}
+
+fn pad(module: &mut Module, function: FunctionId, nodes: usize) {
+    let size = CopyPlan::functions(module, BTreeSet::from([function]))
+        .nodes
+        .len();
+    for _ in size..nodes {
+        let result = module.add_value(None);
+        let body = module.add_node(Node::LetValue {
+            result,
+            value: ValueExpr::Literal(Literal::Nat(Natural::from(0u32))),
+            next: module.function(function).unwrap().body,
+        });
+        module.function_mut(function).unwrap().body = body;
+    }
+}
+
+fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionId, Vec<NodeId>) {
+    let mut module = Module::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let input = module.add_value(None);
+    let callee = module.reserve_function();
+    let callee_return = module.reserve_continuation();
+    let param = module.add_value(None);
+    let body = module.add_node(Node::ApplyCont(Edge {
+        target: callee_return,
+        args: vec![Atom::Value(param)],
+    }));
+    module.define_function(
+        callee,
+        Function {
+            debug_name: Some("callee".into()),
+            params: vec![param],
+            return_cont: callee_return,
+            body,
+            droppable: false,
+        },
+    );
+    pad(&mut module, callee, nodes);
+    let mut calls = Vec::new();
+    let mut continuations = Vec::new();
+    let mut cases = BTreeMap::new();
+    for index in 0..sites {
+        let continuation = module.reserve_continuation();
+        let call = module.add_node(Node::ApplyFun {
+            callee: Callee::Known(callee),
+            args: vec![Atom::Value(input)],
+            return_to: entry_return,
+        });
+        module.define_continuation(
+            continuation,
+            Continuation {
+                debug_name: None,
+                params: vec![],
+                body: call,
+            },
+        );
+        calls.push(call);
+        continuations.push(continuation);
+        cases.insert(
+            index as u32,
+            Edge {
+                target: continuation,
+                args: vec![],
+            },
+        );
+    }
+    let dispatch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(input),
+        cases,
+        default: None,
+    });
+    let mut body = module.add_node(Node::LetCont {
+        continuations,
+        body: dispatch,
+    });
+    if escaping {
+        let held = module.add_value(None);
+        body = module.add_node(Node::LetValue {
+            result: held,
+            value: ValueExpr::Tuple(vec![Atom::Fun(callee)]),
+            next: body,
+        });
+    }
+    let body = module.add_node(Node::LetFun {
+        functions: vec![callee],
+        body,
+    });
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![input],
+            return_cont: entry_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, callee, calls)
+}
+
+#[test]
+fn only_single_site_nonescaping_callees_receive_the_larger_allowance() {
+    for (sites, escaping, limit) in [
+        (1, false, SCC_CLONE_NODE_LIMIT),
+        (2, false, MULTI_SITE_INLINE_LIMIT),
+        (1, true, MULTI_SITE_INLINE_LIMIT),
+    ] {
+        for nested in [false, true] {
+            for nodes in [limit, limit + 1] {
+                let (mut module, callee, calls) =
+                    sized_calls(if nested { 1 } else { nodes }, sites, escaping);
+                if nested {
+                    nest_helpers(&mut module, callee, nodes);
+                }
+                assert_eq!(
+                    CopyPlan::functions(&module, BTreeSet::from([callee]))
+                        .nodes
+                        .len(),
+                    nodes,
+                );
+                let before = arenas(&module);
+                let text = module.to_string();
+                let admitted = nodes <= limit;
+                assert_eq!(inline_known_calls(&mut module), admitted);
+                for call in calls {
+                    assert_eq!(
+                        matches!(module.node(call), Some(Node::ApplyFun { callee: Callee::Known(target), .. }) if *target == callee),
+                        !admitted,
+                        "sites={sites}, escaping={escaping}, nested={nested}, nodes={nodes}",
+                    );
+                }
+                if !admitted {
+                    assert_eq!(arenas(&module), before);
+                    assert_eq!(module.to_string(), text);
+                }
+                module.verify().unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn a_callee_enlarged_earlier_in_the_sweep_is_measured_at_its_current_extent() {
+    let (mut module, callee, calls) = sized_calls(1, 2, false);
+    let helper = module.reserve_function();
+    let helper_return = module.reserve_continuation();
+    let param = module.add_value(None);
+    let body = module.add_node(Node::ApplyCont(Edge {
+        target: helper_return,
+        args: vec![Atom::Value(param)],
+    }));
+    module.define_function(
+        helper,
+        Function {
+            debug_name: Some("helper".into()),
+            params: vec![param],
+            return_cont: helper_return,
+            body,
+            droppable: false,
+        },
+    );
+    pad(&mut module, helper, MULTI_SITE_INLINE_LIMIT + 1);
+    let definition = module.function(callee).unwrap().clone();
+    module.set_node(
+        definition.body,
+        Node::ApplyFun {
+            callee: Callee::Known(helper),
+            args: vec![Atom::Value(definition.params[0])],
+            return_to: definition.return_cont,
+        },
+    );
+    let entry = module.function(module.entry().unwrap()).unwrap().body;
+    let Node::LetFun { functions, .. } = module.node_mut(entry).unwrap() else {
+        unreachable!()
+    };
+    functions.push(helper);
+    assert!(calls.iter().all(|call| definition.body < *call));
+    module.verify().unwrap();
+
+    assert!(inline_known_calls(&mut module));
+    assert_eq!(
+        CopyPlan::functions(&module, BTreeSet::from([callee]))
+            .nodes
+            .len(),
+        MULTI_SITE_INLINE_LIMIT + 1,
+    );
+    for call in calls {
+        assert!(
+            matches!(module.node(call), Some(Node::ApplyFun { callee: Callee::Known(target), .. }) if *target == callee)
+        );
+    }
+    module.verify().unwrap();
 }

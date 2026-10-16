@@ -16,10 +16,11 @@ The current pass timings belong to `curios`'s `tests::instrumented::fixpoint_pas
 
 ## Stages and checks
 
-1. Pin inliner boundaries for single-site, multiple-site and escaping callees, including nested extents, refusal without minting, and a callee enlarged earlier in a sweep. Run against unchanged production behavior; this revision is the measurement baseline. Existing planner and loop-separation tests hold their boundaries and atomicity.
-2. Bound known-call planning before argument cloning; retain the existing inlining transformation and correct the sweep comment. Check Cont tests and the copying, sweeps and dead-parameter codegen consumers.
-3. Bound loop planning and specialization revalidation, preserving the nested-entry guard and atomic copy-and-contify. Put contracts in rustdoc and the owning README. Check the affected pass and codegen tests.
-4. Verify counted work, consumer identity and default-release cost; complete workspace format, Clippy and tests, including the standard-library corpus. Retire this specification.
+The inliner tests pin inclusive boundaries for single-site, multiple-site and escaping callees, including nested extents, refusal without minting, and a callee enlarged earlier in a sweep. They pass against unchanged production behavior, whose revision is the measurement baseline. Existing planner and loop-separation tests hold their boundaries and atomicity.
+
+1. Bound known-call planning before argument cloning; retain the existing inlining transformation and correct the sweep comment. Check Cont tests and the copying, sweeps and dead-parameter codegen consumers.
+2. Bound loop planning and specialization revalidation, preserving the nested-entry guard and atomic copy-and-contify. Put contracts in rustdoc and the owning README. Check the affected pass and codegen tests.
+3. Verify counted work, consumer identity and default-release cost; complete workspace format, Clippy and tests, including the standard-library corpus. Retire this specification.
 
 ## Verification
 
