@@ -1,10 +1,10 @@
-//! The shared fixpoint substrate: a lattice of facts keyed by value identity, and the solver that iterates a client's constraints to their least fixpoint.
+//! The shared fixpoint substrate: a lattice of facts keyed by a client's ordered identities, and the solver that iterates its constraints to their least fixpoint.
 //!
 //! Every analysis in this crate answers the same shape of question — what is established about a value, given what is established about the values feeding it — and each one would otherwise carry its own lattice, its own iteration, and its own convergence test.
 //!
-//! Keys are [`ValueId`] alone, which covers more than it looks: a function's parameters and a continuation's parameters *are* values, so a single key space spans ordinary bindings, call arguments, and join points without a sum type over the three.
+//! Keys default to [`ValueId`]: a function's parameters and a continuation's parameters are values, so that space spans ordinary bindings, call arguments and join points. An analysis can choose a different ordered key when its facts also belong to identities that bind no value, such as function-return positions.
 //!
-//! **That keying is also the limit: a fact belongs to a value, never to a program point.** No client can state something that holds inside one [`super::Node::Switch`] arm and not outside it, so refining a scrutinee's tag where an arm establishes it is not expressible here. It is a per-program-point extension the key space could grow into; no client needs it.
+//! Current clients attach facts to identities, never program points: none states something that holds inside one [`super::Node::Switch`] arm and not outside it. A branch-sensitive analysis would have to choose keys and constraints that express that distinction.
 //!
 //! **The solver has no direction of its own.** [`Solver::solve`] seeds the keys and re-runs a client-supplied round closure until a round establishes nothing new; which facts flow from which is stated entirely inside that closure. A backward analysis and a forward one therefore differ in the client and not here, and neither asks anything of this module that the other does not.
 //!
@@ -28,21 +28,21 @@ pub(crate) trait Lattice: Clone + PartialEq {
 /// The facts established so far, and whether the round in progress has changed any of them.
 ///
 /// Handed to a client's round closure by [`Solver::solve`]. Reads see every join performed earlier in the same round, which is deliberate: a chaotic iteration reaches the same least fixpoint as a round-synchronised one but typically in fewer rounds, and the fixpoint is what the client's answer is defined as.
-pub(crate) struct Solver<F> {
-    facts: BTreeMap<ValueId, F>,
+pub(crate) struct Solver<F, K = ValueId> {
+    facts: BTreeMap<K, F>,
     changed: bool,
 }
 
-impl<F: Lattice> Solver<F> {
+impl<F: Lattice, K: Ord> Solver<F, K> {
     /// The facts established so far. Absence means *unseeded*, never `bottom` — see the module documentation.
-    pub(crate) fn facts(&self) -> &BTreeMap<ValueId, F> {
+    pub(crate) fn facts(&self) -> &BTreeMap<K, F> {
         &self.facts
     }
 
     /// Raise `id`'s fact to include `incoming`, recording whether that changed anything.
     ///
     /// A key absent from the seeding is inserted rather than rejected, so a client may discover targets as it iterates instead of enumerating them all up front.
-    pub(crate) fn join(&mut self, id: ValueId, incoming: F) {
+    pub(crate) fn join(&mut self, id: K, incoming: F) {
         let current = self.facts.entry(id).or_insert_with(F::bottom);
         let mut updated = current.clone();
         updated.join(incoming);
@@ -56,9 +56,9 @@ impl<F: Lattice> Solver<F> {
     ///
     /// `round` states the client's whole constraint system: it reads facts through [`Solver::facts`] and raises them through [`Solver::join`], and is re-run in full each time anything moved. Termination rests on the lattice laws rather than on a round cap — a `join` obeying them can only move a finite lattice upward — so there is deliberately no iteration limit here to mask a lattice that does not.
     pub(crate) fn solve(
-        keys: impl IntoIterator<Item = ValueId>,
+        keys: impl IntoIterator<Item = K>,
         mut round: impl FnMut(&mut Self),
-    ) -> BTreeMap<ValueId, F> {
+    ) -> BTreeMap<K, F> {
         let mut solver = Self {
             facts: keys.into_iter().map(|key| (key, F::bottom())).collect(),
             changed: false,

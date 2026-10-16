@@ -62,6 +62,29 @@ fn an_unseeded_key_is_absent_rather_than_bottom() {
 }
 
 #[test]
+fn distinct_key_kinds_propagate_without_aliasing_or_requiring_copy() {
+    #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+    enum Key {
+        Value(String),
+        Return(String, usize),
+    }
+
+    let value = || Key::Value("f".into());
+    let returned = |position| Key::Return("f".into(), position);
+    let facts = Solver::<Height, Key>::solve([value(), returned(0), returned(1)], |solver| {
+        let forwarded = solver.facts()[&value()].clone();
+        solver.join(returned(1), forwarded);
+        let incoming = solver.facts()[&returned(0)].clone();
+        solver.join(value(), incoming);
+        solver.join(returned(0), Height(7));
+    });
+
+    assert_eq!(facts[&value()], Height(7));
+    assert_eq!(facts[&returned(1)], Height(7));
+    assert!(!facts.contains_key(&returned(2)));
+}
+
+#[test]
 fn joining_an_unseeded_key_discovers_it() {
     let facts = Solver::<Height>::solve([], |solver| {
         solver.join(value(4), Height(2));
