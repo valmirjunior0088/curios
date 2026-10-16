@@ -105,10 +105,10 @@ pub(super) struct Memos {
     sorts: [Lives<Term, Sort>; 2],
     /// Which erased half a position at each type belongs to — a type, a proof, or neither — which is its sort read once more: what `Kernel::record_checked` asks at every position it records, so that the question costs one answer per type and not one per position.
     halves: Lives<Term, Option<Erased>>,
-    /// The type inferred for each term: `infer`'s own answer, remembered as the reducts are. A reduct is a graph whose tree can be exponential in its depth, and so is a body whose `let`s the kernel substituted — every line a term over the function's parameters; typing walks what it meets, and remembered by term a subterm shared across that tree is typed once. Free on a hit. A type alone is kept, not a [`Replay`], because a hit replays nothing — see [`Kernel::infer_hit`](super::Kernel::infer_hit) for why, and for the terms it is refused.
-    types: Lives<Term, Term>,
-    /// Each term checked, beside the type it was checked at. The rules that introduce a function and a record, and the one that descends a `let`, check a term without inferring it, so a tuple whose two fields are one node is checked against its record once per path unless the check itself is remembered. Only that a term checked is kept: a refusal ends its item's check.
-    checked: Lives<Checked, ()>,
+    /// The type inferred for each term: `infer`'s own answer, remembered as the reducts are. A reduct is a graph whose tree can be exponential in its depth, and so is a body whose `let`s the kernel substituted — every line a term over the function's parameters; typing walks what it meets, and remembered by term a subterm shared across that tree is typed once. Free on a hit. A type alone is kept, not a [`Replay`], because a hit replays nothing — see [`Kernel::infer_hit`](super::Kernel::infer_hit) for why, and for the terms it is refused. Beside it, whether the typing closed a group that does not descend, which a hit counts again: filed with the typing, it lives as long as the entry does.
+    types: Lives<Term, (Term, bool)>,
+    /// Each term checked, beside the type it was checked at. The rules that introduce a function and a record, and the one that descends a `let`, check a term without inferring it, so a tuple whose two fields are one node is checked against its record once per path unless the check itself is remembered. Only that a term checked is kept, and whether its check closed a group that does not descend: a refusal ends its item's check.
+    checked: Lives<Checked, bool>,
     /// The verdict of each comparison decided with no pair of heads left apart inside its own unfolding, at its type: `convert`'s own answer, both ways. Two terms that are equal graphs built apart are compared along every path that reaches a pair of their nodes, and remembered by pair each is compared once. A verdict that left a pair of heads apart is true of the path it was reached on, and is not kept — see `convert`'s `Pairs`. One for each of the two reductions, as the sorts have: a comparison reduces its sides, so a verdict plain reduction reached is not the verdict of a judgment's, which may have asked.
     converted: [Lives<Compared, bool>; 2],
     /// What the closed machine's runs have answered ([`ClosedMemo`]): a closed term's value is a function of the definition store, as a local-free reduct is, and lives the declaration with them. With the memos off it lives one run ([`Memos::begin_closed_run`]), which the machine cannot do without: a fold over a neutral accumulator is linear by it.
@@ -208,14 +208,24 @@ impl Memos {
     }
 
     /// The remembered type of `term`, `in_arm` saying whether a case equation is in force, as [`Memos::sort`] hands back a sort.
-    pub(super) fn infer(&self, term: &Term, in_arm: bool) -> Option<(Option<Prefix>, Term)> {
+    pub(super) fn infer(
+        &self,
+        term: &Term,
+        in_arm: bool,
+    ) -> Option<(Option<Prefix>, (Term, bool))> {
         self.types.get(term, self.judged(&[term], in_arm)?)
     }
 
     /// Remember `term`'s type, in the table [`Memos::infer`] reads it from under the same `in_arm`.
-    pub(super) fn store_infer(&mut self, term: Term, in_arm: bool, prefix: Prefix, type_: Term) {
+    pub(super) fn store_infer(
+        &mut self,
+        term: Term,
+        in_arm: bool,
+        prefix: Prefix,
+        typed: (Term, bool),
+    ) {
         if let Some(life) = self.judged(&[&term], in_arm) {
-            self.types.insert(term, life, prefix, type_);
+            self.types.insert(term, life, prefix, typed);
         }
     }
 
@@ -225,27 +235,28 @@ impl Memos {
         term: &Term,
         expected: &Term,
         in_arm: bool,
-    ) -> Option<(Option<Prefix>, ())> {
+    ) -> Option<(Option<Prefix>, bool)> {
         let life = self.judged(&[term, expected], in_arm)?;
 
         self.checked
             .get(&Keyed::new((term.clone(), expected.clone())), life)
     }
 
-    /// Remember that `term` checks at `expected`.
+    /// Remember that `term` checks at `expected`, and whether its check closed a group that does not descend.
     pub(super) fn store_checked(
         &mut self,
         term: &Term,
         expected: &Term,
         in_arm: bool,
         prefix: Prefix,
+        closed: bool,
     ) {
         if let Some(life) = self.judged(&[term, expected], in_arm) {
             self.checked.insert(
                 Keyed::new((term.clone(), expected.clone())),
                 life,
                 prefix,
-                (),
+                closed,
             );
         }
     }

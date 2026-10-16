@@ -34,17 +34,23 @@ fn a_restored_budget_starts_the_identities_over() {
     assert!(kernel.fresh(None).local_index() > held.local_index());
 }
 
-/// What a hit on a typing table recalls goes with the tables: a term whose typing closed a group that does not descend is remembered so that a hit counts the group again, and a declaration begins with the tables empty, so it begins with nothing to recall. Kept across the boundary, the term would answer for one of the next declaration's spelled as it was, binder identities included, since those start over there too.
+/// What a typing hit recalls lives as long as the typing it was filed with: a term typed under one arm, where its typing closed a group that does not descend, and typed again under another, where it closed none, recalls nothing once the first arm's entry is gone.
 #[test]
-fn what_a_hit_recalls_goes_with_the_tables() {
+fn a_typing_hit_recalls_what_its_own_typing_closed() {
     let mut kernel = kernel();
-    let term = Term::intrinsic(Intrinsic::NatType);
-    kernel.calls.remember_partial(&term);
+    let local = kernel.fresh(Some("x"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    kernel.assume(&local, &nat);
+    let term = Term::free_var(&local);
 
-    kernel.restore_budget();
-    let before = kernel.partial_groups();
-    kernel.calls.recall_partial(&term);
-    assert_eq!(kernel.partial_groups(), before);
+    kernel.infer_store(term.clone(), nat.clone(), true);
+    kernel.memos.begin_equations();
+    kernel.infer_store(term.clone(), nat, false);
+
+    assert_eq!(
+        kernel.infer_hit(&term).map(|(_, closed)| closed),
+        Some(false)
+    );
 }
 
 /// The name [`family`] registers its declaration under.

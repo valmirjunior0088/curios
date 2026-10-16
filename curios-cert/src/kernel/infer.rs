@@ -67,17 +67,17 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, Error> {
         // Whether a group that does not descend is typed inside this term, read off the count before and after. A hit types nothing, so it counts again what the term's first typing closed.
         let before = kernel.partial_groups();
         let inferred = match kernel.infer_hit(term) {
-            Some(inferred) => {
-                kernel.calls.recall_partial(term);
+            Some((inferred, closed)) => {
+                if closed {
+                    kernel.calls.recall_partial();
+                }
 
                 inferred
             }
             None => {
                 let inferred = infer_within(kernel, term, spine_head)?;
-                if kernel.partial_groups() > before {
-                    kernel.calls.remember_partial(term);
-                }
-                kernel.infer_store(term.clone(), inferred.clone());
+                let closed = kernel.partial_groups() > before;
+                kernel.infer_store(term.clone(), inferred.clone(), closed);
 
                 inferred
             }
@@ -907,18 +907,18 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Er
     let position = kernel.record_checked(term, expected);
     // A check is remembered as an inferred type is, and a hit counts again what the first check closed. The three rules that never reach `infer` are why it has a table of its own: a tuple whose two fields are one node is checked against its record once per path unless the check itself is remembered.
     let checked = match kernel.check_hit(term, expected) {
-        true => {
-            kernel.calls.recall_partial(term);
+        Some(closed) => {
+            if closed {
+                kernel.calls.recall_partial();
+            }
 
             Ok(())
         }
-        false => {
+        None => {
             let checked = check_rules(kernel, term, expected, parameters);
             if checked.is_ok() {
-                if kernel.partial_groups() > before {
-                    kernel.calls.remember_partial(term);
-                }
-                kernel.check_store(term, expected);
+                let closed = kernel.partial_groups() > before;
+                kernel.check_store(term, expected, closed);
             }
 
             checked

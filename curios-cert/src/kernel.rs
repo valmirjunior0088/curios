@@ -673,7 +673,9 @@ impl<'s> Kernel<'s> {
     /// **Read off the scope where it is.** A term naming a local is typed off the binders in scope, and a term typed while a case equation is in force is filed as one that may rest on it — the machine stands aside under an equation for that reason. Such a type is filed beside the binders it was inferred under and taken only while they stand, in a table cleared wherever an equation moves or a local is re-typed; [`Memos`] states the two lives.
     ///
     /// **Never a term naming a member of a group whose body is being checked.** A recursive call is an application of that local, recorded where it is typed and graded against the member whose body states it. A hit types nothing, so a term that can hold a call is typed at every occurrence: one body stated by two members holds a call from each.
-    pub(crate) fn infer_hit(&self, term: &Term) -> Option<Term> {
+    ///
+    /// **With whether its typing closed a group that does not descend**, which the hit counts again, as the typing it stands for did ([`Calls::recall_partial`](calls::Calls::recall_partial)).
+    pub(crate) fn infer_hit(&self, term: &Term) -> Option<(Term, bool)> {
         if self.calls.names_member(term) {
             return None;
         }
@@ -681,27 +683,37 @@ impl<'s> Kernel<'s> {
         self.standing(self.memos.infer(term, self.has_refinements()))
     }
 
-    /// Remember `term`'s type, under the life and the refusal [`Kernel::infer_hit`] reads it by.
-    pub(crate) fn infer_store(&mut self, term: Term, type_: Term) {
+    /// Remember `term`'s type, and whether its typing closed a group that does not descend, under the life and the refusal [`Kernel::infer_hit`] reads it by.
+    pub(crate) fn infer_store(&mut self, term: Term, type_: Term, closed: bool) {
         if !self.calls.names_member(&term) {
-            self.memos
-                .store_infer(term, self.has_refinements(), self.scope.prefix(), type_);
+            self.memos.store_infer(
+                term,
+                self.has_refinements(),
+                self.scope.prefix(),
+                (type_, closed),
+            );
         }
     }
 
-    /// Whether `term` is remembered to check at `expected`, as [`Kernel::infer_hit`] remembers a type and under its refusal.
-    pub(crate) fn check_hit(&self, term: &Term, expected: &Term) -> bool {
-        !self.calls.names_member(term)
-            && self
-                .standing(self.memos.checked(term, expected, self.has_refinements()))
-                .is_some()
+    /// Whether `term` is remembered to check at `expected`, as [`Kernel::infer_hit`] remembers a type and under its refusal: `Some`, with whether its check closed a group that does not descend.
+    pub(crate) fn check_hit(&self, term: &Term, expected: &Term) -> Option<bool> {
+        if self.calls.names_member(term) {
+            return None;
+        }
+
+        self.standing(self.memos.checked(term, expected, self.has_refinements()))
     }
 
-    /// Remember that `term` checks at `expected`.
-    pub(crate) fn check_store(&mut self, term: &Term, expected: &Term) {
+    /// Remember that `term` checks at `expected`, and whether its check closed a group that does not descend.
+    pub(crate) fn check_store(&mut self, term: &Term, expected: &Term, closed: bool) {
         if !self.calls.names_member(term) {
-            self.memos
-                .store_checked(term, expected, self.has_refinements(), self.scope.prefix());
+            self.memos.store_checked(
+                term,
+                expected,
+                self.has_refinements(),
+                self.scope.prefix(),
+                closed,
+            );
         }
     }
 
@@ -1416,6 +1428,5 @@ impl<'s> Kernel<'s> {
             }
         }
         self.memos.begin_declaration();
-        self.calls.begin_declaration();
     }
 }

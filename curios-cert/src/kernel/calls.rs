@@ -26,10 +26,8 @@ pub(super) struct Calls {
     frames: Vec<Frame>,
     /// Each group this walk checked, with the verdict its calls closed to.
     verdicts: HashMap<Keyed<RecGroup>, Totality>,
-    /// How many groups that do not descend this walk has closed — or met again through a memo hit on a term whose typing closed one. A judgment compares it before and after to learn whether such a group was typed inside it, which is how a verdict reaches what encloses the group without anything looking the group up: the group is typed with its enclosing binders opened, and a term that holds it holds it closed.
+    /// How many groups that do not descend this walk has closed — or met again through a memo hit on a typing that closed one. A judgment compares it before and after to learn whether such a group was typed inside it, which is how a verdict reaches what encloses the group without anything looking the group up: the group is typed with its enclosing binders opened, and a term that holds it holds it closed.
     partial: usize,
-    /// The terms whose typing closed a group that does not descend, so a memo hit on one counts it again.
-    partial_terms: HashSet<Term>,
     /// For each group checked, whether each member's signature or body enclosed a group of its own that does not descend.
     members_enclosing: HashMap<Keyed<RecGroup>, Vec<bool>>,
     /// The definitions whose check enclosed a group that does not descend.
@@ -147,21 +145,9 @@ impl Calls {
             })
     }
 
-    /// Forget which terms' typing closed a group that does not descend. A hit on a typing table is all that recalls one ([`Calls::recall_partial`]), and the tables are discarded where a declaration begins, so what was remembered beside them goes with them: kept, a term of an earlier declaration would answer for one of this declaration's that is spelled as it was, binder identities included, which start over there too.
-    pub(super) fn begin_declaration(&mut self) {
-        self.partial_terms.clear();
-    }
-
-    /// `term`'s typing closed a group that does not descend.
-    pub(super) fn remember_partial(&mut self, term: &Term) {
-        self.partial_terms.insert(term.clone());
-    }
-
-    /// A memo hit on `term`: count again whatever group that does not descend its typing closed.
-    pub(super) fn recall_partial(&mut self, term: &Term) {
-        if self.partial_terms.contains(term) {
-            self.partial += 1;
-        }
+    /// A memo hit on a typing that closed a group that does not descend: count the group again, as the typing it stands for did.
+    pub(super) fn recall_partial(&mut self) {
+        self.partial += 1;
     }
 }
 
