@@ -4,8 +4,8 @@ use {
     super::{ConstructorPattern, function_introductions, tagged_row_values},
     crate::{
         Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, CopyBudget, CopyPlan, CopyPriority,
-        FunctionId, Intrinsic, Literal, Module, Node, NodeId, ValueExpr, ValueId, analyze_calls,
-        copy_bodies, function_nodes, visit_atoms_mut,
+        FunctionId, Intrinsic, Literal, Module, Node, NodeId, ValueExpr, ValueId, copy_bodies,
+        function_nodes, visit_atoms_mut,
     },
     curios_num::Natural,
     curios_utilities::ArenaId,
@@ -30,11 +30,50 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBud
     if constructors.is_empty() {
         return false;
     }
-    let calls = analyze_calls(module);
+    // An extent matters only where an incoming call supplies a constructor. Index those cheap facts before walking any candidate body.
+    let mut grouped = BTreeMap::<(FunctionId, ConstructorPattern), Vec<NodeId>>::new();
+    for (id, node) in module.live_nodes() {
+        let Node::ApplyFun {
+            callee: Callee::Known(callee),
+            args,
+            ..
+        } = node
+        else {
+            continue;
+        };
+        if Some(*callee) == module.entry() || module.is_out_of_line(*callee) {
+            continue;
+        }
+        for (index, arg) in args.iter().enumerate() {
+            let Atom::Value(value) = arg else { continue };
+            let Some((tag, fields, row)) = constructors.get(value) else {
+                continue;
+            };
+            grouped
+                .entry((
+                    *callee,
+                    ConstructorPattern {
+                        index,
+                        tag: *tag,
+                        width: fields.len(),
+                        row: *row,
+                    },
+                ))
+                .or_default()
+                .push(id);
+        }
+    }
+    if grouped.is_empty() {
+        return false;
+    }
     let intros = function_introductions(module);
     let mut roots = BTreeMap::new();
-    for (&callee, sites) in &calls.call_sites {
-        if sites.is_empty() || Some(callee) == module.entry() || module.is_out_of_line(callee) {
+    for callee in grouped
+        .keys()
+        .map(|(callee, _)| *callee)
+        .collect::<BTreeSet<_>>()
+    {
+        if module.function(callee).is_none() {
             continue;
         }
         let Some(&intro) = intros.get(&callee) else {
@@ -47,7 +86,6 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBud
         ) else {
             continue;
         };
-        let extent = plan.nodes;
         let projected = function_nodes(module, callee)
             .into_iter()
             .filter_map(|id| match module.node(id).unwrap() {
@@ -62,59 +100,54 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBud
                 _ => None,
             })
             .collect::<BTreeSet<_>>();
-        roots.insert(callee, (intro, extent, projected));
+        roots.insert(callee, (intro, plan.nodes, projected));
     }
-    let mut grouped = BTreeMap::<(FunctionId, ConstructorPattern), Vec<NodeId>>::new();
-    for (&callee, (_, _, projected)) in &roots {
-        let params = &module.function(callee).unwrap().params;
-        for &id in &calls.call_sites[&callee] {
-            let Node::ApplyFun { args, .. } = module.node(id).unwrap() else {
-                unreachable!()
-            };
-            for (index, arg) in args.iter().enumerate() {
-                let Atom::Value(value) = arg else { continue };
-                let Some((tag, fields, row)) = constructors.get(value) else {
-                    continue;
-                };
-                if !params
-                    .get(index)
-                    .is_some_and(|param| projected.contains(param))
-                {
-                    continue;
-                }
-                grouped
-                    .entry((
-                        callee,
-                        ConstructorPattern {
-                            index,
-                            tag: *tag,
-                            width: fields.len(),
-                            row: *row,
-                        },
-                    ))
-                    .or_default()
-                    .push(id);
-            }
-        }
+    grouped.retain(|(callee, pattern), _| {
+        let Some((_, extent, projected)) = roots.get(callee) else {
+            return false;
+        };
+        budget.admits(extent.len() + 1)
+            && module
+                .function(*callee)
+                .unwrap()
+                .params
+                .get(pattern.index)
+                .is_some_and(|param| projected.contains(param))
+    });
+    if grouped.is_empty() {
+        return false;
+    }
+    // Mid-round orphan nodes are not incoming sites. Only positive syntactic candidates need the owning-body walk that removes them.
+    let prospective = grouped.values().flatten().copied().collect::<BTreeSet<_>>();
+    let owned = module
+        .function_ids()
+        .flat_map(|owner| function_nodes(module, owner))
+        .filter(|id| prospective.contains(id))
+        .collect::<BTreeSet<_>>();
+    for sites in grouped.values_mut() {
+        sites.retain(|site| owned.contains(site));
+    }
+    grouped.retain(|_, sites| !sites.is_empty());
+    if grouped.is_empty() {
+        return false;
     }
     let mut candidates = grouped
         .into_iter()
-        .filter_map(|((callee, pattern), mut sites)| {
+        .map(|((callee, pattern), mut sites)| {
             sites.sort_unstable();
             let (intro, extent, _) = &roots[&callee];
-            let nodes = extent.len() + 1;
-            budget.admits(nodes).then(|| Candidate {
+            Candidate {
                 callee,
                 pattern,
                 intro: *intro,
                 extent: extent.clone(),
                 priority: CopyPriority {
                     sites: sites.len(),
-                    nodes,
+                    nodes: extent.len() + 1,
                     first: sites[0].index(),
                 },
                 sites,
-            })
+            }
         })
         .collect::<Vec<_>>();
     candidates.sort_by_key(|candidate| candidate.priority);

@@ -41,67 +41,21 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
         return false;
     }
     let transfers = continuation_transfers(module);
-    let intros = module
-        .live_nodes()
-        .flat_map(|(id, node)| match node {
-            Node::LetCont { continuations, .. } => {
-                continuations.iter().map(|target| (*target, id)).collect()
-            }
-            _ => Vec::new(),
-        })
-        .collect::<BTreeMap<_, _>>();
-    let mut roots = BTreeMap::new();
-    for (target, definition) in module.live_continuations() {
-        let Some(&intro) = intros.get(&target) else {
-            continue;
-        };
-        if transfers.get(&target).is_none_or(|sites| sites.len() < 2) {
-            continue;
-        }
-        let Some(plan) = CopyPlan::continuation_with_limit(
-            module,
-            target,
-            BRANCH_SPECIALIZATION_GROWTH_LIMIT - 1,
-        ) else {
-            continue;
-        };
-        let extent = plan.nodes;
-        let projected = nodes_from(module, definition.body)
-            .into_iter()
-            .filter_map(|id| match module.node(id).unwrap() {
-                Node::LetIntrinsic {
-                    op: Intrinsic::RowGet(..),
-                    args,
-                    ..
-                } => match args.first() {
-                    Some(Atom::Value(value)) => Some(*value),
-                    _ => None,
-                },
-                _ => None,
-            })
-            .collect::<BTreeSet<_>>();
-        roots.insert(target, (intro, extent, projected));
-    }
+    // Shared joins with no constructor input cannot specialize; discover their incoming patterns before walking copied extents.
     let mut grouped = BTreeMap::<(ContinuationId, ConstructorPattern), BTreeSet<NodeId>>::new();
     for (id, node) in module.live_nodes() {
         for edge in edges(node) {
-            let Some((_, _, projected)) = roots.get(&edge.target) else {
+            if transfers
+                .get(&edge.target)
+                .is_none_or(|sites| sites.len() < 2)
+            {
                 continue;
-            };
-            let Some(definition) = module.continuation(edge.target) else {
-                continue;
-            };
+            }
             for (index, arg) in edge.args.iter().enumerate() {
                 let Atom::Value(value) = arg else { continue };
                 let Some((tag, fields, row)) = constructors.get(value) else {
                     continue;
                 };
-                let Some(param) = definition.params.get(index) else {
-                    continue;
-                };
-                if !projected.contains(param) {
-                    continue;
-                }
                 grouped
                     .entry((
                         edge.target,
@@ -117,9 +71,67 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
             }
         }
     }
+    if grouped.is_empty() {
+        return false;
+    }
+    let intros = module
+        .live_nodes()
+        .flat_map(|(id, node)| match node {
+            Node::LetCont { continuations, .. } => {
+                continuations.iter().map(|target| (*target, id)).collect()
+            }
+            _ => Vec::new(),
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut roots = BTreeMap::new();
+    for target in grouped
+        .keys()
+        .map(|(target, _)| *target)
+        .collect::<BTreeSet<_>>()
+    {
+        let Some(definition) = module.continuation(target) else {
+            continue;
+        };
+        let Some(&intro) = intros.get(&target) else {
+            continue;
+        };
+        let Some(plan) = CopyPlan::continuation_with_limit(
+            module,
+            target,
+            BRANCH_SPECIALIZATION_GROWTH_LIMIT - 1,
+        ) else {
+            continue;
+        };
+        let projected = nodes_from(module, definition.body)
+            .into_iter()
+            .filter_map(|id| match module.node(id).unwrap() {
+                Node::LetIntrinsic {
+                    op: Intrinsic::RowGet(..),
+                    args,
+                    ..
+                } => match args.first() {
+                    Some(Atom::Value(value)) => Some(*value),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
+        roots.insert(target, (intro, plan.nodes, projected));
+    }
     let mut candidates = Vec::new();
     for ((target, pattern), carriers) in grouped {
-        let (intro, extent, _) = &roots[&target];
+        let Some((intro, extent, projected)) = roots.get(&target) else {
+            continue;
+        };
+        if !module
+            .continuation(target)
+            .unwrap()
+            .params
+            .get(pattern.index)
+            .is_some_and(|param| projected.contains(param))
+        {
+            continue;
+        }
         let nodes = extent.len() + 1;
         if nodes > BRANCH_SPECIALIZATION_GROWTH_LIMIT || !budget.admits(nodes) {
             continue;

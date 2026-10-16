@@ -3,7 +3,7 @@
 use {
     crate::{
         Atom, BRANCH_COPY_NODE_LIMIT, Callee, CopyBudget, CopyPlan, FunctionId, Module, Node,
-        NodeId, copy_bodies, function_nodes, specialize_call_patterns,
+        NodeId, copy_bodies, function_nodes, prune_unreachable, specialize_call_patterns,
         test_support::{known_callee, tagged_consumer},
     },
     std::collections::BTreeSet,
@@ -120,5 +120,36 @@ fn an_insufficient_allowance_preserves_arenas_and_an_exact_allowance_succeeds() 
     assert!(specialize_call_patterns(&mut module, &mut budget));
     assert_eq!(budget, CopyBudget::new(0));
     assert_ne!(known_callee(&module, calls[0]), callee);
+    module.verify().unwrap();
+}
+
+#[test]
+fn orphaned_call_sites_neither_win_priority_nor_retarget() {
+    let (mut module, calls, root) = tagged_consumer(0, &[0, 1]);
+    let stale = module.node(calls[1]).unwrap().clone();
+    let orphans = (0..8)
+        .map(|_| module.add_node(stale.clone()))
+        .collect::<Vec<_>>();
+    let cost = CopyPlan::functions(&module, BTreeSet::from([root]))
+        .nodes
+        .len()
+        + 1;
+    let mut budget = CopyBudget::new(cost);
+    assert!(specialize_call_patterns(&mut module, &mut budget));
+    assert_eq!(budget, CopyBudget::new(0));
+    assert_ne!(
+        known_callee(&module, calls[0]),
+        root,
+        "only the live sites count toward sharing priority"
+    );
+    assert_eq!(known_callee(&module, calls[1]), root);
+    for orphan in orphans {
+        assert_eq!(
+            known_callee(&module, orphan),
+            root,
+            "an unowned node is not an incoming site"
+        );
+    }
+    prune_unreachable(&mut module);
     module.verify().unwrap();
 }
