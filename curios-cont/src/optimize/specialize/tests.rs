@@ -3,10 +3,10 @@
 use {
     super::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
     crate::{
-        Atom, BRANCH_CLONE_LIMIT, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, Continuation, Edge,
-        Function, Intrinsic, Literal, Module, Node, Row, RowId, SCC_CLONE_LIMIT,
-        SCC_CLONE_NODE_LIMIT, Slot, ValueExpr, forward_aggregate_projections, function_nodes,
-        known_values, simplify_nodes,
+        Atom, BRANCH_CLONE_LIMIT, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, Continuation,
+        CopyBudget, CopyPlan, Edge, Function, Intrinsic, Literal, Module, Node, Row, RowId,
+        SCC_CLONE_LIMIT, SCC_CLONE_NODE_LIMIT, Slot, ValueExpr, forward_aggregate_projections,
+        function_nodes, known_values, simplify_nodes,
         test_support::{
             PolymorphicLoop, has_switch, known_callee, nest_helpers, polymorphic_loop,
             tagged_consumer, tagged_family, tagged_join,
@@ -472,7 +472,8 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
 #[test]
 fn jump_specialization_threads_a_known_tag_edge_through_its_join() {
     let (mut module, join, some_jump, none_jump, x) = tagged_join();
-    let mut budget = 4;
+    let cost = CopyPlan::continuation(&module, join).nodes.len() + 1;
+    let mut budget = CopyBudget::new(cost * 4);
 
     assert!(specialize_jump_patterns(&mut module, &mut budget));
     // The some-edge repoints to a clone carrying the payload directly; the none-edge is a different (tag, arity) pattern and waits its turn.
@@ -490,13 +491,13 @@ fn jump_specialization_threads_a_known_tag_edge_through_its_join() {
     // Repointing the some-edge left the join single-transfer, which is the inliner's territory: a second invocation deliberately finds nothing.
     assert!(!specialize_jump_patterns(&mut module, &mut budget));
     module.verify().unwrap();
-    assert_eq!(budget, 3);
+    assert_eq!(budget, CopyBudget::new(cost * 3));
 }
 
 #[test]
 fn jump_specialization_respects_its_budget() {
     let (mut module, _, _, _, _) = tagged_join();
-    let mut budget = 0;
+    let mut budget = CopyBudget::new(0);
     assert!(!specialize_jump_patterns(&mut module, &mut budget));
 }
 
@@ -594,7 +595,8 @@ fn jump_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
             default: Some(edge),
         };
         module.verify().unwrap();
-        let mut budget = BRANCH_CLONE_LIMIT;
+        let cost = CopyPlan::continuation(&module, join).nodes.len() + 1;
+        let mut budget = CopyBudget::new(BRANCH_CLONE_LIMIT);
         assert!(specialize_jump_patterns(&mut module, &mut budget));
         module.verify().unwrap();
         let Some(Node::Switch {
@@ -620,7 +622,7 @@ fn jump_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
             "a different vocabulary keeps the general join"
         );
         assert_eq!(other.args.len(), 1);
-        assert_eq!(budget, BRANCH_CLONE_LIMIT - 1);
+        assert_eq!(budget, CopyBudget::new(BRANCH_CLONE_LIMIT - cost));
     }
 }
 
@@ -652,12 +654,12 @@ fn a_jump_handed_no_family_row_is_no_pattern() {
         let row = product.then(|| product_row(&mut module));
         set_constructor_rows(&mut module, &[row, row]);
 
-        let mut budget = BRANCH_CLONE_LIMIT;
+        let mut budget = CopyBudget::new(BRANCH_CLONE_LIMIT);
         assert!(
             !specialize_jump_patterns(&mut module, &mut budget),
             "a first field that is data selects nothing"
         );
-        assert_eq!(budget, BRANCH_CLONE_LIMIT);
+        assert_eq!(budget, CopyBudget::new(BRANCH_CLONE_LIMIT));
         for jump in [some_jump, none_jump] {
             let Some(Node::ApplyCont(edge)) = module.node(jump) else {
                 panic!("the predecessor stays a jump")

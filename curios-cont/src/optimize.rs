@@ -2,6 +2,9 @@
 //!
 //! The pipeline never keys on input names: every rewrite depends only on graph structure and the enforced budget constants below, so the same module always optimizes identically. Every pass carries a permanent span and a sample of whether it fired, as `curios-profile` prescribes for optimizer passes: the span's `calls` is the round count and its total the pass's share, and the sample's total is the number of rounds that pass kept the fixpoint alive. Anything finer is investigated with revision worktrees and temporary instrumentation, never a permanent metrics API.
 
+mod budget;
+pub(crate) use budget::*;
+
 mod clone;
 pub(crate) use clone::*;
 
@@ -49,7 +52,8 @@ pub(crate) const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
 pub(crate) const SCC_CLONE_LIMIT: usize = 64;
 pub(crate) const SCC_CLONE_NODE_LIMIT: usize = 256;
 pub(crate) const BRANCH_CLONE_LIMIT: usize = 64;
-pub(crate) const JUMP_CLONE_LIMIT: usize = 64;
+/// Maximum cumulative jump-specialization copying, including head rebuilds.
+pub(crate) const JUMP_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
 /// How many loops [`separate_loop_entries`] may copy for one more call site each, across a module.
 pub(crate) const ENTRY_CLONE_LIMIT: usize = 64;
 
@@ -69,7 +73,7 @@ pub fn optimize(module: &mut Module) {
 
     let mut scc_clone_budget = SCC_CLONE_LIMIT;
     let mut branch_clone_budget = BRANCH_CLONE_LIMIT;
-    let mut jump_clone_budget = JUMP_CLONE_LIMIT;
+    let mut jump_clone_budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
     let mut entry_clone_budget = ENTRY_CLONE_LIMIT;
     // Name and time one pass, and record whether it fired. The two together are what separate the fixpoint's hypotheses: a pass that admits one candidate per call fires on as many rounds as it has candidates, while a pair undoing each other's work fires in lockstep for rounds neither needed.
     macro_rules! pass {

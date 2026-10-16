@@ -1,9 +1,11 @@
+mod jump;
+pub(crate) use jump::*;
+
 use {
     crate::{
-        Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, CallAnalysis, Callee, ContinuationId, CopyPlan,
-        Edge, FunctionId, Intrinsic, Lattice, Literal, Module, Node, NodeId, RowId,
-        SCC_CLONE_NODE_LIMIT, Slot, Solver, ValueExpr, ValueId, analyze_calls,
-        continuation_transfers, copy_bodies, function_nodes, nodes_from, resolve_atom,
+        Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, CallAnalysis, Callee, CopyPlan, FunctionId,
+        Intrinsic, Lattice, Literal, Module, Node, NodeId, RowId, SCC_CLONE_NODE_LIMIT, Slot,
+        Solver, ValueExpr, ValueId, analyze_calls, copy_bodies, function_nodes, resolve_atom,
         visit_atoms_mut,
     },
     curios_num::Natural,
@@ -453,162 +455,6 @@ pub(crate) fn introducing_letfun(
         }
     }
     None
-}
-/// SpecConstr for continuation joins — the join-point analogue of [`specialize_call_patterns`]. When an edge jumps a variant family's construction whose tag is known into a multi-transfer continuation that deconstructs it, clone the continuation with the constructor rebuilt at its entry and its dynamic fields threaded as parameters, so the existing aggregate-projection and known-switch simplifications collapse the deconstruction — and usually the allocation and the branch — on a later iteration. Every edge sharing the `(target, index, tag, arity, row)` pattern repoints to the single clone. The row identity matches the constructor the clone rebuilds, as for calls. Single-transfer joins are excluded: `inline_single_use_continuations` already collapses them outright. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
-pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) -> bool {
-    if *budget == 0 {
-        return false;
-    }
-    let constructors = tagged_row_values(module);
-    if constructors.is_empty() {
-        return false;
-    }
-    let transfers = continuation_transfers(module);
-
-    // The first specializable pattern in deterministic (node, then edge, then argument) order.
-    let mut chosen = None;
-    'search: for (_, node) in module.live_nodes() {
-        let edges: Vec<&Edge> = match node {
-            Node::ApplyCont(edge) => vec![edge],
-            Node::Switch { cases, default, .. } => cases.values().chain(default.iter()).collect(),
-            _ => continue,
-        };
-        for edge in edges {
-            let Some(continuation) = module.continuation(edge.target) else {
-                continue;
-            };
-            if transfers
-                .get(&edge.target)
-                .is_none_or(|sites| sites.len() < 2)
-            {
-                continue;
-            }
-            for (index, arg) in edge.args.iter().enumerate() {
-                let Atom::Value(value) = arg else { continue };
-                let Some((tag, fields, row)) = constructors.get(value) else {
-                    continue;
-                };
-                let Some(&param) = continuation.params.get(index) else {
-                    continue;
-                };
-                if !continuation_projects(module, edge.target, param) {
-                    continue;
-                }
-                if introducing_letcont(module, edge.target).is_none() {
-                    continue;
-                }
-                // The extent rather than the body, for the reason the call specializer counts one: a definition nested in the join is copied with it.
-                let plan = CopyPlan::continuation(module, edge.target);
-                if plan.nodes.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
-                    continue;
-                }
-                chosen = Some((edge.target, index, *tag, fields.len(), *row, plan));
-                break 'search;
-            }
-        }
-    }
-    let Some((target, index, tag, arity, row, plan)) = chosen else {
-        return false;
-    };
-
-    let intro = introducing_letcont(module, target).unwrap();
-    let clone = copy_bodies(module, plan).continuations[&target];
-
-    // Rebuild the constructor at the clone entry, threading its dynamic fields as fresh parameters in place of the specialized parameter.
-    let clone_definition = module.continuation(clone).unwrap();
-    let mut params = clone_definition.params.clone();
-    let clone_body = clone_definition.body;
-    let old_param = params[index];
-    let field_params: Vec<ValueId> = (1..arity)
-        .map(|field| module.add_value(Some(format!("field#{field}"))))
-        .collect();
-    let mut rebuilt = Vec::with_capacity(arity);
-    rebuilt.push(Atom::Literal(Literal::Nat(Natural::from(tag))));
-    rebuilt.extend(field_params.iter().map(|&p| Atom::Value(p)));
-    let entry = module.add_node(Node::LetValue {
-        result: old_param,
-        value: ValueExpr::Row(row, rebuilt),
-        next: clone_body,
-    });
-    params.splice(index..=index, field_params);
-    let clone_definition = module.continuation_mut(clone).unwrap();
-    clone_definition.params = params;
-    clone_definition.body = entry;
-
-    // Introduce the clone beside the original, so it shares the original's lexical scope.
-    if let Some(Node::LetCont { continuations, .. }) = module.node_mut(intro) {
-        continuations.push(clone);
-    }
-
-    // Repoint every edge sharing the pattern, splicing each edge's own constructor fields in place of the constructed argument.
-    let repoint =
-        |edge: &mut Edge, constructors: &BTreeMap<ValueId, (u32, Vec<Atom>, RowId)>| -> bool {
-            if edge.target != target {
-                return false;
-            }
-            let Some(Atom::Value(value)) = edge.args.get(index) else {
-                return false;
-            };
-            let Some((site_tag, site_fields, site_row)) = constructors.get(value) else {
-                return false;
-            };
-            if *site_tag != tag || site_fields.len() != arity || *site_row != row {
-                return false;
-            }
-            let spliced = site_fields[1..].to_vec();
-            edge.target = clone;
-            edge.args.splice(index..=index, spliced);
-            true
-        };
-    for node_index in 0..module.nodes().len() {
-        let node_id = NodeId(node_index as u32);
-        let Some(node) = module.node_mut(node_id) else {
-            continue;
-        };
-        match node {
-            Node::ApplyCont(edge) => {
-                repoint(edge, &constructors);
-            }
-            Node::Switch { cases, default, .. } => {
-                for edge in cases.values_mut().chain(default.iter_mut()) {
-                    repoint(edge, &constructors);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    *budget -= 1;
-    true
-}
-/// Whether `continuation`'s body projects a field out of `param` — the profitability gate matching [`deconstructs_param`], over a continuation body.
-pub(crate) fn continuation_projects(
-    module: &Module,
-    continuation: ContinuationId,
-    param: ValueId,
-) -> bool {
-    nodes_from(module, module.continuation(continuation).unwrap().body)
-        .iter()
-        .any(|&id| {
-            matches!(
-                module.node(id),
-                Some(Node::LetIntrinsic {
-                    op: Intrinsic::RowGet(..),
-                    args,
-                    ..
-                }) if args.first() == Some(&Atom::Value(param))
-            )
-        })
-}
-/// The `LetCont` node introducing `continuation`. Every live local continuation has exactly one (the verifier's lexical-binding check), so `None` only means the module is mid-rewrite.
-pub(crate) fn introducing_letcont(module: &Module, continuation: ContinuationId) -> Option<NodeId> {
-    module.live_nodes().find_map(|(id, node)| {
-        matches!(
-            node,
-            Node::LetCont { continuations, .. } if continuations.contains(&continuation)
-        )
-        .then_some(id)
-    })
 }
 pub(crate) fn merge_inputs(inputs: &mut [Knowledge], args: Option<&[Atom]>) {
     for (index, input) in inputs.iter_mut().enumerate() {

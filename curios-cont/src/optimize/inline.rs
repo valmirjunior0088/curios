@@ -112,7 +112,7 @@ pub(crate) fn continuation_transfers(module: &Module) -> BTreeMap<ContinuationId
     }
     transfers
 }
-fn collect_control_targets(node: &Node, targets: &mut BTreeSet<ContinuationId>) {
+pub(crate) fn collect_control_targets(node: &Node, targets: &mut BTreeSet<ContinuationId>) {
     match node {
         Node::ApplyFun { return_to, .. }
         | Node::Foreign { return_to, .. }
