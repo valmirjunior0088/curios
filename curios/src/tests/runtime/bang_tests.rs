@@ -7,6 +7,33 @@ use {
 };
 
 #[test]
+fn values_entrypoints_and_witness_methods_sequence_in_their_expected_monads() {
+    for source in [
+        r#"
+        use /std/{Io, print};
+        let task: Io({}) = let _ = print("a")!; print("b");
+        let _ = task!;
+        print("c")
+        "#,
+        r#"
+        use /std/{Nat, Io, print};
+        concept Task(A: Type): pub Type { action() -> Io(A) }
+        satisfy Task(Nat) { action() = let _ = print("a")!; let _ = print("b")!; Io/pure(3) }
+        let _ = Task/action(@Nat)!;
+        print("c")
+        "#,
+        r#"
+        use /std/{Io, print};
+        let _ = print("a")!;
+        let _ = match true | true => let _ = print("b")!; Io/pure(()) | false => print("unreached") end!;
+        print("c")
+        "#,
+    ] {
+        assert_eq!(run(source), b"abc");
+    }
+}
+
+#[test]
 fn dispatches_through_a_user_monad_witness() {
     // A user-declared Identity monad: `Box(A)` wraps a value, its witness's `bind` just applies the continuation. Each `!` desugars to `/std/Monad/bind(action, cont)`; the function's `Box(Nat)` result fixes the region's monad as `Box` and resolves the `Monad(Box)` witness — the same path a std monad takes, exercised end-to-end on a user type.
     let source = r#"

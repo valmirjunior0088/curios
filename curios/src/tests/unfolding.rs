@@ -22,7 +22,7 @@ enum Inner {
     Hoisted,
 }
 
-/// A grammar of `rules` rules in the `/std/Json/decode` idiom: each rule is a top-level `Parse` description built from explicit binds over the two rules before it. The value graph is intentional: this fixture tests sharing of descriptions independently of the source-function rule for `!`.
+/// A grammar of `rules` rules in the `/std/Json/decode` idiom: each rule is a top-level `Parse` description built from explicit binds over the two rules before it. The value graph is intentional: this fixture tests sharing of descriptions.
 fn grammar(rules: usize, inner: Inner) -> String {
     let mut source = String::from(
         "use /std/{Str, Nat, Byte, Bytes, Bool, List, Option, Result, Parse, Io};\n\n\

@@ -1275,6 +1275,11 @@ fn process_items(
                     Vec::<(Plicity, curios_core::Free, curios_core::Term)>::new(),
                     lower.value(&test.body)?,
                 );
+                // The thunk owns the full authored body extent; its interior keeps each bang's narrower extent for diagnostics.
+                let body = match test.body.span() {
+                    Some(span) => context.placed(span, body),
+                    None => body,
+                };
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
                 lowered.tests.push(name);
                 lowered.items.push(FlatItem::Let(FlatLet {
@@ -1991,7 +1996,7 @@ fn process_items(
                             island: context.island(),
                             // Without a telescope the type is the application itself, which carries this span already.
                             type_: lower.signature_type(&signature, declared.as_ref())?,
-                            body: lower.witness_value(&signature)?,
+                            body: lower.signature_value(&signature, |body| lower.value(body))?,
                         };
                         lowered.witnesses.insert(name);
                         Ok(item)

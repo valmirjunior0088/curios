@@ -166,12 +166,6 @@ fn a_lone_non_sequence_spread_keeps_its_concat_wrapper() {
     assert!(!format!("{:?}", run(r"x[..x[0x48]]")).contains("BinConcat"));
 }
 
-#[test]
-fn an_annotation_without_a_source_function_cannot_sequence() {
-    // An annotation supplies an expected type, but does not supply a source function.
-    assert!(run_err("let a : e! = x; a").contains("requires an enclosing function"));
-}
-
 /// The match lowering's refusals stand at what they are about: a named final arm and an irrefutable bind arm at the binder, and a motive no arm dispatches under at the motive.
 #[test]
 fn a_match_refusal_stands_at_the_binder_or_the_motive_it_is_about() {

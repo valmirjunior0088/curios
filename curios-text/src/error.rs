@@ -65,8 +65,6 @@ pub enum Error {
         /// The module that keeps the referent from the item's readers, where the referent is exposed to all of that module's and the module is the declaration written without `pub`.
         behind: Option<String>,
     },
-    /// A value-position bang has no enclosing function written in the source.
-    BangOutsideFunction,
     /// A `Sort` written where no caller states it. A sort left open is a parameter of a top-level declaration, stated at each use of it, so the word stands in the signature of a top-level `let`, `induct` or `struct` and nowhere else.
     SortOutsideSignature {
         /// What it was written in instead.
@@ -259,12 +257,6 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "concept `{concept}` takes a `use` parameter: a concept states a premise as a superclass field, `use C(args)` among its fields"
-                )
-            }
-            Error::BangOutsideFunction => {
-                write!(
-                    f,
-                    "postfix `!` requires an enclosing function\n  write a function such as `let main() -> Io({{}}) = ...;` and call it with `main()`\n  a local `let` and its type annotation share the surrounding region"
                 )
             }
             Error::SortOutsideSignature { site } => {

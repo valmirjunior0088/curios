@@ -489,15 +489,15 @@ pub let parser() -> Parse(Bytes, Nat) =
     Parse/pure(Byte/to_nat(a) + Byte/to_nat(b));
 ```
 
-A value-position `!` requires an enclosing function written in the source: a lambda, a function definition, or function sugar in a tuple, struct or witness field. A top-level value, an entrypoint, and a compiler-generated test thunk or witness telescope do not grant that permission. A function of no parameters is written `parser()` and called with `parser()`.
+A `!` is permitted at every lexical depth where its region's type supports sequencing, including top-level values, entrypoints, test bodies and witness fields. A function is not required to grant permission. A function of no parameters is written `parser()` and called with `parser()`.
 
-Inside a function, ordinary local `let` bindings share the surrounding sequencing region, with or without a type annotation. Adding an unused first binding does not change which region an action belongs to. An independent computation is another function, called where its description is needed. Match and `choose` branches keep their conditional regions: their monads come from their own expected types, and are not forced to be the enclosing function's result monad. There is no `let !` header or matching `end` ([Bang sequencing requires a source function](design/surface/bang-sequencing-requires-a-source-function.md)).
+Ordinary local `let` bindings share the surrounding sequencing region, with or without a type annotation. Adding an unused first binding does not change which region an action belongs to. An independent computation is a function, called where its description is needed. Match and `choose` branches keep their conditional regions: their monads come from their own expected types, and are not forced to be the enclosing region's monad. There is no `let !` header or matching `end` ([Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md)).
 
 A region's monad is read from the region's type and never inferred from a sequenced action. A region whose type is not yet known waits for it, and one whose type can never name a monad — the body of a lambda in inference position, say — is rejected with a request to annotate the enclosing result type.
 
 An action whose own monad differs from the region's is lifted through the declared `Monad/Lift` witness for that ordered pair, and a pair with no witness is rejected. See [Lifting between monads](#lifting-between-monads).
 
-Functions written inside type expressions have the same sequencing rules: a pure monad may compute a type, whose total result is extracted by its ordinary eliminator. A type annotation does not grant function permission or a monadic expected type of its own, and an `Io(Type)` description is not a `Type`. Type computations remain subject to totality checking. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
+Type expressions have the same sequencing rules: a pure monad may compute a type, whose total result is extracted by its ordinary eliminator. An annotation keeps the expectation of a type expression, and an `Io(Type)` description is not a `Type`. Type computations remain subject to totality checking. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
 
 ### Host effects and `Io`
 
@@ -780,7 +780,7 @@ Each selected arm receives the same definitional refinement that an equivalent n
 
 ## Declarations and modules
 
-An entrypoint consists of zero or more top-level items followed by exactly one final term — the description the program performs. Its entry contract is `Io({})`: a program describes doing something and yielding nothing. Sequencing with `!` is written inside an explicit function, and the entrypoint calls it. A module file consists of top-level items only and has no final term.
+An entrypoint consists of zero or more top-level items followed by exactly one final term — the description the program performs. Its entry contract is `Io({})`: a program describes doing something and yielding nothing. Its final term may sequence with `!` directly. A module file consists of top-level items only and has no final term.
 
 What closes the program is performed through `/std/Program`, the concept whose `perform` says what a value of a type does as a whole program, so it is a term of any type with a witness there:
 
@@ -804,7 +804,7 @@ main()
 
 Top-level `let` declarations require a type annotation. Function-definition sugar supplies the annotation as a parameter telescope and result type.
 
-That requirement is also what separates items from the final term: an *unannotated* top-level binding in an entrypoint is not an item at all, but a local `let` opening the final term. Neither spelling permits a `!` without an enclosing source function. Inside a function, adding a local binding's type annotation does not give its value a new sequencing region.
+That requirement is also what separates items from the final term: an *unannotated* top-level binding in an entrypoint is not an item at all, but a local `let` opening the final term. A top-level declaration's value has the expected type its annotation states; a local binding shares the surrounding sequencing region, and adding its type annotation does not give its value a new region.
 
 ```crs
 pub let zero: Nat = 0;
@@ -836,7 +836,7 @@ A test takes no parameters. A claim about *every* instantiation is a proposition
 
 To check a claim at instances you choose, make it an ordinary definition returning `Test({})` and schedule a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's own cases, whose failure names the case's position. A test registers like a private definition of type `() -> Test({})`: referable within its subtree, and colliding with a sibling of the same name.
 
-`test` is contextual: a keyword only where an item may start, an ordinary name everywhere else. A test is never `pub`, its name being a report line rather than an export, and no documentation comment may precede one. The generated thunk is not a source function, so a bare `!` in the test body is refused where it is written. `Test(A)` is a monad: a written function returning `Test({})` sequences assertions, `Io` actions and fallible actions through the declared embeddings. A failed assertion or lifted error stops that test's continuation. `Test/perform` and `Test/try` remain adapters for thunks returning test descriptions.
+`test` is contextual: a keyword only where an item may start, an ordinary name everywhere else. A test is never `pub`, its name being a report line rather than an export, and no documentation comment may precede one. `Test(A)` is a monad: a test body sequences assertions, `Io` actions and fallible actions directly with `!`, under its fixed `Test({})` expectation and through the declared embeddings. A failed assertion or lifted error stops that test's continuation. The body ends in a `Test({})` expression. `Test/perform` and `Test/try` remain adapters for thunks returning test descriptions.
 
 ### Modules
 

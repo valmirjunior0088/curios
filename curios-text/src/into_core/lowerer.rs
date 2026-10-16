@@ -76,8 +76,6 @@ pub(super) struct Lowerer<'a, 'b> {
     used: RefCell<HashSet<curios_core::Free>>,
     /// Whether a written `?` was lowered: a declaration holding one is exempt, its binders being the goal's scope.
     saw_goal: Cell<bool>,
-    /// Whether lowering is inside a function written in the source, independently of the expected type that selects each region's monad.
-    source_function: Cell<bool>,
 }
 
 /// One written binder the lint may report: its spelling, its identity and its span.
@@ -104,7 +102,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             candidates: RefCell::new(Vec::new()),
             used: RefCell::new(HashSet::new()),
             saw_goal: Cell::new(false),
-            source_function: Cell::new(false),
         }
     }
 
@@ -163,19 +160,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     ) -> Result<curios_core::Term, Error> {
         match signature.written {
             LetSignature::Func { params, body, .. } => {
-                self.lambda(&func_sugar_params(params), &signature.leaves, body)
-            }
-            LetSignature::Name { body, .. } => lower_value(body),
-        }
-    }
-
-    /// A witness telescope abstracts its dictionary without making that dictionary a source function body. Written method sugar and lambdas inside its fields grant their own sequencing permission.
-    pub(super) fn witness_value(&self, signature: &Signature) -> Result<curios_core::Term, Error> {
-        match signature.written {
-            LetSignature::Func { params, body, .. } => {
                 self.abstract_value(&func_sugar_params(params), &signature.leaves, body)
             }
-            LetSignature::Name { body, .. } => self.value(body),
+            LetSignature::Name { body, .. } => lower_value(body),
         }
     }
 
@@ -325,7 +312,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         (telescope, operands)
     }
 
-    /// Lowers a *value* body — a top-level `let` body, a witness field, or the entrypoint tail. A value body is a region root; inside a source function each `!` hoists here (never past a boundary — a lambda body, match arm, or recursive-group member re-roots) and is rewired through `/std/Monad/bind`, whose `use` binder resolves the `Monad` witness per site. Type expressions go through [`Self::term`], where an annotation keeps its own expectation and functions still grant sequencing permission.
+    /// Lowers a *value* body — a top-level `let` body, a witness field, or the entrypoint tail. A value body is a region root; each `!` hoists here (never past a boundary — a lambda body, match arm, or recursive-group member re-roots) and is rewired through `/std/Monad/bind`, whose `use` binder resolves the `Monad` witness per site. Type expressions go through [`Self::term`], where an annotation keeps its own expectation.
     pub(super) fn value(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.region(term)
     }
@@ -376,20 +363,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(curios_core::Term::func_type_marked(lowered, output))
     }
 
-    /// A written function grants sequencing permission to its body, without changing how branches select their own regions' monads.
-    fn lambda(
-        &self,
-        params: &[FuncParam],
-        binders: &[Binder],
-        body: &Term,
-    ) -> Result<curios_core::Term, Error> {
-        let previous = self.source_function.replace(true);
-        let lowered = self.abstract_value(params, binders, body);
-        self.source_function.set(previous);
-        lowered
-    }
-
-    /// Abstract a value under a telescope; the caller decides whether the abstraction is a source function.
+    /// Abstract a value region under a telescope.
     fn abstract_value(
         &self,
         params: &[FuncParam],
@@ -504,7 +478,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             Subterm::FuncType(ft) => self.func_type_under(&ft.params, || self.term(&ft.output))?,
             Subterm::Func(func) => {
-                self.lambda(&func.params, &self.mint_params(&func.params), &func.body)?
+                self.abstract_value(&func.params, &self.mint_params(&func.params), &func.body)?
             }
             Subterm::Apply(apply) => curios_core::Term::apply_marked(
                 self.term(&apply.head)?,
@@ -621,7 +595,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             // A `let` block: each statement is in scope for the statements after it and the tail, and for itself — a lone binding that names itself, or a `let … and …;` group, lowers to a core `rec`; see [`Self::lower_let_group`].
             Subterm::Let(let_) => self.lower_let(&let_.groups, &let_.tail)?,
-            // An annotation's expression is checked at its own expected type. A bang there still needs a source function and a monadic expectation; it never floats into the value whose annotation it is.
+            // An annotation's expression is checked at its own expected type. A bang there still needs a monadic expectation; it never floats into the value whose annotation it is.
             Subterm::Bang(_) => self.region(&Term::from(term.clone()))?,
         })
     }
@@ -666,7 +640,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             // A lambda re-roots the region.
             Subterm::Func(func) => {
-                self.lambda(&func.params, &self.mint_params(&func.params), &func.body)
+                self.abstract_value(&func.params, &self.mint_params(&func.params), &func.body)
             }
             // Spine forms (atomic / apply / tuple / proj): collect bangs in left-to-right evaluation order, then wrap.
             _ => {
@@ -839,9 +813,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     ) -> Result<curios_core::Term, Error> {
         Ok(match term.as_subterm() {
             Subterm::Bang(action) => {
-                if !self.source_function.get() {
-                    return Err(Error::BangOutsideFunction);
-                }
                 // The action is itself desugared first, so its inner bangs evaluate before this one (left-to-right).
                 let action = self.collect(action, binds)?;
                 let binder = self.context.fresh_binder(None);

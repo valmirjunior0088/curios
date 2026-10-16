@@ -303,19 +303,21 @@ fn a_test_body_is_checked_against_the_description_type() {
 }
 
 #[test]
-fn a_bare_bang_in_a_test_body_is_refused() {
-    // The thunk that schedules a test is generated; it grants no source-function permission. Effects enter through an explicit adapter lambda.
-    let error = error(
-        r#"
-        use /std/{Nat, Str, Io, Test};
+fn a_test_body_sequences_assertions_and_lifted_io() {
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Io, Test, print};
         test t =
+            let n = Test/pure(21)!;
+            let _ = Test/assert(n * 2 == 42)!;
+            let _ = print("before|")!;
+            let _ = Io/yield()!;
             Test/assert(Io/pure(true)!);
-        /std/print("ran\n")
+        ()
         "#,
-    );
-    assert!(
-        error.contains("requires an enclosing function"),
-        "unexpected error: {error}"
+        ),
+        b"before|/t: passed\n"
     );
 }
 
@@ -368,7 +370,7 @@ fn the_ordinary_program_prunes_what_the_test_program_keeps() {
 
 #[test]
 fn a_body_written_as_a_whole_term_form_is_recorded() {
-    // The runner slices a test's body from the span its lowered lambda carries, so `Lowerer::region` stamps that span on every root it rebuilds: a body rooted at `match`, `let`, `choose` or a lambda that reached Core unspanned would be reported with an empty line where the source belongs, and an elaboration error at such a root would be unlocated.
+    // The runner slices a test's whole body from the generated thunk's extent, independently of the narrower action extent its interior may carry for a sequencing diagnostic.
     let entrypoint = r#"
         use /std/{Nat, Str, Bool, Io, Test};
         test application =
@@ -377,6 +379,11 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
             match 1 + 1 == 2 : (_) => Test({}) | true => Test/assert(true) | false => Test/assert(false) end;
         test binding =
             let x = 1 + 1;
+            Test/assert(x == 2);
+        test sequencing =
+            Test/assert(Io/pure(true)!);
+        test binding_actions =
+            let x = Test/pure(2)!;
             Test/assert(x == 2);
         /std/print("ran\n")
         "#
@@ -401,6 +408,8 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
             "Test/assert(1 + 1 == 2)",
             "match 1 + 1 == 2 : (_) => Test({}) | true => Test/assert(true) | false => Test/assert(false) end",
             "let x = 1 + 1;\n            Test/assert(x == 2)",
+            "Test/assert(Io/pure(true)!)",
+            "let x = Test/pure(2)!;\n            Test/assert(x == 2)",
         ]
     );
 }

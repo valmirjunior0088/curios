@@ -809,9 +809,9 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
     }
 }
 
-/// An annotation does not grant source-function permission; the same computation inside a function still receives its ordinary monad diagnosis.
+/// Values and functions receive the same type-directed sequencing diagnosis, placed at the written action.
 #[test]
-fn a_top_level_annotation_does_not_supply_a_function_boundary() {
+fn values_and_functions_report_the_same_invalid_sequencing_types() {
     for (binding, refusal) in [
         (
             "let n: Nat = Io/pure(3)!;",
@@ -826,15 +826,15 @@ fn a_top_level_annotation_does_not_supply_a_function_boundary() {
             "no witness of /std/Monad/Lift(Io, List) found",
         ),
     ] {
-        let source = format!("use /std/{{Nat, List, Cell, Io}};\n{binding}\n()\n");
-        let error = typecheck(&source).expect_err("a value is no source function");
-        assert!(error.contains("requires an enclosing function"), "{error}");
-
         let function = binding.replacen(':', "() ->", 1);
-        let source = format!("use /std/{{Nat, List, Cell, Io}};\n{function}\n()\n");
-        let error = typecheck(&source).expect_err("a function still needs a suitable monad");
-        assert!(error.contains(refusal), "{error}");
-        assert!(!error.contains("Monad/bind"), "{error}");
+        for declaration in [binding, &function] {
+            let source = format!("use /std/{{Nat, List, Cell, Io}};\n{declaration}\n()\n");
+            let error = typecheck(&source).expect_err("sequencing needs a suitable monad");
+            assert!(error.contains(refusal), "{error}");
+            assert!(error.contains(declaration), "{error}");
+            assert!(error.contains('^'), "{error}");
+            assert!(!error.contains("Monad/bind"), "{error}");
+        }
     }
 }
 

@@ -26,12 +26,11 @@ fn a_failed_assertion_skips_the_remaining_test_continuations() {
         run_tests_program(
             r#"
         use /std/{Test, print};
-        let check() -> Test({}) =
+        test sequence =
             let _ = Test/assert(true)!;
             let _ = Test/assert(false)!;
             let _ = print("unreached")!;
             Test/assert(true);
-        test sequence = check();
         test afterward = Test/assert(true);
         ()
     "#
@@ -48,14 +47,12 @@ fn one_try_embedding_serves_io_and_test_bases() {
         use /std/{Nat, Str, Io, Try, Test, print};
         let io_error() -> Try(Io, Str, Nat) = Try/raise("io error");
         let test_error() -> Try(Test, Str, Nat) = Try/raise("test error");
-        let over_io() -> Test({}) =
+        test first =
             let _ = io_error()!;
             print("unreached");
-        let over_test() -> Test({}) =
+        test second =
             let _ = test_error()!;
             print("unreached");
-        test first = over_io();
-        test second = over_test();
         ()
     "#
         ),

@@ -492,24 +492,16 @@ fn test_definition<'a>(
     })
 }
 
-/// Each registered test as the tail schedules it, read off the lowered definition that carries it: the plicity vector of the lambda its declaration lowered to, and the extent of the authored body — the lambda's interior, since the wrapper node is synthesized and was written nowhere. One lookup serves the tail and the runner's records, so the two cannot disagree about what the tests are.
+/// Each registered test as the tail schedules it, read off the lowered definition that carries it: the generated thunk's extent covers the whole authored body, while its interior retains each action's narrower diagnostic extent. One lookup serves the tail and the runner's records, so the two cannot disagree about what the tests are.
 fn scheduled_tests(
     tests: &[curios_core::Global],
     items: &curios_core::Items,
 ) -> Vec<curios_elab::ScheduledTest> {
     tests
         .iter()
-        .map(|test| {
-            // The declaration lowers to a `() -> Test` thunk, so the authored body is the lambda's terminal — the extent a failing test's record is sliced from.
-            let lambda = test_definition(items, test).and_then(|def| match &*def.body {
-                curios_core::Subterm::Func(func) => Some(func),
-                _ => None,
-            });
-
-            curios_elab::ScheduledTest {
-                name: *test,
-                extent: lambda.and_then(|func| func.telescope.terminal().extent()),
-            }
+        .map(|test| curios_elab::ScheduledTest {
+            name: *test,
+            extent: test_definition(items, test).and_then(|def| def.body.extent()),
         })
         .collect()
 }
