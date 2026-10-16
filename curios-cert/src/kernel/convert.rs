@@ -26,6 +26,8 @@ use intrinsic::*;
 #[cfg(test)]
 mod conversion_tests;
 #[cfg(test)]
+mod foreign_tests;
+#[cfg(test)]
 mod irrelevance_tests;
 #[cfg(test)]
 mod recursion_tests;
@@ -464,6 +466,9 @@ fn structural(
         (Subterm::Intrinsic(left), Subterm::Intrinsic(right)) => {
             convert_intrinsic(kernel, pairs, left, right)
         }
+
+        // A host call is its declaration and its operands, and reduction leaves both as they were posed.
+        (Subterm::Foreign(..), Subterm::Foreign(..)) => convert_foreign(kernel, pairs, this, that),
 
         (Subterm::Var(left), Subterm::Var(right)) => Ok(left.unwrap() == right.unwrap()),
 

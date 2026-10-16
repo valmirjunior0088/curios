@@ -40,7 +40,7 @@ use {
         Declined, Error, Occurrence, metavar_origins, metavar_spines, named_members,
         read_outside_spines, zonk_solved_term_metas,
     },
-    curios_analysis::Classes,
+    curios_analysis::{Classes, foreign_congruence},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
         Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level,
@@ -3065,6 +3065,19 @@ impl Convert {
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
                 (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
                     convert_intrinsic(self, context, this, that)?
+                }
+                // A host call is its declaration and its operands, each compared at the type its row demands of it, as the kernel compares two.
+                (this @ Subterm::Foreign(..), that @ Subterm::Foreign(..)) => {
+                    match foreign_congruence(&this.into(), &that.into(), &context.syntax()) {
+                        Some(operands) => {
+                            for operand in operands {
+                                let type_ = operand.type_.unwrap_or_else(Term::type_ground);
+                                self.enqueue(type_, operand.this, operand.that);
+                            }
+                            true
+                        }
+                        None => false,
+                    }
                 }
                 (Subterm::Sort(this_quality, this), Subterm::Sort(that_quality, that)) => {
                     context.same_quality_at(this_quality, that_quality, self.extent)

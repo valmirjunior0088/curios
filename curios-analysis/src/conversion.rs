@@ -24,9 +24,9 @@ use {
     curios_algebra::{Carrier, Conclusion},
     curios_core::{
         Aligned, Intrinsic, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm, Term,
-        Universes, Var, Visit, align_comparisons, decide_bool, int_has_stuck_product,
-        int_normalize, int_same, is_bool_connective, normalize_bool, peel_commutative,
-        peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine, same_atom,
+        Universes, Var, Visit, align_comparisons, decide_bool, foreign_operands,
+        int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
+        peel_commutative, peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine, same_atom,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -78,6 +78,40 @@ pub struct Obligation {
     pub type_: Option<Term>,
     pub this: Term,
     pub that: Term,
+}
+
+/// Two host calls as the congruence they are, for both checkers: `None` where they are not two calls one declaration states, which are apart whatever they are handed, and otherwise each operand pair at the type the row demands of it ([`foreign_operands`]), a type operand at `Type`. A call is a description of which its declaration and its operands are all, so nothing else holds two one, or two apart.
+pub fn foreign_congruence(
+    this: &Term,
+    that: &Term,
+    syntax: &SyntaxRegistry,
+) -> Option<Vec<Obligation>> {
+    let (
+        Subterm::Foreign(function, this_declared, this_operands),
+        Subterm::Foreign(_, that_declared, that_operands),
+    ) = (&**this, &**that)
+    else {
+        return None;
+    };
+    if this_declared != that_declared || this_operands.len() != that_operands.len() {
+        return None;
+    }
+
+    Some(
+        this_operands
+            .iter()
+            .zip(that_operands)
+            .zip(foreign_operands(function, syntax))
+            .map(|((this, that), demand)| Obligation {
+                type_: match demand {
+                    Operand::At(type_) => Some(type_),
+                    _ => None,
+                },
+                this: this.clone(),
+                that: that.clone(),
+            })
+            .collect(),
+    )
 }
 
 /// Whether `this` and `that`, two intrinsics both checkers reached conversion with, are the same value — the chain the module documentation lays out, up to what only the driver can discharge, and stopping at step 7 where the pair has atoms to class.

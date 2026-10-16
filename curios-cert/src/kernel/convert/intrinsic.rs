@@ -8,7 +8,7 @@ use {
     super::{Pairs, classing, compare, ground},
     crate::{
         Error, Kernel, connectives_agree, connectives_agree_classed, convert_classed,
-        convert_intrinsics,
+        convert_intrinsics, foreign_congruence,
     },
     curios_analysis::{Agreement, Classes, Congruence, Driver, Obligation, Outcome, Pass},
     curios_core::{Intrinsic, Term},
@@ -44,21 +44,43 @@ pub(super) fn convert_intrinsic(
             if !kernel.universes_eq(&this_universes, &that_universes) {
                 return Ok(false);
             }
-            let Some(operands) = operands else {
-                return Ok(false);
-            };
-            for Obligation { type_, this, that } in operands {
-                let converted = match type_ {
-                    Some(type_) => compare(kernel, pairs, &type_, &this, &that)?,
-                    None => ground(kernel, pairs, &this, &that)?,
-                };
-                if !converted {
-                    return Ok(false);
-                }
+            match operands {
+                Some(operands) => obligations_convert(kernel, pairs, operands),
+                None => Ok(false),
             }
-            Ok(true)
         }
     }
+}
+
+/// Whether `this` and `that`, two host calls, are one call: `curios-analysis`'s `foreign_congruence` says which operands to compare, and at what, as it says it to the elaborator.
+pub(super) fn convert_foreign(
+    kernel: &mut Kernel,
+    pairs: &mut Pairs,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, Error> {
+    match foreign_congruence(this, that, &kernel.syntax()) {
+        Some(operands) => obligations_convert(kernel, pairs, operands),
+        None => Ok(false),
+    }
+}
+
+/// Each operand pair of a congruence in order at its declared type, a type operand at `Type`, stopping at the first that fails.
+fn obligations_convert(
+    kernel: &mut Kernel,
+    pairs: &mut Pairs,
+    operands: Vec<Obligation>,
+) -> Result<bool, Error> {
+    for Obligation { type_, this, that } in operands {
+        let converted = match type_ {
+            Some(type_) => compare(kernel, pairs, &type_, &this, &that)?,
+            None => ground(kernel, pairs, &this, &that)?,
+        };
+        if !converted {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 /// Whether a `Bool` connective on either side of a pair that is not two intrinsics agrees with the other side: `curios-analysis`'s `connectives_agree`, its atoms classed here where it hands them back.
