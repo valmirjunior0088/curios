@@ -1,6 +1,6 @@
 # CLI grammars carry their soundness
 
-`/std/Cli` currently describes a flat dependent record. It cannot directly produce a sum representing a path-or-flag choice, and its separate help prescan mistakes argument data for built-in requests. The replacement has one grammar, one ownership scanner and one typed interpreter.
+The grammar engine and command migration are implemented. The remaining work is authoritative documentation, the final workspace checks and retirement of this specification.
 
 ## Settled contracts
 
@@ -16,5 +16,4 @@
 
 ## Stages and checks
 
-1. Migrate command trees and callers, remove the old engine, and check deep dispatch, error streams/statuses, UTF-8 rejection, invalid siblings and typed record lookup.
-2. Update authoritative documentation, run default-feature workspace checks and retire this specification after redirecting references. No measurement is retaken.
+1. Update authoritative documentation, run default-feature workspace checks and retire this specification after redirecting references. No measurement is retaken.

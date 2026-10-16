@@ -4,6 +4,10 @@ mod grammar_tests;
 
 mod prepared_tests;
 
+mod validation_tests;
+
+mod command_tests;
+
 use {
     super::{compile, error},
     curios_runtime::{Compiled, ForeignBindings, MockHost},
@@ -46,11 +50,11 @@ fn serve() -> Compiled {
                 "serve",
                 "Serve a directory over HTTP",
                 Option/some("0.1.0"),
-                [
+                Cli/record([
                     Cli/Arg { ..Cli/flag("verbose", "Log every request"), short = Option/some('v') },
                     Cli/default("port", Cli/nat, 8080, "Port to listen on"),
                     Cli/positional("root", Cli/str, "Directory to serve"),
-                ],
+                ]),
                 (v) =>
                     let port = Cli/get(v, "port");
                     let root = Cli/get(v, "root");
@@ -87,8 +91,9 @@ fn help_answers_on_stdout_and_exits_zero() {
     assert_eq!(serve().run(system, ForeignBindings::empty()), Ok(0));
     assert!(io.errors().is_empty(), "help is not a failure");
     assert!(
-        String::from_utf8_lossy(&io.output())
-            .starts_with("Serve a directory over HTTP\n\nUsage: serve [OPTIONS] <ROOT>\n"),
+        String::from_utf8_lossy(&io.output()).starts_with(
+            "Serve a directory over HTTP\n\nUsage: serve [--verbose] [--port <N>] <ROOT>\n"
+        ),
         "the help screen goes to stdout:\n{}",
         String::from_utf8_lossy(&io.output())
     );
@@ -111,7 +116,7 @@ fn a_refused_line_reports_on_stderr_and_exits_two() {
     );
     assert_eq!(
         String::from_utf8(io.errors()).expect("the refusal is text"),
-        "error: unexpected argument '--prot'\n\nUsage: serve [OPTIONS] <ROOT>\n\nFor more information, try '--help'.\n"
+        "error: unexpected argument '--prot'\n\nUsage: serve [--verbose] [--port <N>] <ROOT>\n\nFor more information, try '--help'.\n"
     );
 }
 
@@ -134,7 +139,7 @@ fn a_non_utf8_argument_is_refused_by_its_position() {
     );
 }
 
-/// A group inside a group, and two leaves that each name one long name twice — the shapes `serve` has none of.
+/// A valid nested command tree, kept separate from invalid-specification fixtures.
 fn deps() -> Compiled {
     compile(
         r#"
@@ -145,30 +150,14 @@ fn deps() -> Compiled {
                 "add",
                 "Add a dependency",
                 Option/none(),
-                [Cli/positional("name", Cli/str, "What to add")],
+                Cli/record([Cli/positional("name", Cli/str, "What to add")]),
                 (v) => print(Str/flatten(["adding ", Cli/get(v, "name"), "\n"])));
 
         let registry: Cli =
             Cli/group("registry", "Manage registry dependencies", Option/none(), [add]);
 
-        let flags: Cli =
-            Cli/leaf(
-                "flags",
-                "One flag named twice",
-                Option/none(),
-                [Cli/flag("verbose", "once"), Cli/flag("verbose", "twice")],
-                (_) => print("ran\n"));
-
-        let ports: Cli =
-            Cli/leaf(
-                "ports",
-                "One required option named twice",
-                Option/none(),
-                [Cli/option("port", Cli/nat, "first"), Cli/option("port", Cli/nat, "second")],
-                (_) => print("ran\n"));
-
         let deps: Cli =
-            Cli/group("deps", "Manage dependencies", Option/some("0.1.0"), [registry, flags, ports]);
+            Cli/group("deps", "Manage dependencies", Option/some("0.1.0"), [registry]);
 
         Cli/main(deps)
         "#,
@@ -216,31 +205,5 @@ fn a_refusal_inside_a_subcommand_names_the_path_that_reaches_it() {
             "error: the argument 'NAME' is required\n\nUsage: deps registry add <NAME>\n\n"
         ),
         "the refusal names the path:\n{refusal}"
-    );
-}
-
-/// Nothing refuses a specification that names one long name twice, so what it does is the fact worth pinning: the first entry takes every occurrence, and a flag's second entry reads as absent, so the line parses and the handler runs.
-#[test]
-fn a_repeated_flag_name_parses_with_its_second_entry_absent() {
-    let (system, io) = MockHost::builder()
-        .args(["deps", "flags", "--verbose"])
-        .build();
-
-    assert_eq!(deps().run(system, ForeignBindings::empty()), Ok(0));
-    assert_eq!(io.output(), b"ran\n");
-}
-
-/// A required option's second entry is never filled either, so the line is refused for an argument it did supply.
-#[test]
-fn a_repeated_option_name_reports_the_supplied_argument_as_missing() {
-    let (system, io) = MockHost::builder()
-        .args(["deps", "ports", "--port", "9090"])
-        .build();
-
-    assert_eq!(deps().run(system, ForeignBindings::empty()), Ok(2));
-    let refusal = String::from_utf8(io.errors()).expect("the refusal is text");
-    assert!(
-        refusal.contains("error: the argument 'PORT' is required"),
-        "the second entry reports as missing:\n{refusal}"
     );
 }

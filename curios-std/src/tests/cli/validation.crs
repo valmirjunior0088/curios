@@ -1,0 +1,37 @@
+use /std/{Cli, Option, Test};
+use /std/Cli/{Grammar};
+use /cli/{rendered};
+
+let tree() -> Cli =
+    let good = Cli/leaf("good", "", Option/none(), Grammar/pure(()), (_) => /std/Io/pure(()));
+    let bad =
+        Cli/checked_leaf(
+            "bad",
+            "",
+            Option/none(),
+            Cli/checked_record([Cli/flag("same", ""), Cli/flag("same", "")]),
+            (_) => /std/Io/pure(()));
+    Cli/group("app", "", Option/none(), [good, bad]);
+
+test pure_renderers_report_an_invalid_unselected_sibling =
+    let expected = "in command \"app\": in command \"bad\": duplicate record field \"same\"";
+    Test/all([
+        Test/equal(rendered(Cli/help([], tree())), expected),
+        Test/equal(rendered(Cli/usage([], tree())), expected),
+        Test/equal(rendered(Cli/report([], tree(), Cli/Failure/unexpected("x"))), expected)]);
+
+test pure_selection_reports_an_invalid_unselected_sibling =
+    Test/equal(
+        match Cli/select(tree(), ["good"])
+        | invalid(error) => Cli/SpecError/to_str(error)
+        | _ => "accepted"
+        end,
+        "in command \"app\": in command \"bad\": duplicate record field \"same\"");
+
+test the_record_parse_adapter_reports_specification_errors_before_help =
+    Test/equal(
+        match Cli/parse([Cli/flag("same", ""), Cli/flag("same", "")], ["--help"], Option/none())
+        | invalid(error) => Cli/SpecError/to_str(error)
+        | _ => "accepted"
+        end,
+        "duplicate record field \"same\"");

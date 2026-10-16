@@ -38,9 +38,9 @@ let serve: Cli =
         "serve",
         "Serve a directory over HTTP",
         Option/some("0.1.0"),
-        [
+        Cli/record([
             Cli/default("port", Cli/nat, 8080, "Port to listen on"),
-            Cli/positional("root", Cli/str, "Directory to serve")],
+            Cli/positional("root", Cli/str, "Directory to serve")]),
         (v) =>
             let port = Cli/get(v, "port");
             let root = Cli/get(v, "root");

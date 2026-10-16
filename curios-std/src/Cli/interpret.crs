@@ -2,18 +2,9 @@ mod scan;
 use scan/{Raw};
 use /std/{Str, Nat, Bool, List, Option, Result, Map};
 use /std/Bool/{Holds};
-use /std/Cli/{Failure, SpecError, Prepared};
+use /std/Cli/{Failure, SpecError, Prepared, Reading};
 use /std/Cli/Grammar/{Node, Sound, Reader, Multiplicity};
 use /std/Cli/{Grammar};
-
---- The result of interpreting one certified grammar.
-pub induct Reading(A: Type): pub Type
-| parsed(A)
-| help()
-| version(Str)
-| failure(Failure)
-| invalid(SpecError)
-end
 
 pub let builtin_collision(
     @A: Type,
