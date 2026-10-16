@@ -92,7 +92,7 @@ pub(crate) fn contract_redexes(term: &Term) -> Term {
 ///
 /// Reduction opens a name to its group to see whether a call computes, and a call that does not compute stays headed by the group. Committed so, a solution holds a copy of the callee: re-validating it elaborates the callee's every member again, the kernel is handed the copy, and a copy that elaboration rebuilt under another spelling of one of its goals is another term to conversion, which unfolds the two side by side. The name is what the author wrote, and reduction opens it to the same group again.
 ///
-/// Exact, where [`refold_recs`] is display's: a group is recognized by itself, and an instance of a universe-polymorphic one by reduction's own record of having opened it ([`Context::instance_of`]), so the levels a member is named at are the ones it was opened at and none is read back off the copy. A group neither recognizes — a local `rec`, an instance opened in another declaration — stands as it was.
+/// Exact, where [`refold_recs`] is display's: a group is recognized by reduction's own record of the name it opened it from in the declaration in progress ([`Context::member_names`]), and an instance of a universe-polymorphic one by its record of having opened that instance ([`Context::instance_of`]), so the names are the definitions the declaration unfolded and the levels a member is named at are the ones it was opened at, none read back off the copy. A group neither records — a local `rec`, a group no name of this declaration's unfolded to — stands as it was.
 pub(crate) fn named_members(context: &Context, term: &Term) -> Term {
     if !term.mentions_rec() {
         return term.clone();

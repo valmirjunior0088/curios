@@ -1102,9 +1102,10 @@ impl<'s> Context<'s> {
         self.typing.frames.rec_definitions()
     }
 
-    /// [`Frames::member_names`]: the globals `group`'s members are defined under, in member order. A group is its members' bodies, so a judgment told which names one goes by has read the body of each.
+    /// [`Frames::member_names`]: the globals `group`'s members are defined under, in member order, by the definitions reduction opened it from in the declaration in progress ([`Caches::opened_from`]), and none where it opened none. A group is its members' bodies, so a judgment told which names one goes by has read the body of each.
     pub(crate) fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
-        let names = self.typing.frames.member_names(group);
+        let opened = self.typing.caches.opened_from(group)?;
+        let names = self.typing.frames.member_names(group, opened);
         for name in names.iter().flatten() {
             self.asks(&Free::Global(*name), Question::Body);
         }
@@ -1522,8 +1523,9 @@ impl<'s> Context<'s> {
     pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
         self.asks(name, Question::Body);
         let body = self.typing.frames.definition_body(name);
-        if body.is_none() {
-            self.missed(name);
+        match body {
+            Some(body) => self.opens(name, body),
+            None => self.missed(name),
         }
 
         body
@@ -1533,19 +1535,28 @@ impl<'s> Context<'s> {
     pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
         self.asks(name, Question::Body);
         let reduct = self.typing.frames.var_reduct(name);
-        if reduct.is_none() {
-            self.missed(name);
+        match reduct {
+            Some(reduct) => self.opens(name, reduct),
+            None => self.missed(name),
         }
 
         reduct
+    }
+
+    /// `name` unfolded to `reduct`: where it is a member of a top-level group, the group is filed as opened from it ([`Caches::note_opened`]).
+    fn opens(&self, name: &Free, reduct: &Term) {
+        if let (Free::Global(global), Some((group, _))) = (name, reduct.as_rec_proj()) {
+            self.typing.caches.note_opened(group, *global);
+        }
     }
 
     /// [`Frames::var_reduct_at`], and a need as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
         self.asks(name, Question::Body);
         let reduct = self.typing.frames.var_reduct_at(name);
-        if reduct.is_none() {
-            self.missed(name);
+        match reduct {
+            Some(reduct) => self.opens(name, reduct),
+            None => self.missed(name),
         }
 
         reduct

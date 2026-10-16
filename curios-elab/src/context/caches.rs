@@ -9,9 +9,9 @@
 use {
     crate::Sort,
     curios_core::{
-        ClosedMemo, Enter, Free, Level, LevelHead, Quality, QualityMetaId, Rec, RecGroup, Subterm,
-        Term, UniverseError, UniverseMetaId, Universes, rewrite_universe_levels_scoped_shared,
-        rewrite_universe_qualities, universes_in_order,
+        ClosedMemo, Enter, Free, Global, Level, LevelHead, Quality, QualityMetaId, Rec, RecGroup,
+        Subterm, Term, UniverseError, UniverseMetaId, Universes,
+        rewrite_universe_levels_scoped_shared, rewrite_universe_qualities, universes_in_order,
     },
     curios_utilities::{Entropy, Keyed},
     std::{
@@ -85,6 +85,8 @@ pub(crate) struct Caches {
     sorts_at: ElaborationStamp,
     /// Each instance of a universe-polymorphic `rec` group reduction has opened in the declaration in progress, beside the group it instantiates and the levels it was opened at. An instance holds its levels substituted through every member, so the pair is what says which instance of which group a copy is without reading the levels back off it. It lives one declaration, as the levels' metavariables do.
     instances: HashMap<Keyed<RecGroup>, (RecGroup, Universes)>,
+    /// Each top-level `rec` group reduction has opened by unfolding a name in the declaration in progress, beside the first name it was opened from: what a term the declaration commits names a stuck call on it by ([`named_members`](crate::named_members)). It lives one declaration, as the instances do. Behind a cell because a name is unfolded through a shared reference.
+    opened: RefCell<HashMap<Keyed<RecGroup>, Global>>,
     elaboration: HashMap<Keyed<ElaborationKey>, (Term, Term)>,
     /// Elaborations inside an oracle bracket (`Context::with_oracle`) that the table above must refuse, one table per live bracket, innermost last: see `Context::get_or_init_elaborated` for what they admit and why. Cleared wherever the table above is, and discarded with their bracket.
     oracle: Vec<HashMap<Keyed<ElaborationKey>, (Term, Term)>>,
@@ -306,6 +308,7 @@ impl Caches {
     pub(crate) fn begin_declaration(&mut self) {
         self.proofs.clear();
         self.instances.clear();
+        self.opened.get_mut().clear();
         self.clear_reductions();
         self.clear_elaborations();
     }
@@ -323,6 +326,22 @@ impl Caches {
         );
 
         Ok(instance)
+    }
+
+    /// `group` opened by unfolding `name`, kept where no name opened it before in the declaration in progress.
+    pub(crate) fn note_opened(&self, group: &RecGroup, name: Global) {
+        self.opened
+            .borrow_mut()
+            .entry(Keyed::new(group.clone()))
+            .or_insert(name);
+    }
+
+    /// The name reduction first opened `group` from in the declaration in progress.
+    pub(crate) fn opened_from(&self, group: &RecGroup) -> Option<Global> {
+        self.opened
+            .borrow()
+            .get(&Keyed::new(group.clone()))
+            .copied()
     }
 
     /// The group `instance` was opened from and the instance it was opened at, where reduction opened it in the declaration in progress.

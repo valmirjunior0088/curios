@@ -93,6 +93,8 @@ fn sized(context: &mut Context) -> (Free, RecGroup) {
 fn a_member_of_an_opened_instance_is_spelled_at_its_levels() {
     let mut context = Context::new(100_000, SYNTAX);
     let (name, group) = sized(&mut context);
+    // What reduction unfolds before it opens an instance.
+    assert!(context.var_reduct_at(&name).is_some());
 
     for level in [Level::constant(1), Level::constant(2)] {
         let instance = context
@@ -119,6 +121,7 @@ fn a_member_of_an_instance_served_at_other_levels_is_named_at_them() {
         )
     };
     let (stored, asked) = (level(), level());
+    assert!(context.var_reduct_at(&name).is_some());
 
     let instance = context
         .opened_instance(&group, &Universes::levels(vec![stored.clone()]))
@@ -135,4 +138,48 @@ fn a_member_of_an_instance_served_at_other_levels_is_named_at_them() {
         super::named_members(&context, &served),
         Term::instance_of(&name, vec![asked])
     );
+}
+
+/// `rec spin(n: Nat): Nat = spin(n)`: a group of one member and no level, which two names may each be defined as.
+fn spin(context: &mut Context) -> RecGroup {
+    let spin = context.fresh(Some("spin"));
+    let n = context.fresh(Some("n"));
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let written = Term::rec(
+        [(
+            spin,
+            Term::func_type([(n, nat())], nat()),
+            Term::func(
+                [(n, nat())],
+                Term::apply(Term::free_var(&spin), [Term::free_var(&n)]),
+            ),
+        )],
+        Term::free_var(&spin),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*written else {
+        unreachable!()
+    };
+
+    group.clone()
+}
+
+/// A group two declarations define is named by the one reduction opened it from, in either order the two are defined: what a committed term calls it follows what its own declaration unfolded, and no order the unit's declarations were elaborated in.
+#[test]
+fn a_group_two_names_define_is_named_by_the_one_reduction_opened() {
+    let name = |label: &str| Free::Global(Global::Authored(Qualifier::from([label])));
+
+    for order in [["first", "second"], ["second", "first"]] {
+        let mut context = Context::new(100_000, SYNTAX);
+        let group = spin(&mut context);
+        for label in order {
+            context.define(&name(label), &Term::rec_proj(group.clone(), 0), None);
+        }
+
+        assert!(context.var_reduct(&name("first")).is_some());
+        assert_eq!(
+            super::named_members(&context, &Term::rec_proj(group, 0)),
+            Term::free_var(&name("first")),
+            "defined in the order {order:?}",
+        );
+    }
 }

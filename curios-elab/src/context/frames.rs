@@ -33,8 +33,8 @@ pub(crate) struct Frames<'s> {
     frames: Vec<Rc<Frame>>,
     /// The frames each judgment standing on held frames set aside, the outermost stand first ([`Frames::stand_on`]): no lookup reads them, and the questions put to every frame are put to them too ([`Frames::every_frame`]).
     aside: Vec<Vec<Rc<Frame>>>,
-    /// Each top-level `rec` group the base frame defines a member of, beside the global each member is defined under, in member order: its definitions read the other way, kept as each member is defined so that a reader holding a group asks for its names and scans nothing. A member not yet defined, or forgotten, is `None`. Asked by group and never read in order, which a hash map has none of.
-    members: HashMap<Keyed<RecGroup>, Vec<Option<Global>>>,
+    /// Each top-level `rec` group the base frame defines a member of, beside the globals its members are defined under, in member order: its definitions read the other way, kept as each member is defined so that a reader holding a group and one of its names asks for the rest and scans nothing. Two declarations that define one group are two lists, each in the order its members were defined. A member not yet defined, or forgotten, is `None`. Asked by group and never read in order, which a hash map has none of.
+    members: HashMap<Keyed<RecGroup>, Vec<Vec<Option<Global>>>>,
     /// How much of the refinement stack a settlement withholds from the inside, as the frame the entry being settled was registered in — `None` for none of it.
     ///
     /// The bracket the kernel has. A refinement key's *reduced* spelling must rest only on equations that outlive it, which are the frames outside its own: an inner arm's equation retracts first, and the entry's own frame is the equation itself, which a reduction of the key would otherwise meet at its first probe and answer with the case value it is assuming. `curios-cert`'s `Scope::hide_refinements_from` withholds the same span for the same two reasons.
@@ -335,10 +335,18 @@ impl<'s> Frames<'s> {
             if let (Free::Global(global), Some((group, index))) =
                 (&name, entry.body().as_rec_proj())
             {
-                let names = self
-                    .members
-                    .entry(Keyed::new(group.clone()))
-                    .or_insert_with(|| vec![None; group.length()]);
+                let lists = self.members.entry(Keyed::new(group.clone())).or_default();
+                // A member joins the first list its place is open in: the declaration defining the group's members defines them in a row.
+                let open = lists
+                    .iter()
+                    .position(|names| names.get(index).is_some_and(Option::is_none));
+                let names = match open {
+                    Some(open) => &mut lists[open],
+                    None => {
+                        lists.push(vec![None; group.length()]);
+                        lists.last_mut().expect("just pushed")
+                    }
+                };
                 if let Some(slot) = names.get_mut(index) {
                     *slot = Some(*global);
                 }
@@ -356,23 +364,39 @@ impl<'s> Frames<'s> {
         else {
             return;
         };
-        let group = Keyed::new(group.clone());
-        let Some(names) = self.members.get_mut(&group) else {
+        let Free::Global(global) = name else {
             return;
         };
-        if let Some(slot) = names.get_mut(index) {
-            *slot = None;
+        let group = Keyed::new(group.clone());
+        let Some(lists) = self.members.get_mut(&group) else {
+            return;
+        };
+        for names in lists.iter_mut() {
+            if let Some(slot) = names.get_mut(index)
+                && *slot == Some(*global)
+            {
+                *slot = None;
+            }
         }
-        if names.iter().all(Option::is_none) {
+        lists.retain(|names| names.iter().any(Option::is_some));
+        if lists.is_empty() {
             self.members.remove(&group);
         }
     }
 
-    /// The globals the base frame defines `group`'s members under, in member order, where it defines every one.
-    pub(crate) fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
+    /// The globals `group`'s members are defined under, in member order, by the definitions `name` is one of: the base frame's, where it defines every one, and otherwise a unit's in scope that names `name` among them.
+    pub(crate) fn member_names(&self, group: &RecGroup, name: Global) -> Option<Vec<Global>> {
         match self.members.get(&Keyed::new(group.clone())) {
-            Some(names) => names.iter().copied().collect(),
-            None => self.scope?.member_names(group),
+            Some(lists) => lists
+                .iter()
+                .find(|names| names.contains(&Some(name)))?
+                .iter()
+                .copied()
+                .collect(),
+            None => self
+                .scope?
+                .member_names(group)
+                .filter(|names| names.contains(&name)),
         }
     }
 
