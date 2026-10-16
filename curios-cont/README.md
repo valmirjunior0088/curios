@@ -1,6 +1,6 @@
 # curios-cont
 
-The Curios continuation-passing IR and its optimizer: `curios_ersd::lower_to_cont` constructs the CPS graph, and the optimizer rewrites it before `curios-emit` lowers it to WebAssembly. How the module prints is [A printer states each fact once, where it is bound](../documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md); the representation invariants belong to the crate rustdoc.
+The Curios continuation-passing IR and its optimizer: `curios_ersd::lower_to_cont` constructs the CPS graph, and the optimizer rewrites it before `curios-emit` lowers it to WebAssembly. How the module prints is [A printer states each fact once, where it is bound](../documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md), and entry capability is [An entry exports only the turns it can return](../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md); the representation invariants belong to the crate rustdoc.
 
 ## Design
 

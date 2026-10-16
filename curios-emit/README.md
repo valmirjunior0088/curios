@@ -1,6 +1,6 @@
 # curios-emit
 
-The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-ersd` built and `curios-cont` optimized, performs delayed closure conversion, and structurizes control into Wasm blocks and loops. How a field's carrier is declared is [A field is declared at the carrier its shape names](../documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md), and how a refusal is spelled [A refusal is a panic the emitter renders](../documentation/design/compilation/a-refusal-is-a-panic-the-emitter-renders.md); the backend pipeline belongs to the crate rustdoc.
+The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-ersd` built and `curios-cont` optimized, performs delayed closure conversion, and structurizes control into Wasm blocks and loops. How a field's carrier is declared is [A field is declared at the carrier its shape names](../documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md), how a refusal is spelled [A refusal is a panic the emitter renders](../documentation/design/compilation/a-refusal-is-a-panic-the-emitter-renders.md), and entry selection is [An entry exports only the turns it can return](../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md); the backend pipeline belongs to the crate rustdoc.
 
 ## Design
 

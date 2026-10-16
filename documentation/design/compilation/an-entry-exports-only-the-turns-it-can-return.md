@@ -1,0 +1,11 @@
+# An entry exports only the turns it can return
+
+**Decision.** The suspension row records a representation identity, independently of whether the program's entry can return that row. Cont derives the latter from conservative return flow over the graph emission consumes. An entry whose results exclude the suspension row uses the direct ABI; an entry whose results may include it uses the turn ABI, exporting the advance beside the entry. Unknown results retain the turn ABI.
+
+The capability is computed afresh at the verified Cont-to-machine boundary, without mutating Cont or caching a fact across optimizer rewrites. Machine lowering and structurization carry that decision to emission. The nominal-row roster remains complete, including a suspension row whose constructions disappeared or whose values are consumed internally. Turn-only closure dispatch is required by the selected ABI; surviving calls and closures independently require their own dispatch types.
+
+**Rationale.** Lowering can introduce suspension handling that optimization removes, and a suspension returned inside a program need not escape its entry. The entry's return flow answers the host-boundary question directly, while retaining the representation identity keeps constructors, projections and verification in agreement. Reusing Cont's row analysis gives row-test simplification and entry selection one interpretation of opaque boundaries, recursion and return positions.
+
+A foreign row's asynchronous reply remains part of its contract. The guest code that converts that reply into a suspension participates in return flow like any other construction; a particular host answering immediately establishes nothing about another valid host. Native and browser consumers already distinguish the direct and turn ABIs from the emitted entry and exports.
+
+**Rejected.** Selecting turns from historical row registration retains machinery the residual entry cannot use. Clearing the row identity conflates representation with capability. Looking for any surviving suspension construction confuses internal values with escaping results. A cached flag on the mutable Cont graph needs invalidation at every rewrite. Assuming built-in host operations are synchronous changes the foreign contract. A second effect-analysis framework duplicates row flow for the same question.
