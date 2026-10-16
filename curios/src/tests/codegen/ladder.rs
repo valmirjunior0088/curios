@@ -75,9 +75,9 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// ```sh
 /// cargo xtask launcher build
-/// cargo build --package curios
-/// cargo run --package curios -- compile programs/parse_digits.crs -o /tmp/parse_digits
-/// echo 1000000 | /usr/bin/time -v /tmp/parse_digits    # and the same for the other two rungs
+/// cargo build --release --package curios
+/// cargo run --release --package curios -- compile programs/parse_digits.crs -o /tmp/parse_digits
+/// /usr/bin/time -v /tmp/parse_digits 1000000    # and the same for the other two rungs
 /// ```
 ///
 /// Check the output, not just the clock: all three programs print the same number for the same input, and a rung that has stopped agreeing is measuring something else.
@@ -88,9 +88,9 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// # What it last printed
 ///
-/// The three rungs together, debug-profile compiler, native binaries, Linux, N = 1 000 000, `user` seconds over five runs: `parse_digits` 0.89–0.91, `parse_bindless` 0.92–0.93, `parse_manual` 0.16. `parse_digits` beats `parse_bindless` although it does strictly more work, since `!` is what separates them: read the bind as an upper bound that has closed rather than as evidence `!` is free — two rungs this close are separated by code layout as much as by work.
+/// The three rungs together, timed at `00627ea06`, release compiler, native binaries, Linux, N = 1 000 000, `user` seconds as the median and span of five interleaved runs: `parse_digits` 0.20 [0.20–0.21], `parse_bindless` 0.23 [0.23–0.24], `parse_manual` 0.19 [0.18–0.19]. `parse_digits` beats `parse_bindless` although it does strictly more work, since `!` is what separates them: read the bind as an upper bound that has closed rather than as evidence `!` is free — two rungs this close are separated by code layout as much as by work.
 ///
-/// The idiomatic walks alone, in one interleaved session of their own with the two harness workloads as controls, `user` seconds over five runs: `parse_digits` at N = 1 000 000 0.46–0.48, `parse_multibyte` at N = 300 000 0.42–0.43, `lcg` at 100 000 000 0.31, `trees` at 21 0.24–0.26. A delta read across two sessions is not attributable to the change between them, so a change to the walk is timed against a control built from the same tree in the same session.
+/// The idiomatic walks alone, in one interleaved session of their own with the two harness workloads as controls, timed at `00627ea06` as the rungs are, `user` seconds as the median and span of five runs: `parse_digits` at N = 1 000 000 0.20 [0.20–0.20], `parse_multibyte` at N = 300 000 0.19 [0.19–0.20], `lcg` at 100 000 000 0.37 [0.36–0.37], `trees` at 21 0.17 [0.16–0.18]. A delta read across two sessions is not attributable to the change between them, so a change to the walk is timed against a control built from the same tree in the same session.
 ///
 /// The static half, taken at `ac663f240`:
 ///

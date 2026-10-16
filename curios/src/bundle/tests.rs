@@ -23,7 +23,7 @@ fn the_embedded_launcher_carries_no_native_backend() {
 
 /// The size backstop, independent of whether the profile retains any string at all.
 ///
-/// The ceiling is calibrated against a *Cranelift-linked launcher*, not against the `curios` binary — that distinction is the whole point of the number. `curios` is 57 MiB because it also carries Binaryen and the compiler, and a ceiling drawn from it sits above the 11 MiB a Cranelift-only launcher weighs, so it would never fire. See [`launcher_guard_positive_control`] for the measurement.
+/// The ceiling is calibrated against a *Cranelift-linked launcher*, not against the `curios` binary — that distinction is the whole point of the number. `curios` is 132 MiB because it also carries Binaryen and the compiler, and a ceiling drawn from it sits above the 16 MiB a Cranelift-linked launcher weighs, so it would never fire. See [`launcher_guard_positive_control`] for the measurement.
 #[test]
 fn the_embedded_launcher_stays_slim() {
     const CEILING: usize = 6 * 1024 * 1024;
@@ -39,13 +39,13 @@ fn the_embedded_launcher_stays_slim() {
 ///
 /// A guard that has never been shown to bite is decoration. A failing image is a build of its own, so this test reports the *current* image's figures and records what a compiler-carrying one measured; compare the two.
 ///
-/// To rebuild the failing image (about 35 seconds):
+/// To rebuild the failing image (about a minute):
 ///
 /// 1. `cargo build --release -p curios-runtime --target <triple> --features wasmtime/cranelift`
 /// 2. inspect `target/<triple>/release/curios-runtime`
 /// 3. re-run `cargo xtask launcher build`, which rebuilds that path without the backend
 ///
-/// **aarch64-apple-darwin, release profile (no `[profile]` section, so no stripping).** Slim: 3,633,792 bytes, zero occurrences of every marker. Cranelift-linked: **11,693,168 bytes**, `cranelift-codegen` ×113 and `cranelift_codegen` ×8. Both guards were run against that image and both failed, which is the evidence this test exists to record. Note that dead-code elimination does *not* remove the backend even though the launcher calls no compiling API — enabling the feature is enough.
+/// **x86_64-unknown-linux-gnu, release profile (no `[profile]` section, so no stripping), counted at `00627ea06`.** Slim: 4,944,856 bytes, zero occurrences of every marker. Cranelift-linked: **17,197,648 bytes**, `cranelift-codegen` ×77 and `cranelift_codegen` ×6,579, so both guards fail against it, which is the evidence this test exists to record. `curios` itself, built at the same commit, is 138,664,896 bytes. Note that dead-code elimination does *not* remove the backend even though the launcher calls no compiling API — enabling the feature is enough.
 ///
 /// Re-run this after bumping wasmtime or changing the release profile: the string markers depend on panic-location paths surviving, which `strip = true` would not change (they are `.rodata` literals, not symbols) but a toolchain change might.
 #[test]
