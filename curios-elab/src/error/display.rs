@@ -22,9 +22,6 @@ use {
     std::{collections::HashMap, fmt, rc::Rc},
 };
 
-/// Why a definition's value is a region of its own, which a report on a `!` in one adds: a program's two top-level bindings differ by whether their type is written.
-const DEFINITION_REGION: &str = "a top-level binding written with its type is a definition, and its value a region of its own; in a program, one written without its type is a step of the program";
-
 /// What a report on a dead arm adds: that the arm is never taken and what says so — its own guard, the guard of an arm around it that its case contradicts, or its scrutinee's indices, which also say it may be left out.
 pub(super) fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> String {
     match dead {
@@ -1176,8 +1173,7 @@ impl fmt::Display for Displayed<'_> {
                             "\n  a function whose result is not a monad has nowhere to sequence one"
                         )
                     }
-                    RegionOwner::Definition => write!(f, "\n  {DEFINITION_REGION}"),
-                    RegionOwner::Declaration => Ok(()),
+                    RegionOwner::Definition | RegionOwner::Declaration => Ok(()),
                 }
             }
             Error::OperatorUndefined { symbol, type_ } => {
@@ -1442,9 +1438,6 @@ impl fmt::Display for Displayed<'_> {
                                 f,
                                 "\n  {source} is not a monad — no Monad witness exists for it, so no embedding out of it can be declared"
                             )?;
-                        }
-                        if diagnosis.owner == Some(RegionOwner::Definition) {
-                            write!(f, "\n  {DEFINITION_REGION}")?;
                         }
                         if !diagnosis.chain.is_empty() {
                             write!(

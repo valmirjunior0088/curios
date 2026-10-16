@@ -96,6 +96,7 @@ pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
         | k + 1; rest => Str/concat(rest, mark(holds(k + 1, leaf, forced, view)))
         end;
 
+    let main() -> Io({}) =
     let arrived = Io/read(Io/stdin, 64)!;
     match arrived
     | chunk(l) =>
@@ -105,7 +106,8 @@ pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
         let view = window(forced);
         print(Str/concat(mark(ready), report(7, leaf, forced, view)))
     | _ => print("no input")
-    end
+    end;
+    main()
     "#
     .replace("%RUN%", carrier.run)
     .replace("%OPEN%", carrier.open)

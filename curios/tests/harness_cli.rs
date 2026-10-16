@@ -311,7 +311,7 @@ fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
     write(
         &root,
         "args.crs",
-        "use /std/{Str, Bytes, List, Show, Io, proc};\nlet args = proc/args()!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))))\n",
+        "use /std/{Str, Bytes, List, Show, Io, proc};\nlet main() -> Io({}) =\nlet args = proc/args()!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))));\nmain()\n",
     );
     let output = Command::new(env!("CARGO_BIN_EXE_curios"))
         .current_dir(&root)
@@ -351,7 +351,7 @@ fn run_delivers_both_streams_in_the_order_the_program_wrote_them() {
         .take()
         .unwrap()
         .write_all(
-            b"let _ = /std/print(\"a\")!;\nlet _ = /std/print_err(\"b\")!;\n/std/print(\"c\\n\")\n",
+            b"let main() -> /std/Io({}) = let _ = /std/print(\"a\")!;\nlet _ = /std/print_err(\"b\")!;\n/std/print(\"c\\n\");\nmain()\n",
         )
         .unwrap();
 

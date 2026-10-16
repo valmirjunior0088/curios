@@ -809,9 +809,9 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
     }
 }
 
-/// A `!` in the value of a top-level binding written with its type names the rule that made that value a region of its own, whatever the region's type is: no monad at all, a type a monad is read from with no witness declared for it, or a monad the action's does not embed in. The second is refused by the `!` itself, as the first is, and not as a premise of `/std/Monad/bind`.
+/// An annotation does not grant source-function permission; the same computation inside a function still receives its ordinary monad diagnosis.
 #[test]
-fn a_bang_in_a_definitions_value_says_the_definition_is_a_region_of_its_own() {
+fn a_top_level_annotation_does_not_supply_a_function_boundary() {
     for (binding, refusal) in [
         (
             "let n: Nat = Io/pure(3)!;",
@@ -827,12 +827,13 @@ fn a_bang_in_a_definitions_value_says_the_definition_is_a_region_of_its_own() {
         ),
     ] {
         let source = format!("use /std/{{Nat, List, Cell, Io}};\n{binding}\n()\n");
-        let error = typecheck(&source).expect_err("a definition's value is no step of the program");
+        let error = typecheck(&source).expect_err("a value is no source function");
+        assert!(error.contains("requires an enclosing function"), "{error}");
+
+        let function = binding.replacen(':', "() ->", 1);
+        let source = format!("use /std/{{Nat, List, Cell, Io}};\n{function}\n()\n");
+        let error = typecheck(&source).expect_err("a function still needs a suitable monad");
         assert!(error.contains(refusal), "{error}");
-        assert!(
-            error.contains("a top-level binding written with its type is a definition"),
-            "{error}"
-        );
         assert!(!error.contains("Monad/bind"), "{error}");
     }
 }
@@ -854,11 +855,11 @@ fn a_bang_sequences_in_a_region_whose_monad_is_a_parameter() {
 #[test]
 fn a_long_sequencing_chain_compiles_and_runs() {
     // `inline_known_calls` prunes each inlined callee's dead body between sweeps; left standing, its call sites would keep counting, callees would turn multi-site, and a `!` chain's continuations would duplicate exponentially — 16 sequenced actions would not finish compiling.
-    let mut source = String::from("use /std/{Str, Io, print};\n");
+    let mut source = String::from("use /std/{Str, Io, print};\nlet main() -> Io({}) =\n");
     for _ in 0..24 {
         source.push_str("let _ = print(\"x\")!;\n");
     }
-    source.push_str("print(\"done\\n\")");
+    source.push_str("print(\"done\\n\");\nmain()");
     assert_eq!(run(&source), format!("{}done\n", "x".repeat(24)).as_bytes());
 }
 

@@ -298,7 +298,7 @@ fn a_test_body_is_checked_against_the_description_type() {
 
 #[test]
 fn a_bare_bang_in_a_test_body_is_refused() {
-    // A test body's region is the description type, and `Test` is no monad: effects enter only through `perform`'s thunk, so a bare `!` is refused where it is written.
+    // The thunk that schedules a test is generated; it grants no source-function permission. Effects enter through an explicit adapter lambda.
     let error = error(
         r#"
         use /std/{Nat, Str, Io, Test};
@@ -307,9 +307,8 @@ fn a_bare_bang_in_a_test_body_is_refused() {
         /std/print("ran\n")
         "#,
     );
-    // By the fault it names — the region's type, and that the type is no monad — rather than by the concept's spelling: the diagnostic says "no monad" in prose, and pinning the capitalized name would make a reworded sentence read as a missing refusal.
     assert!(
-        error.contains("Test") && error.contains("no monad"),
+        error.contains("requires an enclosing function"),
         "unexpected error: {error}"
     );
 }
@@ -397,5 +396,21 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
             "match 1 + 1 == 2 : (_) => Test | true => Test/assert(true) | false => Test/assert(false) end",
             "let x = 1 + 1;\n            Test/assert(x == 2)",
         ]
+    );
+}
+
+/// A written function satisfies the source boundary, but the current terminal Test still has no Monad witness.
+#[test]
+fn a_function_returning_test_still_needs_a_monadic_adapter_for_io() {
+    let refusal = error(
+        r#"
+        use /std/{Io, Test};
+        let check() -> Test = Test/assert(Io/pure(true)!);
+        check()
+    "#,
+    );
+    assert!(
+        refusal.contains("Test") && refusal.contains("no monad"),
+        "{refusal}"
     );
 }

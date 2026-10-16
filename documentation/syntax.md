@@ -483,19 +483,21 @@ Operator notation always uses witness resolution, including intrinsic operands. 
 
 ```crs
 use /std/{Nat, Byte, Bytes, Parse};
-pub let parser: Parse(Bytes, Nat) =
+pub let parser() -> Parse(Bytes, Nat) =
     let a = Parse/bytes/byte!;
     let b = Parse/bytes/byte!;
     Parse/pure(Byte/to_nat(a) + Byte/to_nat(b));
 ```
 
-Every value body is a sequencing region. Lambda bodies, match arms, and recursive member bodies begin fresh regions; the tail after a local `let` remains in the same region. There is no `let !` header or matching `end`.
+A value-position `!` requires an enclosing function written in the source: a lambda, a function definition, or function sugar in a tuple, struct or witness field. A top-level value, an entrypoint, and a compiler-generated test thunk or witness telescope do not grant that permission. A function of no parameters is written `parser()` and called with `parser()`.
+
+Inside a function, ordinary local `let` bindings share the surrounding sequencing region, with or without a type annotation. Adding an unused first binding does not change which region an action belongs to. An independent computation is another function, called where its description is needed. Match and `choose` branches keep their conditional regions: their monads come from their own expected types, and are not forced to be the enclosing function's result monad. There is no `let !` header or matching `end` ([Bang sequencing requires a source function](design/surface/bang-sequencing-requires-a-source-function.md)).
 
 A region's monad is read from the region's type and never inferred from a sequenced action. A region whose type is not yet known waits for it, and one whose type can never name a monad — the body of a lambda in inference position, say — is rejected with a request to annotate the enclosing result type.
 
 An action whose own monad differs from the region's is lifted through the declared `Monad/Lift` witness for that ordered pair, and a pair with no witness is rejected. See [Lifting between monads](#lifting-between-monads).
 
-Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
+Functions written inside type expressions have the same sequencing rules: a pure monad may compute a type, whose total result is extracted by its ordinary eliminator. A type annotation does not grant function permission or a monadic expected type of its own, and an `Io(Type)` description is not a `Type`. Type computations remain subject to totality checking. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
 
 ### Host effects and `Io`
 
@@ -508,8 +510,10 @@ Every operation that touches the host — writing a handle, reading a clock, cal
 ```crs
 use /std/{Io, print};
 let once: Io({}) = print("x");
-let _ = once!;
-once                            -- prints "x" twice in total
+let main() -> Io({}) =
+    let _ = once!;
+    once;
+main()                          -- prints "x" twice in total
 ```
 
 `Io` is not matchable: it has no constructors to enumerate, so a `match` over one is rejected, whether it writes constructor arms or none at all. A lone `| _ =>` arm is an irrefutable binder match rather than an elimination, and is accepted as the binding it is.
@@ -518,7 +522,7 @@ A host operation that can fail is declared `Try(M, E, A)` over its base monad �
 
 ```crs
 use /std/{File, Path, Bytes, Try, Io};
-let contents: Try(Io, Io/Error, Bytes) =
+let contents() -> Try(Io, Io/Error, Bytes) =
     let f = File/open(Path/of_str("notes.txt"), File/Mode/read())!;
     let text = File/read_all(Path/of_str("notes.txt"))!;
     let _ = File/close(f)!;
@@ -541,7 +545,7 @@ With that witness declared, an `Io` action sequences directly inside a `Job` reg
 
 ```crs
 use /std/{Monad, print};
-pub let job: Job({}) =
+pub let job() -> Job({}) =
     let _ = print("hello\n")!;
     Monad/pure(());
 ```
@@ -776,31 +780,31 @@ Each selected arm receives the same definitional refinement that an equivalent n
 
 ## Declarations and modules
 
-An entrypoint consists of zero or more top-level items followed by exactly one final term — the description the program performs. Its top level is an `Io({})` region: a program describes doing something and yielding nothing, and an action sequenced there with `!` is an `Io` action. A module file consists of top-level items only and has no final term.
+An entrypoint consists of zero or more top-level items followed by exactly one final term — the description the program performs. Its entry contract is `Io({})`: a program describes doing something and yielding nothing. Sequencing with `!` is written inside an explicit function, and the entrypoint calls it. A module file consists of top-level items only and has no final term.
 
 What closes the program is performed through `/std/Program`, the concept whose `perform` says what a value of a type does as a whole program, so it is a term of any type with a witness there:
 
 - an `Io({})` is the program itself, and no other payload has a witness: a tail that computes a result must discard it explicitly rather than have the result dropped for it;
 - a `Try(Io, E, {})` whose `E` has a `Show` witness is run, and a failure is written to standard error as it is shown and ends the program with status `1`;
 - a `/std/Test` is reported as `curios test` reports one, and ends the program with status `1` where it did not hold;
-- a `()` is a program that has done what it does by its last `!`.
+- a `()` is an empty program.
 
-What closes a program is each tail of its final term: a tail is reached through a local `let` and through a `!` to what follows them, and through a `match` that writes no motive to each of its arms, so two arms may close one program at two types. A `match` whose motive is written is one term of the type it states, and a written goal is asked at `Io({})`. A program that may fail states so on a declaration and closes with its name, the top level being an `Io` region whatever closes it:
+What closes a program is each tail of its final term: a tail is reached through a local `let` and through a `match` that writes no motive to each of its arms, so two arms may close one program at two types. A `match` whose motive is written is one term of the type it states, and a written goal is asked at `Io({})`. An entry function has its natural result type and is called directly. A program that may fail states so on the function; its final call receives the entrypoint adaptation automatically, without an explicit `Program/perform`:
 
 ```crs
 use /std/{Io, Try, File, Path, print};
-let main: Try(Io, Io/Error, {}) =
+let main() -> Try(Io, Io/Error, {}) =
     let text = File/read_all_text(Path/of_str("notes.txt"))!;
     print(text);
 
-main
+main()
 ```
 
 ### Top-level definitions
 
 Top-level `let` declarations require a type annotation. Function-definition sugar supplies the annotation as a parameter telescope and result type.
 
-That requirement is also what separates items from the final term: an *unannotated* top-level binding in an entrypoint is not an item at all, but a local `let` opening the final term. The difference is not only scope — an item's value body is its own sequencing region, so a `!` in it sequences within that definition, while a local `let`'s value shares the final term's region and sequences with the rest of the program.
+That requirement is also what separates items from the final term: an *unannotated* top-level binding in an entrypoint is not an item at all, but a local `let` opening the final term. Neither spelling permits a `!` without an enclosing source function. Inside a function, adding a local binding's type annotation does not give its value a new sequencing region.
 
 ```crs
 pub let zero: Nat = 0;
@@ -832,7 +836,7 @@ A test takes no parameters. A claim about *every* instantiation is a proposition
 
 To check a claim at instances you choose, make it an ordinary definition returning `Test` and schedule a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's own cases, whose failure names the case's position. A test registers like a private definition of type `() -> Test`: referable within its subtree, and colliding with a sibling of the same name.
 
-`test` is contextual: a keyword only where an item may start, an ordinary name everywhere else. A test is never `pub`, its name being a report line rather than an export, and no documentation comment may precede one. Its body is its own sequencing region typed at `Test`, which is no monad, so a bare `!` is refused where it is written; an effectful test enters `Io` through `Test/perform`'s thunk.
+`test` is contextual: a keyword only where an item may start, an ordinary name everywhere else. A test is never `pub`, its name being a report line rather than an export, and no documentation comment may precede one. The generated thunk is not a source function, so a bare `!` in the test body is refused where it is written. `Test` is no monad; an effectful test enters `Io` through the explicit lambda passed to `Test/perform`, or a fallible computation through `Test/try`.
 
 ### Modules
 

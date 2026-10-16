@@ -16,3 +16,5 @@ mod postponement_tests;
 mod retry_tests;
 mod spine_tests;
 mod tuple_tests;
+
+mod type_sequencing_tests;

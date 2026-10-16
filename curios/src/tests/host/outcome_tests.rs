@@ -325,9 +325,11 @@ fn an_empty_variable_is_set_and_an_absent_one_is_not() {
             | some(b) => match Bytes/len(b) == 0 | true => "empty" | false => "set" end
             | none() => "unset"
             end;
+        let main() -> /std/Io({}) =
         let a = /std/proc/env("EMPTY")!;
         let b = /std/proc/env("NOPE")!;
-        print(Str/flatten([said(a), " ", said(b)]))
+        print(Str/flatten([said(a), " ", said(b)]));
+        main()
         "#,
     )
     .expect("the program compiles");
@@ -344,8 +346,10 @@ fn a_bytes_payload_arrives_whole() {
     let compiled = compile(
         r#"
         use /std/{Io, Path, Try, fs};
+        let main() -> Io({}) =
         let r = Try/run(fs/cwd())!;
-        match r | success(p) => Io/bind(Io/Write/write(Io/stdout, Path/to_bytes(p)), (_) => Io/pure(())) | failure(_) => Io/pure(()) end
+        match r | success(p) => Io/bind(Io/Write/write(Io/stdout, Path/to_bytes(p)), (_) => Io/pure(())) | failure(_) => Io/pure(()) end;
+        main()
         "#,
     )
     .expect("the program compiles");

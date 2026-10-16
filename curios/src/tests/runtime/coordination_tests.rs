@@ -72,7 +72,7 @@ fn type_payloads_still_occupy_storage() {
 
 #[test]
 fn a_zero_capacity_is_refused_at_the_public_constructor() {
-    let error = typecheck("let c = /std/Channel/new(@/std/Nat, 0)!; /std/Io/pure(())")
+    let error = typecheck("let main() -> /std/Io({}) = let c = /std/Channel/new(@/std/Nat, 0)!; /std/Io/pure(()); main()")
         .expect_err("zero has no positive-capacity evidence");
     assert!(error.contains("Holds") || error.contains("Lt"), "{error}");
 }

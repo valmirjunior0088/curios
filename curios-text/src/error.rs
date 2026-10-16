@@ -65,8 +65,8 @@ pub enum Error {
         /// The module that keeps the referent from the item's readers, where the referent is exposed to all of that module's and the module is the declaration written without `pub`.
         behind: Option<String>,
     },
-    /// A postfix `!` was reached through a *type* lowering (an annotation, a motive, a Π/Σ component): types have no region to hoist the action to.
-    BangInTypePosition,
+    /// A value-position bang has no enclosing function written in the source.
+    BangOutsideFunction,
     /// A `Sort` written where no caller states it. A sort left open is a parameter of a top-level declaration, stated at each use of it, so the word stands in the signature of a top-level `let`, `induct` or `struct` and nowhere else.
     SortOutsideSignature {
         /// What it was written in instead.
@@ -261,8 +261,11 @@ impl fmt::Display for Error {
                     "concept `{concept}` takes a `use` parameter: a concept states a premise as a superclass field, `use C(args)` among its fields"
                 )
             }
-            Error::BangInTypePosition => {
-                write!(f, "postfix `!` is not allowed inside a type")
+            Error::BangOutsideFunction => {
+                write!(
+                    f,
+                    "postfix `!` requires an enclosing function\n  write a function such as `let main() -> Io({{}}) = ...;` and call it with `main()`\n  a local `let` and its type annotation share the surrounding region"
+                )
             }
             Error::SortOutsideSignature { site } => {
                 write!(

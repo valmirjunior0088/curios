@@ -13,7 +13,7 @@ fn answers(function: &str, calls: &[&str]) -> [Vec<u8>; 2] {
 
     ["0", "Bytes/len(rand/bytes(0)!)"].map(|zero| {
         run(&format!(
-            "use /std/{{Bool, Bytes, List, Nat, Option, rand}};\n{function}\nlet z = {zero};\n/std/print(Nat/to_str({answer}))\n"
+            "use /std/{{Bool, Bytes, List, Nat, Option, rand}};\n{function}\nlet main() -> /std/Io({{}}) = let z = {zero};\n/std/print(Nat/to_str({answer}));\nmain()\n"
         ))
     })
 }

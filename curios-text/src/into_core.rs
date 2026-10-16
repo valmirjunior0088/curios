@@ -56,8 +56,7 @@ use {
     crate::{
         Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
         LintedBinder, Module, Name, RootSource, StructLit, StructLitEntry, Subterm, Term, TopItem,
-        TupleField, UseGroup, WithoutItems, func_sugar_lambda, func_sugar_type_params, ordered,
-        tree_of,
+        TupleField, UseGroup, WithoutItems, func_sugar_type_params, ordered, tree_of,
     },
     curios_abi::{ForeignFunction, ForeignStore},
     curios_archive::{Bytes, joined, parted},
@@ -74,6 +73,8 @@ use {
     },
 };
 
+#[cfg(test)]
+mod bang_tests;
 #[cfg(test)]
 mod binding_tests;
 #[cfg(test)]
@@ -1267,7 +1268,10 @@ fn process_items(
                 ));
                 // The empty telescope is not vestigial: it is the thunk. A test lowers to `() -> Test` so `Test/main` can hold it unforced and run only the one it selected.
                 let type_ = lower.func_type_under(&func_sugar_type_params(&[]), || Ok(output))?;
-                let body = func_sugar_lambda(&[], &test.body);
+                let body = curios_core::Term::func_marked(
+                    Vec::<(Plicity, curios_core::Free, curios_core::Term)>::new(),
+                    lower.value(&test.body)?,
+                );
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
                 lowered.tests.push(name);
                 lowered.items.push(FlatItem::Let(FlatLet {
@@ -1276,7 +1280,7 @@ fn process_items(
                     name,
                     island: context.island(),
                     type_,
-                    body: lower.value(&body)?,
+                    body,
                 }));
             }
             TopItem::Foreign(f) => {
@@ -1984,7 +1988,7 @@ fn process_items(
                             island: context.island(),
                             // Without a telescope the type is the application itself, which carries this span already.
                             type_: lower.signature_type(&signature, declared.as_ref())?,
-                            body: lower.signature_value(&signature, |body| lower.value(body))?,
+                            body: lower.witness_value(&signature)?,
                         };
                         lowered.witnesses.insert(name);
                         Ok(item)

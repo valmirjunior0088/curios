@@ -163,8 +163,10 @@ fn utf8_inductive_spike() {
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
             end;
-        let _ = /std/print("ok")!;
-        /std/Io/pure(())
+        let main() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        main()
         "#;
     assert_eq!(run(source), b"ok");
 }

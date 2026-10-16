@@ -868,7 +868,7 @@ fn a_bytes_walk_is_run_once_however_many_follow_it() {
         let literal = "ab,".repeat(tokens);
         let total = 2 * tokens;
         format!(
-            "use /std/{{Parse, Result, Eq, Byte, Bytes, Str, Nat}};\n\nlet token: Parse(Bytes, Nat) =\n    let run = Parse/bytes/take_while((b) => Byte/to_nat(b) != ',')!;\n    let _ = Parse/bytes/expect(',')!;\n    Parse/pure(Bytes/len(run));\n\nlet tokens(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =\n    match count\n    | 0 => Parse/pure(acc)\n    | k + 1 =>\n        let n = token!;\n        tokens(k, acc + n)\n    end;\n\nlet walked: Eq()(Parse/run(tokens({tokens}, 0), Str/to_bytes(\"{literal}\")), Result/success({total})) = Eq/refl();\n\n/std/print(\"ok\")\n"
+            "use /std/{{Parse, Result, Eq, Byte, Bytes, Str, Nat}};\n\nlet token() -> Parse(Bytes, Nat) =\n    let run = Parse/bytes/take_while((b) => Byte/to_nat(b) != ',')!;\n    let _ = Parse/bytes/expect(',')!;\n    Parse/pure(Bytes/len(run));\n\nlet tokens(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =\n    match count\n    | 0 => Parse/pure(acc)\n    | k + 1 =>\n        let n = token()!;\n        tokens(k, acc + n)\n    end;\n\nlet walked: Eq()(Parse/run(tokens({tokens}, 0), Str/to_bytes(\"{literal}\")), Result/success({total})) = Eq/refl();\n\n/std/print(\"ok\")\n"
         )
     };
 
@@ -1059,7 +1059,7 @@ fn a_url_literal_read_as_text_costs_a_type_what_its_length_does() {
 /// A program whose claim is that `parser` reads `input`, stated over whether it succeeded and over a declaration bound to the read, so the claim holds nothing of what was read and no member left to inference.
 fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
     format!(
-        "use /std/{{Str, Bytes, Byte, Char, Nat, Parse, Result, Bool}};\nuse /std/Bool/{{Holds, True}};\n\nlet ok(@A: Type, r: Result(Parse/Error, A)) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\nlet times(@I: Type, use Parse/Input(I), @A: Type, n: Nat, p: Parse(I, A)) -> Parse(I, {{}}) =\n    match n\n    | 0 => Parse/pure(())\n    | k + 1 =>\n        let _ = p!;\n        times(k, p)\n    end;\n\nlet reader: Parse({carrier}, {{}}) =\n    let _ = {parser}!;\n    Parse/pure(());\n\nlet read: Result(Parse/Error, {{}}) = Parse/run(reader, {input});\n\nlet _claim: Holds(ok(read)) = True/qed();\n\n/std/print(\"ok\")\n"
+        "use /std/{{Str, Bytes, Byte, Char, Nat, Parse, Result, Bool}};\nuse /std/Bool/{{Holds, True}};\n\nlet ok(@A: Type, r: Result(Parse/Error, A)) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\nlet times(@I: Type, use Parse/Input(I), @A: Type, n: Nat, p: Parse(I, A)) -> Parse(I, {{}}) =\n    match n\n    | 0 => Parse/pure(())\n    | k + 1 =>\n        let _ = p!;\n        times(k, p)\n    end;\n\nlet reader() -> Parse({carrier}, {{}}) =\n    let _ = {parser}!;\n    Parse/pure(());\n\nlet read: Result(Parse/Error, {{}}) = Parse/run(reader(), {input});\n\nlet _claim: Holds(ok(read)) = True/qed();\n\n/std/print(\"ok\")\n"
     )
 }
 

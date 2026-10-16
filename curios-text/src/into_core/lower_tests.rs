@@ -20,7 +20,7 @@ fn distinct_goals_get_distinct_ids() {
 
 #[test]
 fn bang_lowers_to_the_bang_transient() {
-    // Every value body is a region root: `x!` hoists to it as a `Bang` transient holding the action and the continuation over a gensym'd binder. `elaborate_bang` later replaces the node with the `/std/Monad/bind` application, inserting the witness slot and implicits during core elaboration.
+    // A written function body is a region root: `x!` hoists to it as a `Bang` transient holding the action and the continuation over a gensym'd binder. `elaborate_bang` later replaces the node with the `/std/Monad/bind` application, inserting the witness slot and implicits during core elaboration.
     let expected = curios_core::Term::bang(
         // `x` resolves to nothing, so it lowers to a binder identity that core will report as unbound — never to a global that a same-named root-level definition could satisfy.
         curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(
@@ -35,7 +35,11 @@ fn bang_lowers_to_the_bang_transient() {
             curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(1, None))),
         ),
     );
-    assert_eq!(run("x!"), expected);
+    let function = run("() => x!");
+    let curios_core::Subterm::Func(function) = &*function else {
+        panic!("expected a function");
+    };
+    assert_eq!(*function.telescope.terminal(), expected);
 }
 
 #[test]
@@ -163,9 +167,9 @@ fn a_lone_non_sequence_spread_keeps_its_concat_wrapper() {
 }
 
 #[test]
-fn bang_in_a_type_is_rejected() {
-    // Types have no region to hoist an action to, so a `!` in an annotation is rejected during desugaring.
-    assert!(run_err("let a : e! = x; a").contains("not allowed inside a type"));
+fn an_annotation_without_a_source_function_cannot_sequence() {
+    // An annotation supplies an expected type, but does not supply a source function.
+    assert!(run_err("let a : e! = x; a").contains("requires an enclosing function"));
 }
 
 /// The match lowering's refusals stand at what they are about: a named final arm and an irrefutable bind arm at the binder, and a motive no arm dispatches under at the motive.

@@ -181,7 +181,7 @@ fn run_both(fixture: &Fixture, cases: &[(&[&str], &str)]) {
 #[test]
 fn exact_products_recur_as_loops_before_downstream_optimization() {
     let fixture = compile(&format!(
-        "{HEADER}{EXACT} let n = 100000 + List/len(proc/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.0 + r.1))"
+        "{HEADER}{EXACT} let main() -> Io({{}}) = let n = 100000 + List/len(proc/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.0 + r.1)); main()"
     ));
     tail_erased(&fixture);
     loop_cont(&fixture);
@@ -191,7 +191,7 @@ fn exact_products_recur_as_loops_before_downstream_optimization() {
 #[test]
 fn retained_proof_slots_do_not_cost_a_frame_per_step() {
     let fixture = compile(&format!(
-        "{HEADER}{PROOF} let n = 100000 + List/len(proc/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.at))"
+        "{HEADER}{PROOF} let main() -> Io({{}}) = let n = 100000 + List/len(proc/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.at)); main()"
     ));
     tail_erased(&fixture);
     loop_cont(&fixture);
@@ -202,11 +202,13 @@ fn retained_proof_slots_do_not_cost_a_frame_per_step() {
 fn nested_proof_reconstruction_preserves_both_constructor_outcomes() {
     let fixture = compile(&format!(
         r#"{HEADER}{OPTIONAL}
+        let main() -> Io({{}}) =
         let n = 100000 + List/len(proc/args()!);
         match walk(n, 7)
         | some(hit) => let _ = /std/print(Nat/to_str(hit.at))!; let _ = /std/print("/")!; /std/print(Nat/to_str(hit.seen))
         | none() => /std/print("none")
-        end
+        end;
+        main()
         "#
     ));
     tail_erased(&fixture);
@@ -218,6 +220,7 @@ fn nested_proof_reconstruction_preserves_both_constructor_outcomes() {
 fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
     let fixture = compile(&format!(
         r#"{HEADER}{PROOF}
+        let main() -> Io({{}}) =
         let holder = Cell/new()!;
         let _ = Cell/fill(holder, walk)!;
         let indirect = Option/unwrap_or(Cell/poll(holder)!, walk);
@@ -225,7 +228,8 @@ fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
         let a = walk(n, 7);
         let b = walk(n + 1, 11);
         let c = indirect(n + 2, 19);
-        /std/print(Nat/to_str(a.at + b.at + c.at))
+        /std/print(Nat/to_str(a.at + b.at + c.at));
+        main()
         "#
     ));
     tail_erased(&fixture);

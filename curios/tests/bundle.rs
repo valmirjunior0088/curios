@@ -141,7 +141,7 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
         .expect("write the library");
     fs::write(
         package.join("exe.crs"),
-        format!("let doubled = /{name}/double(3)!;\nlet _ = /std/proc/exit(@{{}}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(())\n"),
+        format!("let main() -> /std/Io({{}}) = let doubled = /{name}/double(3)!;\nlet _ = /std/proc/exit(@{{}}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(());\nmain()\n"),
     )
     .expect("write the temp source");
 
@@ -172,8 +172,7 @@ fn refused(directory: &Path, output: &Path, arguments: &[&str]) -> String {
 }
 
 /// A program that calls a `foreign` of its own, which no `[[foreign]]` row answers.
-const UNANSWERED: &str =
-    "foreign frobnicate(Nat) -> Nat;\nlet n = frobnicate(3)!;\n/std/print(/std/Nat/to_str(n))\n";
+const UNANSWERED: &str = "foreign frobnicate(Nat) -> Nat;\nlet main() -> /std/Io({}) = let n = frobnicate(3)!;\n/std/print(/std/Nat/to_str(n));\nmain()\n";
 
 /// `compile` links what it bundles before it writes, as `run` links before it runs: a reached row nothing answers is refused by its name and by what would answer it, a `[[foreign]]` row, and no executable is written that its launcher would refuse at every start.
 #[test]
