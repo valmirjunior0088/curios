@@ -163,6 +163,31 @@ let main() -> /std/Io({}) =
 main()
 `;
 
+test("entry exports select the direct or turn protocol for the program they run", async () => {
+  for (const [source, turns, status, output] of [
+    ["/std/Io/pure(())", false, 0, ""],
+    ['/std/print("hello")', true, 0, "hello"],
+    ["/std/Io/wait([])", true, 1, ""],
+  ]) {
+    const compiled = compile(source);
+    const module = await WebAssembly.compile(compiled.program);
+    const exports = new Set(
+      WebAssembly.Module.exports(module).map(({ name }) => name),
+    );
+    assert.ok(exports.has("func/main"), source);
+    assert.equal(exports.has("func/advance"), turns, source);
+    const outcome = await run(compiled);
+    assert.equal(outcome.exitCode, status, source);
+    assert.equal(outcome.trap, null, source);
+    assert.equal(text(outcome.stdout), output, source);
+    if (status === 1) {
+      assert.match(text(outcome.stderr), /^deadlock: /);
+    } else {
+      assert.equal(text(outcome.stderr), "", source);
+    }
+  }
+});
+
 test("compile hands back the program beside the foreign rows it reaches as plain data", () => {
   const { program, foreigns } = compile(PAIR);
 
@@ -650,4 +675,36 @@ test("a row the program calls needs a hook, a row it never calls needs none, and
     trap,
     /the program imports ffi \/used, which its compiled rows do not describe/,
   );
+});
+
+test("a deadlock cancellation that suspends finishes its cleanup before reporting", async () => {
+  let ticked = false;
+  const outcome = await execute(
+    `
+use /std/{Io, print};
+use /std/time/{Duration};
+let release(_: Io/Ended) -> Io({}) =
+    let _ = print("closing ")!;
+    let _ = Io/sleep(Duration/of_millis(10))!;
+    print("closed");
+let main() -> Io({}) =
+    let _ = Io/using(release, Io/bind(Io/wait([]), (_) => print("resumed")))!;
+    print("after");
+main()
+`,
+    {
+      onStdout: (bytes) => {
+        if (text(bytes) === "closing ") {
+          setTimeout(() => {
+            ticked = true;
+          }, 0);
+        }
+      },
+    },
+  );
+  assert.equal(outcome.exitCode, 1);
+  assert.equal(outcome.trap, null);
+  assert.equal(outcome.stdout, "closing closed");
+  assert.match(outcome.stderr, /^deadlock: /);
+  assert.equal(ticked, true);
 });
