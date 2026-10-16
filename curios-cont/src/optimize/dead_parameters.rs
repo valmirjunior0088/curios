@@ -1,8 +1,12 @@
-//! Dead-parameter cleanup over one demand snapshot, with continuation edits preceding the escape snapshot that admits function edits.
+//! Dead-parameter cleanup with one demand snapshot and one arena repair per phase.
+//!
+//! Continuation removals commit before the escape snapshot: dropping a continuation argument can remove a function's last value occurrence and admit that function immediately. Function removals read this fixed escape snapshot, so escape opportunities they expose wait for the next invocation. Both phases retain the original demand facts, since removing uses cannot falsify `Unused`.
+//!
+//! Each phase filters signatures by their original-position masks, repairs every incoming argument vector and fills remaining inert occurrences in one walk, then tombstones the removed bindings. Different targets own different vectors, and filtering commutes with filling, so the batched repair agrees with sequential edits. The walk covers the entire live arena, including nested bodies and nodes awaiting pruning. Result receivers and escaping function signatures stay intact.
 
 use {
     crate::{
-        Atom, Callee, Demand, Edge, Module, Node, UseTarget, ValueId, atoms, demand_of, demands,
+        Atom, Callee, Demand, Edge, Module, Node, ValueId, atoms, demand_of, demands,
         visit_atoms_mut,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -96,24 +100,26 @@ pub(crate) fn eliminate_dead_parameters(module: &mut Module) -> bool {
             let dead = dead_indices(&definition.params);
             (!dead.is_empty()).then_some((id, dead))
         })
-        .collect::<Vec<_>>();
-    for (function, dead) in functions {
-        let removed =
-            remove_parameter_indices(&mut module.function_mut(function).unwrap().params, &dead);
+        .collect::<BTreeMap<_, _>>();
+    let mut removed = BTreeSet::new();
+    for (&function, dead) in &functions {
+        removed.extend(remove_parameter_indices(
+            &mut module.function_mut(function).unwrap().params,
+            dead,
+        ));
+    }
+    if !functions.is_empty() {
         for (_, node) in module.live_nodes_mut() {
             if let Node::ApplyFun {
                 callee: Callee::Known(callee),
                 args,
                 ..
             } = node
-                && *callee == function
+                && let Some(dead) = functions.get(callee)
             {
-                remove_parameter_indices(args, &dead);
+                remove_parameter_indices(args, dead);
             }
-        }
-        // The same inert occurrences as the continuation half above — see its comment.
-        for &value in &removed {
-            module.replace_atom(UseTarget::Value(value), Atom::Filler);
+            fill_removed_operands(node, &removed);
         }
         for value in removed {
             module.remove_value(value);
@@ -140,10 +146,7 @@ fn fill_removed_operands(node: &mut Node, removed: &BTreeSet<ValueId>) {
     });
 }
 
-pub(crate) fn remove_parameter_indices<T>(
-    values: &mut Vec<T>,
-    removed: &BTreeSet<usize>,
-) -> Vec<T> {
+fn remove_parameter_indices<T>(values: &mut Vec<T>, removed: &BTreeSet<usize>) -> Vec<T> {
     let mut removed_values = Vec::new();
     let mut retained = Vec::with_capacity(values.len() - removed.len());
     for (index, value) in std::mem::take(values).into_iter().enumerate() {

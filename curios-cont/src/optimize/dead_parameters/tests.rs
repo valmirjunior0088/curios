@@ -582,3 +582,366 @@ fn nodes_awaiting_pruning_receive_the_same_argument_repair() {
     crate::prune_unreachable(&mut module);
     module.verify().unwrap();
 }
+#[test]
+fn independent_function_signatures_keep_their_own_argument_masks() {
+    let mut p = Program::new();
+    let a = p.params(5);
+    let b = p.params(4);
+    let c = p.params(3);
+    let f = p.function(a.clone(), Atom::Value(a[1]));
+    let g = p.function(b.clone(), Atom::Value(b[3]));
+    let h = p.function(c.clone(), nat(0));
+    let mut cases = std::collections::BTreeMap::new();
+    let mut calls = Vec::new();
+    for (i, (target, args)) in [
+        (f, (1..=5).map(nat).collect()),
+        (g, (11..=14).map(nat).collect()),
+        (h, (21..=23).map(nat).collect()),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let call = p.module.add_node(Node::ApplyFun {
+            callee: Callee::Known(target),
+            args,
+            return_to: p.returned,
+        });
+        calls.push(call);
+        let k = p.continuation(vec![], call);
+        cases.insert(
+            i as u32,
+            Edge {
+                target: k,
+                args: vec![],
+            },
+        );
+    }
+    let body = p.module.add_node(Node::Switch {
+        scrutinee: nat(0),
+        cases,
+        default: None,
+    });
+    let mut module = p.finish(body);
+    assert!(eliminate_dead_parameters(&mut module));
+    assert_eq!(module.function(f).unwrap().params, [a[1]]);
+    assert_eq!(module.function(g).unwrap().params, [b[3]]);
+    assert!(module.function(h).unwrap().params.is_empty());
+    for (site, expected) in calls.into_iter().zip([vec![nat(2)], vec![nat(14)], vec![]]) {
+        assert!(matches!(module.node(site),Some(Node::ApplyFun {args,..}) if *args == expected));
+    }
+    assert!(
+        a.iter()
+            .chain(&b)
+            .chain(&c)
+            .filter(|&&id| id != a[1] && id != b[3])
+            .all(|id| module.value(*id).is_none())
+    );
+    module.verify().unwrap();
+    assert!(!eliminate_dead_parameters(&mut module));
+}
+
+#[test]
+fn a_self_call_filters_its_original_argument_positions() {
+    let mut p = Program::new();
+    let f = p.module.reserve_function();
+    p.functions.push(f);
+    let params = p.params(5);
+    let returned = p.module.reserve_continuation();
+    let call = p.module.add_node(Node::ApplyFun {
+        callee: Callee::Known(f),
+        args: vec![
+            nat(0),
+            Atom::Value(params[3]),
+            nat(0),
+            Atom::Value(params[1]),
+            nat(0),
+        ],
+        return_to: returned,
+    });
+    let back = p.module.reserve_continuation();
+    p.module.define_continuation(
+        back,
+        Continuation {
+            debug_name: None,
+            params: vec![],
+            body: call,
+        },
+    );
+    let branch = p.module.add_node(Node::Switch {
+        scrutinee: Atom::Value(params[1]),
+        cases: [(
+            0,
+            Edge {
+                target: back,
+                args: vec![],
+            },
+        )]
+        .into(),
+        default: Some(Edge {
+            target: returned,
+            args: vec![Atom::Value(params[3])],
+        }),
+    });
+    let body = p.module.add_node(Node::LetCont {
+        continuations: vec![back],
+        body: branch,
+    });
+    p.module.define_function(
+        f,
+        Function {
+            debug_name: None,
+            params: params.clone(),
+            return_cont: returned,
+            body,
+            droppable: false,
+        },
+    );
+    let enter = p.module.add_node(Node::ApplyFun {
+        callee: Callee::Known(f),
+        args: (1..=5).map(nat).collect(),
+        return_to: p.returned,
+    });
+    let mut module = p.finish(enter);
+    assert!(eliminate_dead_parameters(&mut module));
+    assert_eq!(module.function(f).unwrap().params, [params[1], params[3]]);
+    assert!(
+        matches!(module.node(call),Some(Node::ApplyFun {args,..}) if *args == [Atom::Value(params[3]),Atom::Value(params[1])])
+    );
+    assert!(
+        matches!(module.node(enter),Some(Node::ApplyFun {args,..}) if *args == [nat(2),nat(4)])
+    );
+    module.verify().unwrap();
+}
+
+#[test]
+fn mutually_recursive_signatures_are_repaired_together() {
+    let mut p = Program::new();
+    let f = p.module.reserve_function();
+    let g = p.module.reserve_function();
+    p.functions.extend([f, g]);
+    let a = p.params(3);
+    let b = p.params(4);
+    let fr = p.module.reserve_continuation();
+    let gr = p.module.reserve_continuation();
+    let fg = p.module.add_node(Node::ApplyFun {
+        callee: Callee::Known(g),
+        args: vec![
+            Atom::Value(a[1]),
+            nat(0),
+            Atom::Value(a[0]),
+            Atom::Value(a[2]),
+        ],
+        return_to: fr,
+    });
+    p.module.define_function(
+        f,
+        Function {
+            debug_name: None,
+            params: a.clone(),
+            return_cont: fr,
+            body: fg,
+            droppable: false,
+        },
+    );
+    let gf = p.module.add_node(Node::ApplyFun {
+        callee: Callee::Known(f),
+        args: vec![Atom::Value(b[2]), Atom::Value(b[0]), Atom::Value(b[1])],
+        return_to: gr,
+    });
+    let back = p.module.reserve_continuation();
+    p.module.define_continuation(
+        back,
+        Continuation {
+            debug_name: None,
+            params: vec![],
+            body: gf,
+        },
+    );
+    let branch = p.module.add_node(Node::Switch {
+        scrutinee: Atom::Value(b[2]),
+        cases: [(
+            0,
+            Edge {
+                target: back,
+                args: vec![],
+            },
+        )]
+        .into(),
+        default: Some(Edge {
+            target: gr,
+            args: vec![Atom::Value(b[2])],
+        }),
+    });
+    let body = p.module.add_node(Node::LetCont {
+        continuations: vec![back],
+        body: branch,
+    });
+    p.module.define_function(
+        g,
+        Function {
+            debug_name: None,
+            params: b.clone(),
+            return_cont: gr,
+            body,
+            droppable: false,
+        },
+    );
+    let enter = p.module.add_node(Node::ApplyFun {
+        callee: Callee::Known(f),
+        args: vec![nat(7), nat(8), nat(9)],
+        return_to: p.returned,
+    });
+    let mut module = p.finish(enter);
+    assert!(eliminate_dead_parameters(&mut module));
+    assert_eq!(module.function(f).unwrap().params, [a[0]]);
+    assert_eq!(module.function(g).unwrap().params, [b[2]]);
+    assert!(
+        matches!(module.node(fg),Some(Node::ApplyFun {args,..}) if *args == [Atom::Value(a[0])])
+    );
+    assert!(
+        matches!(module.node(gf),Some(Node::ApplyFun {args,..}) if *args == [Atom::Value(b[2])])
+    );
+    module.verify().unwrap();
+}
+
+#[test]
+fn every_returning_operation_retains_its_result_receiver() {
+    use crate::{CellOp, ChannelOp, IntrinsicCall};
+    use curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType};
+    use std::sync::Arc;
+    for kind in [
+        "known",
+        "closure",
+        "foreign",
+        "cell",
+        "channel",
+        "intrinsic",
+    ] {
+        let mut p = Program::new();
+        let target_params = p.params(1);
+        let target = p.function(target_params, nat(0));
+        let worker = p.module.reserve_function();
+        p.functions.push(worker);
+        let params = p.params(2);
+        let returned = p.module.reserve_continuation();
+        let foreign = Arc::new(ForeignFunction {
+            name: "/probe".into(),
+            signature: WireSignature {
+                params: vec![],
+                returns: WireReturn::Answers(WireResults::record(
+                    ("a".into(), WireType::Byte),
+                    ("b".into(), WireType::Byte),
+                    vec![],
+                )),
+            },
+        });
+        let width = match kind {
+            "foreign" => foreign.signature().imported_results().len(),
+            "cell" => CellOp::Poll.result_arity(),
+            "channel" => ChannelOp::Take.result_arity(),
+            _ => 1,
+        };
+        let results = p.params(width);
+        let end = p.module.add_node(Node::ApplyCont(Edge {
+            target: returned,
+            args: vec![nat(42)],
+        }));
+        let resume = p.module.reserve_continuation();
+        p.module.define_continuation(
+            resume,
+            Continuation {
+                debug_name: None,
+                params: results.clone(),
+                body: end,
+            },
+        );
+        let operation = match kind {
+            "known" => Node::ApplyFun {
+                callee: Callee::Known(target),
+                args: vec![nat(1)],
+                return_to: resume,
+            },
+            "closure" => Node::ApplyFun {
+                callee: Callee::Closure(params[0]),
+                args: vec![nat(1)],
+                return_to: resume,
+            },
+            "foreign" => Node::Foreign {
+                function: foreign,
+                args: vec![Atom::Filler, nat(0)],
+                return_to: resume,
+            },
+            "cell" => Node::Cell {
+                op: CellOp::Poll,
+                args: vec![Atom::Filler],
+                return_to: resume,
+            },
+            "channel" => Node::Channel {
+                op: ChannelOp::Take,
+                args: vec![Atom::Filler],
+                return_to: resume,
+            },
+            "intrinsic" => Node::Intrinsic {
+                op: IntrinsicCall::ListMap,
+                args: vec![Atom::Filler, Atom::Fun(target)],
+                return_to: resume,
+            },
+            _ => unreachable!(),
+        };
+        let operation = p.module.add_node(operation);
+        let body = p.module.add_node(Node::LetCont {
+            continuations: vec![resume],
+            body: operation,
+        });
+        p.module.define_function(
+            worker,
+            Function {
+                debug_name: None,
+                params: params.clone(),
+                return_cont: returned,
+                body,
+                droppable: false,
+            },
+        );
+        let enter = p.module.add_node(Node::ApplyFun {
+            callee: Callee::Known(worker),
+            args: vec![Atom::Fun(target), nat(99)],
+            return_to: p.returned,
+        });
+        let mut module = p.finish(enter);
+        assert!(eliminate_dead_parameters(&mut module), "{kind}");
+        assert_eq!(
+            module.continuation(resume).unwrap().params,
+            results,
+            "{kind}"
+        );
+        module.verify().unwrap();
+    }
+}
+
+#[test]
+fn removing_an_argument_preserves_its_trapping_computation() {
+    let mut p = Program::new();
+    let params = p.params(1);
+    let f = p.function(params, nat(0));
+    let result = p.params(1)[0];
+    let call = p.module.add_node(Node::ApplyFun {
+        callee: Callee::Known(f),
+        args: vec![Atom::Value(result)],
+        return_to: p.returned,
+    });
+    let trap = p.module.add_node(Node::LetIntrinsic {
+        result,
+        op: crate::Intrinsic::NatDiv,
+        args: vec![nat(1), nat(0)],
+        next: call,
+    });
+    let mut module = p.finish(trap);
+    assert!(eliminate_dead_parameters(&mut module));
+    assert!(matches!(module.node(call),Some(Node::ApplyFun {args,..}) if args.is_empty()));
+    assert!(
+        matches!(module.node(trap),Some(Node::LetIntrinsic {op:crate::Intrinsic::NatDiv,next,..}) if *next == call)
+    );
+    assert!(module.value(result).is_some());
+    module.verify().unwrap();
+}
