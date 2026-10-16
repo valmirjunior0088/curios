@@ -1,3 +1,11 @@
+pub mod Grammar;
+
+pub mod SpecError;
+
+pub mod record;
+pub use Grammar/{let Grammar};
+pub use SpecError/{let SpecError};
+pub use record/{let record, checked_record};
 use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, print_err, proc};
 use /std/Bool/{True, False};
 

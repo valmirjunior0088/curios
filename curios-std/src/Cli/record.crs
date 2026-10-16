@@ -1,0 +1,89 @@
+use /std/{Bool, List, Result};
+use /std/Bool/{Holds};
+use /std/Cli/{Arg, Kind, Carrier, Values};
+use /std/Cli/{Grammar};
+use /std/Cli/Grammar/{Node, Named, Positional, Multiplicity};
+use /std/Cli/{SpecError};
+
+pub let argument_tree(a: Arg) -> Node(Carrier(a)) =
+    let named = Named { long = a.long, short = a.short, help = a.help };
+    let positional = Positional { name = a.long, help = a.help };
+    match a.kind
+    | flag() => Node/default(Node/map(Node/flag(named), (_) => true), false)
+    | option(v, presence) =>
+        let value = Node/option(named, Grammar/reader(v), Multiplicity/last());
+        match presence
+        | required() => value
+        | optional() => Node/optional(value)
+        | default(fallback) => Node/default(value, fallback)
+        end
+    | many(v) => Node/repeat(Node/option(named, Grammar/reader(v), Multiplicity/reject()))
+    | positional(v) => Node/positional(positional, Grammar/reader(v))
+    | rest(v) => Node/rest(positional, Grammar/reader(v))
+    end;
+
+--- The typed record adapter's actual tree, with the original argument list as its result index.
+pub let record_tree(args: List(Arg)) -> Node(Values(args)) =
+    match args: (spec) => Node(Values(spec))
+    | [] => Node/pure(Values/nil())
+    | [a, ..rest]; tail =>
+        Node/map(
+            Node/product(argument_tree(a), tail),
+            ((head, tail)) => Values/cons(@a, @rest, head, tail))
+    end;
+
+pub let unique_fields(args: List(Arg)) -> Bool =
+    match args
+    | [] => true
+    | [a, ..rest] =>
+        Bool/not(List/contains(List/map(rest, (b) => b.long), a.long)) && unique_fields(rest)
+    end;
+
+pub let allows_short(kind: Kind) -> Bool =
+    match kind
+    | flag() => true
+    | option(_, _) => true
+    | many(_) => true
+    | _ => false
+    end;
+
+pub let valid_fields(args: List(Arg)) -> Bool =
+    unique_fields(args)
+        && List/fold(
+            args,
+            true,
+            (a, held) =>
+                held
+                    && (allows_short(a.kind)
+                        || match a.short | none() => true | some(_) => false end));
+
+let check_fields(args: List(Arg)) -> Result(SpecError, {}) =
+    match args
+    | [] => Result/success(())
+    | [a, ..rest] =>
+        match List/contains(List/map(rest, (b) => b.long), a.long)
+        | true => Result/failure(SpecError/duplicate_field(a.long))
+        | false =>
+            match allows_short(a.kind)
+            | true => check_fields(rest)
+            | false =>
+                match a.short
+                | none() => check_fields(rest)
+                | some(c) => Result/failure(SpecError/positional_alias(a.long, c))
+                end
+            end
+        end
+    end;
+
+--- Adapt a fixed dependent record; legacy single-value options keep their last-occurrence policy.
+pub let record(
+    args: List(Arg),
+    @_: Holds(valid_fields(args)),
+    @valid: Grammar/Declared(record_tree(args)),
+) -> Grammar(Values(args)) =
+    Grammar/declare(@Values(args), record_tree(args), @valid);
+
+--- Validate dynamic record metadata and return the same certified, typed record grammar.
+pub let checked_record(args: List(Arg)) -> Result(SpecError, Grammar(Values(args))) =
+    let _ = check_fields(args)!;
+    Grammar/checked(record_tree(args));

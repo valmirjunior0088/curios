@@ -1,0 +1,52 @@
+use /std/{Str, Char, List, Spell};
+
+--- A declaration that cannot describe one deterministic command line.
+pub induct SpecError: pub Type
+| invalid_long(Str)
+| invalid_short(Char)
+| duplicate_options(List(Str))
+| invalid_positional(Str)
+| positional_alias(Str, Char)
+| positional_order()
+| ambiguous_choice()
+| unselectable_choice()
+| nonfixed_choice()
+| nonfixed_optional()
+| repeated_group()
+| duplicate_field(Str)
+| builtin_collision(Str)
+| invalid_command(Str)
+| duplicate_command(Str)
+| context(Str, SpecError)
+end
+
+pub use SpecError/*;
+
+--- The declaration problem, including the command that owns it when available.
+pub let to_str(error: SpecError) -> Str =
+    match error
+    | invalid_long(name) => Str/flatten(["invalid long option name ", Spell/spell(name)])
+    | invalid_short(name) => Str/flatten(["invalid short option name ", Spell/spell(name)])
+    | duplicate_options(names) => Str/flatten(["duplicate option names: ", Str/join(", ", names)])
+    | invalid_positional(name) => Str/flatten(["invalid positional name ", Spell/spell(name)])
+    | positional_alias(name, short) =>
+        Str/flatten([
+            "positional ",
+            Spell/spell(name),
+            " cannot own short option -",
+            Str/of_char(short)])
+    | positional_order() =>
+        "a nullable positional group or rest collector must be the final positional suffix"
+    | ambiguous_choice() => "at most one alternative may lack a required named selector"
+    | unselectable_choice() => "each alternative must own a named occurrence or a positional value"
+    | nonfixed_choice() => "alternatives must contain fixed required positional blocks"
+    | nonfixed_optional() =>
+        "an optional or defaulted positional group must contain a fixed required block"
+    | repeated_group() => "only a named leaf may be repeated"
+    | duplicate_field(name) => Str/flatten(["duplicate record field ", Spell/spell(name)])
+    | builtin_collision(name) =>
+        Str/flatten(["option ", Spell/spell(name), " collides with an active built-in"])
+    | invalid_command(name) => Str/flatten(["invalid command name ", Spell/spell(name)])
+    | duplicate_command(name) => Str/flatten(["duplicate subcommand ", Spell/spell(name)])
+    | context(name, inner) => Str/flatten(["in command ", Spell/spell(name), ": ", to_str(inner)])
+    end;

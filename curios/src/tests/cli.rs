@@ -1,5 +1,7 @@
 //! What `/std/Cli` refuses at compile time, and what `Cli/main` writes where. The surface `parse` and `help` *accept* is the corpus unit's; neither a refusal nor a stream nor an exit status is a `Test` a program can declare, so those stay here.
 
+mod grammar_tests;
+
 use {
     super::{compile, error},
     curios_runtime::{Compiled, ForeignBindings, MockHost},
