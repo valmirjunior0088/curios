@@ -6,7 +6,7 @@
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
-//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]). A subtraction, a `min` and a `max` are read too through what both of their cases state and conversion decides — `a - b <= a`, a `min` at most each operand, a `max` at least each — asked where the facts alone leave an assignment and before any case is opened, so a bound the facts prove is proved as it was and one that turns on no case opens none.
+//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]). A subtraction, a `min` and a `max` are read too through what both of their cases state and conversion decides — `a - b <= a`, a `min` at most each operand, a `max` at least each — and an `abs` and a `sign` through what every case states and a lemma of their module proves — a magnitude at least its operand and its negation, a sign within one of zero — asked where the facts alone leave an assignment and before any case is opened, so a bound the facts prove is proved as it was and one that turns on no case opens none.
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs. A product of two sums, which the fold leaves standing, is read distributed ([`Reader::side`]).
 //! - Where their products leave an assignment too, a disequality the scope states — an `==` guard's false arm, a `!=` guard's true one, a hypothesis or a field stating either, `Bool/not` of an equality among them — as the strict bound conversion holds it to be, `n != 0` being `0 < n`, proved by what states it, and otherwise through the two cases the order of its sides makes ([`Reader::distinct`]); and a `!=` guard's false arm as the equation it is ([`disequalities`]). Read last and by a reader of its own, so what the scope kept hands out no atom, class or spelling a search before it reads ([`Kept`]).
 //! - That every monomial over naturals is at least zero, which conversion decides.
@@ -882,7 +882,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Each `abs` and `sign` of an `Int` among the atoms read so far, through the cases its operand's sign makes. An `abs` splits on `+0 <= a`: where it holds the magnitude widened is `a`, and where it fails it is `a` negated. A `sign` splits twice, on `+0 < a` and on `a < +0`: where either holds the sign is `+1` or `-1`, and where one fails the sign is at most or at least zero, so where both fail it is zero. Whether it read one.
+    /// Each `abs` and `sign` of an `Int` among the atoms read so far, through what every case states, by `Int/abs/at_least` and `at_least_negated` and by `Int/sign/at_least` and `at_most`, and through the cases its operand's sign makes. An `abs` splits on `+0 <= a`: where it holds the magnitude widened is `a`, and where it fails it is `a` negated. A `sign` splits twice, on `+0 < a` and on `a < +0`: where either holds the sign is `+1` or `-1`, and where one fails the sign is at most or at least zero, so where both fail it is zero. Whether it read one.
     ///
     /// Conversion decides each from its operand as a term and reads no fact, so this is where a bound over one meets what the scope says of its operand.
     fn signs(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
@@ -895,6 +895,10 @@ impl<'a> Reader<'a> {
             integer.sign_of_not_pos,
             integer.sign_of_neg,
             integer.sign_of_not_neg,
+            integer.abs_at_least,
+            integer.abs_at_least_negated,
+            integer.sign_at_least,
+            integer.sign_at_most,
             order.of_not_le,
             order.of_not_lt,
             order.of_eq,
@@ -920,6 +924,50 @@ impl<'a> Reader<'a> {
         let zero = literal(Carrier::Integer, 0u32);
         for node in pending {
             self.signed.push(node.clone());
+            // What every case states, by a lemma conversion cannot stand in for, read beside the cases and asked before any of them is opened ([`Facts::common`]): a bound that turns on no case opens none.
+            let every = match &*node {
+                Subterm::Intrinsic(Intrinsic::IntAbs(a)) => {
+                    let widened = Term::intrinsic(Intrinsic::NatToInt(node.clone()));
+                    let negated = Term::intrinsic(Intrinsic::IntSub(zero.clone(), a.clone()));
+                    [
+                        (
+                            a,
+                            Intrinsic::IntLe(a.clone(), widened.clone()),
+                            integer.abs_at_least,
+                        ),
+                        (
+                            a,
+                            Intrinsic::IntLe(negated, widened),
+                            integer.abs_at_least_negated,
+                        ),
+                    ]
+                }
+                Subterm::Intrinsic(Intrinsic::IntSign(a)) => {
+                    let below = Term::intrinsic(Intrinsic::Int(Integer::from(-1i32)));
+                    let above = literal(Carrier::Integer, 1u32);
+                    [
+                        (
+                            a,
+                            Intrinsic::IntLe(below, node.clone()),
+                            integer.sign_at_least,
+                        ),
+                        (
+                            a,
+                            Intrinsic::IntLe(node.clone(), above),
+                            integer.sign_at_most,
+                        ),
+                    ]
+                }
+                _ => continue,
+            };
+            let both = self.apart(context, |reader, context| {
+                for (a, statement, lemma) in every {
+                    let proof = Term::apply(global(lemma), [a.clone()]);
+                    reader.admit(context, statement, proof, Origin::Definition)?;
+                }
+                Ok(())
+            })?;
+            self.read.common.extend(both);
             match &*node {
                 Subterm::Intrinsic(Intrinsic::IntAbs(a)) => {
                     let guard = Intrinsic::IntLe(zero.clone(), a.clone());

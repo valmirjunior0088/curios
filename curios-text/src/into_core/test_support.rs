@@ -168,6 +168,10 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             sign_of_not_pos: registry_name(&["std", "Int", "sign", "of_not_pos"]),
             sign_of_neg: registry_name(&["std", "Int", "sign", "of_neg"]),
             sign_of_not_neg: registry_name(&["std", "Int", "sign", "of_not_neg"]),
+            abs_at_least: registry_name(&["std", "Int", "abs", "at_least"]),
+            abs_at_least_negated: registry_name(&["std", "Int", "abs", "at_least_negated"]),
+            sign_at_least: registry_name(&["std", "Int", "sign", "at_least"]),
+            sign_at_most: registry_name(&["std", "Int", "sign", "at_most"]),
         },
     },
 };

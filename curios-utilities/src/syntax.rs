@@ -448,6 +448,14 @@ pub struct IntegerSyntax {
     pub sign_of_neg: SyntaxName,
     /// `+0 <= a` gives `+0 <= sign(a)`: what is left of a sign where its operand is not below zero.
     pub sign_of_not_neg: SyntaxName,
+    /// `a <= Nat/to_int(abs(a))`: what both cases of a magnitude state of its operand.
+    pub abs_at_least: SyntaxName,
+    /// `+0 - a <= Nat/to_int(abs(a))`: what both cases of a magnitude state of its operand's negation.
+    pub abs_at_least_negated: SyntaxName,
+    /// `-1 <= sign(a)`: what every case of a sign states from below.
+    pub sign_at_least: SyntaxName,
+    /// `sign(a) <= +1`: what every case of a sign states from above.
+    pub sign_at_most: SyntaxName,
 }
 
 impl IntegerSyntax {
@@ -459,6 +467,10 @@ impl IntegerSyntax {
             sign_of_not_pos,
             sign_of_neg,
             sign_of_not_neg,
+            abs_at_least,
+            abs_at_least_negated,
+            sign_at_least,
+            sign_at_most,
         } = self;
 
         [
@@ -468,6 +480,10 @@ impl IntegerSyntax {
             sign_of_not_pos,
             sign_of_neg,
             sign_of_not_neg,
+            abs_at_least,
+            abs_at_least_negated,
+            sign_at_least,
+            sign_at_most,
         ]
         .into_iter()
     }

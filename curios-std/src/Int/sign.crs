@@ -19,6 +19,22 @@ pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(sign(a), -1) =
     | neg(_) => Eq/refl()
     end;
 
+--- `sign(a)` is at least `-1`, whatever `a` is.
+pub let at_least(a: Int) -> Holds(-1 <= sign(a)) =
+    match Int/view(a)
+    | nonneg(0) => True/qed()
+    | nonneg(_ + 1) => True/qed()
+    | neg(_) => True/qed()
+    end;
+
+--- `sign(a)` is at most `+1`, whatever `a` is.
+pub let at_most(a: Int) -> Holds(sign(a) <= +1) =
+    match Int/view(a)
+    | nonneg(0) => True/qed()
+    | nonneg(_ + 1) => True/qed()
+    | neg(_) => True/qed()
+    end;
+
 --- `sign(a)` is at most zero where `a` is.
 pub let of_not_pos(a: Int, p: Holds(a <= +0)) -> Holds(sign(a) <= +0) =
     match Int/view(a)

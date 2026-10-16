@@ -1,6 +1,6 @@
 pub use /sys/Int/{abs};
 use /std/{Nat, Int, Eq};
-use /std/Bool/{Holds};
+use /std/Bool/{True, Holds};
 
 --- A magnitude widened back is the integer it was taken of, where that is zero or above.
 ---
@@ -17,6 +17,14 @@ pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(Nat/to_int(abs(a)), +0 - a) =
     | nonneg(_) => match p end
     | neg(_) => Eq/refl()
     end;
+
+--- A magnitude widened back is at least the integer it was taken of, whatever its sign.
+pub let at_least(a: Int) -> Holds(a <= Nat/to_int(abs(a))) =
+    match Int/view(a) | nonneg(_) => True/qed() | neg(_) => True/qed() end;
+
+--- A magnitude widened back is at least the negation of the integer it was taken of, whatever its sign.
+pub let at_least_negated(a: Int) -> Holds(+0 - a <= Nat/to_int(abs(a))) =
+    match Int/view(a) | nonneg(_) => True/qed() | neg(_) => True/qed() end;
 
 --- The magnitude of a product is the product of the magnitudes.
 ---

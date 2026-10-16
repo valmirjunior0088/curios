@@ -430,6 +430,15 @@ const ROWS: &[Row] = &[
         "a1: Int, b1: Int, a2: Int, b2: Int, a3: Int, b3: Int, a4: Int, b4: Int, a5: Int, b5: Int, a6: Int, b6: Int, a7: Int, b7: Int, a8: Int, b8: Int, a9: Int, b9: Int, a10: Int, b10: Int",
         "Holds(a1 + b2 + a3 + b4 + a5 + b6 + a7 + b8 + a9 + b10 <= Int/max(a1, b1) + Int/max(a2, b2) + Int/max(a3, b3) + Int/max(a4, b4) + Int/max(a5, b5) + Int/max(a6, b6) + Int/max(a7, b7) + Int/max(a8, b8) + Int/max(a9, b9) + Int/max(a10, b10))",
     ),
+    // And what both cases of an `abs` and of a `sign` state — a magnitude at least its operand and its negation, a sign within one of zero — each by a lemma: ten of either are no 1,024 cases.
+    claim(
+        "a1: Int, a2: Int, a3: Int, a4: Int, a5: Int, a6: Int, a7: Int, a8: Int, a9: Int, a10: Int",
+        "Holds(a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 <= Nat/to_int(Int/abs(a1)) + Nat/to_int(Int/abs(a2)) + Nat/to_int(Int/abs(a3)) + Nat/to_int(Int/abs(a4)) + Nat/to_int(Int/abs(a5)) + Nat/to_int(Int/abs(a6)) + Nat/to_int(Int/abs(a7)) + Nat/to_int(Int/abs(a8)) + Nat/to_int(Int/abs(a9)) + Nat/to_int(Int/abs(a10)))",
+    ),
+    claim(
+        "a1: Int, a2: Int, a3: Int, a4: Int, a5: Int, a6: Int, a7: Int, a8: Int, a9: Int, a10: Int",
+        "Holds(Int/sign(a1) + Int/sign(a2) + Int/sign(a3) + Int/sign(a4) + Int/sign(a5) + Int/sign(a6) + Int/sign(a7) + Int/sign(a8) + Int/sign(a9) + Int/sign(a10) <= +10)",
+    ),
     // An `abs` and a `sign` are read through the cases their operand's sign makes, conversion deciding each from its operand as a term and reading no fact: a magnitude widened back is its operand where a fact holds that at least zero and is at least it wherever, an operand between a bound and its negation has its magnitude at most the bound, read at `Int` and at `Nat`, the triangle inequality opens three splits, and a sign is within one of zero and on the side its operand is, a difference's as its operands' order says.
     claim(
         "a: Int, p: Holds(+0 <= a)",

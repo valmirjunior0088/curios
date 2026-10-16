@@ -161,6 +161,10 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             sign_of_not_pos: name(&["std", "Int", "sign", "of_not_pos"]),
             sign_of_neg: name(&["std", "Int", "sign", "of_neg"]),
             sign_of_not_neg: name(&["std", "Int", "sign", "of_not_neg"]),
+            abs_at_least: name(&["std", "Int", "abs", "at_least"]),
+            abs_at_least_negated: name(&["std", "Int", "abs", "at_least_negated"]),
+            sign_at_least: name(&["std", "Int", "sign", "at_least"]),
+            sign_at_most: name(&["std", "Int", "sign", "at_most"]),
         },
     },
 };
