@@ -5,7 +5,7 @@ use {
     crate::{
         Atom, BRANCH_COPY_NODE_LIMIT, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, Continuation,
         CopyBudget, CopyPlan, Edge, Function, Intrinsic, JUMP_COPY_NODE_LIMIT, Literal, Module,
-        Node, Row, RowId, SCC_CLONE_LIMIT, SCC_CLONE_NODE_LIMIT, Slot, ValueExpr,
+        Node, Row, RowId, SCC_CLONE_NODE_LIMIT, SCC_COPY_NODE_LIMIT, Slot, ValueExpr,
         forward_aggregate_projections, function_nodes, known_values, simplify_nodes,
         test_support::{
             PolymorphicLoop, has_switch, known_callee, nest_helpers, polymorphic_loop,
@@ -135,12 +135,19 @@ fn specializes_a_polymorphic_recursive_scc_per_call_context() {
         loop_fn,
     } = polymorphic_loop(true, 0);
 
-    let mut budget = SCC_CLONE_LIMIT;
+    let copy_cost = CopyPlan::functions(&module, BTreeSet::from([loop_fn]))
+        .nodes
+        .len();
+    let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
     assert!(
         specialize_scc_calls(&mut module, &mut budget),
         "a disagreeing call context is specialized"
     );
-    assert_eq!(budget, SCC_CLONE_LIMIT - 1, "one clone consumed the budget");
+    assert_eq!(
+        budget,
+        CopyBudget::new(SCC_COPY_NODE_LIMIT - copy_cost),
+        "one clone consumed the budget"
+    );
     module.verify().unwrap();
 
     let first = known_callee(&module, call1);
@@ -169,12 +176,12 @@ fn agreeing_call_contexts_are_not_specialized() {
         loop_fn,
     } = polymorphic_loop(false, 0);
 
-    let mut budget = SCC_CLONE_LIMIT;
+    let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
     assert!(
         !specialize_scc_calls(&mut module, &mut budget),
         "no clone is made when callers agree"
     );
-    assert_eq!(budget, SCC_CLONE_LIMIT);
+    assert_eq!(budget, CopyBudget::new(SCC_COPY_NODE_LIMIT));
     assert_eq!(known_callee(&module, call1), loop_fn);
     assert_eq!(known_callee(&module, call2), loop_fn);
 }
@@ -188,7 +195,7 @@ fn specialization_respects_the_clone_budget() {
         loop_fn,
     } = polymorphic_loop(true, 0);
 
-    let mut budget = 0;
+    let mut budget = CopyBudget::new(0);
     assert!(
         !specialize_scc_calls(&mut module, &mut budget),
         "an exhausted budget makes no clone"
@@ -207,12 +214,12 @@ fn specialization_respects_the_node_budget() {
         loop_fn,
     } = polymorphic_loop(true, SCC_CLONE_NODE_LIMIT + 1);
 
-    let mut budget = SCC_CLONE_LIMIT;
+    let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
     assert!(
         !specialize_scc_calls(&mut module, &mut budget),
         "an oversized SCC is not cloned"
     );
-    assert_eq!(budget, SCC_CLONE_LIMIT);
+    assert_eq!(budget, CopyBudget::new(SCC_COPY_NODE_LIMIT));
     assert_eq!(known_callee(&module, call1), loop_fn);
     assert_eq!(known_callee(&module, call2), loop_fn);
 }
@@ -226,7 +233,7 @@ fn specialization_is_deterministic() {
             call2,
             ..
         } = polymorphic_loop(true, 0);
-        let mut budget = SCC_CLONE_LIMIT;
+        let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
         specialize_scc_calls(&mut module, &mut budget);
         (
             known_callee(&module, call1).0,
@@ -694,7 +701,7 @@ fn nested_definitions_count_toward_the_copy_limit() {
             module.values().len(),
         );
         let original = module.to_string();
-        let mut budget = 1;
+        let mut budget = CopyBudget::new(size);
         let changed = specialize_scc_calls(&mut module, &mut budget);
         assert_eq!(
             changed,
@@ -702,10 +709,10 @@ fn nested_definitions_count_toward_the_copy_limit() {
             "extent of {size} nodes"
         );
         if changed {
-            assert_eq!(budget, 0);
+            assert_eq!(budget, CopyBudget::new(0));
             module.verify().unwrap();
         } else {
-            assert_eq!(budget, 1);
+            assert_eq!(budget, CopyBudget::new(size));
             assert_eq!(module.to_string(), original);
             assert_eq!(
                 before,

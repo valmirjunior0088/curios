@@ -49,8 +49,9 @@ pub(crate) const MULTI_SITE_INLINE_LIMIT: usize = 16;
 pub(crate) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
 /// How many parameters a continuation may hold after a fields split. The largest admitted aggregate `curios`'s corpus census finds is the four-field scan state riding beside loop state, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
 pub(crate) const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
-pub(crate) const SCC_CLONE_LIMIT: usize = 64;
 pub(crate) const SCC_CLONE_NODE_LIMIT: usize = 256;
+/// Maximum cumulative SCC-specialization copying under the complete-extent ceiling.
+pub(crate) const SCC_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
 /// Maximum cumulative call-pattern copying, including head rebuilds.
 pub(crate) const BRANCH_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
 /// Maximum cumulative jump-specialization copying, including head rebuilds.
@@ -72,7 +73,7 @@ pub fn optimize(module: &mut Module) {
         .verify()
         .expect("invalid high CPS before optimization");
 
-    let mut scc_clone_budget = SCC_CLONE_LIMIT;
+    let mut scc_clone_budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
     let mut branch_clone_budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
     let mut jump_clone_budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
     let mut entry_clone_budget = ENTRY_CLONE_LIMIT;

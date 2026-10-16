@@ -1,6 +1,6 @@
 # A pass takes what one snapshot admits
 
-The five one-candidate passes fall short of [A pass applies the independent plans its snapshot admits](../../../curios-cont/README.md#a-pass-applies-the-independent-plans-its-snapshot-admits). The implementation is staged below; the current baseline is `eb40b82e9`. The public optimizer API, host ABI, pass order, per-copy ceilings, parameter ceiling and round backstop remain unchanged.
+Verification remains for [A pass applies the independent plans its snapshot admits](../../../curios-cont/README.md#a-pass-applies-the-independent-plans-its-snapshot-admits). The implementation is staged below; the current baseline is `eb40b82e9`. The public optimizer API, host ABI, pass order, per-copy ceilings, parameter ceiling and round backstop remain unchanged.
 
 ## Decisions
 
@@ -10,7 +10,6 @@ Specialization uses non-refundable module-wide copied-node allowances: jump and 
 
 ## Remaining stages
 
-5. Batch independent SCC specializations, revalidating contexts locally without rebuilding whole-module analyses per context.
 6. Verify source consumers and performance, reconcile the stale measurement finding, audit loop-entry scheduling, update references and retire this specification.
 
 Each implementation stage carries workspace formatting and Clippy, owning tests, relevant raw/optimized execution tests and the standard-library corpus. Discovery and rejection leave arenas and allowances untouched. Existing size ceilings, stacks, lint settings and backstops are not raised.

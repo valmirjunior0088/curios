@@ -1,7 +1,7 @@
 //! Call-pattern specialization uses one constructor/caller snapshot and gives equivalent sites a shared peeled worker.
 
 use {
-    super::{ConstructorPattern, tagged_row_values},
+    super::{ConstructorPattern, function_introductions, tagged_row_values},
     crate::{
         Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, CopyBudget, CopyPlan, CopyPriority,
         FunctionId, Intrinsic, Literal, Module, Node, NodeId, ValueExpr, ValueId, analyze_calls,
@@ -31,15 +31,7 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBud
         return false;
     }
     let calls = analyze_calls(module);
-    let intros = module
-        .live_nodes()
-        .flat_map(|(id, node)| match node {
-            Node::LetFun { functions, .. } => {
-                functions.iter().map(|function| (*function, id)).collect()
-            }
-            _ => Vec::new(),
-        })
-        .collect::<BTreeMap<_, _>>();
+    let intros = function_introductions(module);
     let mut roots = BTreeMap::new();
     for (&callee, sites) in &calls.call_sites {
         if sites.is_empty() || Some(callee) == module.entry() || module.is_out_of_line(callee) {

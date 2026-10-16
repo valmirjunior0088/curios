@@ -1,3 +1,6 @@
+mod scc;
+pub(crate) use scc::*;
+
 mod pattern;
 pub(crate) use pattern::*;
 
@@ -9,9 +12,8 @@ pub(crate) use jump::*;
 
 use {
     crate::{
-        Atom, CallAnalysis, Callee, CopyPlan, FunctionId, Lattice, Literal, Module, Node, NodeId,
-        SCC_CLONE_NODE_LIMIT, Slot, Solver, ValueExpr, ValueId, analyze_calls, copy_bodies,
-        resolve_atom,
+        Atom, CallAnalysis, Callee, FunctionId, Lattice, Literal, Module, Node, NodeId, Slot,
+        Solver, ValueExpr, ValueId, resolve_atom,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -161,89 +163,6 @@ pub(crate) fn useful_knowns(class: BTreeMap<ValueId, Knowledge>) -> BTreeMap<Val
     }
     result
 }
-/// Specialize a recursive SCC for one external call context whose known arguments the module-wide analysis cannot use because other callers disagree.
-///
-/// The SCC is cloned verbatim and the disagreeing call site (with any siblings passing the same arguments) is repointed to the private copy. The clone then has a single agreeing external caller, so the ordinary invariant-known propagation folds those arguments in place on a later iteration while the original stays polymorphic for its other callers. At most `SCC_CLONE_LIMIT` clones are made per module and only SCCs within `SCC_CLONE_NODE_LIMIT` live nodes are cloned. One clone is performed per call so the outer fixpoint stays deterministic.
-pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut usize) -> bool {
-    if *budget == 0 {
-        return false;
-    }
-    let analysis = analyze_calls(module);
-    let literals = literal_value_map(module);
-    let global = scc_invariant_knowns(module, &analysis, &literals);
-
-    for members in eligible_sccs(module, &analysis) {
-        let member_set: BTreeSet<FunctionId> = members.iter().copied().collect();
-        let plan = CopyPlan::functions(module, member_set.clone());
-        if plan.nodes.len() > SCC_CLONE_NODE_LIMIT {
-            continue;
-        }
-        let Some(intro) = introducing_letfun(module, &member_set) else {
-            continue;
-        };
-
-        let params_of: BTreeMap<FunctionId, Vec<ValueId>> = members
-            .iter()
-            .map(|&m| (m, module.function(m).unwrap().params.clone()))
-            .collect();
-        let mut internal: Vec<(FunctionId, Vec<Atom>)> = Vec::new();
-        let mut external: Vec<(NodeId, FunctionId, Vec<Atom>)> = Vec::new();
-        for (&node_id, &owner) in &analysis.node_owners {
-            let Some(Node::ApplyFun {
-                callee: Callee::Known(callee),
-                args,
-                ..
-            }) = module.node(node_id)
-            else {
-                continue;
-            };
-            if !member_set.contains(callee) {
-                continue;
-            }
-            if member_set.contains(&owner) {
-                internal.push((*callee, args.clone()));
-            } else {
-                external.push((node_id, *callee, args.clone()));
-            }
-        }
-
-        // Find the first external context that unlocks a known the module-wide analysis could not, in deterministic call-site order.
-        let mut chosen: Option<(FunctionId, Vec<Atom>)> = None;
-        for (_, callee, args) in &external {
-            let mut constraints = internal.clone();
-            constraints.push((*callee, args.clone()));
-            let context = useful_knowns(invariant_fixpoint(&params_of, &constraints, &literals));
-            if context
-                .iter()
-                .any(|(param, atom)| global.get(param) != Some(atom))
-            {
-                chosen = Some((*callee, args.clone()));
-                break;
-            }
-        }
-        let Some((entry, context_args)) = chosen else {
-            continue;
-        };
-
-        let clones = copy_bodies(module, plan).functions;
-        let clone_entry = clones[&entry];
-        // Only the requested members are bound here. A copy of a *nested* definition is introduced by the copied `LetFun` inside its own member's body, so binding it out here as well would bind it twice.
-        if let Some(Node::LetFun { functions, .. }) = module.node_mut(intro) {
-            functions.extend(member_set.iter().filter_map(|m| clones.get(m).copied()));
-        }
-        for (node_id, callee, args) in &external {
-            if *callee == entry
-                && *args == context_args
-                && let Some(Node::ApplyFun { callee, .. }) = module.node_mut(*node_id)
-            {
-                *callee = Callee::Known(clone_entry);
-            }
-        }
-        *budget -= 1;
-        return true;
-    }
-    false
-}
 /// The `LetValue`-bound constructions of a variant family whose tag is known: a construction of a row that carries [`Slot::Tag`] at slot zero, with a `Nat` literal standing there. These are the constructor call patterns branch specialization can bake into a callee.
 ///
 /// A family's row alone carries a tag. A product row's first field and a structural tuple's are data, so a literal there selects nothing: a product has one pattern, its construction, which is `split_workers`' to deliver.
@@ -283,6 +202,16 @@ pub(crate) fn literal_value_map(module: &Module) -> BTreeMap<ValueId, Atom> {
         }
     }
     literals
+}
+/// The lexical introduction of each function, indexed once for a specialization sweep.
+pub(crate) fn function_introductions(module: &Module) -> BTreeMap<FunctionId, NodeId> {
+    let mut introductions = BTreeMap::new();
+    for (id, node) in module.live_nodes() {
+        if let Node::LetFun { functions, .. } = node {
+            introductions.extend(functions.iter().map(|function| (*function, id)));
+        }
+    }
+    introductions
 }
 /// The single `LetFun` node introducing every member, or `None` if the members are split across nodes. The clones are added to this node so they share the members' lexical scope.
 pub(crate) fn introducing_letfun(
