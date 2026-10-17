@@ -12,12 +12,12 @@ fn a_fulfilment_wakes_a_waiter_once_across_duplicate_offers() {
         let body(s: Io/Scope) -> Io({}) =
             let f = Future/new(@Nat)!;
             let waiter() -> Io(Nat) =
-                let w = Io/select([Future/offer(f), Future/offer(f)])!;
+                let n = Io/select([Future/offer(f), Future/offer(f)])!;
                 let _ = print("once ")!;
-                Io/pure(w.1);
+                Io/pure(n);
             let task = Io/spawn(s, waiter())!;
             let _ = Io/yield()!;
-            let _ = Future/fulfill(f, 7)!;
+            let _ = Future/fill(f, 7)!;
             let n = Io/join(task)!;
             print(Nat/to_str(n));
         Io/scope(body)
@@ -36,7 +36,7 @@ fn two_woken_receivers_retry_after_only_one_can_take() {
             let c = Channel/new(@Nat, 1)!;
             let first = Cell/new(@{})!;
             let receive() -> Io(Nat) =
-                let got = Channel/recv(c.1)!;
+                let got = Channel/receive(c.1)!;
                 let _ = Cell/fill(first, ())!;
                 Io/pure(Option/unwrap_or(got, 0));
             let a = Io/spawn(s, receive())!;
@@ -68,8 +68,8 @@ fn a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it() {
             let other = Channel/new(@Nat, 1)!;
             let select_one() -> Io({}) =
                 let _ = Io/select([
-                    Offer/map(Channel/recv_offer(messages.1), (_) => ()),
-                    Offer/map(Channel/recv_offer(other.1), (_) => ())])!;
+                    Offer/map(Channel/offer_receive(messages.1), (_) => ()),
+                    Offer/map(Channel/offer_receive(other.1), (_) => ())])!;
                 print("selected ");
             let selecting = Io/spawn(s, select_one())!;
             let _ = Io/yield()!;
@@ -79,7 +79,7 @@ fn a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it() {
             let _ = Channel/send(messages.0, (7, ack))!;
             let _ = Io/yield()!;
             let _ = print(match Cell/poll(ack)! | none() => "unacknowledged " | some(_) => "acknowledged " end)!;
-            let got = Channel/recv(messages.1)!;
+            let got = Channel/receive(messages.1)!;
             match got
             | none() => print("lost")
             | some((n, reply)) =>
@@ -106,9 +106,9 @@ fn signals_coalesce_and_futures_preserve_their_first_answer() {
             let again = Signal/offer(s).try!;
             let _ = print(match again | none() => "coalesced " | some(_) => "extra " end)!;
             let f = Future/new(@Nat)!;
-            let _ = Future/fulfill(f, 7)!;
-            let _ = Future/fulfill(f, 99)!;
-            print(Nat/to_str(Future/await(f)!));
+            let _ = Future/fill(f, 7)!;
+            let _ = Future/fill(f, 99)!;
+            print(Nat/to_str(Future/wait(f)!));
         program()
     "#),
         b"coalesced 7"

@@ -105,9 +105,9 @@ fn struct_arm_privacy_is_enforced() {
 #[test]
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
-        use /std/{File, Path, Try};
+        use /std/{File, Path, Try, Io};
         let entry() -> /std/Io({}) =
-            match Try/run(File/with(Path/of_str("log.txt"), File/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))!
+            match Try/run(File/with(Path/of_str("log.txt"), File/Mode/append(), (f) => Io/write(f, /std/Str/to_bytes("x"))))!
             | success(_) => /std/print("ok")
             | failure(_) => /std/print("error")
             end;

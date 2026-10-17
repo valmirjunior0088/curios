@@ -12,7 +12,7 @@ pub use Error/{let Error};
 pub mod Offer;
 pub use Offer/{let Offer};
 
---- A value fulfilled once, which whatever waits on it waits for until it is.
+--- A value filled once, which whatever waits on it waits for until it is.
 pub mod Future;
 pub use Future/{let Future};
 
@@ -172,13 +172,13 @@ satisfy Write(Output) {
     flush(o) = Write/flush(o.0),
 }
 
--- The first offer of `offers` to yield, with its index, trying each in its order.
-let attempt(@A: Type, offers: List(Offer(A)), i: Nat) -> Io(Option({Nat, A})) =
+-- The first offer of `offers` to yield, trying each in its order.
+let attempt(@A: Type, offers: List(Offer(A))) -> Io(Option(A)) =
     match offers
     | [] => pure(Option/none())
     | [o, ..more] =>
         let got = o.try!;
-        match got | some(a) => pure(Option/some((i, a))) | none() => attempt(more, i + 1) end
+        match got | some(a) => pure(Option/some(a)) | none() => attempt(more) end
     end;
 
 -- What every offer of `offers` waits on, in their order.
@@ -195,13 +195,13 @@ let waits(@A: Type, offers: List(Offer(A))) -> Io(List(Offer/Waiting)) =
 let released(ws: List(Offer/Waiting)) -> Io({}) =
     match ws | [] => pure(()) | [w, ..more] => bind(w.release, (_) => released(more)) end;
 
---- The first offer to yield a value, with its index, waiting on what all of them wait on while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing.
+--- The value of the first offer to yield one, waiting on what all of them wait on while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing. Which offer answered is the value's to say, through `Offer/map`.
 ---
 --- This is the one place a wait on the program's own state checks and then suspends, with nothing run between the two, so no change is missed: a future, a channel and a signal each wait as an offer through it.
-pub let select(@A: Type, offers: List(Offer(A))) -> Io({Nat, A}) =
-    let taken = attempt(offers, 0)!;
+pub let select(@A: Type, offers: List(Offer(A))) -> Io(A) =
+    let taken = attempt(offers)!;
     match taken
-    | some(w) => pure(w)
+    | some(a) => pure(a)
     | none() =>
         let ws = waits(offers)!;
         let release = released(ws);
@@ -360,21 +360,21 @@ let drive(held: List(Branch), intake: Io(List(Branch)), settled: Io(Bool)) -> Io
 let nothing_more: Io(List(Branch)) =
     pure([]);
 
--- Whether `f` has been fulfilled.
+-- Whether `f` has been filled.
 let answered(@A: Type, f: Future(A)) -> Io(Bool) =
     bind(Future/poll(f), (held) => pure(Option/is_some(held)));
 
--- `a` as a branch that fulfils `f` with its answer.
+-- `a` as a branch that fills `f` with its answer.
 let into(@A: Type, a: Io(A), f: Future(A)) -> Branch =
-    Branch/fresh(bind(a, (x) => Future/fulfill(f, x)));
+    Branch/fresh(bind(a, (x) => Future/fill(f, x)));
 
 --- `a` and `b` side by side, and both answers once both have them.
 pub let both(@A: Type, @B: Type, a: Io(A), b: Io(B)) -> Io({A, B}) =
     let fa = Future/new()!;
     let fb = Future/new()!;
     let _ = drive([into(a, fa), into(b, fb)], nothing_more, pure(false))!;
-    let x = Future/await(fa)!;
-    let y = Future/await(fb)!;
+    let x = Future/wait(fa)!;
+    let y = Future/wait(fb)!;
     pure((x, y));
 
 -- A future for each action of `actions`, beside it.
@@ -392,7 +392,7 @@ let awaited(@A: Type, fs: List(Future(A))) -> Io(List(A)) =
     match fs
     | [] => pure([])
     | [f, ..more] =>
-        let a = Future/await(f)!;
+        let a = Future/wait(f)!;
         let rest = awaited(more)!;
         pure([a, ..rest])
     end;
@@ -407,19 +407,11 @@ pub let all(@A: Type, actions: List(Io(A))) -> Io(List(A)) =
             pure(false))!;
     awaited(List/map(pairs, (p: {Io(A), Future(A)}) => p.1));
 
---- The first of `actions` to answer, with its index; every other one is cancelled where it waits. An action dropped part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over offers takes nothing until it keeps it, and is the way to choose without paying that. With no action, nothing answers.
-pub let first(@A: Type, actions: List(Io(A))) -> Io({Nat, A}) =
-    let won: Future({Nat, A}) = Future/new()!;
-    let entered = List/zip(List/range(0, List/len(actions)), actions);
-    let branches =
-        List/map(entered, (e: {Nat, Io(A)}) =>
-            Branch/fresh(bind(e.1, (x) => Future/fulfill(won, (e.0, x)))));
-    let _ = drive(branches, nothing_more, answered(won))!;
-    Future/await(won);
-
---- The first of `actions` to answer; every other one is cancelled where it waits.
+--- The first of `actions` to answer; every other one is cancelled where it waits. An action dropped part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over offers takes nothing until it keeps it, and is the way to choose without paying that. Which action answered is its answer's to say. With no action, nothing answers.
 pub let race(@A: Type, actions: List(Io(A))) -> Io(A) =
-    bind(first(actions), (w) => pure(w.1));
+    let won: Future(A) = Future/new()!;
+    let _ = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more, answered(won))!;
+    Future/wait(won);
 
 --- `a`'s answer, or `none` where `d` passes first, `a` then cancelled where it waits. An answer that lands after `d` is dropped, which is what a timeout means.
 pub let timeout(@A: Type, d: Duration, a: Io(A)) -> Io(Option(A)) =
@@ -433,7 +425,7 @@ struct Live: Type {
 
 -- `change` applied to the count of `live`.
 let counted(live: Live, change: (Nat) -> Nat) -> Io({}) =
-    let held = Channel/try_recv(live.count.1)!;
+    let held = Channel/try_receive(live.count.1)!;
     let n = match held | item(n) => n | _ => 0 end;
     let _ = Channel/try_send(live.count.0, change(n))!;
     pure(());
@@ -458,17 +450,17 @@ pub struct Task(A: Type): Type {
 pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =
     let f = Future/new()!;
     let _ = counted(s.live, (n) => n + 1)!;
-    let finished = bind(child, (a) => bind(Future/fulfill(f, a), (_) => ended(s.live)));
+    let finished = bind(child, (a) => bind(Future/fill(f, a), (_) => ended(s.live)));
     let _ = Channel/send(s.children, finished)!;
     pure(Task { f });
 
 --- The task's answer, waiting until it has one.
 pub let join(@A: Type, t: Task(A)) -> Io(A) =
-    Future/await(t.0);
+    Future/wait(t.0);
 
 --- Until every child spawned into `s` has ended, those spawned meanwhile among them: what a body that needs all of its children finished asks before it answers.
 pub let join_all(s: Scope) -> Io({}) =
-    let held = Channel/try_recv(s.live.count.1)!;
+    let held = Channel/try_receive(s.live.count.1)!;
     let n = match held | item(n) => n | _ => 0 end;
     let _ = Channel/try_send(s.live.count.0, n)!;
     match n
@@ -480,7 +472,7 @@ pub let join_all(s: Scope) -> Io({}) =
 
 -- Every child spawned into `r` since the last time it was asked.
 let spawned(r: Channel/Receiver(Io({}))) -> Io(List(Branch)) =
-    let taken = Channel/try_recv(r)!;
+    let taken = Channel/try_receive(r)!;
     match taken
     | item(child) => bind(spawned(r), (more) => pure([Branch/fresh(child), ..more]))
     | _ => pure([])
@@ -495,4 +487,4 @@ pub let scope(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
     let answer: Future(A) = Future/new()!;
     let _ = drive([into(body(s), answer)], spawned(ends.1), answered(answer))!;
     let _ = Channel/close(ends.0)!;
-    Future/await(answer);
+    Future/wait(answer);

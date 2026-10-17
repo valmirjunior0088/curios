@@ -1,13 +1,13 @@
 use /std/{Option, Cell, Io};
 use /std/Io/{Offer};
 
---- A value fulfilled once and read as often as asked, beside the cell its fulfilment fills for whatever waits on it.
+--- A value filled once and read as often as asked, beside the cell its filling fills for whatever waits on it.
 pub struct Future(A: Type): Type {
     value: Cell(A),
     filled: Cell({}),
 }
 
---- A future nothing has fulfilled yet.
+--- A future nothing has filled yet.
 pub let new(@A: Type) -> Io(Future(A)) =
     let value = Cell/new()!;
     let filled = Cell/new()!;
@@ -17,8 +17,8 @@ pub let new(@A: Type) -> Io(Future(A)) =
 pub let poll(@A: Type, f: Future(A)) -> Io(Option(A)) =
     Cell/poll(f.value);
 
---- Fulfil `f` with `a`, and wake whatever waits on it. A second fulfilment is dropped, so the first value stands.
-pub let fulfill(@A: Type, f: Future(A), a: A) -> Io({}) =
+--- Fill `f` with `a`, and wake whatever waits on it. A second filling is dropped, so the first value stands.
+pub let fill(@A: Type, f: Future(A), a: A) -> Io({}) =
     let taken = Cell/fill(f.value, a)!;
     match taken
     | true => Io/bind(Cell/fill(f.filled, ()), (_) => Io/pure(()))
@@ -30,5 +30,5 @@ pub let offer(@A: Type, f: Future(A)) -> Offer(A) =
     Offer/new(poll(f), Io/pure(Offer/on_filled([f.filled])));
 
 --- The value, waiting until there is one.
-pub let await(@A: Type, f: Future(A)) -> Io(A) =
-    Io/bind(Io/select([offer(f)]), (w) => Io/pure(w.1));
+pub let wait(@A: Type, f: Future(A)) -> Io(A) =
+    Io/select([offer(f)]);

@@ -12,7 +12,7 @@ let leave_or_fail(sender: Channel/Sender(Nat), n: Nat) -> Try(Io, Io/Error, {}) 
 
 -- Whether the next take is `n`.
 let left(receiver: Channel/Receiver(Nat), n: Nat) -> Io(Bool) =
-    let taken = Channel/try_recv(receiver)!;
+    let taken = Channel/try_receive(receiver)!;
     Io/pure(match taken | item(m) => m == n | _ => false end);
 
 test a_description_that_yields_nothing_is_executed_as_itself =

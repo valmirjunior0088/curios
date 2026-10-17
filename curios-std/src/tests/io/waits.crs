@@ -9,7 +9,7 @@ let told(sender: Channel/Sender(Io/Ended), ended: Io/Ended) -> Io({}) =
 
 -- Whether the next take is `finished`, where `finished` says so, or `cancelled` otherwise.
 let heard(receiver: Channel/Receiver(Io/Ended), finished: Bool) -> Io(Bool) =
-    let taken = Channel/try_recv(receiver)!;
+    let taken = Channel/try_receive(receiver)!;
     Io/pure(
         match taken
         | item(ended) =>

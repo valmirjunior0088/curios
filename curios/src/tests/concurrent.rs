@@ -414,8 +414,7 @@ fn a_selection_over_no_offers_at_the_top_is_a_deadlock() {
         r#"
         use /std/{Nat, Io};
         let stuck() -> Io(Nat) =
-            let w = Io/select(@Nat, [])!;
-            Io/pure(w.1);
+            Io/select(@Nat, []);
         let entry() -> /std/Io({}) =
             let _ = stuck()!;
             /std/print("finished");
@@ -462,6 +461,7 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, Option, Io, Channel};
+        use /std/Io/{Offer};
         let shown(o: Option(Nat)) -> Str =
             match o | some(n) => Nat/to_str(n) | none() => "none" end;
         let left(t: Channel/Take(Nat)) -> Str =
@@ -471,15 +471,17 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
             let b = Channel/new(@Nat, 4)!;
             let _ = Channel/send(a.0, 10)!;
             let _ = Channel/send(b.0, 20)!;
-            let w = Io/select([Channel/recv_offer(a.1), Channel/recv_offer(b.1)])!;
-            let rest_a = Channel/try_recv(a.1)!;
-            let rest_b = Channel/try_recv(b.1)!;
+            let w = Io/select([
+                Offer/map(Channel/offer_receive(a.1), (o) => ("a", o)),
+                Offer/map(Channel/offer_receive(b.1), (o) => ("b", o))])!;
+            let rest_a = Channel/try_receive(a.1)!;
+            let rest_b = Channel/try_receive(b.1)!;
             /std/print(
                 Str/flatten(
-                    [Nat/to_str(w.0), " ", shown(w.1), " ", left(rest_a), " ", left(rest_b)]));
+                    [w.0, " ", shown(w.1), " ", left(rest_a), " ", left(rest_b)]));
         program()
         "#),
-        b"0 10 empty 20"
+        b"a 10 empty 20"
     );
 }
 
@@ -499,7 +501,7 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
             let c = Channel/new(@{Nat, Cell({})}, 1)!;
             let task = Io/spawn(scope, feeder(c.0))!;
             let _ = print("receiving ")!;
-            let got = Channel/recv(c.1)!;
+            let got = Channel/receive(c.1)!;
             let _ = match got
                 | some((n, ack)) =>
                     let _ = print(Nat/to_str(n))!;
@@ -531,16 +533,16 @@ fn a_closed_channel_drains_before_it_ends() {
             match t | item(n) => Nat/to_str(n) | empty() => "empty" | ended() => "ended" end;
         let program() -> Io({}) =
             let c = Channel/new(@Nat, 2)!;
-            let nothing_yet = Channel/try_recv(c.1)!;
+            let nothing_yet = Channel/try_receive(c.1)!;
             let _ = Channel/send(c.0, 1)!;
             let _ = Channel/send(c.0, 2)!;
             let full = Channel/try_send(c.0, 3)!;
             let _ = Channel/close(c.0)!;
             let refused = Channel/try_send(c.0, 3)!;
-            let first = Channel/recv(c.1)!;
-            let second = Channel/recv(c.1)!;
-            let ended = Channel/recv(c.1)!;
-            let drained = Channel/try_recv(c.1)!;
+            let first = Channel/receive(c.1)!;
+            let second = Channel/receive(c.1)!;
+            let ended = Channel/receive(c.1)!;
+            let drained = Channel/try_receive(c.1)!;
             let after = Channel/send(c.0, 4)!;
             /std/print(
                 Str/flatten(

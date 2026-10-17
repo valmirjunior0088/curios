@@ -1,5 +1,4 @@
-use /std/{Bytes, Nat, Bool, List, Path, Try, Io, Handle};
-use /std/Bool/{Holds};
+use /std/{Nat, Bool, List, Path, Try, Io, Handle};
 
 --- An open serial port.
 pub struct Serial: Type {
@@ -76,16 +75,8 @@ pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
 pub let close(s: Serial) -> Io({}) =
     Handle/close(s.0);
 
---- Up to `n` bytes, waiting until some arrive.
-pub let read(s: Serial, n: Nat, @positive: Holds(0 < n)) -> Try(Io, Io/Error, Io/Chunk) =
-    Io/read(@Handle, s.0, n, @positive);
-
---- The whole of `b`, waiting while the device cannot take more.
-pub let write(s: Serial, b: Bytes) -> Try(Io, Io/Error, {}) =
-    Io/write(s.0, b);
-
 satisfy Io/Read(Serial) {
-    read(s, n, @positive) = read(s, n, @positive),
+    read(s, n, @positive) = Io/read(@Handle, s.0, n, @positive),
 }
 
 --- Wait for this port to send what it accepted: `ok` once it has, or can no longer send it, or the status of the failure. The host answers it later, so the call suspends while the wait runs.
@@ -100,7 +91,7 @@ pub let drain(s: Serial) -> Try(Io, Io/Error, {}) =
     end;
 
 satisfy Io/Write(Serial) {
-    write(s, b) = write(s, b),
+    write(s, b) = Io/write(s.0, b),
     flush(s) = drain(s),
 }
 

@@ -82,7 +82,7 @@ fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Path, Try, Io};
         let entry() -> /std/Io({}) =
-            match Try/run(File/with(Path/of_str("out.txt"), File/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))!
+            match Try/run(File/with(Path/of_str("out.txt"), File/Mode/write(), (f) => Io/write(f, /std/Str/to_bytes("written"))))!
             | success(_) => /std/print("ok")
             | failure(_) => /std/print("error")
             end;

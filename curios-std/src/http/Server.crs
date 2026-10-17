@@ -78,7 +78,7 @@ let invite(limits: Limits, c: Socket, r: Reader(Socket), o: Opened) -> Io(Result
     | true =>
         let held = Reader/held(r)!;
         match read/body(limits, o.framing, x[], held)
-        | more(_, _) => Try/run(Socket/write(c, Str/to_bytes("HTTP/1.1 100 Continue\r\n\r\n")))
+        | more(_, _) => Try/run(Io/write(c, Str/to_bytes("HTTP/1.1 100 Continue\r\n\r\n")))
         | _ => Io/pure(Result/success(()))
         end
     end;
@@ -141,7 +141,7 @@ let drain(c: Socket, quiet: Duration, left: Nat) -> Io({}) =
     match left
     | 0 => Io/pure(())
     | _ =>
-        let arrived = Io/timeout(quiet, Try/run(Socket/read(c, 65536)))!;
+        let arrived = Io/timeout(quiet, Try/run(Io/read(c, 65536)))!;
         match arrived
         | none() => Io/pure(())
         | some(read) =>
@@ -172,7 +172,7 @@ let send(s: Server, c: Socket, method: Method, reply: Response) -> Io({}) =
         | head() => Response/render_head(stamped, stamped.body)
         | _ => Response/render(stamped)
         end;
-    let wrote = Try/run(Socket/write(c, bytes))!;
+    let wrote = Try/run(Io/write(c, bytes))!;
     match wrote
     | failure(_) => Io/pure(())
     | success(_) =>

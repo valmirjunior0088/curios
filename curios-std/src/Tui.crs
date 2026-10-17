@@ -199,7 +199,7 @@ let running(
         end;
     -- Everything queued behind the event that woke the loop, so a burst still draws once. A failure queued among them ends the run where it stands.
     let burst(acc: List(Event(E))) -> Try(Io, Io/Error, List(Event(E))) =
-        let more = Channel/try_recv(queue.1)!;
+        let more = Channel/try_receive(queue.1)!;
         match more
         | item(event(e)) => burst([..acc, e])
         | item(failed(why)) => Try/raise(why)
@@ -207,7 +207,7 @@ let running(
         | ended() => Try/pure(acc)
         end;
     let loop(session: Session, m: M) -> Try(Io, Io/Error, M) =
-        let woke = Channel/recv(queue.1)!;
+        let woke = Channel/receive(queue.1)!;
         match woke
         | none() => Try/pure(m)
         | some(failed(why)) => Try/raise(why)

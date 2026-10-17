@@ -40,7 +40,7 @@ const WIRE: &str = r#"
     use /std/time/{Duration};
     struct Wire: Type { Channel/Receiver(Bytes) }
     let next(w: Wire) -> Try(Io, Io/Error, Io/Chunk) =
-        let got = Channel/recv(w.0)!;
+        let got = Channel/receive(w.0)!;
         match got
         | none() => Try/pure(Io/Chunk/ended())
         | some(bytes) =>

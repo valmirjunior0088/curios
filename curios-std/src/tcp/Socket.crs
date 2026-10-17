@@ -1,22 +1,13 @@
 use /std/{Bytes, Str, Nat, Bool, Try, Io, Handle};
 use /std/tcp/{resolve, Socket};
 use /std/Handle/{Interest};
-use /std/Bool/{Holds};
-
---- Up to `n` bytes, waiting until some arrive.
-pub let read(c: Socket, n: Nat, @positive: Holds(0 < n)) -> Try(Io, Io/Error, Io/Chunk) =
-    Io/read(@Handle, c.0, n, @positive);
-
---- The whole of `b`, waiting while the peer cannot take more.
-pub let write(c: Socket, b: Bytes) -> Try(Io, Io/Error, {}) =
-    Io/write(c.0, b);
 
 satisfy Io/Read(Socket) {
-    read(c, n, @positive) = read(c, n, @positive),
+    read(c, n, @positive) = Io/read(@Handle, c.0, n, @positive),
 }
 
 satisfy Io/Write(Socket) {
-    write(c, b) = write(c, b),
+    write(c, b) = Io/write(c.0, b),
     flush(c) = Io/flush(c.0),
 }
 
@@ -123,5 +114,5 @@ let flushed(@A: Type, c: Socket, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error
 --- `request` written whole and the reply read to its end, over the socket `open` connects, closed after. One exchange with a peer that closes when it has answered.
 pub let call(open: Try(Io, Io/Error, Socket), request: Bytes) -> Try(Io, Io/Error, Bytes) =
     with(open, (c) =>
-        let _ = write(c, request)!;
+        let _ = Io/write(c, request)!;
         Io/read_all(c));
