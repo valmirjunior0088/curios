@@ -127,6 +127,13 @@ pub concept Write(S: Type): pub Type {
 
 pub use Write/*;
 
+--- What a stream's sending half is ended through, on its own: the reader at the other end reads the end of the stream, and whatever it sends back is still read. Ending it is not closing it, which the scope the stream was opened into does.
+pub concept Finish(S: Type): pub Type {
+    finish(S) -> Try(Io, Error, {}),
+}
+
+pub use Finish/*;
+
 -- Everything `read` yields up to the end of the stream; a failure before the end drops what was read. Every chunk holds a byte, so every read short of the end is progress.
 let drain(
     read: (n: Nat, @positive: Holds(0 < n)) -> Try(Io, Error, Chunk),

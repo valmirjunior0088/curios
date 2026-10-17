@@ -537,7 +537,7 @@ fn a_closed_channel_drains_before_it_ends() {
             let _ = Channel/send(c.0, 1)!;
             let _ = Channel/send(c.0, 2)!;
             let full = Channel/try_send(c.0, 3)!;
-            let _ = Channel/close(c.0)!;
+            let _ = Channel/finish(c.0)!;
             let refused = Channel/try_send(c.0, 3)!;
             let first = Channel/receive(c.1)!;
             let second = Channel/receive(c.1)!;

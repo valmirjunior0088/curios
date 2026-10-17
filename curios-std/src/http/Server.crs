@@ -177,7 +177,7 @@ let send(s: Server, c: Socket, method: Method, reply: Response) -> Io({}) =
     | failure(_) => Io/pure(())
     | success(_) =>
         let _ = Try/run(Io/flush(c))!;
-        let _ = Try/run(Socket/finish(c))!;
+        let _ = Try/run(Io/finish(c))!;
         drain(c, s.quiet, s.limits.head + s.limits.content)
     end;
 

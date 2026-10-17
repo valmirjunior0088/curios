@@ -19,8 +19,8 @@ fn a_channel_preserves_fifo_through_wraparound_and_close() {
             let _ = pushed(Channel/try_send(c.0, 30)!)!;
             let _ = taken(Channel/try_receive(c.1)!)!;
             let _ = pushed(Channel/try_send(c.0, 30)!)!;
-            let _ = Channel/close(c.0)!;
-            let _ = Channel/close(c.0)!;
+            let _ = Channel/finish(c.0)!;
+            let _ = Channel/finish(c.0)!;
             let _ = pushed(Channel/try_send(c.0, 40)!)!;
             let _ = taken(Channel/try_receive(c.1)!)!;
             let _ = taken(Channel/try_receive(c.1)!)!;

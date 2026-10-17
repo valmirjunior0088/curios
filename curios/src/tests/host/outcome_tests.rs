@@ -242,7 +242,7 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             vec![(HostOp::TlsServerConfig, denied(vec![bytes(b"")]))],
         ),
         (
-            r#"let c = tcp/Socket/connect(s, "h", 80)!; tcp/Socket/finish(c)"#,
+            r#"let c = tcp/Socket/connect(s, "h", 80)!; Io/finish(c)"#,
             vec![
                 looked_up(),
                 opened(),

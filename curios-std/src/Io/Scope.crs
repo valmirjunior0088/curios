@@ -93,6 +93,6 @@ pub let run(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
     let answer: Future(A) = Future/new()!;
     let driven() -> Io(A) =
         let _ = drive([into(body(s), answer)], spawned(ends.1), answered(answer))!;
-        let _ = Channel/close(ends.0)!;
+        let _ = Channel/finish(ends.0)!;
         Future/wait(answer);
     using((how) => released(s, how), driven());

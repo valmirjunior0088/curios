@@ -17,7 +17,7 @@ pub mod Socket;
 -- What the connection hands its peer as it is released from a scope that finished: what it holds of the writes it accepted, a TLS stream's records, and its sending half ended, a TLS stream's closure alert ahead of the socket's own end. A courtesy to a peer that may already be gone, so neither failure is anyone's.
 let courtesy(h: Handle) -> Io({}) =
     let _ = Try/run(Io/flush(h))!;
-    let _ = Try/run(Handle/finish(h))!;
+    let _ = Try/run(Io/finish(h))!;
     Io/pure(());
 
 -- How a scope releases a connection it owns: the courtesy where the scope finished, then, however it ended, the close.

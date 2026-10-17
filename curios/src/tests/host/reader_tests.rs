@@ -160,7 +160,7 @@ fn two_branches_on_one_reader_each_get_a_whole_line() {
             let second = Io/Scope/spawn(s, reading(input))!;
             let _ = Io/yield()!;
             let _ = Channel/try_send(ends.0, Str/to_bytes("\nb\n"))!;
-            let _ = Channel/close(ends.0)!;
+            let _ = Channel/finish(ends.0)!;
             let _ = Io/Scope/Task/join(first)!;
             Io/Scope/Task/join(second);
         Io/Scope/run(both_read)

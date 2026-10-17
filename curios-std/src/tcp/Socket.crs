@@ -12,8 +12,9 @@ satisfy Io/Write(Socket) {
 }
 
 --- `c`'s sending half ended, with `c` still reading: the peer reads the end of the stream — a TLS peer its closure alert first — and whatever it sends after is still `c`'s to read. It is how a connection says it has finished, where `close` says nothing and resets a connection that holds unread bytes.
-pub let finish(c: Socket) -> Try(Io, Io/Error, {}) =
-    Handle/finish(c.0);
+satisfy Io/Finish(Socket) {
+    finish(c) = Io/finish(c.0),
+}
 
 --- Close `c` before its scope ends, saying nothing to the peer. The scope's own release then finds nothing to close.
 pub let close(c: Socket) -> Io({}) =

@@ -24,7 +24,7 @@ let changed(side: Woken) -> Io({}) =
     | _ => Io/pure(())
     end;
 
--- A channel and the two sides waited on: its readers wait for an item or the close, its writers for room or the close. Every change goes through `try_send`, `try_receive` and `close`, which wake the side it concerns.
+-- A channel and the two sides waited on: its readers wait for an item or the close, its writers for room or the close. Every change goes through `try_send`, `try_receive` and `finish`, which wake the side it concerns.
 struct Ends(A: Type): Type {
     channel: Channel(A),
     readers: Woken,
@@ -69,8 +69,8 @@ pub let try_receive(@A: Type, r: Receiver(A)) -> Io(Take(A)) =
     | _ => Io/pure(outcome)
     end;
 
---- Close the channel. A receiver drains what is already queued and then answers `none`, and a send answers `false`.
-pub let close(@A: Type, s: Sender(A)) -> Io({}) =
+--- End what the channel sends: a receiver drains what is already queued and then answers `none`, and a send answers `false`.
+pub let finish(@A: Type, s: Sender(A)) -> Io({}) =
     let _ = /sys/Channel/close(s.0.channel)!;
     let _ = changed(s.0.readers)!;
     changed(s.0.writers);

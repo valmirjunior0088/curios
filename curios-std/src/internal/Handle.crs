@@ -158,10 +158,6 @@ let finish_waiting(h: Handle) -> Io(Result(Error, {})) =
     end;
 
 -- The loops above are plain `Io` over a `Result`, each wrapped once where it is public, so the description a constant `print` copies stays under the evaluator's cap.
---- `h`'s sending half ended and its receiving half left as it is, waiting while the host would block: the peer reads the end of the stream, a TLS stream's closure alert ahead of it, and `h` still reads what the peer sends. Only a connected socket has a sending half of its own to end, and any other handle is `not_found`.
-pub let finish(h: Handle) -> Try(Io, Error, {}) =
-    Try/attempt(finish_waiting(h));
-
 satisfy Io/Read(Handle) {
     read(h, n, @positive) = Try/attempt(read_waiting(h, n, @positive)),
 }
@@ -169,4 +165,9 @@ satisfy Io/Read(Handle) {
 satisfy Io/Write(Handle) {
     write(h, b) = Try/attempt(write_waiting(h, b)),
     flush(h) = Try/attempt(flush_waiting(h)),
+}
+
+--- `h`'s sending half ended and its receiving half left as it is, waiting while the host would block: the peer reads the end of the stream, a TLS stream's closure alert ahead of it, and `h` still reads what the peer sends. Only a connected socket has a sending half of its own to end, and any other handle is `not_found`.
+satisfy Io/Finish(Handle) {
+    finish(h) = Try/attempt(finish_waiting(h)),
 }
