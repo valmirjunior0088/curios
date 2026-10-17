@@ -278,8 +278,9 @@ export async function run(config) {
       );
     },
     proc_env: () => [status.NOT_FOUND, emptyBytes()],
-    // The playground has no terminal to switch or measure, so both tty rows are denied as `file_open` is.
-    tty_raw: denied,
+    // The playground has no terminal to take, give back or measure, so every tty row is denied as `file_open` is.
+    tty_take: denied,
+    tty_give: denied,
     tty_size: () => [status.PERMISSION_DENIED, 0n, 0n],
     // No serial devices either: Web Serial asks the user to pick a port, which no row can do, so opening one is denied as `file_open` is.
     serial_open: deniedHandle,

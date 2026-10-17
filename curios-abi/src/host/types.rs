@@ -1,6 +1,6 @@
 //! The semantic Rust types a host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a wait on the platform's descriptors — live with the adapter (`curios-runtime`), not here.
+//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Mode`] its [`open_mode`] tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a wait on the platform's descriptors — live with the adapter (`curios-runtime`), not here.
 
 use {
     crate::{file_kind, open_mode, serial_flow, serial_op, serial_parity, stdio, stdio_mode},
@@ -226,6 +226,7 @@ pub enum Mode {
     Read,
     Write,
     Append,
+    ReadWrite,
 }
 
 impl ClosedCode for Mode {
@@ -233,6 +234,7 @@ impl ClosedCode for Mode {
         (Mode::Read, open_mode::READ),
         (Mode::Write, open_mode::WRITE),
         (Mode::Append, open_mode::APPEND),
+        (Mode::ReadWrite, open_mode::READ_WRITE),
     ];
 }
 

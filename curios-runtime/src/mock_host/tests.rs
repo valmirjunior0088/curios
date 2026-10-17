@@ -1,7 +1,7 @@
 //! The scripted host's contract: handles miss loudly after close, and a chunked stream — standard input among them — hands the wait back to its reader between chunks.
 
 use {
-    super::{EBUSY, ENOTTY, Looked, MockHost, SocketEvent},
+    super::{CONTROLLING_TERMINAL, EBUSY, ENOTTY, ENXIO, Looked, MockHost, SocketEvent},
     crate::{
         Answer, ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, Later, Mode,
         SerialFlow, SerialOp, SerialParity, Settled, StdioMode, TtySize, blocking,
@@ -39,42 +39,73 @@ fn watched(host: &MockHost, handle: &Handle, readable: bool, writable: bool) -> 
     ready == [event::READY]
 }
 
+/// The controlling terminal a scripted host answers at `/dev/tty`.
+fn terminal(host: &MockHost) -> Handle {
+    host.file_open(CONTROLLING_TERMINAL.to_vec(), Mode::ReadWrite)
+        .expect("a scripted terminal")
+}
+
 #[test]
 fn terminal_sizes_advance_on_queries_and_repeat_the_last() {
     let (host, io) = MockHost::builder().tty_sizes([(12, 5), (16, 6)]).build();
+    let tty = terminal(&host);
 
-    assert_eq!(host.tty_raw(Handle::Stdin, true), Ok(()));
+    assert_eq!(host.tty_take(tty.clone(), b"leave".to_vec()), Ok(()));
     assert_eq!(
-        host.tty_size(Handle::Stdin),
+        host.tty_size(tty.clone()),
         Ok(TtySize { cols: 12, rows: 5 })
     );
-    assert_eq!(host.tty_raw(Handle::Stdin, false), Ok(()));
+    assert_eq!(host.tty_give(tty.clone()), Ok(()));
     for _ in 0..3 {
         assert_eq!(
-            host.tty_size(Handle::Stdin),
+            host.tty_size(tty.clone()),
             Ok(TtySize { cols: 16, rows: 6 })
         );
     }
     assert_eq!(io.raw_modes(), [true, false]);
+    assert_eq!(io.output(), b"leave");
 }
 
 #[test]
 fn a_fixed_terminal_size_repeats_and_an_empty_script_has_no_terminal() {
     let (host, _) = MockHost::builder().tty_size(20, 5).build();
+    let tty = terminal(&host);
     for _ in 0..3 {
         assert_eq!(
-            host.tty_size(Handle::Stdin),
+            host.tty_size(tty.clone()),
             Ok(TtySize { cols: 20, rows: 5 })
         );
     }
 
     let (host, io) = MockHost::builder().tty_size(20, 5).tty_sizes([]).build();
+    assert_eq!(
+        host.file_open(CONTROLLING_TERMINAL.to_vec(), Mode::ReadWrite),
+        Err(Failure::Other(ENXIO))
+    );
     assert_eq!(host.tty_size(Handle::Stdin), Err(Failure::Other(ENOTTY)));
     assert_eq!(
-        host.tty_raw(Handle::Stdin, true),
+        host.tty_take(Handle::Stdin, Vec::new()),
         Err(Failure::Other(ENOTTY))
     );
     assert!(io.raw_modes().is_empty());
+}
+
+/// The scripted terminal is the device behind both standard streams: it reads the scripted keys and writes where standard output does, and a host dropped with it still taken gives it back, writing its leave bytes, as a trap or an `exit` drops the native host.
+#[test]
+fn the_terminal_reads_the_scripted_keys_and_a_dropped_host_gives_it_back() {
+    let (host, io) = MockHost::builder()
+        .tty_size(20, 5)
+        .stdin_chunks(vec![b"q".to_vec()])
+        .build();
+    let tty = terminal(&host);
+
+    assert_eq!(host.handle_read(tty.clone(), 8), Ok(Some(b"q".to_vec())));
+    assert_eq!(host.handle_write(tty.clone(), b"frame".to_vec()), Ok(5));
+    assert_eq!(host.tty_take(tty, b"/leave".to_vec()), Ok(()));
+    drop(host);
+
+    assert_eq!(io.output(), b"frame/leave");
+    assert_eq!(io.raw_modes(), [true, false]);
 }
 
 #[test]

@@ -466,6 +466,8 @@ enum MockResource {
     /// A server TLS config token minted by `tls_server_config`. The scripted host runs cleartext, so it carries no real configuration — it only marks the handle so `tls_start_server` can recognise it.
     TlsConfig,
     Serial(MockSerial),
+    /// The controlling terminal `file_open` answers at `/dev/tty`: it reads the scripted standard input and writes where standard output does, as a terminal behind both streams is one device with one queue of keys.
+    Terminal,
     /// A watch minted by `handle_watch`: the handle it watches and what it asks of it.
     Watch {
         target: Handle,
@@ -530,8 +532,10 @@ pub struct MockHost {
     args: Vec<Vec<u8>>,
     /// Scripted environment served by `proc_env`: name → value.
     env: HashMap<Vec<u8>, Vec<u8>>,
-    /// Every mode `tty_raw` was asked for, in order. Shared with [`MockIo::raw_modes`], so a test can see that a bracket switched raw mode on and back off.
+    /// Every switch of a terminal, in order: `true` where `tty_take` took one and `false` where it was given back. Shared with [`MockIo::raw_modes`], so a test can see that a scope took the terminal and gave it back.
     raw_modes: Arc<Mutex<Vec<bool>>>,
+    /// Every terminal taken and not yet given back, by its handle's token, with the leave bytes a give writes to it.
+    taken: Mutex<Vec<(Vec<u8>, Vec<u8>)>>,
     /// Terminal sizes served in order, repeating the last; an empty script answers `ENOTTY` as a host with no terminal does.
     tty_sizes: Mutex<VecDeque<(u64, u64)>>,
     /// The scripted working directory `proc_cwd` answers.
@@ -628,6 +632,12 @@ const SIGKILL: NonZeroU32 = NonZeroU32::new(9).unwrap();
 /// `ENOTTY`, the errno a terminal `ioctl` reports on a descriptor that is not a terminal — `25` on both release targets, Linux and macOS.
 const ENOTTY: u32 = 25;
 
+/// `ENXIO`, the errno an open of `/dev/tty` reports for a process with no controlling terminal — `6` on both release targets, Linux and macOS.
+const ENXIO: u32 = 6;
+
+/// The path a process opens its controlling terminal by.
+const CONTROLLING_TERMINAL: &[u8] = b"/dev/tty";
+
 impl MockHost {
     /// Start seeding a host. Chain the `stdin_lines`/`files`/`net`/… setters, then `build` for the `(host, io)` pair.
     pub fn builder() -> MockHostBuilder {
@@ -652,7 +662,9 @@ impl MockHost {
             | (Handle::Stdout | Handle::Stderr, Direction::Write) => Ok(()),
             (Handle::Stdin | Handle::Stdout | Handle::Stderr, _) => wrong_way,
             (Handle::Other(_), _) => match (self.table.lock().unwrap().get(handle), direction) {
-                (Some(MockResource::File(open)), Direction::Read) if open.mode != Mode::Read => {
+                (Some(MockResource::File(open)), Direction::Read)
+                    if !matches!(open.mode, Mode::Read | Mode::ReadWrite) =>
+                {
                     wrong_way
                 }
                 (Some(MockResource::File(open)), Direction::Write) if open.mode == Mode::Read => {
@@ -667,7 +679,8 @@ impl MockHost {
                         | MockResource::Outbound(_)
                         | MockResource::Serial(_)
                         | MockResource::Piped(_)
-                        | MockResource::Sink,
+                        | MockResource::Sink
+                        | MockResource::Terminal,
                     ),
                     _,
                 ) => Ok(()),
@@ -706,25 +719,11 @@ impl MockHost {
         }
 
         match handle {
-            // Standard input is armed like a scripted stream, so one look of a watch is one chunk of progress and a reader waiting on `WouldBlock` resumes into the next chunk.
-            Handle::Stdin => {
-                let mut input = self.input.lock().unwrap();
-                let slept_until = *self.slept_until.lock().unwrap();
-                if self
-                    .input_pauses
-                    .lock()
-                    .unwrap()
-                    .holds(input.left(), slept_until)
-                {
-                    return false;
-                }
-                input.arm();
-
-                true
-            }
+            Handle::Stdin => self.input_ready(),
             // The output streams answer a read at once, with the refusal a stream open only to write gives.
             Handle::Stdout | Handle::Stderr => true,
             Handle::Other(_) => match table.get_mut(handle) {
+                Some(MockResource::Terminal) => self.input_ready(),
                 Some(MockResource::Outbound(stream) | MockResource::Piped(stream)) => stream.arm(),
                 Some(MockResource::Inbound(conn)) => conn.bytes.arm(),
                 Some(MockResource::Serial(port)) => {
@@ -740,6 +739,42 @@ impl MockHost {
                 // An unknown handle — closed, say — is ready, as the native host reports its failure, so a waiter wakes into the call that reports why.
                 None => true,
             },
+        }
+    }
+
+    /// Whether scripted standard input is ready to read, as the stream or the terminal behind it. It is armed like a scripted stream, so one look of a watch is one chunk of progress and a reader waiting on `WouldBlock` resumes into the next chunk.
+    fn input_ready(&self) -> bool {
+        let mut input = self.input.lock().unwrap();
+        let slept_until = *self.slept_until.lock().unwrap();
+        if self
+            .input_pauses
+            .lock()
+            .unwrap()
+            .holds(input.left(), slept_until)
+        {
+            return false;
+        }
+        input.arm();
+
+        true
+    }
+
+    /// Whether `handle` names the controlling terminal.
+    fn terminal(&self, handle: &Handle) -> bool {
+        matches!(
+            self.table.lock().unwrap().get(handle),
+            Some(MockResource::Terminal)
+        )
+    }
+
+    /// Give back the terminal `token` names where it is still taken: its leave bytes are written where the terminal writes, and the switch is recorded.
+    fn give_back(&self, token: &[u8]) {
+        let mut taken = self.taken.lock().unwrap();
+
+        if let Some(index) = taken.iter().position(|(held, _)| held == token) {
+            let (_, leave) = taken.remove(index);
+            self.output.lock().unwrap().extend_from_slice(&leave);
+            self.raw_modes.lock().unwrap().push(false);
         }
     }
 
@@ -805,10 +840,30 @@ impl MockHost {
     }
 }
 
+/// Give back every terminal still taken, as the native host does when it is dropped, so a trap or an `exit` writes the leave bytes a scope that never ended did not.
+impl Drop for MockHost {
+    fn drop(&mut self) {
+        let taken = std::mem::take(&mut *self.taken.lock().unwrap());
+
+        for (_, leave) in taken {
+            self.output.lock().unwrap().extend_from_slice(&leave);
+            self.raw_modes.lock().unwrap().push(false);
+        }
+    }
+}
+
 impl HostOps for MockHost {
     fn file_open(&self, path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> {
+        // A host scripted with a terminal size has a controlling terminal; one with none answers as a process outside any session does.
+        if path == CONTROLLING_TERMINAL {
+            return match self.tty_sizes.lock().unwrap().is_empty() {
+                true => Err(Failure::Other(ENXIO)),
+                false => Ok(self.mint(MockResource::Terminal)),
+            };
+        }
+
         match mode {
-            Mode::Read => match self.files.contains(&path) {
+            Mode::Read | Mode::ReadWrite => match self.files.contains(&path) {
                 true => Ok(()),
                 false => Err(Failure::NotFound),
             },
@@ -1124,6 +1179,9 @@ impl HostOps for MockHost {
             return;
         }
 
+        // A terminal still taken is given back before its handle goes, as the native host gives it back while the descriptor still reaches it.
+        self.give_back(&io.bytes());
+
         let closed = self.table.lock().unwrap().remove(&io);
 
         if matches!(
@@ -1156,6 +1214,8 @@ impl HostOps for MockHost {
             Some(MockResource::Inbound(conn)) => self.ended(conn.bytes.read(count)),
             // A serial port: serve the device's scripted chunks.
             Some(MockResource::Serial(port)) => port.bytes.read(count),
+            // The controlling terminal: its keys are the scripted standard input.
+            Some(MockResource::Terminal) => self.input.lock().unwrap().read(count),
             // Outbound connection: serve the scripted reply.
             Some(MockResource::Outbound(stream)) => self.ended(stream.read(count)),
             // A child's piped output: serve the scripted chunks.
@@ -1221,6 +1281,12 @@ impl HostOps for MockHost {
 
                 Ok(full)
             }
+            // The controlling terminal: written where standard output writes, as the terminal behind it.
+            Some(MockResource::Terminal) => {
+                self.output.lock().unwrap().extend_from_slice(&bytes);
+
+                Ok(full)
+            }
             _ => Err(Failure::NotFound),
         }
     }
@@ -1276,17 +1342,38 @@ impl HostOps for MockHost {
         Termination(code)
     }
 
-    fn tty_raw(&self, _io: Handle, on: bool) -> Result<(), Failure> {
-        if self.tty_sizes.lock().unwrap().is_empty() {
+    fn tty_take(&self, io: Handle, leave: Vec<u8>) -> Result<(), Failure> {
+        if !self.terminal(&io) {
             return Err(Failure::Other(ENOTTY));
         }
 
-        self.raw_modes.lock().unwrap().push(on);
+        let token = io.bytes();
+        let mut taken = self.taken.lock().unwrap();
+
+        match taken.iter_mut().find(|(held, _)| *held == token) {
+            Some((_, held)) => *held = leave,
+            None => taken.push((token, leave)),
+        }
+        self.raw_modes.lock().unwrap().push(true);
 
         Ok(())
     }
 
-    fn tty_size(&self, _io: Handle) -> Result<TtySize, Failure> {
+    fn tty_give(&self, io: Handle) -> Result<(), Failure> {
+        if !self.terminal(&io) {
+            return Err(Failure::NotFound);
+        }
+
+        self.give_back(&io.bytes());
+
+        Ok(())
+    }
+
+    fn tty_size(&self, io: Handle) -> Result<TtySize, Failure> {
+        if !self.terminal(&io) {
+            return Err(Failure::Other(ENOTTY));
+        }
+
         let mut sizes = self.tty_sizes.lock().unwrap();
         let size = if sizes.len() > 1 {
             sizes.pop_front()
@@ -1551,7 +1638,7 @@ impl MockIo {
         self.socket_events.lock().unwrap().clone()
     }
 
-    /// Every raw-mode switch the guest asked for, in order: `true` for on, `false` for off.
+    /// Every switch of the terminal, in order: `true` where the guest took it, `false` where it was given back, by the guest or as the host was dropped.
     pub fn raw_modes(&self) -> Vec<bool> {
         self.raw_modes.lock().unwrap().clone()
     }
@@ -1668,7 +1755,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Give the host a terminal of `cols` by `rows`: `tty_size` answers it and `tty_raw` records its switches. Without one, both rows answer `ENOTTY`.
+    /// Give the host a controlling terminal of `cols` by `rows`: `file_open` answers it at `/dev/tty`, reading the scripted standard input and writing where standard output writes, `tty_size` answers its size and `tty_take` and `tty_give` record its switches. Without one, opening `/dev/tty` answers `ENXIO`, and the terminal rows answer `ENOTTY` of any other handle.
     pub fn tty_size(self, cols: u64, rows: u64) -> Self {
         self.tty_sizes([(cols, rows)])
     }
@@ -1986,6 +2073,7 @@ impl MockHostBuilder {
             args: self.args,
             env: self.env,
             raw_modes,
+            taken: Mutex::new(Vec::new()),
             tty_sizes: Mutex::new(self.tty_sizes),
             cwd: self.cwd.unwrap_or_else(|| b"/".to_vec()),
             children: self.children,

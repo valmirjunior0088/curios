@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Bool, List, Option, Result, Io, Try, Tty, Process};
+use /std/{Nat, Bytes, Bool, List, Option, Result, Io, Try, Tty};
 use /std/Io/{Reader};
 use /std/Io/Reader/{Step, Stop};
 use /std/time/{Duration};
@@ -13,37 +13,25 @@ struct Held: Type {
 --- A terminal taken: what it remembers between draws and reads.
 pub struct Session: Type {
     tty: Tty,
-    input: Reader(Process/Input),
+    input: Reader(Tty),
     previous: Option(Held),
     size: Tty/Size,
 }
 
-let entering: Try(Io, Io/Error, {}) =
-    Io/write(Process/stdout, x[
-        ..ansi/alternate_on,
-        ..ansi/cursor_hide,
-        ..ansi/paste_on,
-        ..ansi/kitty_push]);
+let entering: Bytes =
+    x[..ansi/alternate_on, ..ansi/cursor_hide, ..ansi/paste_on, ..ansi/kitty_push];
 
--- A failed write is discarded here and in `draw`: a release answers nothing, ending the program would skip the scope's other releases, and a terminal that cannot be written ends the session's input too.
-let leave() -> Io({}) =
-    let _ =
-        Try/run(
-            Io/write(Process/stdout, x[
-                ..ansi/kitty_pop,
-                ..ansi/paste_off,
-                ..ansi/cursor_show,
-                ..ansi/alternate_off]))!;
-    Io/pure(());
+-- The modes `entering` sets, undone in reverse: the host writes these when the terminal is given back, however the program ends.
+let leaving: Bytes =
+    x[..ansi/kitty_pop, ..ansi/paste_off, ..ansi/cursor_show, ..ansi/alternate_off];
 
---- The terminal taken for the rest of `s`: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse when `s` ends, however it ends.
+--- The controlling terminal taken for the rest of `s`: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse when `s` ends, however it ends.
 pub let enter(s: Io/Scope) -> Try(Io, Io/Error, Session) =
-    let t = Tty/stdin;
-    let _ = Tty/raw(s, t)!;
+    let t = Tty/open(s)!;
+    let _ = Tty/raw(s, t, leaving)!;
     let first = Tty/size(t)!;
-    let input = Reader/new(Process/stdin)!;
-    let _ = entering!;
-    let _ = Io/Scope/defer(s, (_) => leave())!;
+    let input = Reader/new(t)!;
+    let _ = Io/write(t, entering)!;
     Try/pure(Session { tty = t, input = input, previous = Option/none(), size = first });
 
 --- The terminal's size now, together with the session remembering it.
@@ -76,7 +64,7 @@ pub let draw(
             | false => Option/none()
             end
         end;
-    let _ = Try/run(Io/write(Process/stdout, render(before, frame, cursor)))!;
+    let _ = Try/run(Io/write(s.tty, render(before, frame, cursor)))!;
     Io/pure(Session { ..s, previous = Option/some(Held { w = w, h = h, frame = frame }) });
 
 -- One arrival of input and the events it completes, what it leaves undecoded staying held: the state is whether the arrival has come.

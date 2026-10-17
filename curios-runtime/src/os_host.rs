@@ -432,8 +432,8 @@ pub struct OsHost {
     args: Vec<Vec<u8>>,
     /// The pipe the replies it holds for later wake it through, opened by the first `later` that files one, so a program that never waits on a reply holds none; or what the system refused it with.
     wake: OnceLock<Result<WakePipe, Errno>>,
-    /// The termios of every descriptor `tty_raw` switched, keyed by the handle's token, so `tty_raw(h, false)` and [`Drop`] restore exactly what the program found. Host state with an exit obligation: a terminal left raw outlives the process that switched it.
-    termios: Mutex<Vec<(Vec<u8>, Termios)>>,
+    /// Every terminal `tty_take` took and nothing has given back, so `tty_give` and [`Drop`] undo exactly what the program set and restore what it found. Host state with an exit obligation: a terminal left raw, or on the alternate screen, outlives the process that switched it.
+    taken: Mutex<Vec<Taken>>,
     /// Whether standard output and standard error are a pipe or a socket, read on the first write to each: a gated write to one is bounded by what it takes without blocking. See [`OsHost::write_standard`].
     bounded: [OnceLock<bool>; 2],
     /// Which standard streams the program closed, by their place among input, output and error: a closed one's token names nothing, as any closed handle's does. See [`OsHost::close_standard`].
@@ -452,7 +452,7 @@ impl OsHost {
             start: Instant::now(),
             args,
             wake: OnceLock::new(),
-            termios: Mutex::new(Vec::new()),
+            taken: Mutex::new(Vec::new()),
             bounded: [OnceLock::new(), OnceLock::new()],
             closed: [
                 AtomicBool::new(false),
@@ -485,11 +485,14 @@ impl OsHost {
         }
 
         let token = io.bytes();
-        let mut records = self.termios.lock().unwrap();
-        if let Some(index) = records.iter().position(|(saved, _)| *saved == token) {
-            let (_, saved) = records.remove(index);
-            let input = stdin();
-            let _ = tcsetattr(input.as_fd(), OptionalActions::Now, &saved);
+        let mut records = self.taken.lock().unwrap();
+        if let Some(index) = records.iter().position(|taken| taken.token == token) {
+            let taken = records.remove(index);
+            let _ = match place {
+                0 => give_back(stdin().as_fd(), &taken),
+                1 => give_back(stdout().as_fd(), &taken),
+                _ => give_back(stderr().as_fd(), &taken),
+            };
         }
         drop(records);
 
@@ -617,16 +620,53 @@ impl Default for OsHost {
     }
 }
 
-/// Restore every terminal `tty_raw` switched. `instantiate` drops the host after a trap is classified and before the process exits, so a trap or an `exit` leaves the terminal as the program found it, whether or not the program's own bracket ran.
+/// Give back every terminal still taken. `instantiate` drops the host after a trap is classified and before the process exits, so a trap or an `exit` leaves each terminal as the program found it, whether or not the program's own scope ran.
 impl Drop for OsHost {
     fn drop(&mut self) {
-        let records = std::mem::take(&mut *self.termios.lock().unwrap());
+        let records = std::mem::take(&mut *self.taken.lock().unwrap());
 
-        for (token, saved) in records {
-            let handle = Handle::from_bytes(token);
-            let _ = self.with_fd(&handle, |fd| tcsetattr(fd, OptionalActions::Now, &saved));
+        for taken in records {
+            let handle = Handle::from_bytes(taken.token.clone());
+            let _ = self.with_fd(&handle, |fd| give_back(fd, &taken));
         }
     }
+}
+
+/// A terminal `tty_take` took: its handle's token, the termios it had, and the bytes that undo what the program set on it.
+struct Taken {
+    token: Vec<u8>,
+    saved: Termios,
+    leave: Vec<u8>,
+}
+
+/// How long a give waits for a terminal to take its leave bytes: a give runs where nothing may suspend, at a scope's release or as the process ends.
+const LEAVE_WAIT: Duration = Duration::from_millis(100);
+
+/// Write `taken`'s leave bytes to `fd`, then restore the termios it recorded: the bytes go out while output processing is still off, so they reach the terminal as written. A terminal that will not take them within [`LEAVE_WAIT`] keeps what it took, and its settings are restored all the same.
+fn give_back(fd: BorrowedFd<'_>, taken: &Taken) -> Result<(), Errno> {
+    let mut leave = taken.leave.as_slice();
+
+    while !leave.is_empty() {
+        match rustix::io::write(fd, leave) {
+            Ok(0) => break,
+            Ok(written) => leave = &leave[written..],
+            Err(Errno::INTR) => {}
+            Err(Errno::AGAIN) if writable_within(fd, LEAVE_WAIT) => {}
+            Err(_) => break,
+        }
+    }
+
+    tcsetattr(fd, OptionalActions::Now, &taken.saved)
+}
+
+/// Whether `fd` takes a write within `wait`.
+fn writable_within(fd: BorrowedFd<'_>, wait: Duration) -> bool {
+    let watched = [Watched {
+        fd,
+        asked: PollFlags::OUT,
+    }];
+
+    ready(&watched, Some(Instant::now() + wait)).is_ok_and(|ready| !ready.is_empty())
 }
 
 impl HostOps for OsHost {
@@ -639,6 +679,7 @@ impl HostOps for OsHost {
             Mode::Read => options.read(true),
             Mode::Write => options.write(true).create(true).truncate(true),
             Mode::Append => options.append(true).create(true),
+            Mode::ReadWrite => options.read(true).write(true),
         };
 
         // Opened without blocking, so the open waits on no peer: a FIFO's other end, a device's carrier. What the path turns out to name decides how it is filed.
@@ -967,6 +1008,8 @@ impl HostOps for OsHost {
         match standard(&io) {
             Some(place) => self.close_standard(&io, place),
             None => {
+                // A terminal still taken is given back while its descriptor still reaches it.
+                let _ = self.tty_give(io.clone());
                 self.table.lock().unwrap().remove(&io);
             }
         }
@@ -1205,39 +1248,51 @@ impl HostOps for OsHost {
         env::var_os(OsStr::from_bytes(&name)).map(|value| value.into_encoded_bytes())
     }
 
-    // The code leaves as the guest-exit trap; the terminal records `Drop` restores are what the process leaves behind.
+    // The code leaves as the guest-exit trap; the terminals `Drop` gives back are what the process leaves behind.
     fn proc_exit(&self, code: u8) -> Termination {
         Termination(code)
     }
 
-    fn tty_raw(&self, io: Handle, on: bool) -> Result<(), Failure> {
+    fn tty_take(&self, io: Handle, leave: Vec<u8>) -> Result<(), Failure> {
         let token = io.bytes();
 
         let outcome = self.with_fd(&io, |fd| {
-            let mut records = self.termios.lock().unwrap();
-            let recorded = records.iter().position(|(saved, _)| *saved == token);
+            let current = tcgetattr(fd)?;
+            let mut records = self.taken.lock().unwrap();
 
-            match (on, recorded) {
-                // The record is taken once, on the first switch, so a second `tty_raw(h, true)` cannot overwrite the settings the program found with raw ones.
-                (true, recorded) => {
-                    let current = tcgetattr(fd)?;
+            match records.iter_mut().find(|taken| taken.token == token) {
+                // Taken again: the termios first recorded stays, so raw settings never stand for the ones the program found.
+                Some(taken) => taken.leave = leave,
+                None => records.push(Taken {
+                    token,
+                    saved: current.clone(),
+                    leave,
+                }),
+            }
 
-                    if recorded.is_none() {
-                        records.push((token.clone(), current.clone()));
-                    }
+            let mut raw = current;
+            raw.make_raw();
 
-                    let mut raw = current;
-                    raw.make_raw();
+            tcsetattr(fd, OptionalActions::Now, &raw)
+        });
 
-                    tcsetattr(fd, OptionalActions::Now, &raw)
-                }
-                (false, Some(index)) => {
-                    let (_, saved) = records.remove(index);
+        match outcome {
+            None => Err(Failure::NotFound),
+            Some(Ok(())) => Ok(()),
+            Some(Err(errno)) => Err(failure_from_error(Error::from(errno))),
+        }
+    }
 
-                    tcsetattr(fd, OptionalActions::Now, &saved)
-                }
-                // Never switched: there is nothing to restore.
-                (false, None) => Ok(()),
+    fn tty_give(&self, io: Handle) -> Result<(), Failure> {
+        let token = io.bytes();
+
+        let outcome = self.with_fd(&io, |fd| {
+            let mut records = self.taken.lock().unwrap();
+
+            match records.iter().position(|taken| taken.token == token) {
+                Some(index) => give_back(fd, &records.remove(index)),
+                // Never taken: there is nothing to give back.
+                None => Ok(()),
             }
         });
 

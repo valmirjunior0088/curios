@@ -79,7 +79,7 @@ fn a_table_entry_does_not_carry_a_tls_connection_inline() {
     );
 }
 
-/// A descriptor that is not a terminal refuses both tty rows through the errno lane, which is how a program learns it has none. Which errno is the platform's own — Linux answers `ENOTTY`, macOS `ENODEV` for both rows — so what is under test is the lane rather than the code. `/dev/null` rather than a standard stream, because under an interactive `cargo test` stdin *is* a terminal and a passing `tty_raw` would leave it in raw mode.
+/// A descriptor that is not a terminal refuses a take and a size through the errno lane, which is how a program learns it has none, and one never taken has nothing to give back. Which errno is the platform's own — Linux answers `ENOTTY`, macOS `ENODEV` — so what is under test is the lane rather than the code. `/dev/null` rather than a standard stream, because under an interactive `cargo test` stdin *is* a terminal and a passing `tty_take` would leave it in raw mode.
 #[test]
 fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_refuse_through_the_errno_lane() {
     #[cfg(target_os = "linux")]
@@ -91,16 +91,73 @@ fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_refuse_through_the_errno_
     let handle = host.file_open(b"/dev/null".to_vec(), Mode::Read).unwrap();
 
     assert_eq!(
-        host.tty_raw(handle.clone(), true),
+        host.tty_take(handle.clone(), b"leave".to_vec()),
         Err(Failure::Other(NOT_A_TERMINAL))
     );
     assert_eq!(
         host.tty_size(handle.clone()),
         Err(Failure::Other(NOT_A_TERMINAL))
     );
-    assert_eq!(host.tty_raw(handle.clone(), false), Ok(()));
+    assert_eq!(host.tty_give(handle.clone()), Ok(()));
 
     host.handle_close(handle);
+}
+
+/// Whether the terminal behind `fd` reads lines and echoes them, as a terminal does before a program takes it.
+fn cooked(fd: BorrowedFd<'_>) -> bool {
+    tcgetattr(fd)
+        .expect("its settings")
+        .local_modes
+        .contains(LocalModes::ICANON | LocalModes::ECHO)
+}
+
+/// Everything the near end of a pseudo-terminal has to read now, its far end having written it already.
+fn written_to(near: &OwnedFd) -> Vec<u8> {
+    let mut buffer = vec![0; 256];
+    let read = rustix::io::read(near, &mut buffer).expect("the far end wrote");
+    buffer.truncate(read);
+
+    buffer
+}
+
+/// A terminal opened read and write by path is taken raw, and given back writes the leave bytes its take recorded before restoring the settings it had: the take's own bytes, and the second take's, which replaced them.
+#[test]
+fn a_taken_terminal_is_given_back_with_its_leave_bytes_and_its_settings() {
+    let (near, name) = pseudo_terminal();
+    let host = OsHost::with_args(vec![]);
+    let far = host.file_open(name, Mode::ReadWrite).unwrap();
+    let is_cooked = |host: &OsHost| host.with_fd(&far, cooked).expect("a filed descriptor");
+
+    assert!(is_cooked(&host));
+    assert_eq!(host.tty_take(far.clone(), b"first".to_vec()), Ok(()));
+    assert!(!is_cooked(&host));
+    assert_eq!(host.tty_take(far.clone(), b"\x1b[?1049l".to_vec()), Ok(()));
+    assert_eq!(host.tty_give(far.clone()), Ok(()));
+    assert!(is_cooked(&host));
+    assert_eq!(written_to(&near), b"\x1b[?1049l");
+    assert_eq!(host.tty_give(far.clone()), Ok(()));
+
+    host.handle_close(far);
+}
+
+/// A host dropped with a terminal still taken gives it back, as a trap or an `exit` drops it: the leave bytes reach the terminal and its settings are the ones it had.
+#[test]
+fn a_dropped_host_gives_back_every_terminal_still_taken() {
+    let (near, name) = pseudo_terminal();
+    let host = OsHost::with_args(vec![]);
+    let far = host.file_open(name.clone(), Mode::ReadWrite).unwrap();
+
+    assert_eq!(host.tty_take(far, b"\x1b[?25h".to_vec()), Ok(()));
+    drop(host);
+
+    let reopened = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(OFlags::NOCTTY.bits().cast_signed())
+        .open(OsStr::from_bytes(&name))
+        .expect("the far end opens again");
+    assert!(cooked(reopened.as_fd()));
+    assert_eq!(written_to(&near), b"\x1b[?25h");
 }
 
 /// A piped child stream is filed non-blocking by `proc_spawn`: before the child writes, a read answers `WouldBlock` instead of blocking the caller; bytes it echoes come back through `handle_read` once a watch of it is ready; closing its stdin ends it, its stdout reads to its end, and `proc_wait` reaps it. These streams are what let a drain suspend instead of blocking the run.

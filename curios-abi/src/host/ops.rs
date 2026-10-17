@@ -42,7 +42,7 @@ macro_rules! for_each_host_op {
             HandleFinish: fn handle_finish(h: Handle) -> Result<(), Failure> { module: internal/Handle }
 
             /// Open the file at `path` in `mode`, succeeding with its handle. A regular file or a directory is read and written synchronously, since the disk answers it; anything else — a FIFO, a device — is opened without waiting for a peer and served as a stream is, a read or a write that cannot progress answering `WouldBlock`. A FIFO opened to read reads nothing, rather than its end, until a writer has opened it; one opened to write with no reader fails with `ENXIO` through the errno lane, as the system reports it.
-            FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> { module: File, yields: handle }
+            FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> { module: internal/Handle, yields: handle }
 
             /// Look up `host`:`port`, answered later: every address the resolver found, none included, each an opaque blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_connect`/`socket_listen`. The blocking resolution runs off the host's thread, and the call suspends while it does. A lookup that failed is `NotFound`. A `host` that is not UTF-8 names nothing a resolver can find and is `NotFound`, and a `port` past 65535 is `EINVAL`, both before any lookup starts.
             DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Later<Result<Vec<Vec<u8>>, Failure>> { module: tcp/resolve, yields: addresses }
@@ -101,8 +101,11 @@ macro_rules! for_each_host_op {
             /// End the instance with `code`, the status every host hands its parent whole. The call never returns: the native host carries the code out as its guest-exit trap and the browser as its exit signal, neither ending the embedding process, and a host that returns anyway is refused rather than resumed.
             ProcExit: fn proc_exit(code: u8) -> Termination { module: Process }
 
-            /// Put terminal `h` in raw mode (`on`) — the descriptor's termios recorded on first use, then no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0 — or restore the record (`off`). The native host also restores every record when it is dropped, so a trap or an `exit` leaves the terminal usable. `ENOTTY` through the errno lane is how a program learns it has no terminal.
-            TtyRaw: fn tty_raw(h: Handle, on: bool) -> Result<(), Failure> { module: Tty }
+            /// Take terminal `h`: record its termios and `leave`, the bytes that undo what the program will set on it, then put it in raw mode — no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0. A terminal taken again keeps the termios first recorded, so raw settings never stand for the ones the program found, and its `leave` replaces the one before. `ENOTTY` through the errno lane is how a program learns `h` is no terminal.
+            TtyTake: fn tty_take(h: Handle, leave: Vec<u8>) -> Result<(), Failure> { module: Tty }
+
+            /// Give terminal `h` back: write the `leave` its take recorded, then restore the termios recorded. A terminal not taken has nothing to give back. The native host gives back every terminal still taken when it is dropped, so a trap or an `exit` leaves each as the program found it.
+            TtyGive: fn tty_give(h: Handle) -> Result<(), Failure> { module: Tty }
 
             /// The terminal's dimensions (`TIOCGWINSZ`): a success with its `cols` and `rows`.
             TtySize: fn tty_size(h: Handle) -> Result<TtySize, Failure> { module: Tty }

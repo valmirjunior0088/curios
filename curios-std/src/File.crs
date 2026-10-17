@@ -1,12 +1,12 @@
 use /std/{Bytes, Nat, Str, Path, Try, Io};
-use /std/internal/{Handle, error};
+use /std/internal/{Handle};
 
 --- An open file.
 pub struct File: Type {
     Handle,
 }
 
---- How a file is opened: to read, to write from the start, or to append.
+--- How a file is opened: to read, to write from the start, to append, or to read and write.
 pub induct Mode: pub Type
 --- Opened to read.
 | read()
@@ -14,6 +14,8 @@ pub induct Mode: pub Type
 | write()
 --- Opened to write after what is there.
 | append()
+--- Opened to read and to write where it stands, neither created nor truncated.
+| read_write()
 end
 
 --- The host's code for `mode`.
@@ -22,21 +24,15 @@ pub let of_mode(mode: Mode) -> Nat =
     | read() => /sys/open_mode/read
     | write() => /sys/open_mode/write
     | append() => /sys/open_mode/append
+    | read_write() => /sys/open_mode/read_write
     end;
-
---- Open the file at this path in this mode, one of `/sys/open_mode`'s codes: `ok` beside its handle, or the status of the failure.
-foreign file_open(Bytes, Nat) -> {status: Nat, handle: Handle};
 
 --- The file at `path`, opened in `mode` into `s`, which closes it when it ends.
 pub let open(s: Io/Scope, path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
-    let reply = file_open(Path/to_bytes(path), of_mode(mode))!;
-    match reply.status == /sys/status/ok
-    | true =>
-        let f = File { reply.handle };
-        let _ = Io/Scope/defer(s, (_) => Io/close(f))!;
-        Try/pure(f)
-    | false => Try/raise(error(reply.status))
-    end;
+    let h = Handle/open(Path/to_bytes(path), of_mode(mode))!;
+    let f = File { h };
+    let _ = Io/Scope/defer(s, (_) => Io/close(f))!;
+    Try/pure(f);
 
 --- Close `f` before its scope ends. The scope's own close then finds nothing to close.
 satisfy Io/Close(File) {

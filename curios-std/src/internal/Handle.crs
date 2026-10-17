@@ -5,6 +5,17 @@ use /std/Io/{Error};
 use /std/Bool/{Holds};
 use /std/internal/{error};
 
+--- Open the file at this path in this mode, one of `/sys/open_mode`'s codes: `ok` beside its handle, or the status of the failure.
+foreign file_open(Bytes, Nat) -> {status: Nat, handle: Handle};
+
+--- The handle the file at `path` opens to in `mode`, one of `/sys/open_mode`'s codes: what a file and a terminal are each opened through.
+pub let open(path: Bytes, mode: Nat) -> Try(Io, Io/Error, Handle) =
+    let reply = file_open(path, mode)!;
+    match reply.status == /sys/status/ok
+    | true => Try/pure(reply.handle)
+    | false => Try/raise(error(reply.status))
+    end;
+
 --- Close this handle.
 foreign handle_close(Handle) -> {};
 

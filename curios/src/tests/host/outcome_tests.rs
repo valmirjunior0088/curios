@@ -135,12 +135,18 @@ fn a_device_row_s_failure_is_the_error_it_names() {
 
     each_fails(vec![
         (
-            "Tty/raw(s, Tty/stdin)",
-            vec![(HostOp::TtyRaw, denied(vec![]))],
+            "let t = Tty/open(s)!; Tty/raw(s, t, x[])",
+            vec![
+                (HostOp::FileOpen, ok(vec![bytes(b"tty")])),
+                (HostOp::TtyTake, denied(vec![])),
+            ],
         ),
         (
-            "let _ = Tty/size(Tty/stdin)!; Try/pure(())",
-            vec![(HostOp::TtySize, denied(vec![nat(0), nat(0)]))],
+            "let t = Tty/open(s)!; let _ = Tty/size(t)!; Try/pure(())",
+            vec![
+                (HostOp::FileOpen, ok(vec![bytes(b"tty")])),
+                (HostOp::TtySize, denied(vec![nat(0), nat(0)])),
+            ],
         ),
         (
             &format!("let _ = {open}!; Try/pure(())"),
