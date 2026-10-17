@@ -147,7 +147,7 @@ const SHAPES: [Shape; 4] = [
 /// | conjunctions | 12 | 0.03 s [0.03–0.03] |
 /// | conjunctions | 24 | 0.15 s [0.15–0.15] |
 ///
-/// **A nested term costs its depth and no doubling of it.** **A long sum's cost is mostly the reducers' own**: every stuck sum walks the sum beneath it, whether or not a summand is respelled, which `documentation/roadmap/arithmetic/200-a-stuck-fold-keeps-what-its-walk-found.md` holds with the readings of the same sum unrespelled. **Two towers of remainders grow as two of conjunctions do**, by four and a half times from twelve to twenty-four against five: no remainder is put to a checker beside another.
+/// **A nested term costs its depth and no doubling of it.** **A long sum's cost is mostly the reducers' own**: every stuck sum walks the sum beneath it, whether or not a summand is respelled, which `documentation/roadmap/arithmetic/100-a-term-is-classified-once.md` holds with the counts of the same sum unrespelled. **Two towers of remainders grow as two of conjunctions do**, by four and a half times from twelve to twenty-four against five: no remainder is put to a checker beside another.
 #[test]
 #[ignore = "measurement, timed: reports what a size costs rather than asserting"]
 fn nested_operation_measurements() {
