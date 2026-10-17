@@ -1,6 +1,6 @@
 //! Runtime measurements behind `curios-runtime/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` and `spines` under differently sized heaps, and the pinned absence of allocation in `churn`'s threaded-record loop. Both count the engine's collections through `curios_runtime::test_support::collected`, which hears the engine's own announcements.
 //!
-//! What the sixteen-mebibyte initial heap buys: under death-birth churn an unsized heap parks within a doubling of the live set and the collector recopies it continually; sized, those collections are gone, the allocation-free `churn` does not move — the empirical pin on its exit from the churn class — and `trees` gains little, because an all-live tree must outgrow any constant.
+//! What the thirty-two-mebibyte initial heap buys: under death-birth churn an unsized heap parks within a doubling of the live set and the collector recopies it continually; sized, those collections are gone, the allocation-free `churn` does not move — the empirical pin on its exit from the churn class — and `trees` gains little, because an all-live tree must outgrow any constant.
 
 use {
     crate::to_compiled,
@@ -137,18 +137,18 @@ fn collections(compiled: &Compiled, k: u64) -> (usize, Option<String>) {
 ///
 /// # What it last printed
 ///
-/// Taken on top of `d5046c5cc` on an x86-64 Linux dev machine, wasmtime 47.0.3 with the sixteen-mebibyte default (see `curios-runtime/README.md`), the command above:
+/// Taken on top of `9a8fa8fb3` on an x86-64 Linux dev machine, wasmtime 47.0.3 with the thirty-two-mebibyte default (see `curios-runtime/README.md`), the command above:
 ///
 /// ```text
 /// == chain collection decomposition (K = 400)
-///   stock: churn 0.072 ms/round, 0.037 collections/round, no heap growth recorded
-///   ballast 250k (~16 MiB heap): churn 0.058 ms/round, 0.040 collections/round, no heap growth recorded
-///   ballast 4M (~256 MiB heap): churn 0.183 ms/round, 0.003 collections/round, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
+///   stock: churn 0.084 ms/round, 0.018 collections/round, no heap growth recorded
+///   ballast 500k (~32 MiB heap): churn 0.076 ms/round, 0.020 collections/round, no heap growth recorded
+///   ballast 4M (~256 MiB heap): churn 0.184 ms/round, 0.003 collections/round, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
 /// ```
 ///
 /// # The reading
 ///
-/// The engine grows the heap only when a single post-collection allocation cannot fit, so a heap left unsized parks barely above a tiny live set, a collection fires more than once a round, and every cell is copied more often than it is born. Under the default, stock *is* the sized arrangement — no growth is ever recorded because the initial size absorbs the whole run — and it matches the 16 MiB ballast arm, which is the ballast-to-initial-size equivalence this probe's method assumes. The 250k arm reads slightly under stock because its ballast phase pre-touches the pages stock first meets cold, and over-sizing (the 256 MiB arm) gives the win back to cold pages and TLB misses, so the lever is a sizing *policy*, not a maximal pre-grow. The residual warm-heap floor is the compiler-side birth path. Collection counts are deterministic and transport across machines; the time shares are this machine's.
+/// The engine grows the heap only when a single post-collection allocation cannot fit, so a heap left unsized parks barely above a tiny live set, a collection fires more than once a round, and every cell is copied more often than it is born. Under the default, stock *is* the sized arrangement — no growth is ever recorded because the initial size absorbs the whole run — and it matches the 32 MiB ballast arm, which is the ballast-to-initial-size equivalence this probe's method assumes. The 500k arm reads slightly under stock because its ballast phase pre-touches the pages stock first meets cold, and over-sizing (the 256 MiB arm) gives the win back to cold pages and TLB misses, so the lever is a sizing *policy*, not a maximal pre-grow. The residual warm-heap floor is the compiler-side birth path. Collection counts are deterministic and transport across machines; the time shares are this machine's.
 #[test]
 #[ignore = "measurement, mixed: times the churn workload and counts its collections rather than asserting"]
 fn chain_collection_decomposition() {
@@ -162,7 +162,7 @@ fn chain_collection_decomposition() {
 
     let arrangements: [(&str, Option<u64>); 3] = [
         ("stock", None),
-        ("ballast 250k (~16 MiB heap)", Some(250_000)),
+        ("ballast 500k (~32 MiB heap)", Some(500_000)),
         ("ballast 4M (~256 MiB heap)", Some(4_000_000)),
     ];
 
@@ -271,14 +271,14 @@ entry()
 ///
 /// # What it last printed
 ///
-/// Taken on top of `d5046c5cc` on an x86-64 Linux dev machine, release, under the sixteen-mebibyte default:
+/// Taken on top of `9a8fa8fb3` on an x86-64 Linux dev machine, release, under the thirty-two-mebibyte default:
 ///
 /// ```text
 /// == spines collection decomposition
-///   stock, N=12500: churn 0.65 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
-///   stock, N=25000: churn 0.70 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
-///   ballast 250k, N=25000: churn 0.56 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
-///   ballast 4M, N=25000: churn 0.54 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
+///   stock, N=12500: churn 0.60 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
+///   stock, N=25000: churn 0.61 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
+///   ballast 500k, N=25000: churn 0.58 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
+///   ballast 4M, N=25000: churn 0.57 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
 /// ```
 ///
 /// **The collector's share of the remaining insert is nil** — zero collections per thousand inserts at stock, at both Ns. The remaining insert cost (`map_wall_spines_slope`) is mutator work, so a rebuild-and-collection lever — a generational nursery among them — has nothing to take on this workload; what is left to rank is the representation tax against per-insert key construction, which `shapes.rs`'s instruments measure.
@@ -296,7 +296,7 @@ fn spines_collection_decomposition() {
     let arrangements: [(&str, Option<u64>, u64); 4] = [
         ("stock, N=12500", None, 12_500),
         ("stock, N=25000", None, 25_000),
-        ("ballast 250k, N=25000", Some(250_000), 25_000),
+        ("ballast 500k, N=25000", Some(500_000), 25_000),
         ("ballast 4M, N=25000", Some(4_000_000), 25_000),
     ];
 
@@ -314,6 +314,118 @@ fn spines_collection_decomposition() {
             churn_ms * 1000.0 / inserts as f64,
             (gc_churn as f64 - gc_base as f64) * 1000.0 / inserts as f64,
             heap.as_deref().unwrap_or("no heap growth recorded"),
+        );
+    }
+}
+
+/// `spines` over a map of byte keys, `KEY` its key of `y`: the stock program's walk with the key widened, read the same way.
+const SPINES_KEYED: &str = r#"use /std/{Str, Nat, Map, Io, Bytes};
+
+let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
+    match n: (_) => Map(Bytes, Nat)
+    | 0 => m
+    | k + 1; _ih =>
+        let y = 75 * x % 65537;
+        walk(k, i + 1, y, Map/insert(m, KEY, i % 1000003))
+    end;
+
+let entry() -> /std/Io({}) =
+    let arguments = /std/proc/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) =>
+            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            | some(n) =>
+                let m = walk(n, 0, (n + 1) % 65537, Map/empty());
+                /std/print(
+                    Str/concat(
+                        Nat/to_str(Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003)),
+                        "\n"))
+            | none() => /std/print("bad input\n")
+            end
+        | failure(_) => /std/print("invalid utf-8\n")
+        end
+    | none() => /std/print("no input\n")
+    end;
+
+entry()
+"#;
+
+/// The `spines` half read over its keys' width, the floor's other side: a key past an immediate makes every node of the map a heap object, so the live set the collector recopies grows with the map, and a heap that holds a map of immediates at its plateau holds a map of text past its knee.
+///
+/// # What this measures, and how to retake it
+///
+/// ```sh
+/// cargo test --package curios --release -- codegen::churn::spines_key_width_measurements --ignored --nocapture
+/// ```
+///
+/// Four programs, `spines` as it is and over `Bytes` keys of three, five and ten bytes (`Bytes/of_nat(y * 251)`, `Bytes/of_nat(y * 70001)`, `Str/to_bytes(Nat/to_str(y * 70001))`): the slope between two sizes, at 4 000 and 12 000 inserts and at 25 000 and 75 000, the median and span of five readings each the least of three runs, and the collections each size makes, counted in runs of their own.
+///
+/// # What it last printed
+///
+/// Taken on top of `9a8fa8fb3` on an x86-64 Linux dev machine, release, under the thirty-two-mebibyte default, nanoseconds an insert:
+///
+/// ```text
+/// == spines key width
+///   nat, 4000-12000: 632 ns/insert [598-648]
+///   nat, 25000-75000: 680 ns/insert [669-693]
+///   nat, collections at 4k, 12k, 25k, 75k: 0, 0, 0, 2
+///   bytes3, 4000-12000: 569 ns/insert [522-595]
+///   bytes3, 25000-75000: 643 ns/insert [638-679]
+///   bytes3, collections at 4k, 12k, 25k, 75k: 0, 0, 0, 2
+///   bytes5, 4000-12000: 1645 ns/insert [1555-1685]
+///   bytes5, 25000-75000: 1552 ns/insert [1531-1563]
+///   bytes5, collections at 4k, 12k, 25k, 75k: 0, 0, 2, 9
+///   text10, 4000-12000: 3238 ns/insert [3107-3392]
+///   text10, 25000-75000: 2816 ns/insert [2805-2845]
+///   text10, collections at 4k, 12k, 25k, 75k: 0, 2, 4, 19
+/// ```
+///
+/// **No width sits at the knee by seventy-five thousand inserts.** An insert costs no more between 25 000 and 75 000 inserts than between 4 000 and 12 000 at any width, and a map of ten-byte keys, the widest, is collected 19 times in its 75 000 inserts. Collection counts are deterministic and transport across machines; the slopes are this machine's.
+#[test]
+#[ignore = "measurement, mixed: times the slope of each key width and counts its collections rather than asserting"]
+fn spines_key_width_measurements() {
+    let programs = [
+        ("nat", SPINES.to_string()),
+        (
+            "bytes3",
+            SPINES_KEYED.replace("KEY", "Bytes/of_nat(y * 251)"),
+        ),
+        (
+            "bytes5",
+            SPINES_KEYED.replace("KEY", "Bytes/of_nat(y * 70001)"),
+        ),
+        (
+            "text10",
+            SPINES_KEYED.replace("KEY", "Str/to_bytes(Nat/to_str(y * 70001))"),
+        ),
+    ];
+
+    println!("== spines key width");
+    for (label, source) in programs {
+        let compiled = compiled_of(&source);
+        let (_, anchor) = run(&compiled, 8);
+        assert_eq!(anchor, b"28\n", "{label}(8) anchor");
+
+        for (low, high) in [(4_000, 12_000), (25_000, 75_000)] {
+            let mut slopes = (0..5)
+                .map(|_| {
+                    (timed(&compiled, high) - timed(&compiled, low)) * 1e6 / (high - low) as f64
+                })
+                .collect::<Vec<_>>();
+            slopes.sort_by(f64::total_cmp);
+            println!(
+                "  {label}, {low}-{high}: {:.0} ns/insert [{:.0}-{:.0}]",
+                slopes[2], slopes[0], slopes[4]
+            );
+        }
+        let counted = [4_000, 12_000, 25_000, 75_000]
+            .map(|inserts| collections(&compiled, inserts).0.to_string());
+        println!(
+            "  {label}, collections at 4k, 12k, 25k, 75k: {}",
+            counted.join(", ")
         );
     }
 }

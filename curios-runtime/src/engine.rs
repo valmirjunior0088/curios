@@ -70,8 +70,8 @@ pub fn shared_engine() -> &'static Engine {
         config.wasm_tail_call(true);
         // The collector is left at `Collector::Auto`: the workspace `wasmtime` dependency compiles in only `gc-copying`, so `Auto` resolves to the copying (semi-space) collector — bump-allocation with an in-wasm fast path, so `struct.new`/`array.new` do not round-trip through the `gc_alloc_raw` libcall the deferred-reference-counting collector would require.
 
-        // Sixteen mebibytes: the decision and its reason are this crate's `README.md`, "The heap is sized ahead of its churn", and the figures and their retake recipe live with `chain_collection_decomposition` and `spines_collection_decomposition`.
-        config.gc_heap_initial_size(16 * 1024 * 1024);
+        // Thirty-two mebibytes: the decision and its reason are this crate's `README.md`, "The heap is sized ahead of its churn", and the figures and their retake recipes live with `chain_collection_decomposition`, `spines_collection_decomposition` and `spines_key_width_measurements`.
+        config.gc_heap_initial_size(32 * 1024 * 1024);
 
         // One gibibyte: the decision and its reason are this crate's `README.md`, "A module runs on a stack of its own". The limit bounds a stack and reserves none, so [`on_guest_stack`] is where a thread that has it is built. The engine refuses a limit past the stack it would give an asynchronous call, which nothing here makes, so that size is stated as what the thread has.
         config.max_wasm_stack(GUEST_STACK);
