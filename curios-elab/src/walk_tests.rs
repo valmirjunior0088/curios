@@ -1,10 +1,15 @@
-//! Every walk this crate runs over whole terms, over one doubling term: sixty levels that each sum the one below with itself around a local's application to a metavariable, a tree no walk per path finishes and a graph of sixty-one nodes — and, for the sort of a type, a record of two fields at the level below. A walk the crate adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; a walk private to its module keeps its fixture beside it — `denoise`'s, `typing`'s and `convert::occurrence`'s — since reaching it from here would widen it for a test.
+//! Every walk this crate runs over whole terms, over one doubling term: sixty levels that each sum the one below with itself around a local's application to a metavariable, a tree no walk per path finishes and a graph of sixty-one nodes — and, for the sort of a type, a record of two fields at the level below, and for the reduction table's second door, a pair of the level below with itself. A walk the crate adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; a walk private to its module keeps its fixture beside it — `denoise`'s, `typing`'s and `convert::occurrence`'s — since reaching it from here would widen it for a test.
 
 use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Intrinsic, Level, MetavarId, Nat, Subterm, Term},
+    curios_core::{Free, Intrinsic, Level, MetavarId, Nat, Subterm, Term, UniverseMetaId},
 };
+
+/// A pair of `base` with itself, sixty levels deep: a value no reduction looks inside.
+fn doubled_pair(base: Term) -> Term {
+    (0..60).fold(base, |below, _| Term::tuple([below.clone(), below]))
+}
 
 fn doubled(base: Term) -> Term {
     let mut term = base;
@@ -49,7 +54,29 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
     let solved = doubled(Term::apply(Term::free_var(&f), [Term::hole(0)]));
     let unsolved = doubled(Term::apply(Term::free_var(&f), [Term::hole(1)]));
 
+    // A redex handing back a tower at a universe metavariable, reduced at one and then asked at another: the second is the reduction table's second door, aligning two spellings of the tower and served for nothing.
+    let a = context.fresh(Some("a"));
+    let b = context.fresh(Some("b"));
+    let first = Term::func(
+        [(a, Term::type_ground()), (b, Term::type_ground())],
+        Term::free_var(&a),
+    );
+    let tower = |meta| doubled_pair(Term::type_at(Level::meta(UniverseMetaId(meta))));
+    let stored = reduce(
+        &mut context,
+        Term::apply(first.clone(), [tower(7), Term::type_ground()]),
+    );
+    let spent = context.consumed().units();
+    let asked = reduce(
+        &mut context,
+        Term::apply(first, [tower(8), Term::type_ground()]),
+    );
+    let served_across = stored.is_ok()
+        && asked.is_ok_and(|reduct| reduct.universe_metas().contains(&UniverseMetaId(8)))
+        && context.consumed().units() == spent;
+
     let rows: Vec<(&str, bool)> = vec![
+        ("the second door's alignment", served_across),
         (
             "the strict zonk",
             root_operands_shared(&zonk(&context, &solved).expect("the hole is solved")),

@@ -5,10 +5,11 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Apply, Atom, Bound, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId,
-        MetavarOrigin, Nat, Quality, QualityMetaId, QualityParam, ReduceError, Subterm, Telescope,
-        Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
-        UniverseParam, UniverseRole, Universes, Variance,
+        Apply, Atom, Bound, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Level, Many,
+        MetavarId, MetavarOrigin, Nat, Quality, QualityMetaId, QualityParam, RecGroup,
+        RecMemberScopes, ReduceError, Scope, Subterm, Telescope, Term, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
+        Universes, Variance,
     },
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
     curios_utilities::Qualifier,
@@ -1368,6 +1369,123 @@ fn a_reduct_stored_at_one_stated_sort_is_not_served_at_another() {
     assert_eq!(
         reduce(&mut context, at(Quality::Type)),
         Ok(Term::sort_at(Quality::Type, Level::constant(3)))
+    );
+}
+
+/// `λ(a, b). a`, the closed redex the door's fixtures reduce: its reduct is its first argument as it stands.
+fn first_of(context: &mut Context<'static>) -> Term {
+    let a = context.fresh(Some("a"));
+    let b = context.fresh(Some("b"));
+    let at_five = Term::type_at(Level::constant(5));
+    Term::func([(a, at_five.clone()), (b, at_five)], Term::free_var(&a))
+}
+
+/// A ground sort is a position like any other. Once `first(Type 1, Type 0)` is stored, `first(Type 0, Type 1)` is no instance of it, nor `first(Type 0, Type ?8)` of a stored `first(Type ?7, Type 0)`, and each is reduced as itself: a walk over universe data alone passed over the ground `Type 0` on both sides, and served the first's reduct or carried `?7` to `?8` across positions that do not correspond.
+#[test]
+fn a_ground_sort_at_another_position_is_reduced_afresh() {
+    let applied = |first: &Term, left: Level, right: Level| {
+        Term::apply(first.clone(), [Term::type_at(left), Term::type_at(right)])
+    };
+
+    let mut context = context();
+    let first = first_of(&mut context);
+    let one = Level::constant(1);
+    assert_eq!(
+        reduce(&mut context, applied(&first, one.clone(), Level::zero())),
+        Ok(Term::type_at(one.clone()))
+    );
+    assert_eq!(
+        reduce(&mut context, applied(&first, Level::zero(), one)),
+        Ok(Term::type_ground())
+    );
+
+    let mut context = super::test_support::context();
+    let first = first_of(&mut context);
+    let stored = Level::meta(UniverseMetaId(7));
+    assert_eq!(
+        reduce(&mut context, applied(&first, stored.clone(), Level::zero())),
+        Ok(Term::type_at(stored))
+    );
+    assert_eq!(
+        reduce(
+            &mut context,
+            applied(&first, Level::zero(), Level::meta(UniverseMetaId(8)))
+        ),
+        Ok(Term::type_ground())
+    );
+}
+
+/// A recursive group that binds its own universe parameter and the same group binding none, whose `u` is the enclosing declaration's, erase alike and list the same levels; a walk over levels alone served the first's reduct for the second. Read over the pair they are apart in their universe context, and the second is reduced as itself.
+#[test]
+fn a_group_binding_its_own_levels_answers_no_group_binding_none() {
+    let mut context = context();
+    let first = first_of(&mut context);
+    let member = |term: Term| Scope::constant(Many(1), term);
+    let group = |parameter_count| {
+        Term::rec_proj(
+            RecGroup::new(vec![RecMemberScopes {
+                type_: member(Term::type_at(Level::param(UniverseParam(0)))),
+                body: member(Term::type_at(Level::param(UniverseParam(0)))),
+            }])
+            .with_universe_context(UniverseContext {
+                parameter_count,
+                quality_count: 0,
+                constraints: Vec::new(),
+            }),
+            0,
+        )
+    };
+    // Under a pair, so that the reduct holds the group as it stands.
+    let applied = |parameter_count| {
+        Term::apply(
+            first.clone(),
+            [
+                Term::tuple([group(parameter_count), nat(0)]),
+                Term::type_ground(),
+            ],
+        )
+    };
+
+    assert_eq!(
+        reduce(&mut context, applied(1)),
+        Ok(Term::tuple([group(1), nat(0)]))
+    );
+    assert_eq!(
+        reduce(&mut context, applied(0)),
+        Ok(Term::tuple([group(0), nat(0)]))
+    );
+}
+
+/// A spelling holding a term metavariable is no instance its key's levels can be carried to: the solution holds a universe metavariable the key holds too, which carrying would move in the key and not in the solution. Once `second(poly.{?7}, ?0)` is stored, `?0` solved to `Type ?7`, `second(poly.{?8}, ?0)` is the solution as it stands, and so is the spelling with the solution written in, which the stored key carried to `?8` is not.
+#[test]
+fn a_universe_metavariable_a_solution_holds_is_not_carried() {
+    let mut context = context();
+    let poly = Free::Global(nominal("poly"));
+    let stored = Level::meta(UniverseMetaId(7));
+    context.birth_metavar(
+        MetavarId(0),
+        Vec::new(),
+        Term::type_at(stored.succ().unwrap()),
+    );
+    context.solve_metavar(MetavarId(0), Term::type_at(stored.clone()));
+    let a = context.fresh(Some("a"));
+    let b = context.fresh(Some("b"));
+    let at_five = Term::type_at(Level::constant(5));
+    let second = Term::func([(a, at_five.clone()), (b, at_five)], Term::free_var(&b));
+    let at = |level: Level| {
+        Term::apply(
+            second.clone(),
+            [Term::instance_of(&poly, vec![level]), Term::hole(0)],
+        )
+    };
+
+    assert_eq!(
+        reduce(&mut context, at(stored.clone())),
+        Ok(Term::type_at(stored.clone()))
+    );
+    assert_eq!(
+        reduce(&mut context, at(Level::meta(UniverseMetaId(8)))),
+        Ok(Term::type_at(stored))
     );
 }
 

@@ -215,81 +215,30 @@ fn a_shared_level_walk_asks_each_level_once_per_node() {
     assert!(root_operands_shared(&rewritten));
 }
 
-/// The shared level walk answers as the per-occurrence walk does. Over a term holding two levels under shared nodes, small enough to walk per occurrence, what it remembers of a node is what asking again would have answered: the two rewrites are one term.
+/// The shared level walk rebuilds each node at its substituted levels. Over a term holding two levels under shared nodes, what it remembers of a node is what asking again would have answered, so the rewrite is the term written at the substituted levels, and still a graph.
 #[test]
-fn the_shared_level_walk_answers_as_the_per_occurrence_walk_does() {
+fn the_shared_level_walk_rebuilds_each_node_at_its_substituted_levels() {
     let x = Free::local(0, Some("x"));
     let (first, second) = (UniverseMetaId(0), UniverseMetaId(1));
-    let base = Term::apply(
-        Term::free_var(&x),
-        [
-            Term::type_at(Level::meta(first)),
-            Term::type_at(Level::meta(second)),
-        ],
-    );
-    let term = doubled(base, 4);
-    let settled = move |_: usize, level: &Level| {
+    let base = |first: Level, second: Level| {
+        Term::apply(
+            Term::free_var(&x),
+            [Term::type_at(first), Term::type_at(second)],
+        )
+    };
+    let term = doubled(base(Level::meta(first), Level::meta(second)), 4);
+
+    let shared: Term = rewrite_universe_levels_scoped_shared(&term, move |_, level| {
         level.substitute(|head| match head {
             LevelHead::Meta(found) if found == first => Some(Level::zero()),
             LevelHead::Meta(found) if found == second => Some(Level::constant(1)),
             _ => None,
         })
-    };
-
-    let shared: Term = rewrite_universe_levels_scoped_shared(&term, settled)
-        .expect("substituting a ground level cannot overflow");
-    let walked: Term = rewrite_universe_levels_scoped(&term, settled)
-        .expect("substituting a ground level cannot overflow");
-
-    assert_eq!(shared, walked);
-    assert!(shared.universe_metas().is_empty());
-    assert!(root_operands_shared(&shared));
-}
-
-/// The per-occurrence level walk asks its hook at every occurrence, in walk order: the sequence two spellings are aligned by has one entry per occurrence, so a shared level at the base of three doublings is asked eight times.
-#[test]
-fn the_per_occurrence_level_walk_asks_every_occurrence() {
-    let term = doubled(Term::type_at(Level::meta(UniverseMetaId(0))), 3);
-    let asked = Rc::new(std::cell::Cell::new(0));
-    let counter = Rc::clone(&asked);
-
-    let _: Term = rewrite_universe_levels_scoped(&term, move |_, level| {
-        counter.set(counter.get() + 1);
-        Ok::<_, ()>(level.clone())
     })
-    .expect("the identity cannot fail");
+    .expect("substituting a ground level cannot overflow");
 
-    assert_eq!(asked.get(), 8);
-}
-
-/// The walk two spellings' universes are aligned by reads every level and every quality once per occurrence, in walk order: a shared instance at the base of two doublings is four entries of each sequence, as it is four occurrences.
-#[test]
-fn the_per_occurrence_universe_walk_reads_levels_and_sorts_in_order() {
-    let poly = Free::Global(nominal("poly"));
-    let open = Quality::Meta(QualityMetaId(4));
-    let instance = Term::instance_of(
-        &poly,
-        Universes {
-            levels: vec![Level::meta(UniverseMetaId(0))],
-            qualities: vec![open],
-        },
-    );
-    // A sort above level zero: a ground one at zero carries no universe data, and no universe walk enters it.
-    let sort = Term::sort_at(Quality::Prop, Level::constant(1));
-    let term = Term::tuple([doubled(instance, 2), sort]);
-
-    let (levels, qualities) = universes_in_order(&term);
-
-    assert_eq!(
-        levels.len(),
-        5,
-        "four occurrences of the instance, then the sort"
-    );
-    assert_eq!(
-        qualities,
-        vec![open, open, open, open, Quality::Prop],
-        "each occurrence states its sort, and a sort states its own"
-    );
+    assert_eq!(shared, doubled(base(Level::zero(), Level::constant(1)), 4));
+    assert!(root_operands_shared(&shared));
 }
 
 /// Every walk this crate owns, over one doubling term — sixty levels, a tree no walk per path finishes and a graph of sixty-one nodes — answers in the graph's size, and each walk that rebuilds hands back a graph. A walk the crate adds joins this table, so one a change makes per-path again stalls its row here rather than waiting for a profile to find it; the fixtures above hold each walk's own contract beside it. `shift`, `release` and the read of a binder's use run over the same sixty levels with a loose index at their base: `reach` prunes nothing of an open term, so only the node each remembers keeps them in the graph.
