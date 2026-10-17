@@ -5,7 +5,7 @@ use {
     curios_abi::ForeignStore,
     curios_archive::{Bytes, Deferred, joined, parted},
     curios_core::{Certification, Lexicon, Module, Places, Sharing},
-    curios_elab::{ErasedUnit, Projection, Traces},
+    curios_elab::{ErasedUnit, Projection, Readers, Traces},
     curios_text::PreparedText,
     curios_utilities::Mount,
     std::{cell::OnceCell, rc::Rc},
@@ -43,6 +43,9 @@ pub struct Uncertified {
     /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_bytes`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors and read out of its bytes when a compile over the unit first asks.
     #[archived_with(curios_archive::Skip)]
     traces: Rc<Deferred<Traces>>,
+    /// Who asked what, of the unit's traces read backwards: what a recompile over the unit finds what an edit could reach by. Made the first time a recompile over the unit asks, or handed over by the recompile that made the unit, and kept beside its places; never stored, being read off the traces.
+    #[archived_with(curios_archive::Skip)]
+    readers: Rc<OnceCell<Readers>>,
     /// Whether the unit is the compiler's own: restored out of bytes that are a constant of the executable, so one thing under one compiler. Never stored, being where the unit came from.
     ///
     /// **Nothing records a read of a fixed unit.** A baseline is offered by the compiler that made it — a slot's address names the compiler, and a session lives in one process — so a fixed unit is the one every baseline was compiled after, and what a unit read of it is never asked again (`curios_elab::Established::fixed`).
@@ -61,8 +64,15 @@ impl Uncertified {
             lexicon: Rc::default(),
             erased: Rc::new(erased),
             traces: Rc::new(Deferred::held(traces)),
+            readers: Rc::default(),
             fixed: false,
         }
+    }
+
+    /// This unit, holding `readers` as who asked what of its traces: what the recompile that made it carries over from its baseline, in place of reading its traces backwards again.
+    pub fn reading(mut self, readers: Readers) -> Self {
+        self.readers = Rc::new(OnceCell::from(readers));
+        self
     }
 
     /// Whether the unit is the compiler's own. See the field.
@@ -125,6 +135,11 @@ impl Uncertified {
             .unwrap_or_else(|error| panic!("a unit's traces failed to restore: {error}"))
     }
 
+    /// Who asked what, of this unit's traces. See the field.
+    pub fn readers(&self) -> &Readers {
+        self.readers.get_or_init(|| Readers::of(self.traces()))
+    }
+
     /// The bytes this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it: its lowered items and its erased forms, one on its own for each ([`PreparedText::items_bytes`], [`ErasedUnit::items_bytes`]), its elaborated module's archive, read by item ([`Module::stored`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
     pub fn apart_bytes(&self) -> Result<Vec<u8>, String> {
         let items = self.text.items_bytes()?;
@@ -176,6 +191,7 @@ impl Uncertified {
                     .with_items(forms)?,
             ),
             traces: Rc::new(Deferred::stored(traces)),
+            readers: Rc::default(),
             core: Rc::new(Module::stored(module)?),
             places: Rc::default(),
             projection: Rc::default(),
@@ -193,6 +209,7 @@ impl Uncertified {
             lexicon: Rc::default(),
             erased: Rc::clone(&self.erased),
             traces: Rc::clone(&self.traces),
+            readers: Rc::clone(&self.readers),
             fixed: self.fixed,
         }
     }
@@ -260,6 +277,11 @@ impl Unit {
     /// See [`Uncertified::traces`].
     pub fn traces(&self) -> &Traces {
         self.unit.traces()
+    }
+
+    /// See [`Uncertified::readers`].
+    pub fn readers(&self) -> &Readers {
+        self.unit.readers()
     }
 
     /// See [`Uncertified::fixed`].

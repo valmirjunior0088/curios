@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::Question,
+    crate::{Parts, Question},
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, InductDecl, Item, MetaRenaming, Module,
         Nominal, Place, Places, RecItem, Sharing, StructDecl, Telescope, Term, Variance,
@@ -97,6 +97,23 @@ impl Same {
             concept,
             ..self
         }
+    }
+
+    /// The parts that did not come out as the baseline holds them: what a reader of one of them must ask again.
+    pub(crate) fn moved(&self) -> Parts {
+        [
+            (self.signature, Parts::SIGNATURE),
+            (self.body, Parts::BODY),
+            (self.kind, Parts::KIND),
+            (self.totality, Parts::TOTALITY),
+            (self.variances, Parts::VARIANCES),
+            (self.induct, Parts::INDUCT),
+            (self.struct_, Parts::STRUCT),
+            (self.concept, Parts::CONCEPT),
+        ]
+        .into_iter()
+        .filter(|(stood, _)| !stood)
+        .fold(Parts::default(), |moved, (_, part)| moved.with(part))
     }
 
     /// Whether the part `question` asks is as the baseline holds it.

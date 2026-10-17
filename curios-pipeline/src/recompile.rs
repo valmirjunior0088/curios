@@ -102,6 +102,7 @@ pub(crate) fn compile_lowered_over(
         baseline: baseline.core(),
         places: baseline.places(),
         traces: baseline.traces(),
+        readers: baseline.readers(),
         lowered: &kept,
     };
     let walked = match tail {
@@ -148,6 +149,7 @@ pub(crate) fn compile_lowered_over(
         Recompiled {
             module: core,
             traces,
+            readers,
             kept,
         },
         entry,
@@ -201,7 +203,9 @@ pub(crate) fn compile_lowered_over(
     })?;
 
     Ok((
-        Uncertified::new(lowered, core.into_module(), ersd, traces).certified(certification),
+        Uncertified::new(lowered, core.into_module(), ersd, traces)
+            .reading(readers)
+            .certified(certification),
         entry,
     ))
 }

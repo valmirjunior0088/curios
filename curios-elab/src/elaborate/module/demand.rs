@@ -16,8 +16,8 @@ use {
         withhold,
     },
     crate::{
-        Answered, Context, Error, Established, Foreign, GoalSite, Question, Same, Traces,
-        concepts_alike, entries_alike, inducts_alike, structs_alike,
+        Answered, Context, Error, Established, Foreign, GoalSite, Parts, Question, Readers, Same,
+        Traces, concepts_alike, entries_alike, inducts_alike, structs_alike,
     },
     curios_core::{DefinitionKind, Global, Item, Module, Nominal, Places, Trace},
     curios_utilities::recurse,
@@ -59,8 +59,25 @@ pub(super) struct Over<'a> {
     pub(super) traces: &'a Traces,
     /// The names whose lowered item is the baseline's own (`PreparedText::kept_from`).
     pub(super) lowered: &'a BTreeSet<Global>,
+    /// Who asked what, of the baseline's traces: what the walk finds the declarations an edit could reach by.
+    pub(super) readers: &'a Readers,
     /// The scope, whose baseline layer answers for a declaration from where the walk keeps it.
     pub(super) established: &'a Established<'a>,
+}
+
+/// What a walk over a baseline knows of what its edit reached: which declarations a seed could reach, how many of the declarations each read are yet to be decided, and which are to be made.
+///
+/// **Marked through the baseline's readers, decided when what they read is.** A seed is a declaration that must be made, or an answer that moved; every declaration that read a seed is marked, and every one that read a marked one. A marked declaration counts the marked declarations it read that are undecided, and is decided once the count reaches nothing: made where it must be or a part it read moved, kept otherwise, unasked. A declaration never marked read nothing that can have moved, and is kept unasked whenever the walk comes to it.
+struct Reached {
+    marked: Vec<bool>,
+    /// For each marked declaration, how many names of marked declarations not yet decided it asked about.
+    waiting: Vec<u32>,
+    /// Whether each declaration is to be made: it must be, or a part it read moved.
+    moved: Vec<bool>,
+    /// The marked declarations nothing undecided holds back, by place, the one written first taken first.
+    ready: BTreeSet<usize>,
+    /// The marked declarations whose readers are still to be marked.
+    frontier: Vec<usize>,
 }
 
 /// The walk over one unit's declarations.
@@ -85,6 +102,12 @@ pub(super) struct Demand<'a> {
     same: HashMap<Global, Same>,
     /// Whether each part a kept declaration asked of a declaration the unit does not hold, in a scope that moved, is the part the baseline read: asked again once, a part being asked by every declaration that read it.
     read: RefCell<HashMap<Global, Vec<(Question, bool)>>>,
+    /// What the walk's edit reached, where the unit is compiled over a baseline.
+    reached: Option<Reached>,
+    /// Whether a declaration is decided by asking its trace again, as a walk that knows nothing of what an edit reached does: while the prover's vocabulary is asked for where the edit reached it, so the declarations settled before the offer are the ones its new reads reach.
+    asking: bool,
+    /// Who asked what, of the unit's traces as the walk files them: the baseline's, with the edges of each declaration made or dropped replaced. `None` for a unit compiled whole, whose readers are made where a recompile over it first asks.
+    pub(super) readers: Option<Readers>,
 }
 
 /// Whether the part `question` asks, of a declaration the unit does not hold, digests now to what the baseline recorded of it. A part the baseline recorded nothing of does not stand, and neither does one that will not digest.
@@ -173,6 +196,9 @@ impl<'a> Demand<'a> {
             over,
             same: HashMap::new(),
             read: RefCell::new(HashMap::new()),
+            reached: None,
+            asking: false,
+            readers: over.map(|over| over.readers.clone()),
         }
     }
 
@@ -268,26 +294,336 @@ impl<'a> Demand<'a> {
     }
 
     /// Elaborate every declaration, each after what it reads: the declarations of `vocabulary` and what they read first, then the rest with the unit's lemmas on offer.
+    ///
+    /// **Over a baseline, what the edit reached is visited first, and nothing else is asked.** The walk marks what the edit could reach ([`Reached`]) and decides each marked declaration once what it read is decided; every other declaration is kept as the walk comes to it, unasked. The vocabulary reads what it read where the edit reached none of the declarations settled before the offer, so each declaration stands on its side of the offer and none is asked for ahead of it; where the edit reached one, the vocabulary is asked for as a walk over no baseline asks for it, and a declaration that falls out of what it reads is answered otherwise about the offer, and made.
     pub(super) fn all(&mut self, context: &mut Context, vocabulary: BTreeSet<Global>) {
-        for declaration in self.owners(vocabulary, usize::MAX) {
-            let closed = self.declaration(context, declaration);
-            assert!(
-                closed.is_ok(),
-                "a cycle is closed by the member asked for first, which nothing here asked for"
-            );
+        let owners = self.owners(vocabulary, usize::MAX);
+        let Some(over) = self.over else {
+            for declaration in owners {
+                self.ask_for(context, declaration);
+            }
+            self.traces.settle_before(self.finished());
+            context.offer_lemmas();
+            for declaration in self.in_written_order() {
+                self.ask_for(context, declaration);
+            }
+            return;
+        };
+
+        self.reach(context);
+        let vocabulary_reached = owners.iter().any(|owner| self.is_marked(*owner))
+            || over.traces.before().iter().any(|name| {
+                self.owner
+                    .get(name)
+                    .is_none_or(|declaration| self.is_marked(*declaration))
+            });
+        match vocabulary_reached {
+            true => {
+                self.asking = true;
+                for declaration in owners {
+                    self.ask_for(context, declaration);
+                }
+                self.asking = false;
+                let before = self.finished();
+                // Settled before the offer where the baseline elaborated it, and no longer: it is answered otherwise whether lemmas are on offer.
+                for name in over.traces.before() {
+                    if !before.contains(name)
+                        && over.readers.lemmas(name).is_some()
+                        && let Some(&declaration) = self.owner.get(name)
+                    {
+                        self.seed(declaration);
+                    }
+                }
+                self.mark();
+                self.traces.settle_before(before);
+            }
+            false => self.traces.settle_before(over.traces.before().clone()),
+        }
+        // Every declaration no seed reaches is kept before anything is made after the offer: a read some door notes no need for — a lemma a proof applies, a method a derivation writes — finds it standing, as a walk in the order the declarations are written finds every declaration kept ahead of the ones after it.
+        for declaration in self.in_written_order() {
+            if !self.is_marked(declaration) {
+                self.ask_for(context, declaration);
+            }
         }
         context.offer_lemmas();
 
-        // In the order the declarations are written, which is their first items'.
+        while let Some(declaration) = self
+            .reached
+            .as_mut()
+            .and_then(|reached| reached.ready.pop_first())
+        {
+            self.ask_for(context, declaration);
+        }
+        // What the counting left: a marked declaration held back by one no counting reached, asked for as its trace asks.
+        for declaration in self.in_written_order() {
+            self.ask_for(context, declaration);
+        }
+    }
+
+    /// Ask for `declaration`, which nothing is being asked for ahead of: a cycle it closes is closed by itself.
+    fn ask_for(&mut self, context: &mut Context, declaration: usize) {
+        let closed = self.declaration(context, declaration);
+        assert!(
+            closed.is_ok(),
+            "a cycle is closed by the member asked for first, which nothing here asked for"
+        );
+    }
+
+    /// Every declaration, in the order the declarations are written, which is their first items'.
+    fn in_written_order(&self) -> Vec<usize> {
         let mut order = (0..self.declarations.len()).collect::<Vec<_>>();
         order.sort_by_key(|declaration| self.declarations[*declaration][0]);
-        for declaration in order {
-            let closed = self.declaration(context, declaration);
-            assert!(
-                closed.is_ok(),
-                "a cycle is closed by the member asked for first, which nothing here asked for"
-            );
+
+        order
+    }
+
+    /// The names the finished declarations are written as.
+    fn finished(&self) -> BTreeSet<Global> {
+        (0..self.declarations.len())
+            .filter(|declaration| self.standing[*declaration] == Standing::Finished)
+            .map(|declaration| *self.names(declaration)[0])
+            .collect()
+    }
+
+    /// Whether a seed can reach `declaration`.
+    fn is_marked(&self, declaration: usize) -> bool {
+        self.reached
+            .as_ref()
+            .is_some_and(|reached| reached.marked[declaration])
+    }
+
+    /// Mark what the edit could reach: every declaration the walk cannot keep by its trace, every reader of an answer that moved, then every declaration that read a marked one.
+    fn reach(&mut self, context: &Context) {
+        let Some(over) = self.over else {
+            return;
+        };
+        let count = self.declarations.len();
+        self.reached = Some(Reached {
+            marked: vec![false; count],
+            waiting: vec![0; count],
+            moved: vec![false; count],
+            ready: BTreeSet::new(),
+            frontier: Vec::new(),
+        });
+
+        // A declaration the walk cannot keep by its trace: lowered again, new, not alone at its key, or reaching a refusal.
+        for declaration in 0..count {
+            if self.recorded(context, declaration).is_none() {
+                self.seed(declaration);
+            }
         }
+        // A name the unit declares now and the baseline did not, read where it was no one's; and one the baseline declared and the unit does not, read where it stood.
+        let gained = self
+            .owner
+            .keys()
+            .filter(|name| over.places.place(name).is_none())
+            .copied()
+            .collect::<Vec<_>>();
+        let lost = (0..over.baseline.items.len())
+            .flat_map(|place| over.baseline.items.names(place))
+            .filter(|name| !self.owner.contains_key(*name))
+            .copied()
+            .collect::<Vec<_>>();
+        for name in gained.iter().chain(&lost) {
+            self.flag_readers(name, Parts::ALL);
+        }
+        if let Some(readers) = &mut self.readers {
+            for name in &lost {
+                if let Some(trace) = over.traces.of(name) {
+                    readers.replace(*name, Some(trace), None);
+                }
+            }
+        }
+        // A key at which the unit declares other witnesses than the baseline did.
+        let keys = |names: &BTreeSet<Global>| {
+            names
+                .iter()
+                .filter_map(|name| match name {
+                    Global::Witness(id) => id.spelled().map(|key| (key, *name)),
+                    Global::Authored(_) => None,
+                })
+                .collect::<BTreeSet<_>>()
+        };
+        let (now, then) = (keys(&self.module.witnesses), keys(&over.baseline.witnesses));
+        let moved = now
+            .symmetric_difference(&then)
+            .map(|(key, _)| *key)
+            .collect::<BTreeSet<_>>();
+        for (concept, key) in &moved {
+            for reader in over.readers.at_key(*concept, *key).to_vec() {
+                self.flag(&reader);
+            }
+        }
+        if !over.established.settled() {
+            // A part of a declaration of another unit, where that unit moved and the part digests otherwise now, or the baseline recorded nothing of it.
+            let mut foreign = over
+                .readers
+                .names()
+                .filter(|name| !self.owner.contains_key(*name) && over.places.place(name).is_none())
+                .copied()
+                .collect::<Vec<_>>();
+            foreign.sort_unstable();
+            for name in foreign {
+                let moved = over
+                    .readers
+                    .of_name(&name)
+                    .iter()
+                    .filter(|(_, read)| {
+                        read.questions(name)
+                            .any(|question| !self.read_stands(over, &name, &question))
+                    })
+                    .map(|(reader, _)| *reader)
+                    .collect::<Vec<_>>();
+                for reader in moved {
+                    self.flag(&reader);
+                }
+            }
+            // A witness the units in scope now hold at a key the unit declares one at collides with it. Nothing of the unit has registered yet, so what stands at a key is the scope's alone.
+            for ((concept, key), name) in &now {
+                if context.witness_standing(concept, key).is_some() {
+                    self.flag(name);
+                }
+            }
+            // A key the unit declares no witness at is answered by the units in scope, and where one of them moved, a question asked there may be answered otherwise now.
+            let declared = now.iter().map(|(key, _)| *key).collect::<BTreeSet<_>>();
+            let mut answered_otherwise =
+                over.readers
+                    .keys()
+                    .filter(|((concept, key), keyed)| {
+                        let found_otherwise = !declared.contains(&(*concept, *key))
+                            && keyed.answered.found.is_some_and(|found| {
+                                found != context.witness_standing(concept, key)
+                            });
+                        let declared_otherwise = keyed.answered.declared.is_some_and(|declared| {
+                            declared != context.witness_stands(concept, key)
+                        });
+                        found_otherwise || declared_otherwise
+                    })
+                    .flat_map(|(_, keyed)| keyed.readers.iter().copied())
+                    .collect::<Vec<_>>();
+            answered_otherwise.sort_unstable();
+            for reader in answered_otherwise {
+                self.flag(&reader);
+            }
+        }
+
+        self.mark();
+    }
+
+    /// Hold `declaration` to be made, and mark it.
+    fn seed(&mut self, declaration: usize) {
+        let reached = self.reached.as_mut().expect("a seed is a recompile's");
+        reached.moved[declaration] = true;
+        if !reached.marked[declaration] {
+            reached.marked[declaration] = true;
+            reached.frontier.push(declaration);
+        }
+    }
+
+    /// Hold the declaration written as `reader` to be made, where the unit declares it and it is undecided: an answer it read moved.
+    fn flag(&mut self, reader: &Global) {
+        if let Some(&declaration) = self.owner.get(reader)
+            && self.standing[declaration] == Standing::Pending
+        {
+            self.seed(declaration);
+        }
+    }
+
+    /// Hold each declaration that read one of `parts` of `name` to be made.
+    fn flag_readers(&mut self, name: &Global, parts: Parts) {
+        let over = self.over.expect("a reader is a recompile's");
+        for (reader, read) in over.readers.of_name(name) {
+            if read.meets(parts) {
+                self.flag(reader);
+            }
+        }
+    }
+
+    /// Mark every undecided declaration that read a marked one, counting for each the names of marked declarations it asked about, and make ready each newly marked declaration that waits on nothing.
+    fn mark(&mut self) {
+        let (Some(over), Some(mut reached)) = (self.over, self.reached.take()) else {
+            return;
+        };
+        let mut marked = Vec::new();
+        while let Some(declaration) = reached.frontier.pop() {
+            marked.push(declaration);
+            for name in self.names(declaration) {
+                for (reader, _) in over.readers.of_name(name) {
+                    // A declaration does not wait on itself: what a group asks of its own members is decided with it.
+                    let Some(&read) = self.owner.get(reader) else {
+                        continue;
+                    };
+                    if read == declaration || self.standing[read] != Standing::Pending {
+                        continue;
+                    }
+                    reached.waiting[read] += 1;
+                    if !reached.marked[read] {
+                        reached.marked[read] = true;
+                        reached.frontier.push(read);
+                    }
+                }
+            }
+        }
+        for declaration in marked {
+            if reached.waiting[declaration] == 0 && self.standing[declaration] == Standing::Pending
+            {
+                reached.ready.insert(declaration);
+            }
+        }
+        self.reached = Some(reached);
+    }
+
+    /// Tell the readers of `declaration`, just decided, what of it moved: each that read a part that moved is to be made, and each waits on one declaration fewer.
+    fn propagated(&mut self, declaration: usize) {
+        let (Some(over), Some(mut reached)) = (self.over, self.reached.take()) else {
+            return;
+        };
+        if reached.marked[declaration] {
+            for name in self.names(declaration) {
+                let moved = self.moved(name, declaration);
+                for (reader, read) in over.readers.of_name(name) {
+                    let Some(&read_by) = self.owner.get(reader) else {
+                        continue;
+                    };
+                    if !reached.marked[read_by] || self.standing[read_by] != Standing::Pending {
+                        continue;
+                    }
+                    if read.meets(moved) {
+                        reached.moved[read_by] = true;
+                    }
+                    reached.waiting[read_by] = reached.waiting[read_by].saturating_sub(1);
+                    if reached.waiting[read_by] == 0 {
+                        reached.ready.insert(read_by);
+                    }
+                }
+            }
+        }
+        self.reached = Some(reached);
+    }
+
+    /// The parts of `name`, of `declaration` just decided, that are not as the baseline holds them: none of one kept, and every one of one refused, withheld, or with nothing of the baseline's to compare with.
+    fn moved(&self, name: &Global, declaration: usize) -> Parts {
+        if self.poison.holds(name) {
+            return Parts::ALL;
+        }
+        if self.kept[declaration] {
+            return Parts::default();
+        }
+
+        self.same.get(name).map_or(Parts::ALL, Same::moved)
+    }
+
+    /// Whether the walk decides `declaration` without asking its trace, and how: `Some(true)` keeps it, being one no seed reaches or one whose every marked dependency is decided and none moved, and `Some(false)` makes it, being one to be made; `None` asks, where nothing is known of what the edit reached, the vocabulary is being asked for, or the declaration is asked for ahead of what it waits on.
+    fn unasked(&self, declaration: usize) -> Option<bool> {
+        let reached = self.reached.as_ref().filter(|_| !self.asking)?;
+        if !reached.marked[declaration] {
+            return Some(true);
+        }
+        if reached.moved[declaration] {
+            return Some(false);
+        }
+
+        (reached.waiting[declaration] == 0).then_some(true)
     }
 
     /// The names every item of `declaration` declares.
@@ -356,6 +692,7 @@ impl<'a> Demand<'a> {
         };
         self.standing[declaration] = Standing::Finished;
         context.finish(&self.names(declaration));
+        self.propagated(declaration);
 
         outcome
     }
@@ -585,17 +922,27 @@ impl<'a> Demand<'a> {
     }
 
     /// Elaborate `declaration` after what it reads: kept as its baseline holds it where everything it asked there is answered as it was, and otherwise attempt by attempt, until one reads nothing unfinished.
+    ///
+    /// **Over a baseline, decided unasked where the walk knows how** ([`Demand::unasked`]): kept where no seed reaches it, or what it waited on is decided and none of it moved, and made where it is to be made. Only a declaration asked for ahead of what it waits on, or while the vocabulary is asked for, asks its trace again.
     fn settle(&mut self, context: &mut Context, declaration: usize) -> Result<(), Cycle> {
         let module = self.module;
         let items = self.declarations[declaration].clone();
         let names = self.names(declaration);
+        let unasked = self.unasked(declaration);
+        if unasked == Some(true)
+            && let Some(trace) = self.recorded(context, declaration)
+        {
+            self.keep(context, declaration, trace);
+            return Ok(());
+        }
         // A declaration asked again by its trace asks for each declaration its elaboration waited for as its questions come to it, so what its lowered forms reach is asked for ahead of it only where that could be told apart: ahead of the offer of the unit's lemmas, which side of the offer a declaration is first asked for on being what one of its questions is answered by.
-        let traced = context.offers_lemmas() && self.traced(declaration);
+        let traced = unasked.is_none() && context.offers_lemmas() && self.traced(declaration);
         if !traced {
             self.reached(context, declaration)?;
         }
 
-        if let Some(trace) = self.recorded(context, declaration)
+        if unasked.is_none()
+            && let Some(trace) = self.recorded(context, declaration)
             && self.stands(context, declaration, &trace)?
         {
             curios_profile::sample!("demand::kept", trace.len());
@@ -660,6 +1007,9 @@ impl<'a> Demand<'a> {
                 // What the attempt that stands asked of the declarations around it is its declaration's.
                 let trace = context.take_trace();
                 curios_profile::sample!("demand::asked", trace.len());
+                if let (Some(readers), Some(over)) = (&mut self.readers, self.over) {
+                    readers.replace(*names[0], over.traces.of(names[0]), Some(&trace));
+                }
                 self.traces.file(*names[0], trace);
                 self.poison = poison;
                 let mut holding = Vec::new();

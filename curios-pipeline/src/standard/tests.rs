@@ -101,6 +101,7 @@ fn elaborated_over(
             baseline: std.core(),
             places: std.places(),
             traces: std.traces(),
+            readers: std.readers(),
             lowered: kept,
         },
         lowered.core(),

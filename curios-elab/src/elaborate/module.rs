@@ -13,8 +13,8 @@ mod tests;
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Declared, ErasedSite, Established, GoalReport, GoalSite, Published, ScheduledTest, Traces,
-        Zonked, body_levels, check_concept_registry, check_is_sort, check_proof_totality,
+        Declared, ErasedSite, Established, GoalReport, GoalSite, Published, Readers, ScheduledTest,
+        Traces, Zonked, body_levels, check_concept_registry, check_is_sort, check_proof_totality,
         check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
         decide_polarities, definition_variances, family_levels, field_variances, goal_sites,
         hold_prop, hold_variances, record_definition_totality, record_superclasses,
@@ -1551,6 +1551,8 @@ struct ElaboratedSuffix {
     traces: Traces,
     /// Every name of a declaration kept as the baseline holds it. Empty for a unit compiled whole.
     kept: BTreeSet<Global>,
+    /// Who asked what, of `traces`, where the unit was compiled over a baseline: the baseline's readers with the edges of what the walk made or dropped replaced.
+    readers: Option<Readers>,
 }
 
 /// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
@@ -1658,6 +1660,7 @@ fn elaborate_module_suffix<'s>(
         poison,
         mut survivors,
         traces,
+        readers,
         ..
     } = demand;
 
@@ -1766,6 +1769,7 @@ fn elaborate_module_suffix<'s>(
         held,
         traces,
         kept,
+        readers,
     })
 }
 
@@ -2112,20 +2116,22 @@ fn elaborate_and_zonk<'s>(
     })
 }
 
-/// What a unit compiled over a baseline hands elaboration: the baseline, as an earlier text of the unit elaborated, with the places of its names; what each of its declarations asked as it elaborated; and the names the new text's lowering kept, each one's lowered item being the baseline's own.
+/// What a unit compiled over a baseline hands elaboration: the baseline, as an earlier text of the unit elaborated, with the places of its names; what each of its declarations asked as it elaborated, and who asked what of those traces; and the names the new text's lowering kept, each one's lowered item being the baseline's own.
 ///
 /// The scope elaboration is handed holds the baseline as its last layer ([`Established::keeping`]), which is the caller's to arrange, as it is that the baseline was compiled after the units this one is.
 pub struct Recompile<'a> {
     pub baseline: &'a Module,
     pub places: &'a Places,
     pub traces: &'a Traces,
+    pub readers: &'a Readers,
     pub lowered: &'a BTreeSet<Global>,
 }
 
-/// A unit elaborated over a baseline: its module, what each of its declarations asked, and every name of a declaration kept as the baseline holds it.
+/// A unit elaborated over a baseline: its module, what each of its declarations asked and who asked what of that, and every name of a declaration kept as the baseline holds it.
 pub struct Recompiled {
     pub module: Module,
     pub traces: Traces,
+    pub readers: Readers,
     pub kept: BTreeSet<Global>,
 }
 
@@ -2171,6 +2177,7 @@ fn elaborate_and_zonk_over<'s>(
             places: recompile.places,
             traces: recompile.traces,
             lowered: recompile.lowered,
+            readers: recompile.readers,
             established,
         };
         let elaborated =
@@ -2190,7 +2197,7 @@ fn elaborate_and_zonk_over<'s>(
             entry,
             obligations,
         } = finalized?;
-        let (traces, kept) = (elaborated.traces, elaborated.kept);
+        let (traces, kept, readers) = (elaborated.traces, elaborated.kept, elaborated.readers);
         let (module, standing) = {
             curios_profile::profile!("assemble_unit_over");
             assembled(&recompile, module, &kept, made)
@@ -2219,6 +2226,7 @@ fn elaborate_and_zonk_over<'s>(
                 Recompiled {
                     module,
                     traces,
+                    readers: readers.expect("a walk over a baseline keeps who asked what"),
                     kept,
                 },
                 entry,

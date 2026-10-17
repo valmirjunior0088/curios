@@ -769,6 +769,29 @@ pub let y: /std/Nat = /lib/b/x;
     answers_as_the_whole_compile_does(&edited, &baseline);
 }
 
+/// An edit closes a cycle through a declaration its baseline trace read nothing of: `f` is made first, as nothing it read is marked, and asks for `g`, which asks for `f` again. The members are refused and `h`, which reads `g`, is withheld, as the whole compile refuses and withholds them.
+#[test]
+fn an_edit_closing_a_cycle_refuses_its_members_as_the_whole_compile_does() {
+    let base = "use /std/{Nat};
+
+pub let f(n: Nat) -> Nat = n;
+
+pub let g(n: Nat) -> Nat = f(n);
+
+pub let h: Nat = g(1);
+
+pub let unrelated: Nat = 7;
+";
+    let edited = base.replace("f(n: Nat) -> Nat = n;", "f(n: Nat) -> Nat = g(n);");
+    let baseline = unit_of(base);
+
+    assert!(
+        recompile_over(&edited, &baseline).is_err(),
+        "a cycle the edit closed was compiled"
+    );
+    answers_as_the_whole_compile_does(&edited, &baseline);
+}
+
 /// A library of five files: `a` reads `x` through the export `b` makes of `c`'s, beside a declaration that reads nothing and an import nothing reads.
 const FILES: [(&str, &str); 5] = [
     (

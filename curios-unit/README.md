@@ -34,7 +34,7 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 ### A unit is handed over, never copied
 
-**Decision.** A unit holds its lowered state, its elaborated module, its erased forms and its certification each by pointer, and each item's erased form by pointer among them, so a clone of a unit is a clone of its handles. Where its elaborated module holds each name it defines (`curios_core::Places`) is made once, the first time the unit is read by name, and kept with it for as long as it is held.
+**Decision.** A unit holds its lowered state, its elaborated module, its erased forms and its certification each by pointer, and each item's erased form by pointer among them, so a clone of a unit is a clone of its handles. Where its elaborated module holds each name it defines (`curios_core::Places`) is made once, the first time the unit is read by name, and kept with it for as long as it is held; so is who asked what of its traces (`curios_elab::Readers`), the first time a recompile over it asks, and a unit compiled over a baseline holds the baseline's with the edges of each declaration it elaborated again or took away replaced.
 
 **Rationale.** A unit is handed on more often than it is made: a fold hands each to its successors, a session keeps the last one as the next question's baseline and takes it back out, a store offers the archived one, and a unit compiled over a baseline keeps every erased form it does not redo. Copied, each of those is a walk of the whole unit for a question that may redo one declaration, and a scope keyed again for each compile is the same walk made of every unit in scope.
 
