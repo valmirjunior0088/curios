@@ -110,8 +110,9 @@ pub let raw_to_eq(x: Bits, y: Bits, p: Eq()(raw(x, y), Ordering/eq())) -> Eq()(x
                 ord_head_eq(xh, yh, Eq/trans(Eq/sym(cong_ord_match(sub_split(raw(xt, yt), p))), p)),
                 raw_to_eq(xt, yt, sub_split(raw(xt, yt), p)))
         end
-    end
-and ord_head_eq(
+    end;
+
+let ord_head_eq(
     xh: Bool,
     yh: Bool,
     p: Eq()(

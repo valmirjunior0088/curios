@@ -1062,6 +1062,12 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         }
     }
 
+    // A top-level group is one cycle of what its members reach: read once their terms and registry entries are elaborated, so a witness's resolutions count, and before the group's levels close, which a member outside the cycle would share.
+    let parts = group_parts(context, &defs, &types, &bodies);
+    if parts.len() > 1 {
+        return Err(Error::group_apart(&defs, &types, &parts));
+    }
+
     // As for a single definition, the group's interface is its member signatures and registry telescopes; levels reachable only through a member body are internal and minimized rather than generalized, and so are the levels of a member's result sort that no member's domain mentions — see [`result_sort_only_metas`]. The rule is the one `finalize_definition` applies, read over the group: a level one member keeps in its interface stays there for all of them, since the group shares a context, and only a level every member confines to its result sort is determined. A group of one is then generalized exactly as the same signature would be as a `let`, which is what keeps the path a definition takes from showing in its scheme.
     let mut interface = types
         .iter()
@@ -1264,6 +1270,74 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     }
 
     Ok(rec)
+}
+
+/// The parts a top-level group's members fall into by what each reaches of the others, through its type, its body and its registry entry: the cycles of that relation, each its members' positions in the order they are written, the parts in the order of their first members. One part where the group is one cycle.
+///
+/// A declaration reads any other wherever it is written, so a group ties nothing but declarations that need one another, and one part is all a group may be ([`Error::GroupApart`]).
+fn group_parts(
+    context: &Context,
+    defs: &[Definition],
+    types: &[Term],
+    bodies: &[Term],
+) -> Vec<Vec<usize>> {
+    let names = defs.iter().map(|def| def.name).collect::<Vec<_>>();
+    let edges = names
+        .iter()
+        .zip(types.iter().zip(bodies))
+        .map(|(name, (type_, body))| {
+            let mut reached = type_.reaches();
+            reached.extend(body.reaches());
+            if let Some(entry) = context.induct_decl(name) {
+                reached.extend(entry.reaches());
+            }
+            if let Some(entry) = context.struct_decl(name) {
+                reached.extend(entry.reaches());
+            }
+            if let Some(entry) = context.concept(name) {
+                reached.extend(entry.reaches());
+            }
+            names
+                .iter()
+                .enumerate()
+                .filter(|(_, other)| reached.contains(other))
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let reach = (0..names.len())
+        .map(|start| {
+            let mut seen = BTreeSet::from([start]);
+            let mut stack = vec![start];
+            while let Some(at) = stack.pop() {
+                for &next in &edges[at] {
+                    if seen.insert(next) {
+                        stack.push(next);
+                    }
+                }
+            }
+            seen
+        })
+        .collect::<Vec<_>>();
+
+    let mut placed = vec![false; names.len()];
+    let mut parts = Vec::new();
+    for member in 0..names.len() {
+        if placed[member] {
+            continue;
+        }
+        let part = (member..names.len())
+            .filter(|&other| {
+                !placed[other] && reach[member].contains(&other) && reach[other].contains(&member)
+            })
+            .collect::<Vec<_>>();
+        for &other in &part {
+            placed[other] = true;
+        }
+        parts.push(part);
+    }
+
+    parts
 }
 
 /// Elaborate one persistent module item and perform every item-boundary obligation. Both module drivers use this path so universe transactions, parked work, witnesses, privacy islands, and error attribution cannot drift.

@@ -112,8 +112,9 @@ pub let render(h: Html) -> Str =
     match is_named(h, "html")
     | true => Str/concat("<!doctype html>", render_tree(h))
     | false => render_tree(h)
-    end
-and render_tree(h: Html) -> Str =
+    end;
+
+let render_tree(h: Html) -> Str =
     match h
     | text(s) => escape(s)
     | comment(s) => Str/flatten(["<!--", Str/replace(s, "--", "- -"), "-->"])

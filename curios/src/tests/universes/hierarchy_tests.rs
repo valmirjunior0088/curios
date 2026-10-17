@@ -172,8 +172,10 @@ fn a_group_member_used_a_level_above_its_own_certifies() {
     let source = r#"
         use /std/{Nat};
 
-        let pick(@A: Type, x: A) -> Nat = 0
-        and other(n: Nat) -> Nat = pick(Nat) + n;
+        let pick(@A: Type, n: Nat, x: A) -> Nat =
+            match n | 0 => 1 | k + 1 => other(k) end
+        and other(n: Nat) -> Nat =
+            match n | 0 => 1 | k + 1 => pick(k, Nat) end;
 
         /std/print(Nat/to_str(other(1)))
         "#;

@@ -183,6 +183,96 @@ fn a_cycle_through_a_registry_entry_is_refused_by_name() {
     }
 }
 
+/// A top-level group ties declarations that need one another and nothing else, a declaration reading any other wherever it is written: one whose members fall into parts is refused once, at its first member, naming each part, whether it groups definitions, families or witnesses, and each is accepted declared part by part. A witness's resolutions count as what its member reaches.
+#[test]
+fn a_top_level_group_that_is_no_cycle_is_refused_naming_its_parts() {
+    let cases = [
+        (
+            r#"
+            use /std/{Nat};
+            let alone(n: Nat) -> Nat = n
+            and generic(A: Type, n: Nat) -> Nat = alone(n);
+            /std/print(Nat/to_str(generic(Nat, 1)))
+            "#,
+            r#"
+            use /std/{Nat};
+            let alone(n: Nat) -> Nat = n;
+            let generic(A: Type, n: Nat) -> Nat = alone(n);
+            /std/print(Nat/to_str(generic(Nat, 1)))
+            "#,
+            "'alone' alone, and 'generic' alone",
+        ),
+        (
+            r#"
+            induct Pause: pub Type
+            | yield_now()
+            and Step(A: Type): pub Type
+            | done(A)
+            | step(pause: Pause)
+            end
+            /std/print("1")
+            "#,
+            r#"
+            induct Pause: pub Type
+            | yield_now()
+            end
+            induct Step(A: Type): pub Type
+            | done(A)
+            | step(pause: Pause)
+            end
+            /std/print("1")
+            "#,
+            "'Pause' alone, and 'Step' alone",
+        ),
+        (
+            r#"
+            use /std/{Show};
+            induct A: pub Type | a() end
+            induct B: pub Type | b() end
+            satisfy Show(A) {
+                show(_) = "1",
+            }
+            and Show(B) {
+                show(_) = Show/show(A/a()),
+            }
+            /std/print(Show/show(B/b()))
+            "#,
+            r#"
+            use /std/{Show};
+            induct A: pub Type | a() end
+            induct B: pub Type | b() end
+            satisfy Show(A) {
+                show(_) = "1",
+            }
+            satisfy Show(B) {
+                show(_) = Show/show(A/a()),
+            }
+            /std/print(Show/show(B/b()))
+            "#,
+            "the witness of Show(A) alone, and the witness of Show(B) alone",
+        ),
+    ];
+
+    for (grouped, apart, parts) in cases {
+        let report = error(grouped);
+        assert!(
+            report.contains("are grouped, and do not all need one another")
+                && report.contains(&format!("declare each part on its own: {parts}")),
+            "expected the group refused, naming its parts:\n{report}"
+        );
+        assert_eq!(
+            report.matches("do not all need one another").count(),
+            1,
+            "expected the group refused once:\n{report}"
+        );
+        assert_eq!(
+            run(apart),
+            b"1",
+            "declared part by part, the group is accepted"
+        );
+    }
+}
+
 // Read outside every lambda, the self-reference is an initializer evaluating itself, which the erased verifier refuses. The refusal stays at the erase boundary on purpose: forcing on first use is what a recursive value means, and no syntactic net can tell this from the knots the language admits — a member read through a closure, a later member forced first, a self-knot nothing ever forces.
 #[test]
 fn a_value_that_reads_itself_is_refused_at_the_erase_boundary() {

@@ -900,7 +900,7 @@ The check compares audiences rather than declaration paths, so a name re-exporte
 
 ## Recursive groups
 
-A declaration is in scope of its own body, so it may recurse with nothing said. Declarations that reference one another are declared as one group with `and`, whose members all register before any body is elaborated; two that reference each other without being grouped are refused, naming both. One rule, five spellings, differing only in what a later member carries and what closes the group:
+A declaration is in scope of its own body, so it may recurse with nothing said. Declarations that reference one another are declared as one group with `and`, whose members all register before any body is elaborated; two that reference each other without being grouped are refused, naming both. A top-level group holds nothing else: a top-level declaration may name any other wherever it is written, so a top-level group whose members do not all reach one another, through the names they write or the witnesses their goals resolve to, is refused, naming the parts it falls into, each to be declared on its own. A local group may hold a member the others do not reach, since it also orders the values a recursive binding forces by need. One rule, five spellings, differing only in what a later member carries and what closes the group:
 
 | Form | A later member is written | The group closes with |
 | --- | --- | --- |

@@ -1343,12 +1343,7 @@ impl fmt::Display for Displayed<'_> {
             Error::DeclarationCycle { members } => {
                 let named = members
                     .iter()
-                    .map(|member| match member {
-                        CycleMember::Named(name) => format!("'{}'", spelling.symbol(name)),
-                        CycleMember::Witness { type_, .. } => {
-                            format!("the witness of {}", type_.spelled(spelling))
-                        }
-                    })
+                    .map(|member| member.spelled(spelling))
                     .collect::<Vec<_>>();
                 // Neither group's spelling holds a definition beside a witness, so a cycle through both is pointed at the two ways out it does have.
                 let across = members
@@ -1377,6 +1372,43 @@ impl fmt::Display for Displayed<'_> {
                         named.join(", ")
                     ),
                 }
+            }
+            Error::GroupApart { parts } => {
+                // `a`, `a and b`, `a, b and c`: the members of one part, or every member.
+                let listed = |names: Vec<String>| match names.split_last() {
+                    Some((last, rest)) if !rest.is_empty() => {
+                        format!("{} and {last}", rest.join(", "))
+                    }
+                    _ => names.concat(),
+                };
+                let grouped = listed(
+                    parts
+                        .iter()
+                        .flatten()
+                        .map(|member| member.spelled(spelling))
+                        .collect(),
+                );
+                let each = parts
+                    .iter()
+                    .map(|part| match part.as_slice() {
+                        [alone] => format!("{} alone", alone.spelled(spelling)),
+                        _ => format!(
+                            "{} as one group",
+                            listed(part.iter().map(|member| member.spelled(spelling)).collect())
+                        ),
+                    })
+                    .collect::<Vec<_>>();
+                // A part's own list holds an `and`, so the parts are told apart by a comma before the last.
+                let each = match each.split_last() {
+                    Some((last, rest)) if !rest.is_empty() => {
+                        format!("{}, and {last}", rest.join(", "))
+                    }
+                    _ => each.concat(),
+                };
+                write!(
+                    f,
+                    "{grouped} are grouped, and do not all need one another\n  a group ties declarations that need one another, each reading another of them before it can finish, and a declaration reads any other wherever it is written\n  declare each part on its own: {each}"
+                )
             }
             Error::NoWitness {
                 goal,

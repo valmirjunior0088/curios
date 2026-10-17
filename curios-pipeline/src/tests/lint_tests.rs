@@ -23,8 +23,10 @@ fn a_proof_in_a_group_members_type_credits_that_member() {
         "use /std/{Nat, Eq};
 use /std/Bool/{Holds};
 
-pub let first(n: Nat, idle: Nat) -> Nat = n
-pub and second(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
+pub let first(n: Nat, idle: Nat) -> Nat =
+    let _ = second;
+    n
+pub and second(n: Nat, ok: Holds(0 < n)) -> {Nat, Eq()(10 / n, 10 / n)} = (first(n, n), Eq/refl());
 ",
     );
 

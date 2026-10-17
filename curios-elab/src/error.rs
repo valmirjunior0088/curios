@@ -8,10 +8,10 @@ use {
     super::{Context, Erased, ErasedNames, HeldFrames, Pending, Refusal, written},
     curios_analysis::DeclaredPart,
     curios_core::{
-        Anchors, Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Extent, Free, Global,
-        Item, Level, Lexicon, Module, Polarity, ReaderNames, ReaderPosition, ReaderPrinter,
-        ReduceError, Rename, Spelling, Spellings, Term, UniverseConstraintOrigin, UniverseError,
-        Unresolved, WitnessKey, build_rename,
+        Anchors, Atom, CalleeId, Definition, DefinitionKind, DisplayNames, Exhaustion, Extent,
+        Free, Global, Item, Level, Lexicon, Module, Polarity, ReaderNames, ReaderPosition,
+        ReaderPrinter, ReduceError, Rename, Spelling, Spellings, Term, UniverseConstraintOrigin,
+        UniverseError, Unresolved, WitnessKey, build_rename,
     },
     curios_num::{Grain, Integer, Natural},
     curios_utilities::{InfixOp, Note, Plicity, Qualifier, Report, Span, SyntaxRegistry},
@@ -69,11 +69,30 @@ impl ReaderScope {
     }
 }
 
-/// One member of an [`Error::DeclarationCycle`]: a declaration by its name, or a witness, which a reader knows by the type it is declared at and a report places by its identity.
+/// One member of an [`Error::DeclarationCycle`] or an [`Error::GroupApart`]: a declaration by its name, or a witness, which a reader knows by the type it is declared at and a report places by its identity.
 #[derive(Debug)]
 pub enum CycleMember {
     Named(Global),
     Witness { name: Global, type_: Box<Term> },
+}
+
+impl CycleMember {
+    /// Where a report places it.
+    fn name(&self) -> &Global {
+        match self {
+            CycleMember::Named(name) | CycleMember::Witness { name, .. } => name,
+        }
+    }
+
+    /// How a report names it: a declaration by its name, a witness by the type it is declared at.
+    fn spelled(&self, spelling: &Rc<Spelling>) -> String {
+        match self {
+            CycleMember::Named(name) => format!("'{}'", spelling.symbol(name)),
+            CycleMember::Witness { type_, .. } => {
+                format!("the witness of {}", type_.spelled(spelling))
+            }
+        }
+    }
 }
 
 /// One written goal's entry in an [`Error::Goals`] batch: its occurrence extent, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
@@ -399,6 +418,15 @@ macro_rules! shown_terms {
                 for member in members {
                     if let CycleMember::Witness { type_, .. } = member {
                         $visit(type_);
+                    }
+                }
+            }
+            Self::GroupApart { parts } => {
+                for part in parts {
+                    for member in part {
+                        if let CycleMember::Witness { type_, .. } = member {
+                            $visit(type_);
+                        }
                     }
                 }
             }
@@ -834,6 +862,10 @@ pub enum Error {
     /// Declarations that need one another: each reads another of them before it can finish — by a name it writes, or by the witness a goal of its resolves to. A definition may name itself and a witness may recurse through its *own* table entry, each bound by the group it becomes, but a cycle through two has no order to elaborate them in. Refused at its first member in source order, naming every member, so the refusal is stated in the language's own terms with the way out named.
     DeclarationCycle {
         members: Vec<CycleMember>,
+    },
+    /// A top-level group whose members do not all need one another: they fall into parts, each a cycle of what its members reach, and a declaration reads any other wherever it is written, so a group ties nothing but declarations that need one another. Refused at the group's first member, naming every member part by part in the order they are written, as [`Error::DeclarationCycle`] refuses the converse.
+    GroupApart {
+        parts: Vec<Vec<CycleMember>>,
     },
     /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently — except an unnameable binder, whose line spells `_` the way source does.
     ///
@@ -1555,6 +1587,30 @@ impl Error {
         }
     }
 
+    /// The top-level group `members`, typed `types`, falling into `parts`: each part the positions of its members among `members`, in the order they are written. A member is named as a cycle's is.
+    pub(crate) fn group_apart(
+        members: &[Definition],
+        types: &[Term],
+        parts: &[Vec<usize>],
+    ) -> Self {
+        Self::GroupApart {
+            parts: parts
+                .iter()
+                .map(|part| {
+                    part.iter()
+                        .map(|&index| match members[index].kind {
+                            DefinitionKind::Witness => CycleMember::Witness {
+                                name: members[index].name,
+                                type_: Box::new(types[index].clone()),
+                            },
+                            _ => CycleMember::Named(members[index].name),
+                        })
+                        .collect()
+                })
+                .collect(),
+        }
+    }
+
     pub(crate) fn goal(scope: Vec<(Term, Term)>, goal: Term, solution: Option<Term>) -> Self {
         Self::Goal {
             scope,
@@ -1995,16 +2051,22 @@ impl Error {
                 .iter()
                 .skip(1)
                 .filter_map(|member| {
-                    let (name, declared) = match member {
-                        CycleMember::Named(name) => (name, format!("'{}'", spelling.symbol(name))),
-                        CycleMember::Witness { name, type_ } => {
-                            (name, format!("the witness of {}", type_.spelled(spelling)))
-                        }
-                    };
+                    note(
+                        Anchors::label(anchors, member.name()),
+                        format!("{} is declared here", member.spelled(spelling)),
+                    )
+                })
+                .collect(),
+            // Every part's first member but the first part's, which is where the report itself stands.
+            Self::GroupApart { parts } => parts
+                .iter()
+                .skip(1)
+                .filter_map(|part| {
+                    let first = part.first()?;
 
                     note(
-                        Anchors::label(anchors, name),
-                        format!("{declared} is declared here"),
+                        Anchors::label(anchors, first.name()),
+                        format!("{} begins another part here", first.spelled(spelling)),
                     )
                 })
                 .collect(),

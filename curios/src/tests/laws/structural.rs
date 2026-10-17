@@ -15,7 +15,7 @@ struct Unital: pub Type { unit: {}, proof: Holds(0 < 10) }
 struct Bounded: pub Type { n: Nat, ok: Holds(n < 10) }
 struct Box(A: Type): pub Type { held: A }
 struct Holder: pub Type { member: Member, unit: {} }
-and Member: pub Type { unit: {} }
+and Member: pub Type { unit: {}, holders: List(Holder) }
 induct Zero: (Nat) -> pub Prop
 | zero(): (0)
 end
@@ -341,7 +341,7 @@ pub(super) const SEEDS: &[Seeds] = &[
         seeds: &[
             miss(
                 "a neutral at a struct declared in a group, against the literal",
-                "Holder { member = Member { unit = () }, unit = () }",
+                "Holder { member = Member { unit = (), holders = [] }, unit = () }",
                 "u",
             ),
             miss("two neutrals at a struct declared in a group", "v", "u"),

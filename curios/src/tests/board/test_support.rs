@@ -923,7 +923,7 @@ pub(super) const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
         induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
 
         struct Outer: pub Prop { inner: Inner, p: Eq()(0, 0) }
-        and Inner: pub Prop { p: Eq()(0, 0) }
+        and Inner: pub Prop { p: Eq()(0, 0), outer: () -> Outer }
 
         let at_a_member(r : Inner, s : Inner) -> Same()(r, s) = Same/same();
 
@@ -943,7 +943,7 @@ pub(super) const TWO_NEUTRALS_AT_A_GROUPS_MEMBER_WITH_A_RELEVANT_FIELD_STAY_APAR
         use /std/{Eq, Nat};
 
         struct Outer: pub Type { inner: Inner, u: {} }
-        and Inner: pub Type { n: Nat }
+        and Inner: pub Type { n: Nat, outer: () -> Outer }
 
         let apart(r : Outer, s : Outer) -> Eq(@(Outer))(r, s) = Eq/refl();
 
@@ -1595,8 +1595,10 @@ pub(super) const TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS: &str = r#"
 pub(super) const A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING: &str = r#"
         use /std/{Nat};
 
-        let pick(@A: Type, x: A) -> Nat = 0
-        and other(n: Nat) -> Nat = pick(Nat) + n;
+        let pick(@A: Type, n: Nat, x: A) -> Nat =
+            match n | 0 => 1 | k + 1 => other(k) end
+        and other(n: Nat) -> Nat =
+            match n | 0 => 1 | k + 1 => pick(k, Nat) end;
 
         /std/print(Nat/to_str(other(1)))
         "#;
