@@ -487,7 +487,11 @@ pub(crate) fn profile_prelude(half: PreludeHalf, stream: &Path) -> Result<(), St
 }
 
 pub(crate) fn clean() -> Result<(), String> {
-    run(Command::new("git"), &["clean", "-xffd"])?;
+    // A worktree under `.claude/worktrees` is a nested checkout `-ff` would delete with whatever another session has not committed in it.
+    run(
+        Command::new("git"),
+        &["clean", "-xffd", "--exclude", ".claude/worktrees"],
+    )?;
 
     Ok(())
 }

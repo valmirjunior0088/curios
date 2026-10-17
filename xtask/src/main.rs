@@ -14,7 +14,7 @@
 //!
 //! **The test runner is a tool a contributor installs.** A test step runs under `cargo-nextest` and refuses before building when it is absent, naming the command that installs it; why nextest is the README's decision.
 //!
-//! **Four commands are not steps.** `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track. None is a step, so none has a row; each keeps the parameters it had.
+//! **Four commands are not steps.** `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track, except the worktrees under `.claude/worktrees`. None is a step, so none has a row; each keeps the parameters it had.
 //!
 //! **A dependency of nothing.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it.
 
@@ -127,7 +127,9 @@ enum Asked {
         stream: PathBuf,
     },
 
-    #[command(about = "Remove everything git does not track, including the build products")]
+    #[command(
+        about = "Remove everything git does not track, including the build products, except the worktrees under .claude/worktrees"
+    )]
     Clean,
 }
 
