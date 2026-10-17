@@ -19,7 +19,7 @@ let none_at: Option(View/Point(2, 1)) =
 test a_first_frame_clears_and_writes_every_tile =
     let f = Frame/of_view(row(Style/plain, "ab", 2));
     Test/equal(
-        spelled(Tui/render(Option/none(), f, none_at)),
+        spelled(Tui/render(Option/none(), f, none_at, true)),
         "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0mab^[[0m^[[?2026l");
 
 -- Against a previous frame, only the tile that differs is written, with one move to it.
@@ -27,19 +27,21 @@ test a_diff_writes_only_the_changed_tile =
     let before = Frame/of_view(View/above(row(Style/plain, "ab", 2), row(Style/plain, "cd", 2)));
     let after = Frame/of_view(View/above(row(Style/plain, "ab", 2), row(Style/plain, "cX", 2)));
     Test/equal(
-        spelled(Tui/render(Option/some(before), after, Option/none())),
+        spelled(Tui/render(Option/some(before), after, Option/none(), true)),
         "^[[?2026h^[[?25l^[[2;2H^[[0mX^[[0m^[[?2026l");
 
 -- An unchanged frame writes only the bracket.
 test an_unchanged_frame_writes_only_the_bracket =
     let f = Frame/of_view(row(Style/plain, "ab", 2));
-    Test/equal(spelled(Tui/render(Option/some(f), f, none_at)), "^[[?2026h^[[?25l^[[0m^[[?2026l");
+    Test/equal(
+        spelled(Tui/render(Option/some(f), f, none_at, true)),
+        "^[[?2026h^[[?25l^[[0m^[[?2026l");
 
 -- A wide glyph is written once and its second column not at all; after it the renderer moves to the next tile rather than trusting the terminal to have measured the glyph as it does, so a terminal that disagrees misplaces that glyph alone.
 test a_glyph_terminals_may_measure_otherwise_is_followed_by_a_move =
     let f = Frame/of_view(row(Style/plain, "日a", 3));
     Test/equal(
-        spelled(Tui/render(Option/none(), f, Option/none())),
+        spelled(Tui/render(Option/none(), f, Option/none(), true)),
         "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0m日^[[1;3Ha^[[0m^[[?2026l");
 
 -- The style is written where it changes, as the whole style from a reset.
@@ -49,20 +51,26 @@ test a_style_change_is_written_whole =
         Frame/of_view(
             View/fit(View/beside(View/text(Style/plain, "a"), View/text(bold, "b")), 2, 1));
     Test/equal(
-        spelled(Tui/render(Option/none(), f, none_at)),
+        spelled(Tui/render(Option/none(), f, none_at, true)),
         "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0ma^[[0;31;1mb^[[0m^[[?2026l");
+
+-- A terminal that does not show a frame whole is written no bracket around one.
+test a_frame_is_bracketed_only_where_the_terminal_shows_it_whole =
+    let f = Frame/of_view(row(Style/plain, "ab", 2));
+    Test/equal(spelled(Tui/render(Option/some(f), f, none_at, false)), "^[[?25l^[[0m");
 
 -- A cursor is placed and shown after the tiles, and hidden while they are written.
 test the_cursor_is_placed_after_the_tiles =
     let f = Frame/of_view(row(Style/plain, "ab", 2));
     Test/equal(
-        spelled(Tui/render(Option/some(f), f, Option/some(View/Point(2, 1) { x = 1, y = 0 }))),
+        spelled(
+            Tui/render(Option/some(f), f, Option/some(View/Point(2, 1) { x = 1, y = 0 }), true)),
         "^[[?2026h^[[?25l^[[0m^[[1;2H^[[?25h^[[?2026l");
 
 -- Text that holds controls reaches the terminal as their pictures: no bell, no line break and no Escape but the renderer's own sequences' is written, so a label cannot set a window title or move the cursor.
 test text_holding_controls_writes_none_of_them =
     let f = Frame/of_view(row(Style/plain, "a\u{1B}]0;x\u{7}\nb", 9));
-    let written = Tui/render(Option/none(), f, Option/none());
+    let written = Tui/render(Option/none(), f, Option/none(), true);
     Test/all([
         Test/equal(Frame/to_lines(f), ["a␛]0;x␇␊b"]),
         Test/assert(Bytes/all(written, (b) => Byte/to_nat(b) != 0x07 && Byte/to_nat(b) != 0x0A)),
@@ -168,12 +176,12 @@ test what_the_renderer_writes_takes_a_terminal_to_the_frame =
         (before: Frame(4, 2), after: Frame(4, 2)) =>
             replay(
                 Screen { cells = cells_of(before), x = 0, y = 0 },
-                Tui/render(Option/some(before), after, Option/none())).cells;
+                Tui/render(Option/some(before), after, Option/none(), true)).cells;
     let fresh =
         (after: Frame(4, 2)) =>
             replay(
                 Screen { cells = cells_of(frame("????", "????")), x = 0, y = 0 },
-                Tui/render(Option/none(), after, Option/none())).cells;
+                Tui/render(Option/none(), after, Option/none(), true)).cells;
     Test/all(
         List/flatten(
             List/map(pairs, (pair) =>

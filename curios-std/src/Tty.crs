@@ -49,6 +49,15 @@ pub let raw(s: Io/Scope, t: Tty, leave: Bytes) -> Try(Io, Io/Error, {}) =
     let _ = given(status)!;
     Io/Scope/defer(s, (_) => give_back(t));
 
+--- `action` run with `t` given back — its leave bytes written and its settings restored — and `t` taken again once `action` answers, raw once more with `leave` the bytes that undo what the program sets on it: how a program that has taken its terminal hands it to another for a while, an editor, a pager or a shell. A failure to give it or to take it again is raised.
+pub let released(@A: Type, t: Tty, leave: Bytes, action: Io(A)) -> Try(Io, Io/Error, A) =
+    let gave = tty_give(t.0)!;
+    let _ = given(gave)!;
+    let answer = action!;
+    let took = tty_take(t.0, leave)!;
+    let _ = given(took)!;
+    Try/pure(answer);
+
 --- This terminal's dimensions: `ok` beside its columns and its rows, or the status of the failure.
 foreign tty_size(Handle) -> {status: Nat, cols: Nat, rows: Nat};
 

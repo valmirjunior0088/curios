@@ -25,6 +25,10 @@ pub let on(m: Mode) -> Bytes =
 pub let off(m: Mode) -> Bytes =
     private(m, "l");
 
+--- Ask whether the terminal supports `m`, which it answers with a report of the mode.
+pub let ask(m: Mode) -> Bytes =
+    private(m, "$p");
+
 --- Show the cursor.
 pub let cursor_show: Bytes =
     csi("?25h");
@@ -40,6 +44,14 @@ pub let keyboard_push: Bytes =
 --- Pop the enhancements `keyboard_push` pushed.
 pub let keyboard_pop: Bytes =
     csi("<u");
+
+--- Ask which enhancements of the kitty keyboard protocol are in force, which a terminal that speaks it answers.
+pub let keyboard_ask: Bytes =
+    csi("?u");
+
+--- Ask for the terminal's primary device attributes, which every terminal answers.
+pub let attributes_ask: Bytes =
+    csi("c");
 
 --- Every attribute off.
 pub let reset: Bytes =

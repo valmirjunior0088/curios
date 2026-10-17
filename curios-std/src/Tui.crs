@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, List, Io, Try, Channel};
+use /std/{Nat, Bool, List, Option, Result, Io, Try, Tty, Channel};
 use /std/time/{Duration};
 
 --- A terminal colour, in the four forms a terminal understands.
@@ -83,7 +83,40 @@ pub struct Tui(M: Type, E: Type): pub Type {
     view: (model: M) -> Pane,
 }
 
---- The program's fold with no terminal: `events` through `update` from the initial model, stopping at the first `quit`. Answers the model, whether it quit, its view at `w` by `h`, and every `perform` it asked for, unrun.
+-- What a directive asks for, in its order: the work it performs, the work it runs with the terminal given back, whether it asks for a whole frame, and whether it quits.
+struct Asked(E: Type): Type {
+    work: List(Io(E)),
+    released: List(Io(E)),
+    redraw: Bool,
+    quit: Bool,
+}
+
+let nothing(@E: Type) -> Asked(E) =
+    Asked { work = [], released = [], redraw = false, quit = false };
+
+let asked(@E: Type, d: Directive(E)) -> Asked(E) =
+    match d
+    | none() => nothing()
+    | perform(a) => Asked { ..nothing(), work = [a] }
+    | batch(ds) => all(ds)
+    | redraw() => Asked { ..nothing(), redraw = true }
+    | release(a) => Asked { ..nothing(), released = [a] }
+    | quit() => Asked { ..nothing(), quit = true }
+    end
+and all(@E: Type, ds: List(Directive(E))) -> Asked(E) =
+    match ds
+    | [] => nothing()
+    | [d, ..more] =>
+        let first = asked(d);
+        let rest = all(more);
+        Asked {
+            work = [..first.work, ..rest.work],
+            released = [..first.released, ..rest.released],
+            redraw = first.redraw || rest.redraw,
+            quit = first.quit || rest.quit }
+    end;
+
+--- The program's fold with no terminal: `events` through `update` from the initial model, stopping at the first `quit`, at `w` by `h` until an event says the terminal is another size. Answers the model, whether it quit, the size it stands at, its view there, and every action it asked for, unrun: what it performs and what it runs with the terminal given back, in order.
 pub let drive(
     @M: Type,
     @E: Type,
@@ -91,37 +124,53 @@ pub let drive(
     w: Nat,
     h: Nat,
     events: List(Event(E)),
-) -> {model: M, quit: Bool, view: View(w, h), pending: List(Io(E))} =
-    let start = app.init.1;
+) -> {
+    model: M,
+    quit: Bool,
+    size: Tty/Size,
+    view: View(size.cols, size.rows),
+    pending: List(Io(E))} =
+    let start = asked(app.init.1);
     let state =
         List/fold(
             events,
-            (model = app.init.0, quit = start.stop, pending = start.run),
+            (
+                model = app.init.0,
+                quit = start.quit,
+                size = Tty/Size { cols = w, rows = h },
+                pending = [..start.work, ..start.released]),
             (e, acc) =>
                 match acc.quit
                 | true => acc
                 | false =>
+                    let size = match e | input(resize(now)) => now | _ => acc.size end;
                     let next = app.update(acc.model, e);
-                    let d = next.1;
-                    (model = next.0, quit = d.stop, pending = [..acc.pending, ..d.run])
+                    let d = asked(next.1);
+                    (
+                        model = next.0,
+                        quit = d.quit,
+                        size = size,
+                        pending = [..acc.pending, ..d.work, ..d.released])
                 end);
     (
         model = state.model,
         quit = state.quit,
-        view = app.view(state.model)(w, h),
+        size = state.size,
+        view = app.view(state.model)(state.size.cols, state.size.rows),
         pending = state.pending);
 
--- What wakes the loop: an event for the program, or the failure of its terminal, which ends the run. A failure is no `Event`, a type every program matches.
+-- What wakes the loop: a read of the terminal, an answer of the work a directive asked for, or the deadline for asking the terminal's size.
 induct Wake(E: Type): Type
-| event(Event(E))
-| failed(Io/Error)
+| read(Result(Io/Error, Option(List(Input))))
+| answer(E)
+| tick()
 end
 
---- Run the program in a session until it quits, answering its last model. Keys, resizes and the answers of the program's own directives feed one queue, and the screen is drawn once per burst. The reading of keys, the watch on the terminal's size and every directive's work run beside the loop, and whatever of them is still running when the program quits is cancelled where it waits. A read of the terminal that fails ends the run with its error, and so does a query of its size. The end of standard input ends the reading alone, and the program runs on until it quits.
+--- Run the program until it quits, answering its last model. One task races a read of the terminal, the answers of the work the program's directives asked for and, where the terminal does not report its size, a deadline for asking it that passes every tenth of a second, whatever else wakes the loop meanwhile, and is served before what arrived as it passed; what wakes it is folded through `update`, with every answer already waiting, and the screen drawn once. Work runs beside the loop, and a quit waits for the work its own update asked for and cancels the rest where it waits. A read of the terminal that fails ends the run with its error, and so do a query of its size and a draw. The end of the terminal's input ends the reading alone, and the program runs on until it quits.
 pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Io, Io/Error, M) =
-    Try/scope((children) => Try/bind(Session/enter(children), (s) => running(app, s, children)));
+    Try/scope((children) => Try/bind(Session/open(children), (s) => running(app, s, children)));
 
--- The loop of `app` over the session `s`, with what runs beside it spawned into `children`.
+-- The loop of `app` over the session `s`, with the work its directives ask for spawned into `children`.
 let running(
     @M: Type,
     @E: Type,
@@ -129,93 +178,122 @@ let running(
     s: Session,
     children: Io/Scope,
 ) -> Try(Io, Io/Error, M) =
-    let queue: {Channel/Sender(Wake(E)), Channel/Receiver(Wake(E))} = Channel/new(256)!;
-    let push(e: Event(E)) -> Io({}) =
-        let _ = Channel/send(queue.0, Wake/event(e))!;
-        Io/pure(());
-    let fail(why: Io/Error) -> Io({}) =
-        let _ = Channel/send(queue.0, Wake/failed(why))!;
-        Io/pure(());
-    let reader(session: Session) -> Io({}) =
-        let got = Try/run(Session/read(session))!;
-        match got
-        | failure(why) => fail(why)
-        | success(read) =>
-            match read
-            | none() => Io/pure(())
-            | some(inputs) =>
-                let _ = List/each(inputs, (i: Input) => push(Event/input(i)))!;
-                reader(session)
-            end
+    let answers: {Channel/Sender(E), Channel/Receiver(E)} = Channel/new(256)!;
+    let never: Io(Wake(E)) = Io/race([]);
+    -- `a` run beside the loop, and a second child handing its answer to the loop: a quit waits on the first, never on the queue the second may wait on.
+    let performed(a: Io(E)) -> Io(Io/Scope/Task(E)) =
+        let task = Io/Scope/spawn(children, a)!;
+        let _ =
+            Io/Scope/spawn(
+                children,
+                Io/bind(Io/Scope/Task/join(task), (e) => Channel/send(answers.0, e)))!;
+        Io/pure(task);
+    -- Each of `rs` run with the terminal given back, in order, its answer queued for the loop.
+    let released(rs: List(Io(E))) -> Try(Io, Io/Error, {}) =
+        match rs
+        | [] => Try/pure(())
+        | [r, ..more] =>
+            let e = Session/release(s, r)!;
+            let _ = Channel/send(answers.0, e)!;
+            released(more)
         end;
-    let ticker(session: Session) -> Io({}) =
-        let _ = Io/sleep(Duration/of_millis(100))!;
-        let known = Session/last_size(session)!;
-        let now = Try/run(Session/size(session))!;
-        match now
-        | failure(why) => fail(why)
-        | success((updated, sz)) =>
-            match sz == known
-            | true => ticker(updated)
-            | false =>
-                let _ = push(Event/input(Input/resize(sz)))!;
-                ticker(updated)
-            end
-        end;
-    let answer(a: Io(E)) -> Io({}) =
-        let e = a!;
-        push(Event/custom(e));
-    let beside(work: Io({})) -> Io({}) =
-        Io/bind(Io/Scope/spawn(children, work), (_) => Io/pure(()));
-    let issue(c: Directive(E)) -> Io(Bool) =
-        let _ = List/each(c.run, (a) => beside(answer(a)))!;
-        Io/pure(c.stop);
-    let draw(session: Session, m: M) -> Io(Session) =
-        let sz = Session/last_size(session)!;
-        Session/draw(session, app.view(m)(sz.cols, sz.rows));
-    let drain(session: Session, m: M, events: List(Event(E))) -> Io({Session, M, Bool}) =
+    -- What `d` asks for done: its work started, what it runs with the terminal given back run now, and the screen forgotten where it asks for a whole frame. Answers the work it started and whether it quits.
+    let issue(d: Directive(E)) -> Try(Io, Io/Error, {tasks: List(Io/Scope/Task(E)), quit: Bool}) =
+        let a = asked(d);
+        let tasks = Io/all(List/map(a.work, performed))!;
+        let _ = released(a.released)!;
+        let _ = match a.redraw | true => Session/forget(s) | false => Try/pure(()) end!;
+        Try/pure((tasks = tasks, quit = a.quit));
+    -- `events` through `update` from `m`, a size the terminal reported kept as it passes; stopping at the first quit, with the work its update asked for.
+    let fold(
+        m: M,
+        events: List(Event(E)),
+    ) -> Try(Io, Io/Error, {model: M, tasks: List(Io/Scope/Task(E)), quit: Bool}) =
         match events
-        | [] => Io/pure((session, m, false))
+        | [] => Try/pure((model = m, tasks = [], quit = false))
         | [e, ..more] =>
-            let updated =
-                match e | input(resize(size)) => Session/resized(session, size) | _ => session end;
+            let _ =
+                match e | input(resize(now)) => Session/resized(s, now) | _ => Try/pure(()) end!;
             let next = app.update(m, e);
-            let stop = issue(next.1)!;
-            match stop
-            | true => Io/pure((updated, next.0, true))
-            | false => drain(updated, next.0, more)
+            let issued = issue(next.1)!;
+            match issued.quit
+            | true => Try/pure((model = next.0, tasks = issued.tasks, quit = true))
+            | false => fold(next.0, more)
             end
         end;
-    -- Everything queued behind the event that woke the loop, so a burst still draws once. A failure queued among them ends the run where it stands.
-    let burst(acc: List(Event(E))) -> Try(Io, Io/Error, List(Event(E))) =
-        let more = Channel/try_receive(queue.1)!;
-        match more
-        | item(event(e)) => burst([..acc, e])
-        | item(failed(why)) => Try/raise(why)
-        | empty() => Try/pure(acc)
-        | ended() => Try/pure(acc)
+    -- Every answer already waiting, so a burst draws once.
+    let waiting(acc: List(Event(E))) -> Io(List(Event(E))) =
+        let more = Channel/try_receive(answers.1)!;
+        match more | item(e) => waiting([..acc, Event/custom(e)]) | _ => Io/pure(acc) end;
+    let draw(m: M) -> Try(Io, Io/Error, {}) =
+        let size = Session/size(s)!;
+        Session/draw(s, app.view(m)(size.cols, size.rows));
+    -- `m`, once each of `tasks` has answered.
+    let quitting(m: M, tasks: List(Io/Scope/Task(E))) -> Try(Io, Io/Error, M) =
+        match tasks
+        | [] => Try/pure(m)
+        | [t, ..more] =>
+            let _ = Io/Scope/Task/join(t)!;
+            quitting(m, more)
         end;
-    let loop(session: Session, m: M) -> Try(Io, Io/Error, M) =
-        let woke = Channel/receive(queue.1)!;
+    -- The next deadline for asking the terminal's size, a tenth of a second off, where the terminal does not report it: a child of the scope, so a wake the loop has meanwhile cancels the loop's wait on it and not the sleep, and it passes when it is due whatever wakes the loop before it.
+    let deadline() -> Io(Option(Io/Scope/Task({}))) =
+        match Session/reports_size(s)
+        | true => Io/pure(Option/none())
+        | false =>
+            let task = Io/Scope/spawn(children, Io/sleep(Duration/of_millis(100)))!;
+            Io/pure(Option/some(task))
+        end;
+    let after(
+        m: M,
+        events: List(Event(E)),
+        reading: Bool,
+        due: Option(Io/Scope/Task({})),
+    ) -> Try(Io, Io/Error, M) =
+        let queued = waiting(events)!;
+        let folded = fold(m, queued)!;
+        match folded.quit
+        | true => quitting(folded.model, folded.tasks)
+        | false =>
+            let _ = draw(folded.model)!;
+            step(folded.model, reading, due)
+        end
+    and step(m: M, reading: Bool, due: Option(Io/Scope/Task({}))) -> Try(Io, Io/Error, M) =
+        let read =
+            match reading
+            | true => Io/bind(Try/run(Session/read(s)), (r) => Io/pure(Wake/read(r)))
+            | false => never
+            end;
+        let answer =
+            Io/bind(
+                Channel/receive(answers.1),
+                (got) => match got | some(e) => Io/pure(Wake/answer(e)) | none() => never end);
+        let tick =
+            match due
+            | some(task) => Io/bind(Io/Scope/Task/join(task), (_) => Io/pure(Wake/tick()))
+            | none() => never
+            end;
+        -- A deadline that has passed is acted on before what arrived as it passed, which the read leaves where it was.
+        let woke = Io/race([tick, answer, read])!;
         match woke
-        | none() => Try/pure(m)
-        | some(failed(why)) => Try/raise(why)
-        | some(event(e)) =>
-            let events = burst([e])!;
-            let folded = drain(session, m, events)!;
-            match folded.2
-            | true => Try/pure(folded.1)
-            | false =>
-                let drawn = draw(folded.0, folded.1)!;
-                loop(drawn, folded.1)
+        | read(failure(why)) => Try/raise(why)
+        | read(success(none())) => step(m, false, due)
+        | read(success(some(inputs))) => after(m, List/map(inputs, Event/input), reading, due)
+        | answer(e) => after(m, [Event/custom(e)], reading, due)
+        | tick() =>
+            let next = deadline()!;
+            let known = Session/size(s)!;
+            let now = Session/measure(s)!;
+            match now == known
+            | true => step(m, reading, next)
+            | false => after(m, [Event/input(Input/resize(now))], reading, next)
             end
         end;
-    let _ = beside(reader(s))!;
-    let _ = beside(ticker(s))!;
     let first = issue(app.init.1)!;
-    match first
-    | true => Try/pure(app.init.0)
+    match first.quit
+    | true => quitting(app.init.0, first.tasks)
     | false =>
-        let drawn = draw(s, app.init.0)!;
-        loop(drawn, app.init.0)
+        let _ = draw(app.init.0)!;
+        let due = deadline()!;
+        step(app.init.0, true, due)
     end;

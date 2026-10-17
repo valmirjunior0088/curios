@@ -1,5 +1,5 @@
 -- A whole program through `drive`: the fold from `init` through `update`, the view it shows, and what a directive asks for.
-use /std/{Nat, Char, List, Io, Test, Tui};
+use /std/{Nat, Char, List, Io, Test, Tty, Tui};
 use /std/Tui/{Style, Frame, Pane, Key, Input, Event, Directive};
 
 -- A counter: `+` and `-` change it, `q` quits, `!` asks for an `Io` that answers the count doubled.
@@ -49,3 +49,10 @@ test a_perform_comes_back_pending =
 test a_custom_event_reaches_update =
     let d = Tui/drive(counter, 3, 1, [Event/custom(7)]);
     Test/equal(d.model, 7);
+
+-- A resize moves the fold to the size it reports, and the view is drawn there.
+test the_view_follows_a_resize_the_fold_meets =
+    let d = Tui/drive(counter, 3, 1, [Event/input(Input/resize(Tty/Size { cols = 4, rows = 2 }))]);
+    Test/all([
+        Test/equal(d.size, Tty/Size { cols = 4, rows = 2 }),
+        Test/equal(Frame/to_lines(Frame/of_view(d.view)), ["0   ", "    "])]);

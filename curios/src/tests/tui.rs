@@ -26,7 +26,16 @@ fn a_palette_index_past_the_sixteen_is_refused() {
     );
 }
 
-// The session's scope, both ways round: raw mode on, then the four modes in order, and as the scope ends the four inverses in reverse, then raw mode off — whichever way the body ended.
+// What a session asks the terminal where it opens: the keyboard protocol's flags, the three modes it uses where the terminal supports them, and the device attributes last.
+const ASKED: &str = "\x1b[?u\x1b[?2026$p\x1b[?2027$p\x1b[?2048$p\x1b[c";
+
+// Every mode a session may set, undone in reverse, which the host writes as it gives the terminal back.
+const LEAVE: &str = "\x1b[<u\x1b[?2048l\x1b[?2027l\x1b[?1004l\x1b[?2004l\x1b[?25h\x1b[?1049l";
+
+// The answer of a terminal that supports synchronized output and nothing else the session asks after: a chunk scripted first, so the session opens on it and leaves the keys after it to the program.
+const SYNCHRONIZED: &[u8] = b"\x1b[?2026;2$y\x1b[?62c";
+
+// The session's scope, both ways round: raw mode on, the questions, then the four modes a terminal that answered none of them is set up with, in order; and as the scope ends every mode the session may set undone in reverse, then raw mode off — whichever way the body ended.
 #[test]
 fn a_session_switches_the_terminal_and_restores_it_in_reverse() {
     let (system, io) = MockHost::builder().tty_size(20, 5).build();
@@ -35,7 +44,7 @@ fn a_session_switches_the_terminal_and_restores_it_in_reverse() {
         use /std/{Str, Try, Io, Show, Tui};
         use /std/Tui/{Session};
         let program() -> Io({}) =
-            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) => Try/pure("inside"))))!;
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) => Try/pure("inside"))))!;
             match outcome
             | success(s) => /std/print(s)
             | failure(e) => /std/print(Show/show(e))
@@ -46,10 +55,38 @@ fn a_session_switches_the_terminal_and_restores_it_in_reverse() {
     )
     .expect("expected result");
     let output = String::from_utf8_lossy(&io.output()).into_owned();
-    let enter = "\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[>1u";
-    let leave = "\x1b[<u\x1b[?2004l\x1b[?25h\x1b[?1049l";
-    assert_eq!(output, format!("{enter}{leave}inside"), "{output:?}");
+    let enter = "\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[?1004h";
+    assert_eq!(output, format!("{ASKED}{enter}{LEAVE}inside"), "{output:?}");
     assert_eq!(io.raw_modes(), vec![true, false]);
+}
+
+// A terminal that answers with the keyboard protocol's flags and every mode supported is set up with all of them: the protocol pushed, grapheme clusters and in-band resize set.
+#[test]
+fn a_session_sets_up_what_the_terminal_confirmed() {
+    let (system, io) = MockHost::builder()
+        .tty_size(20, 5)
+        .stdin_chunks(vec![
+            b"\x1b[?1u\x1b[?2026;2$y\x1b[?2027;2$y\x1b[?2048;2$y\x1b[?62c".to_vec(),
+        ])
+        .build();
+    run_text(
+        r#"
+        use /std/{Str, Try, Io, Show, Tui};
+        use /std/Tui/{Session};
+        let program() -> Io({}) =
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) => Try/pure("inside"))))!;
+            match outcome
+            | success(s) => /std/print(s)
+            | failure(e) => /std/print(Show/show(e))
+            end;
+        program()
+        "#,
+        system,
+    )
+    .expect("expected result");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    let enter = "\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[?1004h\x1b[>1u\x1b[?2027h\x1b[?2048h";
+    assert_eq!(output, format!("{ASKED}{enter}{LEAVE}inside"), "{output:?}");
 }
 
 // Without a terminal entering the session fails where it starts, as the `Try` it is, and switches nothing.
@@ -61,7 +98,7 @@ fn a_session_without_a_terminal_is_refused_before_anything_is_written() {
         use /std/{Str, Try, Io, Show, Tui};
         use /std/Tui/{Session};
         let program() -> Io({}) =
-            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) => Try/pure("inside"))))!;
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) => Try/pure("inside"))))!;
             match outcome
             | success(s) => /std/print(s)
             | failure(e) => /std/print(Show/show(e))
@@ -84,11 +121,15 @@ fn a_session_without_a_terminal_is_refused_before_anything_is_written() {
 fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
     let (system, io) = MockHost::builder()
         .tty_size(12, 5)
-        .stdin_chunks(vec![b"\x1b[B".to_vec(), b"q".to_vec()])
+        .stdin_chunks(vec![
+            SYNCHRONIZED.to_vec(),
+            b"\x1b[B".to_vec(),
+            b"q".to_vec(),
+        ])
         .build();
     run_text(LISTING_PROGRAM, system).expect("expected result");
     let output = String::from_utf8_lossy(&io.output()).into_owned();
-    assert!(output.starts_with("\x1b[?1049h"), "{output:?}");
+    assert!(output.starts_with(ASKED), "{output:?}");
     assert!(output.ends_with("\x1b[?1049ltwo"), "{output:?}");
     // The first frame is the whole screen: a clear, the border's corner, the title. The second is a diff: no clear, and the two rows whose highlight moved.
     assert_eq!(output.matches("\x1b[2J").count(), 1, "{output:?}");
@@ -97,12 +138,12 @@ fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
-// A pause in the keys hands the session's timers their turn: the size ticker runs once there and reads the terminal's new size, so the frame after it is drawn whole, a second clear, where keys that never pause leave the ticker unrun. A key follows the pause before `q`, since a burst that quits draws nothing.
+// A pause in the keys lets the loop's deadline for the size pass: it asks the terminal's size there and finds it new, so the frame after it is drawn whole, a second clear, where keys that never pause leave it unasked. A key follows the pause before `q`, since a burst that quits draws nothing.
 #[test]
-fn a_pause_in_the_keys_lets_the_size_ticker_read_a_resize() {
+fn a_pause_in_the_keys_lets_the_loop_ask_the_size_and_read_a_resize() {
     let (system, io) = MockHost::builder()
         .tty_sizes([(12, 5), (16, 6)])
-        .stdin_chunks(vec![b"\x1b[B".to_vec()])
+        .stdin_chunks(vec![SYNCHRONIZED.to_vec(), b"\x1b[B".to_vec()])
         .stdin_pause()
         .stdin_chunks(vec![b"\x1b[A".to_vec(), b"q".to_vec()])
         .mono((0..1_000).map(|millis| (millis / 1_000, millis % 1_000 * 1_000_000)))
@@ -117,13 +158,18 @@ fn a_pause_in_the_keys_lets_the_size_ticker_read_a_resize() {
 fn a_session_carries_incomplete_input_into_its_next_read() {
     let (host, io) = MockHost::builder()
         .tty_size(4, 2)
-        .stdin_chunks(vec![b"\x1b".to_vec(), b"[".to_vec(), b"A".to_vec()])
+        .stdin_chunks(vec![
+            SYNCHRONIZED.to_vec(),
+            b"\x1b".to_vec(),
+            b"[".to_vec(),
+            b"A".to_vec(),
+        ])
         .build();
     run_text(r#"
         use /std/{Nat, List, Option, Try, Io, print};
         use /std/Tui/{Session};
         let program() -> Io({}) =
-            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) =>
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) =>
                 let first = Session/read(s)!;
                 let _ = print(match first | some(events) => Nat/to_str(List/len(events)) | none() => "eof" end)!;
                 let second = Session/read(s)!;
@@ -148,24 +194,27 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
+// A session is a handle: a draw diffs against the frame the last one wrote, and a size asked is the size it knows from then on, so a frame of another size is written whole.
 #[test]
-fn drawing_history_and_size_travel_with_the_returned_session() {
+fn a_session_remembers_what_it_drew_and_the_size_it_was_told() {
     let (host, io) = MockHost::builder().tty_sizes([(4, 2), (6, 3)]).build();
     run_text(
         r#"
         use /std/{Nat, Try, Io, print};
         use /std/Tui/{Session, View};
         let program() -> Io({}) =
-            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) =>
-                let drawn = Session/draw(s, View/blank(4, 2))!;
-                let again = Session/draw(drawn, View/blank(4, 2))!;
-                let resized = Session/size(again)!;
-                let _ = Session/draw(resized.0, View/blank(6, 3))!;
-                let original = Session/last_size(s)!;
-                let updated = Session/last_size(resized.0)!;
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) =>
+                let _ = Session/draw(s, View/blank(4, 2))!;
+                let _ = Session/draw(s, View/blank(4, 2))!;
+                let original = Session/size(s)!;
+                let now = Session/measure(s)!;
+                let _ = Session/draw(s, View/blank(6, 3))!;
+                let known = Session/size(s)!;
                 let _ = print(Nat/to_str(original.cols))!;
                 let _ = print("/")!;
-                let _ = print(Nat/to_str(updated.cols))!;
+                let _ = print(Nat/to_str(now.cols))!;
+                let _ = print("/")!;
+                let _ = print(Nat/to_str(known.cols))!;
                 Try/pure(()))))!;
             Io/pure(());
         program()
@@ -175,7 +224,7 @@ fn drawing_history_and_size_travel_with_the_returned_session() {
     .expect("threaded frames and dimensions");
     let output = String::from_utf8_lossy(&io.output()).into_owned();
     assert_eq!(output.matches("\x1b[2J").count(), 2, "{output:?}");
-    assert!(output.contains("4/6"), "{output:?}");
+    assert!(output.contains("4/6/6"), "{output:?}");
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
@@ -331,3 +380,143 @@ pub(super) const LISTING_PROGRAM: &str = r#"
             end;
         program()
         "#;
+
+// Saving and quitting in one update: the quit waits for the save its update asked for, which runs to its end before the program does.
+#[test]
+fn a_quit_waits_for_the_work_its_update_asked_for() {
+    let (host, io) = MockHost::builder()
+        .tty_size(4, 2)
+        .stdin_chunks(vec![SYNCHRONIZED.to_vec(), b"q".to_vec()])
+        .build();
+    run_text(
+        r#"
+        use /std/{Nat, Try, Tui, Io, print};
+        use /std/Tui/{View, Directive};
+        let save() -> Io(Nat) =
+            let _ = print("saved")!;
+            Io/pure(1);
+        let app: Tui(Nat, Nat) = Tui {
+            init = (0, Directive/none()),
+            update(model, event) = match event
+                | input(key(_)) => (model, Directive/batch([Directive/perform(save()), Directive/quit()]))
+                | _ => (model, Directive/none())
+                end,
+            view(model) = (w, h) => View/blank(w, h),
+        };
+        let program() -> Io({}) =
+            let result = Try/run(Tui/run(app))!;
+            print(match result | success(_) => "/quit" | failure(_) => "/failed" end);
+        program()
+    "#,
+        host,
+    )
+    .expect("the run ends");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(output.contains("saved"), "{output:?}");
+    assert!(output.ends_with("\x1b[?1049l/quit"), "{output:?}");
+}
+
+// A draw whose write fails ends the run with the write's error, the terminal given back on the way out.
+#[test]
+fn a_failed_draw_ends_the_run_with_its_error() {
+    let (host, io) = MockHost::builder().tty_size(4, 2).build();
+    // The session's questions and its set-up are the first two writes; the first frame is the third.
+    let failing = Lying::after(
+        host,
+        HostOp::HandleWrite,
+        2,
+        Err::<u64, Failure>(Failure::PermissionDenied),
+    );
+    run_text(IDLE_PROGRAM, failing).expect("the run ends");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(
+        output.ends_with("\x1b[?1049lpermission_denied"),
+        "{output:?}"
+    );
+    assert_eq!(io.raw_modes(), vec![true, false]);
+}
+
+// A release gives the terminal back around its action — the modes undone and raw mode off while the action runs — and takes it again after, set up as before; its answer reaches `update`.
+#[test]
+fn a_release_gives_the_terminal_back_around_its_action() {
+    let (host, io) = MockHost::builder()
+        .tty_size(4, 2)
+        .stdin_chunks(vec![SYNCHRONIZED.to_vec(), b"r".to_vec(), b"q".to_vec()])
+        .build();
+    run_text(
+        r#"
+        use /std/{Nat, Try, Tui, Io, print};
+        use /std/Tui/{View, Directive};
+        let outside() -> Io(Nat) =
+            let _ = print("outside")!;
+            Io/pure(5);
+        let app: Tui(Nat, Nat) = Tui {
+            init = (0, Directive/none()),
+            update(model, event) = match event
+                | input(key(k)) => match k.code
+                    | char(c) => match c == 'r'
+                        | true => (model, Directive/release(outside()))
+                        | false => (model, Directive/quit())
+                        end
+                    | _ => (model, Directive/none())
+                    end
+                | custom(n) => (model + n, Directive/none())
+                | _ => (model, Directive/none())
+                end,
+            view(model) = (w, h) => View/blank(w, h),
+        };
+        let program() -> Io({}) =
+            let result = Try/run(Tui/run(app))!;
+            print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
+        program()
+    "#,
+        host,
+    )
+    .expect("the run ends");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    let outside = output.find("outside").expect("the action ran");
+    let given = output[..outside]
+        .rfind("\x1b[?1049l")
+        .expect("the terminal was given back first");
+    let taken = output[outside..]
+        .find("\x1b[?1049h")
+        .expect("and taken again after");
+    assert!(given < outside && taken > 0, "{output:?}");
+    assert!(output.ends_with("\x1b[?1049l5"), "{output:?}");
+    assert_eq!(io.raw_modes(), vec![true, false, true, false]);
+}
+
+// A terminal that reports its size in band is never asked it: the report is an input, and the run ends on it with no clock to tick.
+#[test]
+fn a_size_the_terminal_reports_reaches_update_as_an_input() {
+    let (host, io) = MockHost::builder()
+        .tty_size(4, 2)
+        .stdin_chunks(vec![
+            b"\x1b[?2048;2$y\x1b[?62c".to_vec(),
+            b"\x1b[48;3;8;0;0t".to_vec(),
+        ])
+        .build();
+    run_text(
+        r#"
+        use /std/{Nat, Try, Tui, Io, print};
+        use /std/Tui/{View, Directive};
+        let app: Tui(Nat, Nat) = Tui {
+            init = (0, Directive/none()),
+            update(model, event) = match event
+                | input(resize(size)) => (size.cols, Directive/quit())
+                | _ => (model, Directive/none())
+                end,
+            view(model) = (w, h) => View/blank(w, h),
+        };
+        let program() -> Io({}) =
+            let result = Try/run(Tui/run(app))!;
+            print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
+        program()
+    "#,
+        host,
+    )
+    .expect("the run ends");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(output.contains("\x1b[?2048h"), "{output:?}");
+    assert!(output.ends_with("\x1b[?1049l8"), "{output:?}");
+}

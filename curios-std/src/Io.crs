@@ -378,7 +378,7 @@ pub let all(@A: Type, actions: List(Io(A))) -> Io(List(A)) =
             pure(false))!;
     awaited(List/map(pairs, (p: {Io(A), Future(A)}) => p.1));
 
---- The first of `actions` to answer; every other one is cancelled where it waits. An action dropped part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over offers takes nothing until it keeps it, and is the way to choose without paying that. Which action answered is its answer's to say. With no action, nothing answers.
+--- The first of `actions` to answer; every other one is cancelled where it waits. Actions are stepped in list order, so of two that can answer at once — two whose waits ended together — the earlier in the list answers. An action dropped part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over offers takes nothing until it keeps it, and is the way to choose without paying that. Which action answered is its answer's to say. With no action, nothing answers.
 pub let race(@A: Type, actions: List(Io(A))) -> Io(A) =
     let won: Future(A) = Future/new()!;
     let _ = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more, answered(won))!;
