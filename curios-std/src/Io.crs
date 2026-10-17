@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Bytes, Nat, Bool, List, Option, Cell, Handle, Channel, Program, Try};
+use /std/{Monad, Bytes, Nat, Bool, List, Option, Cell, Handle, Program, Try};
 use /std/Handle/{let Handle};
 use /std/Bool/{Holds};
 use /std/time/{Duration};
@@ -32,6 +32,10 @@ pub use Signal/{let Signal};
 --- A stream with the bytes read ahead of what was asked of it, and the reads that cut a piece from them.
 pub mod Reader;
 pub use Reader/{let Reader};
+
+--- What a body runs its children in and opens its resources into: everything spawned into a scope is cancelled, and everything deferred to it released, before the scope answers.
+pub mod Scope;
+pub use Scope/{let Scope};
 
 satisfy Monad(Io) {
     pure = pure,
@@ -68,7 +72,7 @@ pub let yield() -> Io({}) =
     let cell = ready()!;
     wait_filled([cell]);
 
---- How a body that `using` brackets ended.
+--- How a scope ended, as each release deferred to it is told.
 pub induct Ended: pub Type
 --- It ran to its end.
 | finished()
@@ -76,8 +80,8 @@ pub induct Ended: pub Type
 | cancelled()
 end
 
---- `body`, and then `release` told how it ended: `finished` where it ran to its end, and `cancelled` where whatever advances it drops it while it waits, which `release` hears as the cancel of every suspension the body passes out.
-pub let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
+-- `body`, and then `release` told how it ended: `finished` where it ran to its end, and `cancelled` where whatever advances it drops it while it waits, which `release` hears as the cancel of every suspension the body passes out. The scope's machinery: a program defers a release to a scope instead.
+let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
     /sys/Io/advance(
         body,
         (a) => bind(release(Ended/finished()), (_) => pure(a)),
@@ -362,75 +366,3 @@ pub let race(@A: Type, actions: List(Io(A))) -> Io(A) =
 --- `a`'s answer, or `none` where `d` passes first, `a` then cancelled where it waits. An answer that lands after `d` is dropped, which is what a timeout means.
 pub let timeout(@A: Type, d: Duration, a: Io(A)) -> Io(Option(A)) =
     race([bind(a, (x) => pure(Option/some(x))), bind(sleep(d), (_) => pure(Option/none()))]);
-
--- How many children of a scope have not ended, kept in a capacity-one channel, and the signal raised as each ends: what `join_all` waits on, a count rather than the tasks, so a scope that spawns without end holds nothing of the children that have ended.
-struct Live: Type {
-    count: {Channel/Sender(Nat), Channel/Receiver(Nat)},
-    ended: Signal,
-}
-
--- `change` applied to the count of `live`.
-let counted(live: Live, change: (Nat) -> Nat) -> Io({}) =
-    let held = Channel/try_receive(live.count.1)!;
-    let n = match held | item(n) => n | _ => 0 end;
-    let _ = Channel/try_send(live.count.0, change(n))!;
-    pure(());
-
--- One child of `live` ended.
-let ended(live: Live) -> Io({}) =
-    let _ = counted(live, (n) => match n | 0 => 0 | m + 1 => m end)!;
-    Signal/notify(live.ended);
-
---- What a scope's body spawns its children into.
-pub struct Scope: Type {
-    children: Channel/Sender(Io({})),
-    live: Live,
-}
-
---- A child a scope runs: its answer once it has one.
-pub struct Task(A: Type): Type {
-    Future(A),
-}
-
---- `child` run beside the body of the scope `s`, answering at once with the task `join` waits on. A child still running when the body of its scope answers is cancelled where it waits, and one spawned once the scope has answered never runs.
-pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =
-    let f = Future/new()!;
-    let _ = counted(s.live, (n) => n + 1)!;
-    let finished = bind(child, (a) => bind(Future/fill(f, a), (_) => ended(s.live)));
-    let _ = Channel/send(s.children, finished)!;
-    pure(Task { f });
-
---- The task's answer, waiting until it has one.
-pub let join(@A: Type, t: Task(A)) -> Io(A) =
-    Future/wait(t.0);
-
---- Until every child spawned into `s` has ended, those spawned meanwhile among them: what a body that needs all of its children finished asks before it answers.
-pub let join_all(s: Scope) -> Io({}) =
-    let held = Channel/try_receive(s.live.count.1)!;
-    let n = match held | item(n) => n | _ => 0 end;
-    let _ = Channel/try_send(s.live.count.0, n)!;
-    match n
-    | 0 => pure(())
-    | _ =>
-        let _ = Signal/wait(s.live.ended)!;
-        join_all(s)
-    end;
-
--- Every child spawned into `r` since the last time it was asked.
-let spawned(r: Channel/Receiver(Io({}))) -> Io(List(Branch)) =
-    let taken = Channel/try_receive(r)!;
-    match taken
-    | item(child) => bind(spawned(r), (more) => pure([Branch/fresh(child), ..more]))
-    | _ => pure([])
-    end;
-
---- `body` run with a scope it spawns children into, and its answer once it has one. The children run beside the body, and those still running when the body answers are cancelled where they wait: a description's answer is all it yields, so a child the body needs is joined before it answers.
-pub let scope(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
-    let ends = Channel/new(@Io({}), 64)!;
-    let count = Channel/new(@Nat, 1)!;
-    let ended = Signal/new()!;
-    let s = Scope { children = ends.0, live = Live { count = count, ended = ended } };
-    let answer: Future(A) = Future/new()!;
-    let _ = drive([into(body(s), answer)], spawned(ends.1), answered(answer))!;
-    let _ = Channel/close(ends.0)!;
-    Future/wait(answer);

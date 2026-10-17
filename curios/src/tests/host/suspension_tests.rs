@@ -88,7 +88,7 @@ fn a_program_suspended_on_a_filled_cell_goes_on_into_its_rest() {
         let entry() -> /std/Io({}) =
             let cell = Cell/new()!;
             let _ = Cell/fill(cell, ())!;
-            let _ = Io/using(told, Io/bind(Io/wait_filled([cell]), (_) => /std/print("resumed|")))!;
+            let _ = Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, told), (_) => Io/bind(Io/wait_filled([cell]), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
         "#,
@@ -110,7 +110,7 @@ fn a_program_suspended_on_an_empty_cell_alone_ends_reporting_the_deadlock() {
             /std/print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
         let entry() -> /std/Io({}) =
             let cell = Cell/new()!;
-            let _ = Io/using(told, Io/bind(Io/wait_filled([cell]), (_) => /std/print("resumed|")))!;
+            let _ = Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, told), (_) => Io/bind(Io/wait_filled([cell]), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
         "#,
@@ -132,7 +132,7 @@ fn a_cancel_that_suspends_part_way_runs_to_its_end() {
         use /std/time/{Duration};
         let entry() -> /std/Io({}) =
             let release(_: Io/Ended) -> Io({}) = Io/bind(Io/sleep(Duration/zero), (_) => /std/print("abandoned|"));
-            let _ = Io/using(release, Io/bind(Io/wait_filled([]), (_) => /std/print("resumed|")))!;
+            let _ = Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, release), (_) => Io/bind(Io/wait_filled([]), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
         "#,
@@ -151,7 +151,7 @@ fn a_program_suspended_on_no_handle_runs_its_cancel_and_ends_reporting_the_deadl
         r#"
         use /std/{Io};
         let entry() -> /std/Io({}) =
-            let _ = Io/using((_) => /std/print("abandoned|"), Io/bind(Io/wait_filled([]), (_) => /std/print("resumed|")))!;
+            let _ = Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("abandoned|")), (_) => Io/bind(Io/wait_filled([]), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
         "#,

@@ -26,7 +26,7 @@ fn written(source: &str, op: HostOp, reply: Vec<RawValue>) -> Vec<u8> {
 
 const OPEN: &str = r#"
     let entry() -> /std/Io({}) =
-        let r = /std/Try/run(/std/File/open(/std/Path/of_str("a.txt"), /std/File/Mode/read()))!;
+        let r = /std/Try/run(/std/Try/scope((s) => /std/File/open(s, /std/Path/of_str("a.txt"), /std/File/Mode/read())))!;
         match r
         | success(_) => /std/print("opened")
         | failure(e) => /std/print(/std/Show/show(e))

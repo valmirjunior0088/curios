@@ -1,4 +1,4 @@
-//! Opening, reading and writing a file, and the bracket its handle lives inside — synchronous, and across a suspension through the stream witnesses.
+//! Opening, reading and writing a file, and the scope its handle lives inside — synchronous, and across a suspension through the stream witnesses.
 
 use {
     crate::tests::{run, run_text},
@@ -78,11 +78,11 @@ fn read_all_text_answers_text_and_refuses_bytes_that_are_none() {
 }
 
 #[test]
-fn file_with_write_mode_persists_through_close() {
+fn a_file_opened_to_write_persists_through_its_scopes_close() {
     let source = r#"
         use /std/{File, Path, Try, Io};
         let entry() -> /std/Io({}) =
-            match Try/run(File/with(Path/of_str("out.txt"), File/Mode/write(), (f) => Io/write(f, /std/Str/to_bytes("written"))))!
+            match Try/run(Try/scope((s) => Try/bind(File/open(s, Path/of_str("out.txt"), File/Mode/write()), (f) => Io/write(f, /std/Str/to_bytes("written")))))!
             | success(_) => /std/print("ok")
             | failure(_) => /std/print("error")
             end;
@@ -95,15 +95,15 @@ fn file_with_write_mode_persists_through_close() {
     assert_eq!(io.file(b"out.txt"), Some(b"written".to_vec()));
 }
 
-// A read inside the bracket is synchronous, a `Try` region over `Io` sequencing an `Io` action through the identity edge, and the bracket closes the file after the body's answer.
+// A read inside the scope is synchronous, a `Try` region over `Io` sequencing an `Io` action through the identity edge, and the scope closes the file after the body's answer.
 #[test]
-fn read_pulls_bytes_inside_the_bracket() {
+fn read_pulls_bytes_inside_the_scope() {
     let source = r#"
         use /std/{File, Path, Str, Bytes, Try, Io, Process};
         let entry() -> /std/Io({}) =
-            let bytes = Try/run(File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
+            let bytes = Try/run(Try/scope((s) => Try/bind(File/open(s, Path/of_str("lines.txt"), File/Mode/read()), (f) =>
                 let c = Io/read(f, 1024)!;
-                Try/pure(match c | bytes(b, @_) => b | ended() => x[] end)))!;
+                Try/pure(match c | bytes(b, @_) => b | ended() => x[] end))))!;
             match bytes
             | success(b) => Io/bind(Try/run(Io/write(Process/stdout, b)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
@@ -118,16 +118,16 @@ fn read_pulls_bytes_inside_the_bracket() {
     assert_eq!(io.output(), b"first\nsecond\n");
 }
 
-// The same bracket over a body that suspends: the file reads through its stream witness after the body yields, and the close rides the suspension, so it is owed to whoever advances the body rather than to the body reaching its end.
+// The same scope over a body that suspends: the file reads through its stream witness after the body yields, and the close rides the suspension, so it is owed to whoever advances the body rather than to the body reaching its end.
 #[test]
-fn a_bracketed_file_reads_through_its_stream_witness_across_a_suspension() {
+fn a_scoped_file_reads_through_its_stream_witness_across_a_suspension() {
     let source = r#"
         use /std/{File, Path, Str, Bytes, Try, Io, Process};
         let program: Try(Io, Io/Error, Bytes) =
-            File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
+            Try/scope((s) => Try/bind(File/open(s, Path/of_str("lines.txt"), File/Mode/read()), (f) =>
                 let _ = Io/yield()!;
                 let c = Io/read(f, 1024)!;
-                Try/pure(match c | bytes(b, @_) => b | _ => x[] end));
+                Try/pure(match c | bytes(b, @_) => b | _ => x[] end)));
         let main() -> Io({}) =
             let r = Try/run(program)!;
             match r

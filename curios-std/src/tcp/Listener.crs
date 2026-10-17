@@ -1,5 +1,5 @@
 use /std/{Bytes, Str, Nat, Result, Try, Io, Handle};
-use /std/tcp/{resolve, Socket};
+use /std/tcp/{resolve, Socket, release};
 use /std/Handle/{let Handle, Interest};
 
 --- A bound, listening socket.
@@ -17,10 +17,12 @@ let listening(addr: Bytes) -> Try(Io, Io/Error, Listener) =
     | false => Try/raise(Handle/error(reply.status))
     end;
 
---- A listener bound to `host` at `port`, the address reusable so a restart does not wait out the previous socket.
-pub let listen(host: Str, port: Nat) -> Try(Io, Io/Error, Listener) =
+--- A listener bound to `host` at `port` into `s`, which closes it when it ends, the address reusable so a restart does not wait out the previous socket.
+pub let listen(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Listener) =
     let addr = resolve(host, port)!;
-    listening(addr);
+    let l = listening(addr)!;
+    let _ = Io/Scope/defer(s, (_) => close(l))!;
+    Try/pure(l);
 
 --- The next connection on this listener: `ok` beside its handle, or the status of the failure.
 foreign socket_accept(Handle) -> {status: Nat, handle: Handle};
@@ -38,12 +40,13 @@ let accepted(l: Listener) -> Io(Result(Io/Error, Handle)) =
         end;
     go();
 
---- The next connection, waiting until a peer arrives.
-pub let accept(l: Listener) -> Try(Io, Io/Error, Socket) =
+--- The next connection, waiting until a peer arrives, opened into `s` as `Socket/connect` opens one.
+pub let accept(s: Io/Scope, l: Listener) -> Try(Io, Io/Error, Socket) =
     let h = Try/attempt(accepted(l))!;
+    let _ = Io/Scope/defer(s, (how) => release(h, how))!;
     Try/pure(Socket { h });
 
---- Close `l`.
+--- Close `l` before its scope ends.
 pub let close(l: Listener) -> Io({}) =
     Handle/close(l.0);
 
@@ -58,24 +61,20 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Io({})) -> Io({}) =
         end;
     go();
 
---- `handler` over the connection, then what the connection holds of the writes it accepted handed on and its sending half ended, so a TLS stream has sent its records and its closure alert before it is closed.
-let served(h: Handle, handler: (Socket) -> Io({})) -> Io({}) =
-    let _ = handler(Socket { h })!;
-    let _ = Try/run(Io/flush(h))!;
-    let _ = Try/run(Handle/finish(h))!;
-    Io/pure(());
-
--- The connection `h` served by `handler` beside the accept loop, a child of `s`, closed however it ends.
+-- The connection `h` served by `handler` beside the accept loop, a child of `s` in a scope of its own, which releases it as `Socket/connect`'s does once the handler ends: a TLS stream has sent its records and its closure alert before it is closed.
 let serve_conn(s: Io/Scope, h: Handle, handler: (Socket) -> Io({})) -> Io({}) =
-    Io/bind(Io/spawn(s, Io/using((_) => Handle/close(h), served(h, handler))), (_) => Io/pure(()));
+    let served =
+        Io/Scope/run((c) =>
+            Io/bind(Io/Scope/defer(c, (how) => release(h, how)), (_) => handler(Socket { h })));
+    Io/bind(Io/Scope/spawn(s, served), (_) => Io/pure(()));
 
 --- Every connection to `host` at `port` handed to `handler` in a branch of its own, until an accept fails, when the connections still open are served to their end; the listener is closed however the serving ends.
 pub let serve(host: Str, port: Nat, handler: (Socket) -> Io({})) -> Try(Io, Io/Error, {}) =
-    let l = listen(host, port)!;
-    Io/using(
-        (_) => close(l),
-        Io/scope((s) =>
-            Io/bind(accept_loop(l, (h) => serve_conn(s, h, handler)), (_) => Io/join_all(s))));
+    Try/scope((s) =>
+        let l = listen(s, host, port)!;
+        let _ = accept_loop(l, (h) => serve_conn(s, h, handler))!;
+        let _ = Io/Scope/join_all(s)!;
+        Try/pure(()));
 
 --- Upgrade this socket to a TLS server stream under this configuration: `ok`, or the status of the failure.
 foreign tls_start_server(Handle, Handle) -> Nat;
@@ -98,18 +97,15 @@ pub let serve_tls(
     key: Bytes,
     handler: (Socket) -> Io({}),
 ) -> Try(Io, Io/Error, {}) =
-    let reply = tls_server_config(cert, key)!;
-    let cfg =
-        match reply.status == /sys/status/ok
-        | true => Result/success(reply.handle)
-        | false => Result/failure(Handle/error(reply.status))
-        end!;
-    let l = listen(host, port)!;
-    Io/using(
-        (_) => Handle/close(cfg),
-        Io/using(
-            (_) => close(l),
-            Io/scope((s) =>
-                Io/bind(
-                    accept_loop(l, (h) => serve_tls_conn(s, h, cfg, handler)),
-                    (_) => Io/join_all(s)))));
+    Try/scope((s) =>
+        let reply = tls_server_config(cert, key)!;
+        let cfg =
+            match reply.status == /sys/status/ok
+            | true => Result/success(reply.handle)
+            | false => Result/failure(Handle/error(reply.status))
+            end!;
+        let _ = Io/Scope/defer(s, (_) => Handle/close(cfg))!;
+        let l = listen(s, host, port)!;
+        let _ = accept_loop(l, (h) => serve_tls_conn(s, h, cfg, handler))!;
+        let _ = Io/Scope/join_all(s)!;
+        Try/pure(()));

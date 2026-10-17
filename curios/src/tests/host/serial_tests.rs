@@ -19,9 +19,9 @@ fn an_open_asks_the_host_for_the_configured_speed_and_frame() {
                 flow = Serial/Flow/hardware(),
             };
         let open_close(c: Serial/Config) -> Try(Io, Io/Error, {}) =
-            let s = Serial/open(port, c)!;
-            let _ = Serial/close(s)!;
-            Try/pure(());
+            Try/scope((scope) =>
+                let _ = Serial/open(scope, port, c)!;
+                Try/pure(()));
         let program() -> Try(Io, Io/Error, {}) =
             let _ = open_close(Serial/config(115200))!;
             open_close(custom);
@@ -47,18 +47,19 @@ fn an_open_asks_the_host_for_the_configured_speed_and_frame() {
     );
 }
 
-// Under `with`, a command lands on the device whole and the reply is read as one line across two arrivals: the reader suspends between the carriage return and the newline, the host's wait brings the second, and the line ending is dropped whole. The body ended well, so the port is drained before it closes.
+// In a scope, a command lands on the device whole and the reply is read as one line across two arrivals: the reader suspends between the carriage return and the newline, the host's wait brings the second, and the line ending is dropped whole. The body drains the port before the scope closes it.
 #[test]
-fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
+fn a_command_lands_whole_and_its_reply_line_is_read_across_arrivals() {
     let source = r#"
         use /std/{Str, Bytes, Option, Show, Try, Io, Path, Serial, Process};
         let exchange(s: Serial) -> Try(Io, Io/Error, Bytes) =
             let _ = Io/write(s, Str/to_bytes("AT\r\n"))!;
             let input = Io/Reader/new(s)!;
             let line = Io/Reader/line(input)!;
+            let _ = Serial/drain(s)!;
             Try/pure(Option/unwrap_or(line, x[]));
         let program() -> Io({}) =
-            let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), exchange))!;
+            let r = Try/run(Try/scope((scope) => Try/bind(Serial/open(scope, Path/of_str("/dev/ttyUSB0"), Serial/config(115200)), exchange)))!;
             match r
             | success(line) => Io/bind(Try/run(Io/write(Process/stdout, line)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
@@ -75,16 +76,16 @@ fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
     assert_eq!(io.serial_drains(), vec![b"/dev/ttyUSB0".to_vec()]);
 }
 
-// A body that fails is closed over without a drain: its failure is the answer, and what it wrote is the close's to discard.
+// A scope closes its port without a drain: a body that fails answers its failure, and what it wrote is the close's to discard.
 #[test]
-fn with_does_not_drain_after_a_body_that_fails() {
+fn a_scope_closes_its_port_without_a_drain() {
     let source = r#"
         use /std/{Str, Show, Try, Io, Path, Serial};
         let failing(s: Serial) -> Try(Io, Io/Error, {}) =
             let _ = Io/write(s, Str/to_bytes("AT\r\n"))!;
             Try/raise(Io/Error/not_found());
         let program() -> Io({}) =
-            let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), failing))!;
+            let r = Try/run(Try/scope((scope) => Try/bind(Serial/open(scope, Path/of_str("/dev/ttyUSB0"), Serial/config(115200)), failing)))!;
             match r
             | success(_) => /std/print("drained")
             | failure(e) => /std/print(Show/show(e))
@@ -115,7 +116,7 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
             let line = Io/Reader/line(input)!;
             Try/pure(Option/unwrap_or(line, x[]));
         let program() -> Io({}) =
-            let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), reset))!;
+            let r = Try/run(Try/scope((scope) => Try/bind(Serial/open(scope, Path/of_str("/dev/ttyUSB0"), Serial/config(115200)), reset)))!;
             match r
             | success(line) => Io/bind(Try/run(Io/write(Process/stdout, line)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
@@ -143,9 +144,9 @@ fn opens_are_refused_by_name() {
         let shown(@A: Type, r: Result(Io/Error, A)) -> Str =
             match r | success(_) => "ok" | failure(e) => Show/show(e) end;
         let program() -> Io({}) =
-            let missing = Try/run(Serial/open(elsewhere, Serial/config(9600)))!;
-            let framed = Try/run(Serial/open(elsewhere, Serial/Config { ..Serial/config(9600), data_bits = 5 }))!;
-            let stalled = Try/run(Serial/open(elsewhere, Serial/config(0)))!;
+            let missing = Try/run(Try/scope((scope) => Serial/open(scope, elsewhere, Serial/config(9600))))!;
+            let framed = Try/run(Try/scope((scope) => Serial/open(scope, elsewhere, Serial/Config { ..Serial/config(9600), data_bits = 5 })))!;
+            let stalled = Try/run(Try/scope((scope) => Serial/open(scope, elsewhere, Serial/config(0))))!;
             /std/print(Str/join(" ", [shown(missing), shown(framed), shown(stalled)]));
         program()
         "#;

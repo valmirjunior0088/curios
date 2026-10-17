@@ -194,14 +194,14 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
     assert!(io.output().is_empty());
 }
 
-/// A program computing one `Str` inside a `Try` region over `Io`, with the process names in scope; a failure that escapes the region prints as its name.
+/// A program computing one `Str` inside a `Try` region over `Io` with a scope `scope`, with the process names in scope; a failure that escapes the region prints as its name.
 fn child_program(body: &str) -> String {
     format!(
         r#"
         use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Io, Path, Process}};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let program() -> Try(Io, Io/Error, Str) =
-            {body};
+            Try/scope((scope) => {body});
         let main() -> Io({{}}) =
             let r = Try/run(program())!;
             match r
@@ -258,14 +258,16 @@ fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     assert_eq!(io.output(), b"signaled(9) not_found");
 }
 
-// A child spawned inside `Process/with` is killed when the body around it is cancelled: a timeout drops the bracket while it waits on a sleep the child would outlast, and the mock records the program name when the kill does.
+// A child spawned into a scope is killed when the scope is cancelled: a timeout drops the scope while it waits on a sleep the child would outlast, and the mock records the program name when the kill does.
 #[test]
-fn a_cancelled_bracket_kills_the_child_it_spawned() {
+fn a_cancelled_scope_kills_the_child_spawned_into_it() {
     let source = child_program(
         r#"
             let body() -> Try(Io, Io/Error, {}) =
-                let child = Process/spawn(Process/Command/new("sleepy", []))!;
-                Process/with(child, Io/sleep(/std/time/Duration/of(60, 0)));
+                Try/scope((inner) =>
+                    let _ = Process/spawn(inner, Process/Command/new("sleepy", []))!;
+                    let _ = Io/sleep(/std/time/Duration/of(60, 0))!;
+                    Try/pure(()));
             let ran = Io/timeout(/std/time/Duration/of(0, 0), Try/run(body()))!;
             Try/pure(match ran | none() => "cancelled" | some(_) => "finished" end)
         "#,
@@ -277,13 +279,12 @@ fn a_cancelled_bracket_kills_the_child_it_spawned() {
     assert_eq!(io.kills(), vec![b"sleepy".to_vec()]);
 }
 
-// A bracket whose body returns without waiting still ends with its child released: a child that has already ended is not signaled, and its handle is closed, so a wait after the bracket finds nothing to wait for.
+// A scope whose body returns without waiting still ends with its child released: a child that has already ended is not signaled, and its handle is closed, so a wait after the scope finds nothing to wait for.
 #[test]
-fn a_bracket_releases_its_child_and_kills_nothing_that_has_ended() {
+fn a_scope_releases_its_child_and_kills_nothing_that_has_ended() {
     let source = child_program(
         r#"
-            let child = Process/spawn(Process/Command/new("done", []))!;
-            let _ = Process/with(child, Try/pure(()))!;
+            let child = Try/scope((inner) => Process/spawn(inner, Process/Command/new("done", [])))!;
             let late = Try/run(Process/wait(child))!;
             Try/pure(match late | success(e) => Show/show(e) | failure(e) => Show/show(e) end)
         "#,
@@ -302,7 +303,7 @@ fn a_bracket_releases_its_child_and_kills_nothing_that_has_ended() {
 fn a_piped_output_is_read_through_the_stream_witness() {
     let source = child_program(
         r#"
-            let child = Process/spawn(Process/Command { ..Process/Command/new("greet", []), stdout = Process/Stdio/piped() })!;
+            let child = Process/spawn(scope, Process/Command { ..Process/Command/new("greet", []), stdout = Process/Stdio/piped() })!;
             let read =
                 match Process/piped_stdout(child)
                 | some(p) => /std/Io/read_all(p)
@@ -328,8 +329,8 @@ fn a_child_holds_a_pipe_for_exactly_the_streams_it_piped() {
         r#"
             let held(p: Option(Process/Pipe)) -> Str = match p | some(_) => "pipe" | none() => "none" end;
             let pipes(c: Process) -> Str = Str/join(" ", [held(Process/piped_stdin(c)), held(Process/piped_stdout(c)), held(Process/piped_stderr(c))]);
-            let c = Process/spawn(Process/Command { ..Process/Command/new("greet", []), stdin = Process/Stdio/piped(), stdout = Process/Stdio/null() })!;
-            let d = Process/spawn(Process/Command { ..Process/Command/new("greet", []), stdin = Process/Stdio/null(), stdout = Process/Stdio/piped(), stderr = Process/Stdio/piped() })!;
+            let c = Process/spawn(scope, Process/Command { ..Process/Command/new("greet", []), stdin = Process/Stdio/piped(), stdout = Process/Stdio/null() })!;
+            let d = Process/spawn(scope, Process/Command { ..Process/Command/new("greet", []), stdin = Process/Stdio/null(), stdout = Process/Stdio/piped(), stderr = Process/Stdio/piped() })!;
             Try/pure(Str/join(" | ", [pipes(c), pipes(d)]))
         "#,
     );

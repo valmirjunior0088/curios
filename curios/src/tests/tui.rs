@@ -26,7 +26,7 @@ fn a_palette_index_past_the_sixteen_is_refused() {
     );
 }
 
-// The bracket, both ways round: raw mode on, then the four modes in order, and on the way out the four inverses in reverse, then raw mode off — whichever way the body ended.
+// The session's scope, both ways round: raw mode on, then the four modes in order, and as the scope ends the four inverses in reverse, then raw mode off — whichever way the body ended.
 #[test]
 fn a_session_switches_the_terminal_and_restores_it_in_reverse() {
     let (system, io) = MockHost::builder().tty_size(20, 5).build();
@@ -35,7 +35,7 @@ fn a_session_switches_the_terminal_and_restores_it_in_reverse() {
         use /std/{Str, Try, Io, Show, Tui};
         use /std/Tui/{Session};
         let program() -> Io({}) =
-            let outcome = Try/run(Session/with((s) => Try/pure("inside")))!;
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) => Try/pure("inside"))))!;
             match outcome
             | success(s) => /std/print(s)
             | failure(e) => /std/print(Show/show(e))
@@ -52,7 +52,7 @@ fn a_session_switches_the_terminal_and_restores_it_in_reverse() {
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
-// Without a terminal the bracket fails where it starts, as the `Try` it is, and switches nothing.
+// Without a terminal entering the session fails where it starts, as the `Try` it is, and switches nothing.
 #[test]
 fn a_session_without_a_terminal_is_refused_before_anything_is_written() {
     let (system, io) = MockHost::builder().build();
@@ -61,7 +61,7 @@ fn a_session_without_a_terminal_is_refused_before_anything_is_written() {
         use /std/{Str, Try, Io, Show, Tui};
         use /std/Tui/{Session};
         let program() -> Io({}) =
-            let outcome = Try/run(Session/with((s) => Try/pure("inside")))!;
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) => Try/pure("inside"))))!;
             match outcome
             | success(s) => /std/print(s)
             | failure(e) => /std/print(Show/show(e))
@@ -123,7 +123,7 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
         use /std/{Nat, List, Option, Try, Io, print};
         use /std/Tui/{Session};
         let program() -> Io({}) =
-            let outcome = Try/run(Session/with((s) =>
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) =>
                 let first = Session/read(@Nat, s)!;
                 let _ = print(match first | some(events) => Nat/to_str(List/len(events)) | none() => "eof" end)!;
                 let second = Session/read(@Nat, s)!;
@@ -139,7 +139,7 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
                     end)!;
                 let third = Session/read(@Nat, s)!;
                 let _ = print(match third | none() => "eof" | some(_) => "more" end)!;
-                Try/pure(())))!;
+                Try/pure(()))))!;
             Io/pure(());
         program()
     "# , host).expect("held input");
@@ -156,7 +156,7 @@ fn drawing_history_and_size_travel_with_the_returned_session() {
         use /std/{Nat, Option, Try, Io, print};
         use /std/Tui/{Session, Frame};
         let program() -> Io({}) =
-            let outcome = Try/run(Session/with((s) =>
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) =>
                 let drawn = Session/draw(s, Frame/blank(4, 2), Option/none())!;
                 let again = Session/draw(drawn, Frame/blank(4, 2), Option/none())!;
                 let resized = Session/size(again)!;
@@ -166,7 +166,7 @@ fn drawing_history_and_size_travel_with_the_returned_session() {
                 let _ = print(Nat/to_str(original.cols))!;
                 let _ = print("/")!;
                 let _ = print(Nat/to_str(updated.cols))!;
-                Try/pure(())))!;
+                Try/pure(()))))!;
             Io/pure(());
         program()
     "#,

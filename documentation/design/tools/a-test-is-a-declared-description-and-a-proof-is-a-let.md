@@ -6,7 +6,7 @@ A test lowers to a definition of kind `Test` and type `() -> /std/Test({})`, col
 
 `Test(A)` carries successful intermediate values and propagates the first failure without invoking its continuation. Its `Io` embedding preserves suspension; one generic `Try(M, E)` embedding requires a declared base embedding and `Show(E)`. Only `Test({})` closes a program or registers as a test, so an arbitrary successful payload is never silently discarded.
 
-`Test/using`, `Test/scope` and `Test/timeout` protect the complete interpretation of their function bodies. Internally, an assertion failure is an outcome carried inside `Io` until the enclosing bracket or scope has released its resources, then resumes propagating through `Test`. Suspension and cooperative cancellation follow `/std/Io`'s contract; a guest trap or process exit promises no guest finalizer.
+`Test/scope` and `Test/timeout` protect the complete interpretation of their function bodies. Internally, an assertion failure is an outcome carried inside `Io` until the enclosing scope has released its resources, then resumes propagating through `Test`. Suspension and cooperative cancellation follow `/std/Io`'s contract; a guest trap or process exit promises no guest finalizer.
 
 **Rationale.**
 

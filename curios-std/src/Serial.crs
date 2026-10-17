@@ -55,10 +55,10 @@ let of_flow(flow: Flow) -> Nat =
 --- Open the serial device at this path at this speed and frame — data bits, a `/sys/serial_parity` code, stop bits and a `/sys/serial_flow` code: `ok` beside the port's handle, or the status of the failure.
 foreign serial_open(Bytes, Nat, Nat, Nat, Nat, Nat) -> {status: Nat, handle: Handle};
 
---- The port at `path`, opened raw at `c`'s speed and frame, or `other(22)` when the device takes another. Nothing holds it exclusively, so whether another open of the same device is refused is the device's to say. A character that fails its parity check arrives as it was received, and a break as a zero byte.
+--- The port at `path`, opened raw into `s` at `c`'s speed and frame, or `other(22)` when the device takes another. `s` closes it when it ends, discarding what it has not sent, so a body whose writes must leave drains the port before it answers. Nothing holds it exclusively, so whether another open of the same device is refused is the device's to say. A character that fails its parity check arrives as it was received, and a break as a zero byte.
 ---
 --- The system raises DTR as a port opens whatever the program wants, so a board that resets on DTR resets here; `discard_input` once it has booted drops the banner it printed.
-pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
+pub let open(s: Io/Scope, path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
     let reply =
         serial_open(
             Path/to_bytes(path),
@@ -68,11 +68,14 @@ pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
             c.stop_bits,
             of_flow(c.flow))!;
     match reply.status == /sys/status/ok
-    | true => Try/pure(Serial { reply.handle })
+    | true =>
+        let port = Serial { reply.handle };
+        let _ = Io/Scope/defer(s, (_) => close(port))!;
+        Try/pure(port)
     | false => Try/raise(Handle/error(reply.status))
     end;
 
---- Close `s`. What it accepted and has not sent is discarded, so the close never waits on the wire: `drain` first to send it, as `with` does.
+--- Close `s` before its scope ends, as the scope does when it ends. What it accepted and has not sent is discarded, so the close never waits on the wire: `drain` first to send it.
 pub let close(s: Serial) -> Io({}) =
     Handle/close(s.0);
 
@@ -117,24 +120,6 @@ pub let set_rts(s: Serial, on: Bool) -> Try(Io, Io/Error, {}) =
 --- Drop what the device sent and the program has not read.
 pub let discard_input(s: Serial) -> Try(Io, Io/Error, {}) =
     control(s, /sys/serial_op/discard_input, false);
-
---- `body` over the port at `path`, closed whichever way the body ends, a cancellation included; the body's own failure is the answer after the close. A body that ends well is followed by a `drain`, so what it wrote has left before the close discards the rest.
-pub let with(
-    @A: Type,
-    path: Path,
-    c: Config,
-    body: (Serial) -> Try(Io, Io/Error, A),
-) -> Try(Io, Io/Error, A) =
-    let s = open(path, c)!;
-    let outcome = Io/using((_) => close(s), Try/run(drained(s, body(s))))!;
-    let a = outcome!;
-    Try/pure(a);
-
---- `body`, then `s` drained; a failure to drain is the body's.
-let drained(@A: Type, s: Serial, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
-    let a = body!;
-    let _ = drain(s)!;
-    Try/pure(a);
 
 --- The serial devices the system has: `ok` beside their paths, or the status of the failure.
 foreign serial_list() -> {status: Nat, paths: List(Bytes)};

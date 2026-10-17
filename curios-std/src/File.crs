@@ -27,15 +27,18 @@ pub let of_mode(mode: Mode) -> Nat =
 --- Open the file at this path in this mode, one of `/sys/open_mode`'s codes: `ok` beside its handle, or the status of the failure.
 foreign file_open(Bytes, Nat) -> {status: Nat, handle: Handle};
 
---- The file at `path`, opened in `mode`.
-pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
+--- The file at `path`, opened in `mode` into `s`, which closes it when it ends.
+pub let open(s: Io/Scope, path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     let reply = file_open(Path/to_bytes(path), of_mode(mode))!;
     match reply.status == /sys/status/ok
-    | true => Try/pure(File { reply.handle })
+    | true =>
+        let f = File { reply.handle };
+        let _ = Io/Scope/defer(s, (_) => close(f))!;
+        Try/pure(f)
     | false => Try/raise(Handle/error(reply.status))
     end;
 
---- Close `f`.
+--- Close `f` before its scope ends. The scope's own close then finds nothing to close.
 pub let close(f: File) -> Io({}) =
     Handle/close(f.0);
 
@@ -48,18 +51,6 @@ satisfy Io/Write(File) {
     flush(f) = Io/flush(f.0),
 }
 
---- `body` over the file at `path`, closed whichever way the body ends — finished, failed, or cancelled while it waits; the body's own failure is the answer after the close.
-pub let with(
-    @A: Type,
-    path: Path,
-    mode: Mode,
-    body: (File) -> Try(Io, Io/Error, A),
-) -> Try(Io, Io/Error, A) =
-    let f = open(path, mode)!;
-    let outcome = Io/using((_) => close(f), Try/run(body(f)))!;
-    let a = outcome!;
-    Try/pure(a);
-
 let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
     let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =
         let c = Io/read(f, 4096)!;
@@ -68,7 +59,7 @@ let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
 
 --- The whole file at `path`.
 pub let read_all(path: Path) -> Try(Io, Io/Error, Bytes) =
-    with(path, Mode/read(), read_to_end);
+    Try/scope((s) => Try/bind(open(s, path, Mode/read()), read_to_end));
 
 --- The whole file at `path` as text: `read_all`, its bytes read as UTF-8. Bytes that are not text are `not_text` with the length of their longest prefix that is.
 pub let read_all_text(path: Path) -> Try(Io, Io/Error, Str) =
@@ -80,4 +71,4 @@ pub let read_all_text(path: Path) -> Try(Io, Io/Error, Str) =
 
 --- `b` as the whole file at `path`: created if absent, replaced if present.
 pub let write_all(path: Path, b: Bytes) -> Try(Io, Io/Error, {}) =
-    with(path, Mode/write(), (f) => Io/write(f, b));
+    Try/scope((s) => Try/bind(open(s, path, Mode/write()), (f) => Io/write(f, b)));

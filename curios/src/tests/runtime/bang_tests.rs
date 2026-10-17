@@ -196,7 +196,7 @@ fn a_nested_recursive_function_keeps_the_value_bound_before_it() {
 }
 
 #[test]
-fn a_function_constructs_a_nested_description_before_its_bracket_runs() {
+fn a_function_constructs_a_nested_description_before_its_scope_runs() {
     let source = r#"
         use /std/{Io, print};
         let main() -> Io({}) =
@@ -204,7 +204,7 @@ fn a_function_constructs_a_nested_description_before_its_bracket_runs() {
                 let _ = print("body")!;
                 Io/pure(());
             let _ = print("acquire")!;
-            Io/using((_) => print("release"), body());
+            Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("release")), (_) => body()));
         main()
         "#;
     assert_eq!(run(source), b"acquirebodyrelease");

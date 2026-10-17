@@ -6,7 +6,7 @@ use {
 };
 
 #[test]
-fn a_bracket_releases_before_propagating_a_failure_reached_after_yielding() {
+fn a_scope_releases_before_propagating_a_failure_reached_after_yielding() {
     assert_eq!(
         run_tests_program(
             r#"
@@ -17,7 +17,7 @@ fn a_bracket_releases_before_propagating_a_failure_reached_after_yielding() {
             let _ = print("body|")!;
             let _ = Io/yield()!;
             Test/assert(false);
-        test protected = Test/using(release, body);
+        test protected = Test/scope((s) => let _ = Io/Scope/defer(s, release)!; body());
         ()
         "#
         ),
@@ -26,7 +26,7 @@ fn a_bracket_releases_before_propagating_a_failure_reached_after_yielding() {
 }
 
 #[test]
-fn a_bracket_releases_before_its_successful_payload_continues() {
+fn a_scope_releases_before_its_successful_payload_continues() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Io, Test, print};
@@ -35,7 +35,7 @@ fn a_bracket_releases_before_its_successful_payload_continues() {
             let _ = Io/yield()!;
             Test/pure(42);
         let check() -> Test({}) =
-            let value = Test/using(release, body)!;
+            let value = Test/scope((s) => let _ = Io/Scope/defer(s, release)!; body())!;
             let _ = print("continued|")!;
             Test/equal(value, 42);
         check()
@@ -55,7 +55,7 @@ fn an_external_race_cancels_a_suspended_test_and_runs_its_release() {
             let _ = print("waiting|")!;
             let _ = Io/wait_filled([])!;
             Test/assert(true);
-        let protected() -> Test({}) = Test/using(release, body);
+        let protected() -> Test({}) = Test/scope((s) => let _ = Io/Scope/defer(s, release)!; body());
         let competing() -> Io({}) =
             let _ = Io/yield()!;
             Io/pure(());
@@ -81,10 +81,10 @@ fn a_scope_cancels_a_started_child_before_propagating_the_tests_failure() {
                 let _ = print("child-started|")!;
                 let _ = Signal/notify(started)!;
                 Io/wait_filled([]);
-            Io/using((_) => print("child-cancelled|"), waiting());
+            Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("child-cancelled|")), (_) => waiting()));
         let body(s: Io/Scope) -> Test({}) =
             let started = Signal/new()!;
-            let _ = Io/spawn(s, child(started))!;
+            let _ = Io/Scope/spawn(s, child(started))!;
             let _ = Signal/wait(started)!;
             Test/assert(false);
         test scoped = Test/scope(body);
@@ -108,7 +108,7 @@ fn a_timeout_cancels_and_releases_before_reporting_its_failure() {
             let _ = Io/sleep(Duration/of_secs(50))!;
             let _ = print("unreached|")!;
             Test/assert(true);
-        let protected() -> Test({}) = Test/using(release, waiting);
+        let protected() -> Test({}) = Test/scope((s) => let _ = Io/Scope/defer(s, release)!; waiting());
         let expired() -> Test({}) = Test/timeout(Duration/of_secs(2), protected);
         let entry() -> Io({}) =
             let _ = Test/main([("expired", expired)])!;

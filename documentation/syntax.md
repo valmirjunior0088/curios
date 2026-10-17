@@ -523,10 +523,11 @@ A host operation that can fail is declared `Try(M, E, A)` over its base monad â€
 ```crs
 use /std/{File, Path, Bytes, Try, Io};
 let contents() -> Try(Io, Io/Error, Bytes) =
-    let f = File/open(Path/of_str("notes.txt"), File/Mode/read())!;
-    let text = File/read_all(Path/of_str("notes.txt"))!;
-    let _ = File/close(f)!;
-    Try/pure(text);
+    Try/scope((s) =>
+        let f = File/open(s, Path/of_str("notes.txt"), File/Mode/read())!;
+        let text = Io/read_all(f)!;
+        let _ = File/close(f)!;
+        Try/pure(text));
 ```
 
 ### Lifting between monads

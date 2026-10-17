@@ -127,7 +127,7 @@ end
 
 --- Run the program in a session until it quits, answering its last model. Keys, resizes and the answers of the program's own directives feed one queue, and the screen is drawn once per burst. The reading of keys, the watch on the terminal's size and every directive's work run beside the loop, and whatever of them is still running when the program quits is cancelled where it waits. A read of the terminal that fails ends the run with its error, and so does a query of its size. The end of standard input ends the reading alone, and the program runs on until it quits.
 pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Io, Io/Error, M) =
-    Session/with((s) => Try/attempt(Io/scope((children) => Try/run(running(app, s, children)))));
+    Try/scope((children) => Try/bind(Session/enter(children), (s) => running(app, s, children)));
 
 -- The loop of `app` over the session `s`, with what runs beside it spawned into `children`.
 let running(
@@ -173,7 +173,8 @@ let running(
     let answer(a: Io(E)) -> Io({}) =
         let e = a!;
         push(Event/custom(e));
-    let beside(work: Io({})) -> Io({}) = Io/bind(Io/spawn(children, work), (_) => Io/pure(()));
+    let beside(work: Io({})) -> Io({}) =
+        Io/bind(Io/Scope/spawn(children, work), (_) => Io/pure(()));
     let issue(c: Directive(E)) -> Io(Bool) =
         let _ = List/each(c.run, (a) => beside(answer(a)))!;
         Io/pure(c.stop);

@@ -65,11 +65,11 @@ const SERVER: &str = r#"
         | _ => Try/pure(said)
         end;
     let session() -> Try(Io, Io/Error, {}) =
-        let l = Listener/listen("0.0.0.0", 8080)!;
-        let c = Listener/accept(l)!;
-        let _ = Server/answer(Server/default, Scheme/http(), handler)(c)!;
-        let _ = Socket/close(c)!;
-        Listener/close(l);
+        Try/scope((s) =>
+            let l = Listener/listen(s, "0.0.0.0", 8080)!;
+            let c = Listener/accept(s, l)!;
+            let _ = Server/answer(Server/default, Scheme/http(), handler)(c)!;
+            Socket/close(c));
     let program() -> Io({}) =
         let r = Try/run(session())!;
         match r

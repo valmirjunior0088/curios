@@ -1,3 +1,4 @@
+use /std/{Try, Io, Handle};
 use /std/Handle/{let Handle};
 
 --- A host and a port as the address the socket operations take.
@@ -10,8 +11,19 @@ pub struct Socket: Type {
     Handle,
 }
 
---- A connected socket: connecting it, reading and writing it, and the brackets that close it.
+--- A connected socket: connecting it into a scope, and reading and writing it.
 pub mod Socket;
+
+-- What the connection hands its peer as it is released from a scope that finished: what it holds of the writes it accepted, a TLS stream's records, and its sending half ended, a TLS stream's closure alert ahead of the socket's own end. A courtesy to a peer that may already be gone, so neither failure is anyone's.
+let courtesy(h: Handle) -> Io({}) =
+    let _ = Try/run(Io/flush(h))!;
+    let _ = Try/run(Handle/finish(h))!;
+    Io/pure(());
+
+-- How a scope releases a connection it owns: the courtesy where the scope finished, then, however it ended, the close.
+let release(h: Handle, how: Io/Ended) -> Io({}) =
+    let _ = match how | finished() => courtesy(h) | cancelled() => Io/pure(()) end!;
+    Handle/close(h);
 
 --- A bound, listening socket, and the accept loop written over it.
 pub mod Listener;

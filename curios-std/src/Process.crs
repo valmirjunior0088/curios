@@ -81,8 +81,8 @@ foreign proc_spawn(List(Bytes), Bytes, List(Bytes), Nat, Nat, Nat) -> {
     stdout: Handle,
     stderr: Handle};
 
---- Start `cmd`. Nothing guards the child: `with` is the bracket that kills it when the body around it ends. The child arrives with a pipe for each stream `cmd` piped, in the one call that starts it. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
-pub let spawn(cmd: Command) -> Try(Io, Io/Error, Process) =
+--- Start `cmd` into `s`: when `s` ends the child is killed if it still runs, and its handle and pipes are closed, so no child outlives the scope it was started in. The child arrives with a pipe for each stream `cmd` piped, in the one call that starts it. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
+pub let spawn(s: Io/Scope, cmd: Command) -> Try(Io, Io/Error, Process) =
     let _ = env_checked(cmd.env)!;
     let reply =
         proc_spawn(
@@ -97,12 +97,14 @@ pub let spawn(cmd: Command) -> Try(Io, Io/Error, Process) =
         | true => Result/success(reply)
         | false => Result/failure(Handle/error(reply.status))
         end!;
-    Try/pure(
+    let p =
         Process {
             handle = spawned.child,
             stdin = end_of(cmd.stdin, spawned.stdin),
             stdout = end_of(cmd.stdout, spawned.stdout),
-            stderr = end_of(cmd.stderr, spawned.stderr) });
+            stderr = end_of(cmd.stderr, spawned.stderr) };
+    let _ = Io/Scope/defer(s, (_) => release(p))!;
+    Try/pure(p);
 
 let close_pipe(p: Option(Pipe)) -> Io({}) =
     match p | some(p) => Pipe/close(p) | none() => Io/pure(()) end;
@@ -119,6 +121,12 @@ foreign proc_kill(Handle) -> Nat;
 let killed(p: Process) -> Io({}) =
     let _ = proc_kill(p.handle)!;
     Io/pure(());
+
+-- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.
+let release(p: Process) -> Io({}) =
+    let _ = killed(p)!;
+    let _ = Handle/close(p.handle)!;
+    close_pipes(p);
 
 --- End the child if it still runs, and close its pipes.
 pub let kill(p: Process) -> Io({}) =
@@ -143,18 +151,6 @@ pub let wait(p: Process) -> Try(Io, Io/Error, Exit) =
     | false => Try/raise(Handle/error(reply.status))
     end;
 
--- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.
-let release(p: Process) -> Io({}) =
-    let _ = killed(p)!;
-    let _ = Handle/close(p.handle)!;
-    close_pipes(p);
-
---- `body` with the child killed and its handle released whichever way the body ends, so a child never outlives the bracket it was started in, and nothing it was filed under does either.
-pub let with(@A: Type, p: Process, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
-    let outcome = Io/using((_) => release(p), Try/run(body))!;
-    let a = outcome!;
-    Try/pure(a);
-
 let drain(p: Option(Pipe)) -> Io(Result(Io/Error, Bytes)) =
     match p | some(p) => Try/run(Io/read_all(p)) | none() => Io/pure(Result/success(x[])) end;
 
@@ -167,13 +163,14 @@ let capture(p: Process) -> Try(Io, Io/Error, {exit: Exit, stdout: Bytes, stderr:
 
 --- `cmd` run to its end with both outputs captured, and how it ended.
 pub let run(cmd: Command) -> Try(Io, Io/Error, {exit: Exit, stdout: Bytes, stderr: Bytes}) =
-    let p = spawn(Command { ..cmd, stdout = Stdio/piped(), stderr = Stdio/piped() })!;
-    with(p, capture(p));
+    Try/scope((s) =>
+        Try/bind(
+            spawn(s, Command { ..cmd, stdout = Stdio/piped(), stderr = Stdio/piped() }),
+            capture));
 
 --- `cmd` run with its streams as wired, and how it ended.
 pub let status(cmd: Command) -> Try(Io, Io/Error, Exit) =
-    let p = spawn(cmd)!;
-    with(p, wait(p));
+    Try/scope((s) => Try/bind(spawn(s, cmd), wait));
 
 --- The process's arguments.
 foreign proc_args() -> List(Bytes);

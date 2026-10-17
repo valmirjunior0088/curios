@@ -66,14 +66,14 @@ let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Io(Result(Error,
 -- One exchange over a connection of its own. The reply is read whether or not the request was written whole: a peer that answers before it has read its request and then stops reading fails the write, and the reply it sent is still there (RFC 9112 §9.6). The failed write is the exchange's failure only where no reply is.
 let exchange(c: Client, request: Request) -> Try(Io, Error, Response) =
     let u = request.url;
-    let open =
-        match u.scheme
-        | http() => Socket/connect(u.host, u.port)
-        | https() => Socket/connect_tls(u.host, u.port)
-        end;
     let read =
         Try/map_failure(
-            Socket/with(open, (s) =>
+            Try/scope((scope) =>
+                let s =
+                    match u.scheme
+                    | http() => Socket/connect(scope, u.host, u.port)
+                    | https() => Socket/connect_tls(scope, u.host, u.port)
+                    end!;
                 let wrote = Try/run(Io/write(s, Request/render(request)))!;
                 let r = Reader/new(s)!;
                 let answered = reply(c.limits, request.method, r)!;

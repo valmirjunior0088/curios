@@ -15,12 +15,12 @@ fn a_fulfilment_wakes_a_waiter_once_across_duplicate_offers() {
                 let n = Io/select([Future/offer(f), Future/offer(f)])!;
                 let _ = print("once ")!;
                 Io/pure(n);
-            let task = Io/spawn(s, waiter())!;
+            let task = Io/Scope/spawn(s, waiter())!;
             let _ = Io/yield()!;
             let _ = Future/fill(f, 7)!;
-            let n = Io/join(task)!;
+            let n = Io/Scope/Task/join(task)!;
             print(Nat/to_str(n));
-        Io/scope(body)
+        Io/Scope/run(body)
     "#),
         b"once 7"
     );
@@ -39,18 +39,18 @@ fn two_woken_receivers_retry_after_only_one_can_take() {
                 let got = Channel/receive(c.1)!;
                 let _ = Cell/fill(first, ())!;
                 Io/pure(Option/unwrap_or(got, 0));
-            let a = Io/spawn(s, receive())!;
-            let b = Io/spawn(s, receive())!;
+            let a = Io/Scope/spawn(s, receive())!;
+            let b = Io/Scope/spawn(s, receive())!;
             let _ = Io/yield()!;
             let _ = Channel/send(c.0, 1)!;
             let _ = Io/wait_filled([first])!;
             let _ = Channel/send(c.0, 2)!;
-            let x = Io/join(a)!;
-            let y = Io/join(b)!;
+            let x = Io/Scope/Task/join(a)!;
+            let y = Io/Scope/Task/join(b)!;
             let _ = print(Nat/to_str(x))!;
             let _ = print(" ")!;
             print(Nat/to_str(y));
-        Io/scope(body)
+        Io/Scope/run(body)
     "#),
         b"1 2"
     );
@@ -71,10 +71,10 @@ fn a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it() {
                     Offer/map(Channel/offer_receive(messages.1), (_) => ()),
                     Offer/map(Channel/offer_receive(other.1), (_) => ())])!;
                 print("selected ");
-            let selecting = Io/spawn(s, select_one())!;
+            let selecting = Io/Scope/spawn(s, select_one())!;
             let _ = Io/yield()!;
             let _ = Channel/send(other.0, 1)!;
-            let _ = Io/join(selecting)!;
+            let _ = Io/Scope/Task/join(selecting)!;
             let ack = Cell/new(@{})!;
             let _ = Channel/send(messages.0, (7, ack))!;
             let _ = Io/yield()!;
@@ -86,7 +86,7 @@ fn a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it() {
                 let _ = Cell/fill(reply, ())!;
                 print(Nat/to_str(n))
             end;
-        Io/scope(body)
+        Io/Scope/run(body)
     "#),
         b"selected unacknowledged 7"
     );
@@ -123,7 +123,7 @@ fn a_waiter_cancelled_on_a_cell_is_released_once() {
         use /std/{Cell, print, Io};
         let program() -> Io({}) =
             let c = Cell/new(@{})!;
-            let _ = Io/race([Io/using((_) => print("released "), Io/wait_filled([c])), Io/pure(())])!;
+            let _ = Io/race([Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("released ")), (_) => Io/wait_filled([c]))), Io/pure(())])!;
             let _ = Cell/fill(c, ())!;
             let _ = Io/wait_filled([c])!;
             print("done");

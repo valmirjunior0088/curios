@@ -18,14 +18,14 @@ pub struct Session: Type {
     size: Tty/Size,
 }
 
-let enter: Try(Io, Io/Error, {}) =
+let entering: Try(Io, Io/Error, {}) =
     Io/write(Process/stdout, x[
         ..ansi/alternate_on,
         ..ansi/cursor_hide,
         ..ansi/paste_on,
         ..ansi/kitty_push]);
 
--- A failed write is discarded here and in `draw`: a release answers nothing, ending the program would skip the rest of the bracket, and a terminal that cannot be written ends the session's input too.
+-- A failed write is discarded here and in `draw`: a release answers nothing, ending the program would skip the scope's other releases, and a terminal that cannot be written ends the session's input too.
 let leave() -> Io({}) =
     let _ =
         Try/run(
@@ -36,18 +36,15 @@ let leave() -> Io({}) =
                 ..ansi/alternate_off]))!;
     Io/pure(());
 
---- The bracket: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse whichever way `body` ends.
-pub let with(@A: Type, body: (Session) -> Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
+--- The terminal taken for the rest of `s`: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse when `s` ends, however it ends.
+pub let enter(s: Io/Scope) -> Try(Io, Io/Error, Session) =
     let t = Tty/stdin;
-    let entered() -> Try(Io, Io/Error, A) =
-        let first = Tty/size(t)!;
-        let input = Reader/new(Process/stdin)!;
-        let s = Session { tty = t, input = input, previous = Option/none(), size = first };
-        let _ = enter!;
-        let outcome = Io/using((_) => leave(), Try/run(body(s)))!;
-        let a = outcome!;
-        Try/pure(a);
-    Tty/with_raw(t, entered());
+    let _ = Tty/raw(s, t)!;
+    let first = Tty/size(t)!;
+    let input = Reader/new(Process/stdin)!;
+    let _ = entering!;
+    let _ = Io/Scope/defer(s, (_) => leave())!;
+    Try/pure(Session { tty = t, input = input, previous = Option/none(), size = first });
 
 --- The terminal's size now, together with the session remembering it.
 pub let size(s: Session) -> Try(Io, Io/Error, {Session, Tty/Size}) =

@@ -13,7 +13,7 @@ const CALL: &str = r#"
     use /std/{Str, Show, Try, Io, Process};
     use /std/tcp/{Socket};
     let program() -> Io({}) =
-        let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
+        let r = Try/run(Try/scope((s) => Try/bind(Socket/connect(s, "example.com", 80), (c) => Socket/call(c, Str/to_bytes("GET /\r\n\r\n")))))!;
         match r
         | success(response) => Io/bind(Try/run(Io/write(Process/stdout, response)), (_) => Io/pure(()))
         | failure(e) => /std/print(Show/show(e))
@@ -109,14 +109,15 @@ fn a_peer_that_resets_reads_as_connection_reset() {
     assert_eq!(io.output(), b"connection_reset");
 }
 
-/// `with` over the connector `open`, the body reading one chunk off the socket it is handed and answering it.
+/// A scope over the socket `open` connects into it, the body reading one chunk off it and answering it.
 fn read_one_chunk(open: &str) -> String {
     format!(
         r#"
         use /std/{{Str, Bytes, Show, Try, Io, Process}};
         use /std/tcp/{{Socket}};
         let program() -> Io({{}}) =
-            let r = Try/run(Socket/with({open}, (s) =>
+            let r = Try/run(Try/scope((scope) =>
+                let s = {open}!;
                 let c = Io/read(s, 64)!;
                 Try/pure(match c | bytes(b, @_) => b | _ => x[] end)))!;
             match r
@@ -128,10 +129,10 @@ fn read_one_chunk(open: &str) -> String {
     )
 }
 
-// `with` hands the body the socket its connector opened and closes it after; `Socket/read` pulls the scripted bytes off it inside the bracket.
+// `connect` opens the socket into the scope, which closes it as it ends; `Io/read` pulls the scripted bytes off it inside the scope.
 #[test]
-fn with_hands_the_body_a_connected_socket() {
-    let source = read_one_chunk(r#"Socket/connect("db.internal", 5432)"#);
+fn connect_opens_a_connected_socket_into_its_scope() {
+    let source = read_one_chunk(r#"Socket/connect(scope, "db.internal", 5432)"#);
 
     let (system, io) = MockHost::builder()
         .net([("db.internal:5432", "PONG")])
@@ -143,7 +144,7 @@ fn with_hands_the_body_a_connected_socket() {
 // TLS client: `connect_tls` files the session on the connected socket before the body runs. The mock host serves the scripted endpoint cleartext (no real handshake under test), so the upgrade is a no-op identity and the round-trip still succeeds — exercising the wiring, types, and intrinsic threading end to end through codegen.
 #[test]
 fn connect_tls_upgrades_and_reads() {
-    let source = read_one_chunk(r#"Socket/connect_tls("secure.example", 443)"#);
+    let source = read_one_chunk(r#"Socket/connect_tls(scope, "secure.example", 443)"#);
 
     let (system, io) = MockHost::builder()
         .net([("secure.example:443", "SECURE-PONG")])
@@ -217,24 +218,23 @@ fn serve_tls_handles_a_scripted_inbound_connection() {
     assert_eq!(io.captures(), vec![b"tls: ping".to_vec()]);
 }
 
-// The loop written by hand: `listen`, one `accept`, the exchange over the accepted socket, and both closed — the pieces `serve` is made of, reachable on their own.
+// The loop written by hand: `listen`, one `accept`, the exchange over the accepted socket, and both closed by the scope they were opened into — the pieces `serve` is made of, reachable on their own.
 #[test]
 fn listen_and_accept_serve_one_connection_by_hand() {
     let source = r#"
         use /std/{Str, Bytes, Result, Show, Try, Io};
         use /std/tcp/{Listener, Socket};
         let session() -> Try(Io, Io/Error, {}) =
-            let l = Listener/listen("0.0.0.0", 8080)!;
-            let c = Listener/accept(l)!;
-            let r = Io/read(c, 64)!;
-            let reply =
-                match r
-                | bytes(bytes, @_) => Io/write(c, x[..Str/to_bytes("one: "), ..bytes])
-                | _ => Try/pure(())
-                end;
-            let _ = reply!;
-            let _ = Socket/close(c)!;
-            Listener/close(l);
+            Try/scope((s) =>
+                let l = Listener/listen(s, "0.0.0.0", 8080)!;
+                let c = Listener/accept(s, l)!;
+                let r = Io/read(c, 64)!;
+                let reply =
+                    match r
+                    | bytes(bytes, @_) => Io/write(c, x[..Str/to_bytes("one: "), ..bytes])
+                    | _ => Try/pure(())
+                    end;
+                reply);
         let program() -> Io({}) =
             let r = Try/run(session())!;
             match r

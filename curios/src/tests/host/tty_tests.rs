@@ -44,13 +44,13 @@ fn a_size_past_the_i31_crosses_back_whole() {
     assert_eq!(io.output(), b"10000000000000000000x1099511627776");
 }
 
-// `with_raw` switches raw mode on, runs the body, and switches it back, so the mock's record is exactly one switch each way around the body's result.
+// `raw` switches raw mode on for the rest of the scope, which switches it back as it ends, so the mock's record is exactly one switch each way around the body's result.
 #[test]
-fn with_raw_brackets_the_body_and_restores_the_mode() {
+fn raw_mode_lasts_the_scope_and_is_restored_as_it_ends() {
     let source = r#"
         use /std/{Nat, Show, Try, Io, Tty};
         let entry() -> /std/Io({}) =
-            match Try/run(Tty/with_raw(Tty/stdin, Try/pure(7)))!
+            match Try/run(Try/scope((s) => Try/bind(Tty/raw(s, Tty/stdin), (_) => Try/pure(7))))!
             | success(n) => /std/print(Nat/to_str(n))
             | failure(e) => /std/print(Show/show(e))
             end;
@@ -63,15 +63,15 @@ fn with_raw_brackets_the_body_and_restores_the_mode() {
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
-// A body that fails still restores the mode, and its failure is the bracket's answer; with no terminal the bracket fails at the switch on, records nothing, and never runs the body.
+// A body that fails still has the mode restored, and its failure is the scope's answer; with no terminal the switch on fails, records nothing, and the body never runs.
 #[test]
-fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
+fn raw_mode_is_restored_after_a_failing_body_and_refused_without_a_terminal() {
     let source = r#"
         use /std/{Nat, Show, Try, Io, Tty};
         let body: Try(Io, Io/Error, Nat) =
             Try/raise(Io/Error/connection_refused());
         let entry() -> /std/Io({}) =
-            match Try/run(Tty/with_raw(Tty/stdin, body))!
+            match Try/run(Try/scope((s) => Try/bind(Tty/raw(s, Tty/stdin), (_) => body)))!
             | success(n) => /std/print(Nat/to_str(n))
             | failure(e) => /std/print(Show/show(e))
             end;
@@ -89,16 +89,16 @@ fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
     assert_eq!(io.raw_modes(), Vec::<bool>::new());
 }
 
-// The same bracket over a body that suspends: the body yields and resumes under raw mode, and the mode is restored once around the result.
+// The same scope over a body that suspends: the body yields and resumes under raw mode, and the mode is restored once around the result.
 #[test]
-fn with_raw_brackets_a_body_that_suspends() {
+fn raw_mode_lasts_across_a_body_that_suspends() {
     let source = r#"
         use /std/{Nat, Show, Try, Io, Tty};
         let body() -> Try(Io, Io/Error, Nat) =
             let _ = Io/yield()!;
             Try/pure(7);
         let program() -> Io({}) =
-            let r = Try/run(Tty/with_raw(Tty/stdin, body()))!;
+            let r = Try/run(Try/scope((s) => Try/bind(Tty/raw(s, Tty/stdin), (_) => body())))!;
             match r
             | success(n) => /std/print(Nat/to_str(n))
             | failure(e) => /std/print(Show/show(e))

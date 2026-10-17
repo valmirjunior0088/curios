@@ -22,11 +22,11 @@ let verdict(@A: Type, r: Result(Io/Error, A)) -> Byte = match r | success(_) => 
 /// The rows a fixture scripts, each with the raw reply it answers every call with.
 type Replies = Vec<(HostOp, Vec<RawValue>)>;
 
-/// Run `subject`, a `Try` over `Io` with no value, against a mock host whose rows in `replies` answer raw, and the code it exits with.
+/// Run `subject`, a `Try` over `Io` with no value inside a scope `s`, against a mock host whose rows in `replies` answer raw, and the code it exits with.
 fn exit_code(subject: &str, replies: Replies) -> u8 {
     let tail = "
 let subject() -> Try(Io, Io/Error, {}) =
-    SUBJECT;
+    Try/scope((s) => SUBJECT);
 let main() -> Io({}) =
     let r = Try/run(subject())!;
     Process/exit(@{}, verdict(r));
@@ -92,7 +92,7 @@ fn a_stream_row_s_failure_is_the_error_it_names() {
 fn a_filesystem_row_s_failure_is_the_error_it_names() {
     each_fails(vec![
         (
-            r#"let _ = File/open(Path/of_str("a"), File/Mode/read())!; Try/pure(())"#,
+            r#"let _ = File/open(s, Path/of_str("a"), File/Mode/read())!; Try/pure(())"#,
             vec![(HostOp::FileOpen, denied(vec![bytes(b"")]))],
         ),
         (
@@ -131,11 +131,11 @@ fn a_filesystem_row_s_failure_is_the_error_it_names() {
 
 #[test]
 fn a_device_row_s_failure_is_the_error_it_names() {
-    let open = r#"Serial/open(Path/of_str("/dev/x"), Serial/config(9600))"#;
+    let open = r#"Serial/open(s, Path/of_str("/dev/x"), Serial/config(9600))"#;
 
     each_fails(vec![
         (
-            "Tty/raw(Tty/stdin, true)",
+            "Tty/raw(s, Tty/stdin)",
             vec![(HostOp::TtyRaw, denied(vec![]))],
         ),
         (
@@ -154,7 +154,7 @@ fn a_device_row_s_failure_is_the_error_it_names() {
             )],
         ),
         (
-            &format!("let s = {open}!; Serial/set_dtr(s, true)"),
+            &format!("let port = {open}!; Serial/set_dtr(port, true)"),
             vec![
                 (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
                 (HostOp::SerialControl, denied(vec![])),
@@ -166,7 +166,7 @@ fn a_device_row_s_failure_is_the_error_it_names() {
 #[test]
 fn a_serial_drain_s_failure_is_the_error_it_names() {
     each_fails(vec![(
-        r#"let s = Serial/open(Path/of_str("/dev/x"), Serial/config(9600))!; Serial/drain(s)"#,
+        r#"let port = Serial/open(s, Path/of_str("/dev/x"), Serial/config(9600))!; Serial/drain(port)"#,
         vec![
             (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
             (HostOp::SerialDrain, denied(vec![])),
@@ -183,7 +183,7 @@ fn a_network_row_s_failure_is_the_error_it_names() {
         )
     };
     let opened = || (HostOp::SocketOpen, ok(vec![bytes(&[8])]));
-    let connect = r#"let _ = tcp/Socket/connect("h", 80)!; Try/pure(())"#;
+    let connect = r#"let _ = tcp/Socket/connect(s, "h", 80)!; Try/pure(())"#;
 
     each_fails(vec![
         (
@@ -212,7 +212,7 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             ],
         ),
         (
-            r#"let _ = tcp/Socket/connect_tls("h", 80)!; Try/pure(())"#,
+            r#"let _ = tcp/Socket/connect_tls(s, "h", 80)!; Try/pure(())"#,
             vec![
                 looked_up(),
                 opened(),
@@ -221,15 +221,15 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             ],
         ),
         (
-            r#"let _ = tcp/Listener/listen("h", 80)!; Try/pure(())"#,
+            r#"let _ = tcp/Listener/listen(s, "h", 80)!; Try/pure(())"#,
             vec![
                 looked_up(),
                 (HostOp::SocketListen, denied(vec![bytes(b"")])),
             ],
         ),
         (
-            r#"let l = tcp/Listener/listen("h", 80)!;
-                   let _ = tcp/Listener/accept(l)!;
+            r#"let l = tcp/Listener/listen(s, "h", 80)!;
+                   let _ = tcp/Listener/accept(s, l)!;
                    Try/pure(())"#,
             vec![
                 looked_up(),
@@ -242,7 +242,7 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             vec![(HostOp::TlsServerConfig, denied(vec![bytes(b"")]))],
         ),
         (
-            r#"let s = tcp/Socket/connect("h", 80)!; tcp/Socket/finish(s)"#,
+            r#"let c = tcp/Socket/connect(s, "h", 80)!; tcp/Socket/finish(c)"#,
             vec![
                 looked_up(),
                 opened(),
@@ -258,7 +258,7 @@ fn a_network_row_s_failure_is_the_error_it_names() {
 fn a_name_resolving_to_no_address_is_not_found() {
     assert_eq!(
         exit_code(
-            r#"let _ = tcp/Socket/connect("h", 80)!; Try/pure(())"#,
+            r#"let _ = tcp/Socket/connect(s, "h", 80)!; Try/pure(())"#,
             vec![(HostOp::DnsLookup, ok(vec![RawValue::BytesList(vec![])]))],
         ),
         2
@@ -276,23 +276,23 @@ fn spawned() -> (HostOp, Vec<RawValue>) {
 #[test]
 fn a_process_row_s_failure_is_the_error_it_names() {
     each_fails(vec![(
-        r#"let _ = Process/spawn(Process/Command/new("x", []))!; Try/pure(())"#,
+        r#"let _ = Process/spawn(s, Process/Command/new("x", []))!; Try/pure(())"#,
         vec![(HostOp::ProcSpawn, denied(vec![bytes(b""); 4]))],
     )]);
     each_fails(vec![(
-        r#"let c = Process/spawn(Process/Command/new("x", []))!;
+        r#"let c = Process/spawn(s, Process/Command/new("x", []))!;
                let _ = Process/wait(c)!;
                Try/pure(())"#,
         vec![spawned(), (HostOp::ProcWait, denied(vec![nat(0), nat(0)]))],
     )]);
 }
 
-/// `/std` absorbs two failures by design: a kill that fails leaves a child the bracket reaps regardless, and a socket's finish is a courtesy to a peer that may already be gone.
+/// `/std` absorbs two failures by design: a kill that fails leaves a child the scope reaps regardless, and a socket's finish is a courtesy to a peer that may already be gone.
 #[test]
 fn the_failures_std_absorbs_by_design_are_absorbed() {
     assert_eq!(
         exit_code(
-            r#"tcp/Socket/with(tcp/Socket/connect("h", 80), (_) => Try/pure(()))"#,
+            r#"let _ = tcp/Socket/connect(s, "h", 80)!; Try/pure(())"#,
             vec![
                 (
                     HostOp::DnsLookup,
@@ -308,7 +308,7 @@ fn the_failures_std_absorbs_by_design_are_absorbed() {
     );
     assert_eq!(
         exit_code(
-            r#"let c = Process/spawn(Process/Command/new("x", []))!;
+            r#"let c = Process/spawn(s, Process/Command/new("x", []))!;
                let _ = Process/kill(c)!;
                Try/pure(())"#,
             vec![spawned(), (HostOp::ProcKill, denied(vec![]))],

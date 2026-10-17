@@ -1,4 +1,4 @@
--- Waiting in `Io`: what a wait holds of the branch beside it, and what a bracket tells its finalizer.
+-- Waiting in `Io`: what a wait holds of the branch beside it, and what a scope tells its releases.
 use /std/{Bool, Cell, Io, Test, Channel};
 use /std/time/{Duration};
 
@@ -35,21 +35,24 @@ test a_wait_on_a_cell_goes_on_once_the_branch_beside_it_fills_it =
             Io/both(Io/bind(Io/wait_filled([cell]), (_) => Io/pure(true)), Cell/fill(cell, ()))!;
         Io/pure(Test/assert(waited && filled)));
 
-test using_tells_its_finalizer_a_body_ran_to_its_end =
+test a_scope_tells_its_release_a_body_ran_to_its_end =
     Test/perform(() =>
         let ends = Channel/new(@Io/Ended, 1)!;
-        let n = Io/using((ended) => told(ends.0, ended), Io/pure(3))!;
+        let n =
+            Io/Scope/run((scope) =>
+                Io/bind(Io/Scope/defer(scope, (ended) => told(ends.0, ended)), (_) => Io/pure(3)))!;
         let finished = heard(ends.1, true)!;
         Io/pure(Test/assert(n == 3 && finished)));
 
-test using_tells_its_finalizer_a_body_was_dropped_while_it_waited =
+test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
     Test/perform(() =>
         let ends = Channel/new(@Io/Ended, 1)!;
         let never = Cell/new()!;
         let body =
-            Io/using(
-                (ended) => told(ends.0, ended),
-                Io/bind(Io/wait_filled([never]), (_) => Io/pure(3)));
+            Io/Scope/run((scope) =>
+                Io/bind(
+                    Io/Scope/defer(scope, (ended) => told(ends.0, ended)),
+                    (_) => Io/bind(Io/wait_filled([never]), (_) => Io/pure(3))));
         let _ = Io/race([body, Io/pure(4)])!;
         let cancelled = heard(ends.1, false)!;
         Io/pure(Test/assert(cancelled)));
