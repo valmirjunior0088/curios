@@ -1,5 +1,5 @@
 pub use /sys/{Bool};
-pub use /sys/Bool/{or, xor, eql, Holds};
+pub use /sys/Bool/{xor, eql, Holds};
 use /std/{Str, Option, Eq, Show, Spell, Ordering, Ord};
 use /std/ops/{Eql, Or, And, Cmp};
 
@@ -14,6 +14,10 @@ pub use False/{let False};
 --- Conjunction, with what a proof of one holds of its halves.
 pub mod and;
 pub use and/{let and};
+
+--- Disjunction, with what makes one hold.
+pub mod or;
+pub use or/{let or};
 
 --- The other value.
 pub let not(b: Bool) -> Bool =

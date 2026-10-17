@@ -1,0 +1,22 @@
+use /std/{Str};
+use /std/Tui/{Style, Glyph, View, Pane};
+
+--- `inner` in a box one column wide on every side, drawn in `style`, with `title` in the top edge where there is room.
+pub let border(style: Style, title: Str, inner: Pane) -> Pane =
+    (w, h) =>
+        let iw = w - 2;
+        let ih = h - 2;
+        let edge(left: Glyph, right: Glyph, middle: View(iw, 1)) -> View(1 + iw + 1, 1) =
+            View/beside(
+                View/beside(View/filled(left, style, 1, 1), middle),
+                View/filled(right, style, 1, 1));
+        let bar = View/filled(Glyph/of_char('─'), style, iw, 1);
+        let side = View/filled(Glyph/of_char('│'), style, 1, ih);
+        let top =
+            edge(
+                Glyph/of_char('┌'),
+                Glyph/of_char('┐'),
+                View/over(bar, View/text(style, title), 0, 0));
+        let middle = View/beside(View/beside(side, inner(iw, ih)), side);
+        let bottom = edge(Glyph/of_char('└'), Glyph/of_char('┘'), bar);
+        View/fit(View/above(View/above(top, middle), bottom), w, h);

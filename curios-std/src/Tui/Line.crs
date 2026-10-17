@@ -1,0 +1,91 @@
+use /std/{Nat, Str, List, Option, Spell};
+use /std/ops/{Eql};
+use /std/Tui/{Glyph};
+
+--- A row of glyphs: text as a terminal draws it.
+pub struct Line: pub Type {
+    glyphs: List(Glyph),
+}
+
+satisfy Eql(Line) {
+    ..
+}
+
+satisfy Spell(Line) {
+    ..
+}
+
+-- How many columns `glyphs` take.
+let columns(glyphs: List(Glyph)) -> Nat =
+    List/fold(glyphs, 0, (g, total) => total + Glyph/width(g));
+
+--- How many columns the line takes.
+pub let width(l: Line) -> Nat =
+    columns(l.glyphs);
+
+--- The text the line draws.
+pub let text(l: Line) -> Str =
+    Str/flatten(List/map(l.glyphs, Glyph/text));
+
+-- The glyphs one extended grapheme cluster of text shows as: itself where it draws, each control in it as its picture, and nothing where it draws as nothing.
+let shown(cluster: Str) -> List(Glyph) =
+    match Glyph/of_cluster(cluster)
+    | some(g) => [g]
+    | none() =>
+        List/filter_map(
+            Str/to_list(cluster),
+            (c) =>
+                match Glyph/printable(c)
+                | true => Option/none()
+                | false => Option/some(Glyph/picture(c))
+                end)
+    end;
+
+--- `s` as a terminal draws it, every character it holds shown: a control as its picture — a line break among them, which `Pane/paragraph` breaks at before a line is made — and a cluster that draws as nothing left out.
+pub let of_str(s: Str) -> Line =
+    Line { glyphs = List/flatten(List/map(Str/graphemes(s), shown)) };
+
+-- The longest start of `glyphs` that fits `room` columns.
+let fitting(glyphs: List(Glyph), room: Nat) -> List(Glyph) =
+    match glyphs
+    | [] => []
+    | [g, ..rest] =>
+        match Glyph/width(g) <= room
+        | true => [g, ..fitting(rest, room - Glyph/width(g))]
+        | false => []
+        end
+    end;
+
+--- The longest start of `l` that fits `w` columns: a wide glyph that would straddle the edge is dropped whole.
+pub let truncate(l: Line, w: Nat) -> Line =
+    Line { glyphs = fitting(l.glyphs, w) };
+
+-- The words of `glyphs`, split at each space.
+let words(glyphs: List(Glyph)) -> List(List(Glyph)) =
+    let none: List(Glyph) = [];
+    List/fold(
+        List/reverse(glyphs),
+        [none],
+        (g, acc) =>
+            match Glyph/text(g) == " "
+            | true => [none, ..acc]
+            | false => match acc | [] => [[g]] | [word, ..rest] => [[g, ..word], ..rest] end
+            end);
+
+--- `l` as lines no wider than `w`, broken at spaces; a word wider than `w` is a line of its own, which a view crops.
+pub let wrap(l: Line, w: Nat) -> List(Line) =
+    let none: List(List(Glyph)) = [];
+    let packed =
+        List/fold(
+            words(l.glyphs),
+            (done = none, current = []),
+            (word, acc) =>
+                match acc.current
+                | [] => (done = acc.done, current = word)
+                | _ =>
+                    match columns(acc.current) + 1 + columns(word) <= w
+                    | true => (done = acc.done, current = [..acc.current, Glyph/space, ..word])
+                    | false => (done = [acc.current, ..acc.done], current = word)
+                    end
+                end);
+    List/map(List/reverse([packed.current, ..packed.done]), (glyphs) => Line { glyphs = glyphs });

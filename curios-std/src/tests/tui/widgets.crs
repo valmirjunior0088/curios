@@ -1,79 +1,85 @@
--- The widget six, each a pure function of its state and its size.
-use /std/{Nat, Bool, Str, Option, Test, Tui};
-use /std/Bool/{True};
-use /std/Tui/{Style, Frame, Key, Listing, Field};
-use /std/Tui/Key/{Code};
+-- The drawings and the widgets: each a pane, drawn at the size it is given.
+use /std/{Nat, Bool, Str, Option, Test};
+use /std/Tui/{Style, Frame, View, Pane, Key, Listing, Field};
 
-let render(@w: Nat, @h: Nat, f: Frame(w, h)) -> Str =
-    Str/join("/", Frame/to_lines(f));
+let shown(@w: Nat, @h: Nat, v: View(w, h)) -> Str =
+    Str/join("/", Frame/to_lines(Frame/of_view(v)));
 
--- A border is two wider and two taller than what it wraps, the title in its top edge.
-test a_border_wraps_at_two_more_each_way =
+let named(name: Str) -> Pane =
+    (w, h) => View/fit(View/text(Style/plain, name), w, h);
+
+-- A border is a column and a row of box on every side of what it holds, the title in its top edge.
+test a_border_holds_its_pane_inside_a_box =
+    Test/equal(shown(Pane/border(Style/plain, "t", named("ab"))(4, 3)), "┌t─┐/│ab│/└──┘");
+
+-- A paragraph wraps at spaces, breaks at its line breaks, and fits its pane.
+test a_paragraph_wraps_breaks_and_fits =
     Test/equal(
-        render(Tui/border(Style/plain, "t", Frame/of_lines(Style/plain, ["ab"], 2, 1))),
-        "┌t─┐/│ab│/└──┘");
-
--- A paragraph wraps at spaces and fits the pane.
-test a_paragraph_wraps_and_fits =
-    Test/equal(render(Tui/paragraph(Style/plain, "aa bb cc", 5, 3)), "aa bb/cc   /     ");
+        Str/join(" ", [
+            shown(Pane/paragraph(Style/plain, "aa bb cc")(5, 3)),
+            shown(Pane/paragraph(Style/plain, "aa\nbb")(3, 2))]),
+        "aa bb/cc   /      aa /bb ");
 
 -- The selection moves down and stops at the end; the rows scroll so it stays in view.
 test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection =
     let l = Listing/new(["one", "two", "three"]);
-    let moved = Listing/move(Listing/move(Listing/move(l, Code/down()), Code/down()), Code/down());
+    let moved =
+        Listing/move(
+            Listing/move(Listing/move(l, Key/Code/down()), Key/Code/down()),
+            Key/Code/down());
     Test/all([
         Test/equal(Listing/index(moved), Option/some(2)),
         Test/equal(Listing/selected(moved), Option/some("three")),
-        Test/equal(render(Listing/draw(moved, Style/plain, Style/plain, 5, 2)), "two  /three"),
-        Test/equal(Listing/index(Listing/move(l, Code/up())), Option/some(0)),
+        Test/equal(shown(Listing/view(moved, Style/plain, Style/plain)(5, 2)), "two  /three"),
+        Test/equal(Listing/index(Listing/move(l, Key/Code/up())), Option/some(0)),
         Test/equal(Listing/index(Listing/new([])), Option/none())]);
 
--- A listing built with items and nothing selected highlights no row, where its first row is highlighted once it is the selection.
+-- A listing with items and nothing selected highlights no row, where its first row is highlighted once it is the selection.
 test a_listing_with_nothing_selected_highlights_no_row =
     let marked = Style { ..Style/plain, reverse = true };
     let first_row_marked(l: Listing) -> Bool =
-        let drawn = Listing/draw(l, Style/plain, marked, 5, 2);
-        Frame/get(drawn, 0, 0, True/qed(), True/qed()).style.reverse;
+        match Frame/get(Frame/of_view(Listing/view(l, Style/plain, marked)(5, 2)), 0, 0)
+        | glyph(_, style) => style.reverse
+        | continuation() => false
+        end;
     Test/all([
         Test/equal(
             first_row_marked(Listing { items = ["one", "two"], cursor = Option/none() }),
             false),
         Test/equal(first_row_marked(Listing/new(["one", "two"])), true)]);
 
--- An input edits at its cursor, which never passes its text.
-test an_input_edits_at_its_cursor =
-    let i =
+-- A field edits at its cursor, which never passes its text, and its view asks for the terminal's cursor where the field's stands.
+test a_field_edits_at_its_cursor_and_places_the_terminal_s =
+    let f =
         Field/handle(
-            Field/handle(Field/of_str("ab"), Key/plain(Code/left())),
-            Key/plain(Code/char('X')));
-    let drawn = Field/draw(i, Style/plain, 5);
-    let past = Field/handle(Field/handle(i, Key/plain(Code/right())), Key/plain(Code/right()));
+            Field/handle(Field/of_str("ab"), Key/plain(Key/Code/left())),
+            Key/plain(Key/Code/char('X')));
+    let drawn = Field/view(f, Style/plain)(5, 1);
+    let past =
+        Field/handle(Field/handle(f, Key/plain(Key/Code/right())), Key/plain(Key/Code/right()));
     Test/all([
-        Test/equal(Str/flatten([render(drawn.frame), ":", Nat/to_str(drawn.cursor_x)]), "aXb  :2"),
+        Test/equal(shown(drawn), "aXb  "),
+        Test/equal(Option/map(View/cursor(drawn), (p: View/Point(5, 1)) => p.x), Option/some(2)),
         Test/equal(Str/At/to_offset(past.cursor), 3),
-        Test/equal(Field/handle(past, Key/plain(Code/backspace())).text, "aX")]);
+        Test/equal(Field/handle(past, Key/plain(Key/Code/backspace())).text, "aX")]);
 
--- A viewport is a window onto a larger frame, blank past its edge.
-test a_viewport_windows_a_larger_frame =
-    let big = Frame/of_lines(Style/plain, ["abcd", "efgh", "ijkl"], 4, 3);
+-- A window is a part of a larger view, blank past its edge.
+test a_window_shows_part_of_a_larger_view =
+    let big = View/above(View/above(named("abcd")(4, 1), named("efgh")(4, 1)), named("ijkl")(4, 1));
     Test/equal(
-        Str/join(" ", [
-            render(Tui/viewport(big, 1, 1, 2, 2)),
-            render(Tui/viewport(big, 3, 2, 2, 2))]),
+        Str/join(" ", [shown(Pane/window(big, 1, 1)(2, 2)), shown(Pane/window(big, 3, 2)(2, 2))]),
         "fg/jk l /  ");
 
--- A wave is one reading per column joined by strokes: a reading past the scale stands at its edge, one that is no number leaves its column blank, and the readings shown are the last that fit, from the left.
+-- A wave is one reading a column joined by strokes: a reading past the scale stands at its edge, one that is no number leaves its column blank, and the readings shown are the last that fit, from the left.
 test a_wave_joins_its_readings_and_leaves_a_gap_blank =
     Test/all([
         Test/equal(
-            render(
-                Tui/wave(
+            shown(
+                Pane/wave(
                     Style/plain,
                     [+0.0, +0.0, +2.0, +2.0, +9.0, +nan.0, +1.0, +0.0],
                     +0.0,
-                    +2.0,
-                    8,
-                    3)),
+                    +2.0)(8, 3)),
             "  ╭──   /  │   ─╮/──╯    ╰"),
-        Test/equal(render(Tui/wave(Style/plain, [+0.0, +1.0, +1.0], +0.0, +1.0, 2, 2)), "──/  "),
-        Test/equal(render(Tui/wave(Style/plain, [+1.0], +0.0, +1.0, 3, 2)), "─  /   ")]);
+        Test/equal(shown(Pane/wave(Style/plain, [+0.0, +1.0, +1.0], +0.0, +1.0)(2, 2)), "──/  "),
+        Test/equal(shown(Pane/wave(Style/plain, [+1.0], +0.0, +1.0)(3, 2)), "─  /   ")]);

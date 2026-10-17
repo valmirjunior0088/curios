@@ -1,6 +1,5 @@
-use /std/{Nat, Str, List, Vec, Option};
-use /std/Tui/{Style, Tile, Frame};
-use /std/Tui/Key/{Code};
+use /std/{Nat, Str, List, Option};
+use /std/Tui/{Style, View, Pane, Key};
 use /std/Bool/{Holds};
 
 --- Items with one selected, or none when there are no items.
@@ -28,7 +27,7 @@ pub let selected(l: Listing) -> Option(Str) =
     Option/map(l.cursor, (c) => List/get(@Str, l.items, c.i, @c.ok));
 
 --- Up, down, home and end move the selection; any other key leaves it. A move past either end is not taken.
-pub let move(l: Listing, code: Code) -> Listing =
+pub let move(l: Listing, code: Key/Code) -> Listing =
     match l.cursor
     | none() => l
     | some(c) =>
@@ -47,20 +46,27 @@ pub let move(l: Listing, code: Code) -> Listing =
     end;
 
 --- The items as rows, the selected one in `highlight`, scrolled so the selection is in view. A listing with nothing selected highlights no row and draws from the top.
-pub let draw(l: Listing, style: Style, highlight: Style, w: Nat, h: Nat) -> Frame(w, h) =
-    let chosen = index(l);
-    let first =
-        match chosen
-        | some(i) => match i < h | true => 0 | false => i + 1 - h end
-        | none() => 0
-        end;
-    let shown =
-        List/take(
-            List/drop_while(
-                List/zip(List/range(0, List/len(l.items)), l.items),
-                (e) => e.0 < first),
-            h);
-    let row(entry: {Nat, Str}) -> Vec(Tile, w) =
-        let s = match chosen == Option/some(entry.0) | true => highlight | false => style end;
-        Vec/first(Frame/fit(Frame/text(s, entry.1).frame, w, 1));
-    Frame/fit(Vec/of_list(List/map(shown, row)), w, h);
+pub let view(l: Listing, style: Style, highlight: Style) -> Pane =
+    (w, h) =>
+        let chosen = index(l);
+        let first =
+            match chosen
+            | some(i) => match i < h | true => 0 | false => i + 1 - h end
+            | none() => 0
+            end;
+        let shown =
+            List/take(
+                List/drop_while(
+                    List/zip(List/range(0, List/len(l.items)), l.items),
+                    (e) => e.0 < first),
+                h);
+        let row(entry: {Nat, Str}) -> View(w, 1) =
+            let s = match chosen == Option/some(entry.0) | true => highlight | false => style end;
+            View/fit(View/text(s, entry.1), w, 1);
+        let none: {h: Nat, view: View(w, h)} = (h = 0, view = View/blank(w, 0));
+        let stacked =
+            List/fold(
+                List/reverse(List/map(shown, row)),
+                none,
+                (r, acc) => (h = 1 + acc.h, view = View/above(r, acc.view)));
+        View/fit(stacked.view, w, h);

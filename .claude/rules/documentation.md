@@ -36,4 +36,4 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 
 The filing, refinement and retirement rules are [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md)'s.
 
-An absolute Curios path leads with its slash — `/std/Tui/Layout` — while a file path such as `curios-std/src/Tui.crs` keeps its form.
+An absolute Curios path leads with its slash — `/std/Tui/View` — while a file path such as `curios-std/src/Tui.crs` keeps its form.

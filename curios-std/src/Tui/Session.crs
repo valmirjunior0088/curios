@@ -1,8 +1,8 @@
-use /std/{Nat, Bytes, Bool, List, Option, Result, Io, Try, Tty};
+use /std/{Nat, Bytes, Bool, List, Option, Result, Eq, Io, Try, Tty};
+use /std/Bool/{True};
 use /std/Io/{Reader};
-use /std/Io/Reader/{Step, Stop};
 use /std/time/{Duration};
-use /std/Tui/{Frame, Event, input, render, ansi};
+use /std/Tui/{Frame, View, Event, input, render, ansi};
 
 struct Held: Type {
     w: Nat,
@@ -47,39 +47,44 @@ pub let resized(s: Session, now: Tty/Size) -> Session =
 pub let last_size(s: Session) -> Io(Tty/Size) =
     Io/pure(s.size);
 
---- `frame` written as the difference from the previous one where the size is unchanged, and whole where it is not.
-pub let draw(
-    @w: Nat,
-    @h: Nat,
-    s: Session,
-    frame: Frame(w, h),
-    cursor: Option({x: Nat, y: Nat}),
-) -> Io(Session) =
+--- `v` written as the difference from the previous frame where the size is unchanged and whole where it is not, the terminal's cursor where `v` asks for it or hidden.
+pub let draw(@w: Nat, @h: Nat, s: Session, v: View(w, h)) -> Io(Session) =
+    let frame = Frame/of_view(v);
     let before: Option(Frame(w, h)) =
         match s.previous
         | none() => Option/none()
         | some(p) =>
             match p.w == w && p.h == h
-            | true => Option/some(Frame/fit(p.frame, w, h))
+            | true =>
+                let as_wide =
+                    Eq/subst(
+                        (n: Nat) => Frame(n, p.h),
+                        Nat/eq_of_eql(p.w, w, True/proved()),
+                        p.frame);
+                Option/some(
+                    Eq/subst(
+                        (n: Nat) => Frame(w, n),
+                        Nat/eq_of_eql(p.h, h, True/proved()),
+                        as_wide))
             | false => Option/none()
             end
         end;
-    let _ = Try/run(Io/write(s.tty, render(before, frame, cursor)))!;
+    let _ = Try/run(Io/write(s.tty, render(before, frame, View/cursor(v))))!;
     Io/pure(Session { ..s, previous = Option/some(Held { w = w, h = h, frame = frame }) });
 
 -- One arrival of input and the events it completes, what it leaves undecoded staying held: the state is whether the arrival has come.
-let burst(@E: Type, arrived: Bool, held: Bytes) -> Step(Bool, {}, List(Event(E))) =
+let burst(@E: Type, arrived: Bool, held: Bytes) -> Reader/Step(Bool, {}, List(Event(E))) =
     match arrived
-    | false => Step/more(true, held)
+    | false => Reader/Step/more(true, held)
     | true =>
         let decoded = input/decode(@E, held);
-        Step/took(decoded.events, decoded.rest)
+        Reader/Step/took(decoded.events, decoded.rest)
     end;
 
 --- The next burst of input as events, waiting until one arrives; `none` once standard input has ended. A read that fails is raised, the one a burst opens with and the one it waits on for the rest of a key alike.
 pub let read(@E: Type, s: Session) -> Try(Io, Io/Error, Option(List(Event(E)))) =
     -- A take of the reader is an `Io` action by its declaration, which is what a `Try` region embeds it by.
-    let arrival: Io(Result(Stop(Bool, {}), List(Event(E)))) =
+    let arrival: Io(Result(Reader/Stop(Bool, {}), List(Event(E)))) =
         Reader/take(s.input, (arrived: Bool, held: Bytes) => burst(@E, arrived, held), false);
     let got = arrival!;
     match got
@@ -96,10 +101,10 @@ pub let read(@E: Type, s: Session) -> Try(Io, Io/Error, Option(List(Event(E)))) 
             | some(failure(failed(_, why))) => Try/raise(why)
             | _ =>
                 -- Nothing more came: what is held is read as it stands, and taken.
-                let flushing: Io(Result(Stop({}, {}), List(Event(E)))) =
+                let flushing: Io(Result(Reader/Stop({}, {}), List(Event(E)))) =
                     Reader/take(
                         s.input,
-                        (_: {}, held: Bytes) => Step/took(input/flush(@E, held), x[]),
+                        (_: {}, held: Bytes) => Reader/Step/took(input/flush(@E, held), x[]),
                         ());
                 let flushed = flushing!;
                 Try/pure(

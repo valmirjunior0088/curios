@@ -1,0 +1,105 @@
+use /std/{Nat, Bool, Str, Char, List, Option, Spell};
+use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
+use /std/Char/{GraphemeBreak, EastAsianWidth};
+
+--- Whether a terminal draws `c` rather than reading it as a control: it is none of the C0 controls, DEL or the C1 controls.
+pub let printable(c: Char) -> Bool =
+    let code = Char/to_nat(c);
+    0x20 <= code && (code < 0x7F || 0x9F < code);
+
+--- One grapheme cluster as a terminal draws it, in one column or two. Every character of it is printable by proof, so nothing a glyph holds reaches a terminal as a control; and its width is the one `of_cluster` measures, since only this module builds one.
+pub struct Glyph: Type {
+    chars: List(Char),
+    wide: Bool,
+    @printable: Holds(List/all(chars, printable)),
+}
+
+satisfy Eql(Glyph) {
+    ..
+}
+
+satisfy Spell(Glyph) {
+    ..
+}
+
+--- The cluster the glyph draws, as text.
+pub let text(g: Glyph) -> Str =
+    Str/flatten(List/map(g.chars, Str/of_char));
+
+--- How many columns the glyph takes: one, or two.
+pub let width(g: Glyph) -> Nat =
+    match g.wide | true => 2 | false => 1 end;
+
+--- A space.
+pub let space: Glyph =
+    Glyph { chars = [' '], wide = false };
+
+-- Whether `c` asks for the emoji presentation of what it follows.
+let selects_emoji(c: Char) -> Bool =
+    Char/to_nat(c) == 0xFE0F;
+
+-- Whether `c` takes two columns where it stands in a cluster.
+let wide_in_cluster(c: Char) -> Bool =
+    match EastAsianWidth/of_char(c)
+    | wide() => true
+    | fullwidth() => true
+    | _ => Char/is_emoji_presentation(c) || selects_emoji(c)
+    end;
+
+-- How many columns a cluster takes on a terminal: two where it holds a wide or fullwidth character, one that presents as an emoji, or the selector asking for emoji presentation; none where it opens with a mark, a joiner or a format character, which a terminal draws over its neighbour or not at all; one otherwise.
+let columns(chars: List(Char)) -> Nat =
+    match chars
+    | [] => 0
+    | [first, .._] =>
+        let opening = GraphemeBreak/of_char(first);
+        choose
+        | List/any(chars, wide_in_cluster) => 2
+        | opening == GraphemeBreak/extend() || opening == GraphemeBreak/zwj()
+            || opening == GraphemeBreak/control() => 0
+        | _ => 1
+        end
+    end;
+
+--- `c` alone as a glyph, under the evidence that a terminal draws it: what a box's corners and edges are drawn with, a literal's evidence discharged by reduction.
+pub let of_char(c: Char, @drawn: Holds(printable(c))) -> Glyph =
+    Glyph {
+        chars = [c],
+        wide = columns([c]) == 2,
+        @printable = List/all/cons(printable, c, [], drawn, True/qed()) };
+
+-- The glyph of the character `code` of the Control Pictures block, which is printable: every code of the block lies past the C1 controls and below the surrogates. The block is drawn one column wide.
+let pictured(code: Nat, @block: Holds(0x2400 <= code && code < 0x2440)) -> Glyph =
+    let shown = Char { code = code, @valid = Char/Valid/below_surrogates(code, True/proved()) };
+    let drawn: Holds(printable(shown)) =
+        Bool/and/both(
+            0x20 <= code,
+            code < 0x7F || 0x9F < code,
+            True/proved(),
+            Bool/or/of_second(code < 0x7F, 0x9F < code, True/proved()));
+    Glyph {
+        chars = [shown],
+        wide = false,
+        @printable = List/all/cons(printable, shown, [], drawn, True/qed()) };
+
+--- The glyph a terminal is shown in place of `c` where `c` is a control, since a control written to a terminal is obeyed rather than drawn: its picture from the Control Pictures block for a C0 control and DEL, and the replacement character for a C1 control or any other.
+pub let picture(c: Char) -> Glyph =
+    let code = Char/to_nat(c);
+    choose
+    | code < 0x20 => pictured(0x2400 + code)
+    | code == 0x7F => pictured(0x2421)
+    | _ => Glyph { chars = ['�'], wide = false }
+    end;
+
+--- The glyph `cluster` draws as, or `none` where it draws as nothing or holds a control: one extended grapheme cluster of text, as `Str/graphemes` cuts it.
+pub let of_cluster(cluster: Str) -> Option(Glyph) =
+    let chars = Str/to_list(cluster);
+    match List/all(chars, printable)
+    | false => Option/none()
+    | true =>
+        match columns(chars)
+        | 0 => Option/none()
+        | 1 => Option/some(Glyph { chars = chars, wide = false })
+        | _ => Option/some(Glyph { chars = chars, wide = true })
+        end
+    end;

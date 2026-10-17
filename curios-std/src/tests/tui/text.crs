@@ -1,31 +1,45 @@
--- Tile width, and the truncation and wrapping written over it.
-use /std/{Nat, Str, Test};
-use /std/Tui/{text};
+-- Glyphs and lines: what a character draws as, how wide a line is, and the truncation and wrapping measured over it.
+use /std/{Nat, Str, List, Test};
+use /std/Tui/{Line};
 
--- The three widths the table separates: a Latin scalar at one, a CJK ideograph at two, and a combining mark at zero — so `é` (an `e` followed by U+0301, written here as the two scalars it is, since a string literal has no `\u` escape) measures one column while `Str/len` counts two.
-test width_counts_columns_rather_than_scalars =
-    Test/equal(
-        Str/join(" ", [
-            Nat/to_str(text/width("hello")),
-            Nat/to_str(text/width("é")),
-            Nat/to_str(Str/len("é")),
-            Nat/to_str(text/width("日本")),
-            Nat/to_str(text/width(""))]),
-        "5 1 2 4 0");
+let width(s: Str) -> Nat =
+    Line/width(Line/of_str(s));
 
--- A double-width scalar that would straddle the boundary is dropped whole, so truncating to three columns keeps one ideograph and leaves the result two columns wide rather than one and a half.
-test truncate_never_splits_a_wide_scalar =
+let shown(lines: List(Line)) -> Str =
+    Str/join("/", List/map(lines, Line/text));
+
+-- A line takes the columns a terminal draws it in: a mark none of its own, so `e` with a combining accent is one column where `Str/len` counts two; an ideograph and every emoji a terminal draws wide two, the rocket, the hourglass and the newest hearts among them; a sequence joined by ZWJs and a flag two, as the one glyph each is.
+test a_line_is_as_wide_as_a_terminal_draws_it =
     Test/equal(
-        Str/join("|", [
-            text/truncate("abcdef", 3),
-            text/truncate("abc", 10),
-            text/truncate("日本", 3),
-            text/truncate("abc", 0)]),
-        "abc|abc|日|");
+        List/map(["hello", "é", "日本", "🚀", "⌛", "🩷", "👨\u{200D}👩", "🇫🇷", ""], width),
+        [5, 1, 4, 2, 2, 2, 2, 2, 0]);
+
+-- A control reaches a terminal as its picture and never as itself: an Escape, a bell and a line break show as `␛`, `␇` and `␊`, so text that would set a window title draws as the characters it holds; a C1 control shows as the replacement character.
+test a_control_is_shown_as_its_picture =
+    Test/all([
+        Test/equal(Line/text(Line/of_str("a\u{1B}]0;x\u{7}\nb")), "a␛]0;x␇␊b"),
+        Test/equal(Line/text(Line/of_str("\u{9B}")), "�"),
+        Test/equal(width("\u{7F}"), 1)]);
+
+-- A cluster that draws as nothing takes no glyph: a zero-width space between two letters leaves the two.
+test what_draws_as_nothing_is_left_out =
+    Test/equal(Line/text(Line/of_str("a\u{200B}b")), "ab");
+
+-- A wide glyph that would straddle the edge is dropped whole, so truncating to three columns keeps one ideograph and leaves the line two columns wide rather than one and a half.
+test truncate_never_splits_a_wide_glyph =
+    Test/equal(
+        shown([
+            Line/truncate(Line/of_str("abcdef"), 3),
+            Line/truncate(Line/of_str("abc"), 10),
+            Line/truncate(Line/of_str("日本"), 3),
+            Line/truncate(Line/of_str("abc"), 0)]),
+        "abc/abc/日/");
 
 test wrap_packs_words_up_to_the_width =
-    Test/equal(Str/join("/", text/wrap("the quick brown fox", 9)), "the quick/brown fox");
+    Test/equal(shown(Line/wrap(Line/of_str("the quick brown fox"), 9)), "the quick/brown fox");
 
--- A word wider than the pane becomes its own over-wide line rather than being split mid-word; `Tui/Frame/fit` is what crops it at the pane, which keeps the one coercion in one place.
+-- A word wider than the pane is a line of its own rather than being split; a view crops it at the pane, which keeps the one coercion in one place.
 test wrap_leaves_an_over_wide_word_on_its_own_line =
-    Test/equal(Str/join("/", text/wrap("a stupendously long word", 6)), "a/stupendously/long/word");
+    Test/equal(
+        shown(Line/wrap(Line/of_str("a stupendously long word"), 6)),
+        "a/stupendously/long/word");

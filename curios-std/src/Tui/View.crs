@@ -1,0 +1,89 @@
+use /std/{Nat, Str, Option};
+use /std/Tui/{Style, Glyph, Line};
+
+--- A column and a row within a view, by proof.
+pub mod Point;
+pub use Point/{let Point};
+
+--- What a terminal is to show at `w` by `h`, as a description every reading folds over — what it draws, `Frame/of_view`, and where it asks for the cursor, `cursor` — so the two cannot disagree. The size is the type's, so two views join only where their sizes agree.
+pub induct View: (w: Nat, h: Nat) -> pub Type
+--- `w` by `h` of one glyph in `style`.
+| filled(glyph: Glyph, style: Style, w: Nat, h: Nat): (w, h)
+--- A line in `style`, as wide as its glyphs.
+| line(style: Style, l: Line): (Line/width(l), 1)
+--- `left` then `right`, left to right.
+| beside(@w1: Nat, @w2: Nat, @h: Nat, left: View(w1, h), right: View(w2, h)): (w1 + w2, h)
+--- `top` then `bottom`, top to bottom.
+| above(@w: Nat, @h1: Nat, @h2: Nat, top: View(w, h1), bottom: View(w, h2)): (w, h1 + h2)
+--- `inner` at `w` by `h`: cropped where it overflows, padded with blanks where it falls short. The one coercion, where a view of a size known only as the program runs meets a typed one.
+| fit(@w0: Nat, @h0: Nat, inner: View(w0, h0), w: Nat, h: Nat): (w, h)
+--- `inner` from column `x` and row `y` on.
+| crop(@w0: Nat, @h0: Nat, inner: View(w0, h0), x: Nat, y: Nat): (w0 - x, h0 - y)
+--- `top` painted onto `base` with its upper-left corner at `x`, `y`, clipped to `base`.
+| over(@w: Nat, @h: Nat, @w1: Nat, @h1: Nat, base: View(w, h), top: View(w1, h1), x: Nat, y: Nat): (
+    w,
+    h)
+--- `inner` with every style it draws in passed through `f`.
+| styled(@w: Nat, @h: Nat, f: (Style) -> Style, inner: View(w, h)): (w, h)
+--- `inner`, asking for the terminal's cursor at `at`.
+| with_cursor(@w: Nat, @h: Nat, inner: View(w, h), at: Point(w, h)): (w, h)
+end
+
+pub use View/*;
+
+--- `w` by `h` of blanks.
+pub let blank(w: Nat, h: Nat) -> View(w, h) =
+    View/filled(Glyph/space, Style/plain, w, h);
+
+--- `s` as one line in `style`, every character it holds shown, as `Line/of_str` shows it.
+pub let text(style: Style, s: Str) -> View(Line/width(Line/of_str(s)), 1) =
+    View/line(style, Line/of_str(s));
+
+-- `p`, moved by `dx` and `dy`, as a point of the `w1` by `h1` view it is moved into, where it stands within it.
+let shifted(
+    @w: Nat,
+    @h: Nat,
+    p: Point(w, h),
+    dx: Nat,
+    dy: Nat,
+    w1: Nat,
+    h1: Nat,
+) -> Option(Point(w1, h1)) =
+    let x = p.x + dx;
+    let y = p.y + dy;
+    match x < w1 && y < h1
+    | true => Option/some(Point(w1, h1) { x = x, y = y })
+    | false => Option/none()
+    end;
+
+-- The first of the two that holds a value.
+let either(@A: Type, first: Option(A), second: Option(A)) -> Option(A) =
+    match first | some(_) => first | none() => second end;
+
+--- Where `v` asks for the terminal's cursor, or `none`. A request stands for the view it is made over; one over another's stands above it, `over`'s top above its base; and of two views side by side or one above the other, the later's is taken.
+pub let cursor(@w: Nat, @h: Nat, v: View(w, h)) -> Option(Point(w, h)) =
+    match v
+    | filled(_, _, _, _) => Option/none()
+    | line(_, _) => Option/none()
+    | beside(@w1, @w2, @bh, left, right) =>
+        either(
+            Option/bind(cursor(right), (p) => shifted(p, w1, 0, w1 + w2, bh)),
+            Option/bind(cursor(left), (p) => shifted(p, 0, 0, w1 + w2, bh)))
+    | above(@aw, @h1, @h2, top, bottom) =>
+        either(
+            Option/bind(cursor(bottom), (p) => shifted(p, 0, h1, aw, h1 + h2)),
+            Option/bind(cursor(top), (p) => shifted(p, 0, 0, aw, h1 + h2)))
+    | fit(inner, fw, fh) => Option/bind(cursor(inner), (p) => shifted(p, 0, 0, fw, fh))
+    | crop(@w0, @h0, inner, x, y) =>
+        Option/bind(
+            cursor(inner),
+            (p) =>
+                match x <= p.x && y <= p.y
+                | true => Option/some(Point(w0 - x, h0 - y) { x = p.x - x, y = p.y - y })
+                | false => Option/none()
+                end)
+    | over(@ow, @oh, base, top, x, y) =>
+        either(Option/bind(cursor(top), (p) => shifted(p, x, y, ow, oh)), cursor(base))
+    | styled(_, inner) => cursor(inner)
+    | with_cursor(_, at) => Option/some(at)
+    end;

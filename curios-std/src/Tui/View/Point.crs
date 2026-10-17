@@ -1,0 +1,10 @@
+use /std/{Nat};
+use /std/Bool/{Holds};
+
+--- A point of a `w` by `h` view: a column and a row within it, by proof.
+pub struct Point(w: Nat, h: Nat): pub Type {
+    x: Nat,
+    y: Nat,
+    @in_x: Holds(x < w),
+    @in_y: Holds(y < h),
+}

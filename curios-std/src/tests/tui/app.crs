@@ -1,7 +1,6 @@
--- A whole program through `drive`: the fold from `init` through `update`, the frame `view` gives, and what a directive asks for.
-use /std/{Nat, Char, List, Option, Io, Test, Tui};
-use /std/Tui/{Style, Frame, Key, Event, Directive};
-use /std/Tui/Key/{Code};
+-- A whole program through `drive`: the fold from `init` through `update`, the view it shows, and what a directive asks for.
+use /std/{Nat, Char, List, Io, Test, Tui};
+use /std/Tui/{Style, Frame, Pane, Key, Event, Directive};
 
 -- A counter: `+` and `-` change it, `q` quits, `!` asks for an `Io` that answers the count doubled.
 let counter: Tui(Nat, Nat) =
@@ -24,18 +23,17 @@ let counter: Tui(Nat, Nat) =
             | custom(n) => (n, Directive/none())
             | _ => (model, Directive/none())
             end,
-        view(model, w, h) = Frame/of_lines(Style/plain, [Nat/to_str(model)], w, h),
-        cursor(_model, _w, _h) = Option/none() };
+        view(model) = Pane/paragraph(Style/plain, Nat/to_str(model)) };
 
 let press(c: Char) -> Event(Nat) =
-    Event/key(Key/plain(Code/char(c)));
+    Event/key(Key/plain(Key/Code/char(c)));
 
 test the_fold_runs_every_event_through_update =
     let d = Tui/drive(counter, 3, 1, [press('+'), press('+'), press('-')]);
     Test/all([
         Test/equal(d.model, 1),
         Test/equal(d.quit, false),
-        Test/equal(Frame/to_lines(d.frame), ["1  "])]);
+        Test/equal(Frame/to_lines(Frame/of_view(d.view)), ["1  "])]);
 
 -- `quit` stops the fold where it is issued; the events after it are not seen.
 test quit_stops_the_fold_early =

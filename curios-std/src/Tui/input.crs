@@ -1,12 +1,11 @@
 use /std/{Nat, Str, Char, Byte, Bytes, List, Option};
 use /std/Tui/{Key, Event};
-use /std/Tui/Key/{Code};
 use /std/Bool/{Holds};
 
 let at(b: Bytes, i: Nat) -> Option(Nat) =
     Option/map(Bytes/try_get(b, i), Byte/to_nat);
 
-let modified(code: Code, m: Nat) -> Key =
+let modified(code: Key/Code, m: Nat) -> Key =
     let bits = m - 1;
     Key {
         code = code,
@@ -21,64 +20,64 @@ let low(code: Nat, @below: Holds(code < 0xD800)) -> Char =
 -- The key a control byte is. It is a byte's, which is what puts the letter or the sign it stands beside below the surrogates.
 let control(n: Nat, @byte: Holds(n <= 255)) -> Key =
     choose
-    | n == 0x0D => Key/plain(Code/enter())
-    | n == 0x09 => Key/plain(Code/tab())
-    | n == 0x7F => Key/plain(Code/backspace())
-    | n == 0x08 => Key/plain(Code/backspace())
-    | n == 0x1B => Key/plain(Code/escape())
-    | n == 0x00 => Key/with_ctrl(Code/char(' '))
-    | n <= 0x1A => Key/with_ctrl(Code/char(low(n + 0x60)))
-    | _ => Key/with_ctrl(Code/char(low(n + 0x40)))
+    | n == 0x0D => Key/plain(Key/Code/enter())
+    | n == 0x09 => Key/plain(Key/Code/tab())
+    | n == 0x7F => Key/plain(Key/Code/backspace())
+    | n == 0x08 => Key/plain(Key/Code/backspace())
+    | n == 0x1B => Key/plain(Key/Code/escape())
+    | n == 0x00 => Key/with_ctrl(Key/Code/char(' '))
+    | n <= 0x1A => Key/with_ctrl(Key/Code/char(low(n + 0x60)))
+    | _ => Key/with_ctrl(Key/Code/char(low(n + 0x40)))
     end;
 
-let tilde(n: Nat) -> Option(Code) =
+let tilde(n: Nat) -> Option(Key/Code) =
     match n
-    | 1 => Option/some(Code/home())
-    | 2 => Option/some(Code/insert())
-    | 3 => Option/some(Code/delete())
-    | 4 => Option/some(Code/end_key())
-    | 5 => Option/some(Code/page_up())
-    | 6 => Option/some(Code/page_down())
-    | 7 => Option/some(Code/home())
-    | 8 => Option/some(Code/end_key())
-    | 11 => Option/some(Code/f(1))
-    | 12 => Option/some(Code/f(2))
-    | 13 => Option/some(Code/f(3))
-    | 14 => Option/some(Code/f(4))
-    | 15 => Option/some(Code/f(5))
-    | 17 => Option/some(Code/f(6))
-    | 18 => Option/some(Code/f(7))
-    | 19 => Option/some(Code/f(8))
-    | 20 => Option/some(Code/f(9))
-    | 21 => Option/some(Code/f(10))
-    | 23 => Option/some(Code/f(11))
-    | 24 => Option/some(Code/f(12))
+    | 1 => Option/some(Key/Code/home())
+    | 2 => Option/some(Key/Code/insert())
+    | 3 => Option/some(Key/Code/delete())
+    | 4 => Option/some(Key/Code/end_key())
+    | 5 => Option/some(Key/Code/page_up())
+    | 6 => Option/some(Key/Code/page_down())
+    | 7 => Option/some(Key/Code/home())
+    | 8 => Option/some(Key/Code/end_key())
+    | 11 => Option/some(Key/Code/f(1))
+    | 12 => Option/some(Key/Code/f(2))
+    | 13 => Option/some(Key/Code/f(3))
+    | 14 => Option/some(Key/Code/f(4))
+    | 15 => Option/some(Key/Code/f(5))
+    | 17 => Option/some(Key/Code/f(6))
+    | 18 => Option/some(Key/Code/f(7))
+    | 19 => Option/some(Key/Code/f(8))
+    | 20 => Option/some(Key/Code/f(9))
+    | 21 => Option/some(Key/Code/f(10))
+    | 23 => Option/some(Key/Code/f(11))
+    | 24 => Option/some(Key/Code/f(12))
     | _ => Option/none()
     end;
 
-let final_code(n: Nat) -> Option(Code) =
+let final_code(n: Nat) -> Option(Key/Code) =
     match n
-    | 'A' => Option/some(Code/up())
-    | 'B' => Option/some(Code/down())
-    | 'C' => Option/some(Code/right())
-    | 'D' => Option/some(Code/left())
-    | 'H' => Option/some(Code/home())
-    | 'F' => Option/some(Code/end_key())
-    | 'P' => Option/some(Code/f(1))
-    | 'Q' => Option/some(Code/f(2))
-    | 'R' => Option/some(Code/f(3))
-    | 'S' => Option/some(Code/f(4))
+    | 'A' => Option/some(Key/Code/up())
+    | 'B' => Option/some(Key/Code/down())
+    | 'C' => Option/some(Key/Code/right())
+    | 'D' => Option/some(Key/Code/left())
+    | 'H' => Option/some(Key/Code/home())
+    | 'F' => Option/some(Key/Code/end_key())
+    | 'P' => Option/some(Key/Code/f(1))
+    | 'Q' => Option/some(Key/Code/f(2))
+    | 'R' => Option/some(Key/Code/f(3))
+    | 'S' => Option/some(Key/Code/f(4))
     | _ => Option/none()
     end;
 
-let kitty(code: Nat) -> Option(Code) =
+let kitty(code: Nat) -> Option(Key/Code) =
     match code
-    | 13 => Option/some(Code/enter())
-    | 27 => Option/some(Code/escape())
-    | 9 => Option/some(Code/tab())
-    | 127 => Option/some(Code/backspace())
-    | 8 => Option/some(Code/backspace())
-    | _ => Option/map(Char/of_nat(code), Code/char)
+    | 13 => Option/some(Key/Code/enter())
+    | 27 => Option/some(Key/Code/escape())
+    | 9 => Option/some(Key/Code/tab())
+    | 127 => Option/some(Key/Code/backspace())
+    | 8 => Option/some(Key/Code/backspace())
+    | _ => Option/map(Char/of_nat(code), Key/Code/char)
     end;
 
 --- The parameters of the control sequence whose parameter bytes begin at `i`, its final byte and where it ends, or `none` when the chunk ends first. Parameters read as ECMA-48 reads them: digits accumulate from zero, and an empty one is `none`, its default being each control function's to state. An empty last one is left out.
@@ -126,7 +125,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             | some(valid) =>
                 let s = Str { bytes = piece, @valid = valid };
                 let first = Str/At/next(s, Str/At/start(s));
-                Step/emit(key(Key/plain(Code/char(first.char))), i + (more + 1))
+                Step/emit(key(Key/plain(Key/Code/char(first.char))), i + (more + 1))
             end
         end;
     let paste(_: Nat, start: Nat) -> Step(E) =
@@ -197,12 +196,12 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             choose
             | second == '[' => csi(i, i + 2)
             | second == 'O' => ss3(i + 2)
-            | second == 0x1B => Step/emit(key(Key/plain(Code/escape())), i + 1)
+            | second == 0x1B => Step/emit(key(Key/plain(Key/Code/escape())), i + 1)
             | Nat/in_range(second, 0x20, 0x7E) =>
-                Step/emit(key(Key/with_alt(Code/char(low(second)))), i + 2)
+                Step/emit(key(Key/with_alt(Key/Code/char(low(second)))), i + 2)
             | second < 0x20 || second == 0x7F =>
                 Step/emit(key(Key { ..control(second), alt = true }), i + 2)
-            | _ => Step/emit(key(Key/plain(Code/escape())), i + 1)
+            | _ => Step/emit(key(Key/plain(Key/Code/escape())), i + 1)
             end
         end;
     let go(i: Nat, acc: List(Event(E))) -> {events: List(Event(E)), rest: Bytes} =
@@ -237,7 +236,7 @@ pub let flush(@E: Type, rest: Bytes) -> List(Event(E)) =
     | x[head, ..tail] =>
         let first: List(Event(E)) =
             match Byte/to_nat(head) == 0x1B
-            | true => [Event/key(Key/plain(Code/escape()))]
+            | true => [Event/key(Key/plain(Key/Code/escape()))]
             | false => []
             end;
         let d = decode(tail);

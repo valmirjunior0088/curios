@@ -1,5 +1,5 @@
 use /std/{Nat, Str};
-use /std/Tui/{Style, Frame, Key, text};
+use /std/Tui/{Style, Line, View, Pane, Key};
 
 --- A line of text and a cursor within it, at a position of the text rather than a count of its characters.
 pub struct Field: pub Type {
@@ -56,6 +56,10 @@ pub let handle(i: Field, k: Key) -> Field =
     | _ => i
     end;
 
+-- How many columns `s` takes, as a view shows it.
+let columns(s: Str) -> Nat =
+    Line/width(Line/of_str(s));
+
 --- The leftmost position of `s` a view of `room` columns may start at and still hold everything from there to `at`: walking back from `at`, a character joins the view while the view has room for it.
 let scrolled(s: Str, at: Str/At(s), room: Nat) -> Str/At(s) =
     Str/At/backward(
@@ -65,7 +69,7 @@ let scrolled(s: Str, at: Str/At(s), room: Nat) -> Str/At(s) =
                 match Str/At/try_prev(s, here)
                 | none() => here
                 | some(back) =>
-                    let wider = used + text/char_width(back.char);
+                    let wider = used + columns(Str/of_char(back.char));
                     match wider <= room
                     | true => again(back.past, back.progress)(wider)
                     | false => here
@@ -73,11 +77,13 @@ let scrolled(s: Str, at: Str/At(s), room: Nat) -> Str/At(s) =
                 end,
         at)(0);
 
---- One row of the text, scrolled so the cursor is in view, and the column the cursor is at.
-pub let draw(i: Field, style: Style, w: Nat) -> {frame: Frame(w, 1), cursor_x: Nat} =
-    let first = scrolled(i.text, i.cursor, w - 1);
-    let shown = Str/after(i.text, first);
-    let skipped = text/width(Str/before(i.text, first));
-    (
-        frame = Frame/fit(Frame/text(style, shown).frame, w, 1),
-        cursor_x = text/width(Str/before(i.text, i.cursor)) - skipped);
+--- The text in `style` on the first row, scrolled so the cursor is in view, and the terminal's cursor asked for where the field's stands.
+pub let view(i: Field, style: Style) -> Pane =
+    (w, h) =>
+        let first = scrolled(i.text, i.cursor, w - 1);
+        let shown = View/fit(View/text(style, Str/after(i.text, first)), w, h);
+        let x = columns(Str/before(i.text, i.cursor)) - columns(Str/before(i.text, first));
+        match x < w && 0 < h
+        | true => View/with_cursor(shown, View/Point(w, h) { x = x, y = 0 })
+        | false => shown
+        end;

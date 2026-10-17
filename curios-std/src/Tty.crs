@@ -1,6 +1,9 @@
-use /std/{Nat, Str, Bytes, Try, Io, Show};
-use /std/ops/{Eql};
+use /std/{Nat, Str, Bytes, Try, Io};
 use /std/internal/{Handle, error};
+
+--- The terminal's size in cells.
+pub mod Size;
+pub use Size/{let Size};
 
 --- The terminal this process's session has: one device, read for its keys and written for its screen.
 pub struct Tty: Type {
@@ -26,20 +29,6 @@ satisfy Io/Read(Tty) {
 satisfy Io/Write(Tty) {
     write(t, b) = Io/write(t.0, b),
     flush(t) = Io/flush(t.0),
-}
-
---- The terminal's size in cells.
-pub struct Size: pub Type {
-    cols: Nat,
-    rows: Nat,
-}
-
-satisfy Eql(Size) {
-    ..
-}
-
-satisfy Show(Size) {
-    show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),
 }
 
 --- Take this terminal with the bytes that undo what the program will set on it, and put it in raw mode: `ok`, or the status of the failure.

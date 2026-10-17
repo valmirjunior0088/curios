@@ -1,0 +1,68 @@
+use /std/{Nat, Str, List};
+use /std/Tui/{Style, Line, View};
+
+--- How a part claims its share of an axis, and the pass that shares one out.
+pub mod Constraint;
+pub use Constraint/{let Constraint};
+
+--- A pane in a box.
+pub mod border;
+pub use border/{let border};
+
+--- A run of readings as a line.
+pub mod wave;
+pub use wave/{let wave};
+
+--- A view of whatever size it is given: what a program shows its model as, what a layout shares an axis among, and what a drawing that fills its room is.
+pub let Pane: Type =
+    (w: Nat, h: Nat) -> View(w, h);
+
+--- `parts` stacked down an axis of `h` rows, each at the height its constraint claims as `Constraint/distribute` shares it, the whole fitted to the size asked for.
+pub let rows(parts: List({Constraint, Pane})) -> Pane =
+    (w, h) =>
+        let heights = Constraint/distribute(List/map(parts, (part) => part.0), h);
+        let none: {h: Nat, view: View(w, h)} = (h = 0, view = View/blank(w, 0));
+        let stacked =
+            List/fold(
+                List/reverse(List/zip(parts, heights)),
+                none,
+                (entry, acc) =>
+                    (h = entry.1 + acc.h, view = View/above(entry.0.1(w, entry.1), acc.view)));
+        View/fit(stacked.view, w, h);
+
+--- `parts` set side by side along an axis of `w` columns, each at the width its constraint claims as `Constraint/distribute` shares it, the whole fitted to the size asked for.
+pub let cols(parts: List({Constraint, Pane})) -> Pane =
+    (w, h) =>
+        let widths = Constraint/distribute(List/map(parts, (part) => part.0), w);
+        let none: {w: Nat, view: View(w, h)} = (w = 0, view = View/blank(0, h));
+        let set =
+            List/fold(
+                List/reverse(List/zip(parts, widths)),
+                none,
+                (entry, acc) =>
+                    (w = entry.1 + acc.w, view = View/beside(entry.0.1(entry.1, h), acc.view)));
+        View/fit(set.view, w, h);
+
+-- `lines` one above another, each fitted to `w`, as many as fit `h`, and the whole fitted to `h`.
+let stack(style: Style, lines: List(Line), w: Nat, h: Nat) -> View(w, h) =
+    let none: {h: Nat, view: View(w, h)} = (h = 0, view = View/blank(w, 0));
+    let stacked =
+        List/fold(
+            List/reverse(List/take(lines, h)),
+            none,
+            (l, acc) =>
+                (h = 1 + acc.h, view = View/above(View/fit(View/line(style, l), w, 1), acc.view)));
+    View/fit(stacked.view, w, h);
+
+--- `s` in `style`, broken at its line breaks, each line wrapped at spaces to the width it is given, and as many lines as fit its height shown.
+pub let paragraph(style: Style, s: Str) -> Pane =
+    (w, h) =>
+        stack(
+            style,
+            List/flatten(List/map(Str/lines(s), (one) => Line/wrap(Line/of_str(one), w))),
+            w,
+            h);
+
+--- A window onto `inner`: the part of it from column `x` and row `y` on, at the size it is given, blank past its edge.
+pub let window(@w0: Nat, @h0: Nat, inner: View(w0, h0), x: Nat, y: Nat) -> Pane =
+    (w, h) => View/fit(View/crop(inner, x, y), w, h);

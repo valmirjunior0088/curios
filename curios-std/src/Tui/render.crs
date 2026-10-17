@@ -1,5 +1,5 @@
-use /std/{Nat, Str, Bytes, List, Vec, Option};
-use /std/Tui/{Style, Tile, Frame, ansi, text};
+use /std/{Nat, Bool, Byte, Str, Bytes, List, Vec, Option};
+use /std/Tui/{Style, Glyph, Tile, Frame, View, ansi};
 
 struct Pen: Type {
     out: Bytes,
@@ -7,21 +7,32 @@ struct Pen: Type {
     at: Option({Nat, Nat}),
 }
 
+-- Whether every terminal agrees on how far `text` moves the cursor: text of ASCII alone.
+let agreed(text: Bytes) -> Bool =
+    Bytes/all(text, (b) => Byte/to_nat(b) < 0x80);
+
+-- The pen once `tile` is written at `x`, `y`, unless it is what `before` shows there. After a glyph whose width terminals may disagree on the pen forgets where it stands, so the next tile it writes moves there first: a terminal that measures a glyph otherwise misplaces that glyph alone.
 let paint(pen: Pen, x: Nat, y: Nat, tile: Tile, before: Option(Tile)) -> Pen =
-    let same = match before | some(b) => b == tile | none() => false end;
-    let width = text/width(tile.symbol);
-    choose
-    | same => pen
-    | width == 0 => pen
-    | _ =>
-        let moved = match pen.at | some(p) => p.0 == x && p.1 == y | none() => false end;
-        let move = match moved | true => x[] | false => ansi/move_to(x, y) end;
-        let restyled = match pen.style | some(s) => s == tile.style | none() => false end;
-        let sgr = match restyled | true => x[] | false => ansi/sgr(tile.style) end;
-        Pen {
-            out = x[..pen.out, ..move, ..sgr, ..Str/to_bytes(tile.symbol)],
-            style = Option/some(tile.style),
-            at = Option/some((x + width, y)) }
+    match before == Option/some(tile)
+    | true => pen
+    | false =>
+        match tile
+        | continuation() => pen
+        | glyph(g, style) =>
+            let there = match pen.at | some(p) => p.0 == x && p.1 == y | none() => false end;
+            let move = match there | true => x[] | false => ansi/move_to(x, y) end;
+            let kept = match pen.style | some(s) => s == style | none() => false end;
+            let sgr = match kept | true => x[] | false => ansi/sgr(style) end;
+            let text = Str/to_bytes(Glyph/text(g));
+            Pen {
+                out = x[..pen.out, ..move, ..sgr, ..text],
+                style = Option/some(style),
+                at =
+                    match agreed(text)
+                    | true => Option/some((x + Glyph/width(g), y))
+                    | false => Option/none()
+                    end }
+        end
     end;
 
 let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Tile, w), before: Option(Vec(Tile, w))) -> Pen =
@@ -36,13 +47,13 @@ let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Tile, w), before: Option(Vec(T
         pen,
         (entry, acc) => paint(acc, entry.0.0, y, entry.0.1, entry.1));
 
---- The bytes that take the terminal from `previous` to `next`, tiles written only where they differ, and the cursor placed at `cursor` or hidden. With no previous frame the screen is cleared and every tile written.
+--- The bytes that take the terminal from `previous` to `next`: tiles written only where they differ, inside one synchronized update, and the cursor placed at `cursor` or hidden. With no previous frame the screen is cleared and every tile written.
 pub let render(
     @w: Nat,
     @h: Nat,
     previous: Option(Frame(w, h)),
     next: Frame(w, h),
-    cursor: Option({x: Nat, y: Nat}),
+    cursor: Option(View/Point(w, h)),
 ) -> Bytes =
     let clear = match previous | some(_) => x[] | none() => ansi/clear end;
     let rows = List/zip(List/range(0, h), Vec/to_list(next));

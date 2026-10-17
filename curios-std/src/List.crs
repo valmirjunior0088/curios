@@ -16,6 +16,10 @@ pub use Permutation/{let Permutation};
 pub mod ordered;
 pub use ordered/{let ordered};
 
+--- Whether every element of a list satisfies a predicate, with what builds that at a cons.
+pub mod all;
+pub use all/{let all};
+
 --- That each element of a list stands in a relation to every one after it.
 pub mod Pairwise;
 pub use Pairwise/{let Pairwise};
@@ -61,13 +65,6 @@ pub let any(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
     match l
     | [] => false
     | [h, ..t] => match pred(h) | true => true | false => any(t, pred) end
-    end;
-
---- Whether `pred` accepts every element.
-pub let all(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
-    match l
-    | [] => true
-    | [h, ..t] => match pred(h) | true => all(t, pred) | false => false end
     end;
 
 --- Whether `x` is an element.

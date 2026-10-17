@@ -1,56 +1,182 @@
--- The renderer: what a first frame writes, what a diff writes, and what it skips.
-use /std/{Nat, Str, Bytes, Vec, Option, Result, Test, Tui};
-use /std/Tui/{Style, Tile, Frame};
+-- The renderer: what a first frame writes, what a diff writes and skips, and that what it writes takes a terminal to the frame it was asked for.
+use /std/{Nat, Byte, Str, Bytes, List, Vec, Option, Result, Test, Tui};
+use /std/Tui/{Style, Line, Glyph, Frame, View};
 
 let esc: Str =
     Result/unwrap_or(Str/of_bytes(x[0x1B]), "");
 
 -- The bytes as text, with `ESC` shown as `^[`, so an expectation is readable.
-let shown(b: Bytes) -> Str =
+let spelled(b: Bytes) -> Str =
     Str/replace(Result/unwrap_or(Str/of_bytes(b), "?"), esc, "^[");
 
-let none_at: Option({x: Nat, y: Nat}) =
+let row(style: Style, s: Str, w: Nat) -> View(w, 1) =
+    View/fit(View/text(style, s), w, 1);
+
+let none_at: Option(View/Point(2, 1)) =
     Option/none();
 
 -- With no previous frame, the screen is cleared and every tile written, one move at the start and one style for the run.
-test a_first_frame_clears_and_writes_every_cell =
-    let f = Frame/of_lines(Style/plain, ["ab"], 2, 1);
+test a_first_frame_clears_and_writes_every_tile =
+    let f = Frame/of_view(row(Style/plain, "ab", 2));
     Test/equal(
-        shown(Tui/render(Option/none(), f, none_at)),
+        spelled(Tui/render(Option/none(), f, none_at)),
         "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0mab^[[0m^[[?2026l");
 
 -- Against a previous frame, only the tile that differs is written, with one move to it.
-test a_diff_writes_only_the_changed_cell =
-    let before = Frame/of_lines(Style/plain, ["ab", "cd"], 2, 2);
-    let after = Frame/of_lines(Style/plain, ["ab", "cX"], 2, 2);
+test a_diff_writes_only_the_changed_tile =
+    let before = Frame/of_view(View/above(row(Style/plain, "ab", 2), row(Style/plain, "cd", 2)));
+    let after = Frame/of_view(View/above(row(Style/plain, "ab", 2), row(Style/plain, "cX", 2)));
     Test/equal(
-        shown(Tui/render(Option/some(before), after, none_at)),
+        spelled(Tui/render(Option/some(before), after, Option/none())),
         "^[[?2026h^[[?25l^[[2;2H^[[0mX^[[0m^[[?2026l");
 
 -- An unchanged frame writes only the bracket.
 test an_unchanged_frame_writes_only_the_bracket =
-    let f = Frame/of_lines(Style/plain, ["ab"], 2, 1);
-    Test/equal(shown(Tui/render(Option/some(f), f, none_at)), "^[[?2026h^[[?25l^[[0m^[[?2026l");
+    let f = Frame/of_view(row(Style/plain, "ab", 2));
+    Test/equal(spelled(Tui/render(Option/some(f), f, none_at)), "^[[?2026h^[[?25l^[[0m^[[?2026l");
 
--- A wide symbol is written once and its continuation tile not at all; the pen knows it advanced two columns, so the tile after needs no move.
-test a_wide_symbol_is_written_once =
-    let f = Frame/of_lines(Style/plain, ["日a"], 3, 1);
+-- A wide glyph is written once and its second column not at all; after it the renderer moves to the next tile rather than trusting the terminal to have measured the glyph as it does, so a terminal that disagrees misplaces that glyph alone.
+test a_glyph_terminals_may_measure_otherwise_is_followed_by_a_move =
+    let f = Frame/of_view(row(Style/plain, "日a", 3));
     Test/equal(
-        shown(Tui/render(Option/none(), f, none_at)),
-        "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0m日a^[[0m^[[?2026l");
+        spelled(Tui/render(Option/none(), f, Option/none())),
+        "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0m日^[[1;3Ha^[[0m^[[?2026l");
 
 -- The style is written where it changes, as the whole style from a reset.
 test a_style_change_is_written_whole =
     let bold = Style { ..Style/plain, fg = Tui/Color/red, bold = true };
-    let row = Vec/cons(Tile/of_str(Style/plain, "a"), Vec/cons(Tile/of_str(bold, "b"), Vec/nil()));
-    let f: Frame(2, 1) = Vec/cons(row, Vec/nil());
+    let f =
+        Frame/of_view(
+            View/fit(View/beside(View/text(Style/plain, "a"), View/text(bold, "b")), 2, 1));
     Test/equal(
-        shown(Tui/render(Option/none(), f, none_at)),
+        spelled(Tui/render(Option/none(), f, none_at)),
         "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0ma^[[0;31;1mb^[[0m^[[?2026l");
 
 -- A cursor is placed and shown after the tiles, and hidden while they are written.
-test the_cursor_is_placed_after_the_cells =
-    let f = Frame/of_lines(Style/plain, ["ab"], 2, 1);
+test the_cursor_is_placed_after_the_tiles =
+    let f = Frame/of_view(row(Style/plain, "ab", 2));
     Test/equal(
-        shown(Tui/render(Option/some(f), f, Option/some((x = 1, y = 0)))),
+        spelled(Tui/render(Option/some(f), f, Option/some(View/Point(2, 1) { x = 1, y = 0 }))),
         "^[[?2026h^[[?25l^[[0m^[[1;2H^[[?25h^[[?2026l");
+
+-- Text that holds controls reaches the terminal as their pictures: no bell, no line break and no Escape but the renderer's own sequences' is written, so a label cannot set a window title or move the cursor.
+test text_holding_controls_writes_none_of_them =
+    let f = Frame/of_view(row(Style/plain, "a\u{1B}]0;x\u{7}\nb", 9));
+    let written = Tui/render(Option/none(), f, Option/none());
+    Test/all([
+        Test/equal(Frame/to_lines(f), ["a␛]0;x␇␊b"]),
+        Test/assert(Bytes/all(written, (b) => Byte/to_nat(b) != 0x07 && Byte/to_nat(b) != 0x0A)),
+        Test/equal(
+            spelled(written),
+            "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0ma␛^[[1;3H]0;x␇^[[1;8H␊^[[1;9Hb^[[0m^[[?2026l")]);
+
+-- A model terminal, enough of one to replay what the renderer writes: a grid of cells, each the text a tile shows, and a cursor; a move, a clear and the text between sequences are what it reads, and every other sequence it passes over.
+struct Screen: Type {
+    cells: List(List(Str)),
+    x: Nat,
+    y: Nat,
+}
+
+let cells_of(@w: Nat, @h: Nat, f: Frame(w, h)) -> List(List(Str)) =
+    List/map(
+        Vec/to_list(f),
+        (r) =>
+            List/map(
+                Vec/to_list(r),
+                (tile) => match tile | glyph(g, _) => Glyph/text(g) | continuation() => "" end));
+
+let set(row: List(Str), at: Nat, value: Str) -> List(Str) =
+    List/map(
+        List/zip(List/range(0, List/len(row)), row),
+        (cell) => match cell.0 == at | true => value | false => cell.1 end);
+
+-- `cluster` written where the screen's cursor stands, the cursor past the columns it takes.
+let put(s: Screen, cluster: Str) -> Screen =
+    let columns = Line/width(Line/of_str(cluster));
+    let written =
+        List/map(
+            List/zip(List/range(0, List/len(s.cells)), s.cells),
+            (r) =>
+                match r.0 == s.y
+                | false => r.1
+                | true =>
+                    match columns == 2
+                    | true => set(set(r.1, s.x, cluster), s.x + 1, "")
+                    | false => set(r.1, s.x, cluster)
+                    end
+                end);
+    Screen { cells = written, x = s.x + columns, y = s.y };
+
+-- The numbers a sequence's parameter bytes spell, `;` apart.
+let numbers(params: Bytes) -> List(Nat) =
+    List/map(
+        Str/split(Result/unwrap_or(Str/of_bytes(params), ""), ";"),
+        (field) => Option/unwrap_or(Nat/of_str(field), 0));
+
+-- The text `text` holds, written where the screen's cursor stands, a cluster at a time.
+let flush(s: Screen, text: Bytes) -> Screen =
+    List/fold(
+        Str/graphemes(Result/unwrap_or(Str/of_bytes(text), "")),
+        s,
+        (cluster, acc) => put(acc, cluster));
+
+-- `written` read over `start`, a byte at a step: in text (`0`), past an Escape (`1`), or among a sequence's parameters (`2`).
+let replay(start: Screen, written: Bytes) -> Screen =
+    let blanked(cells: List(List(Str))) -> List(List(Str)) =
+        List/map(cells, (r) => List/map(r, (_) => " "));
+    let go(s: Screen, rest: Bytes, text: Bytes, params: Bytes, state: Nat) -> Screen =
+        match rest
+        | x[] => flush(s, text)
+        | x[b, ..more] =>
+            let n = Byte/to_nat(b);
+            match state
+            | 0 =>
+                match n == 0x1B
+                | true => go(flush(s, text), more, x[], x[], 1)
+                | false => go(s, more, x[..text, b], params, 0)
+                end
+            | 1 => go(s, more, x[], x[], 2)
+            | _ =>
+                choose
+                | n == 'H' =>
+                    let p = numbers(params);
+                    let at = (k: Nat) => Option/unwrap_or(List/try_get(p, k), 1) - 1;
+                    go(Screen { ..s, x = at(1), y = at(0) }, more, x[], x[], 0)
+                | n == 'J' => go(Screen { ..s, cells = blanked(s.cells) }, more, x[], x[], 0)
+                | Nat/in_range(n, 0x40, 0x7E) => go(s, more, x[], x[], 0)
+                | _ => go(s, more, x[], x[..params, b], 2)
+                end
+            end
+        end;
+    go(start, written, x[], x[], 0);
+
+-- What the renderer writes takes a terminal showing the previous frame to the next one, whatever changed between them — a word for another, a wide glyph for two narrow ones, a style — and takes a terminal showing anything to the frame where there is no previous one.
+test what_the_renderer_writes_takes_a_terminal_to_the_frame =
+    let frame =
+        (top: Str, bottom: Str) =>
+            Frame/of_view(
+                View/above(
+                    row(Style/plain, top, 4),
+                    row(Style { ..Style/plain, bold = true }, bottom, 4)));
+    let pairs =
+        [
+            (frame("abcd", "efgh"), frame("abXd", "efgh")),
+            (frame("日本", "ab"), frame("a日b", "日本")),
+            (frame("éx", "😀!"), frame("....", "😀?")),
+            (frame("", ""), frame("wxyz", "1234"))];
+    let replayed =
+        (before: Frame(4, 2), after: Frame(4, 2)) =>
+            replay(
+                Screen { cells = cells_of(before), x = 0, y = 0 },
+                Tui/render(Option/some(before), after, Option/none())).cells;
+    let fresh =
+        (after: Frame(4, 2)) =>
+            replay(
+                Screen { cells = cells_of(frame("????", "????")), x = 0, y = 0 },
+                Tui/render(Option/none(), after, Option/none())).cells;
+    Test/all(
+        List/flatten(
+            List/map(pairs, (pair) =>
+                [
+                    Test/equal(replayed(pair.0, pair.1), cells_of(pair.1)),
+                    Test/equal(fresh(pair.1), cells_of(pair.1))])));

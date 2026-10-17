@@ -1096,13 +1096,16 @@ const DECLINED: [&str; 13] = [
     "/std/Nat/Gcd/euclid",
     "/std/Nat/Gcd/scaled",
     "/std/Nat/Gcd/unique",
-    "/std/Tui/Field/draw",
-    "/std/Tui/Listing/draw",
-    "/std/Tui/border/edge",
+    "/std/Tui/Field/view",
+    "/std/Tui/Listing/view",
+    "/std/Tui/Pane/border/border",
 ];
 
-/// The `let`s of the library that are refused as a report prints them: none.
-const REFUSED: [&str; 0] = [];
+/// The `let`s of the library that are refused as a report prints them, under their reason.
+const REFUSED: [&str; 1] = [
+    // Its guard's fact proves a proof field over a recursive call, and the call written with its implicit argument, as a report prints it, is no guard the field's statement meets (`documentation/roadmap/theory/000-findings.md`).
+    "/std/Tui/Glyph/of_cluster",
+];
 
 /// The `let`s of the library whose printed form elaborates and is not proved to be the `let`: none.
 const UNPROVED: [&str; 0] = [];

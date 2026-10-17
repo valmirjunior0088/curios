@@ -93,7 +93,7 @@ fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
     // The first frame is the whole screen: a clear, the border's corner, the title. The second is a diff: no clear, and the two rows whose highlight moved.
     assert_eq!(output.matches("\x1b[2J").count(), 1, "{output:?}");
     assert_eq!(output.matches("\x1b[?2026h").count(), 2, "{output:?}");
-    assert!(output.contains("┌pick"), "{output:?}");
+    assert!(output.contains("┌\x1b[1;2Hpick"), "{output:?}");
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
@@ -153,14 +153,14 @@ fn drawing_history_and_size_travel_with_the_returned_session() {
     let (host, io) = MockHost::builder().tty_sizes([(4, 2), (6, 3)]).build();
     run_text(
         r#"
-        use /std/{Nat, Option, Try, Io, print};
-        use /std/Tui/{Session, Frame};
+        use /std/{Nat, Try, Io, print};
+        use /std/Tui/{Session, View};
         let program() -> Io({}) =
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) =>
-                let drawn = Session/draw(s, Frame/blank(4, 2), Option/none())!;
-                let again = Session/draw(drawn, Frame/blank(4, 2), Option/none())!;
+                let drawn = Session/draw(s, View/blank(4, 2))!;
+                let again = Session/draw(drawn, View/blank(4, 2))!;
                 let resized = Session/size(again)!;
-                let _ = Session/draw(resized.0, Frame/blank(6, 3), Option/none())!;
+                let _ = Session/draw(resized.0, View/blank(6, 3))!;
                 let original = Session/last_size(s)!;
                 let updated = Session/last_size(resized.0)!;
                 let _ = print(Nat/to_str(original.cols))!;
@@ -187,8 +187,8 @@ fn resize_events_update_the_drawing_session_before_rendering() {
         .build();
     run_text(
         r#"
-        use /std/{Nat, Option, Try, Tui, Io, print};
-        use /std/Tui/{Frame, Directive};
+        use /std/{Nat, Try, Tui, Io, print};
+        use /std/Tui/{View, Directive};
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/none()),
             update(model, event) = match event
@@ -198,8 +198,7 @@ fn resize_events_update_the_drawing_session_before_rendering() {
                     end
                 | _ => (model, Directive/none())
                 end,
-            view(model, w, h) = Frame/blank(w, h),
-            cursor(model, w, h) = Option/none(),
+            view(model) = (w, h) => View/blank(w, h),
         };
         let program() -> Io({}) =
             let result = Try/run(Tui/run(app))!;
@@ -217,13 +216,12 @@ fn resize_events_update_the_drawing_session_before_rendering() {
 
 // A program that never quits by itself, so what ends its run is its terminal: a failure is printed by its name, and a run that ended any other way prints that it did.
 const IDLE_PROGRAM: &str = r#"
-        use /std/{Nat, Option, Try, Show, Tui, Io, print};
-        use /std/Tui/{Frame, Directive};
+        use /std/{Nat, Try, Show, Tui, Io, print};
+        use /std/Tui/{View, Directive};
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/none()),
             update(model, event) = (model, Directive/none()),
-            view(model, w, h) = Frame/blank(w, h),
-            cursor(model, w, h) = Option/none(),
+            view(model) = (w, h) => View/blank(w, h),
         };
         let program() -> Io({}) =
             let result = Try/run(Tui/run(app))!;
@@ -280,9 +278,9 @@ fn a_program_outlives_the_end_of_its_input() {
         .build();
     run_text(
         r#"
-        use /std/{Nat, Option, Try, Tui, Io, print};
+        use /std/{Nat, Try, Tui, Io, print};
         use /std/time/{Duration};
-        use /std/Tui/{Frame, Directive};
+        use /std/Tui/{View, Directive};
         let later() -> Io(Nat) =
             let _ = Io/sleep(Duration/of_millis(300))!;
             Io/pure(7);
@@ -292,8 +290,7 @@ fn a_program_outlives_the_end_of_its_input() {
                 | custom(n) => (n, Directive/quit())
                 | _ => (model, Directive/none())
                 end,
-            view(model, w, h) = Frame/blank(w, h),
-            cursor(model, w, h) = Option/none(),
+            view(model) = (w, h) => View/blank(w, h),
         };
         let program() -> Io({}) =
             let result = Try/run(Tui/run(app))!;
@@ -311,7 +308,7 @@ fn a_program_outlives_the_end_of_its_input() {
 // Shared with the coordination measurement so both exercise the same application.
 pub(super) const LISTING_PROGRAM: &str = r#"
         use /std/{Nat, Str, Bool, List, Option, Try, Io, Show, Tui};
-        use /std/Tui/{Style, Frame, Key, Event, Directive, Listing};
+        use /std/Tui/{Style, Pane, Key, Event, Directive, Listing};
         let app: Tui(Listing, Nat) =
             Tui {
                 init = (Listing/new(["one", "two", "three"]), Directive/none()),
@@ -324,26 +321,7 @@ pub(super) const LISTING_PROGRAM: &str = r#"
                         end
                     | _ => (model, Directive/none())
                     end,
-                view(model, w, h) =
-                    let boxed(iw: Nat, ih: Nat) -> Frame(iw + 2, ih + 2) =
-                        Tui/border(Style/plain, "pick", Listing/draw(model, Style/plain, Style { ..Style/plain, reverse = true }, iw, ih));
-                    match w: (a) => Frame(a, h)
-                    | 0 => Frame/blank(0, h)
-                    | w1 + 1 =>
-                        match w1: (b) => Frame(b + 1, h)
-                        | 0 => Frame/blank(1, h)
-                        | iw + 1 =>
-                            match h: (c) => Frame(iw + 1 + 1, c)
-                            | 0 => Frame/blank(iw + 1 + 1, 0)
-                            | h1 + 1 =>
-                                match h1: (d) => Frame(iw + 1 + 1, d + 1)
-                                | 0 => Frame/blank(iw + 1 + 1, 1)
-                                | ih + 1 => boxed(iw, ih)
-                                end
-                            end
-                        end
-                    end,
-                cursor(model, w, h) = Option/none(),
+                view(model) = Pane/border(Style/plain, "pick", Listing/view(model, Style/plain, Style { ..Style/plain, reverse = true })),
             };
         let program() -> Io({}) =
             let outcome = Try/run(Tui/run(app))!;

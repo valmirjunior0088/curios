@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, List, Option, Io, Try, Tty, Channel};
+use /std/{Nat, Bool, List, Io, Try, Tty, Channel};
 use /std/time/{Duration};
 
 --- A terminal colour, in the four forms a terminal understands.
@@ -9,20 +9,29 @@ pub use Color/{let Color};
 pub mod Style;
 pub use Style/{let Style};
 
---- One tile of the screen: a column of a row, with its text and its style.
+--- One grapheme cluster as a terminal draws it, printable by proof, in one column or two.
+pub mod Glyph;
+pub use Glyph/{let Glyph};
+
+--- A row of glyphs: text as a terminal draws it, and the truncation and wrapping measured over it.
+pub mod Line;
+pub use Line/{let Line};
+
+--- One column of a row of the screen: a glyph in its style, or the second column of a wide one.
 pub mod Tile;
 pub use Tile/{let Tile};
 
---- How wide a string is on a terminal, and truncation and wrapping over that measurement.
-pub mod text;
-
---- A screen or a part of one, with its size in its type, and the algebra that builds one.
+--- What a view is drawn as: its rows of tiles, with its size in its type.
 pub mod Frame;
 pub use Frame/{let Frame};
 
---- A tree of named panes, and the sizes a frame splits into along it.
-pub mod Layout;
-pub use Layout/{let Layout};
+--- What a terminal is to show at a size its type holds, the algebra that composes one, and where it asks for the cursor.
+pub mod View;
+pub use View/{let View};
+
+--- A view of whatever size it is given: the layouts that share an axis among panes, and the drawings that fill their room.
+pub mod Pane;
+pub use Pane/{let Pane};
 
 --- A key as a program sees it: a code and three modifiers.
 pub mod Key;
@@ -38,20 +47,12 @@ pub mod input;
 mod ansi;
 
 --- Two frames of one size into the bytes that carry the terminal from the first to the second.
-pub mod render;
+mod render;
 pub use render/{let render};
 
 --- The terminal taken and given back, and what a program with a loop of its own writes it over.
 pub mod Session;
 pub use Session/{let Session};
-
---- A frame in a box.
-pub mod border;
-pub use border/{let border};
-
---- `s` in `style` wrapped at `w`, each line fitted, the whole fitted to `h`.
-pub let paragraph(style: Style, s: Str, w: Nat, h: Nat) -> Frame(w, h) =
-    Frame/of_lines(style, text/wrap(s, w), w, h);
 
 --- A list with one selected entry.
 pub mod Listing;
@@ -61,37 +62,19 @@ pub use Listing/{let Listing};
 pub mod Field;
 pub use Field/{let Field};
 
---- A window onto a larger frame: the part of `frame` from `x`, `y` on, at `w` by `h`. A window past the edge shows blank.
-pub let viewport(
-    @w0: Nat,
-    @h0: Nat,
-    frame: Frame(w0, h0),
-    x: Nat,
-    y: Nat,
-    w: Nat,
-    h: Nat,
-) -> Frame(w, h) =
-    Frame/fit(Frame/crop(frame, x, y).frame, w, h);
-
---- A run of readings as a line.
-pub mod wave;
-pub use wave/{let wave};
-
 --- What an `update` asks the loop to do beside the new model.
 pub mod Directive;
 pub use Directive/{let Directive};
 
---- A program: its first model and directive, how an event changes the model, what the model looks like at a size, and where the cursor goes.
+--- A program: its first model and directive, how an event changes the model, and what the model looks like.
 pub struct Tui(M: Type, E: Type): pub Type {
     init: {M, Directive(E)},
     update: (model: M, event: Event(E)) -> {M, Directive(E)},
-    --- Typed at the size it is given, so a frame that does not fill the terminal is refused where it is written.
-    view: (model: M, w: Nat, h: Nat) -> Frame(w, h),
-    --- Where the terminal's cursor goes, or hidden.
-    cursor: (model: M, w: Nat, h: Nat) -> Option({x: Nat, y: Nat}),
+    --- The model as a pane, drawn at the terminal's size: a view of exactly that size, its cursor where it asks for one.
+    view: (model: M) -> Pane,
 }
 
---- The program's fold with no terminal: `events` through `update` from the initial model, stopping at the first `quit`. Answers the model, whether it quit, the frame at `w` by `h`, and every `perform` it asked for, unrun.
+--- The program's fold with no terminal: `events` through `update` from the initial model, stopping at the first `quit`. Answers the model, whether it quit, its view at `w` by `h`, and every `perform` it asked for, unrun.
 pub let drive(
     @M: Type,
     @E: Type,
@@ -99,7 +82,7 @@ pub let drive(
     w: Nat,
     h: Nat,
     events: List(Event(E)),
-) -> {model: M, quit: Bool, frame: Frame(w, h), pending: List(Io(E))} =
+) -> {model: M, quit: Bool, view: View(w, h), pending: List(Io(E))} =
     let start = app.init.1;
     let state =
         List/fold(
@@ -116,7 +99,7 @@ pub let drive(
     (
         model = state.model,
         quit = state.quit,
-        frame = app.view(state.model, w, h),
+        view = app.view(state.model)(w, h),
         pending = state.pending);
 
 -- What wakes the loop: an event for the program, or the failure of its terminal, which ends the run. A failure is no `Event`, a type every program matches.
@@ -180,7 +163,7 @@ let running(
         Io/pure(c.stop);
     let draw(session: Session, m: M) -> Io(Session) =
         let sz = Session/last_size(session)!;
-        Session/draw(session, app.view(m, sz.cols, sz.rows), app.cursor(m, sz.cols, sz.rows));
+        Session/draw(session, app.view(m)(sz.cols, sz.rows));
     let drain(session: Session, m: M, events: List(Event(E))) -> Io({Session, M, Bool}) =
         match events
         | [] => Io/pure((session, m, false))

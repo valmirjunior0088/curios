@@ -1,0 +1,16 @@
+use /std/{Nat, Str, Show};
+use /std/ops/{Eql};
+
+--- The terminal's size in cells.
+pub struct Size: pub Type {
+    cols: Nat,
+    rows: Nat,
+}
+
+satisfy Eql(Size) {
+    ..
+}
+
+satisfy Show(Size) {
+    show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),
+}

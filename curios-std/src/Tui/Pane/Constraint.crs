@@ -1,0 +1,53 @@
+use /std/{Nat, List};
+use /std/Bool/{Holds};
+
+--- How a part claims its share of an axis.
+pub induct Constraint: pub Type
+--- Exactly this many cells.
+| length(Nat)
+--- At least this many, and a share of what the others leave as a fill of weight one takes.
+| min(Nat)
+--- This percentage of the whole axis, at most the whole.
+| percent(p: Nat, @at_most: Holds(p <= 100))
+--- A share of whatever the others leave, by its weight, which is above nothing.
+| fill(weight: Nat, @positive: Holds(0 < weight))
+end
+
+pub use Constraint/*;
+
+-- What `c` claims before anything is shared out.
+let claimed(avail: Nat, c: Constraint) -> Nat =
+    match c
+    | length(n) => n
+    | min(n) => n
+    | percent(p) => avail * p / 100
+    | fill(_) => 0
+    end;
+
+-- The weight `c` takes a share of what is left by.
+let weight(c: Constraint) -> Nat =
+    match c | min(_) => 1 | fill(k) => k | _ => 0 end;
+
+--- `avail` shared among `cs` in one deterministic pass: what lengths, floors and percentages claim first, then what they leave among the floors and the fills by weight, and the rounding's shortfall to the last of those. An axis the claims overrun answers the claims as written, and a view cuts it where it ends.
+pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
+    let total(ns: List(Nat)) -> Nat = List/fold(ns, 0, (n, sum) => n + sum);
+    let fixed = total(List/map(cs, (c) => claimed(avail, c)));
+    let weights = total(List/map(cs, weight));
+    let spare = avail - fixed;
+    let share(c: Constraint) -> Nat =
+        match Nat/lt/try(0, weights)
+        | none() => claimed(avail, c)
+        | some(_) => claimed(avail, c) + spare * weight(c) / weights
+        end;
+    let shortfall = avail - total(List/map(cs, share));
+    -- From the last part back, so the first weighted one met is the last, which takes the shortfall.
+    let settled =
+        List/fold(
+            List/reverse(cs),
+            (given = false, out = []),
+            (c, acc) =>
+                match acc.given || weight(c) == 0
+                | true => (given = acc.given, out = [share(c), ..acc.out])
+                | false => (given = true, out = [share(c) + shortfall, ..acc.out])
+                end);
+    settled.out;
