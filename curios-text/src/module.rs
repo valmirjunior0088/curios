@@ -3,7 +3,7 @@ use {
         Argument, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature,
         LoadError, Name, RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam,
         clear_comments, parse_file_head, parse_optional_term, parse_program_end, parse_term,
-        parse_top_item, print_module_items, print_term, take_comments,
+        parse_top_item, parsed, print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
     curios_parse::{
@@ -478,26 +478,14 @@ impl Module {
         Ok((module.trimmed(&comments), comments))
     }
 
-    /// Read and parse a standalone module while retaining its source path for diagnostics. `curios-package` reads a library's header with it to learn what the library declares; ordinary compilation reaches file-backed modules through [`RootSource`], which parses each text at most once.
+    /// Read and parse a standalone module from the disk, through the thread's parse memo as every file-backed module is read ([`RootSource`]): `curios-package` reads a library's header with it to learn what the library declares, and the compilation that reads the same text afterwards parses nothing.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
-        Self::read(path.as_ref()).map(|(module, _)| module)
+        parsed(path.as_ref(), None).map(|(module, _)| module)
     }
 
     /// [`Module::from_path`] with `text` standing in for what `path` holds — an editor's unsaved buffer.
     pub fn overlaid(path: &Path, text: &str) -> Result<Self, ParserError> {
         Self::parse(&Source::held(path, text))
-    }
-
-    /// [`Module::from_path`], additionally handing back the [`Source`] it parsed — which costs a refcount, since the module's spans already hold it.
-    pub(crate) fn read(path: &Path) -> Result<(Self, Arc<Source>), LoadError> {
-        let source = Source::read(path).map_err(|error| LoadError::Read {
-            path: path.into(),
-            error,
-        })?;
-
-        Module::parse(&source)
-            .map(|module| (module, source))
-            .map_err(LoadError::Parse)
     }
 }
 

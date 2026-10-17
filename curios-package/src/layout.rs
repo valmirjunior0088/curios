@@ -106,7 +106,7 @@ fn spelled_segments(relative: &Path) -> Option<Vec<String>> {
 
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.
 ///
-/// The header is read here and read again when discovery asks for it. That is deliberate: the stem refusal below has to fire before elaboration, and a header is one small file — paying for it twice is cheaper than a refusal arriving as an unbound name. Read from disk both times; a source overlay reaches discovery's read and not this one, so a stem collision is judged on what is saved, which is the only thing a collision can be between.
+/// The header is read here and read again when discovery asks for it. That is deliberate: the stem refusal below has to fire before elaboration, and a refusal arriving as an unbound name would say nothing of the stem. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo (`curios_text::Module::from_path`). Read from disk here; a source overlay reaches discovery's read and not this one, so a stem collision is judged on what is saved, which is the only thing a collision can be between.
 pub fn package_source(package: &Package, directory: &Path) -> Result<Option<RootSource>, String> {
     let umbrella = umbrella_over(directory)?;
     require_compiler(
