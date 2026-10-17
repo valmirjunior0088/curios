@@ -4,7 +4,7 @@
 
 ## What is missing
 
-`display_mismatch` normalizes the two sides of a mismatch where its error is raised, and chooses among the specialized reports by reducing them (`sort_decided_twice`, `unembedded_action`, `implicit_at_other_sort`); an error raised under a bracket that rolls back is thrown away with what was built for it. Elaborating `/std` builds 389 such displays, 778 sides normalized, and reports none; with the normalization skipped, `/std` spends 65,514,611 units where it spends 65,545,426 and two declarations commit other terms through the identities the normalization minted. Counted at `68ca73258`. Once [An identity is read by its equality and its age](../arithmetic/101-an-identity-is-read-by-its-equality-and-its-age.md) has landed, what is left is the budget and the cost: a declaration near its budget can be refused for a report it never makes.
+`display_mismatch` normalizes the two sides of a mismatch where its error is raised, and chooses among the specialized reports by reducing them (`sort_decided_twice`, `unembedded_action`, `implicit_at_other_sort`); an error raised under a bracket that rolls back is thrown away with what was built for it. Elaborating `/std` builds 389 such displays, 778 sides normalized, and reports none, and with the normalization skipped `/std` spends 65,514,611 units where it spends 65,545,426, counted at `68ca73258`. The identities the normalization mints move nothing, an atom being ranked by the age of its identities and never by their values ([A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md)), so what is left is the budget and the cost: a declaration near its budget can be refused for a report it never makes.
 
 ## Design
 

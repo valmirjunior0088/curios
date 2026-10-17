@@ -1,6 +1,6 @@
 # A stuck fold keeps what its walk found
 
-**Not refined yet.** This specification reserves a stuck operation's fold taken again from what the operations beneath it found, where each reducer walks every node beneath it again today. It is not an implementation plan. It is taken after [An identity is read by its equality and its age](101-an-identity-is-read-by-its-equality-and-its-age.md), which changes the same normal forms.
+**Not refined yet.** This specification reserves a stuck operation's fold taken again from what the operations beneath it found, where each reducer walks every node beneath it again today. It is not an implementation plan.
 
 ## What is missing
 
