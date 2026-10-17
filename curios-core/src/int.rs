@@ -29,6 +29,8 @@ pub(crate) struct IntOrigin {
     factors: Vec<Term>,
     /// The left-nested product of `factors` as the summand held it. A rebuild hands it back in place of writing the product again, so a sum that keeps a monomial writes a node for it and none for its factors, as `Nat`'s keeps the factor it read.
     spine: Option<Term>,
+    /// The summand and the coefficient it was read at, where it is spelled over `spine` as [`int_scaled_spine`] writes one. A rebuild at that coefficient hands the summand back whole, as `Nat`'s does.
+    written: Option<(Integer, Term)>,
 }
 
 /// A signed combination as this module reads one: each summand's origin is its monomial as it was read, which a rebuild restores.
@@ -109,7 +111,15 @@ pub(crate) fn int_linear(summands: impl IntoIterator<Item = Term>) -> Vec<Monomi
 /// The atoms are put in their own order, as `Nat`'s are: [`int_monomial`] orders factors by the rank of each as written, levels included, so two instances of one polymorphic factor can sort apart, while an atom's rank is its projected term's, which no level moves.
 fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, IntOrigin>> {
     let (coefficient, factors) = int_monomial(summand);
-    (!coefficient.is_zero()).then(|| Summand {
+    if coefficient.is_zero() {
+        return None;
+    }
+    let spine = int_written(summand, &factors);
+    let written = spine
+        .as_ref()
+        .is_some_and(|spine| int_scaled_as(summand, &coefficient, spine))
+        .then(|| (coefficient.clone(), summand.clone()));
+    Some(Summand {
         coefficient,
         monomial: curios_algebra::Monomial::product(
             factors
@@ -118,10 +128,22 @@ fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, Int
                 .collect(),
         ),
         origin: IntOrigin {
-            spine: int_written(summand, &factors),
+            spine,
             factors,
+            written,
         },
     })
+}
+
+/// Whether `summand` is spelled `coefficient · spine` as [`int_scaled_spine`] writes it: the spine itself under a unit coefficient, and otherwise the product with the literal on its left.
+fn int_scaled_as(summand: &Term, coefficient: &Integer, spine: &Term) -> bool {
+    match &**summand {
+        _ if *coefficient == one() => summand.identity() == spine.identity(),
+        Subterm::Intrinsic(Intrinsic::IntMul(left, right)) => {
+            right.identity() == spine.identity() && *left == literal(coefficient.clone())
+        }
+        _ => false,
+    }
 }
 
 /// The spine `summand` holds where it is written as the fold writes a monomial: `factors` multiplied left to right in their order, under a literal coefficient on its left or under none. `None` for any other spelling — factors in another order, a literal inside the product — which a rebuild writes again in the canonical one.
@@ -163,17 +185,26 @@ fn int_monomials_of(combination: Signed) -> Vec<Monomial> {
         .collect()
 }
 
-/// A combination written back into the normal form, each monomial the spine it was read over where it was read over one.
-fn int_from_combination(combination: Signed) -> Term {
+/// A combination's constant and its summands as the normal form writes them back: each summand the node it was read from where it stands at the coefficient it was read at, and otherwise its monomial the spine it was read over where it was read over one — a rebuild that changes nothing hands back the node it was given (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`).
+fn int_written_of(combination: Signed) -> (Integer, Vec<Term>) {
     let summands = combination
         .summands
         .into_iter()
-        .map(|summand| match summand.origin.spine {
-            Some(spine) => int_scaled_spine(summand.coefficient, spine),
-            None => int_scaled(summand.coefficient, &summand.origin.factors),
-        });
+        .map(|summand| match summand.origin.written {
+            Some((read, written)) if read == summand.coefficient => written,
+            _ => match summand.origin.spine {
+                Some(spine) => int_scaled_spine(summand.coefficient, spine),
+                None => int_scaled(summand.coefficient, &summand.origin.factors),
+            },
+        })
+        .collect();
+    (combination.constant, summands)
+}
 
-    int_summed(combination.constant, summands)
+/// A combination written back into the normal form ([`int_written_of`]).
+fn int_from_combination(combination: Signed) -> Term {
+    let (constant, summands) = int_written_of(combination);
+    int_summed(constant, None, &summands)
 }
 
 /// The bare monomial over `factors`, nested to the left in the order given.
@@ -202,17 +233,21 @@ fn int_scaled_spine(coefficient: Integer, spine: Term) -> Term {
 
 /// A combination and a constant written back into the normal form every reader here reads: summands folded left to right, the constant last and absent when zero, a combination with nothing in it the constant alone.
 pub(crate) fn int_from_linear(constant: Integer, combination: Vec<Monomial>) -> Term {
-    int_summed(
-        constant,
-        combination
-            .into_iter()
-            .map(|(coefficient, factors)| int_scaled(coefficient, &factors)),
-    )
+    let summands = combination
+        .into_iter()
+        .map(|(coefficient, factors)| int_scaled(coefficient, &factors))
+        .collect::<Vec<_>>();
+    int_summed(constant, None, &summands)
 }
 
-/// `summands`, each a monomial under its coefficient, folded left to right over `constant`.
-fn int_summed(constant: Integer, summands: impl Iterator<Item = Term>) -> Term {
-    let inner = summands.reduce(|left, right| Term::intrinsic(Intrinsic::IntAdd(left, right)));
+/// `summands`, each a monomial under its coefficient, folded left to right onto `chain` or onto nothing, and `constant` last.
+fn int_summed(constant: Integer, chain: Option<Term>, summands: &[Term]) -> Term {
+    let inner = summands.iter().cloned().fold(chain, |chain, summand| {
+        Some(match chain {
+            None => summand,
+            Some(chain) => Term::intrinsic(Intrinsic::IntAdd(chain, summand)),
+        })
+    });
     match (inner, constant.is_zero()) {
         (None, _) => literal(constant),
         (Some(inner), true) => inner,
@@ -220,12 +255,51 @@ fn int_summed(constant: Integer, summands: impl Iterator<Item = Term>) -> Term {
     }
 }
 
+/// A reduced term's spine of summands: the term without the constant its normal form writes last.
+fn int_chain(term: &Term) -> &Term {
+    match &**term {
+        Subterm::Intrinsic(Intrinsic::IntAdd(chain, constant)) if constant.as_int().is_some() => {
+            chain
+        }
+        _ => term,
+    }
+}
+
+/// Whether `chain` is `summands` folded left to right, as [`int_summed`] writes them.
+fn int_chains(chain: &Term, summands: &[Term]) -> bool {
+    let Some((first, rest)) = summands.split_first() else {
+        return false;
+    };
+    let mut node = chain;
+    for summand in rest.iter().rev() {
+        match &**node {
+            Subterm::Intrinsic(Intrinsic::IntAdd(left, right)) if right == summand => node = left,
+            _ => return false,
+        }
+    }
+    node == first
+}
+
 /// The sum of two reduced terms, in normal form: constants added, like monomials merged.
+///
+/// **A sum is written over the chain it extends**, as `Nat::sum` is: where the merged summands begin with the left operand's own, unchanged and in their order, the rest are folded onto the left operand's spine itself, and the term is the one [`int_merged`] writes.
 pub fn int_sum(left: &Term, right: &Term) -> Term {
     let (constant_left, mut summands) = int_terms(left);
+    let held = summands.len();
     let (constant_right, summands_right) = int_terms(right);
     summands.extend(summands_right);
-    int_merged(constant_left + constant_right, summands)
+
+    let mut atoms = Atoms::default();
+    let combination = int_combination(&mut atoms, constant_left + constant_right, &summands);
+    let (constant, written) = int_written_of(int_recombine(&mut atoms, combination));
+    let chain = int_chain(left);
+    match written
+        .get(..held)
+        .is_some_and(|kept| int_chains(chain, kept))
+    {
+        true => int_summed(constant, Some(chain.clone()), &written[held..]),
+        false => int_summed(constant, None, &written),
+    }
 }
 
 /// A constant and its summands merged into the normal form, a remainder beside its multiple recombined on the way — what every sum this module builds goes through, as `Nat::sum_over_floor` is for `Nat`.

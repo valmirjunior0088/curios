@@ -20,6 +20,14 @@ pub enum Nat<T = Term> {
     Succ(Natural, T),
 }
 
+/// A summand's factor as it was read, and the summand itself where it is spelled as [`Nat::scaled`] writes one: what a rebuild restores.
+#[derive(Debug, Clone)]
+pub(crate) struct NatOrigin {
+    factor: Term,
+    /// The summand and the coefficient it was read at. A rebuild at that coefficient hands the summand back in place of writing its product again, as `int.rs` hands a monomial back as the spine it was read over.
+    written: Option<(Natural, Term)>,
+}
+
 impl Nat {
     /// A closed literal in canonical form: zero is `Zero`, anything positive is a single `Succ` floor over the literal-zero tail — never a unary chain.
     pub fn new(value: impl Into<Natural>) -> Self {
@@ -336,10 +344,10 @@ impl Nat {
         Self::terms_of(Combination::collect(Natural::zero(), read))
     }
 
-    /// A reduced summand as `curios-algebra` reads it: its literal coefficient, and its factor's product spine as a monomial of atoms, the factor itself the origin a rebuild restores.
+    /// A reduced summand as `curios-algebra` reads it: its literal coefficient, and its factor's product spine as a monomial of atoms, the factor and the summand as written the origin a rebuild restores.
     ///
     /// **The atoms are put in their own order, not the spine's.** The product fold orders a spine's factors by the rank of each as written, levels included, so two instances of one polymorphic factor can sort to opposite sides of another and spell one number two ways. An atom's rank is its projected term's, which no level moves, so [`Monomial::product`] puts `g<0> · x` and `g<8> · x` in one order. A factor still holding a literal inside its spine — a term no fold left that way — is read whole, as one atom, so its literal is never dropped from the coefficient.
-    fn summand(atoms: &mut Atoms, summand: &Term) -> Summand<Natural, Term> {
+    fn summand(atoms: &mut Atoms, summand: &Term) -> Summand<Natural, NatOrigin> {
         let (coefficient, factor) = Self::literal_factor(summand);
         let (inner, factors) = Self::monomial(&factor);
         let monomial = match inner.is_one() {
@@ -351,15 +359,30 @@ impl Nat {
             ),
             false => Monomial::new(vec![atoms.handle(Carrier::Natural, &factor)]),
         };
+        let written = Self::scaled_as(summand, &coefficient, &factor)
+            .then(|| (coefficient.clone(), summand.clone()));
         Summand {
             coefficient,
             monomial,
-            origin: factor,
+            origin: NatOrigin { factor, written },
+        }
+    }
+
+    /// Whether `summand` is spelled `coefficient · factor` as [`Nat::scaled`] writes it: the factor itself under a unit coefficient, and otherwise the product with the literal on its left.
+    fn scaled_as(summand: &Term, coefficient: &Natural, factor: &Term) -> bool {
+        match &**summand {
+            _ if coefficient.is_zero() => false,
+            _ if coefficient.is_one() => summand.identity() == factor.identity(),
+            Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
+                right.identity() == factor.identity()
+                    && *left == Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient.clone())))
+            }
+            _ => false,
         }
     }
 
     /// A reduced `Nat` read as its floor beside the combination of its summands.
-    fn combination(atoms: &mut Atoms, term: &Term) -> Combination<Natural, Term> {
+    fn combination(atoms: &mut Atoms, term: &Term) -> Combination<Natural, NatOrigin> {
         let (floor, inner) = Self::decompose(term);
         let summands = Self::summands(&inner)
             .iter()
@@ -369,17 +392,28 @@ impl Nat {
     }
 
     /// A combination's summands as the coefficients and factors they were read from.
-    fn terms_of(combination: Combination<Natural, Term>) -> Vec<(Natural, Term)> {
+    fn terms_of(combination: Combination<Natural, NatOrigin>) -> Vec<(Natural, Term)> {
         combination
             .summands
             .into_iter()
-            .map(|summand| (summand.coefficient, summand.origin))
+            .map(|summand| (summand.coefficient, summand.origin.factor))
             .collect()
     }
 
-    /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, a remainder beside its multiple recombined by [`Nat::recombine`], each spelled by [`Nat::scaled`], folded left-to-right.
-    pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: Natural) -> Term {
-        curios_profile::profile!("nat::sum_over_floor");
+    /// A combination's summands written back, each spelled by [`Nat::scaled`] and the summand it was read from where it stands at the coefficient it was read at: a rebuild that changes nothing hands back the node it was given (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`).
+    fn written_of(combination: Combination<Natural, NatOrigin>) -> Vec<Term> {
+        combination
+            .summands
+            .into_iter()
+            .map(|summand| match summand.origin.written {
+                Some((read, written)) if read == summand.coefficient => written,
+                _ => Self::scaled(summand.coefficient, summand.origin.factor),
+            })
+            .collect()
+    }
+
+    /// `summands` over a literal `floor` as the sum normal form writes them back: like terms merged, a remainder beside its multiple recombined by [`Nat::recombine`], and the floor it leaves.
+    fn written(summands: &[Term], floor: Natural) -> (Natural, Vec<Term>) {
         let mut atoms = Atoms::default();
         let read = summands
             .iter()
@@ -387,15 +421,52 @@ impl Nat {
             .map(|summand| Self::summand(&mut atoms, summand))
             .collect::<Vec<_>>();
         let combination = Self::recombine(&mut atoms, Combination::collect(floor, read));
-        let floor = combination.constant.clone();
-        Self::from_linear(Self::terms_of(combination), floor)
+        (combination.constant.clone(), Self::written_of(combination))
+    }
+
+    /// `summands` folded left to right onto `chain`, or onto nothing: the sum normal form's spine, `0` where there is nothing to fold.
+    fn chained(chain: Option<Term>, summands: &[Term]) -> Term {
+        summands
+            .iter()
+            .cloned()
+            .fold(chain, |chain, summand| {
+                Some(match chain {
+                    None => summand,
+                    Some(chain) => Term::intrinsic(Intrinsic::nat_add(chain, summand)),
+                })
+            })
+            .unwrap_or_else(|| Term::intrinsic(Intrinsic::Nat(Nat::Zero)))
+    }
+
+    /// Whether `chain` is `summands` folded left to right, as [`Nat::chained`] writes them.
+    fn chains(chain: &Term, summands: &[Term]) -> bool {
+        let Some((first, rest)) = summands.split_first() else {
+            return false;
+        };
+        let mut node = chain;
+        for summand in rest.iter().rev() {
+            match &**node {
+                Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) if right == summand => {
+                    node = left;
+                }
+                _ => return false,
+            }
+        }
+        node == first
+    }
+
+    /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, a remainder beside its multiple recombined by [`Nat::recombine`], each spelled by [`Nat::scaled`] or as it was read, folded left-to-right.
+    pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: Natural) -> Term {
+        curios_profile::profile!("nat::sum_over_floor");
+        let (floor, written) = Self::written(&summands, floor);
+        Self::rebuild(floor, Self::chained(None, &written))
     }
 
     /// `combination` with Euclid's identity applied until no remainder beside its multiple is left: the arithmetic is `curios-algebra`'s, and what is read here is which summand is a remainder and where the combination holds each monomial of its multiple.
     fn recombine(
         atoms: &mut Atoms,
-        mut combination: Combination<Natural, Term>,
-    ) -> Combination<Natural, Term> {
+        mut combination: Combination<Natural, NatOrigin>,
+    ) -> Combination<Natural, NatOrigin> {
         while let Some((recombination, dividend)) = Self::euclid_pair(atoms, &combination) {
             combination = combination.recombined(recombination, dividend);
         }
@@ -407,8 +478,8 @@ impl Nat {
     /// **The multiple is matched in the form the fold leaves it in.** A quotient is one symbolic summand, so `d · (x / d)` is always distributed by the product fold — `(x / (y + 1)) · (y + 1)` is `y · (x / (y + 1)) + x / (y + 1)` — and the wanted monomials are computed the same way, through [`Nat::multiply`], so the two spellings meet. A quotient and a remainder pair on their dividend and divisor and never on their proofs, which each division carries as written and which proof irrelevance makes unobservable; a monomial is compared as a multiset of factors, because the factor order is a structural hash that sees the proof.
     fn euclid_pair(
         atoms: &mut Atoms,
-        combination: &Combination<Natural, Term>,
-    ) -> Option<(Recombination<Natural>, Combination<Natural, Term>)> {
+        combination: &Combination<Natural, NatOrigin>,
+    ) -> Option<(Recombination<Natural>, Combination<Natural, NatOrigin>)> {
         combination
             .summands
             .iter()
@@ -418,7 +489,7 @@ impl Nat {
                     dividend,
                     divisor,
                     non_zero,
-                }) = &*summand.origin
+                }) = &*summand.origin.factor
                 else {
                     return None;
                 };
@@ -438,7 +509,7 @@ impl Nat {
                                 .iter()
                                 .enumerate()
                                 .find(|(_, candidate)| {
-                                    Self::same_monomial(&candidate.origin, &monomial)
+                                    Self::same_monomial(&candidate.origin.factor, &monomial)
                                 });
                         let holding =
                             holding.map(|(at, candidate)| (at, candidate.coefficient.clone()));
@@ -494,13 +565,12 @@ impl Nat {
     /// [`Nat::sum_over_floor`] from a combination already merged.
     pub(crate) fn from_linear(combination: Vec<(Natural, Term)>, floor: Natural) -> Term {
         curios_profile::profile!("nat::from_linear");
-        let inner = combination
+        let summands = combination
             .into_iter()
             .map(|(coefficient, factor)| Self::scaled(coefficient, factor))
-            .reduce(|left, right| Term::intrinsic(Intrinsic::nat_add(left, right)))
-            .unwrap_or_else(|| Term::intrinsic(Intrinsic::Nat(Nat::Zero)));
+            .collect::<Vec<_>>();
 
-        Self::rebuild(floor, inner)
+        Self::rebuild(floor, Self::chained(None, &summands))
     }
 
     /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold does not perform on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s. See `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
@@ -592,15 +662,26 @@ impl Nat {
     /// The sum of two already-reduced `Nat` terms, landing in the normal form [`Nat::decompose`] and [`Nat::summands`] read back: the literal floors added and hoisted outward, the symbolic summands juxtaposed.
     ///
     /// The one place a sum is needed *without* a reducer in hand. `spine`'s window fusion adds two lengths while flattening a value for comparison, and a flattening walk cannot re-enter reduction — so the form has to be constructed rather than folded into. Stating it here is what keeps it this module's invariant instead of a second opinion about it held next door: a fused window's length is then the same term `NatAdd`'s fold would have produced, which is what lets it still compare against an unfused window's.
+    ///
+    /// **A sum is written over the chain it extends.** Where the merged summands begin with the left operand's own, unchanged and in their order, the rest are folded onto the left operand's chain itself, as a rebuild that changes nothing hands back the node it was given; the term is the one [`Nat::sum_over_floor`] writes. So a stuck sum one summand longer holds the sum it extends, and a reduction of a long sum builds its graph a summand at a time where a copy of the chain at each level would build its square, which every walk and table over the reduct would then pay again (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`).
     pub(crate) fn sum(left: &Term, right: &Term) -> Term {
         curios_profile::profile!("nat::sum");
         let (floor_left, inner_left) = Nat::decompose(left);
         let (floor_right, inner_right) = Nat::decompose(right);
 
         let mut summands = Self::summands(&inner_left);
+        let held = summands.len();
         summands.extend(Self::summands(&inner_right));
 
-        Self::sum_over_floor(summands, floor_left + floor_right)
+        let (floor, written) = Self::written(&summands, floor_left + floor_right);
+        let extended = written
+            .get(..held)
+            .is_some_and(|kept| Self::chains(&inner_left, kept));
+        let inner = match extended {
+            true => Self::chained(Some(inner_left), &written[held..]),
+            false => Self::chained(None, &written),
+        };
+        Self::rebuild(floor, inner)
     }
 
     /// Strip what both operands carry in common, so residuals decide where the originals could not: `x + a` against `x + b` becomes `a` against `b`.
@@ -637,7 +718,7 @@ impl Nat {
     }
 
     /// `left` against `right` read over one table of atoms, with what they share taken off both.
-    pub(crate) fn cancellation(left: &Term, right: &Term) -> Cancelled<Natural, Term> {
+    pub(crate) fn cancellation(left: &Term, right: &Term) -> Cancelled<Natural, NatOrigin> {
         curios_profile::profile!("nat::cancel_common");
         let mut atoms = Atoms::default();
         let left = Self::combination(&mut atoms, left);
@@ -649,13 +730,13 @@ impl Nat {
     ///
     /// **A pass that cancels no summand hands its inners back untouched.** Rebuilding through [`Nat::from_linear`] re-associates and reorders a sum — `a + (b + c)` comes back as `(c + b) + a`, and again as `(a + b) + c` — so a stuck comparison rebuilt from reordered operands is a *different* term, which the caller reduces again, reorders again, and never settles. Taking the floors off the original inners is what the comparison family did before summands were read at all, and it is stable because it rewrites nothing below the floor.
     pub(crate) fn rebuild_cancelled(
-        cancelled: Cancelled<Natural, Term>,
+        cancelled: Cancelled<Natural, NatOrigin>,
         left: &Term,
         right: &Term,
     ) -> (Term, Term) {
-        let rebuild = |combination: Combination<Natural, Term>| {
+        let rebuild = |combination: Combination<Natural, NatOrigin>| {
             let floor = combination.constant.clone();
-            Self::from_linear(Self::terms_of(combination), floor)
+            Self::rebuild(floor, Self::chained(None, &Self::written_of(combination)))
         };
         match cancelled.progress {
             Progress::Summands => (rebuild(cancelled.left), rebuild(cancelled.right)),
@@ -667,7 +748,7 @@ impl Nat {
     }
 
     /// How many summands [`Nat::rebuild_cancelled`] writes back for `cancelled`: both residuals where a summand cancelled, and none where only the floors moved.
-    pub(crate) fn residuals(cancelled: &Cancelled<Natural, Term>) -> usize {
+    pub(crate) fn residuals(cancelled: &Cancelled<Natural, NatOrigin>) -> usize {
         match cancelled.progress {
             Progress::Summands => cancelled.left.summands.len() + cancelled.right.summands.len(),
             Progress::Nothing | Progress::Constant => 0,

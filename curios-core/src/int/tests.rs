@@ -159,6 +159,33 @@ fn a_sum_in_normal_form_reads_back_as_itself() {
     assert_eq!(int_sum(&merged, &int(0)), merged);
 }
 
+// A sum one summand longer is written over the spine it extends, under the constant it moves to the end, and is the term the fold writes from nothing.
+//
+// Mutation-checked: with every sum written from nothing, the longer sum's spine is another node.
+#[test]
+fn a_sum_one_summand_longer_holds_the_sum_it_extends() {
+    let (i, j, k) = (sym(0, "i"), sym(1, "j"), sym(2, "k"));
+    let shorter = int_sum(&int_sum(&i, &mul(int(2), j.clone())), &int(5));
+
+    let longer = int_sum(&shorter, &k);
+
+    let Subterm::Intrinsic(Intrinsic::IntAdd(chain, _)) = &*shorter else {
+        panic!("a spine under its constant: {shorter}");
+    };
+    let Subterm::Intrinsic(Intrinsic::IntAdd(extended, _)) = &*longer else {
+        panic!("a spine under its constant: {longer}");
+    };
+    let Subterm::Intrinsic(Intrinsic::IntAdd(held, _)) = &**extended else {
+        panic!("a spine of three summands: {longer}");
+    };
+    assert_eq!(held.identity(), chain.identity(), "the spine it extends");
+    assert_eq!(
+        longer,
+        int_merged(Integer::from(5), vec![i, mul(int(2), j), k]),
+        "the term the fold writes from nothing"
+    );
+}
+
 // A sum that keeps a monomial hands back the spine it read, the node it was, under whatever coefficient the sum leaves it: a merge writes a node for the monomial and none for its factors, as `Nat`'s keeps the factor it read.
 //
 // Mutation-checked: with no spine kept, the monomial of each sum is another node.

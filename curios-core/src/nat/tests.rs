@@ -64,6 +64,56 @@ fn a_sum_in_normal_form_reads_back_as_itself() {
     );
 }
 
+// A sum one summand longer is written over the chain it extends, so a reduct holds the sum before it and a walk over the two meets one node; the term is the one the fold writes from nothing.
+//
+// Mutation-checked: with every sum written from nothing, the longer sum's chain is another node.
+#[test]
+fn a_sum_one_summand_longer_holds_the_sum_it_extends() {
+    let (a, b, c) = (sym(0, "a"), sym(1, "b"), sym(2, "c"));
+    let shorter = Nat::sum(
+        &Nat::sum(&a, &Nat::scaled(2u32.into(), b.clone())),
+        &Term::intrinsic(Intrinsic::Nat(Nat::new(3u32))),
+    );
+
+    let longer = Nat::sum(&shorter, &c);
+
+    let (_, chain) = Nat::decompose(&shorter);
+    let (_, extended) = Nat::decompose(&longer);
+    let Subterm::Intrinsic(Intrinsic::NatAdd(held, _)) = &*extended else {
+        panic!("a sum of three summands: {longer}");
+    };
+    assert_eq!(held.identity(), chain.identity(), "the sum it extends");
+    assert_eq!(
+        longer,
+        Nat::sum_over_floor(vec![a, Nat::scaled(2u32.into(), b), c], 3u32.into()),
+        "the term the fold writes from nothing"
+    );
+}
+
+// A summand that stands at the coefficient it was read at is the node it was read from, where its product would otherwise be written again.
+#[test]
+fn a_summand_at_its_coefficient_is_the_node_it_was_read_from() {
+    let (a, x) = (sym(0, "a"), sym(1, "x"));
+    let scaled = Nat::scaled(3u32.into(), x);
+
+    let sum = Nat::sum(&a, &scaled);
+
+    let Subterm::Intrinsic(Intrinsic::NatAdd(_, written)) = &*sum else {
+        panic!("a sum of two summands: {sum}");
+    };
+    assert_eq!(written.identity(), scaled.identity());
+}
+
+// A summand a merge moved is written anew, and the chain with it: `a + b` beside `a` is `2 · a + b`, which holds no chain of the left operand's.
+#[test]
+fn a_merged_summand_is_written_anew() {
+    let (a, b) = (sym(0, "a"), sym(1, "b"));
+
+    let merged = Nat::sum(&add(a.clone(), b.clone()), &a);
+
+    assert_eq!(merged, add(Nat::scaled(2u32.into(), a), b));
+}
+
 // A residual is rebuilt from the terms it was read from, never from a copy: `curios-algebra` hands each summand's origin back untouched, so the `b` left over from `a + b` against `a + c` is the very allocation the caller wrote, and a shared term graph stays shared through the cancellation.
 #[test]
 fn a_residual_keeps_the_terms_it_was_read_from() {
