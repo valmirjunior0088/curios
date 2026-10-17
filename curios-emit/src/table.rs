@@ -39,7 +39,7 @@ impl FieldData {
     }
 }
 
-/// The name bundle for one internal rope carrier (`$rope/bin` or `$rope/list`): the base struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat payload array, and every field name — one handle to thread through the op emitters so packed `Bits`/`Bytes` and `List` share their lowering code.
+/// The name bundle for one internal rope carrier (`$rope/bin` or `$rope/list`): the base struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat payload array, the room record both carriers share, and every field name — one handle to thread through the op emitters so packed `Bits`/`Bytes` and `List` share their lowering code.
 #[derive(Debug, Clone)]
 pub(crate) struct RopeData {
     pub base: curios_wasm::TypeName,
@@ -47,12 +47,15 @@ pub(crate) struct RopeData {
     pub node: curios_wasm::TypeName,
     pub view: curios_wasm::TypeName,
     pub payload: curios_wasm::TypeName,
+    pub room: curios_wasm::TypeName,
     pub tag_field: curios_wasm::FieldName,
     pub len_field: curios_wasm::FieldName,
     pub payload_field: curios_wasm::FieldName,
     pub left_field: curios_wasm::FieldName,
     pub right_field: curios_wasm::FieldName,
     pub cache_field: curios_wasm::FieldName,
+    pub room_field: curios_wasm::FieldName,
+    pub extent_field: curios_wasm::FieldName,
     pub base_field: curios_wasm::FieldName,
     pub offset_field: curios_wasm::FieldName,
 }
@@ -271,6 +274,7 @@ pub(crate) struct Table<'a> {
     list_rope_leaf_type: curios_wasm::TypeName,
     list_rope_node_type: curios_wasm::TypeName,
     list_rope_view_type: curios_wasm::TypeName,
+    rope_room_type: curios_wasm::TypeName,
     cell_type: curios_wasm::TypeName,
 
     panic: OnceCell<curios_wasm::FuncName>,
@@ -373,6 +377,7 @@ impl<'a> Table<'a> {
             list_rope_leaf_type: curios_wasm::TypeName::from("rope/list/leaf"),
             list_rope_node_type: curios_wasm::TypeName::from("rope/list/node"),
             list_rope_view_type: curios_wasm::TypeName::from("rope/list/view"),
+            rope_room_type: curios_wasm::TypeName::from("rope/room"),
             cell_type: curios_wasm::TypeName::from("cell"),
             panic: OnceCell::new(),
             refuse: Default::default(),
@@ -651,12 +656,15 @@ impl<'a> Table<'a> {
             node: self.bin_rope_node_type.clone(),
             view: self.bin_rope_view_type.clone(),
             payload: self.bytes_type.clone(),
+            room: self.rope_room_type.clone(),
             tag_field: curios_wasm::FieldName::from("tag"),
             len_field: curios_wasm::FieldName::from("len"),
             payload_field: curios_wasm::FieldName::from("bytes"),
             left_field: curios_wasm::FieldName::from("left"),
             right_field: curios_wasm::FieldName::from("right"),
             cache_field: curios_wasm::FieldName::from("cache"),
+            room_field: curios_wasm::FieldName::from("room"),
+            extent_field: curios_wasm::FieldName::from("extent"),
             base_field: curios_wasm::FieldName::from("base"),
             offset_field: curios_wasm::FieldName::from("offset"),
         }
@@ -670,12 +678,15 @@ impl<'a> Table<'a> {
             node: self.list_rope_node_type.clone(),
             view: self.list_rope_view_type.clone(),
             payload: self.elems_type.clone(),
+            room: self.rope_room_type.clone(),
             tag_field: curios_wasm::FieldName::from("tag"),
             len_field: curios_wasm::FieldName::from("len"),
             payload_field: curios_wasm::FieldName::from("elems"),
             left_field: curios_wasm::FieldName::from("left"),
             right_field: curios_wasm::FieldName::from("right"),
             cache_field: curios_wasm::FieldName::from("cache"),
+            room_field: curios_wasm::FieldName::from("room"),
+            extent_field: curios_wasm::FieldName::from("extent"),
             base_field: curios_wasm::FieldName::from("base"),
             offset_field: curios_wasm::FieldName::from("offset"),
         }
@@ -810,7 +821,7 @@ impl<'a> Table<'a> {
             .collect()
     }
 
-    /// `$bytes/force (ref $rope/bin) -> (ref $bytes)`: flatten a `Bytes` rope to its payload, memoizing in the entry node. First use marks it for emission.
+    /// `$bytes/force (ref $rope/bin) -> (ref $bytes)`: flatten a `Bytes` rope to its payload, memoizing in the entry node; the payload holds the run in its first `len` slots and may hold room past them. First use marks it for emission.
     pub(crate) fn bytes_force_func(&self) -> curios_wasm::FuncName {
         self.bytes_force
             .get_or_init(|| curios_wasm::FuncName::from("bytes/force"))
@@ -821,7 +832,7 @@ impl<'a> Table<'a> {
         self.bytes_force.get().is_some()
     }
 
-    /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope to its packed payload, memoizing in the entry node. First use marks it for emission.
+    /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope to its packed payload, memoizing in the entry node; the payload holds the run in its first `ceil(len/8)` bytes and may hold room past them. First use marks it for emission.
     pub(crate) fn bits_force_func(&self) -> curios_wasm::FuncName {
         self.bits_force
             .get_or_init(|| curios_wasm::FuncName::from("bits/force"))

@@ -1,14 +1,23 @@
 //! The iterative flattening walk shared by the two grain-specific `force` emitters.
 
-use super::{RopeData, cast, concrete_val, field_get, field_set, get, null, set};
+use super::{
+    Chunk, RopeData, Table, br, branch, cast, concrete_val, field_get, field_set, get, i32_const,
+    i64_const, i64_type, null, set, tee, wasm, when,
+};
 
-/// The walk machinery shared verbatim by [`RopeEmitter::emit_force_func`](super::RopeEmitter::emit_force_func) and [`RopeEmitter::emit_bits_force_func`](super::RopeEmitter::emit_bits_force_func): one scratch-local roster plus the invariant-bearing instruction blocks — entry shortcuts, view resolution, worklist growth and descent, pop, memoization — so the two grains cannot silently diverge on the discipline. Each emitter inlines only what genuinely differs: destination sizing, the chunk-count source, and the copy body.
+/// The walk machinery shared verbatim by [`RopeEmitter::emit_force_func`](super::RopeEmitter::emit_force_func) and [`RopeEmitter::emit_bits_force_func`](super::RopeEmitter::emit_bits_force_func): one scratch-local roster plus the invariant-bearing instruction blocks — entry shortcuts, the destination its first piece decides, view resolution, worklist growth and descent, pop, memoization — so the two grains cannot silently diverge on the discipline. Each emitter inlines only what genuinely differs: the chunk-count source and the copy body; the grain's sizing is the walk's own, chosen by its constructor.
 pub(super) struct ForceWalk<'r> {
     rope: &'r RopeData,
     elems: curios_wasm::TypeName,
+    /// How many payload slots a run of the length the instructions push occupies: the length itself, or at the bit grain the bytes it fills.
+    occupied: fn(Vec<curios_wasm::Instr>) -> Vec<curios_wasm::Instr>,
+    /// Whether a claim needs its extent at a byte boundary, as the bit grain's does: past an extent inside a byte lies the padding an older version holds, and the tree reads padding as zero.
+    byte_aligned_claim: bool,
     pub(super) r: curios_wasm::LocalName,
     node: curios_wasm::LocalName,
     pub(super) out: curios_wasm::LocalName,
+    room: curios_wasm::LocalName,
+    wide: curios_wasm::LocalName,
     stack: curios_wasm::LocalName,
     grown: curios_wasm::LocalName,
     sp: curios_wasm::LocalName,
@@ -21,13 +30,32 @@ pub(super) struct ForceWalk<'r> {
 }
 
 impl<'r> ForceWalk<'r> {
+    /// The walk of a byte- or element-grain rope, whose run occupies as many payload slots as it is long.
     pub(super) fn new(rope: &'r RopeData, elems: curios_wasm::TypeName) -> Self {
+        Self::of(rope, elems, |length| length, false)
+    }
+
+    /// The walk of a bit-grain rope, whose run occupies `ceil(len/8)` bytes and claims room only from a byte boundary.
+    pub(super) fn bits(rope: &'r RopeData, elems: curios_wasm::TypeName) -> Self {
+        Self::of(rope, elems, Table::bits_payload_len_instrs, true)
+    }
+
+    fn of(
+        rope: &'r RopeData,
+        elems: curios_wasm::TypeName,
+        occupied: fn(Vec<curios_wasm::Instr>) -> Vec<curios_wasm::Instr>,
+        byte_aligned_claim: bool,
+    ) -> Self {
         Self {
             rope,
             elems,
+            occupied,
+            byte_aligned_claim,
             r: curios_wasm::LocalName::from("r"),
             node: curios_wasm::LocalName::from("node"),
             out: curios_wasm::LocalName::from("out"),
+            room: curios_wasm::LocalName::from("room"),
+            wide: curios_wasm::LocalName::from("wide"),
             stack: curios_wasm::LocalName::from("stack"),
             grown: curios_wasm::LocalName::from("grown"),
             sp: curios_wasm::LocalName::from("sp"),
@@ -52,6 +80,11 @@ impl<'r> ForceWalk<'r> {
                 self.out.clone(),
                 concrete_val(self.rope.payload.clone(), true),
             ),
+            (
+                self.room.clone(),
+                concrete_val(self.rope.room.clone(), true),
+            ),
+            (self.wide.clone(), i64_type()),
             (self.stack.clone(), concrete_val(self.elems.clone(), true)),
             (self.grown.clone(), concrete_val(self.elems.clone(), true)),
             (self.sp.clone(), i32_val.clone()),
@@ -113,6 +146,136 @@ impl<'r> ForceWalk<'r> {
                 ],
                 else_instructions: vec![],
             },
+        ]
+    }
+
+    /// Where the walk's first piece puts the run, ahead of that piece's copy, which `copied` closes: every later piece finds `out` set and is copied after the pieces before it.
+    ///
+    /// ```wat
+    /// if out == null:                                    ;; the first piece
+    ///   if r.tag == 1 && cur.tag == 1:                   ;; a node entry, a flattened first piece
+    ///     room := cur.room
+    ///     if room != null && room.extent == cur.len && payload.len >= occupied(r.len)
+    ///        [&& cur.len % 8 == 0 at the bit grain]:
+    ///       out := payload; room.extent := r.len; br copied   ;; the claim
+    ///   if r.tag == 1 && cur.tag != 0:                   ;; read, grown and read again
+    ///     out := new occupied(min(2 r.len, u32::MAX)); room := room{r.len}
+    ///   else:
+    ///     out := new occupied(r.len); room := null
+    /// ```
+    ///
+    /// A claim writes past the extent only, where no slot is written, and every other holder of the payload reads below the extent its run ends at, which no slot it reads is past: so the rule asks nothing about who else holds the payload, and the extent, which only grows, is all that is shared.
+    pub(super) fn place_first(&self) -> Vec<curios_wasm::Instr> {
+        let run_len = || {
+            vec![
+                get(&self.r),
+                field_get(&self.rope.base, &self.rope.len_field),
+            ]
+        };
+        let tag_is = |local: &curios_wasm::LocalName, tag: i32| {
+            vec![
+                get(local),
+                field_get(&self.rope.base, &self.rope.tag_field),
+                i32_const(tag),
+                curios_wasm::Instr::I32Eq,
+            ]
+        };
+
+        let mut fits = wasm![
+            get(&self.room),
+            field_get(&self.rope.room, &self.rope.extent_field),
+            get(&self.cur),
+            field_get(&self.rope.base, &self.rope.len_field),
+            curios_wasm::Instr::I32Eq,
+            get(&self.payload),
+            curios_wasm::Instr::ArrayLen,
+            (self.occupied)(run_len()),
+            curios_wasm::Instr::I32GeU,
+            curios_wasm::Instr::I32And,
+        ];
+        if self.byte_aligned_claim {
+            fits.extend([
+                get(&self.cur),
+                field_get(&self.rope.base, &self.rope.len_field),
+                i32_const(7),
+                curios_wasm::Instr::I32And,
+                curios_wasm::Instr::I32Eqz,
+                curios_wasm::Instr::I32And,
+            ]);
+        }
+        let claim = wasm![
+            get(&self.payload),
+            set(&self.out),
+            get(&self.room),
+            run_len(),
+            field_set(&self.rope.room, &self.rope.extent_field),
+            br("copied"),
+        ];
+        let claimable = wasm![
+            get(&self.cur),
+            cast(&self.rope.node),
+            field_get(&self.rope.node, &self.rope.room_field),
+            set(&self.room),
+            get(&self.room),
+            curios_wasm::Instr::RefIsNull,
+            curios_wasm::Instr::I32Eqz,
+            when(wasm![fits, when(claim)]),
+        ];
+
+        // Twice the run, the product taken wide and clamped to the largest length a run holds.
+        let doubled = wasm![
+            run_len(),
+            curios_wasm::Instr::I64ExtendI32U,
+            i64_const(1),
+            curios_wasm::Instr::I64Shl,
+            tee(&self.wide),
+            i64_const(u32::MAX.into()),
+            get(&self.wide),
+            i64_const(u32::MAX.into()),
+            curios_wasm::Instr::I64LtU,
+            curios_wasm::Instr::Select {
+                val_types: vec![i64_type()],
+            },
+            curios_wasm::Instr::I32WrapI64,
+        ];
+        let roomy = wasm![
+            (self.occupied)(doubled),
+            curios_wasm::Instr::ArrayNewDefault {
+                type_name: self.rope.payload.clone(),
+            },
+            set(&self.out),
+            run_len(),
+            curios_wasm::Instr::StructNew {
+                type_name: self.rope.room.clone(),
+            },
+            set(&self.room),
+        ];
+        let exact = wasm![
+            (self.occupied)(run_len()),
+            curios_wasm::Instr::ArrayNewDefault {
+                type_name: self.rope.payload.clone(),
+            },
+            set(&self.out),
+            null(&self.rope.room),
+            set(&self.room),
+        ];
+
+        vec![
+            get(&self.out),
+            curios_wasm::Instr::RefIsNull,
+            when(wasm![
+                tag_is(&self.r, 1),
+                tag_is(&self.cur, 1),
+                curios_wasm::Instr::I32And,
+                when(claimable),
+                tag_is(&self.r, 1),
+                get(&self.cur),
+                field_get(&self.rope.base, &self.rope.tag_field),
+                curios_wasm::Instr::I32Eqz,
+                curios_wasm::Instr::I32Eqz,
+                curios_wasm::Instr::I32And,
+                branch(roomy, exact),
+            ]),
         ]
     }
 
@@ -267,7 +430,7 @@ impl<'r> ForceWalk<'r> {
         ]
     }
 
-    /// Memoize a node entry and release its tree (`node` was set at entry exactly when the tag is 1); a view entry has nowhere to memoize. Answers the filled payload.
+    /// Memoize a node entry, its payload and that payload's room record, and release its tree (`node` was set at entry exactly when the tag is 1); a view entry has nowhere to memoize. Answers the filled payload.
     pub(super) fn memoize_entry_node(&self) -> Vec<curios_wasm::Instr> {
         vec![
             get(&self.r),
@@ -281,6 +444,9 @@ impl<'r> ForceWalk<'r> {
                     get(&self.node),
                     get(&self.out),
                     field_set(&self.rope.node, &self.rope.cache_field),
+                    get(&self.node),
+                    get(&self.room),
+                    field_set(&self.rope.node, &self.rope.room_field),
                     get(&self.node),
                     null(&self.rope.base),
                     field_set(&self.rope.node, &self.rope.left_field),

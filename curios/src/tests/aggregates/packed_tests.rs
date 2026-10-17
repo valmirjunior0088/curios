@@ -1,7 +1,7 @@
 //! Indexed vectors a program declares for itself: the type-level `Vec` over `Nat` induction, and the indexed inductive whose `append` is executed rather than only compiled. The packed splices and folds are the corpus's `/aggregates/packed`.
 
 use {
-    super::test_support::{ARRIVAL, BITS, BYTES, reads_in_every_shape},
+    super::test_support::{ARRIVAL, BITS, BYTES, ODD_BITS, extends_in_place, reads_in_every_shape},
     crate::tests::{run, run_text},
     curios_runtime::MockHost,
 };
@@ -175,4 +175,47 @@ fn a_packed_run_reads_as_its_flat_copy_in_every_shape_its_children_take() {
         run_text(&reads_in_every_shape(carrier), system).expect("the reads run");
         assert_eq!(io.output(), b"111111111", "{}", carrier.run);
     }
+}
+
+/// **A packed run read after another extended its payload in place reads as it was written.** A flattening over a run that ends at its payload's written extent writes into the room past it, so the older run, a window of it, a second run over it that finds the extent moved, and a run appended to itself each read element by element as the copies of the leaf they are — at the bit grain from a byte boundary, and, over a leaf of 317 bits, where every run ends off one and no flattening claims.
+#[test]
+fn a_packed_run_extended_in_place_reads_as_it_was_written() {
+    for carrier in [&BYTES, &BITS, &ODD_BITS] {
+        let (system, io) = MockHost::builder().stdin_chunks(vec![ARRIVAL]).build();
+
+        run_text(&extends_in_place(carrier), system).expect("the reads run");
+        assert_eq!(io.output(), b"111111", "{}", carrier.leaf);
+    }
+}
+
+/// **A run whose payload holds room crosses to a host as its run.** `left` claims the room a flattening gave `three`, so its payload is longer than it is, and the host is handed the bytes of the run and nothing past them.
+#[test]
+fn a_run_whose_payload_holds_room_crosses_to_a_host_as_its_run() {
+    let source = r#"
+        use /std/{Bytes, Io, Try, Process};
+
+        let settled(run: Bytes) -> Bytes =
+            Bytes/xor(run, Bytes/replicate(Bytes/len(run), 0x00));
+
+        let main() -> Io({}) =
+            let arrived = Try/run(Io/read(Process/stdin, 64))!;
+            match arrived
+            | success(bytes(leaf)) =>
+                let two = x[..leaf, ..leaf];
+                let flat_two = settled(two);
+                let three = x[..two, ..leaf];
+                let flat_three = settled(three);
+                let left = x[..three, ..leaf];
+                let flat_left = settled(left);
+                let _ = Try/run(Io/write(Process/stdout, x[..flat_two, ..flat_three, ..flat_left]))!;
+                let _ = Try/run(Io/write(Process/stdout, left))!;
+                Io/pure(())
+            | _ => Io/pure(())
+            end;
+        main()
+        "#;
+    let (system, io) = MockHost::builder().stdin_chunks(vec![ARRIVAL]).build();
+
+    run_text(source, system).expect("the program runs");
+    assert_eq!(io.output(), ARRIVAL.repeat(2 + 3 + 4 + 4).as_bytes());
 }

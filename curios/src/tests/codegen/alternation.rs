@@ -1,4 +1,4 @@
-//! Runtime measurements of a list grown an element a step and read in turn: at its first element (`rope_push_first.crs`) or by a window past it (`rope_push_drop.crs`), each of which a flattening reaches, against `rope_push_peek.crs`, which grows it alike and reads only the element it has just appended. Collections are counted from the engine's own records through `curios_runtime::test_support::collected`, as `churn.rs` counts them, and runs are timed interleaved.
+//! Runtime measurements behind `curios-emit/README.md`'s decision "A flattening extends the payload its first piece wrote last", and the bound they hold: a list grown an element a step and read in turn: at its first element (`rope_push_first.crs`) or by a window past it (`rope_push_drop.crs`), each of which a flattening reaches, against `rope_push_peek.crs`, which grows it alike and reads only the element it has just appended. Collections are counted from the engine's own records through `curios_runtime::test_support::collected`, as `churn.rs` counts them, and runs are timed interleaved.
 
 use {
     super::{compiled_of, run},
@@ -61,27 +61,27 @@ fn programs() -> [(&'static str, Compiled); 3] {
 ///
 /// # What it last printed
 ///
-/// Taken on top of `e3bfb4396` on an x86-64 Linux machine under load, wasmtime 47.0.3, the command above:
+/// Taken on top of `cd4fe7354` on an x86-64 Linux machine under load, wasmtime 47.0.3, the command above:
 ///
 /// ```text
 /// == rope alternation, collections at N = 64000 and times
-///   push, then read the first: 248 collections
-///   push, then drop the first: 497 collections
+///   push, then read the first: 0 collections
+///   push, then drop the first: 1 collections
 ///   push, then peek (control): 0 collections
-///   N = 16000, push, then read the first: 214.5 ms (179.4–321.2)
-///   N = 16000, push, then drop the first: 445.8 ms (359.0–577.2)
-///   N = 16000, push, then peek (control): 8.0 ms (5.7–9.6)
-///   N = 32000, push, then read the first: 437.2 ms (379.8–886.2)
-///   N = 32000, push, then drop the first: 932.0 ms (734.8–1655.5)
-///   N = 32000, push, then peek (control): 10.4 ms (5.8–16.8)
-///   N = 64000, push, then read the first: 3455.8 ms (2464.7–3578.0)
-///   N = 64000, push, then drop the first: 5700.8 ms (4672.2–6902.6)
-///   N = 64000, push, then peek (control): 28.8 ms (14.9–45.1)
+///   N = 16000, push, then read the first: 2.8 ms (2.7–3.1)
+///   N = 16000, push, then drop the first: 3.9 ms (3.9–4.0)
+///   N = 16000, push, then peek (control): 1.6 ms (1.5–1.7)
+///   N = 32000, push, then read the first: 5.3 ms (5.3–5.4)
+///   N = 32000, push, then drop the first: 7.6 ms (7.5–8.1)
+///   N = 32000, push, then peek (control): 3.1 ms (2.9–3.2)
+///   N = 64000, push, then read the first: 10.9 ms (10.2–10.9)
+///   N = 64000, push, then drop the first: 15.2 ms (15.1–15.7)
+///   N = 64000, push, then peek (control): 5.8 ms (5.8–5.9)
 /// ```
 ///
 /// # The reading
 ///
-/// Each flattening copies its whole run: the first program flattens at every second step and the second at every step, so they collect in proportion to the square of N while the control, which flattens nothing, never collects.
+/// The first program flattens at every second step and the second at every step, and each flattening writes into the room its first piece's payload holds, so each element is copied a bounded number of times: both collect about as rarely as the control, which flattens nothing, and their time doubles with N as its does. A flattening that copied its whole run made them collect hundreds of times at this size, in proportion to the square of N.
 #[test]
 #[ignore = "measurement, mixed: counts the alternations' collections and times them rather than asserting"]
 fn rope_alternation_collections() {
@@ -103,5 +103,21 @@ fn rope_alternation_collections() {
             let (middle, low, high) = median(times);
             println!("  N = {n}, {label}: {middle:.1} ms ({low:.1}–{high:.1})");
         }
+    }
+}
+
+/// An alternation of appends with reads of what a flattening reaches copies each element a bounded number of times, so at the largest size it collects about as rarely as its control, which flattens nothing — where one whose flattenings copied the whole run collected hundreds of times. Collection counts are deterministic, which is what makes the bound assertable.
+#[test]
+fn an_alternation_collects_about_as_rarely_as_its_control() {
+    let [first, past, control] = programs();
+    let largest = SIZES[SIZES.len() - 1];
+    let floor = collections(&control.1, largest);
+
+    for (label, compiled) in [first, past] {
+        let count = collections(&compiled, largest);
+        assert!(
+            count <= floor + 4,
+            "{label}: {count} collections at N = {largest}, its control {floor}"
+        );
     }
 }

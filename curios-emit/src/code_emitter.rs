@@ -895,6 +895,21 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         ]);
     }
 
+    /// A node's construction once its tag, length and children are on the stack: no cache and no room until a flattening writes them, then the struct.
+    fn node_instrs(rope: &RopeData) -> Vec<curios_wasm::Instr> {
+        vec![
+            curios_wasm::Instr::RefNull {
+                heap_type: curios_wasm::HeapType::Concrete(rope.payload.clone()),
+            },
+            curios_wasm::Instr::RefNull {
+                heap_type: curios_wasm::HeapType::Concrete(rope.room.clone()),
+            },
+            curios_wasm::Instr::StructNew {
+                type_name: rope.node.clone(),
+            },
+        ]
+    }
+
     /// `struct.get` on a rope base — the `len`/`tag` reads that never force.
     fn rope_get(rope: &RopeData, field: &curios_wasm::FieldName) -> curios_wasm::Instr {
         curios_wasm::Instr::StructGet {
@@ -929,12 +944,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         node.extend(self.context.length_sum_instrs(left_len, right_len));
         node.extend(lhs.clone());
         node.extend(rhs.clone());
-        node.push(curios_wasm::Instr::RefNull {
-            heap_type: curios_wasm::HeapType::Concrete(rope.payload.clone()),
-        });
-        node.push(curios_wasm::Instr::StructNew {
-            type_name: rope.node.clone(),
-        });
+        node.extend(Self::node_instrs(rope));
         node.push(set_dest.clone());
 
         let mut rhs_empty_check = rhs.clone();
@@ -1072,12 +1082,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instr(curios_wasm::Instr::StructNew {
             type_name: rope.leaf.clone(),
         });
-        self.emit_instr(curios_wasm::Instr::RefNull {
-            heap_type: curios_wasm::HeapType::Concrete(rope.payload.clone()),
-        });
-        self.emit_instr(curios_wasm::Instr::StructNew {
-            type_name: rope.node.clone(),
-        });
+        self.emit_instrs(Self::node_instrs(rope));
         self.emit_instr(curios_wasm::Instr::LocalSet {
             local_name: result_local.clone(),
         });
@@ -1617,12 +1622,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         overflow.extend(self.context.load_value_instrs(carrier, LoadAs::NonNull));
         overflow.push(curios_wasm::Instr::Call { func_name: boxf });
         overflow.extend(elem_leaf(elem_instrs.clone()));
-        overflow.push(curios_wasm::Instr::RefNull {
-            heap_type: curios_wasm::HeapType::Concrete(rope.payload.clone()),
-        });
-        overflow.push(curios_wasm::Instr::StructNew {
-            type_name: rope.node.clone(),
-        });
+        overflow.extend(Self::node_instrs(&rope));
 
         // Immediate, roomy: (payload | elem << position·len) | (len + 1) << len_shift, the position one byte or one bit per the grain.
         let mut grow = vec![
@@ -1707,12 +1707,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         rope_arm.extend(self.context.load_value_instrs(carrier, LoadAs::NonNull));
         rope_arm.push(cast_rope);
         rope_arm.extend(elem_leaf(elem_instrs));
-        rope_arm.push(curios_wasm::Instr::RefNull {
-            heap_type: curios_wasm::HeapType::Concrete(rope.payload.clone()),
-        });
-        rope_arm.push(curios_wasm::Instr::StructNew {
-            type_name: rope.node.clone(),
-        });
+        rope_arm.extend(Self::node_instrs(&rope));
 
         self.emit_instr(curios_wasm::Instr::If {
             label_name: curios_wasm::LabelName::from("bin_append"),

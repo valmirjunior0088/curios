@@ -1,4 +1,6 @@
-//! The program the three carriers' read tests share: a run built in each shape a node's children take, every element of it read from the first to the last and back, against the same run settled into one flat payload.
+//! The programs the three carriers' read tests share: a run built in each shape a node's children take, every element of it read from the first to the last and back, against the same run settled into one flat payload; and runs flattened over one another, extending a payload in place or copying it, every element read against the leaf they repeat.
+
+use curios_utilities::fill;
 
 /// The chunk of standard input the program reads its leaf from: forty bytes, past an immediate's envelope and long enough for a window of twenty.
 pub(super) const ARRIVAL: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCD";
@@ -32,6 +34,12 @@ pub(super) const BITS: Carrier = Carrier {
     at: "match Bits/try_get(run, i) | some(bit) => match bit | true => 2 | false => 1 end | none() => 0 end",
     leaf: "Bytes/to_bits(l)",
     settled: "Bits/xor(run, Bits/replicate(Bits/len(run), false))",
+};
+
+/// The bit carrier over a leaf of 317 bits, so every run it builds ends off a byte boundary, where a flattening claims no room.
+pub(super) const ODD_BITS: Carrier = Carrier {
+    leaf: "match Nat/le/try(317, Bits/len(Bytes/to_bits(l))) | some(fits) => Bits/slice(Bytes/to_bits(l), 0, 317) | none() => Bytes/to_bits(l) end",
+    ..BITS
 };
 
 pub(super) const LIST: Carrier = Carrier {
@@ -116,4 +124,86 @@ pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
     .replace("%AT%", carrier.at)
     .replace("%LEAF%", carrier.leaf)
     .replace("%SETTLED%", carrier.settled)
+}
+
+/// A program over one chunk of standard input that prints a `1` for each of six claims and a `0` for one that fails, over runs that each repeat the leaf the arrival makes, flattened in an order that puts every arm of a flattening to work. `two` is flattened over its leaf, so exactly, and `three` over `two`, so with room, its extent its own length. `left` then claims the room `three` left and `right` finds the extent moved and copies, and `doubled` claims room enough for `again` appended to itself. A window of `three`, cut before anything extends its payload, is read after. Every run is read element by element against the leaf it repeats, and each flattening's settled copy as well, so a read of a run and the payload it was written into answer alike.
+///
+/// The bindings stand in the order they are flattened in, each settled copy read in the claims, so no flattening is left for a read to do later.
+pub(super) fn extends_in_place(carrier: &Carrier) -> String {
+    let (run, open, len, slice, at, leaf, settled) = (
+        carrier.run,
+        carrier.open,
+        carrier.len,
+        carrier.slice,
+        carrier.at,
+        carrier.leaf,
+        carrier.settled,
+    );
+    fill!(
+        r#"
+    use /std/{Nat, Byte, Bytes, Bits, Bool, List, Option, Str, Io, print, Try, Process};
+
+    let at(run: ${run}, i: Nat) -> Nat =
+        ${at};
+
+    let settled(run: ${run}) -> ${run} =
+        ${settled};
+
+    let repeats_from(run: ${run}, leaf: ${run}, i: Nat) -> Bool =
+        match (Nat/lt/try(i, ${len}(run)), Nat/lt/try(0, ${len}(leaf)))
+        | (some(_), some(_)) =>
+            at(run, i) == at(leaf, i % ${len}(leaf)) && repeats_from(run, leaf, i + 1)
+        | _ => true
+        end;
+
+    let repeats(run: ${run}, leaf: ${run}, times: Nat) -> Bool =
+        ${len}(run) == times * ${len}(leaf) && repeats_from(run, leaf, 0);
+
+    let window(run: ${run}, leaf: ${run}) -> ${run} =
+        match Nat/le/try(${len}(leaf), ${len}(run))
+        | some(fits) => ${slice}(run, 0, ${len}(leaf))
+        | none() => run
+        end;
+
+    let mark(held: Bool) -> Str =
+        match held | true => "1" | false => "0" end;
+
+    let main() -> Io({}) =
+    let arrived = Try/run(Io/read(Process/stdin, 64))!;
+    match arrived
+    | success(bytes(l)) =>
+        let leaf: ${run} = ${leaf};
+        let two = ${open}..leaf, ..leaf];
+        let flat_two = settled(two);
+        let three = ${open}..two, ..leaf];
+        let flat_three = settled(three);
+        let early = window(three, leaf);
+        let left = ${open}..three, ..leaf];
+        let flat_left = settled(left);
+        let right = ${open}..three, ..two];
+        let flat_right = settled(right);
+        let again = ${open}..two, ..two];
+        let flat_again = settled(again);
+        let doubled = ${open}..again, ..again];
+        let flat_doubled = settled(doubled);
+        print(
+            Str/flatten([
+                mark(repeats(flat_two, leaf, 2) && repeats(flat_three, leaf, 3)),
+                mark(repeats(flat_left, leaf, 4) && repeats(flat_right, leaf, 5)),
+                mark(repeats(flat_again, leaf, 4) && repeats(flat_doubled, leaf, 8)),
+                mark(repeats(three, leaf, 3) && repeats(early, leaf, 1)),
+                mark(repeats(left, leaf, 4) && repeats(right, leaf, 5)),
+                mark(repeats(doubled, leaf, 8) && repeats(two, leaf, 2))]))
+    | _ => print("no input")
+    end;
+    main()
+    "#,
+        run,
+        open,
+        len,
+        slice,
+        at,
+        leaf,
+        settled
+    )
 }

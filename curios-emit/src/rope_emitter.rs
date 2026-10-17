@@ -1,6 +1,6 @@
 //! The shared rope helper functions. Straight-line sequences are inlined at their use site; anything the emitter lowers to a *loop* is a helper here instead, so its mutable scratch locals are zeroed by the fresh activation rather than leaking across executions of one call site. Among them:
 //!
-//! - `$<carrier>/force` flattens a byte- or element-grain rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else fills a fresh payload by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
+//! - `$<carrier>/force` flattens a byte- or element-grain rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else is filled by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. The walk's first piece decides where the run goes: a flattened node whose run ends at its payload's written extent hands over that payload's room, and the walk writes the other pieces past the extent; any other first piece leaves a fresh payload, with room twice the run where the entry is a node and the piece no leaf. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
 //! - `$<carrier>/exact` answers a run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run otherwise — for what leaves the rope as a flat array: a leaf sealed over a forced payload, and a host operand.
 //! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on re-entry.
 //! - `$<carrier>/slice` builds the O(1) window: bounds-check, the trivial windows answer an empty leaf or the rope itself, a view collapses (so windows never stack), and an uncached node base is forced first — which memoizes — so every `view` in existence has a *flat-available* base (a leaf or a cached node).
@@ -17,9 +17,9 @@ use force_walk::*;
 
 use {
     super::{
-        BigHelper, Chunk, ImmediateLayout, RopeData, Scope, Table, block, br, br_if, call, cast,
-        concrete_val, declare_helper, either, field_get, field_set, get, i32_const, i32_type,
-        i64_const, i64_type, null, repeat, set, wasm,
+        BigHelper, Chunk, ImmediateLayout, RopeData, Scope, Table, block, br, br_if, branch, call,
+        cast, concrete_val, declare_helper, either, field_get, field_set, get, i32_const, i32_type,
+        i64_const, i64_type, null, repeat, set, tee, wasm, when,
     },
     curios_abi::{WireLeaf, WireType},
     curios_num::Grain,
@@ -59,34 +59,24 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// ```wat
     /// if r.tag == 0                  → r.payload      ;; leaf
     /// if r.tag == 1 && r.cache != null → r.cache      ;; already forced
-    /// out   := array.new_default <payload> r.len
     /// stack := array.new_default $elems 32            ;; explicit worklist
     /// cur   := r
     /// loop:                                           ;; per leaf-like chunk
     ///   descend: while cur is an uncached node,
     ///     push cur.right (growing the stack by doubling), cur := cur.left
+    ///   at the first chunk, out := its payload's room claimed, or a fresh one
     ///   copy the chunk — a leaf payload, a node cache, or a view's window
-    ///   over its flat-available base — into out at offset
+    ///   over its flat-available base — into out at offset, unless claimed
     ///   pop cur from the stack; repeat until empty
     /// if r.tag == 1:                                  ;; memoize, release tree
-    ///   r.cache := out; r.left := null; r.right := null
+    ///   r.cache := out; r.room := room; r.left := null; r.right := null
     /// ```
     ///
-    /// An entry *view* is not memoized (its fields are immutable): its fill is one window copy of exactly its own size, so there is nothing quadratic to fence off.
+    /// The first chunk decides where the run goes ([`ForceWalk::place_first`]): a flattened node whose run ends at its payload's written extent hands the run its payload, the copy then writing only the pieces after it, and every other first chunk leaves the run a fresh payload. An entry *view* is not memoized (its fields are immutable): its fill is one window copy of exactly its own size, so there is nothing quadratic to fence off.
     pub(crate) fn emit_force_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
         let walk = ForceWalk::new(rope, self.table.elems_type());
 
         let mut instrs = walk.entry_shortcuts();
-
-        // out = array.new_default <payload> r.len, then the worklist.
-        instrs.extend([
-            get(&walk.r),
-            field_get(&rope.base, &rope.len_field),
-            curios_wasm::Instr::ArrayNewDefault {
-                type_name: rope.payload.clone(),
-            },
-            set(&walk.out),
-        ]);
         instrs.extend(walk.init_worklist());
 
         // The descent body: classify `cur`, either resolving a leaf-like chunk — payload + source window — (exit to `$emit`) or pushing right and descending left.
@@ -146,8 +136,21 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         ]);
         descend.extend(walk.push_uncached_node(&descend_label));
 
-        // The walk: descend to a chunk, copy it at the running offset, pop.
+        // The walk: descend to a chunk, place the run at the first, copy the chunk at the running offset, pop.
         let walk_label = curios_wasm::LabelName::from("walk");
+        let mut copy = walk.place_first();
+        // array.copy out[offset..] <- payload[src_off..src_off+count]
+        copy.extend([
+            get(&walk.out),
+            get(&walk.offset),
+            get(&walk.payload),
+            get(&walk.src_off),
+            get(&walk.count),
+            curios_wasm::Instr::ArrayCopy {
+                target_name: rope.payload.clone(),
+                source_name: rope.payload.clone(),
+            },
+        ]);
         let mut walk_body = vec![
             curios_wasm::Instr::Block {
                 label_name: curios_wasm::LabelName::from("emit"),
@@ -158,16 +161,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                     instructions: descend,
                 }],
             },
-            // array.copy out[offset..] <- payload[src_off..src_off+count]
-            get(&walk.out),
-            get(&walk.offset),
-            get(&walk.payload),
-            get(&walk.src_off),
-            get(&walk.count),
-            curios_wasm::Instr::ArrayCopy {
-                target_name: rope.payload.clone(),
-                source_name: rope.payload.clone(),
-            },
+            block("copied", copy),
             get(&walk.offset),
             get(&walk.count),
             curios_wasm::Instr::I32Add,
@@ -191,10 +185,10 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope into a packed LSB-first payload. The tree walk is iterative, like [`Self::emit_force_func`], but chunk windows and offsets are measured in bits and the destination has `ceil(len / 8)` zeroed bytes. Copying only logical bits keeps the unused high padding of the final byte zero.
+    /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope into a packed LSB-first payload. The tree walk is iterative, like [`Self::emit_force_func`], but chunk windows and offsets are measured in bits and the destination has `ceil(len / 8)` zeroed bytes, or as many for twice the run where it is given room. Copying only logical bits keeps the unused high padding of the final byte zero, and a run claims its first chunk's room only where that chunk ends at a byte boundary, so no claim writes into a byte an older version holds padding in.
     pub(crate) fn emit_bits_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let rope = self.table.bin_rope();
-        let walk = ForceWalk::new(&rope, self.table.elems_type());
+        let walk = ForceWalk::bits(&rope, self.table.elems_type());
 
         let copy_i = curios_wasm::LocalName::from("copy_i");
         let src_bit = curios_wasm::LocalName::from("src_bit");
@@ -209,18 +203,6 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         ]);
 
         let mut instrs = walk.entry_shortcuts();
-
-        // ceil(r.len / 8) zeroed destination bytes, then the worklist.
-        instrs.extend(wasm![
-            Table::bits_payload_len_instrs(vec![
-                get(&walk.r),
-                field_get(&rope.base, &rope.len_field)
-            ]),
-            curios_wasm::Instr::ArrayNewDefault {
-                type_name: rope.payload.clone(),
-            },
-            set(&walk.out),
-        ]);
         instrs.extend(walk.init_worklist());
 
         let descend_label = curios_wasm::LabelName::from("descend");
@@ -292,73 +274,79 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                     instructions: descend,
                 }],
             },
-            // Scratch locals are reused per chunk, so reset the cursor.
-            curios_wasm::Instr::I32Const { value: 0 },
-            set(&copy_i),
-            curios_wasm::Instr::Block {
-                label_name: copy_done.clone(),
-                block_type: curios_wasm::BlockType::Empty,
-                instructions: vec![curios_wasm::Instr::Loop {
-                    label_name: copy_label.clone(),
-                    block_type: curios_wasm::BlockType::Empty,
-                    instructions: vec![
-                        get(&copy_i),
-                        get(&walk.count),
-                        curios_wasm::Instr::I32GeU,
-                        curios_wasm::Instr::BrIf {
-                            label_name: copy_done,
-                        },
-                        get(&walk.src_off),
-                        get(&copy_i),
-                        curios_wasm::Instr::I32Add,
-                        set(&src_bit),
-                        get(&walk.offset),
-                        get(&copy_i),
-                        curios_wasm::Instr::I32Add,
-                        set(&dst_bit),
-                        // out[dst/8] |= ((payload[src/8] >> src%8) & 1) << dst%8
-                        get(&walk.out),
-                        get(&dst_bit),
-                        curios_wasm::Instr::I32Const { value: 3 },
-                        curios_wasm::Instr::I32ShrU,
-                        get(&walk.out),
-                        get(&dst_bit),
-                        curios_wasm::Instr::I32Const { value: 3 },
-                        curios_wasm::Instr::I32ShrU,
-                        curios_wasm::Instr::ArrayGetU {
-                            type_name: rope.payload.clone(),
-                        },
-                        get(&walk.payload),
-                        get(&src_bit),
-                        curios_wasm::Instr::I32Const { value: 3 },
-                        curios_wasm::Instr::I32ShrU,
-                        curios_wasm::Instr::ArrayGetU {
-                            type_name: rope.payload.clone(),
-                        },
-                        get(&src_bit),
-                        curios_wasm::Instr::I32Const { value: 7 },
-                        curios_wasm::Instr::I32And,
-                        curios_wasm::Instr::I32ShrU,
-                        curios_wasm::Instr::I32Const { value: 1 },
-                        curios_wasm::Instr::I32And,
-                        get(&dst_bit),
-                        curios_wasm::Instr::I32Const { value: 7 },
-                        curios_wasm::Instr::I32And,
-                        curios_wasm::Instr::I32Shl,
-                        curios_wasm::Instr::I32Or,
-                        curios_wasm::Instr::ArraySet {
-                            type_name: rope.payload.clone(),
-                        },
-                        get(&copy_i),
-                        curios_wasm::Instr::I32Const { value: 1 },
-                        curios_wasm::Instr::I32Add,
-                        set(&copy_i),
-                        curios_wasm::Instr::Br {
-                            label_name: copy_label,
-                        },
-                    ],
-                }],
-            },
+            block(
+                "copied",
+                wasm![
+                    walk.place_first(),
+                    // Scratch locals are reused per chunk, so reset the cursor.
+                    curios_wasm::Instr::I32Const { value: 0 },
+                    set(&copy_i),
+                    curios_wasm::Instr::Block {
+                        label_name: copy_done.clone(),
+                        block_type: curios_wasm::BlockType::Empty,
+                        instructions: vec![curios_wasm::Instr::Loop {
+                            label_name: copy_label.clone(),
+                            block_type: curios_wasm::BlockType::Empty,
+                            instructions: vec![
+                                get(&copy_i),
+                                get(&walk.count),
+                                curios_wasm::Instr::I32GeU,
+                                curios_wasm::Instr::BrIf {
+                                    label_name: copy_done,
+                                },
+                                get(&walk.src_off),
+                                get(&copy_i),
+                                curios_wasm::Instr::I32Add,
+                                set(&src_bit),
+                                get(&walk.offset),
+                                get(&copy_i),
+                                curios_wasm::Instr::I32Add,
+                                set(&dst_bit),
+                                // out[dst/8] |= ((payload[src/8] >> src%8) & 1) << dst%8
+                                get(&walk.out),
+                                get(&dst_bit),
+                                curios_wasm::Instr::I32Const { value: 3 },
+                                curios_wasm::Instr::I32ShrU,
+                                get(&walk.out),
+                                get(&dst_bit),
+                                curios_wasm::Instr::I32Const { value: 3 },
+                                curios_wasm::Instr::I32ShrU,
+                                curios_wasm::Instr::ArrayGetU {
+                                    type_name: rope.payload.clone(),
+                                },
+                                get(&walk.payload),
+                                get(&src_bit),
+                                curios_wasm::Instr::I32Const { value: 3 },
+                                curios_wasm::Instr::I32ShrU,
+                                curios_wasm::Instr::ArrayGetU {
+                                    type_name: rope.payload.clone(),
+                                },
+                                get(&src_bit),
+                                curios_wasm::Instr::I32Const { value: 7 },
+                                curios_wasm::Instr::I32And,
+                                curios_wasm::Instr::I32ShrU,
+                                curios_wasm::Instr::I32Const { value: 1 },
+                                curios_wasm::Instr::I32And,
+                                get(&dst_bit),
+                                curios_wasm::Instr::I32Const { value: 7 },
+                                curios_wasm::Instr::I32And,
+                                curios_wasm::Instr::I32Shl,
+                                curios_wasm::Instr::I32Or,
+                                curios_wasm::Instr::ArraySet {
+                                    type_name: rope.payload.clone(),
+                                },
+                                get(&copy_i),
+                                curios_wasm::Instr::I32Const { value: 1 },
+                                curios_wasm::Instr::I32Add,
+                                set(&copy_i),
+                                curios_wasm::Instr::Br {
+                                    label_name: copy_label,
+                                },
+                            ],
+                        }],
+                    },
+                ],
+            ),
             get(&walk.offset),
             get(&walk.count),
             curios_wasm::Instr::I32Add,
@@ -665,7 +653,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// otherwise      → p := child.cache ?? (j := i; force(r))
     /// ```
     ///
-    /// **One level, and no further.** A child that is itself unflattened would be read by a descent, and a walk over a deep chain that was never read would pay its depth at every read, where flattening the node makes each later read one array access. So an append then a read of the part just appended copies nothing, which is what a stream's reader and a push-then-peek loop do, and an alternation that reads the older part still flattens, at every second append.
+    /// **One level, and no further.** A child that is itself unflattened would be read by a descent, and a walk over a deep chain that was never read would pay its depth at every read, where flattening the node makes each later read one array access. So an append then a read of the part just appended copies nothing, which is what a stream's reader and a push-then-peek loop do, and an alternation that reads the older part still flattens, at every second append — a flattening that copies only what was appended since, into the room its first piece's payload holds ([`Self::emit_force_func`]).
     fn unflattened_read_instrs(
         rope: &RopeData,
         force_func: curios_wasm::FuncName,

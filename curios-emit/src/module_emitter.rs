@@ -2,10 +2,11 @@ use {
     super::{
         BigEmitter, BigHelper, Context, EmissionClosure, EmissionClosureName, EmissionData,
         EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter,
-        FltEmitter, FltHelper, ImmediateLayout, RopeEmitter, Table, TurnEmitter, big_sub_type,
-        bytes_sub_type, cell_sub_type, channel_sub_type, elems_sub_type, flt_sub_type,
-        longs_sub_type, refusal_data_name, refusal_message, rope_base_sub_type, rope_leaf_sub_type,
-        rope_node_sub_type, rope_view_sub_type, words_sub_type,
+        FltEmitter, FltHelper, ImmediateLayout, RopeData, RopeEmitter, Table, TurnEmitter,
+        big_sub_type, bytes_sub_type, cell_sub_type, channel_sub_type, elems_sub_type,
+        flt_sub_type, longs_sub_type, refusal_data_name, refusal_message, rope_base_sub_type,
+        rope_leaf_sub_type, rope_node_sub_type, rope_room_sub_type, rope_view_sub_type,
+        words_sub_type,
     },
     curios_abi::{ENTRY, Namespace, PANIC, WireType},
     curios_num::{Binary, Grain},
@@ -28,47 +29,29 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The binary rope row: the flat `$bytes` payload (the host-boundary shape), the `$rope/bin` base, and its `leaf`/`node`/`view` subtypes. Each is its own singleton recursion group — `$bytes` must canonicalize equal to the type curios-js's bridge declares standalone, and a subtype may reference any *earlier* group.
-    fn emit_bin_rope_types(&mut self) {
+    /// The room record both rope carriers' nodes reference, declared ahead of either, since a subtype may reference only an *earlier* group.
+    fn emit_rope_room_type(&mut self) {
         let rope = self.table.bin_rope();
+        self.module
+            .add_type(rope.room.clone(), rope_room_sub_type(&rope));
+    }
 
-        self.module.add_type(rope.payload.clone(), bytes_sub_type());
-        self.module.add_type(
-            rope.base.clone(),
-            rope_base_sub_type(rope.tag_field.clone(), rope.len_field.clone()),
-        );
-        self.module.add_type(
-            rope.leaf.clone(),
-            rope_leaf_sub_type(
-                rope.base.clone(),
-                rope.tag_field.clone(),
-                rope.len_field.clone(),
-                rope.payload_field.clone(),
-                rope.payload.clone(),
-            ),
-        );
-        self.module.add_type(
-            rope.node.clone(),
-            rope_node_sub_type(
-                rope.base.clone(),
-                rope.tag_field.clone(),
-                rope.len_field.clone(),
-                rope.left_field,
-                rope.right_field,
-                rope.cache_field,
-                rope.payload,
-            ),
-        );
-        self.module.add_type(
-            rope.view.clone(),
-            rope_view_sub_type(
-                rope.base,
-                rope.tag_field,
-                rope.len_field,
-                rope.base_field,
-                rope.offset_field,
-            ),
-        );
+    /// One rope carrier's row: its flat payload, the base, and its `leaf`/`node`/`view` subtypes. Each is its own singleton recursion group — `$bytes` must canonicalize equal to the type curios-js's bridge declares standalone, and a subtype may reference any *earlier* group.
+    fn emit_rope_types(&mut self, rope: &RopeData, payload: curios_wasm::SubType) {
+        self.module.add_type(rope.payload.clone(), payload);
+        self.module
+            .add_type(rope.base.clone(), rope_base_sub_type(rope));
+        self.module
+            .add_type(rope.leaf.clone(), rope_leaf_sub_type(rope));
+        self.module
+            .add_type(rope.node.clone(), rope_node_sub_type(rope));
+        self.module
+            .add_type(rope.view.clone(), rope_view_sub_type(rope));
+    }
+
+    /// The binary rope row, over the flat `$bytes` payload — the host-boundary shape.
+    fn emit_bin_rope_types(&mut self) {
+        self.emit_rope_types(&self.table.bin_rope(), bytes_sub_type());
     }
 
     /// Declare a host import: a final func type plus a `(namespace, name)` import bound to `func_name`.
@@ -136,47 +119,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// The `List` mirror of [`emit_bin_rope_types`](Self::emit_bin_rope_types).
+    /// The `List` mirror of [`emit_bin_rope_types`](Self::emit_bin_rope_types), over the flat `$elems` payload.
     fn emit_list_rope_types(&mut self) {
-        let rope = self.table.list_rope();
-
-        self.module
-            .add_type(rope.payload.clone(), elems_sub_type(Table::top_type(true)));
-        self.module.add_type(
-            rope.base.clone(),
-            rope_base_sub_type(rope.tag_field.clone(), rope.len_field.clone()),
-        );
-        self.module.add_type(
-            rope.leaf.clone(),
-            rope_leaf_sub_type(
-                rope.base.clone(),
-                rope.tag_field.clone(),
-                rope.len_field.clone(),
-                rope.payload_field.clone(),
-                rope.payload.clone(),
-            ),
-        );
-        self.module.add_type(
-            rope.node.clone(),
-            rope_node_sub_type(
-                rope.base.clone(),
-                rope.tag_field.clone(),
-                rope.len_field.clone(),
-                rope.left_field,
-                rope.right_field,
-                rope.cache_field,
-                rope.payload,
-            ),
-        );
-        self.module.add_type(
-            rope.view.clone(),
-            rope_view_sub_type(
-                rope.base,
-                rope.tag_field,
-                rope.len_field,
-                rope.base_field,
-                rope.offset_field,
-            ),
+        self.emit_rope_types(
+            &self.table.list_rope(),
+            elems_sub_type(Table::top_type(true)),
         );
     }
 
@@ -995,6 +942,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_flt_type();
         self.emit_big_types();
         self.emit_longs_type();
+        self.emit_rope_room_type();
         self.emit_bin_rope_types();
         self.emit_list_rope_types();
         self.emit_cell_type();

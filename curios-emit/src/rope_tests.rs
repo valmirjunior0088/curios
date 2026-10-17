@@ -85,7 +85,7 @@ fn a_read_of_an_unflattened_node_looks_in_its_children_before_it_forces() {
     }
 }
 
-/// A consumer of a forced payload bounds its walk by the run's `len` and never by its array's length, which a flattened payload may hold room past: equality, the pointwise combiners, a map, and the host's deep and scalar forms read no `array.len` at all, and a force reads one, its worklist's.
+/// A consumer of a forced payload bounds its walk by the run's `len` and never by its array's length, which a flattened payload may hold room past: equality, the pointwise combiners, a map, and the host's deep and scalar forms read no `array.len` at all, and a force reads two, its worklist's and, where it claims its first piece's room, the capacity of that piece's payload.
 #[test]
 fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
     let packed = |op: fn(Grain) -> curios_cont::Intrinsic, grain| {
@@ -126,7 +126,7 @@ fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
         (&and, "$bits/force"),
         (&map, "$list/force"),
     ] {
-        assert_eq!(count(func(wat, force), "array.len"), 1, "{force}");
+        assert_eq!(count(func(wat, force), "array.len"), 2, "{force}");
     }
 }
 
@@ -164,6 +164,60 @@ fn what_leaves_the_rope_is_its_exact_payload() {
         assert_contains(exact, "array.len");
         assert_contains(exact, "array.copy");
     }
+}
+
+/// A flattening reads its first piece's written extent before it allocates, so a run that ends at its payload's extent extends that payload instead; a fresh payload's room is twice the run, clamped to the largest length a run holds; and the bit grain claims only from a byte boundary, a guard the byte and element grains do without.
+#[test]
+fn a_flattening_reads_its_first_pieces_extent_before_it_allocates() {
+    let packed = |grain| {
+        wat(&intrinsic_main(
+            curios_cont::Intrinsic::BinGet(grain),
+            vec![bin_lit(vec![1, 2, 3, 4]), nat(1)],
+        ))
+    };
+    let bytes = packed(Grain::X);
+    let bits = packed(Grain::B);
+    let list = wat(&list_read());
+
+    for (wat, force, payload, guarded) in [
+        (&bytes, "$bytes/force", "$bytes", false),
+        (&bits, "$bits/force", "$bytes", true),
+        (&list, "$list/force", "$elems", false),
+    ] {
+        let force = func(wat, force);
+        let extent = force
+            .find("struct.get $rope/room $extent")
+            .expect("the force reads the extent");
+        // The run's payload, which the worklist ahead of the walk may share a type with.
+        let allocation = extent
+            + force[extent..]
+                .find(&format!("array.new_default {payload}"))
+                .expect("the force allocates the run's payload after the extent");
+        assert_contains(force, "struct.set $rope/room $extent");
+        assert_contains(force, "struct.new $rope/room");
+        assert_contains(force, &format!("i64.const {}", u32::MAX));
+        assert_eq!(
+            force[extent..allocation].contains("i32.const 7"),
+            guarded,
+            "{force}"
+        );
+    }
+}
+
+/// A node is built with no cache and no room, both written by the flattening that memoizes it.
+#[test]
+fn a_node_is_built_with_no_room() {
+    let wat = wat(&intrinsic_main(
+        curios_cont::Intrinsic::BinConcat(Grain::X, 2),
+        vec![bin_lit(vec![1, 2, 3, 4]), bin_lit(vec![5, 6, 7, 8])],
+    ));
+    let room = wat
+        .find("ref.null $rope/room")
+        .expect("the node's room is null");
+    let node = wat
+        .find("struct.new $rope/bin/node")
+        .expect("the concatenation is a node");
+    assert!(room < node);
 }
 
 #[test]

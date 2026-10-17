@@ -2,20 +2,21 @@
 //!
 //! # The rope representation
 //!
-//! `Bits`, `Bytes`, and `List` are *ropes*: the two packed grains share one three-shape tagged union behind the non-final `$rope/bin` struct base, while lists use `$rope/list` (both have fields `tag` + `len`). A `leaf` holds a flat payload array (`$bytes` / `$elems`); a `node` holds two children plus a memoization `cache`; a `view` is a window — a `base` rope plus an `offset`. The cost model this buys:
+//! `Bits`, `Bytes`, and `List` are *ropes*: the two packed grains share one three-shape tagged union behind the non-final `$rope/bin` struct base, while lists use `$rope/list` (both have fields `tag` + `len`). A `leaf` holds a flat payload array (`$bytes` / `$elems`) exactly its run; a `node` holds two children plus a memoization `cache`, which may hold room past the run, and the `$rope/room` record of that room's written extent; a `view` is a window — a `base` rope plus an `offset`. The cost model this buys:
 //!
 //! - `concat`/`append` are O(1): one `node` allocation, no copying.
 //! - `len` is O(1): every shape carries it.
 //! - `slice` is O(1): one `view` allocation over the source (collapsing a view-of-view, so windows never stack). A `view`'s base is always *flat-available* — a leaf or an already-cached node (slicing an uncached node forces it first, which memoizes) — so `get` reads straight through a window without forcing or copying.
 //! - `get` on an uncached node reads through one level: the child that holds the element answers where it is flat-available — a leaf, a view, a cached node — and nothing is forced, so an append then a read of the part just appended copies nothing.
 //! - The first *whole-value read* (`eql` on equal lengths, `map`, a host call, a `slice` of an uncached node, and a `get` that falls in a child of one that is itself an uncached node) forces the rope — one O(n) fill into a fresh flat payload, memoized in the entry node's `cache` (its children are then nulled, releasing the tree). Later reads are O(1) to reach the payload. (A `view` is not memoized: forcing one is a single window copy of exactly its own size.)
-//! - The documented hazard: *alternating* append with a whole-value read re-forces per read, and alternating it with a `get` of the older part re-forces at every second append — the node above a cached one reads through, and the node above that has an uncached child — which is quadratic either way. Build fully, then read.
+//! - A run read, grown and read again copies only what it grew by. A forcing whose first piece is a view or a flattened node fills a payload with room twice its run, and one whose first piece is a flattened node ending at its payload's written extent, the payload holding the whole run, claims that payload: it writes only the pieces after the first, past the extent, and raises the extent to its own length. So alternating append with a whole-value read, or with a `get` of the older part — which re-forces at every second append, the node above a cached one reading through and the node above that meeting an uncached child — copies each element a bounded number of times over the run's life.
+//! - What is left of the hazard: a run handed to a host at every step crosses exact, a copy where its payload holds room; a bit run that ends off a byte boundary claims no room, since past its extent lies the padding of a byte an older version holds, so alternating one re-forces it whole; and a run extended two ways at every step copies whole at every step, since a payload's room is one run's to write — as a list that grows and is read through an eager flat build of itself and two more elements does, the build copying what the next append's flattening claims.
 //!
-//! Naive accumulation loops are therefore O(n) by construction, and so are head/tail peel loops (`get` head + `slice` tail): the first peel forces once, every later peel is an O(1) window over the settled payload. There is no compile-time recognition anywhere.
+//! Naive accumulation loops are therefore O(n) by construction, and so are loops that read what they accumulate and head/tail peel loops (`get` head + `slice` tail): the first peel forces once, every later peel is an O(1) window over the settled payload. There is no compile-time recognition anywhere.
 //!
 //! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are taken exact before the call, a payload exactly its run, and results are embedded into fresh leaves after it), so curios-runtime and the curios-js bridge only ever see flat arrays, each read by its own length.
 
-use super::{ChannelData, concrete_val};
+use super::{ChannelData, RopeData, concrete_val};
 
 /// `Flt` — a boxed `f64`: `struct (field $special (f64))`.
 pub fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubType {
@@ -87,94 +88,92 @@ fn ref_field(
     }
 }
 
+/// `$rope/room` — final: the written extent of a flattened payload that holds room past its run, `struct (field $extent (mut i32))`, in the run's own units. Its payload's slots below the extent are written and never again, and those past it are unwritten; the extent only grows, raised by the one run whose length it is when that run's flattening writes its other pieces into the room. Every flattened node over the payload references the record, so whether a run may write the room is a comparison any of them can make, of its length with the extent.
+pub(crate) fn rope_room_sub_type(rope: &RopeData) -> curios_wasm::SubType {
+    curios_wasm::SubType {
+        is_final: true,
+        super_types: vec![],
+        comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([(
+            rope.extent_field.clone(),
+            curios_wasm::FieldType {
+                storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
+                    curios_wasm::NumType::I32,
+                )),
+                mutability: curios_wasm::Mutability::Var,
+            },
+        )])),
+    }
+}
+
 /// A rope base (`$rope/bin` / `$rope/list`) — the non-final struct every carrier ref is cast to: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a leaf, 1 for a node, 2 for a view; `len` is the carrier's element count, so `len` and the tag dispatch never force.
-pub fn rope_base_sub_type(
-    tag_field: curios_wasm::FieldName,
-    len_field: curios_wasm::FieldName,
-) -> curios_wasm::SubType {
+pub(crate) fn rope_base_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: false,
         super_types: vec![],
         comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
-            (tag_field, i32_const_field()),
-            (len_field, i32_const_field()),
+            (rope.tag_field.clone(), i32_const_field()),
+            (rope.len_field.clone(), i32_const_field()),
         ])),
     }
 }
 
-/// A rope leaf (`$rope/bin/leaf` / `$rope/list/leaf`) — final, subtype of the base: adds the flat payload (`$bytes` / `$elems`).
-pub fn rope_leaf_sub_type(
-    base_type: curios_wasm::TypeName,
-    tag_field: curios_wasm::FieldName,
-    len_field: curios_wasm::FieldName,
-    payload_field: curios_wasm::FieldName,
-    payload_type: curios_wasm::TypeName,
-) -> curios_wasm::SubType {
+/// A rope leaf (`$rope/bin/leaf` / `$rope/list/leaf`) — final, subtype of the base: adds the flat payload (`$bytes` / `$elems`), exactly the run's length, so a leaf's read can leave its bounds to the engine's trap on the array.
+pub(crate) fn rope_leaf_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
-        super_types: vec![base_type],
+        super_types: vec![rope.base.clone()],
         comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
-            (tag_field, i32_const_field()),
-            (len_field, i32_const_field()),
+            (rope.tag_field.clone(), i32_const_field()),
+            (rope.len_field.clone(), i32_const_field()),
             (
-                payload_field,
-                ref_field(payload_type, false, curios_wasm::Mutability::Const),
+                rope.payload_field.clone(),
+                ref_field(rope.payload.clone(), false, curios_wasm::Mutability::Const),
             ),
         ])),
     }
 }
 
-/// A rope node (`$rope/bin/node` / `$rope/list/node`) — final, subtype of the base: adds two children and the memoization `cache`. All three are mutable and nullable: forcing writes the flat payload into `cache` and nulls the children, releasing the tree while the memo stays live.
-pub fn rope_node_sub_type(
-    base_type: curios_wasm::TypeName,
-    tag_field: curios_wasm::FieldName,
-    len_field: curios_wasm::FieldName,
-    left_field: curios_wasm::FieldName,
-    right_field: curios_wasm::FieldName,
-    cache_field: curios_wasm::FieldName,
-    payload_type: curios_wasm::TypeName,
-) -> curios_wasm::SubType {
+/// A rope node (`$rope/bin/node` / `$rope/list/node`) — final, subtype of the base: adds two children, the memoization `cache`, and the `room` record of a cache that holds room past the run. All four are mutable and nullable: forcing writes the flat payload into `cache`, its room record into `room` where it has one, and nulls the children, releasing the tree while the memo stays live. A cache is written once, and it holds the run in its first `len` slots.
+pub(crate) fn rope_node_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
-        super_types: vec![base_type.clone()],
+        super_types: vec![rope.base.clone()],
         comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
-            (tag_field, i32_const_field()),
-            (len_field, i32_const_field()),
+            (rope.tag_field.clone(), i32_const_field()),
+            (rope.len_field.clone(), i32_const_field()),
             (
-                left_field,
-                ref_field(base_type.clone(), true, curios_wasm::Mutability::Var),
+                rope.left_field.clone(),
+                ref_field(rope.base.clone(), true, curios_wasm::Mutability::Var),
             ),
             (
-                right_field,
-                ref_field(base_type, true, curios_wasm::Mutability::Var),
+                rope.right_field.clone(),
+                ref_field(rope.base.clone(), true, curios_wasm::Mutability::Var),
             ),
             (
-                cache_field,
-                ref_field(payload_type, true, curios_wasm::Mutability::Var),
+                rope.cache_field.clone(),
+                ref_field(rope.payload.clone(), true, curios_wasm::Mutability::Var),
+            ),
+            (
+                rope.room_field.clone(),
+                ref_field(rope.room.clone(), true, curios_wasm::Mutability::Var),
             ),
         ])),
     }
 }
 
 /// A rope view (`$rope/bin/view` / `$rope/list/view`) — final, subtype of the base: a window into a `base` rope starting at `offset`. All fields are immutable; the invariant that makes windows read-through is *representational*: a `view`'s base is always flat-available (a leaf, or a node whose `cache` is already set), enforced by the only constructor, the emitted `slice` helper.
-pub fn rope_view_sub_type(
-    base_type: curios_wasm::TypeName,
-    tag_field: curios_wasm::FieldName,
-    len_field: curios_wasm::FieldName,
-    base_field: curios_wasm::FieldName,
-    offset_field: curios_wasm::FieldName,
-) -> curios_wasm::SubType {
+pub(crate) fn rope_view_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
-        super_types: vec![base_type.clone()],
+        super_types: vec![rope.base.clone()],
         comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
-            (tag_field, i32_const_field()),
-            (len_field, i32_const_field()),
+            (rope.tag_field.clone(), i32_const_field()),
+            (rope.len_field.clone(), i32_const_field()),
             (
-                base_field,
-                ref_field(base_type, false, curios_wasm::Mutability::Const),
+                rope.base_field.clone(),
+                ref_field(rope.base.clone(), false, curios_wasm::Mutability::Const),
             ),
-            (offset_field, i32_const_field()),
+            (rope.offset_field.clone(), i32_const_field()),
         ])),
     }
 }
