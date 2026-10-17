@@ -70,7 +70,7 @@ Of where a choice is taken: every choice held to its item's end, as Lean holds a
 
 ### Generated declarations name their owner
 
-**Decision.** Lowering records whether a definition is authored or generated and records a generated definition's owner explicitly; ownership is never inferred from a flattened path's spelling. An entry and the type former that carries it share one finalized context. Generated constructor and concept-method wrappers generalize their own universe schemes, since each may use a subset of, or dependencies beyond, its owner's scheme, and their owner metadata validates provenance without conflating a wrapper's binders with the entry's.
+**Decision.** Lowering records whether a definition is authored or generated and records a generated definition's owner explicitly; ownership is never inferred from a flattened path's spelling. An entry and the type former that carries it share one finalized context. Generated constructor and concept-method wrappers take their owner's whole context, the owner's instance their type states bound to its parameters by position (`UniverseSolver::finalize_at_instance`): a wrapper's own type names only some of its owner's levels, so generalized alone it would leave the others no parameter to stand for, and every other level it holds settles at the parameter that bounds it or is refused as escaping. The owner metadata is what finds that context, so a wrapper's binders are never taken for the entry's.
 
 ### A refinement is keyed on the guard as written and decided at the read
 
