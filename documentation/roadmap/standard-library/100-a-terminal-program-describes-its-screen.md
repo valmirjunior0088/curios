@@ -16,7 +16,7 @@ Working specification for rebuilding `/std/Tui` and `/std/Tty` around one termin
 
 ## What this builds on
 
-- **The terminal is one device the host gives back.** `Tty/open` opens the controlling terminal read and write, and `Tty/raw` takes it with the bytes that undo what the program sets on it: `tty_take` records them beside the termios, and `tty_give`, a closed handle and the host's `Drop` after a trap or an `exit` write them and restore the termios (`curios-runtime/src/os_host.rs`). The host installs no signal handler, so a terminating signal leaves the terminal as the program set it.
+- **The terminal is one device the host gives back.** `Tty/open` opens the controlling terminal read and write, and `Tty/raw` takes it with the bytes that undo what the program sets on it: `tty_take` records them beside the termios, and `tty_give`, a closed handle, the host's `Drop` after a trap or an `exit`, and a thread the first take starts for SIGTERM, SIGHUP, SIGQUIT and SIGINT write them and restore the termios before the process ends (`curios-runtime/src/os_host.rs`).
 - **A wait is a suspension.** `Io/race` cancels the losers where they wait, and a read through `Io/Reader` puts back what it took before every suspension, so a read under a race loses nothing ([A wait is a suspension, and only the host waits](../../design/standard-library/a-wait-is-a-suspension-and-only-the-host-waits.md)). State a branch keeps lives in a channel of one slot, as `Io/Reader` keeps its bytes.
 - **`/std` holds no Unicode property.** `Char` has no width, no grapheme break class, no emoji property; `Str` steps by scalar, so a field's cursor crosses a combining mark as a character. The compiler has none either: `Span::render_snippet` (`curios-utilities/src/span.rs`) counts scalars for a caret, so a report's caret under a wide character stands short of its span.
 - **`/sys` already carries Rust's data.** `code_modules` (`curios-text/src/sys_module.rs`) bakes `curios-abi`'s wire codes into `/sys` as named constants, and a packed literal is `Intrinsic::Bin`, so a table baked as a `Bytes` constant is a literal every stage carries.
@@ -45,13 +45,12 @@ Settled with the user on 2026-10-17.
 
 Each stage lands as its own commits and rewrites this specification to the work left.
 
-1. **A terminating signal restores the terminal.** The native host gives back every terminal it took when SIGTERM, SIGHUP, SIGQUIT or SIGINT arrives, then dies by the signal. Check: a child that took a pseudo-terminal and was sent SIGTERM leaves it as it found it; the launcher's ceiling.
-2. **Unicode has one authority.** `curios-unicode` and its pinned download; `/sys/unicode`'s constants; `Char`'s properties and `Str`'s grapheme boundaries; the span renderer's caret by width. Check: every case of `GraphemeBreakTest.txt`, the Curios lookups against the Rust ones at every range boundary, the pinned reports whose caret moved, and the prelude's elaboration named where it may have moved.
-3. **Glyphs and lines.** `Glyph`, `Line` and the width policy replace `Tui/text`; the renderer re-anchors. Check: the hostile text writes only printable bytes, the three wide characters measure two.
-4. **Views and layout.** `View`, its readings, `rows` and `cols`, and the stateless drawings replace `Layout`, the frame algebra's public builders and `Tui.cursor`. Check: a replay of what the renderer writes over a model terminal yields the frame.
-5. **The protocol and its input.** The modes as data, the key model, `Input` and `Event(E)`, and the decoder reading the terminal's replies. Check: every cut of every input decodes as the whole, and a key decodes alike under both encodings.
-6. **The session and the loop.** The handshake, the session as a handle, `Tui/run` as one task, the directives, and `drive` following a resize. Check: save and quit runs the save, a failed draw ends the run with its error, a resize arrives by either path.
-7. **Widgets, and a whole program.** `Listing(A)`, `Field` over graphemes, `Focus(P)`; a program of a field and a listing in bordered panes run against the scripted terminal. Check: the program's frames, its cursor and its answer.
+1. **Unicode has one authority.** `curios-unicode` and its pinned download; `/sys/unicode`'s constants; `Char`'s properties and `Str`'s grapheme boundaries; the span renderer's caret by width. Check: every case of `GraphemeBreakTest.txt`, the Curios lookups against the Rust ones at every range boundary, the pinned reports whose caret moved, and the prelude's elaboration named where it may have moved.
+2. **Glyphs and lines.** `Glyph`, `Line` and the width policy replace `Tui/text`; the renderer re-anchors. Check: the hostile text writes only printable bytes, the three wide characters measure two.
+3. **Views and layout.** `View`, its readings, `rows` and `cols`, and the stateless drawings replace `Layout`, the frame algebra's public builders and `Tui.cursor`. Check: a replay of what the renderer writes over a model terminal yields the frame.
+4. **The protocol and its input.** The modes as data, the key model, `Input` and `Event(E)`, and the decoder reading the terminal's replies. Check: every cut of every input decodes as the whole, and a key decodes alike under both encodings.
+5. **The session and the loop.** The handshake, the session as a handle, `Tui/run` as one task, the directives, and `drive` following a resize. Check: save and quit runs the save, a failed draw ends the run with its error, a resize arrives by either path.
+6. **Widgets, and a whole program.** `Listing(A)`, `Field` over graphemes, `Focus(P)`; a program of a field and a listing in bordered panes run against the scripted terminal. Check: the program's frames, its cursor and its answer.
 
 ## Verification
 

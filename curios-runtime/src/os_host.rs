@@ -22,6 +22,11 @@ use {
         ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, ServerConfig,
         ServerConnection, StreamOwned, crypto::ring, pki_types::ServerName,
     },
+    signal_hook::{
+        consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM},
+        iterator::Signals,
+        low_level::emulate_default_handler,
+    },
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
         env,
@@ -42,6 +47,7 @@ use {
             atomic::{AtomicBool, Ordering},
         },
         task::{Context, Poll, Wake, Waker},
+        thread,
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
     webpki_roots::TLS_SERVER_ROOTS,
@@ -433,7 +439,9 @@ pub struct OsHost {
     /// The pipe the replies it holds for later wake it through, opened by the first `later` that files one, so a program that never waits on a reply holds none; or what the system refused it with.
     wake: OnceLock<Result<WakePipe, Errno>>,
     /// Every terminal `tty_take` took and nothing has given back, so `tty_give` and [`Drop`] undo exactly what the program set and restore what it found. Host state with an exit obligation: a terminal left raw, or on the alternate screen, outlives the process that switched it.
-    taken: Mutex<Vec<Taken>>,
+    taken: Arc<Mutex<Vec<Taken>>>,
+    /// Whether the thread that gives every terminal back at a terminating signal is running, started by the first take.
+    signals: OnceLock<()>,
     /// Whether standard output and standard error are a pipe or a socket, read on the first write to each: a gated write to one is bounded by what it takes without blocking. See [`OsHost::write_standard`].
     bounded: [OnceLock<bool>; 2],
     /// Which standard streams the program closed, by their place among input, output and error: a closed one's token names nothing, as any closed handle's does. See [`OsHost::close_standard`].
@@ -452,7 +460,8 @@ impl OsHost {
             start: Instant::now(),
             args,
             wake: OnceLock::new(),
-            taken: Mutex::new(Vec::new()),
+            taken: Arc::new(Mutex::new(Vec::new())),
+            signals: OnceLock::new(),
             bounded: [OnceLock::new(), OnceLock::new()],
             closed: [
                 AtomicBool::new(false),
@@ -487,12 +496,7 @@ impl OsHost {
         let token = io.bytes();
         let mut records = self.taken.lock().unwrap();
         if let Some(index) = records.iter().position(|taken| taken.token == token) {
-            let taken = records.remove(index);
-            let _ = match place {
-                0 => give_back(stdin().as_fd(), &taken),
-                1 => give_back(stdout().as_fd(), &taken),
-                _ => give_back(stderr().as_fd(), &taken),
-            };
+            let _ = give_back(&records.remove(index));
         }
         drop(records);
 
@@ -532,6 +536,22 @@ impl OsHost {
         };
 
         write_once(|| rustix::io::write(fd, taken).map_err(Error::from))
+    }
+
+    /// Start the thread that gives back every terminal still taken when a terminating signal arrives and then lets the signal end the process, so its parent sees it end by that signal; once, at the first take. A host whose handlers the system refuses still takes its terminal, and only a signal then leaves it as the program set it.
+    fn give_back_on_signals(&self) {
+        self.signals.get_or_init(|| {
+            let taken = Arc::clone(&self.taken);
+
+            if let Ok(mut signals) = Signals::new(ENDING) {
+                thread::spawn(move || {
+                    if let Some(signal) = signals.forever().next() {
+                        give_back_all(&taken);
+                        let _ = emulate_default_handler(signal);
+                    }
+                });
+            }
+        });
     }
 
     /// Run `apply` over the descriptor behind `handle` — a standard stream's, or an open file's, pipe's or serial port's out of the table. `None` for a handle with no descriptor a terminal `ioctl` could address, which the callers report as `NotFound`.
@@ -623,27 +643,36 @@ impl Default for OsHost {
 /// Give back every terminal still taken. `instantiate` drops the host after a trap is classified and before the process exits, so a trap or an `exit` leaves each terminal as the program found it, whether or not the program's own scope ran.
 impl Drop for OsHost {
     fn drop(&mut self) {
-        let records = std::mem::take(&mut *self.taken.lock().unwrap());
-
-        for taken in records {
-            let handle = Handle::from_bytes(taken.token.clone());
-            let _ = self.with_fd(&handle, |fd| give_back(fd, &taken));
-        }
+        give_back_all(&self.taken);
     }
 }
 
-/// A terminal `tty_take` took: its handle's token, the termios it had, and the bytes that undo what the program set on it.
+/// A terminal `tty_take` took: its handle's token, a descriptor of its own on the terminal, the termios it had, and the bytes that undo what the program set on it. The descriptor is the record's, so a terminal is given back however its handle went and from a thread that holds no handle table.
 struct Taken {
     token: Vec<u8>,
+    fd: OwnedFd,
     saved: Termios,
     leave: Vec<u8>,
+}
+
+/// The signals whose default action ends the process, and which a terminal it took would outlive as the program left it.
+const ENDING: [i32; 4] = [SIGTERM, SIGHUP, SIGQUIT, SIGINT];
+
+/// Give back every terminal `taken` holds, emptying it.
+fn give_back_all(taken: &Mutex<Vec<Taken>>) {
+    let records = std::mem::take(&mut *taken.lock().unwrap());
+
+    for record in records {
+        let _ = give_back(&record);
+    }
 }
 
 /// How long a give waits for a terminal to take its leave bytes: a give runs where nothing may suspend, at a scope's release or as the process ends.
 const LEAVE_WAIT: Duration = Duration::from_millis(100);
 
-/// Write `taken`'s leave bytes to `fd`, then restore the termios it recorded: the bytes go out while output processing is still off, so they reach the terminal as written. A terminal that will not take them within [`LEAVE_WAIT`] keeps what it took, and its settings are restored all the same.
-fn give_back(fd: BorrowedFd<'_>, taken: &Taken) -> Result<(), Errno> {
+/// Write `taken`'s leave bytes to its terminal, then restore the termios it recorded: the bytes go out while output processing is still off, so they reach the terminal as written. A terminal that will not take them within [`LEAVE_WAIT`] keeps what it took, and its settings are restored all the same.
+fn give_back(taken: &Taken) -> Result<(), Errno> {
+    let fd = taken.fd.as_fd();
     let mut leave = taken.leave.as_slice();
 
     while !leave.is_empty() {
@@ -1265,6 +1294,7 @@ impl HostOps for OsHost {
                 Some(taken) => taken.leave = leave,
                 None => records.push(Taken {
                     token,
+                    fd: rustix::io::dup(fd)?,
                     saved: current.clone(),
                     leave,
                 }),
@@ -1278,7 +1308,11 @@ impl HostOps for OsHost {
 
         match outcome {
             None => Err(Failure::NotFound),
-            Some(Ok(())) => Ok(()),
+            Some(Ok(())) => {
+                self.give_back_on_signals();
+
+                Ok(())
+            }
             Some(Err(errno)) => Err(failure_from_error(Error::from(errno))),
         }
     }
@@ -1286,11 +1320,11 @@ impl HostOps for OsHost {
     fn tty_give(&self, io: Handle) -> Result<(), Failure> {
         let token = io.bytes();
 
-        let outcome = self.with_fd(&io, |fd| {
+        let outcome = self.with_fd(&io, |_| {
             let mut records = self.taken.lock().unwrap();
 
             match records.iter().position(|taken| taken.token == token) {
-                Some(index) => give_back(fd, &records.remove(index)),
+                Some(index) => give_back(&records.remove(index)),
                 // Never taken: there is nothing to give back.
                 None => Ok(()),
             }

@@ -140,6 +140,76 @@ fn a_taken_terminal_is_given_back_with_its_leave_bytes_and_its_settings() {
     host.handle_close(far);
 }
 
+/// The pseudo-terminal the child half of [`a_terminating_signal_gives_back_every_terminal_taken`] takes, named by the variable its parent sets.
+const SIGNALLED_TERMINAL: &str = "CURIOS_TEST_SIGNALLED_TERMINAL";
+
+/// Bytes the near end of a pseudo-terminal reads within ten seconds, until they end with `marker`; a child that never writes it fails the test rather than holding it.
+fn read_until(near: &OwnedFd, marker: &[u8]) -> Vec<u8> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut seen = Vec::new();
+
+    while !seen.ends_with(marker) {
+        let watched = [Watched {
+            fd: near.as_fd(),
+            asked: PollFlags::IN,
+        }];
+        let ready = ready(&watched, Some(deadline)).expect("the near end is waited on");
+        assert!(!ready.is_empty(), "nothing arrived in time; read {seen:?}");
+        seen.extend(written_to(near));
+    }
+
+    seen
+}
+
+/// A process ended by a terminating signal gives back every terminal it took first, then ends by that signal. A test cannot outlive the signal it sends itself, so its child is this test's own binary run again: given a pseudo-terminal by the variable above, it takes the terminal and waits, and the parent sends it SIGTERM and finds the terminal as the child found it, its leave bytes written.
+#[test]
+fn a_terminating_signal_gives_back_every_terminal_taken() {
+    if let Some(name) = env::var_os(SIGNALLED_TERMINAL) {
+        let host = OsHost::with_args(vec![]);
+        let far = host.file_open(name.into_vec(), Mode::ReadWrite).unwrap();
+        host.tty_take(far.clone(), b"\x1b[?1049l".to_vec()).unwrap();
+        host.handle_write(far, b"taken".to_vec()).unwrap();
+        loop {
+            thread::sleep(Duration::from_secs(60));
+        }
+    }
+
+    let (near, name) = pseudo_terminal();
+    let mut child = std::process::Command::new(env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "os_host::tests::a_terminating_signal_gives_back_every_terminal_taken",
+            "--nocapture",
+        ])
+        .env(SIGNALLED_TERMINAL, OsStr::from_bytes(&name))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the test runs again as a child");
+
+    read_until(&near, b"taken");
+    rustix::process::kill_process(
+        rustix::process::Pid::from_child(&child),
+        rustix::process::Signal::TERM,
+    )
+    .expect("the child is signalled");
+    let status = child.wait().expect("the child ends");
+
+    assert_eq!(
+        std::os::unix::process::ExitStatusExt::signal(&status),
+        Some(SIGTERM)
+    );
+    assert_eq!(read_until(&near, b"\x1b[?1049l"), b"\x1b[?1049l");
+    let reopened = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(OFlags::NOCTTY.bits().cast_signed())
+        .open(OsStr::from_bytes(&name))
+        .expect("the far end opens again");
+    assert!(cooked(reopened.as_fd()));
+}
+
 /// A host dropped with a terminal still taken gives it back, as a trap or an `exit` drops it: the leave bytes reach the terminal and its settings are the ones it had.
 #[test]
 fn a_dropped_host_gives_back_every_terminal_still_taken() {

@@ -28,6 +28,8 @@ log = { version = "0.4.33", optional = true }
 getrandom = { version = "0.4.3" }
 socket2 = { version = "0.6.4" }
 rustix = { version = "1.1.4", features = ["event", "fs", "pipe", "process", "stdio", "termios"] }
+# The thread that gives back every terminal a program took when a terminating signal arrives, then lets the signal end the process: the one place the native host handles a signal, through the crate's safe registration rather than a handler of ours.
+signal-hook = { version = "0.4.5" }
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = { version = "2.2.0" }
 webpki-roots = { version = "1.0.8" }
