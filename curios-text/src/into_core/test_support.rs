@@ -378,6 +378,9 @@ fn prelude_fixture() -> RootSource {
                     area(A, A) -> Type,
                 }
             end
+            mod Hidden
+                pub use /sys/{Handle};
+            end
         "#
         .parse()
         .unwrap(),

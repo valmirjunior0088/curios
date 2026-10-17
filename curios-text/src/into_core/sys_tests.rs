@@ -95,6 +95,16 @@ fn a_name_under_the_closed_root_is_offered_the_paths_that_carry_it() {
     );
 }
 
+// **A report never offers a path through a module the reader cannot see.** The fixture's `/std` holds `Handle` only in a private module, so a reach for it under the closed root is told the root is internal and offered nothing: `/std/Hidden/Handle` would be a way out the next compile refuses.
+#[test]
+fn does_not_offer_a_path_through_a_private_module() {
+    let error = lower_with_prelude("let h: /sys/Handle = Type; Type").unwrap_err();
+    assert!(
+        error.contains("`sys` is internal to the standard library") && !error.contains("Hidden"),
+        "unexpected error: {error}"
+    );
+}
+
 // **A type re-exported out of a closed root carries its constructors with it.** The `use` naming it was vetted against the facade where it was written, so walking into what it holds is reaching through that facade rather than past it: the guard answers for the reach an author spelled, not for where the library keeps the declaration. Closing `/sys` without this left `True/qed` and `Verdict/passed` unwritable by any spelling at all.
 #[test]
 fn allows_a_constructor_of_a_type_re_exported_out_of_a_closed_root() {

@@ -380,10 +380,12 @@ pub(super) fn unresolved(
 
 /// Every public interface in scope that carries `label` in the namespace `sought` names, as the absolute path the label has there: the paths a refusal offers for a name that resolved to nothing. Found by the label alone — a module and a declaration of one name are two things, and nothing here pairs a path with another that exports the same declaration. Read off the public interfaces, where a `pub use` is a binding of the re-exporting module, rather than the declaration table, because the path a reader may write is the exporting module's: `/std/Bool` is `pub use Bool/{let Bool}`, and Core knows only the `/sys/Bool/Bool` it stands for. Only the shortest paths are kept — a longer one is the same name through a deeper module — in the path's own order, which is deterministic and nothing more.
 ///
-/// A candidate the unit may not reference is dropped first, because a report that offered one would spell a way out the next compile refuses. Dropping before the shortest paths are kept rather than after is what makes the rule reachability instead of depth: `/sys/Nat` stands beside `/std/Nat` at the same length, and a reachable route below an internal one is still worth offering.
+/// A candidate `consumer` may not write is dropped first — one under a root the unit may not name, or one through a module it cannot see — because a report that offered one would spell a way out the next compile refuses. Dropping before the shortest paths are kept rather than after is what makes the rule reachability instead of depth: `/sys/Nat` stands beside `/std/Nat` at the same length, and a reachable route below an internal one is still worth offering.
 pub(super) fn carriers(
     public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     reach: Reach<'_>,
+    consumer: &Qualifier,
     label: &str,
     sought: curios_core::Sought,
 ) -> Vec<Qualifier> {
@@ -399,6 +401,7 @@ pub(super) fn carriers(
             (modules && interface.children.contains_key(label))
                 || (bindings && interface.bindings.contains_key(label))
         })
+        .filter(|(module, _)| reachable(public, table, consumer, module))
         .map(|(module, _)| module.with(label))
         .filter(|path| reach.refused(path.segments()).is_none())
         .collect::<Vec<_>>();
@@ -408,10 +411,32 @@ pub(super) fn carriers(
     found
 }
 
-/// The refusal of a reach into a root the unit may not name: the root of `resolved` as the step that failed, for the reason `missing` gives, with every path the unit may write that carries `wanted`, the name it reached for under that root and the namespace it sought it in.
+/// Whether `consumer` may walk to `module` from the compilation root, one step at a time: each a child its parent shows the consumer, by its export or by the consumer standing within the parent.
+fn reachable(
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
+    consumer: &Qualifier,
+    module: &Qualifier,
+) -> bool {
+    let mut parent = Qualifier::empty();
+
+    module.segments().iter().all(|segment| {
+        match visible_child(public, table, consumer, &parent, segment) {
+            Some(child) => {
+                parent = child;
+                true
+            }
+            None => false,
+        }
+    })
+}
+
+/// The refusal of a reach into a root the unit may not name: the root of `resolved` as the step that failed, for the reason `missing` gives, with every path `consumer` may write that carries `wanted`, the name it reached for under that root and the namespace it sought it in.
 pub(super) fn out_of_reach(
     public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     reach: Reach<'_>,
+    consumer: &Qualifier,
     resolved: &[String],
     missing: curios_core::Missing,
     wanted: Option<(&str, curios_core::Sought)>,
@@ -423,7 +448,7 @@ pub(super) fn out_of_reach(
         missing,
         nearest: None,
         elsewhere: match wanted {
-            Some((label, sought)) => carriers(public, reach, label, sought),
+            Some((label, sought)) => carriers(public, table, reach, consumer, label, sought),
             None => Vec::new(),
         },
     }
@@ -920,7 +945,15 @@ fn resolve_provider(
             .map(|wanted| (wanted.as_str(), curios_core::Sought::Module));
 
         Err(Error::unresolved(
-            out_of_reach(public, reach, reached.segments(), missing, wanted),
+            out_of_reach(
+                public,
+                table,
+                reach,
+                module,
+                reached.segments(),
+                missing,
+                wanted,
+            ),
             false,
         ))
     };

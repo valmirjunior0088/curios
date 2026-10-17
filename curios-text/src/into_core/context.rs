@@ -862,7 +862,14 @@ impl<'a> Context<'a> {
             within: None,
             missing: curios_core::Missing::Absent,
             nearest: nearest(label, scope).map(str::to_string),
-            elsewhere: carriers(self.public, self.reach, label, curios_core::Sought::Binding),
+            elsewhere: carriers(
+                self.public,
+                self.table,
+                self.reach,
+                &self.prefix,
+                label,
+                curios_core::Sought::Binding,
+            ),
         }
     }
 
@@ -874,7 +881,14 @@ impl<'a> Context<'a> {
             within: None,
             missing: curios_core::Missing::Absent,
             nearest: nearest(label, self.qualifiers.keys().map(String::as_str)).map(str::to_string),
-            elsewhere: carriers(self.public, self.reach, label, curios_core::Sought::Module),
+            elsewhere: carriers(
+                self.public,
+                self.table,
+                self.reach,
+                &self.prefix,
+                label,
+                curios_core::Sought::Module,
+            ),
         }
     }
 
@@ -1015,7 +1029,15 @@ impl<'a> Context<'a> {
         };
 
         Err(Error::unresolved(
-            out_of_reach(self.public, self.reach, module.segments(), missing, wanted),
+            out_of_reach(
+                self.public,
+                self.table,
+                self.reach,
+                &self.prefix,
+                module.segments(),
+                missing,
+                wanted,
+            ),
             false,
         ))
     }
