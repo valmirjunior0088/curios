@@ -1,15 +1,29 @@
-//! The benchmark bench, as a cargo subcommand, and the readings it has taken, under `readings/`.
+//! The benchmark bench, as a cargo subcommand, and the readings it has taken, one a module beside this one.
 //!
-//! `cargo xbench collect` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and prints the reading as the module that records it — standard output carries the module alone, so `cargo xbench collect > xbench/src/readings/reading_NN.rs` files a capture and nothing else. `cargo xbench report` computes what the readings say; it runs anywhere.
+//! `cargo xbench collect` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and prints the reading as the module that records it — standard output carries the module alone, so `cargo xbench collect > xbench/src/reading_NN.rs` files a capture and nothing else. `cargo xbench report` computes what the readings say; it runs anywhere.
 
-mod readings;
-use readings::*;
+#[cfg(test)]
+mod tests;
+
+// Re-exported publicly so `support`'s `pub` items count as reachable under `unreachable_pub`.
+mod support;
+pub use support::*;
+
+mod reading_00;
+use reading_00::*;
+
+mod reading_01;
+use reading_01::*;
 
 use {
     clap::{Parser, Subcommand},
     std::process::ExitCode,
-    xbench::{one, report},
 };
+
+/// Every reading taken, oldest first: a reading's number is its index here.
+///
+/// The bench begins with none, as the board began with no ticket. A reading is filed from what a sitting printed, never written by hand, and the ones a vanished harness took are not carried in: none was taken under a protocol this bench records, so none could be compared with a reading taken now.
+const READINGS: &[&Reading] = &[&READING_00, &READING_01];
 
 #[derive(Debug, Parser)]
 #[command(
@@ -46,7 +60,7 @@ enum Bench {
 fn main() -> ExitCode {
     let outcome = match Cli::parse().command {
         // The next reading is numbered after the ones already filed, which is something only the binary knows.
-        Bench::Collect => xbench::collect(READINGS.len()),
+        Bench::Collect => collect(READINGS.len()),
         Bench::Report { reading: None } => {
             print!("{}", report(READINGS));
             Ok(())

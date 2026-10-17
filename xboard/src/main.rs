@@ -1,9 +1,31 @@
-//! The soundness board, as a cargo subcommand, and the board itself, under `board/`.
+//! The soundness board, as a cargo subcommand, and the board itself, one part of the judgment a module beside this one.
 //!
 //! `cargo xboard report` puts every ticket to the checkers, prints the report, and fails if a ticket regressed or was shut without a fix named. `cargo xboard probe` puts one program to them as a proof of `False`, off the board: what a hunt asks before there is a ticket to write.
 
-mod board;
-use board::*;
+#[cfg(test)]
+mod tests;
+
+// Re-exported publicly so `support`'s `pub` items count as reachable under `unreachable_pub`.
+mod support;
+pub use support::*;
+
+mod admission;
+use admission::*;
+
+mod conversion;
+use conversion::*;
+
+mod elimination;
+use elimination::*;
+
+mod formation;
+use formation::*;
+
+mod introduction;
+use introduction::*;
+
+mod totality;
+use totality::*;
 
 use {
     clap::{Parser, Subcommand},
@@ -13,8 +35,17 @@ use {
         path::{Path, PathBuf},
         process::ExitCode,
     },
-    xboard::{Probe, Report},
 };
+
+/// The board itself: every part of the judgment, each with the tickets filed under it.
+const BOARD: &[&Part] = &[
+    &FORMATION,
+    &INTRODUCTION,
+    &ELIMINATION,
+    &CONVERSION,
+    &TOTALITY,
+    &ADMISSION,
+];
 
 #[derive(Debug, Parser)]
 #[command(
@@ -95,18 +126,5 @@ fn read(program: &Path) -> io::Result<String> {
             Ok(source)
         }
         false => fs::read_to_string(program),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The suite fails where `cargo xboard report` would.
-    #[test]
-    fn the_board_holds() {
-        let report = Report::run(BOARD);
-
-        assert!(!report.fails(), "\n{report}");
     }
 }

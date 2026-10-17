@@ -1,12 +1,12 @@
 use {
+    crate::{
+        Date, Part, Proof, Status, Ticket, Witness, declared, false_name, false_type, refused,
+    },
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Item, Module,
         Nominal, Telescope, Term, Totality, UniverseContext,
     },
     curios_utilities::Qualifier,
-    xboard::{
-        Date, Part, Proof, Status, Ticket, Witness, declared, false_name, false_type, refused,
-    },
 };
 
 /// What is believed without being judged again? A unit already in scope, a cached verdict, a reused payload, a module taken as finished, an exhausted budget.

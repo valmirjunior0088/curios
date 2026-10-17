@@ -1,6 +1,6 @@
 //! Coverage for the rules that can admit a term, where nothing else guards one.
 //!
-//! What the soundness claim covers is `documentation/design/soundness/the-soundness-board.md`'s. The soundness board, `xboard/src/board/`, holds a ticket only for a proof of `False` that was seen admitted, so a rule nothing has broken has no witness there: these tests are what fails when such a rule stops holding.
+//! What the soundness claim covers is `documentation/design/soundness/the-soundness-board.md`'s. The soundness board, `xboard/src/<part>.rs`, holds a ticket only for a proof of `False` that was seen admitted, so a rule nothing has broken has no witness there: these tests are what fails when such a rule stops holding.
 //!
 //! The rules with their own homes are not repeated here: strict positivity lives in `tests::positivity`, the two totality obligations in `tests::soundness`, and witness coherence in `tests::concepts`.
 //!

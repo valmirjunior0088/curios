@@ -6,7 +6,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(gi
 
 Find a proof of `False`: a closed term the checkers admit at `/std/Bool/False`.
 
-`$ARGUMENTS` names a part of the board, a file under `xboard/src/board/`, and may name a rule in it by the decision that designs it. With none given, choose a rule and say why. One invocation is one rule; iteration lives outside, under `/loop`, and what one run hands the next is the tree as committed: the board, the findings files and the tests.
+`$ARGUMENTS` names a part of the board, its file `xboard/src/<part>.rs`, and may name a rule in it by the decision that designs it. With none given, choose a rule and say why. One invocation is one rule; iteration lives outside, under `/loop`, and what one run hands the next is the tree as committed: the board, the findings files and the tests.
 
 ## Authority
 

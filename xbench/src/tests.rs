@@ -4,7 +4,7 @@
 
 use {
     super::*,
-    xbench::{CONTESTANTS, WORKLOADS},
+    crate::{CONTESTANTS, WORKLOADS},
 };
 
 /// Two is the fewest that yields a span rather than a single difference, and the report's whole test is whether two spans are disjoint.

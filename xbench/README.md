@@ -8,19 +8,18 @@ A reading is a historical fact and cannot be re-run. That is what separates this
 
 ```
 xbench/
-  src/lib.rs and beside it    the library: what a reading is, what it is taken under, the contest, the report
-  src/main.rs                 the binary: the command line
-  src/readings.rs             every reading taken
-  src/readings/reading_NN.rs  one reading each, as data
+  src/main.rs        the command line, and every reading taken
+  src/reading_NN.rs  one reading each, as data
+  src/support/       what a reading is, what it is taken under, the contest, the report
 
 ../programs/
   lcg/ trees/ chain/ churn/ walk/ spines/   the timed programs, one directory per workload
 ```
 
 ```sh
-cargo xbench collect > xbench/src/readings/reading_00.rs   # then list the module in readings.rs
-cargo xbench report                                        # every reading, and what changed between them
-cargo xbench report 00                                     # one reading in full
+cargo xbench collect > xbench/src/reading_00.rs   # then list the module in main.rs
+cargo xbench report                               # every reading, and what changed between them
+cargo xbench report 00                            # one reading in full
 ```
 
 Standard output carries the reading module alone, so a redirect files the capture and nothing else; the build log, the agreement check and the live tables go to standard error.

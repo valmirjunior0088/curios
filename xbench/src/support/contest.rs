@@ -382,7 +382,7 @@ fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<f64>>
     Ok(samples)
 }
 
-/// A reading as the module that records it, ready to be filed under `src/readings/` and listed in `readings.rs`.
+/// A reading as the module that records it, ready to be filed as `src/reading_NN.rs` and listed in `main.rs`.
 /// Everything one sitting captured, which is the subject `recorded` writes out. It travels as one value because it is one thing: what a reading will say.
 #[derive(Debug)]
 struct Sitting {
@@ -410,7 +410,7 @@ fn recorded(number: usize, sitting: &Sitting) -> String {
         unpadded(&taken[8..10]),
     );
     let mut module = format!(
-        "//! Reading {number:02}, taken {taken}.\n\nuse xbench::{{Date, Platform, Reading, took, weighed}};\n\npub(super) const READING_{number:02}: Reading = Reading {{\n    taken: Date::new({year}, {month}, {day}),\n    subject: {subject:?},\n    platform: Platform {{\n        machine: {:?},\n        state: {:?},\n        software: {:?},\n    }},\n    pinned: &[\n",
+        "use crate::{{Date, Platform, Reading, took, weighed}};\n\npub(super) const READING_{number:02}: Reading = Reading {{\n    taken: Date::new({year}, {month}, {day}),\n    subject: {subject:?},\n    platform: Platform {{\n        machine: {:?},\n        state: {:?},\n        software: {:?},\n    }},\n    pinned: &[\n",
         platform.machine, platform.state, platform.software
     );
 

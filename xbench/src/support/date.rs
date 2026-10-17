@@ -1,4 +1,4 @@
-//! A calendar day, which is all a run says of when. The board keeps the same type for its tickets, `xboard/src/date.rs`: the two are one file, copied.
+//! A calendar day, which is all a run says of when. The board keeps the same type for its tickets, `xboard/src/support/date.rs`: the two are one file, copied.
 
 #[cfg(test)]
 mod tests;

@@ -1,6 +1,4 @@
-//! Reading 01, taken 2026-10-15.
-
-use xbench::{Date, Platform, Reading, took, weighed};
+use crate::{Date, Platform, Reading, took, weighed};
 
 pub(super) const READING_01: Reading = Reading {
     taken: Date::new(2026, 10, 15),

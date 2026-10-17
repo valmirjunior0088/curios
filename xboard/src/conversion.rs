@@ -1,11 +1,11 @@
 use {
+    crate::{Date, Part, Proof, Status, Ticket, Witness, declared, refused},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nominal, Scope,
         Telescope, Term, UniverseContext,
     },
     curios_text::SYNTAX,
     curios_utilities::{Plicity, Qualifier},
-    xboard::{Date, Part, Proof, Status, Ticket, Witness, declared, refused},
 };
 
 /// Are these two terms equal? Definitional equality and everything it believes about computation: the intrinsics' folds and algebra, the bounds oracle, the binary64 model, the closed machine, the evaluation memo.

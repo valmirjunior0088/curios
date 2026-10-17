@@ -1,4 +1,4 @@
-//! The benchmark bench, as a library: what a reading is, what it is taken under, the contest that takes one, and the report that computes every figure the readings amount to. The readings themselves are the binary's, under `src/readings/`, as `xboard`'s board is that crate's binary's.
+//! What the benchmark bench is written in and run by: what a reading is, what it is taken under, the contest that takes one, and the report that computes every figure the readings amount to. The readings themselves are the binary's, one a module beside `main.rs`, as `xboard`'s board is that crate's binary's.
 //!
 //! It reads in the order a sitting uses it:
 //!

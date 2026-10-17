@@ -6,7 +6,7 @@ The soundness board: every flaw found in the Curios checkers, kept as something 
 
 ### A flaw is a ticket that is run
 
-**Decision.** The board is the binary's, `src/board/`, one module per part of the judgment, and the library is what it is written in and run by: a part owns the tickets for the flaws found in it. A ticket states the day it was found and whether it is open or fixed. It carries witnesses, and `cargo xboard report` puts every one to the checkers: a fixed flaw whose witness is no longer refused as it expects has regressed, an open flaw whose witnesses are all refused was shut without the ticket saying so, and either fails the run. The report then says of each part what was found in it.
+**Decision.** The board is the binary's, one module per part of the judgment beside `src/main.rs`, and its `support` module is what it is written in and run by: a part owns the tickets for the flaws found in it. A ticket states the day it was found and whether it is open or fixed. It carries witnesses, and `cargo xboard report` puts every one to the checkers: a fixed flaw whose witness is no longer refused as it expects has regressed, an open flaw whose witnesses are all refused was shut without the ticket saying so, and either fails the run. The report then says of each part what was found in it.
 
 **Rationale.** A flaw in the kernel of a proof assistant is not fixed and forgotten: every later change is held against every flaw already found, and the list is one a person can read and a machine runs. The fields are Rust values, so a date that does not exist does not compile, and where a ticket sits says which part it was found in, so that relation is stated once.
 

@@ -1,10 +1,10 @@
 use {
+    crate::{Date, Part, Proof, Status, Ticket, Witness, declared, false_type, refused},
     curios_core::{
         Free, Global, Level, Module, Nominal, StructDecl, StructType, Subterm, Telescope, Term,
         UniverseContext, Universes,
     },
     curios_utilities::Qualifier,
-    xboard::{Date, Part, Proof, Status, Ticket, Witness, declared, false_type, refused},
 };
 
 /// Is this a type, and at which sort? For every former — Π, Σ, a declared family or record — with its levels, subsumption, `Prop` and positivity, and for what a declaration, an intrinsic or a `foreign` row may state.

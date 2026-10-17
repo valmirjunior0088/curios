@@ -1,10 +1,10 @@
 use {
+    crate::{Date, Part, Proof, Status, Ticket, Witness, declared, false_type, refused},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Level, Module, Nominal, Telescope, Term,
         UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
-    xboard::{Date, Part, Proof, Status, Ticket, Witness, declared, false_type, refused},
 };
 
 /// Does this recursion end, and is what is erased total? The erasure obligations and the descent they rest on.

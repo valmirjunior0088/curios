@@ -1,11 +1,11 @@
 use {
+    crate::{Date, Part, Proof, Status, Ticket, Witness, declared, false_type, refused},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat, Nominal, Scope,
         Telescope, Term, UniverseContext,
     },
     curios_text::SYNTAX,
     curios_utilities::{Plicity, Qualifier},
-    xboard::{Date, Part, Proof, Status, Ticket, Witness, declared, false_type, refused},
 };
 
 /// May this value be taken apart this way, and what does an arm learn? A match, its motive, coverage, inversion and case equations, where a proposition may be eliminated, and that `Io` cannot be.

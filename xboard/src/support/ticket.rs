@@ -24,7 +24,7 @@ pub enum Status {
 
 /// One flaw: a closed term the checkers admitted at `/std/Bool/False`. Nothing else is a ticket — not a misjudgment no proof of `False` was built from, not a refusal of something sound, not a program compiled to do what its source does not say.
 ///
-/// A whole one, written as a board file writes it and put through a run, is `EXAMPLE` in this crate's `report/tests.rs`.
+/// A whole one, written as a board file writes it and put through a run, is `EXAMPLE` in this crate's `support/report/tests.rs`.
 #[derive(Debug)]
 pub struct Ticket {
     pub title: &'static str,
