@@ -1,4 +1,5 @@
 use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord};
+use /std/Char/{GraphemeBreak};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
 
@@ -189,6 +190,67 @@ pub let try_prev(
     at: At(s),
 ) -> Option({char: Char, past: At(s), progress: Holds(past.offset < at.offset)}) =
     match 0 < at.offset | true => Option/some(prev(s, at)) | false => Option/none() end;
+
+--- The rules of UAX #29 that decide where an extended grapheme cluster ends.
+mod grapheme;
+
+--- The position past the extended grapheme cluster that begins at `at`, and the proof that it lies past: what a reader sees as one character, which may be several characters of `s` — a letter and its marks, an emoji sequence, a flag. Its boundaries are UAX #29's, over the classes `Char` reads from the Unicode Character Database the toolchain pins.
+pub let next_grapheme(
+    s: Str,
+    at: At(s),
+    @here: Holds(at.offset < Bytes/len(s.bytes)),
+) -> {past: At(s), progress: Holds(at.offset < past.offset)} =
+    let first = next(s, at);
+    let opening = GraphemeBreak/of_char(first.char);
+    forward(
+        (p: At(s)) =>
+            (before: GraphemeBreak, run: grapheme/Run, @beyond: Holds(at.offset < p.offset)) -> {
+                past: At(s),
+                progress: Holds(at.offset < past.offset)},
+        (p, again) =>
+            (before, run, @beyond) =>
+                match try_next(s, p)
+                | none() => (past = p, progress = beyond)
+                | some(step) =>
+                    let class = GraphemeBreak/of_char(step.char);
+                    match grapheme/breaks(before, step.char, class, run)
+                    | true => (past = p, progress = beyond)
+                    | false =>
+                        again(step.past, step.progress)(
+                            class,
+                            grapheme/after(run, step.char, class))
+                    end
+                end,
+        first.past)(opening, grapheme/opening(first.char, opening));
+
+--- The position past the extended grapheme cluster that begins at `at` and the proof that it lies past, or `none` at the end of `s`.
+pub let try_next_grapheme(
+    s: Str,
+    at: At(s),
+) -> Option({past: At(s), progress: Holds(at.offset < past.offset)}) =
+    match at.offset < Bytes/len(s.bytes)
+    | true => Option/some(next_grapheme(s, at))
+    | false => Option/none()
+    end;
+
+--- The position where the extended grapheme cluster before `at` begins and the proof that it lies before, or `none` at the start of `s`. A boundary is decided by the text before it, so the clusters are walked from the start of `s`.
+pub let try_prev_grapheme(
+    s: Str,
+    at: At(s),
+) -> Option({past: At(s), progress: Holds(past.offset < at.offset)}) =
+    forward(
+        (_: At(s)) => Option({past: At(s), progress: Holds(past.offset < at.offset)}),
+        (p, again) =>
+            match p.offset < at.offset
+            | false => Option/none()
+            | true =>
+                let cluster = next_grapheme(s, p);
+                match cluster.past.offset < at.offset
+                | true => again(cluster.past, cluster.progress)
+                | false => Option/some((past = p, progress = True/proved()))
+                end
+            end,
+        start(s));
 
 --- Recursion forward through the positions of `s`: `step` answers `P(at)` and may recur at any position past `at` — with the proof that it lies past, which is what [`next`] and [`skip`] answer — so a walk forward is total without recursing on its own, and computes wherever a value is demanded, in a type as at runtime.
 pub let forward(

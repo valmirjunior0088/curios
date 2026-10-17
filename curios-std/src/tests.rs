@@ -8,9 +8,15 @@ mod runner;
 use runner::*;
 
 use {
-    curios_pipeline::DEFAULT_STEP_BUDGET,
-    curios_text::{Formatted, Overlay, RootSource},
-    curios_utilities::RootKind,
+    curios::run_wasm,
+    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_runtime::{ForeignBindings, MockHost},
+    curios_text::{Entrypoint, Formatted, Overlay, RootSource},
+    curios_unicode::{
+        east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,
+        is_extended_pictographic, test_support::grapheme_break_cases,
+    },
+    curios_utilities::{RootKind, fill},
     curios_wonder::{Severity, Subject, diagnostics},
     std::{fs, path::PathBuf},
 };
@@ -29,7 +35,7 @@ macro_rules! corpus {
     };
 }
 
-corpus! { strings, data, aggregates, numeric, flt, cli, tui, big_nat, http, io }
+corpus! { strings, data, aggregates, numeric, flt, cli, tui, big_nat, http, io, unicode }
 
 /// A unit header with no row in `corpus!` would be compiled by nothing and silently pass, which is the one failure mode this arrangement has that a per-fixture Rust test does not.
 #[test]
@@ -152,5 +158,159 @@ fn every_corpus_unit_lints_clean() {
         "{} findings:\n\n{}",
         wrong.len(),
         wrong.join("\n\n")
+    );
+}
+
+/// The text of a run of scalars as a Curios string literal spells it, each by its escape.
+fn literal(scalars: &[u32]) -> String {
+    let escaped: String = scalars
+        .iter()
+        .map(|scalar| format!("\\u{{{scalar:X}}}"))
+        .collect();
+
+    format!("\"{escaped}\"")
+}
+
+/// Every case of Unicode's `GraphemeBreakTest.txt`, at the version `curios-unicode` pins, segments through `/std/Str/graphemes` into the clusters the database states: one unit of one test over every case.
+#[test]
+fn every_conformance_case_segments_through_the_library_as_the_database_states() {
+    let cases = grapheme_break_cases()
+        .iter()
+        .map(|case| {
+            let clusters: Vec<String> = case.iter().map(|cluster| literal(cluster)).collect();
+            format!("({}, [{}])", literal(&case.concat()), clusters.join(", "))
+        })
+        .collect::<Vec<_>>()
+        .join(",\n        ");
+    let mut unit = RootSource::supplied();
+    unit.insert_root(
+        "conformance",
+        RootKind::Ordinary,
+        fill!(
+            r#"
+            use /std/{Str, List, Test};
+
+            let cases: List({Str, List(Str)}) =
+                [
+                    ${cases}];
+
+            test every_case_segments_as_stated =
+                Test/all(List/map(cases, (case) => Test/equal(Str/graphemes(case.0), case.1)));
+            "#,
+            cases
+        )
+        .parse()
+        .expect("the unit parses"),
+    );
+
+    let (passed, failures) = outcomes("conformance", unit);
+
+    assert!(failures.is_empty(), "\n{failures}");
+    assert_eq!(passed, 1);
+}
+
+/// What `/std/Char` answers of each scalar read on standard input, one line a scalar.
+const PROPERTIES_PROGRAM: &str = r#"
+use /std/{Nat, Str, Char, Option, Io, Try, Process, Spell, print};
+use /std/Io/{Reader};
+use /std/Char/{GraphemeBreak, IndicConjunctBreak, EastAsianWidth};
+
+let answer(c: Char) -> Str =
+    Str/join(" ", [
+        Spell/spell(GraphemeBreak/of_char(c)),
+        Spell/spell(IndicConjunctBreak/of_char(c)),
+        Spell/spell(EastAsianWidth/of_char(c)),
+        Spell/spell(Char/is_extended_pictographic(c)),
+        Spell/spell(Char/is_emoji_presentation(c))]);
+
+let each(r: Reader(Process/Input)) -> Try(Io, Io/Error, {}) =
+    let line = Reader/line_text(r)!;
+    match line
+    | none() => Try/pure(())
+    | some(text) =>
+        let shown =
+            match Option/bind(Nat/of_str(text), Char/of_nat)
+            | some(c) => answer(c)
+            | none() => "unread"
+            end;
+        let _ = print(Str/concat(shown, "\n"))!;
+        each(r)
+    end;
+
+let main() -> Try(Io, Io/Error, {}) =
+    let r = Reader/new(Process/stdin)!;
+    each(r);
+
+main()
+"#;
+
+/// `curios-unicode`'s answer for `scalar`, spelled as [`PROPERTIES_PROGRAM`] prints `/std/Char`'s.
+fn database(scalar: char) -> String {
+    format!(
+        "GraphemeBreak/{}() IndicConjunctBreak/{}() EastAsianWidth/{}() {} {}",
+        grapheme_break(scalar).sys_name(),
+        indic_conjunct_break(scalar).sys_name(),
+        east_asian_width(scalar).sys_name(),
+        is_extended_pictographic(scalar),
+        is_emoji_presentation(scalar),
+    )
+}
+
+/// `/std/Char` answers every property as `curios-unicode` does wherever a table's answer changes and just before: every run's first and last scalar and those outside it, which is where a misread of the packed runs — their order, their width, a search by halves stopping short — would show.
+#[test]
+fn the_library_reads_every_property_as_the_database_does_at_every_run_s_edges() {
+    let mut scalars: Vec<char> = Vec::new();
+    let mut previous: Option<(char, String)> = None;
+    for scalar in (0..=0x10_FFFF).filter_map(char::from_u32) {
+        let answer = database(scalar);
+        if previous
+            .as_ref()
+            .is_none_or(|(_, before)| *before != answer)
+        {
+            if let Some((before, _)) = previous.take()
+                && scalars.last() != Some(&before)
+            {
+                scalars.push(before);
+            }
+            scalars.push(scalar);
+        }
+        previous = Some((scalar, answer));
+    }
+    scalars.push('\u{10FFFF}');
+
+    let entrypoint: Entrypoint = PROPERTIES_PROGRAM.parse().expect("the program parses");
+    let (module, foreigns) = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("the program compiles");
+    let (host, io) = MockHost::builder()
+        .stdin_lines(scalars.iter().map(|&scalar| u32::from(scalar).to_string()))
+        .build();
+    run_wasm(&module, foreigns, host, ForeignBindings::empty()).expect("the program runs");
+
+    let printed = String::from_utf8(io.output()).expect("the program prints text");
+    let lines: Vec<&str> = printed.lines().collect();
+    let wrong: Vec<String> = scalars
+        .iter()
+        .zip(&lines)
+        .filter(|&(&scalar, line)| database(scalar) != **line)
+        .map(|(&scalar, line)| {
+            format!(
+                "U+{:04X}: {line}, where the database answers {}",
+                u32::from(scalar),
+                database(scalar)
+            )
+        })
+        .collect();
+
+    assert_eq!(lines.len(), scalars.len());
+    assert!(
+        wrong.is_empty(),
+        "{} scalars read otherwise:\n{}",
+        wrong.len(),
+        wrong.join("\n")
     );
 }

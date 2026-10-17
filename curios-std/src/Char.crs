@@ -6,6 +6,21 @@ use /std/ops/{Eql, Cmp};
 pub mod Valid;
 pub use Valid/{let Valid};
 
+--- The tables of the Unicode Character Database the toolchain pins, as `/sys/unicode` holds them: the search that answers a character's class from one.
+mod unicode;
+
+--- A character's `Grapheme_Cluster_Break` class (UAX #29).
+pub mod GraphemeBreak;
+pub use GraphemeBreak/{let GraphemeBreak};
+
+--- A character's `Indic_Conjunct_Break` class.
+pub mod IndicConjunctBreak;
+pub use IndicConjunctBreak/{let IndicConjunctBreak};
+
+--- A character's `East_Asian_Width` class (UAX #11).
+pub mod EastAsianWidth;
+pub use EastAsianWidth/{let EastAsianWidth};
+
 --- One Unicode scalar value.
 pub struct Char: pub Type {
     --- Its code point.
@@ -61,6 +76,14 @@ pub let ge(a: Char, b: Char) -> Bool =
 --- Space, tab, newline, vertical tab, form feed or carriage return.
 pub let is_whitespace(c: Char) -> Bool =
     c.code == ' ' || Nat/in_range(c.code, '\t', '\r');
+
+--- Whether `c` is `Extended_Pictographic`, which rule GB11 of UAX #29 reads to keep an emoji sequence in one cluster.
+pub let is_extended_pictographic(c: Char) -> Bool =
+    unicode/held(/sys/unicode/extended_pictographic, c);
+
+--- Whether `c` presents as an emoji where nothing asks otherwise (`Emoji_Presentation`).
+pub let is_emoji_presentation(c: Char) -> Bool =
+    unicode/held(/sys/unicode/emoji_presentation, c);
 
 --- `0` through `9`.
 pub let is_digit(c: Char) -> Bool =

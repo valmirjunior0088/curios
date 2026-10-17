@@ -27,6 +27,7 @@ use {
     },
     curios_abi::{CodeCarrier, Failure, code_sets, stdio},
     curios_num::{Grain, Natural, Rounding},
+    curios_unicode::{PACKED_RUN, class_codes, packed_tables},
     curios_utilities::SyntaxRegistry,
 };
 
@@ -1063,6 +1064,41 @@ fn code_modules() -> Vec<SysModule> {
         .collect()
 }
 
+/// The Unicode Character Database `curios-unicode` pins, as `/std/Char` reads it: `/sys/unicode` holds each property's table as `Bytes`, in runs of `run` bytes as [`PACKED_RUN`] states them, and each class set's codes are a module of their own, named as the property's table is, holding each class's code at its name, the code of the class a scalar no run names as `missing`, and every code as `codes` — what the standard library's cases are held to, as `/sys/status/failures` holds `/std/Io/Error`'s. Nothing here spells a class or a run.
+fn unicode_modules() -> Vec<SysModule> {
+    let run = u64::try_from(PACKED_RUN).expect("a run's size fits a natural");
+    let tables = packed_tables()
+        .into_iter()
+        .map(|table| pub_let(table.name, bytes(), bytes_lit(table.bytes)))
+        .chain([pub_let("run", nat(), nat_lit(run))])
+        .collect();
+    let codes = class_codes().into_iter().map(|set| {
+        let named = set
+            .codes
+            .iter()
+            .map(|&(name, code)| pub_let(name, nat(), nat_lit(u64::from(code))));
+        let missing = pub_let("missing", nat(), nat_lit(u64::from(set.missing)));
+        let every = pub_let(
+            "codes",
+            intrinsic(Intrinsic::ListType(nat())),
+            intrinsic(Intrinsic::List {
+                element: nat(),
+                items: set
+                    .codes
+                    .iter()
+                    .map(|&(_, code)| nat_lit(u64::from(code)))
+                    .collect(),
+            }),
+        );
+
+        SysModule::ops(set.property, named.chain([missing, every]).collect())
+    });
+
+    std::iter::once(SysModule::ops("unicode", tables))
+        .chain(codes)
+        .collect()
+}
+
 /// Every module `/sys` declares before the host's rows join them: the carriers in the order the root lists them, each holding its type former and the intrinsic operations over it, and hoisting the type to the root.
 fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
     vec![
@@ -1169,6 +1205,7 @@ pub fn sys_module(syntax: &SyntaxRegistry) -> Module {
     let items = declared(syntax)
         .into_iter()
         .chain(code_modules())
+        .chain(unicode_modules())
         .flat_map(SysModule::into_items)
         .chain([option_decl(), result_decl()])
         .collect();

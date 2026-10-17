@@ -1,0 +1,45 @@
+-- `/std/Char`'s reading of the Unicode Character Database the toolchain pins, and `/std/Str`'s extended grapheme clusters over it. Every conformance case and every run's edges are held by `curios-std`'s Rust tests; these are the cases a reader checks by eye.
+use /std/{Bool, Str, Char, Option, Test};
+use /std/Char/{GraphemeBreak, IndicConjunctBreak, EastAsianWidth};
+
+test a_character_s_classes_are_the_database_s =
+    Test/all([
+        Test/equal(GraphemeBreak/of_char('a'), GraphemeBreak/other()),
+        Test/equal(GraphemeBreak/of_char('\r'), GraphemeBreak/cr()),
+        Test/equal(GraphemeBreak/of_char('́'), GraphemeBreak/extend()),
+        Test/equal(GraphemeBreak/of_char('🇫'), GraphemeBreak/regional_indicator()),
+        Test/equal(GraphemeBreak/of_char('가'), GraphemeBreak/lv()),
+        Test/equal(IndicConjunctBreak/of_char('्'), IndicConjunctBreak/linker()),
+        Test/equal(IndicConjunctBreak/of_char('क'), IndicConjunctBreak/consonant()),
+        Test/equal(EastAsianWidth/of_char('a'), EastAsianWidth/narrow()),
+        Test/equal(EastAsianWidth/of_char('日'), EastAsianWidth/wide()),
+        Test/equal(EastAsianWidth/of_char('🚀'), EastAsianWidth/wide()),
+        Test/equal(EastAsianWidth/of_char('€'), EastAsianWidth/ambiguous()),
+        Test/assert(Char/is_emoji_presentation('🚀')),
+        Test/assert(Bool/not(Char/is_emoji_presentation('☀'))),
+        Test/assert(Char/is_extended_pictographic('☀'))]);
+
+-- A letter and its mark, an emoji sequence joined by ZWJs, a flag and a carriage return before a line feed are each one cluster, where every character is one scalar.
+test what_a_reader_sees_as_one_character_is_one_cluster =
+    Test/equal(Str/graphemes("éx👨\u{200D}👩🇫🇷\r\n."), ["é", "x", "👨\u{200D}👩", "🇫🇷", "\r\n", "."]);
+
+-- A cluster is stepped over forward and back as one: past the accented letter is the `x`, and before the `x` is the letter's start.
+test a_cluster_is_stepped_over_whole_either_way =
+    let s = "éx";
+    let start = Str/At/start(s);
+    match Str/At/try_next_grapheme(s, start)
+    | none() => Test/assert(false)
+    | some(cluster) =>
+        Test/all([
+            Test/equal(Str/At/to_offset(cluster.past), 3),
+            Test/equal(
+                Option/map(
+                    Str/At/try_prev_grapheme(s, cluster.past),
+                    (back) => Str/At/to_offset(back.past)),
+                Option/some(0)),
+            Test/equal(
+                Option/map(
+                    Str/At/try_prev_grapheme(s, start),
+                    (back) => Str/At/to_offset(back.past)),
+                Option/none())])
+    end;

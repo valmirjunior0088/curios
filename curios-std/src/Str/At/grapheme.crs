@@ -1,0 +1,82 @@
+use /std/{Bool, Char};
+use /std/Char/{GraphemeBreak, IndicConjunctBreak};
+
+--- What the characters up to a candidate boundary leave that a rule of UAX #29 reads past the one character before it.
+pub struct Run: Type {
+    --- GB11: an `Extended_Pictographic` character and only `Extend` ones since, up to the one before.
+    pictographic: Bool,
+    --- GB11: such a run and then a ZWJ, the character before.
+    joined_pictographic: Bool,
+    --- GB12 and GB13: the regional indicators that run up to the character before are odd in number.
+    odd_indicators: Bool,
+    --- GB9c: an `InCB=Linker` character and only `InCB=Extend` ones since, up to the one before.
+    linked: Bool,
+}
+
+--- What a cluster's first character leaves, `next` being it, of class `class`.
+pub let opening(next: Char, class: GraphemeBreak) -> Run =
+    after(
+        Run {
+            pictographic = false,
+            joined_pictographic = false,
+            odd_indicators = false,
+            linked = false },
+        next,
+        class);
+
+--- The run once `next`, of class `class`, is the character before.
+pub let after(run: Run, next: Char, class: GraphemeBreak) -> Run =
+    let conjunct = IndicConjunctBreak/of_char(next);
+    Run {
+        pictographic =
+            Char/is_extended_pictographic(next)
+                || run.pictographic && class == GraphemeBreak/extend(),
+        joined_pictographic = run.pictographic && class == GraphemeBreak/zwj(),
+        odd_indicators =
+            class == GraphemeBreak/regional_indicator() && Bool/not(run.odd_indicators),
+        linked =
+            conjunct == IndicConjunctBreak/linker()
+                || run.linked && conjunct == IndicConjunctBreak/extend() };
+
+-- Whether a character of class `class` stands alone, as a control or a line break does.
+let alone(class: GraphemeBreak) -> Bool =
+    match class
+    | cr() => true
+    | lf() => true
+    | control() => true
+    | _ => false
+    end;
+
+--- Whether a cluster ends between a character of class `before` and `next`, of class `class`, the run up to `before` being `run`: the rules of UAX #29 in their order, the first that decides deciding.
+pub let breaks(before: GraphemeBreak, next: Char, class: GraphemeBreak, run: Run) -> Bool =
+    choose
+    -- GB3.
+    | before == GraphemeBreak/cr() && class == GraphemeBreak/lf() => false
+    -- GB4 and GB5.
+    | alone(before) || alone(class) => true
+    -- GB6.
+    | before == GraphemeBreak/l()
+        && (class == GraphemeBreak/l() || class == GraphemeBreak/v() || class == GraphemeBreak/lv()
+            || class == GraphemeBreak/lvt()) => false
+    -- GB7.
+    | (before == GraphemeBreak/lv() || before == GraphemeBreak/v())
+        && (class == GraphemeBreak/v() || class == GraphemeBreak/t()) => false
+    -- GB8.
+    | (before == GraphemeBreak/lvt() || before == GraphemeBreak/t())
+        && class == GraphemeBreak/t() => false
+    -- GB9 and GB9a.
+    | class == GraphemeBreak/extend() || class == GraphemeBreak/zwj()
+        || class == GraphemeBreak/spacing_mark() => false
+    -- GB9b.
+    | before == GraphemeBreak/prepend() => false
+    -- GB9c.
+    | run.linked && IndicConjunctBreak/of_char(next) == IndicConjunctBreak/consonant() => false
+    -- GB11.
+    | before == GraphemeBreak/zwj() && run.joined_pictographic
+        && Char/is_extended_pictographic(next) => false
+    -- GB12 and GB13.
+    | before == GraphemeBreak/regional_indicator() && class == GraphemeBreak/regional_indicator() =>
+        Bool/not(run.odd_indicators)
+    -- GB999.
+    | _ => true
+    end;

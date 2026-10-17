@@ -1,0 +1,51 @@
+use /std/{Nat, List, Char, Spell};
+use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
+use /std/Char/{unicode};
+
+--- A character's `East_Asian_Width` class (UAX #11).
+pub induct EastAsianWidth: pub Type
+--- No East Asian width.
+| neutral()
+--- Wide in an East Asian context, narrow elsewhere.
+| ambiguous()
+--- Halfwidth.
+| halfwidth()
+--- Wide.
+| wide()
+--- Fullwidth.
+| fullwidth()
+--- Narrow.
+| narrow()
+end
+
+pub use EastAsianWidth/*;
+
+satisfy Eql(EastAsianWidth) {
+    ..
+}
+
+satisfy Spell(EastAsianWidth) {
+    ..
+}
+
+-- The class `/sys/east_asian_width` gives `code`.
+let of_code(code: Nat) -> EastAsianWidth =
+    choose
+    | code == /sys/east_asian_width/ambiguous => ambiguous()
+    | code == /sys/east_asian_width/halfwidth => halfwidth()
+    | code == /sys/east_asian_width/wide => wide()
+    | code == /sys/east_asian_width/fullwidth => fullwidth()
+    | code == /sys/east_asian_width/narrow => narrow()
+    | _ => neutral()
+    end;
+
+-- Every code `/sys` names is a case of `of_code`: a class the database gains is refused here until the ladder has its arm.
+let _every_code_the_database_names_is_a_case: Holds(
+    List/all(/sys/east_asian_width/codes, (code: Nat) =>
+        code == /sys/east_asian_width/neutral || of_code(code) != neutral())) =
+    True/qed();
+
+--- `c`'s class.
+pub let of_char(c: Char) -> EastAsianWidth =
+    of_code(unicode/class(/sys/unicode/east_asian_width, /sys/east_asian_width/missing, c));

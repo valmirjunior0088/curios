@@ -1,0 +1,75 @@
+use /std/{Nat, List, Char, Spell};
+use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
+use /std/Char/{unicode};
+
+--- A character's `Grapheme_Cluster_Break` class: what segmenting text into extended grapheme clusters reads (UAX #29).
+pub induct GraphemeBreak: pub Type
+--- Any character of no other class.
+| other()
+--- U+000D CARRIAGE RETURN.
+| cr()
+--- U+000A LINE FEED.
+| lf()
+--- A control or a separator: always a cluster of its own.
+| control()
+--- A mark or a modifier that joins the character before it.
+| extend()
+--- U+200D ZERO WIDTH JOINER.
+| zwj()
+--- One of the regional indicators a flag is a pair of.
+| regional_indicator()
+--- A character that joins the one after it.
+| prepend()
+--- A spacing mark that joins the character before it.
+| spacing_mark()
+--- A Hangul leading consonant.
+| l()
+--- A Hangul vowel.
+| v()
+--- A Hangul trailing consonant.
+| t()
+--- A Hangul syllable of a leading consonant and a vowel.
+| lv()
+--- A Hangul syllable of a leading consonant, a vowel and a trailing consonant.
+| lvt()
+end
+
+pub use GraphemeBreak/*;
+
+satisfy Eql(GraphemeBreak) {
+    ..
+}
+
+satisfy Spell(GraphemeBreak) {
+    ..
+}
+
+-- The class `/sys/grapheme_break` gives `code`.
+let of_code(code: Nat) -> GraphemeBreak =
+    choose
+    | code == /sys/grapheme_break/cr => cr()
+    | code == /sys/grapheme_break/lf => lf()
+    | code == /sys/grapheme_break/control => control()
+    | code == /sys/grapheme_break/extend => extend()
+    | code == /sys/grapheme_break/zwj => zwj()
+    | code == /sys/grapheme_break/regional_indicator => regional_indicator()
+    | code == /sys/grapheme_break/prepend => prepend()
+    | code == /sys/grapheme_break/spacing_mark => spacing_mark()
+    | code == /sys/grapheme_break/l => l()
+    | code == /sys/grapheme_break/v => v()
+    | code == /sys/grapheme_break/t => t()
+    | code == /sys/grapheme_break/lv => lv()
+    | code == /sys/grapheme_break/lvt => lvt()
+    | _ => other()
+    end;
+
+-- Every code `/sys` names is a case of `of_code`: a class the database gains is refused here until the ladder has its arm.
+let _every_code_the_database_names_is_a_case: Holds(
+    List/all(/sys/grapheme_break/codes, (code: Nat) =>
+        code == /sys/grapheme_break/other || of_code(code) != other())) =
+    True/qed();
+
+--- `c`'s class.
+pub let of_char(c: Char) -> GraphemeBreak =
+    of_code(unicode/class(/sys/unicode/grapheme_break, /sys/grapheme_break/missing, c));

@@ -16,6 +16,8 @@ curios-archive = { workspace = true }
 curios-document = { workspace = true }
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
+# The Unicode tables `/sys/unicode` bakes.
+curios-unicode = { workspace = true }
 curios-utilities = { workspace = true }
 curios-parse = { workspace = true }
 curios-print = { workspace = true }

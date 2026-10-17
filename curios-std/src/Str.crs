@@ -310,6 +310,18 @@ pub let after(s: Str, at: At(s)) -> Str =
 pub let between(s: Str, from: At(s), to: At(s), @ordered: Holds(from.offset <= to.offset)) -> Str =
     before(after(s, from), At/to_after(s, from, to, @ordered));
 
+--- `s` as its extended grapheme clusters, in order: what a reader sees as its characters, each a letter with its marks, an emoji sequence or a flag as one, by the boundaries of [`At/next_grapheme`].
+pub let graphemes(s: Str) -> List(Str) =
+    At/forward(
+        (_: At(s)) => List(Str),
+        (p, again) =>
+            match At/try_next_grapheme(s, p)
+            | none() => []
+            | some(cluster) =>
+                [between(s, p, cluster.past), ..again(cluster.past, cluster.progress)]
+            end,
+        At/start(s));
+
 --- The concatenation, in order.
 pub let flatten(parts: List(Str)) -> Str =
     List/fold(parts, "", (p, acc) => concat(acc, p));

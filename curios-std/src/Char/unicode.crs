@@ -1,0 +1,47 @@
+use /std/{Nat, Byte, Bytes, Bool, Char};
+use /std/Bool/{True, Holds};
+
+-- A run is read as the seven bytes `curios-unicode` packs it in: its first scalar in three, its last in three, least significant first, then its class's code.
+let _a_run_is_seven_bytes: Holds(/sys/unicode/run == 7) =
+    True/qed();
+
+-- The runs of a table a search has not ruled out.
+struct Span(runs: Nat): Type {
+    lo: Nat,
+    hi: Nat,
+    @within: Holds(hi <= runs),
+}
+
+-- The number the three bytes of `t` from `at` spell, least significant first.
+let number(t: Bytes, at: Nat, @fits: Holds(at + 3 <= Bytes/len(t))) -> Nat =
+    Byte/to_nat(Bytes/get(t, at)) + 256 * Byte/to_nat(Bytes/get(t, at + 1))
+        + 65536 * Byte/to_nat(Bytes/get(t, at + 2));
+
+--- The code `table`'s run holding `c` gives it, or `missing` where no run does: a search by halves over the runs of a table `/sys/unicode` holds, which ascend and never meet.
+pub let class(table: Bytes, missing: Nat, c: Char) -> Nat =
+    let scalar = Char/to_nat(c);
+    let runs = Bytes/len(table) / 7;
+    Nat/descend(
+        (span: Span(runs)) => span.hi - span.lo,
+        (_) => Nat,
+        (span, again) =>
+            match span.lo < span.hi
+            | false => missing
+            | true =>
+                let mid = (span.lo + span.hi) / 2;
+                let at = 7 * mid;
+                let inside: Holds(mid < span.hi) = True/proved();
+                let room: Holds(at + 7 <= Bytes/len(table)) = True/proved();
+                choose
+                | scalar < number(table, at) =>
+                    again(Span(runs) { lo = span.lo, hi = mid }, True/proved())
+                | number(table, at + 3) < scalar =>
+                    again(Span(runs) { lo = mid + 1, hi = span.hi }, True/proved())
+                | _ => Byte/to_nat(Bytes/get(table, at + 6))
+                end
+            end,
+        Span(runs) { lo = 0, hi = runs });
+
+--- Whether a run of `table`, a binary property's, holds `c`: each of its runs has code `1`, and a character no run holds has none.
+pub let held(table: Bytes, c: Char) -> Bool =
+    class(table, 0, c) != 0;

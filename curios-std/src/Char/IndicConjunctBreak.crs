@@ -1,0 +1,45 @@
+use /std/{Nat, List, Char, Spell};
+use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
+use /std/Char/{unicode};
+
+--- A character's `Indic_Conjunct_Break` class: what rule GB9c of UAX #29 reads to keep a conjunct in one cluster.
+pub induct IndicConjunctBreak: pub Type
+--- Any character of no other class.
+| none()
+--- A virama that joins the consonants around it.
+| linker()
+--- A consonant a linker joins.
+| consonant()
+--- A mark that may stand between a linker and the consonant it joins.
+| extend()
+end
+
+pub use IndicConjunctBreak/*;
+
+satisfy Eql(IndicConjunctBreak) {
+    ..
+}
+
+satisfy Spell(IndicConjunctBreak) {
+    ..
+}
+
+-- The class `/sys/indic_conjunct_break` gives `code`.
+let of_code(code: Nat) -> IndicConjunctBreak =
+    choose
+    | code == /sys/indic_conjunct_break/linker => linker()
+    | code == /sys/indic_conjunct_break/consonant => consonant()
+    | code == /sys/indic_conjunct_break/extend => extend()
+    | _ => none()
+    end;
+
+-- Every code `/sys` names is a case of `of_code`: a class the database gains is refused here until the ladder has its arm.
+let _every_code_the_database_names_is_a_case: Holds(
+    List/all(/sys/indic_conjunct_break/codes, (code: Nat) =>
+        code == /sys/indic_conjunct_break/none || of_code(code) != none())) =
+    True/qed();
+
+--- `c`'s class.
+pub let of_char(c: Char) -> IndicConjunctBreak =
+    of_code(unicode/class(/sys/unicode/indic_conjunct_break, /sys/indic_conjunct_break/missing, c));
