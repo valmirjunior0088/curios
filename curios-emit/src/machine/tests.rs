@@ -1,11 +1,16 @@
 use {
     super::{
-        MachineFunction, MachineInstruction, MachineOperand, MachineTerminator, MachineValueId,
-        lower,
+        MachineFunction, MachineInstruction, MachineModule, MachineOperand, MachineTerminator,
+        MachineValueId, lower,
     },
     crate::{EmissionHostTarget, EmissionTail, test_support::halt},
     curios_num::Natural,
 };
+
+/// Lower `source` at the representation decided over it, as the emitter does.
+fn lowered(source: &curios_cont::Module) -> MachineModule {
+    lower(source, &curios_cont::representation(source).results)
+}
 
 #[test]
 fn return_sentinel_becomes_machine_return_without_a_block() {
@@ -30,7 +35,7 @@ fn return_sentinel_becomes_machine_return_without_a_block() {
     );
     source.set_entry(function);
 
-    let machine = lower(&source);
+    let machine = lowered(&source);
     let function = &machine.functions[&function];
     assert_eq!(function.blocks.len(), 1);
     let MachineTerminator::Return(operands) = &function.blocks[&function.entry].terminator else {
@@ -88,7 +93,7 @@ fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
     );
     source.set_entry(main);
 
-    let machine = lower(&source);
+    let machine = lowered(&source);
     let main = &machine.functions[&main];
     assert_eq!(main.blocks.len(), 1);
     assert!(matches!(
@@ -117,7 +122,7 @@ fn a_halt_stays_terminal_through_structurization() {
     );
     source.set_entry(main);
 
-    let machine = lower(&source);
+    let machine = lowered(&source);
     let structured = super::structurize(&machine);
     let (_, function) = structured.funcs().first().unwrap();
     assert!(matches!(
@@ -210,7 +215,7 @@ fn repeated_first_class_use_materializes_one_closure() {
     );
     source.set_entry(main);
 
-    let machine = lower(&source);
+    let machine = lowered(&source);
     assert_eq!(machine_make_closures(&machine.functions[&main], target), 1);
 }
 
@@ -274,7 +279,7 @@ fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
     );
     source.set_entry(main);
 
-    let machine = lower(&source);
+    let machine = lowered(&source);
     let main = &machine.functions[&main];
     assert!(main.blocks.values().any(|block| matches!(
         &block.terminator,
@@ -308,7 +313,7 @@ fn exiting_main() -> (curios_cont::Module, curios_cont::FunctionId) {
 #[test]
 fn verify_rejects_a_function_without_its_entry_block() {
     let (source, _) = exiting_main();
-    let mut machine = lower(&source);
+    let mut machine = lowered(&source);
 
     let entry = machine.entry;
     let function = machine.functions.get_mut(&entry).unwrap();
@@ -357,7 +362,7 @@ fn verify_rejects_a_nested_block_with_no_lexical_owner() {
     );
     source.set_entry(main);
 
-    let mut machine = lower(&source);
+    let mut machine = lowered(&source);
     let entry = machine.entry;
     let function = machine.functions.get_mut(&entry).unwrap();
     assert!(
@@ -377,10 +382,10 @@ fn verify_rejects_a_nested_block_with_no_lexical_owner() {
 #[test]
 fn verify_rejects_a_tail_closure_call_in_a_function_returning_two_values() {
     let (source, _) = exiting_main();
-    let mut machine = lower(&source);
+    let mut machine = lowered(&source);
     let entry = machine.entry;
     let function = machine.functions.get_mut(&entry).unwrap();
-    function.results = 2;
+    function.results = vec![None, None];
     let closure = MachineValueId(0);
     let block = function.blocks.get_mut(&function.entry).unwrap();
     block.terminator = MachineTerminator::TailIndirectCall {
@@ -392,7 +397,31 @@ fn verify_rejects_a_tail_closure_call_in_a_function_returning_two_values() {
     assert!(
         error
             .to_string()
-            .contains("returns 1 values from a tail position"),
+            .contains("returns 1 references from a tail position"),
+        "unexpected error: {error}"
+    );
+}
+
+/// A tail position an operation fixes hands back references, so a function whose result the representation raised into a register cannot end in one: its class is fixed, and this is the machine-level check that the decision held.
+#[test]
+fn verify_rejects_a_tail_closure_call_in_a_function_returning_a_float_register() {
+    let (source, _) = exiting_main();
+    let mut machine = lowered(&source);
+    let entry = machine.entry;
+    let function = machine.functions.get_mut(&entry).unwrap();
+    function.results = vec![Some(curios_cont::Repr::Flt)];
+    let closure = MachineValueId(0);
+    let block = function.blocks.get_mut(&function.entry).unwrap();
+    block.terminator = MachineTerminator::TailIndirectCall {
+        closure,
+        args: vec![],
+    };
+
+    let error = machine.verify().unwrap_err();
+    assert!(
+        error.to_string().contains(
+            "returns 1 references from a tail position while its function returns [Some(Flt)]"
+        ),
         "unexpected error: {error}"
     );
 }

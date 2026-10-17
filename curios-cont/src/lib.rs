@@ -1,6 +1,6 @@
 //! The Curios continuation IR: the arena-backed, pre-closure CPS graph the erased stage lowers into, and the optimizer that rewrites it.
 //!
-//! `curios_ersd::lower_to_cont` constructs the public [`Module`], and [`optimize`](optimize()) rewrites that high-CPS graph. Lowering it to WebAssembly is `curios-emit`'s, which depends on this crate rather than the reverse, so the erased stage that lowers into this IR never builds the emitter or `curios-wasm`. [`storage`] derives which local values a machine register can hold, and [`Module::entry_suspension`] derives whether the residual entry needs the turn ABI, both from the dataflow solver the passes share.
+//! `curios_ersd::lower_to_cont` constructs the public [`Module`], and [`optimize`](optimize()) rewrites that high-CPS graph. Lowering it to WebAssembly is `curios-emit`'s, which depends on this crate rather than the reverse, so the erased stage that lowers into this IR never builds the emitter or `curios-wasm`. [`representation`] derives which values a machine register can hold and at which carriers a function the analysis sees whole takes its parameters and hands back its results, and [`Module::entry_suspension`] derives whether the residual entry needs the turn ABI, both from the dataflow solver the passes share.
 //!
 //! Every CPS function owns a globally unique bodyless return continuation. Ordinary return is `ApplyCont(function.return_cont, [value])`; `Halt` is reserved for a host call that terminates the process.
 

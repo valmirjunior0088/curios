@@ -30,7 +30,11 @@ pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
     }
     for (id, function) in &machine.functions {
         let resume = return_name(*id);
-        let region = MachineFunctionBridge::new(machine, *id, function, resume.clone()).convert();
+        let (region, minted) =
+            MachineFunctionBridge::new(machine, *id, function, resume.clone()).convert();
+        for (name, carrier) in minted {
+            output.add_minted_register(name, carrier);
+        }
         let params = function
             .free_values
             .iter()
@@ -43,7 +47,7 @@ pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
             function_name(machine, *id),
             EmissionFunction {
                 params,
-                results: function.results,
+                results: function.results.clone(),
                 resume,
                 region,
             },
@@ -96,6 +100,8 @@ struct MachineFunctionBridge<'a> {
     resume: EmissionBlockName,
     literal_entropy: Entropy,
     block_captures: BTreeMap<MachineBlockId, Vec<MachineValueId>>,
+    /// The values this bridge minted that a register holds, at their carriers. See [`EmissionModule::minted_registers`].
+    minted: Vec<(EmissionValueName, curios_cont::Repr)>,
 }
 
 impl<'a> MachineFunctionBridge<'a> {
@@ -113,11 +119,14 @@ impl<'a> MachineFunctionBridge<'a> {
             resume,
             literal_entropy: Entropy::new(),
             block_captures,
+            minted: Vec::new(),
         }
     }
 
-    fn convert(mut self) -> EmissionBody {
-        self.convert_block(self.function.entry)
+    /// The function's body, and the values minted for it that a register holds.
+    fn convert(mut self) -> (EmissionBody, Vec<(EmissionValueName, curios_cont::Repr)>) {
+        let body = self.convert_block(self.function.entry);
+        (body, self.minted)
     }
 
     fn convert_block(&mut self, id: MachineBlockId) -> EmissionBody {
@@ -234,15 +243,18 @@ impl<'a> MachineFunctionBridge<'a> {
                 function,
                 args,
                 resume,
-            } => EmissionTail::Call(EmissionCallTarget::Direct {
-                target: direct_name(self.machine, *function),
-                params: self.jump_args(args, values),
-                resume: self.resume_target(
-                    *resume,
-                    self.machine.functions[function].results,
-                    blocks,
-                ),
-            }),
+            } => {
+                let machine = self.machine;
+                EmissionTail::Call(EmissionCallTarget::Direct {
+                    target: direct_name(machine, *function),
+                    params: self.jump_args(args, values),
+                    resume: self.resume_target(
+                        *resume,
+                        &machine.functions[function].results,
+                        blocks,
+                    ),
+                })
+            }
             MachineTerminator::TailDirectCall { function, args } => {
                 EmissionTail::Call(EmissionCallTarget::Direct {
                     target: direct_name(self.machine, *function),
@@ -257,7 +269,7 @@ impl<'a> MachineFunctionBridge<'a> {
             } => EmissionTail::Call(EmissionCallTarget::Indirect {
                 target: value_name(*closure),
                 params: self.jump_args(args, values),
-                resume: self.resume_target(*resume, 1, blocks),
+                resume: self.resume_target(*resume, &[None], blocks),
             }),
             MachineTerminator::TailIndirectCall { closure, args } => {
                 EmissionTail::Call(EmissionCallTarget::Indirect {
@@ -275,7 +287,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 operands: self.operands(args, values),
                 resume: self.resume_target(
                     *resume,
-                    function.signature().imported_results().len(),
+                    &vec![None; function.signature().imported_results().len()],
                     blocks,
                 ),
             }),
@@ -287,14 +299,14 @@ impl<'a> MachineFunctionBridge<'a> {
                 })
             }
             MachineTerminator::Cell { op, args, resume } => {
-                let resume = self.resume_target(*resume, op.result_arity(), blocks);
+                let resume = self.resume_target(*resume, &vec![None; op.result_arity()], blocks);
                 self.cell(*op, args, resume, values)
             }
             MachineTerminator::CellReturn { op, args } => {
                 self.cell(*op, args, self.resume.clone(), values)
             }
             MachineTerminator::Channel { op, args, resume } => {
-                let resume = self.resume_target(*resume, op.result_arity(), blocks);
+                let resume = self.resume_target(*resume, &vec![None; op.result_arity()], blocks);
                 self.channel(*op, args, resume, values)
             }
             MachineTerminator::ChannelReturn { op, args } => {
@@ -305,7 +317,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 args,
                 resume,
             } => {
-                let resume = self.resume_target(*resume, 1, blocks);
+                let resume = self.resume_target(*resume, &[None], blocks);
                 self.list_map(args, resume, values)
             }
             MachineTerminator::IntrinsicReturn {
@@ -323,29 +335,36 @@ impl<'a> MachineFunctionBridge<'a> {
         }
     }
 
+    /// The block a call or an operation resumes into, handing over results held at `carriers`. Where `target` captures values, a block minted in front of it takes the results as parameters of its own, each held as it arrives, and jumps on with the captures.
     fn resume_target(
         &mut self,
         target: MachineBlockId,
-        result_arity: usize,
+        carriers: &[Option<curios_cont::Repr>],
         blocks: &mut Vec<(EmissionBlockName, EmissionBlock)>,
     ) -> EmissionBlockName {
-        let captures = &self.block_captures[&target];
-        if captures.is_empty() {
+        if self.block_captures[&target].is_empty() {
             return self.block_name(target);
         }
 
         let synthetic = self.literal_entropy.fresh();
         let resume =
             EmissionBlockName::from(format!("resume/{}/{}", self.function_id.index(), synthetic));
-        let results = (0..result_arity)
-            .map(|index| {
-                EmissionValueName::from(format!(
+        let results = carriers
+            .iter()
+            .enumerate()
+            .map(|(index, carrier)| {
+                let name = EmissionValueName::from(format!(
                     "resume/{}/{}/result/{index}",
                     self.function_id.index(),
                     synthetic
-                ))
+                ));
+                if let Some(carrier) = carrier {
+                    self.minted.push((name.clone(), *carrier));
+                }
+                name
             })
             .collect::<Vec<_>>();
+        let captures = &self.block_captures[&target];
         let mut params = results
             .iter()
             .cloned()

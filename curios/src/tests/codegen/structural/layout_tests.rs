@@ -86,11 +86,10 @@ fn a_returned_constructor_is_delivered_as_its_fields() {
         );
     }
 
+    // The four slots are the tag and three remainders a literal modulus bounds, so each is a word, and the representation hands every one back in a register.
     assert!(
-        advance
-            .body
-            .contains("(result (ref null any) (ref null any) (ref null any) (ref null any))"),
-        "the callee must return the class's four slots: {}",
+        advance.body.contains("(result i32 i32 i32 i32)"),
+        "the callee must return the class's four slots, each a word: {}",
         advance.name,
     );
     assert!(
@@ -162,6 +161,9 @@ fn raw_wasm_validates_and_executes_without_binaryen() {
         ("looped-pick", LOOPED_PICK),
         ("variant-filler", VARIANT_FILLER),
         ("float-literal-loop", FLOAT_LITERAL_LOOP),
+        ("known-parameter-seed", KNOWN_PARAMETER_SEED),
+        ("call-result-seed", CALL_RESULT_SEED),
+        ("pair-step", PAIR_STEP),
     ] {
         let args = ["prog", "a", "b", "c"];
         let raw = run_raw(source, &args);

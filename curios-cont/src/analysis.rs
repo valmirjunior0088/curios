@@ -244,6 +244,8 @@ pub(crate) fn analyze_calls(module: &Module) -> CallAnalysis {
 pub(crate) struct TailClasses {
     /// Each class's members in `FunctionId` order, the classes in the order their first member is met.
     pub(crate) members: Vec<Vec<FunctionId>>,
+    /// The class each live function belongs to.
+    pub(crate) class_of: BTreeMap<FunctionId, usize>,
     /// The classes whose results something outside their own return edges fixes.
     pub(crate) fixed: BTreeSet<usize>,
 }
@@ -290,6 +292,11 @@ impl TailClasses {
         }
 
         let members = components(&tail_calls);
+        let class_of = members
+            .iter()
+            .enumerate()
+            .flat_map(|(class, members)| members.iter().map(move |&member| (member, class)))
+            .collect();
         let fixed = members
             .iter()
             .enumerate()
@@ -297,7 +304,11 @@ impl TailClasses {
             .map(|(class, _)| class)
             .collect();
 
-        Self { members, fixed }
+        Self {
+            members,
+            class_of,
+            fixed,
+        }
     }
 }
 

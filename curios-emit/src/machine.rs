@@ -145,8 +145,8 @@ pub(crate) struct MachineBlock {
 pub(crate) struct MachineFunction {
     free_values: Vec<MachineValueId>,
     params: Vec<MachineValueId>,
-    /// How many values every `Return` in this function carries, read off the Cont module rather than recounted here — a caller has to know it to size the block that resumes the call, and a block cannot be sized from a terminator it has not reached yet.
-    results: usize,
+    /// What every `Return` in this function carries, one carrier a value — a register's, or `None` for a reference — read off the representation decided over the Cont module rather than recounted here: a caller has to know it to size the block that resumes the call and to receive each value as it is held, and a block cannot be sized from a terminator it has not reached yet.
+    results: Vec<Option<curios_cont::Repr>>,
     entry: MachineBlockId,
     blocks: BTreeMap<MachineBlockId, MachineBlock>,
     block_scopes: BTreeMap<MachineBlockId, Vec<MachineBlockId>>,
@@ -196,7 +196,11 @@ impl fmt::Display for MachineVerifyError {
     }
 }
 
-pub(crate) fn lower(source: &curios_cont::Module) -> MachineModule {
+/// Lower `source` to the closed machine CFG, each function handing back its results at the storage `results` decided for them.
+pub(crate) fn lower(
+    source: &curios_cont::Module,
+    results: &BTreeMap<curios_cont::FunctionId, Vec<curios_cont::Storage>>,
+) -> MachineModule {
     source
         .verify()
         .expect("invalid high CPS at machine boundary");
@@ -234,7 +238,7 @@ pub(crate) fn lower(source: &curios_cont::Module) -> MachineModule {
             break;
         }
     }
-    let escaping = escaping_functions(source);
+    let escaping = source.escaping_functions();
     let wrappers = escaping
         .iter()
         .map(|function| {
@@ -250,12 +254,14 @@ pub(crate) fn lower(source: &curios_cont::Module) -> MachineModule {
         })
         .collect();
 
-    let arities = source.return_arities();
     let mut functions = BTreeMap::new();
     for (index, function) in source.functions().iter().enumerate() {
         let Some(function) = function else { continue };
         let id = curios_cont::FunctionId::from_index(index);
-        let results = arities.get(&id).copied().unwrap_or(1);
+        let results = results
+            .get(&id)
+            .map(|slots| slots.iter().map(|slot| slot.raw_carrier()).collect())
+            .unwrap_or_else(|| vec![None]);
         let lowered =
             MachineFunctionLowerer::new(source, id, function, &free_values, results).lower();
         functions.insert(id, lowered);
@@ -280,18 +286,6 @@ pub(crate) fn lower(source: &curios_cont::Module) -> MachineModule {
     };
     module.verify().expect("invalid closed machine CFG");
     module
-}
-
-fn escaping_functions(source: &curios_cont::Module) -> BTreeSet<curios_cont::FunctionId> {
-    let mut escaping = BTreeSet::new();
-    for node in source.nodes().iter().flatten() {
-        for atom in curios_cont::atoms(node) {
-            if let curios_cont::Atom::Fun(function) = atom {
-                escaping.insert(*function);
-            }
-        }
-    }
-    escaping
 }
 
 fn free_runtime_values(
@@ -441,7 +435,7 @@ pub(crate) struct MachineFunctionLowerer<'a> {
     id: curios_cont::FunctionId,
     function: &'a curios_cont::Function,
     free_values: &'a BTreeMap<curios_cont::FunctionId, Vec<MachineValueId>>,
-    results: usize,
+    results: Vec<Option<curios_cont::Repr>>,
     blocks: BTreeMap<MachineBlockId, MachineBlock>,
     block_scopes: BTreeMap<MachineBlockId, Vec<MachineBlockId>>,
     continuation_blocks: BTreeMap<curios_cont::ContinuationId, MachineBlockId>,
@@ -457,7 +451,7 @@ impl<'a> MachineFunctionLowerer<'a> {
         id: curios_cont::FunctionId,
         function: &'a curios_cont::Function,
         free_values: &'a BTreeMap<curios_cont::FunctionId, Vec<MachineValueId>>,
-        results: usize,
+        results: Vec<Option<curios_cont::Repr>>,
     ) -> Self {
         let block_entropy = Entropy::new();
         block_entropy.seed(1);
@@ -968,11 +962,11 @@ impl MachineModule {
             }
         }
         match &block.terminator {
-            MachineTerminator::Return(operands) if operands.len() != function.results => {
+            MachineTerminator::Return(operands) if operands.len() != function.results.len() => {
                 return Err(MachineVerifyError(format!(
                     "{owner} returns {} values while its function returns {}",
                     operands.len(),
-                    function.results
+                    function.results.len()
                 )));
             }
             MachineTerminator::Return(_) => {}
@@ -995,7 +989,7 @@ impl MachineModule {
                         "{owner} direct call argument count does not match closed signature"
                     )));
                 }
-                verify_block_resume(function, *resume, callee.results)?;
+                verify_block_resume(function, *resume, callee.results.len())?;
             }
             MachineTerminator::TailDirectCall {
                 function: callee,
@@ -1009,10 +1003,10 @@ impl MachineModule {
                         "{owner} tail-call argument count does not match closed signature"
                     )));
                 }
-                // A tail call is emitted as `return_call`, which hands the callee's results straight out of this function — so the two signatures must agree on results as well as on arguments.
+                // A tail call is emitted as `return_call`, which hands the callee's results straight out of this function — so the two signatures must agree on results, each at one carrier, as well as on arguments.
                 if callee.results != function.results {
                     return Err(MachineVerifyError(format!(
-                        "{owner} tail-calls a function returning {} values while returning {}",
+                        "{owner} tail-calls a function returning {:?} while returning {:?}",
                         callee.results, function.results
                     )));
                 }
@@ -1123,15 +1117,15 @@ impl MachineModule {
     }
 }
 
-/// A tail position produces `results` values straight out of `function`, so the two counts must agree — the check `TailDirectCall` makes against its callee, stated once for the positions whose count is fixed by an operation rather than a callee.
+/// A tail position produces `results` references straight out of `function`, so the function must hand back that many, each a reference — the check `TailDirectCall` makes against its callee, stated once for the positions an operation fixes rather than a callee. The representation leaves such a function's class boxed; a raw result here is that decision broken.
 fn tail_returns(
     owner: curios_cont::FunctionId,
     function: &MachineFunction,
     results: usize,
 ) -> Result<(), MachineVerifyError> {
-    if results != function.results {
+    if results != function.results.len() || function.results.iter().any(Option::is_some) {
         return Err(MachineVerifyError(format!(
-            "{owner} returns {results} values from a tail position while its function returns {}",
+            "{owner} returns {results} references from a tail position while its function returns {:?}",
             function.results
         )));
     }

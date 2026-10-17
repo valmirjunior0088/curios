@@ -94,9 +94,11 @@ pub fn into_wasm(module: &curios_cont::Module) -> (curios_wasm::Module, ForeignS
 
 fn into_wasm_within(module: &curios_cont::Module) -> (curios_wasm::Module, ForeignStore) {
     curios_profile::profile!("into_wasm");
-    let raw = raw_locals(module);
-    let machine = lower(module);
+    let representation = curios_cont::representation(module);
+    let mut raw = raw_locals(&representation);
+    let machine = lower(module, &representation.results);
     let mut structured = structurize(&machine);
+    raw.extend(structured.minted_registers());
     hoist_consts(&mut structured);
     let mut wasm_module = curios_wasm::Module::new("module");
     let table = Table::new(&structured, &raw);
@@ -112,11 +114,14 @@ fn into_wasm_within(module: &curios_cont::Module) -> (curios_wasm::Module, Forei
 
 /// The emission names the representation analysis decided to hold raw, and at which carrier.
 ///
-/// Translated here rather than threaded through the lowerings because both hops are total functions of an index: a machine value *is* its CPS value, and its emission name is that index spelled. Nothing has to be carried along to reconstruct it. A name codegen mints for itself — a hoisted literal, a wrapper argument, a closure shell — is not a CPS value, is therefore absent, and is held behind a reference, which is the correct default.
-fn raw_locals(module: &curios_cont::Module) -> HashMap<EmissionValueName, curios_cont::Repr> {
-    curios_cont::storage(module)
-        .into_iter()
-        .filter_map(|(value, storage)| {
+/// Translated here rather than threaded through the lowerings because both hops are total functions of an index: a machine value *is* its CPS value, and its emission name is that index spelled. Nothing has to be carried along to reconstruct it. A name codegen mints for itself — a hoisted literal, a wrapper argument, a closure shell — is not a CPS value, is therefore absent, and is held behind a reference, which is the correct default; the one exception, a resume block's result parameter, is recorded where structurization mints it ([`EmissionModule::minted_registers`]).
+fn raw_locals(
+    representation: &curios_cont::Representation,
+) -> HashMap<EmissionValueName, curios_cont::Repr> {
+    representation
+        .values
+        .iter()
+        .filter_map(|(&value, storage)| {
             storage
                 .raw_carrier()
                 .map(|carrier| (value_name(value_id(value)), carrier))

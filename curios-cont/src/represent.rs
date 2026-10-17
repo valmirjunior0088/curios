@@ -1,23 +1,25 @@
-//! Which values can be held in a machine register instead of an `i31`/`Flt` reference.
+//! Which values can be held in a machine register instead of an `i31`/`Flt` reference, and at which carriers a function the analysis sees whole takes its parameters and hands back its results.
 //!
 //! Every value in an emitted module is a reference by default, which is what lets one closure type serve an arity and one field shape serve a constructor. Inside a loop that uniformity buys nothing and costs a great deal: every `Flt` operation allocates its result's box, and every read of a `Bool`, a byte or a tag arrives through a type check and an unbox first. A `Nat` or `Int` is not among what a register holds — it is a reference whatever its size, an i31 or a boxed magnitude — so the words here are the bounded scalars and the floats.
 //!
 //! **The carrier is not in question; the storage is.** A value's carrier is fixed by whatever produced it, so the decision is whether to hold it raw or behind a reference — but the answer must *name* the carrier, because a local has to be declared `i32` or `f64` and a continuation parameter has no producer to read it from. Its carrier is only knowable from the demands its uses impose, which is why it is carried in the lattice rather than recovered afterwards.
 //!
-//! **A value is raw whenever any use demands the raw carrier**, and every disagreeing use is coerced. That is deliberately not the conservative rule "raw only when *every* use accepts it": a loop value used by an operation *and* jumped out on the loop-exit edge would settle boxed under it, paying the unbox and the rebox on every iteration. The asymmetry that justifies preferring raw is in the instructions rather than in any loop heuristic: coercing raw to boxed is one `ref.i31` or one `struct.new`, while boxed to raw is a runtime type check and an unbox.
+//! **A value is raw whenever any use demands the raw carrier**, and every disagreeing use is coerced. That is deliberately not the conservative rule "raw only when *every* use accepts it": a loop value used by an operation *and* jumped out on the loop-exit edge would settle boxed under it, paying the unbox and the rebox on every iteration. The asymmetry that justifies preferring raw is in the instructions rather than in any loop heuristic: coercing raw to boxed is one `ref.i31` or one `struct.new`, while boxed to raw is a runtime type check and an unbox. A value nothing reads has no use to disagree with, so a call's unread result is held as its result slot hands it over rather than boxed for no reader.
 //!
-//! **An edge argument's demand is the storage of the parameter it feeds**, which is what makes this a fixpoint rather than a scan. Without that rule a loop's back-edge values have no raw use of their own — the decremented counter and the folded accumulator are *only* ever passed back round — so they would settle boxed and the loop would coerce on every iteration, losing exactly what the analysis exists to win.
+//! **An argument's demand is the storage of the position it feeds**, which is what makes this a fixpoint rather than a scan. Without that rule a loop's back-edge values have no raw use of their own — the decremented counter and the folded accumulator are *only* ever passed back round — so they would settle boxed and the loop would coerce on every iteration, losing exactly what the analysis exists to win.
 //!
-//! **A word holds only what a word was handed.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a continuation parameter coerced to a word loses what a bigger argument said. A parameter is therefore offered the word only when every argument reaching it is itself one — a small literal, a filler, a word-producing definition, or another such parameter — which [`word_params`] decides before any demand is read.
+//! **A boundary the analysis sees whole is a join like any other.** A function that neither escapes nor is the entry is called only by `Known` calls, each naming its arguments, so each of its parameters is a join whose edges are its call sites. Its results are handed back at slots `return_call` requires every member of its tail-call class to agree on ([`TailClasses`]), so each slot is a join whose edges are the class's return edges and whose uses are the resume parameters of every call into the class. Both are decided with the same lattice as a continuation parameter, and the emitter declares the function's type at what they settle to, loads a call's arguments as an edge loads its own, and coerces a result to a resume parameter held otherwise.
 //!
-//! **A float register holds only what a float was handed.** A parameter has one type only where no type computes one. A variant's constructors share a payload slot, and scalar replacement makes that slot a parameter, `success`'s float and `failure`'s error in the one; and a value whose type is a match on another is a float on one edge and a string on the next. What its uses read under one tag or one branch says nothing of what arrives under another, and an edge coerces its argument to the parameter's carrier before anything is consulted, so a float register there casts the reference, and loses it where it does not trap. Nothing here says which reference is a float — a function parameter, a call's result and a field read are references of no stated shape — so a parameter is offered the float only when every argument reaching it is one already: a float literal, a filler, a definition producing a float, or another such parameter, which [`float_params`] decides beside the word. A loop seeded from a reference therefore carries its float behind one, and what would hand it the register is a shape stated of that reference.
+//! **A word holds only what a word was handed.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a parameter coerced to a word loses what a bigger argument said. A parameter or a result slot is therefore offered the word only when every argument reaching it is itself one — a small literal, a filler, a word-producing definition, or another such position — which [`word_params`] decides before any demand is read.
 //!
-//! **A use can only take what the definition can give**, which is what [`Offer`] states. Demands alone would raise a function parameter the moment its body did arithmetic on it — and a function parameter arrives through a `func/N` signature that is uniformly `anyref`, with no store site the analysis controls. The same holds of a value returning from a call, a host import or a cell read. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
+//! **A float register holds only what a float was handed.** A parameter has one type only where no type computes one. A variant's constructors share a payload slot, and scalar replacement makes that slot a parameter, `success`'s float and `failure`'s error in the one; and a value whose type is a match on another is a float on one edge and a string on the next. What its uses read under one tag or one branch says nothing of what arrives under another, and an edge coerces its argument to the parameter's carrier before anything is consulted, so a float register there casts the reference, and loses it where it does not trap. Nothing here says which reference is a float, so a position is offered the float only when every argument reaching it is one already: a float literal, a filler, a definition producing a float, or another such position, which [`float_params`] decides beside the word.
+//!
+//! **A use can only take what the definition can give**, which is what [`Offer`] states. What arrives through a position no single party controls is a reference by declaration: an escaping function's parameters, which its closure wrapper passes at the shared `clsr/N` type, and the entry's, which the host passes; the results of a class whose results something else fixes; a value free in another function's body; and what a cell, a channel, a call-shaped intrinsic or a host import hands back, a host's `Flt` aside. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
 
 use {
     super::{
-        Atom, ContinuationId, Edge, Lattice, Literal, Module, Node, Repr, Solver, ValueExpr,
-        ValueId, free_values, nat_is_small,
+        Atom, Callee, ContinuationId, Edge, FunctionId, Lattice, Literal, Module, Node, Repr,
+        Solver, TailClasses, ValueExpr, ValueId, free_values, nat_is_small,
     },
     curios_abi::WireType,
     std::collections::{BTreeMap, BTreeSet},
@@ -63,16 +65,42 @@ impl Lattice for Storage {
     }
 }
 
-/// What a value's definition can hand to a machine register.
+/// What the analysis decides: how each value is held, and how each function hands back its results.
+pub struct Representation {
+    /// The storage of every value the module binds.
+    pub values: BTreeMap<ValueId, Storage>,
+    /// The storage of each live function's results, in order: the slots of its tail-call class where something it sees decides them, and every one boxed where something else fixes them.
+    pub results: BTreeMap<FunctionId, Vec<Storage>>,
+}
+
+/// What one decision is about: a value, or a result slot of a tail-call class, which binds no value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Site {
+    Value(ValueId),
+    /// The `slot`-th value every member of tail-call class `class` hands back.
+    Result {
+        class: usize,
+        slot: usize,
+    },
+}
+
+/// What reaches a site: an atom an edge, a call or a return hands over, or a result slot a call's resume parameter receives.
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    Atom(&'a Atom),
+    Site(Site),
+}
+
+/// What a site's definition can hand to a machine register.
 ///
 /// [`Storage`] answers what the uses want; this answers what the definition can give, and a value is held raw only where the two agree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Offer {
     /// The definition produces exactly this carrier, so a use demanding it reads the register directly and every other use coerces at its own site.
     Fixed(Repr),
-    /// A continuation parameter, which has no producer of its own: it holds whatever its uses agree on among what reaches it, and each incoming edge coerces its argument to match. This is the only offer a `Conflict` can arise from. `words` and `floats` say whether the machine word and the float are among what it may hold, which [`word_params`] and [`float_params`] decide from what reaches it.
+    /// A join — a continuation parameter, a known function's parameter, a result slot — which has no producer of its own: it holds whatever its uses agree on among what reaches it, and each incoming argument is coerced to match. This is the only offer a `Conflict` can arise from. `words` and `floats` say whether the machine word and the float are among what it may hold, which [`word_params`] and [`float_params`] decide from what reaches it.
     Open { words: bool, floats: bool },
-    /// Nothing. Either the value arrives through a position that is uniformly a reference — a function parameter, a call, host or cell result, a recursive shell — or its definition builds a heap shape, which a register cannot hold in the first place.
+    /// Nothing. Either the value arrives through a position that is a reference by declaration, or its definition builds a heap shape, which a register cannot hold in the first place.
     Never,
 }
 
@@ -109,6 +137,52 @@ fn literal_repr(literal: &Literal) -> Repr {
     }
 }
 
+/// The boundaries the analysis sees whole: the functions every call of which it reads, and the tail-call classes whose results only their own return edges decide.
+struct Boundaries {
+    classes: TailClasses,
+    known: BTreeSet<FunctionId>,
+    /// The function each return sentinel belongs to, so an edge into one is read as a return.
+    sentinels: BTreeMap<ContinuationId, FunctionId>,
+    arities: BTreeMap<FunctionId, usize>,
+}
+
+impl Boundaries {
+    fn of(module: &Module) -> Self {
+        let escaping = module.escaping_functions();
+        let classes = TailClasses::of(module, &escaping);
+        let known = module
+            .live_functions()
+            .map(|(function, _)| function)
+            .filter(|function| !escaping.contains(function) && module.entry() != Some(*function))
+            .collect();
+        let sentinels = module
+            .live_functions()
+            .map(|(function, definition)| (definition.return_cont, function))
+            .collect();
+        Self {
+            classes,
+            known,
+            sentinels,
+            arities: module.return_arities(),
+        }
+    }
+
+    /// The class whose results `function` hands back, where nothing but the class's own return edges decides them.
+    fn open_class(&self, function: FunctionId) -> Option<usize> {
+        let class = *self.classes.class_of.get(&function)?;
+        (!self.classes.fixed.contains(&class)).then_some(class)
+    }
+
+    /// The result slots of every open class.
+    fn result_sites(&self) -> impl Iterator<Item = Site> + '_ {
+        self.arities.iter().flat_map(|(&function, &arity)| {
+            self.open_class(function)
+                .into_iter()
+                .flat_map(move |class| (0..arity).map(move |slot| Site::Result { class, slot }))
+        })
+    }
+}
+
 /// Withdraw every parameter of `cont`, which receives a result the emitter hands over as a reference.
 fn withdraw_params(module: &Module, cont: ContinuationId, withdrawn: &mut BTreeSet<ValueId>) {
     let Some(continuation) = module.continuation(cont) else {
@@ -118,24 +192,34 @@ fn withdraw_params(module: &Module, cont: ContinuationId, withdrawn: &mut BTreeS
     withdrawn.extend(&continuation.params);
 }
 
-/// What each value's definition can hand to a register.
+/// What each site's definition can hand to a register.
 ///
 /// Offers are collected first and withdrawals applied over them at the end, rather than both being written into one map as they are found. The order matters and this is what makes it not depend on traversal: a value can perfectly well bind a scalar an intrinsic produced *and* escape into another function's body, and it must settle on the withdrawal whichever the walk reached first.
-fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
+fn offers(
+    module: &Module,
+    boundaries: &Boundaries,
+    flows: &[(Source, Site)],
+) -> BTreeMap<Site, Offer> {
+    let open = Offer::Open {
+        words: true,
+        floats: true,
+    };
     let mut offers = BTreeMap::new();
     let mut withdrawn = BTreeSet::new();
 
+    // A continuation's parameters and a known function's have no producer of their own, so each takes whatever its uses agree on; so does a result slot.
     for (_, continuation) in module.live_continuations() {
-        // A continuation parameter has no producer of its own, so it takes whatever its uses agree on.
         for &param in &continuation.params {
-            offers.insert(
-                param,
-                Offer::Open {
-                    words: true,
-                    floats: true,
-                },
-            );
+            offers.insert(Site::Value(param), open);
         }
+    }
+    for &function in &boundaries.known {
+        for &param in &module.function(function).unwrap().params {
+            offers.insert(Site::Value(param), open);
+        }
+    }
+    for site in boundaries.result_sites() {
+        offers.insert(site, open);
     }
 
     for (_, node) in module.live_nodes() {
@@ -149,7 +233,7 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
                     true => Offer::Fixed(Repr::Nat),
                     false => offer_of(module.result_repr(op)),
                 };
-                offers.insert(*result, offer);
+                offers.insert(Site::Value(*result), offer);
             }
 
             Node::LetValue { result, value, .. } => {
@@ -157,12 +241,24 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
                     ValueExpr::Literal(literal) => offer_of(literal_repr(literal)),
                     ValueExpr::List(_) | ValueExpr::Tuple(_) | ValueExpr::Row(..) => Offer::Never,
                 };
-                offers.insert(*result, offer);
+                offers.insert(Site::Value(*result), offer);
             }
 
-            // A result returning from a call, a cell operation or a call-shaped intrinsic is already a reference by the time it reaches its continuation's parameter.
-            Node::ApplyFun { return_to, .. }
-            | Node::Cell { return_to, .. }
+            // A known call into a class its own return edges decide hands its results over at the class's slots, which the flows below read; any other call's result is a reference by the time it reaches its continuation's parameter.
+            Node::ApplyFun {
+                callee, return_to, ..
+            } => {
+                let decided = match callee {
+                    Callee::Known(function) => boundaries.open_class(*function).is_some(),
+                    Callee::Closure(_) => false,
+                };
+                if !decided {
+                    withdraw_params(module, *return_to, &mut withdrawn);
+                }
+            }
+
+            // What a cell operation or a call-shaped intrinsic returns is a reference too.
+            Node::Cell { return_to, .. }
             | Node::Channel { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 withdraw_params(module, *return_to, &mut withdrawn)
@@ -182,7 +278,7 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
                     for (index, &param) in continuation.params.iter().enumerate() {
                         match results.get(index) {
                             Some(WireType::Flt) => {
-                                offers.insert(param, Offer::Fixed(Repr::Flt));
+                                offers.insert(Site::Value(param), Offer::Fixed(Repr::Flt));
                             }
                             _ => {
                                 withdrawn.insert(param);
@@ -203,91 +299,86 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
     }
 
     for (function, definition) in module.live_functions() {
-        // Every function is entered through a `func/N` signature whose parameters are uniformly `anyref`.
-        withdrawn.extend(&definition.params);
-        withdraw_params(module, definition.return_cont, &mut withdrawn);
+        // A function nobody calls by name alone is entered through a position that is a reference by declaration: an escaping one through its closure wrapper's `clsr/N` signature, the entry by the host.
+        if !boundaries.known.contains(&function) {
+            withdrawn.extend(&definition.params);
+        }
 
-        // A value free in this body is bound outside it, and lowering carries it in: lambda-lifted onto a directly-called function as an extra `anyref` parameter, or captured into a closure's environment as an `anyref` field. Neither survives a register, and *this* is where the locals-only scope is enforced rather than merely intended — without it a counter decided raw where it is bound is read as a register where it is used, and a `(ref any)` reaches an `i32.sub`.
+        // A value free in this body is bound outside it, and lowering carries it in: lambda-lifted onto a directly-called function as an extra `anyref` parameter, or captured into a closure's environment as an `anyref` field. Neither survives a register, and *this* is where the scope is enforced rather than merely intended — without it a counter decided raw where it is bound is read as a register where it is used, and a `(ref any)` reaches an `i32.sub`.
         withdrawn.extend(free_values(module, function));
     }
 
     for value in withdrawn {
-        offers.insert(value, Offer::Never);
+        offers.insert(Site::Value(value), Offer::Never);
     }
 
-    let words = word_params(module, &offers);
-    let floats = float_params(module, &offers);
-    for (value, offer) in &mut offers {
+    let words = word_params(&offers, flows);
+    let floats = float_params(&offers, flows);
+    for (site, offer) in &mut offers {
         if let Offer::Open {
             words: word,
             floats: float,
         } = offer
         {
-            *word = words.contains(value);
-            *float = floats.contains(value);
+            *word = words.contains(site);
+            *float = floats.contains(site);
         }
     }
 
     offers
 }
 
-/// The continuation parameters a machine word may hold: those every argument reaching them is a word already — a small literal, a filler, a definition producing a word, or another such parameter.
-fn word_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<ValueId> {
-    fed_only_by(module, offers, |arg| match arg {
-        Atom::Value(value) => offers.get(value) == Some(&Offer::Fixed(Repr::Nat)),
-        Atom::Literal(literal) => literal_repr(literal) == Repr::Nat,
-        Atom::Filler => true,
-        Atom::Fun(_) => false,
-    })
-}
+/// Every argument the module hands to a join: an edge's to a continuation's parameters, or to its function's result slots where it returns; a known call's to its callee's parameters; and a result slot's to the resume parameters of every call into its class.
+fn flows<'m>(module: &'m Module, boundaries: &Boundaries) -> Vec<(Source<'m>, Site)> {
+    let mut flows = Vec::new();
 
-/// The continuation parameters a float register may hold: those every argument reaching them is a float already — a float literal, a filler, a definition producing a float, or another such parameter.
-fn float_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<ValueId> {
-    fed_only_by(module, offers, |arg| match arg {
-        Atom::Value(value) => offers.get(value) == Some(&Offer::Fixed(Repr::Flt)),
-        Atom::Literal(literal) => literal_repr(literal) == Repr::Flt,
-        Atom::Filler => true,
-        Atom::Fun(_) => false,
-    })
-}
-
-/// The open parameters every argument reaching them either `feeds` or is another such parameter.
-///
-/// A greatest fixpoint, because a loop parameter reaches itself around its back edge: every open parameter starts admitted, one reached by anything else is dropped, and each drop drops the parameters it reaches in turn.
-fn fed_only_by(
-    module: &Module,
-    offers: &BTreeMap<ValueId, Offer>,
-    feeds: impl Fn(&Atom) -> bool,
-) -> BTreeSet<ValueId> {
-    let open = |value: &ValueId| matches!(offers.get(value), Some(Offer::Open { .. }));
-    let mut admitted = offers.keys().copied().filter(open).collect::<BTreeSet<_>>();
-    let mut reaches = BTreeMap::<ValueId, Vec<ValueId>>::new();
-    let mut dropped = Vec::new();
-
-    let mut read_edge = |edge: &Edge| {
-        let Some(target) = module.continuation(edge.target) else {
-            return;
-        };
-
-        for (arg, &param) in edge.args.iter().zip(&target.params) {
-            match arg {
-                Atom::Value(value) if open(value) => reaches.entry(*value).or_default().push(param),
-                arg if feeds(arg) => {}
-                Atom::Value(_) | Atom::Literal(_) | Atom::Fun(_) | Atom::Filler => {
-                    dropped.push(param)
-                }
+    let read_edge = |edge: &'m Edge, flows: &mut Vec<(Source<'m>, Site)>| {
+        if let Some(target) = module.continuation(edge.target) {
+            for (arg, &param) in edge.args.iter().zip(&target.params) {
+                flows.push((Source::Atom(arg), Site::Value(param)));
+            }
+        } else if let Some(class) = boundaries
+            .sentinels
+            .get(&edge.target)
+            .and_then(|&function| boundaries.open_class(function))
+        {
+            for (slot, arg) in edge.args.iter().enumerate() {
+                flows.push((Source::Atom(arg), Site::Result { class, slot }));
             }
         }
     };
 
     for (_, node) in module.live_nodes() {
         match node {
-            Node::ApplyCont(edge) => read_edge(edge),
+            Node::ApplyCont(edge) => read_edge(edge, &mut flows),
             Node::Switch { cases, default, .. } => {
-                cases
-                    .values()
-                    .chain(default.iter())
-                    .for_each(&mut read_edge);
+                for edge in cases.values().chain(default.iter()) {
+                    read_edge(edge, &mut flows);
+                }
+            }
+            Node::ApplyFun {
+                callee: Callee::Known(function),
+                args,
+                return_to,
+            } => {
+                if boundaries.known.contains(function) {
+                    let params = &module.function(*function).unwrap().params;
+                    for (arg, &param) in args.iter().zip(params) {
+                        flows.push((Source::Atom(arg), Site::Value(param)));
+                    }
+                }
+                // A tail call returns through its caller's own sentinel, which is no continuation: the class's results pass straight through.
+                if let (Some(class), Some(resume)) = (
+                    boundaries.open_class(*function),
+                    module.continuation(*return_to),
+                ) {
+                    for (slot, &param) in resume.params.iter().enumerate() {
+                        flows.push((
+                            Source::Site(Site::Result { class, slot }),
+                            Site::Value(param),
+                        ));
+                    }
+                }
             }
             Node::LetIntrinsic { .. }
             | Node::LetValue { .. }
@@ -304,9 +395,58 @@ fn fed_only_by(
         }
     }
 
-    while let Some(param) = dropped.pop() {
-        if admitted.remove(&param) {
-            dropped.extend(reaches.get(&param).into_iter().flatten().copied());
+    flows
+}
+
+/// The open sites a machine word may hold: those every argument reaching them is a word already — a small literal, a filler, a definition producing a word, or another such site.
+fn word_params(offers: &BTreeMap<Site, Offer>, flows: &[(Source, Site)]) -> BTreeSet<Site> {
+    fed_only_by(offers, flows, |arg| match arg {
+        Atom::Value(value) => offers.get(&Site::Value(*value)) == Some(&Offer::Fixed(Repr::Nat)),
+        Atom::Literal(literal) => literal_repr(literal) == Repr::Nat,
+        Atom::Filler => true,
+        Atom::Fun(_) => false,
+    })
+}
+
+/// The open sites a float register may hold: those every argument reaching them is a float already — a float literal, a filler, a definition producing a float, or another such site.
+fn float_params(offers: &BTreeMap<Site, Offer>, flows: &[(Source, Site)]) -> BTreeSet<Site> {
+    fed_only_by(offers, flows, |arg| match arg {
+        Atom::Value(value) => offers.get(&Site::Value(*value)) == Some(&Offer::Fixed(Repr::Flt)),
+        Atom::Literal(literal) => literal_repr(literal) == Repr::Flt,
+        Atom::Filler => true,
+        Atom::Fun(_) => false,
+    })
+}
+
+/// The open sites every argument reaching them either `feeds` or is another such site.
+///
+/// A greatest fixpoint, because a loop parameter reaches itself around its back edge and a recursive function's parameter through its own call: every open site starts admitted, one reached by anything else is dropped, and each drop drops the sites it reaches in turn.
+fn fed_only_by(
+    offers: &BTreeMap<Site, Offer>,
+    flows: &[(Source, Site)],
+    feeds: impl Fn(&Atom) -> bool,
+) -> BTreeSet<Site> {
+    let open = |site: &Site| matches!(offers.get(site), Some(Offer::Open { .. }));
+    let mut admitted = offers.keys().copied().filter(open).collect::<BTreeSet<_>>();
+    let mut reaches = BTreeMap::<Site, Vec<Site>>::new();
+    let mut dropped = Vec::new();
+
+    for &(source, target) in flows {
+        let from = match source {
+            Source::Site(site) => Some(site),
+            Source::Atom(Atom::Value(value)) => Some(Site::Value(*value)),
+            Source::Atom(_) => None,
+        };
+        match (from, source) {
+            (Some(site), _) if open(&site) => reaches.entry(site).or_default().push(target),
+            (_, Source::Atom(arg)) if feeds(arg) => {}
+            _ => dropped.push(target),
+        }
+    }
+
+    while let Some(site) = dropped.pop() {
+        if admitted.remove(&site) {
+            dropped.extend(reaches.get(&site).into_iter().flatten().copied());
         }
     }
 
@@ -337,12 +477,19 @@ fn wire_carrier(wire: &WireType) -> Option<Repr> {
     }
 }
 
-/// Decide the storage of every value in the module: which values `curios-emit` may hold in a machine register, and at which carrier.
-pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
-    let offers = offers(module);
-    let seeds = module.value_ids().collect::<Vec<_>>();
+/// Decide the storage of every value in the module and of every function's results: what `curios-emit` may hold in a machine register, and at which carrier.
+pub fn representation(module: &Module) -> Representation {
+    let boundaries = Boundaries::of(module);
+    let flows = flows(module, &boundaries);
+    let offers = offers(module, &boundaries, &flows);
+    let read = module.value_use_counts();
+    let seeds = module
+        .value_ids()
+        .map(Site::Value)
+        .chain(boundaries.result_sites())
+        .collect::<Vec<_>>();
 
-    Solver::solve(seeds, |solver| {
+    let facts = Solver::solve(seeds, |solver| {
         for (_, node) in module.live_nodes() {
             match node {
                 // The roster states what each operand position reads.
@@ -352,19 +499,10 @@ pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
                     }
                 }
 
-                // A tag is read as a raw unsigned scalar; the edges' arguments are handled below with every other edge.
-                Node::Switch {
-                    scrutinee,
-                    cases,
-                    default,
-                } => {
+                // A tag is read as a raw unsigned scalar.
+                Node::Switch { scrutinee, .. } => {
                     demand(scrutinee, Some(Repr::Nat), &offers, solver);
-                    for edge in cases.values().chain(default.iter()) {
-                        edge_demands(module, edge, &offers, solver);
-                    }
                 }
-
-                Node::ApplyCont(edge) => edge_demands(module, edge, &offers, solver),
 
                 // A host call reads its scalar parameters raw and its reference parameters as shapes, whether or not it returns.
                 Node::Foreign { function, args, .. } | Node::Halt { function, args } => {
@@ -388,14 +526,15 @@ pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
                     }
                 }
 
-                // Everything else stores or passes a reference: call arguments cross a `func/N` signature that is uniformly `anyref`, a list's elements and a tuple's fields are held uninterpreted, and every cell operation works on shapes. None of these demands a raw carrier, so none contributes.
+                // Everything else stores or passes a reference, or hands its arguments to a join the flows below state: a list's elements and a tuple's fields are held uninterpreted, a closure's arguments cross its arity's uniform signature, and every cell operation works on shapes. None of these demands a raw carrier, so none contributes.
                 Node::LetValue { value, .. } => match value {
                     ValueExpr::Literal(_)
                     | ValueExpr::List(_)
                     | ValueExpr::Tuple(_)
                     | ValueExpr::Row(..) => {}
                 },
-                Node::ApplyFun { .. }
+                Node::ApplyCont(_)
+                | Node::ApplyFun { .. }
                 | Node::Cell { .. }
                 | Node::Channel { .. }
                 | Node::Intrinsic { .. }
@@ -405,42 +544,83 @@ pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
                 | Node::Unreachable => {}
             }
         }
-    })
+
+        // A resume parameter nothing reads is held as the slot feeding it hands it over: no use disagrees with the register, and holding it boxed would be a coercion no use asked for, an allocation a call where a float result goes unread.
+        for &(source, target) in &flows {
+            if let (Source::Site(slot), Site::Value(param)) = (source, target)
+                && !read.contains_key(&param)
+                && let Some(carrier) = solver
+                    .facts()
+                    .get(&slot)
+                    .and_then(|decided| decided.raw_carrier())
+            {
+                demand_site(target, carrier, &offers, solver);
+            }
+        }
+
+        // An argument inherits the storage of the join it feeds — the rule that carries a decision around a loop, across a call and back out of a return.
+        for &(source, target) in &flows {
+            let Some(carrier) = solver
+                .facts()
+                .get(&target)
+                .and_then(|decided| decided.raw_carrier())
+            else {
+                continue;
+            };
+            match source {
+                Source::Atom(atom) => demand(atom, Some(carrier), &offers, solver),
+                Source::Site(site) => demand_site(site, carrier, &offers, solver),
+            }
+        }
+    });
+
+    let results = module
+        .live_functions()
+        .map(|(function, _)| {
+            let arity = boundaries.arities.get(&function).copied().unwrap_or(1);
+            let slots = (0..arity)
+                .map(|slot| match boundaries.open_class(function) {
+                    Some(class) => facts[&Site::Result { class, slot }],
+                    None => Storage::Boxed,
+                })
+                .collect();
+            (function, slots)
+        })
+        .collect();
+    let values = facts
+        .into_iter()
+        .filter_map(|(site, storage)| match site {
+            Site::Value(value) => Some((value, storage)),
+            Site::Result { .. } => None,
+        })
+        .collect();
+
+    Representation { values, results }
 }
 
 /// Demand `carrier` of `atom`, where its definition can supply it. An atom that is not a value, a position that reads a reference, and a definition that cannot reach a register all contribute nothing.
 fn demand(
     atom: &Atom,
     carrier: Option<Repr>,
-    offers: &BTreeMap<ValueId, Offer>,
-    solver: &mut Solver<Storage>,
+    offers: &BTreeMap<Site, Offer>,
+    solver: &mut Solver<Storage, Site>,
 ) {
     let (Atom::Value(value), Some(carrier)) = (atom, carrier) else {
         return;
     };
 
-    if offers.get(value).is_some_and(|offer| offer.admits(carrier)) {
-        solver.join(*value, Storage::Raw(carrier));
-    }
+    demand_site(Site::Value(*value), carrier, offers, solver);
 }
 
-/// An edge's arguments inherit the storage of the parameters they feed — the rule that carries a decision around a loop.
-fn edge_demands(
-    module: &Module,
-    edge: &Edge,
-    offers: &BTreeMap<ValueId, Offer>,
-    solver: &mut Solver<Storage>,
+/// Demand `carrier` of `site`, where what defines it can supply it.
+fn demand_site(
+    site: Site,
+    carrier: Repr,
+    offers: &BTreeMap<Site, Offer>,
+    solver: &mut Solver<Storage, Site>,
 ) {
-    let Some(target) = module.continuation(edge.target) else {
-        // A jump to a function's return sentinel: the result leaves through the `anyref` return, so nothing is demanded raw.
-        return;
-    };
-
-    for (arg, param) in edge.args.iter().zip(&target.params) {
-        let Some(&decided) = solver.facts().get(param) else {
-            continue;
-        };
-        demand(arg, decided.raw_carrier(), offers, solver);
+    if offers.get(&site).is_some_and(|offer| offer.admits(carrier)) {
+        solver.join(site, Storage::Raw(carrier));
     }
 }
 

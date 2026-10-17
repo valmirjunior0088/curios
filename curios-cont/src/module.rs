@@ -334,6 +334,21 @@ impl Module {
         counts
     }
 
+    /// The functions some node names as a value rather than calling by name. Each becomes a closure, entered through its arity's uniform `clsr/N` signature by the wrapper `curios-emit` builds for it, so nothing about its own parameters or results may be re-keyed.
+    ///
+    /// Read over every node of the arena rather than those a live body reaches, because the wrapper set and the representation decided around it must be the same set: a function one counted as escaping and the other did not would be tail-called by a wrapper at a signature it no longer has.
+    pub fn escaping_functions(&self) -> BTreeSet<FunctionId> {
+        let mut escaping = BTreeSet::new();
+        for node in self.nodes.slots().iter().flatten() {
+            for atom in atoms(node) {
+                if let Atom::Fun(function) = atom {
+                    escaping.insert(*function);
+                }
+            }
+        }
+        escaping
+    }
+
     /// How many values each live function hands back to its caller.
     ///
     /// A function's returns are its edges to its own return sentinel, so the arity those edges carry *is* its result count — nothing declares it, and adding a field to say so would mean restating it at every construction site rather than reading it off the one place that already knows. A function with no such edge returns through some tail position instead: a foreign call, a cell operation, or a `ListMap` hands back what that operation produces, a closure call hands back the one value its shared type carries, and a tail call to a known function hands back whatever *that* function does — which is why the last of those is resolved by propagation rather than locally. A function with none of those neither returns nor is called for a result, and takes the one value every function returns unless a protocol widened it.

@@ -197,8 +197,8 @@ pub(crate) struct EmissionClosure {
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionFunction {
     pub(crate) params: Vec<EmissionBinder>,
-    /// How many values this function hands back: one, unless a return protocol delivers a constructor as its fields — which is why the wasm type is keyed on the shape rather than on the parameter count alone.
-    pub(crate) results: usize,
+    /// What this function hands back, one carrier a value — a register's, or `None` for a reference: one value unless a return protocol delivers a constructor as its fields, each held as the representation decided for its result slot — which is why the wasm type is keyed on the carriers rather than on the parameter count alone.
+    pub(crate) results: Vec<Option<curios_cont::Repr>>,
     pub(crate) resume: EmissionBlockName,
     pub(crate) region: EmissionBody,
 }
@@ -214,6 +214,8 @@ pub(crate) struct EmissionModule {
     rows: Vec<(curios_cont::RowId, curios_cont::Row)>,
     /// The suspension row only when the residual entry may return it: what selects turn exports and their dispatch requirements.
     entry_suspension: Option<curios_cont::RowId>,
+    /// The values structurization minted that a register holds, at their carriers: a resume block it adds in front of one that captures takes a call's results as parameters of its own, each held as the callee hands that result back.
+    minted_registers: Vec<(EmissionValueName, curios_cont::Repr)>,
 }
 
 impl EmissionModule {
@@ -240,6 +242,22 @@ impl EmissionModule {
 
     pub(crate) fn consts(&self) -> &[(EmissionValueName, EmissionData)] {
         &self.consts
+    }
+
+    /// The values structurization minted that a register holds, at their carriers.
+    pub(crate) fn minted_registers(
+        &self,
+    ) -> impl Iterator<Item = (EmissionValueName, curios_cont::Repr)> + '_ {
+        self.minted_registers.iter().cloned()
+    }
+
+    /// Record that `name`, a value structurization minted, is held in a register at `carrier`.
+    pub(crate) fn add_minted_register(
+        &mut self,
+        name: EmissionValueName,
+        carrier: curios_cont::Repr,
+    ) {
+        self.minted_registers.push((name, carrier));
     }
 
     pub(crate) fn set_consts(&mut self, consts: Vec<(EmissionValueName, EmissionData)>) {

@@ -257,6 +257,75 @@ pub(super) const FLOAT_LITERAL_LOOP: &str = r#"
     entry()
     "#;
 
+/// A loop seeded by its function's own float parameter. `spin` is called from two places and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function, with `go` contified into it and seeded by `x`; `j % 7919` puts a small `Nat` the loop alone holds into it.
+pub(super) const KNOWN_PARAMETER_SEED: &str = r#"
+    use /std/{Flt, Nat, List, Str, Process};
+    let go(acc : Flt, k : Nat) -> Flt =
+        match k
+        | 0 => acc
+        | j + 1 => go(acc * +1.5 + Nat/to_flt(j % 7919) * +0.25, j)
+        end;
+    let spin(x : Flt, n : Nat) -> Flt =
+        let a = go(x, n);
+        let b = a * +0.5 + a * +0.25 + +1.0;
+        let c = b * +0.5 + b * +0.25 + +1.0;
+        let d = c * +0.5 + c * +0.25 + +1.0;
+        let e = d * +0.5 + d * +0.25 + +1.0;
+        e * +0.5 + e * +0.25 + +1.0;
+    let entry() -> /std/Io({}) =
+        let taint = List/len(Process/args()!);
+        /std/print(Str/join(" | ", [Flt/to_str(spin(Nat/to_flt(taint) * +0.001, taint + 10)), Flt/to_str(spin(+0.002, taint + 20))]));
+    entry()
+    "#;
+
+/// A loop seeded by a call's result. `base` is called from two places with values the input decides, and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function and `seed` arrives as what it hands back.
+pub(super) const CALL_RESULT_SEED: &str = r#"
+    use /std/{Flt, Nat, List, Str, Process};
+    let base(x : Flt) -> Flt =
+        let b = x * +0.5 + x * +0.25 + +1.0;
+        let c = b * +0.5 + b * +0.25 + +1.0;
+        let d = c * +0.5 + c * +0.25 + +1.0;
+        let e = d * +0.5 + d * +0.25 + +1.0;
+        e * +0.5 + e * +0.25 + +1.0;
+    let go(acc : Flt, k : Nat) -> Flt =
+        match k
+        | 0 => acc
+        | j + 1 => go(acc * +1.5 + Nat/to_flt(j % 7919) * +0.25, j)
+        end;
+    let entry() -> /std/Io({}) =
+        let taint = List/len(Process/args()!);
+        let seed = base(Nat/to_flt(taint) * +0.001);
+        let other = base(Nat/to_flt(taint) * +0.002);
+        /std/print(Str/join(" | ", [Flt/to_str(go(seed, taint + 10)), Flt/to_str(other)]));
+    entry()
+    "#;
+
+/// A step function over a two-float structure, called once a round from a loop. `step` is called from two places and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function: the known-function worker takes its structures as their four fields, and the return protocol hands its answer back as two values. `j % 7919` puts a small `Nat` the loop alone holds into it.
+pub(super) const PAIR_STEP: &str = r#"
+    use /std/{Flt, Nat, List, Str, Process};
+    struct Vec2: Type { x: Flt, y: Flt }
+    let step(p : Vec2, v : Vec2, dt : Flt) -> Vec2 =
+        let a = p.x + v.x * dt;
+        let b = p.y + v.y * dt;
+        let c = a * +0.5 + b * +0.25 + +1.0;
+        let d = b * +0.5 + a * +0.25 + +1.0;
+        let e = c * +0.5 + d * +0.25 + +1.0;
+        let f = d * +0.5 + c * +0.25 + +1.0;
+        Vec2 { x = e * +0.001, y = f * +0.001 };
+    let run(p : Vec2, v : Vec2, k : Nat) -> Vec2 =
+        match k
+        | 0 => p
+        | j + 1 => run(step(p, v, Nat/to_flt(j % 7919) * +0.01), v, j)
+        end;
+    let entry() -> /std/Io({}) =
+        let taint = List/len(Process/args()!);
+        let t = Nat/to_flt(taint);
+        let r = run(Vec2 { x = t, y = t * +0.5 }, Vec2 { x = +1.0, y = t }, taint + 10);
+        let s = step(Vec2 { x = t * +2.0, y = t }, Vec2 { x = t, y = t }, t);
+        /std/print(Str/join(" | ", [Flt/to_str(r.x), Flt/to_str(r.y), Flt/to_str(s.x)]));
+    entry()
+    "#;
+
 /// A variant whose two constructors share a payload slot, joined from both: `success` hands the slot a float and `failure` an error. The join reads the payload as a float under one tag and as the error under the other.
 ///
 /// **The error has to arrive from a call.** `judged` recurses, so it is not inlined and `doubled` forwards a `failure` whose payload no edge shows being built: the emitter has no aggregate to refuse, and a payload held in a float register casts the error where the `failure` edge is taken. `taint + 1` and `taint + 3` take it and `taint` does not, so both constructors reach the join.

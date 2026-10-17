@@ -110,6 +110,90 @@ fn a_float_literal_read_in_a_register_is_its_constant() {
     }
 }
 
+// -- floats across known calls ----------------------------------------------
+
+/// A loop seeded by its function's own float parameter holds the float in a register. `spin` does not escape, so every call to it is one the representation reads, and its parameter is a join over those calls, each handing it a float.
+#[test]
+fn a_loop_a_known_parameter_seeds_allocates_no_float() {
+    let wat = wat(KNOWN_PARAMETER_SEED);
+    let functions = functions(&wat);
+    let spin = function_with(&functions, "i32.const 7919");
+    assert!(
+        spin.name.ends_with("$/spin"),
+        "the premise: the loop stays in `spin`, seeded by its parameter, rather than being copied into a caller: {}",
+        spin.name
+    );
+    for kernel in loops_containing(spin.body, "i32.const 7919") {
+        assert!(
+            !kernel.contains("struct.new $flt"),
+            "no round boxes the float its parameter seeded: {kernel}"
+        );
+    }
+}
+
+/// A loop seeded by a call's result holds the float in a register: `base`'s class hands its result back from return edges that each carry a float, so the slot, and the resume parameter it feeds, are registers.
+#[test]
+fn a_loop_a_call_result_seeds_allocates_no_float() {
+    let wat = wat(CALL_RESULT_SEED);
+    assert!(
+        functions(&wat)
+            .iter()
+            .any(|function| function.name.ends_with("$/base")),
+        "the premise: `base` stays a function whose result seeds the loop"
+    );
+    for kernel in loops_containing(&wat, "i32.const 7919") {
+        assert!(
+            !kernel.contains("struct.new $flt"),
+            "no round boxes the float a call's result seeded: {kernel}"
+        );
+    }
+}
+
+/// A step over a two-float structure, called once a round, takes its fields and hands back its answer in registers: the worker split and the return protocol already cross its boundary as fields, and the representation now holds each field at its carrier, so neither the step nor the loop allocates.
+#[test]
+fn a_step_over_floats_called_from_a_loop_allocates_no_float() {
+    let wat = wat(PAIR_STEP);
+    let functions = functions(&wat);
+    let step = functions
+        .iter()
+        .find(|function| function.name.ends_with("$/step"))
+        .expect("the premise: `step` stays a function the loop calls");
+    assert!(
+        !step.body.contains("struct.new $flt"),
+        "the step hands its answer back without boxing it: {}",
+        step.body
+    );
+    for kernel in loops_containing(&wat, "i32.const 7919") {
+        assert!(
+            kernel.contains(&format!("call {}", step.name)),
+            "the premise: the loop calls the step: {kernel}"
+        );
+        assert!(
+            !kernel.contains("struct.new $flt"),
+            "no round boxes what crosses the step's boundary: {kernel}"
+        );
+    }
+}
+
+/// What the programs whose floats now cross known calls in registers print, worked independently in IEEE doubles with ties to even.
+#[test]
+fn floats_across_known_calls_answer_as_computed() {
+    let args = ["prog", "a", "b", "c"];
+    for (source, expected) in [
+        (
+            KNOWN_PARAMETER_SEED,
+            "+384.7028433303833 | +41956.94057294268",
+        ),
+        (CALL_RESULT_SEED, "+2498.0003496329787 | +3.0526796875"),
+        (
+            PAIR_STEP,
+            "+0.00175099278948419 | +0.00175099290668634 | +0.01425",
+        ),
+    ] {
+        assert_eq!(String::from_utf8(run_raw(source, &args)).unwrap(), expected);
+    }
+}
+
 /// The global a float literal is hoisted to: the one whose initializer boxes that literal, read off its declaration whether the printer kept it on one line or broke it before the initializer.
 fn float_global<'a>(wat: &'a str, literal: &str) -> &'a str {
     let lines = wat.lines().collect::<Vec<_>>();

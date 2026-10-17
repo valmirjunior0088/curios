@@ -1,8 +1,8 @@
 use {
-    super::{Storage, storage},
+    super::{Storage, representation},
     crate::{
-        Atom, Callee, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, NodeId, Repr,
-        ValueId,
+        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
+        Module, Node, NodeId, Repr, ValueExpr, ValueId,
     },
     curios_num::{Floating, Natural, Rounding},
 };
@@ -42,6 +42,40 @@ fn through_continuation(module: &mut Module, params: Vec<ValueId>, body: NodeId)
     module.add_node(Node::ApplyCont(Edge { target: head, args }))
 }
 
+/// Define the reserved `function` as `name(params)`, its body built by `body` against the function's own return sentinel, which it is handed.
+fn define(
+    module: &mut Module,
+    function: FunctionId,
+    name: &str,
+    params: Vec<ValueId>,
+    body: impl FnOnce(&mut Module, ContinuationId) -> NodeId,
+) {
+    let return_cont = module.reserve_continuation();
+    let body = body(module, return_cont);
+    module.define_function(
+        function,
+        Function {
+            debug_name: Some(name.into()),
+            params,
+            return_cont,
+            body,
+            droppable: false,
+        },
+    );
+}
+
+/// Define the reserved `continuation` taking `params`, its body `body`.
+fn resume(module: &mut Module, continuation: ContinuationId, params: Vec<ValueId>, body: NodeId) {
+    module.define_continuation(
+        continuation,
+        Continuation {
+            debug_name: Some("resume".into()),
+            params,
+            body,
+        },
+    );
+}
+
 /// Jump to a reserved-but-undefined continuation — the return sentinel, which demands nothing of what it carries.
 fn finish(module: &mut Module, args: Vec<Atom>) -> NodeId {
     let sentinel = module.reserve_continuation();
@@ -70,7 +104,10 @@ fn an_intrinsic_operand_position_demands_the_raw_carrier() {
     let enter = through_continuation(&mut module, vec![param], body);
     entry(&mut module, vec![], enter);
 
-    assert_eq!(storage(&module)[&param], Storage::Raw(Repr::Nat));
+    assert_eq!(
+        representation(&module).values[&param],
+        Storage::Raw(Repr::Nat)
+    );
 }
 
 /// The scrutinee is read as an unsigned tag, so it is a raw position even though nothing arithmetic touches it.
@@ -94,17 +131,33 @@ fn a_switch_scrutinee_demands_the_raw_carrier() {
     let enter = through_continuation(&mut module, vec![param], body);
     entry(&mut module, vec![], enter);
 
-    assert_eq!(storage(&module)[&param], Storage::Raw(Repr::Nat));
+    assert_eq!(
+        representation(&module).values[&param],
+        Storage::Raw(Repr::Nat)
+    );
 }
 
-/// A call argument crosses a `func/N` signature that is uniformly `anyref`, so nothing about it is raw.
+/// A call argument's demand is the storage of the callee's parameter it feeds, so where nothing reads that parameter raw, nothing about the argument is raw either.
 #[test]
 fn a_call_argument_alone_stays_boxed() {
     let mut module = Module::new();
     let param = module.add_value(Some("a".into()));
+    let unread = module.add_value(Some("unread".into()));
     let callee = module.reserve_function();
     let resume = module.reserve_continuation();
 
+    define(
+        &mut module,
+        callee,
+        "callee",
+        vec![unread],
+        |module, sentinel| {
+            module.add_node(Node::ApplyCont(Edge {
+                target: sentinel,
+                args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
+            }))
+        },
+    );
     let body = module.add_node(Node::ApplyFun {
         callee: Callee::Known(callee),
         args: vec![Atom::Value(param)],
@@ -113,7 +166,9 @@ fn a_call_argument_alone_stays_boxed() {
     let enter = through_continuation(&mut module, vec![param], body);
     entry(&mut module, vec![], enter);
 
-    assert_eq!(storage(&module)[&param], Storage::Boxed);
+    let decided = representation(&module).values;
+    assert_eq!(decided[&unread], Storage::Boxed);
+    assert_eq!(decided[&param], Storage::Boxed);
 }
 
 /// The rule the whole analysis turns on. `carried` is *only* ever passed round an edge — it has no raw use of its own — so a scan over use positions would leave it boxed and the loop would coerce every iteration. Its demand is the storage of the parameter it feeds, and that parameter is raw because an intrinsic reads it, so the decision has to travel backwards across the edge to reach it.
@@ -161,7 +216,10 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
     });
     entry(&mut module, vec![], body);
 
-    assert_eq!(storage(&module)[&carried], Storage::Raw(Repr::Nat));
+    assert_eq!(
+        representation(&module).values[&carried],
+        Storage::Raw(Repr::Nat)
+    );
 }
 
 /// The soundness half of the edge rule. A sum is unbounded, so it is a reference that narrowing to a word would saturate; a parameter it reaches must therefore stay a reference however its uses read it, or the edge would coerce a value past the i31 into a word and lose it.
@@ -207,7 +265,7 @@ fn a_parameter_an_unbounded_value_reaches_is_never_held_in_a_word() {
     });
     entry(&mut module, vec![], body);
 
-    let decided = storage(&module);
+    let decided = representation(&module).values;
     assert_eq!(decided[&param], Storage::Boxed);
     assert_eq!(decided[&carried], Storage::Boxed);
 }
@@ -244,14 +302,14 @@ fn disagreeing_raw_carriers_settle_at_conflict_rather_than_oscillating() {
     let enter = through_continuation(&mut module, vec![shared], body);
     entry(&mut module, vec![], enter);
 
-    let decided = storage(&module);
+    let decided = representation(&module).values;
     assert_eq!(decided[&shared], Storage::Conflict);
     assert_eq!(decided[&shared].raw_carrier(), None);
 }
 
-/// A function is entered through a `func/N` signature whose parameters are uniformly `anyref`. There is no store site the analysis controls, so however arithmetically the body reads the parameter, it is held as it arrived and each use unboxes.
+/// The entry is entered by the host, through a signature no store site of the module's controls, so however arithmetically its body reads a parameter, the parameter is held as it arrived and each use unboxes.
 #[test]
-fn a_function_parameter_stays_boxed_however_its_body_reads_it() {
+fn the_entrys_parameter_stays_boxed_however_its_body_reads_it() {
     let mut module = Module::new();
     let param = module.add_value(Some("x".into()));
     let result = module.add_value(Some("r".into()));
@@ -268,7 +326,7 @@ fn a_function_parameter_stays_boxed_however_its_body_reads_it() {
     });
     entry(&mut module, vec![param], body);
 
-    assert_eq!(storage(&module)[&param], Storage::Boxed);
+    assert_eq!(representation(&module).values[&param], Storage::Boxed);
 }
 
 /// `escaping` is bound in the entry function and read arithmetically inside *another* function's body, so `curios-emit`'s `machine::lower` lambda-lifts it onto that function as an extra `anyref` parameter. Deciding it from its binding scope alone would answer `Raw(Nat)` — and the callee, which holds it as a parameter, would load it with no unboxing and hand a `(ref any)` to an `i32.sub`.
@@ -320,45 +378,46 @@ fn a_value_free_in_another_function_stays_boxed() {
     });
     entry(&mut module, vec![], body);
 
-    assert_eq!(storage(&module)[&escaping], Storage::Boxed);
+    assert_eq!(representation(&module).values[&escaping], Storage::Boxed);
 }
 
-/// The same argument one step further out: a call's result reaches its continuation's parameter as a reference, because that is what the callee returned. The parameter is open to its uses in general, and this is what withdraws it.
+/// A call's result reaches its continuation's parameter as a reference where the callee's results are fixed by something other than its own return edges: here a tail call through a closure, which returns at the closure type's one uniform result. The parameter is open to its uses in general, and this is what withdraws it.
 #[test]
-fn a_call_result_stays_boxed_however_its_continuation_reads_it() {
+fn a_call_result_a_closure_tail_call_fixes_stays_boxed() {
     let mut module = Module::new();
+    let closure = module.add_value(Some("closure".into()));
     let returned = module.add_value(Some("returned".into()));
-    let result = module.add_value(Some("r".into()));
+    let read = module.add_value(Some("read".into()));
     let callee = module.reserve_function();
-    let resume = module.reserve_continuation();
+    let after = module.reserve_continuation();
 
-    let done = finish(&mut module, vec![Atom::Value(result)]);
-    let resume_body = module.add_node(Node::LetIntrinsic {
-        result,
-        op: Intrinsic::NatAdd,
-        args: vec![
-            Atom::Value(returned),
-            Atom::Literal(Literal::Nat(Natural::from(1u32))),
-        ],
-        next: done,
-    });
-    module.define_continuation(
-        resume,
-        Continuation {
-            debug_name: Some("resume".into()),
-            params: vec![returned],
-            body: resume_body,
+    define(
+        &mut module,
+        callee,
+        "callee",
+        vec![closure],
+        |module, sentinel| {
+            module.add_node(Node::ApplyFun {
+                callee: Callee::Closure(closure),
+                args: vec![],
+                return_to: sentinel,
+            })
         },
     );
-
+    let done = finish(&mut module, vec![Atom::Value(read)]);
+    let after_body = float_read(&mut module, read, returned, done);
+    resume(&mut module, after, vec![returned], after_body);
+    let outside = module.add_value(Some("outside".into()));
     let body = module.add_node(Node::ApplyFun {
         callee: Callee::Known(callee),
-        args: vec![],
-        return_to: resume,
+        args: vec![Atom::Value(outside)],
+        return_to: after,
     });
-    entry(&mut module, vec![], body);
+    entry(&mut module, vec![outside], body);
 
-    assert_eq!(storage(&module)[&returned], Storage::Boxed);
+    let decided = representation(&module);
+    assert_eq!(decided.values[&returned], Storage::Boxed);
+    assert_eq!(decided.results[&callee], vec![Storage::Boxed]);
 }
 
 /// A join whose parameter is read as a float, entered on one edge with a float a definition produced and on the other with `other`; `params` are the entry's own. Answers the parameter.
@@ -429,7 +488,7 @@ fn a_parameter_a_reference_reaches_is_never_held_in_a_float_register() {
         Atom::Value(reference),
     );
 
-    assert_eq!(storage(&module)[&joined], Storage::Boxed);
+    assert_eq!(representation(&module).values[&joined], Storage::Boxed);
 }
 
 /// The precision half: where every edge hands the parameter a float, a definition's on one and a literal on the other, the register is kept.
@@ -444,5 +503,274 @@ fn a_parameter_every_edge_hands_a_float_is_held_in_a_register() {
         Atom::Literal(Literal::Flt(Floating::from(4.0))),
     );
 
-    assert_eq!(storage(&module)[&joined], Storage::Raw(Repr::Flt));
+    assert_eq!(
+        representation(&module).values[&joined],
+        Storage::Raw(Repr::Flt)
+    );
+}
+
+/// Read `value` as a float into `result`, then go on to `next`.
+fn float_read(module: &mut Module, result: ValueId, value: ValueId, next: NodeId) -> NodeId {
+    module.add_node(Node::LetIntrinsic {
+        result,
+        op: Intrinsic::FltAdd(Rounding::TiesToEven),
+        args: vec![
+            Atom::Value(value),
+            Atom::Literal(Literal::Flt(Floating::from(1.0))),
+        ],
+        next,
+    })
+}
+
+/// Bind `result` to a float a definition produces, then go on to `next`.
+fn float_made(module: &mut Module, result: ValueId, next: NodeId) -> NodeId {
+    module.add_node(Node::LetIntrinsic {
+        result,
+        op: Intrinsic::FltAdd(Rounding::TiesToEven),
+        args: vec![
+            Atom::Literal(Literal::Flt(Floating::from(2.0))),
+            Atom::Literal(Literal::Flt(Floating::from(3.0))),
+        ],
+        next,
+    })
+}
+
+/// Define `callee(x)`, which reads `x` as a float and returns the sum, and answer `x`.
+fn float_reader(module: &mut Module, callee: FunctionId) -> ValueId {
+    let param = module.add_value(Some("x".into()));
+    let sum = module.add_value(Some("sum".into()));
+    define(module, callee, "reader", vec![param], |module, sentinel| {
+        let done = module.add_node(Node::ApplyCont(Edge {
+            target: sentinel,
+            args: vec![Atom::Value(sum)],
+        }));
+        float_read(module, sum, param, done)
+    });
+    param
+}
+
+/// Call `callee(arg)` from a continuation that reads the result as a float, and answer the call and the result's parameter.
+fn float_call(module: &mut Module, callee: FunctionId, arg: Atom) -> (NodeId, ValueId) {
+    let returned = module.add_value(Some("returned".into()));
+    let read = module.add_value(Some("read".into()));
+    let after = module.reserve_continuation();
+    let done = finish(module, vec![Atom::Value(read)]);
+    let after_body = float_read(module, read, returned, done);
+    resume(module, after, vec![returned], after_body);
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![arg],
+        return_to: after,
+    });
+    (call, returned)
+}
+
+/// A function that neither escapes nor is the entry is entered only by calls naming it, each handing over its arguments, so its parameter is a join whose edges are those calls, decided as a loop header's is. Every call here hands it a float a definition produced, and its body reads it as one.
+#[test]
+fn a_known_parameter_every_call_hands_a_float_is_held_in_a_register() {
+    let mut module = Module::new();
+    let callee = module.reserve_function();
+    let param = float_reader(&mut module, callee);
+    let float = module.add_value(Some("float".into()));
+    let (call, _) = float_call(&mut module, callee, Atom::Value(float));
+    let body = float_made(&mut module, float, call);
+    entry(&mut module, vec![], body);
+
+    let decided = representation(&module).values;
+    assert_eq!(decided[&param], Storage::Raw(Repr::Flt));
+    assert_eq!(decided[&float], Storage::Raw(Repr::Flt));
+}
+
+/// The soundness half: a call handing the parameter a reference states nothing of what the reference holds, so the parameter stays one, as a join's does.
+#[test]
+fn a_known_parameter_a_reference_reaches_stays_boxed() {
+    let mut module = Module::new();
+    let callee = module.reserve_function();
+    let param = float_reader(&mut module, callee);
+    let outside = module.add_value(Some("outside".into()));
+    let (call, _) = float_call(&mut module, callee, Atom::Value(outside));
+    entry(&mut module, vec![outside], call);
+
+    assert_eq!(representation(&module).values[&param], Storage::Boxed);
+}
+
+/// A function named as a value escapes: a closure calls it through its arity's uniform signature, whatever every call naming it hands over.
+#[test]
+fn an_escaping_functions_parameter_stays_boxed() {
+    let mut module = Module::new();
+    let callee = module.reserve_function();
+    let param = float_reader(&mut module, callee);
+    let float = module.add_value(Some("float".into()));
+    let named = module.add_value(Some("named".into()));
+    let (call, _) = float_call(&mut module, callee, Atom::Value(float));
+    let name = module.add_node(Node::LetValue {
+        result: named,
+        value: ValueExpr::Tuple(vec![Atom::Fun(callee)]),
+        next: call,
+    });
+    let body = float_made(&mut module, float, name);
+    entry(&mut module, vec![], body);
+
+    let decided = representation(&module);
+    assert_eq!(decided.values[&param], Storage::Boxed);
+    assert_eq!(decided.results[&callee], vec![Storage::Boxed]);
+}
+
+/// A result slot is a join whose edges are the class's return edges and whose uses are the resume parameters of every call into it. Every return here hands it a float, and the caller reads the result as one, so the slot and the resume parameter are both held in a register.
+#[test]
+fn a_result_every_return_hands_a_float_is_held_in_a_register() {
+    let mut module = Module::new();
+    let callee = module.reserve_function();
+    float_reader(&mut module, callee);
+    let float = module.add_value(Some("float".into()));
+    let (call, returned) = float_call(&mut module, callee, Atom::Value(float));
+    let body = float_made(&mut module, float, call);
+    entry(&mut module, vec![], body);
+
+    let decided = representation(&module);
+    assert_eq!(decided.values[&returned], Storage::Raw(Repr::Flt));
+    assert_eq!(decided.results[&callee], vec![Storage::Raw(Repr::Flt)]);
+}
+
+/// One call reads the result as a float and another only stores it in a tuple. The slot is raw, since a use demands it, and the second resume parameter stays boxed: the emitter boxes the result once as it enters, rather than at each use.
+#[test]
+fn a_resume_parameter_with_only_boxed_uses_beside_a_raw_result_stays_boxed() {
+    let mut module = Module::new();
+    let callee = module.reserve_function();
+    float_reader(&mut module, callee);
+    let float = module.add_value(Some("float".into()));
+    let stored = module.add_value(Some("stored".into()));
+    let tuple = module.add_value(Some("tuple".into()));
+    let after = module.reserve_continuation();
+    let done = finish(&mut module, vec![Atom::Value(tuple)]);
+    let after_body = module.add_node(Node::LetValue {
+        result: tuple,
+        value: ValueExpr::Tuple(vec![Atom::Value(stored)]),
+        next: done,
+    });
+    resume(&mut module, after, vec![stored], after_body);
+    let storing = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(float)],
+        return_to: after,
+    });
+    let (reading, returned) = float_call(&mut module, callee, Atom::Value(float));
+    let reading = edge_to(&mut module, reading);
+    let storing = edge_to(&mut module, storing);
+    let both = module.add_node(Node::Switch {
+        scrutinee: Atom::Literal(Literal::Nat(Natural::from(0u32))),
+        cases: [(0, reading)].into(),
+        default: Some(storing),
+    });
+    let body = float_made(&mut module, float, both);
+    entry(&mut module, vec![], body);
+
+    let decided = representation(&module);
+    assert_eq!(decided.results[&callee], vec![Storage::Raw(Repr::Flt)]);
+    assert_eq!(decided.values[&returned], Storage::Raw(Repr::Flt));
+    assert_eq!(decided.values[&stored], Storage::Boxed);
+}
+
+/// One call reads the result as a float and another reads it not at all. The unread resume parameter has no use to disagree with the register, so it is held as the slot hands it over, and nothing boxes a result no one reads.
+#[test]
+fn a_resume_parameter_nothing_reads_is_held_as_its_slot_hands_it_over() {
+    let mut module = Module::new();
+    let callee = module.reserve_function();
+    float_reader(&mut module, callee);
+    let float = module.add_value(Some("float".into()));
+    let unread = module.add_value(Some("unread".into()));
+    let after = module.reserve_continuation();
+    let done = finish(&mut module, vec![]);
+    resume(&mut module, after, vec![unread], done);
+    let discarding = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(float)],
+        return_to: after,
+    });
+    let (reading, _) = float_call(&mut module, callee, Atom::Value(float));
+    let reading = edge_to(&mut module, reading);
+    let discarding = edge_to(&mut module, discarding);
+    let both = module.add_node(Node::Switch {
+        scrutinee: Atom::Literal(Literal::Nat(Natural::from(0u32))),
+        cases: [(0, reading)].into(),
+        default: Some(discarding),
+    });
+    let body = float_made(&mut module, float, both);
+    entry(&mut module, vec![], body);
+
+    let decided = representation(&module);
+    assert_eq!(decided.results[&callee], vec![Storage::Raw(Repr::Flt)]);
+    assert_eq!(decided.values[&unread], Storage::Raw(Repr::Flt));
+}
+
+/// An argumentless edge into a continuation whose body is `body`.
+fn edge_to(module: &mut Module, body: NodeId) -> Edge {
+    let target = module.reserve_continuation();
+    module.define_continuation(
+        target,
+        Continuation {
+            debug_name: Some("arm".into()),
+            params: vec![],
+            body,
+        },
+    );
+    Edge {
+        target,
+        args: vec![],
+    }
+}
+
+/// The word beside the float: a parameter every call hands a remainder its literal divisor bounds, read by integer arithmetic, rides a word.
+#[test]
+fn a_known_parameter_every_call_hands_a_word_is_held_in_a_word() {
+    let mut module = Module::new();
+    let callee = module.reserve_function();
+    let param = module.add_value(Some("n".into()));
+    let sum = module.add_value(Some("sum".into()));
+    define(
+        &mut module,
+        callee,
+        "counter",
+        vec![param],
+        |module, sentinel| {
+            let done = module.add_node(Node::ApplyCont(Edge {
+                target: sentinel,
+                args: vec![Atom::Value(sum)],
+            }));
+            module.add_node(Node::LetIntrinsic {
+                result: sum,
+                op: Intrinsic::NatAdd,
+                args: vec![
+                    Atom::Value(param),
+                    Atom::Literal(Literal::Nat(Natural::from(1u32))),
+                ],
+                next: done,
+            })
+        },
+    );
+    let bounded = module.add_value(Some("bounded".into()));
+    let after = module.reserve_continuation();
+    let returned = module.add_value(Some("returned".into()));
+    let done = finish(&mut module, vec![Atom::Value(returned)]);
+    resume(&mut module, after, vec![returned], done);
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(bounded)],
+        return_to: after,
+    });
+    let body = module.add_node(Node::LetIntrinsic {
+        result: bounded,
+        op: Intrinsic::NatRem,
+        args: vec![
+            Atom::Literal(Literal::Nat(Natural::from(9u32))),
+            Atom::Literal(Literal::Nat(Natural::from(7u32))),
+        ],
+        next: call,
+    });
+    entry(&mut module, vec![], body);
+
+    assert_eq!(
+        representation(&module).values[&param],
+        Storage::Raw(Repr::Nat)
+    );
 }

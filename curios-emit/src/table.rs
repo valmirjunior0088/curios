@@ -171,16 +171,109 @@ impl<'a> ClsrData<'a> {
     }
 }
 
+/// What one position of a function's type holds: a reference, or a register at its carrier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Position {
+    Reference,
+    Word,
+    Float,
+}
+
+impl Position {
+    /// The position a value held at `carrier` takes — a register's, or `None` for a reference.
+    pub(crate) fn of(carrier: Option<curios_cont::Repr>) -> Self {
+        match carrier {
+            None => Self::Reference,
+            Some(curios_cont::Repr::Nat) => Self::Word,
+            Some(curios_cont::Repr::Flt) => Self::Float,
+            Some(other) => panic!("a register holds a word or a float, never {other:?}"),
+        }
+    }
+
+    /// The register carrier this position holds, or `None` for a reference.
+    pub(crate) fn carrier(self) -> Option<curios_cont::Repr> {
+        match self {
+            Self::Reference => None,
+            Self::Word => Some(curios_cont::Repr::Nat),
+            Self::Float => Some(curios_cont::Repr::Flt),
+        }
+    }
+
+    /// The wasm type a value in this position is declared at. A reference admits null, as every reference position a value crosses does.
+    pub(crate) fn val_type(self) -> curios_wasm::ValType {
+        match self {
+            Self::Reference => Table::top_type(true),
+            Self::Word => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+            Self::Float => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
+        }
+    }
+
+    fn letter(self) -> char {
+        match self {
+            Self::Reference => 'r',
+            Self::Word => 'i',
+            Self::Float => 'f',
+        }
+    }
+}
+
+/// A function's type: what each parameter and each result is held at.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Signature {
+    pub(crate) params: Vec<Position>,
+    pub(crate) results: Vec<Position>,
+}
+
+impl Signature {
+    /// `func`'s type: a parameter is held as the representation decided its value is, which `raw` holds, and a result as the function hands it back.
+    fn of(func: &EmissionFunction, raw: &HashMap<EmissionValueName, curios_cont::Repr>) -> Self {
+        Self {
+            params: func
+                .params
+                .iter()
+                .map(|param| Position::of(raw.get(&param.name).copied()))
+                .collect(),
+            results: func.results.iter().copied().map(Position::of).collect(),
+        }
+    }
+
+    /// The emitted name of this type. A type all of references keeps the spelling it had before any position was held in a register, `func/{parameters}` with one result and `func/{parameters}/{results}` with several; any other spells each position, `r` for a reference, `i` for a word and `f` for a float, and `0` for none.
+    ///
+    /// What produces several results is `curios-cont`'s return protocol, which hands a class of functions back the leading fields of the construction they would otherwise allocate, and what produces a register position is its representation analysis; both are decided per tail-call class, because `return_call` requires a callee's results to match its caller's exactly. Closure supertypes are keyed separately, on arity alone, and stay uniform and single-result — which is why both decisions exclude any function that escapes.
+    fn name(&self) -> curios_wasm::TypeName {
+        let uniform = self
+            .params
+            .iter()
+            .chain(&self.results)
+            .all(|position| *position == Position::Reference);
+        let spelled = |positions: &[Position]| match positions.is_empty() {
+            true => "0".to_string(),
+            false => positions.iter().map(|position| position.letter()).collect(),
+        };
+        curios_wasm::TypeName::from(match (uniform, self.results.len()) {
+            (true, 1) => format!("func/{}", self.params.len()),
+            (true, results) => format!("func/{}/{}", self.params.len(), results),
+            (false, _) => format!("func/{}/{}", spelled(&self.params), spelled(&self.results)),
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct FuncData<'a> {
     func_name: curios_wasm::FuncName,
     params: HashMap<&'a EmissionValueName, curios_wasm::LocalName>,
+    signature: Signature,
     resume: &'a EmissionBlockName,
 }
 
 impl<'a> FuncData<'a> {
-    pub(crate) fn new(func_name: &'a EmissionFunctionName, func: &'a EmissionFunction) -> Self {
+    pub(crate) fn new(
+        func_name: &'a EmissionFunctionName,
+        func: &'a EmissionFunction,
+        raw: &HashMap<EmissionValueName, curios_cont::Repr>,
+    ) -> Self {
         Self {
+            signature: Signature::of(func, raw),
             // The `func/` prefix is why the exported entrypoint is `func/main`: the entry is always `main`, and the export reuses the function's emitted name.
             func_name: curios_wasm::FuncName::from(format!("func/{}", func_name)),
             params: func
@@ -201,8 +294,9 @@ impl<'a> FuncData<'a> {
         self.func_name.clone()
     }
 
-    pub(crate) fn arity(&self) -> usize {
-        self.params.len()
+    /// What each parameter and each result of this function is held at.
+    pub(crate) fn signature(&self) -> &Signature {
+        &self.signature
     }
 
     pub(crate) fn params(&self) -> HashMap<&'a EmissionValueName, curios_wasm::LocalName> {
@@ -331,8 +425,8 @@ pub(crate) struct Table<'a> {
     row_types: BTreeMap<curios_cont::RowId, (curios_wasm::TypeName, Vec<curios_cont::Slot>)>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
-    /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
-    func_types: BTreeMap<(usize, usize), curios_wasm::TypeName>,
+    /// Keyed by what a wasm function type actually is — what each parameter and each result is held at — rather than by parameter count alone, so two functions of the same arity delivering different result shapes, or holding a position in different carriers, cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
+    func_types: BTreeMap<Signature, curios_wasm::TypeName>,
     // No accessor iterates `consts`, `clsrs` or `funcs`: they are `HashMap`s, so iteration order varies per process, and every consumer here emits into the module — where order is load-bearing for a reproducible build. A consumer walks `EmissionModule`'s own ordered sequence and resolves each name through these indices instead, which is what `curios-utilities`'s `name!` means by carrying an explicit sequence where the order matters.
     consts: HashMap<&'a EmissionValueName, curios_wasm::GlobalName>,
     /// The module consts that are `Tuple`/`List` constructions — the hoisted half of the population `Context::refuse_raw_aggregate` refuses to hand to a register. A closed aggregate is lifted out of its region by `hoist`, so a guard reading region values alone would miss exactly the constant ones.
@@ -491,8 +585,11 @@ impl<'a> Table<'a> {
             func_types: module
                 .funcs()
                 .iter()
-                .map(|(_, func)| (func.params.len(), func.results))
-                .map(|shape| (shape, Table::func_type_name(shape)))
+                .map(|(_, func)| Signature::of(func, raw))
+                .map(|signature| {
+                    let name = signature.name();
+                    (signature, name)
+                })
                 .collect(),
             consts: module
                 .consts()
@@ -552,7 +649,7 @@ impl<'a> Table<'a> {
             funcs: module
                 .funcs()
                 .iter()
-                .map(|(func_name, func)| (func_name, FuncData::new(func_name, func)))
+                .map(|(func_name, func)| (func_name, FuncData::new(func_name, func, raw)))
                 .collect(),
         }
     }
@@ -1344,35 +1441,16 @@ impl<'a> Table<'a> {
             .clone()
     }
 
-    /// The emitted name of the function type with this `(parameters, results)` shape.
-    ///
-    /// A single-result shape keeps the bare `func/{parameters}` spelling, so keying on the pair changes no single-result module. What produces the wider shapes is `curios-cont`'s return protocol, which hands a class of functions back the leading fields of the construction they would otherwise allocate; that class is a per-tail-call-component decision, because `return_call` requires a callee's results to match its caller's exactly. Closure supertypes are keyed separately, on arity alone, and stay single-result — which is why the decision excludes any function that escapes.
-    fn func_type_name(shape: (usize, usize)) -> curios_wasm::TypeName {
-        let (parameters, results) = shape;
-
-        match results {
-            1 => curios_wasm::TypeName::from(format!("func/{}", parameters)),
-            _ => curios_wasm::TypeName::from(format!("func/{}/{}", parameters, results)),
-        }
-    }
-
-    pub(crate) fn func_types(
-        &self,
-    ) -> impl Iterator<Item = ((usize, usize), curios_wasm::TypeName)> {
+    pub(crate) fn func_types(&self) -> impl Iterator<Item = (&Signature, curios_wasm::TypeName)> {
         self.func_types
             .iter()
-            .map(|(shape, type_name)| (*shape, type_name.clone()))
+            .map(|(signature, type_name)| (signature, type_name.clone()))
     }
 
-    pub(crate) fn find_func_type(&self, shape: (usize, usize)) -> curios_wasm::TypeName {
+    pub(crate) fn find_func_type(&self, signature: &Signature) -> curios_wasm::TypeName {
         self.func_types
-            .get(&shape)
-            .unwrap_or_else(|| {
-                panic!(
-                    "`Table` lacks function type for shape `{}` parameters, `{}` results",
-                    shape.0, shape.1
-                )
-            })
+            .get(signature)
+            .unwrap_or_else(|| panic!("`Table` lacks function type for `{signature:?}`"))
             .clone()
     }
 

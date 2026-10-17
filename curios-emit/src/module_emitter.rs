@@ -338,19 +338,19 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_func_types(&mut self) {
-        for ((parameters, results), type_name) in self.table.func_types() {
+        for (signature, type_name) in self.table.func_types() {
             self.module.add_type(
                 type_name,
                 curios_wasm::SubType {
                     is_final: true,
                     super_types: vec![],
-                    // Nullable in both directions, as every reference position is: a filler a split hands across a call or a return is null, and only a read asserts otherwise.
+                    // A reference position is nullable in both directions, as every reference position is: a filler a split hands across a call or a return is null, and only a read asserts otherwise. A register position holds its carrier's zero for a filler instead.
                     comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
                         inputs: curios_wasm::ResultType::from(
-                            (0..parameters).map(|_| Table::top_type(true)),
+                            signature.params.iter().map(|position| position.val_type()),
                         ),
                         outputs: curios_wasm::ResultType::from(
-                            (0..results).map(|_| Table::top_type(true)),
+                            signature.results.iter().map(|position| position.val_type()),
                         ),
                     }),
                 },
@@ -619,7 +619,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.module.add_func(
             self.table.find_func(name).func_name(),
             curios_wasm::Func {
-                type_name: self.table.find_func_type((func.params.len(), func.results)),
+                type_name: self
+                    .table
+                    .find_func_type(self.table.find_func(name).signature()),
                 params: func
                     .params
                     .iter()

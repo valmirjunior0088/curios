@@ -4,7 +4,7 @@ use {
     super::{
         BigHelper, BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
         EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
-        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table,
+        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Position, Table,
         concrete_val, get, set,
     },
     curios_abi::{ForeignFunction, WireLeaf, WireReference, WireShape, WireType},
@@ -123,6 +123,15 @@ impl<'a, 'b> Context<'a, 'b> {
             Self::Const { .. } => false,
             Self::Closure { data, .. } => data.is_resume(block_name),
             Self::Function { data, .. } => data.is_resume(block_name),
+        }
+    }
+
+    /// What this body hands back, each value at its position: a function's as its signature states, and a closure's the one reference its arity's uniform type returns.
+    fn own_results(&self) -> Vec<Position> {
+        match self {
+            Self::Const { .. } => panic!("`Context` lacks a return"),
+            Self::Closure { .. } => vec![Position::Reference],
+            Self::Function { data, .. } => data.signature().results.clone(),
         }
     }
 
@@ -449,9 +458,9 @@ impl<'a, 'b> Context<'a, 'b> {
         self.find_block(resume).params().len()
     }
 
-    /// Enter a resume block with `arity` values already on the stack, each in the carrier its parameter is held at.
+    /// Enter a resume block with `arity` values already on the stack, each in the carrier its parameter is held at, after anything but a direct call — whose results [`Self::call_resume_instrs`] enters at the callee's own positions.
     ///
-    /// **A resume parameter is a reference, with one exception the analysis is allowed to make.** `represent.rs` withdraws the register offer on every continuation a call, a cell operation or a call-shaped intrinsic returns to, because the emitter hands those results over as references and has no cheaper store to make. A host import is withdrawn the same way but for one wire type: an `Flt` result crosses back as a raw `f64`, so its parameter is held in a register and `local_type` declares it `f64`.
+    /// **A resume parameter here is a reference, with one exception the analysis is allowed to make.** `represent.rs` withdraws the register offer on every continuation a closure call, a cell operation or a call-shaped intrinsic returns to, because the emitter hands those results over as references and has no cheaper store to make. A host import is withdrawn the same way but for one wire type: an `Flt` result crosses back as a raw `f64`, so its parameter is held in a register and `local_type` declares it `f64`.
     ///
     /// The assert states the rest rather than trusting it — any *other* raw carrier here is a broken analysis, and it would otherwise surface as a wasm validation failure with nothing pointing back. `Repr::Flt` is admitted rather than the assert being dropped, because it is the only carrier a host result can legitimately arrive at, and every other one is a bug.
     fn resume_instrs(&self, resume: &EmissionBlockName, arity: usize) -> Vec<curios_wasm::Instr> {
@@ -498,7 +507,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 local_name: local_data.local_name,
             }];
 
-            // Only a local can be held in a register. A closure field, a module const and a function parameter each arrive through a position that is a reference by declaration, which is what the representation analysis withholds its offer on.
+            // Only a local can be held in a register, a function's parameters among them, each declared as its function's type holds it. A closure field and a module const each arrive through a position that is a reference by declaration, which is what the representation analysis withholds its offer on.
             match self.table().raw_carrier(value_name) {
                 Some(carrier) => self.raw_as_instrs(producer, carrier, load_as),
                 None => self.load_as_instrs(producer, load_as, local_data.is_nullable),
@@ -529,15 +538,23 @@ impl<'a, 'b> Context<'a, 'b> {
     pub(crate) fn jump_instrs(&self, target: &'a EmissionJumpTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
-        // The bare-forwarder sentinel is the function's own return, so whatever it carries leaves boxed however it was held. The count is the target's own, not a fixed one: a function returning a constructor as its fields returns as many values as the shape has, and the arity a jump carries is the arity the return delivers.
+        // The bare-forwarder sentinel is the function's own return, so whatever it carries leaves at the position the function's type holds that result at: a reference unless the representation raised the class's slot into a register. The count is the target's own, not a fixed one: a function returning a constructor as its fields returns as many values as the shape has, and the arity a jump carries is the arity the return delivers.
         if self.is_resume(&target.target) {
-            for arg in &target.params {
-                output.extend(match arg {
-                    EmissionArg::Value(value_name) => {
-                        self.load_value_instrs(value_name, LoadAs::Null)
-                    }
-                    // A return filler is absence, and a result admits null: it crosses as the null it is, and lands in the caller's slot as the null a padded slot holds.
-                    EmissionArg::Filler => null_instrs(),
+            let results = self.own_results();
+            assert_eq!(
+                results.len(),
+                target.params.len(),
+                "a return carries as many values as its function hands back",
+            );
+            for (arg, position) in target.params.iter().zip(results) {
+                output.extend(match (arg, position.carrier()) {
+                    (EmissionArg::Value(value_name), carrier) => self.load_value_instrs(
+                        value_name,
+                        carrier.map_or(LoadAs::Null, |carrier| LoadAs::of(&carrier)),
+                    ),
+                    // A return filler is absence: a reference result admits null, and lands in the caller's slot as the null a padded slot holds; a register result takes its carrier's zero.
+                    (EmissionArg::Filler, Some(carrier)) => zero_instrs(carrier),
+                    (EmissionArg::Filler, None) => null_instrs(),
                 });
             }
             output.push(curios_wasm::Instr::Return);
@@ -713,41 +730,117 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     pub(crate) fn call_direct_instrs(
-        &self,
+        &mut self,
         target: &'a EmissionFunctionName,
         params: &'a [EmissionArg],
         resume: &'a EmissionBlockName,
     ) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
+        let callee = self.table().find_func(target);
+        let signature = callee.signature();
 
-        if params.len() != self.table().find_func(target).arity() {
+        if params.len() != signature.params.len() {
             panic!(
                 "call to `{}` expects {} params, got {}",
                 target,
-                self.table().find_func(target).arity(),
+                signature.params.len(),
                 params.len(),
             );
         }
 
-        // A function's parameters arrive boxed through its signature — the representation analysis withholds its offer on them — so a filler is null with no register to consider.
-        for arg in params {
-            output.extend(match arg {
-                EmissionArg::Value(value_name) => self.load_value_instrs(value_name, LoadAs::Null),
-                EmissionArg::Filler => null_instrs(),
+        // Each argument is loaded the way the callee's parameter is held, as an edge loads its own: a register where the representation decided one across the call, and a reference — a filler crossing as null — where the callee is entered through a uniform position.
+        for (arg, position) in params.iter().zip(&signature.params) {
+            output.extend(match (arg, position.carrier()) {
+                (EmissionArg::Value(value_name), carrier) => self.load_value_instrs(
+                    value_name,
+                    carrier.map_or(LoadAs::Null, |carrier| LoadAs::of(&carrier)),
+                ),
+                (EmissionArg::Filler, Some(carrier)) => zero_instrs(carrier),
+                (EmissionArg::Filler, None) => null_instrs(),
             });
         }
 
         if self.is_resume(resume) {
+            // `return_call` hands the callee's results straight out of this function, so the two must hold them alike; the representation decides a tail-call class's results as one, and this states it rather than trusting it.
+            assert_eq!(
+                signature.results,
+                self.own_results(),
+                "`{target}` is tail-called from a function handing its results back otherwise",
+            );
             output.push(curios_wasm::Instr::ReturnCall {
-                func_name: self.table().find_func(target).func_name(),
+                func_name: callee.func_name(),
             });
         } else {
             output.push(curios_wasm::Instr::Call {
-                func_name: self.table().find_func(target).func_name(),
+                func_name: callee.func_name(),
             });
 
-            output.extend(self.resume_instrs(resume, self.resume_arity(resume)));
+            output.extend(self.call_resume_instrs(resume, &signature.results));
         }
+
+        output
+    }
+
+    /// Enter the block a direct call resumes into with the callee's results on the stack, each at the position its signature holds it at.
+    ///
+    /// A result slot the representation raised into a register reaches every call into its class raw, and a resume parameter whose own uses read it only as a reference is held boxed: that result is boxed once, here, as it enters, rather than at each use. A result arriving as a reference never enters a parameter held in a register, since such a parameter is offered the register only where the slot feeding it is one.
+    fn call_resume_instrs(
+        &mut self,
+        resume: &'a EmissionBlockName,
+        results: &[Position],
+    ) -> Vec<curios_wasm::Instr> {
+        let held = self
+            .find_block(resume)
+            .params()
+            .iter()
+            .map(|(param, _)| self.table().raw_carrier(param))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            held.len(),
+            results.len(),
+            "resume block `{resume}` takes as many values as its callee hands back",
+        );
+
+        if results
+            .iter()
+            .zip(&held)
+            .all(|(result, held)| result.carrier() == *held)
+        {
+            return self.find_block(resume).enter(results.len());
+        }
+
+        // Some result is held otherwise than its parameter: set every result aside at its own position, then load each as its parameter is held.
+        let locals = results
+            .iter()
+            .map(|position| self.push_local("result", position.val_type()))
+            .collect::<Vec<_>>();
+        let mut output = locals
+            .iter()
+            .rev()
+            .map(|local| curios_wasm::Instr::LocalSet {
+                local_name: local.clone(),
+            })
+            .collect::<Vec<_>>();
+        for ((local, position), held) in locals.iter().zip(results).zip(&held) {
+            let producer = vec![curios_wasm::Instr::LocalGet {
+                local_name: local.clone(),
+            }];
+            output.extend(match position.carrier() {
+                Some(carrier) => self.raw_as_instrs(
+                    producer,
+                    carrier,
+                    held.map_or(LoadAs::Null, |held| LoadAs::of(&held)),
+                ),
+                None => {
+                    assert!(
+                        held.is_none(),
+                        "resume block `{resume}` holds a parameter in a register its callee hands back as a reference",
+                    );
+                    producer
+                }
+            });
+        }
+        output.extend(self.find_block(resume).enter(results.len()));
 
         output
     }
