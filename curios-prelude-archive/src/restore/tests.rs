@@ -12,12 +12,14 @@ use {
         instantiate_qualities,
     },
     curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_unit},
-    curios_text::SYNTAX,
+    curios_std::std_directory,
+    curios_text::{SYNTAX, TopItem},
     curios_unit::{Record, Uncertified, segments},
     curios_utilities::{Qualifier, digest},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap},
+        fs,
         path::PathBuf,
         rc::Rc,
         thread,
@@ -158,6 +160,201 @@ fn the_std_record_names_every_authored_source_and_no_other() {
         .collect::<BTreeSet<_>>();
 
     assert_eq!(recorded, authored);
+}
+
+/// A tier of `/std`: which root modules a declaration of one may name. `curios-std/README.md`'s "`/std` is laid out by tier, subject and kind" gives the rule.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Tier {
+    /// What performs nothing: the forms the language dispatches through, logic, numbers, text, collections and parsing.
+    Core,
+    /// What describes work the host does, and the forms a program or a test closes with.
+    Host,
+    /// Codecs that reach no host operation, so a type or a proof may run one.
+    Formats,
+    /// Protocols and frameworks over every tier below them.
+    Applications,
+}
+
+impl Tier {
+    /// Whether a declaration of this tier may name a declaration of `other`'s.
+    fn reads(self, other: Tier) -> bool {
+        match self {
+            Tier::Core => other == Tier::Core,
+            Tier::Host => matches!(other, Tier::Core | Tier::Host),
+            Tier::Formats => matches!(other, Tier::Core | Tier::Formats),
+            Tier::Applications => true,
+        }
+    }
+}
+
+/// The tier of every root module `/std` declares: the one statement of the library's tiers.
+const TIERS: &[(&str, Tier)] = &[
+    ("ops", Tier::Core),
+    ("Eq", Tier::Core),
+    ("Bool", Tier::Core),
+    ("Ord", Tier::Core),
+    ("Hash", Tier::Core),
+    ("Show", Tier::Core),
+    ("Spell", Tier::Core),
+    ("Monad", Tier::Core),
+    ("Tuple", Tier::Core),
+    ("Byte", Tier::Core),
+    ("Nat", Tier::Core),
+    ("Int", Tier::Core),
+    ("Flt", Tier::Core),
+    ("Dyadic", Tier::Core),
+    ("Bits", Tier::Core),
+    ("Bytes", Tier::Core),
+    ("Char", Tier::Core),
+    ("Str", Tier::Core),
+    ("List", Tier::Core),
+    ("Vec", Tier::Core),
+    ("Option", Tier::Core),
+    ("Result", Tier::Core),
+    ("State", Tier::Core),
+    ("Map", Tier::Core),
+    ("Set", Tier::Core),
+    ("Path", Tier::Core),
+    ("Parse", Tier::Core),
+    ("Io", Tier::Host),
+    ("Handle", Tier::Host),
+    ("Cell", Tier::Host),
+    ("Channel", Tier::Host),
+    ("Try", Tier::Host),
+    ("Program", Tier::Host),
+    ("Test", Tier::Host),
+    ("Fmt", Tier::Host),
+    ("time", Tier::Host),
+    ("rand", Tier::Host),
+    ("proc", Tier::Host),
+    ("fs", Tier::Host),
+    ("File", Tier::Host),
+    ("Command", Tier::Host),
+    ("Tty", Tier::Host),
+    ("Serial", Tier::Host),
+    ("tcp", Tier::Host),
+    ("Json", Tier::Formats),
+    ("Toml", Tier::Formats),
+    ("Html", Tier::Formats),
+    ("http", Tier::Applications),
+    ("Cli", Tier::Applications),
+    ("Tui", Tier::Applications),
+];
+
+/// The tier of the root's own declarations: the loose printers, which end the program where a write fails.
+const ROOT: Tier = Tier::Host;
+
+/// The tier a root module stands in.
+fn tier(root: &str) -> Tier {
+    TIERS
+        .iter()
+        .find(|(name, _)| *name == root)
+        .map(|(_, tier)| *tier)
+        .unwrap_or_else(|| panic!("/std/{root} stands in no tier"))
+}
+
+/// The tier of a declaration in `module`, or nothing for a module outside `/std`.
+fn tier_of_module(module: &[String]) -> Option<Tier> {
+    match module {
+        [std, rest @ ..] if std == "std" => Some(rest.first().map_or(ROOT, |root| tier(root))),
+        _ => None,
+    }
+}
+
+/// The tier of a declaration `name` names, or nothing for one outside `/std`.
+fn tier_of(name: &Global) -> Option<Tier> {
+    match name {
+        Global::Authored(path) => {
+            let segments = path.segments();
+            tier_of_module(&segments[..segments.len() - 1])
+        }
+        Global::Witness(witness) => tier_of_module(witness.module().segments()),
+    }
+}
+
+/// The root modules `/std`'s header declares, in the order it declares them.
+fn declared_root_modules() -> Vec<String> {
+    let header = fs::read_to_string(std_directory().join("lib.crs"))
+        .expect("the standard library's header reads");
+    let header = header
+        .parse::<curios_text::Module>()
+        .unwrap_or_else(|error| panic!("the standard library's header parses: {error:?}"));
+
+    header
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            TopItem::Mod(declared) => Some(declared.label.as_str().to_string()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every root module the header declares has one tier, and the roster names no module the header does not declare.
+#[test]
+fn every_root_module_of_std_stands_in_one_tier() {
+    let mut declared = declared_root_modules();
+    declared.sort();
+    let mut rostered = TIERS
+        .iter()
+        .map(|(name, _)| name.to_string())
+        .collect::<Vec<_>>();
+    rostered.sort();
+
+    assert_eq!(declared, rostered);
+}
+
+/// The header reads as the library's architecture: its root modules stand in the order of their tiers.
+#[test]
+fn std_declares_its_root_modules_in_tier_order() {
+    let declared = declared_root_modules();
+    let misplaced = declared
+        .windows(2)
+        .filter(|pair| tier(&pair[0]) > tier(&pair[1]))
+        .map(|pair| {
+            format!(
+                "{} ({:?}) before {} ({:?})",
+                pair[0],
+                tier(&pair[0]),
+                pair[1],
+                tier(&pair[1])
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert!(misplaced.is_empty(), "{misplaced:#?}");
+}
+
+/// A declaration of `/std` names only declarations of a tier its own reads, the items of a recursive group and the registry entries a declaration's elaboration consumed included.
+#[test]
+fn a_std_declaration_names_only_tiers_its_own_reads() {
+    let [_, std] = restore_archives();
+    let module = std.unit.core();
+    let mut crossings = Vec::new();
+
+    for item in &module.items {
+        let Some(owner) = item
+            .definitions()
+            .first()
+            .and_then(|definition| tier_of_module(definition.island.segments()))
+        else {
+            continue;
+        };
+
+        for name in module.reaches(item) {
+            if let Some(named) = tier_of(&name)
+                && !owner.reads(named)
+            {
+                crossings.push(format!(
+                    "{} ({owner:?}) names {} ({named:?})",
+                    item.describe(),
+                    name.faithful()
+                ));
+            }
+        }
+    }
+
+    assert!(crossings.is_empty(), "{crossings:#?}");
 }
 
 /// The record ahead of each image digests exactly the unit segment behind it, as a slot's record digests the unit it was filed with.

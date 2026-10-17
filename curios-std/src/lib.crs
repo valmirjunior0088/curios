@@ -1,5 +1,16 @@
+-- Core: what performs nothing.
 --- The concepts the infix operators dispatch through, each supplying the method its operator calls.
 pub mod ops;
+
+--- Propositional equality, with `refl` as its one constructor. The value-level decision behind `==` is `Eql`.
+pub mod Eq;
+pub use Eq/{let Eq};
+
+--- The two-valued type.
+---
+--- `Holds` beneath reflects a decision into a proposition: `True`, inhabited by `qed`, where it is `true`, and `False`, whose elimination proves anything, where it is not. A program imports the three by name — `use /std/Bool/{True, False, Holds};` — and writes `Holds(b)`, `True/qed()`, `True/proved()` and `False/refuted()`.
+pub mod Bool;
+pub use Bool/{let Bool};
 
 --- A total order, over an `Eql` superclass: what sorting and ordered collections ask for, the three-way answer it gives, and the laws a theorem may ask of a comparator, each named once.
 pub mod Ord;
@@ -21,14 +32,14 @@ pub use Show/{let Show};
 pub mod Spell;
 pub use Spell/{let Spell};
 
+--- Sequencing: the concept postfix `!` is a call to, in the monad of its region.
+---
+--- A region's monad is read from the region's type, never from an action sequenced in it. An action of another monad reaches the region through `Monad/Lift`.
+pub mod Monad;
+pub use Monad/{let Monad};
+
 --- The witnesses for the positional tuple shapes, up to eight fields. A labeled product wanting the same is a `struct`.
 pub mod Tuple;
-
---- The two-valued type.
----
---- `Holds` beneath reflects a decision into a proposition: `True`, inhabited by `qed`, where it is `true`, and `False`, whose elimination proves anything, where it is not. A program imports the three by name — `use /std/Bool/{True, False, Holds};` — and writes `Holds(b)`, `True/qed()`, `True/proved()` and `False/refuted()`.
-pub mod Bool;
-pub use Bool/{let Bool};
 
 --- One octet, `0` through `255`.
 pub mod Byte;
@@ -49,6 +60,10 @@ pub use Int/{let Int};
 --- Every comparison is IEEE's, so a NaN fails them all. Division is total. The narrowings to `Int` and `Nat` carry the decided bounds `Finite` and `NonNeg`, and the decimal conversions round-trip: text is read correctly rounded, and written as the shortest decimal that reads back.
 pub mod Flt;
 pub use Flt/{let Flt};
+
+--- Dyadic rationals, `mantissa · 2^exponent`: every finite `Flt`'s exact value, with arithmetic that never rounds.
+pub mod Dyadic;
+pub use Dyadic/{let Dyadic};
 
 --- A packed bit string, least-significant first, written `b[...]`.
 pub mod Bits;
@@ -76,6 +91,10 @@ pub use Str/{let Str};
 pub mod List;
 pub use List/{let List};
 
+--- A list that carries its length in its type.
+pub mod Vec;
+pub use Vec/{let Vec};
+
 --- A value that may be absent, with `IsSome` as the decided proposition that says which.
 pub mod Option;
 pub use Option/{let Option};
@@ -86,12 +105,33 @@ pub use Option/{let Option};
 pub mod Result;
 pub use Result/{let Result};
 
---- Sequencing: the concept postfix `!` is a call to, in the monad of its region.
+--- Pure state threading: a computation that reads and writes a state and performs nothing.
 ---
---- A region's monad is read from the region's type, never from an action sequenced in it. An action of another monad reaches the region through `Monad/Lift`.
-pub mod Monad;
-pub use Monad/{let Monad};
+--- The value parameter sits last so the family partially applies as a monad. There is no edge from `Io` into a `State` region.
+pub mod State;
+pub use State/{let State};
 
+--- A map from keys of one type to values, built and read under the `Key` dictionary its type names.
+---
+--- A key is held as it went in and handed back at its own type, in the keys' own order: a `Key` witness proves its encoding injective and in that order, a map holds the proof that its trie is sound, and that its keys are in order is a theorem beside `keys`. A map under another dictionary is a value of another type, and `rekey` moves one across.
+pub mod Map;
+pub use Map/{let Map};
+
+--- A set of keys, with the surface of `Map` and the value elided.
+pub mod Set;
+pub use Set/{let Set};
+
+--- A host path as the host holds it: bytes with `/` as the separator, never decoded on the way. `to_str` is where a program decodes one or refuses it.
+pub mod Path;
+pub use Path/{let Path};
+
+--- A parser monad over an input's bytes or its text.
+---
+--- One parser type, `Parse(I, A)`, indexed by the carrier it reads: `Parse(Bytes, A)` reads bytes, whose positions lie within the input, and `Parse(Str, A)` reads text, whose positions are boundaries of valid text, so a text primitive reads characters and pieces of the input by position. The combinators and `run` are written once for both; each carrier's primitives live under `Parse/bytes` and `Parse/text`, one spelling per operation, and one that takes a run stops where its predicate does. A parser declines when the input is not its shape, and `or` tries the alternative, reporting the refusal that reached further when neither fits; once `commit` has said the input is its shape, a refusal is reported instead. A parser that must consume everything ends with `eof()`. A refusal is a `Parse/Error`: what was wanted and the byte offset it was wanted at.
+pub mod Parse;
+pub use Parse/{let Parse};
+
+-- Host: what describes work the host does.
 --- A description of a computation that touches the host, never its result.
 ---
 --- Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. A description that waits suspends, so it holds only the branch it runs in, and the host alone waits: `wait`, `sleep` and `yield` suspend, `using` brackets a resource so that a branch dropped while it waits releases it, `both`, `all`, `first`, `race` and `timeout` run descriptions side by side, and a `scope` runs the children its body spawns beside it, joined one by one or all at once. `Future`, `Signal` and `/std/Channel` are waited on through `select` over their offers. `Read` and `Write` are what a stream is read and written through — the concepts a file, a socket, a child's pipe and the standard streams satisfy — with `read_all` and `copy` written once over them; `Reader` is a stream with the bytes read ahead of what was asked of it, through which a line or any other piece is cut from them. `Error` is the failure every host operation reports and `Chunk` what one read answers with.
@@ -116,6 +156,22 @@ pub use Channel/{let Channel};
 pub mod Try;
 pub use Try/{let Try};
 
+--- What may close a program: the concept the compiler executes a program's closing term through, witnessed by a description that yields nothing, by one over `Io` that may fail, and by a `Test`.
+pub mod Program;
+pub use Program/{let Program};
+
+--- Checks `curios test` runs: the description a `test name = body;` declaration's body builds, with `assert`, `equal`, `all`, `perform` and `try`.
+---
+--- A test takes no parameters; a claim about every instantiation is a proof, a `let` whose type states it. `main` is the tail that runs a unit's tests and reports each as passed or failed, and `curios test` reports one that traps or exits as trapped or exited.
+pub mod Test;
+pub use Test/{let Test};
+
+--- Interpolation against a format string, checked at the call.
+---
+--- A place takes one argument, shown at a `%` by any type's `Show` and spelled at a `#` by its `Spell`, with `\%` and `\#` for the literal characters. A missing or surplus argument is refused where the call is written.
+pub mod Fmt;
+pub use Fmt/{let Fmt};
+
 --- Clocks and the calendar: `Instant`, `Timestamp`, the `Duration` between two of either, and the `Timestamp/Utc` a timestamp is.
 ---
 --- `Instant` is an opaque reading of the monotonic clock, good for measuring alone; `Timestamp` is a moment that means something; `Duration` is the distance between two of either, with no sign. The two moments do not convert. A `Timestamp/Utc` is a timestamp as the Gregorian calendar and the clock name it in UTC, written out as HTTP writes one.
@@ -124,23 +180,19 @@ pub mod time;
 --- Randomness from the host, in `Io`.
 pub mod rand;
 
---- A host path as the host holds it: bytes with `/` as the separator, never decoded on the way. `to_str` is where a program decodes one or refuses it.
-pub mod Path;
-pub use Path/{let Path};
-
---- A regular file the program opened.
----
---- Every operation is `Io`, since the disk answers at once, and what can fail is `Try` over `Io`. A file is a stream like any other, and its bracket closes it however the body ends.
-pub mod File;
-pub use File/{let File};
+--- This process: its arguments, its environment, and its exit.
+pub mod proc;
 
 --- The filesystem beyond a file's contents: what is at a path, a directory's entries, and making, moving and removing things.
 ---
 --- Every operation is `Io`, and `Try` over it where it can fail.
 pub mod fs;
 
---- This process: its arguments, its environment, and its exit.
-pub mod proc;
+--- A regular file the program opened.
+---
+--- Every operation is `Io`, since the disk answers at once, and what can fail is `Try` over `Io`. A file is a stream like any other, and its bracket closes it however the body ends.
+pub mod File;
+pub use File/{let File};
 
 --- A child process to run: the program, its arguments, and how its streams are wired.
 ---
@@ -161,56 +213,7 @@ pub use Serial/{let Serial};
 --- TCP over the host's sockets: connections and listeners as streams, waiting by suspending wherever a peer decides.
 pub mod tcp;
 
---- What may close a program: the concept the compiler executes a program's closing term through, witnessed by a description that yields nothing, by one over `Io` that may fail, and by a `Test`.
-pub mod Program;
-pub use Program/{let Program};
-
---- Checks `curios test` runs: the description a `test name = body;` declaration's body builds, with `assert`, `equal`, `all`, `perform` and `try`.
----
---- A test takes no parameters; a claim about every instantiation is a proof, a `let` whose type states it. `main` is the tail that runs a unit's tests and reports each as passed or failed, and `curios test` reports one that traps or exits as trapped or exited.
-pub mod Test;
-pub use Test/{let Test};
-
---- Dyadic rationals, `mantissa · 2^exponent`: every finite `Flt`'s exact value, with arithmetic that never rounds.
-pub mod Dyadic;
-pub use Dyadic/{let Dyadic};
-
---- Propositional equality, with `refl` as its one constructor. The value-level decision behind `==` is `Eql`.
-pub mod Eq;
-pub use Eq/{let Eq};
-
---- Pure state threading: a computation that reads and writes a state and performs nothing.
----
---- The value parameter sits last so the family partially applies as a monad. There is no edge from `Io` into a `State` region.
-pub mod State;
-pub use State/{let State};
-
---- A list that carries its length in its type.
-pub mod Vec;
-pub use Vec/{let Vec};
-
---- A map from keys of one type to values, built and read under the `Key` dictionary its type names.
----
---- A key is held as it went in and handed back at its own type, in the keys' own order: a `Key` witness proves its encoding injective and in that order, a map holds the proof that its trie is sound, and that its keys are in order is a theorem beside `keys`. A map under another dictionary is a value of another type, and `rekey` moves one across.
-pub mod Map;
-pub use Map/{let Map};
-
---- A set of keys, with the surface of `Map` and the value elided.
-pub mod Set;
-pub use Set/{let Set};
-
---- Interpolation against a format string, checked at the call.
----
---- A place takes one argument, shown at a `%` by any type's `Show` and spelled at a `#` by its `Spell`, with `\%` and `\#` for the literal characters. A missing or surplus argument is refused where the call is written.
-pub mod Fmt;
-pub use Fmt/{let Fmt};
-
---- A parser monad over an input's bytes or its text.
----
---- One parser type, `Parse(I, A)`, indexed by the carrier it reads: `Parse(Bytes, A)` reads bytes, whose positions lie within the input, and `Parse(Str, A)` reads text, whose positions are boundaries of valid text, so a text primitive reads characters and pieces of the input by position. The combinators and `run` are written once for both; each carrier's primitives live under `Parse/bytes` and `Parse/text`, one spelling per operation, and one that takes a run stops where its predicate does. A parser declines when the input is not its shape, and `or` tries the alternative, reporting the refusal that reached further when neither fits; once `commit` has said the input is its shape, a refusal is reported instead. A parser that must consume everything ends with `eof()`. A refusal is a `Parse/Error`: what was wanted and the byte offset it was wanted at.
-pub mod Parse;
-pub use Parse/{let Parse};
-
+-- Formats: codecs that reach no host operation.
 --- JSON, decoded from text and encoded through `Parse`. Numbers are binary64 `Flt` and finite: an integer past `2^53` may decode inexactly, a number past binary64's range is refused, and a float that is not finite has no JSON value.
 pub mod Json;
 pub use Json/{let Json};
@@ -225,6 +228,7 @@ pub use Toml/{let Toml};
 pub mod Html;
 pub use Html/{let Html};
 
+-- Applications: protocols and frameworks.
 --- HTTP/1.1 over `tcp`: the vocabulary of an exchange as data, a client that performs one and a server that answers one.
 ---
 --- A message is read as RFC 9112 frames it, through pieces that hold no stream, and made as one a wire can carry: a field's name is a token, its value holds no control octet, and the renderers write the framing fields themselves. Each end takes one message per connection and whole bodies, within bounds it states: the client under a deadline and a redirect limit, the server answering a refused request with its status and closing only once its peer has had the reply.
