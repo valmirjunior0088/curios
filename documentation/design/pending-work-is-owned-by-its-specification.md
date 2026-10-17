@@ -8,7 +8,8 @@ The areas follow this directory's subjects, one directory per area under `roadma
 
 - `000-findings.md` comes first: the small fixes and possible bugs.
 - A specification numbered from `100` describes code that breaks a rule a document states, and opens by linking that rule. A design decision states the intended rule; a gap is a specification here, never a caveat there.
-- A specification numbered from `200` describes a missing capability or a removable cost for which no document states a rule.
+- A specification numbered from `200` describes a removable cost for which no document states a rule.
+- A specification numbered from `300` describes a missing capability for which no document states a rule.
 
 Within each hundred a lower number is taken first. A number is a place in that order, never a permanent identifier: a retired specification leaves its number free, and one filed ahead of others takes a free number at its place or moves the later specifications up with every path that cites them. A filename spells its subject out, and references cite the file directly. Directory listings provide discovery without a maintained index.
 

@@ -1,6 +1,6 @@
 # A lowering is held to its recorded lookups
 
-Not refined yet. A lowering is kept by the lookups it recorded, and nothing lowers a declaration again against those lookups alone to hold the record complete. The note a mismatch owes a binder that hides a module's name, its last stage, adds a lookup to that record and waits on this.
+**Not refined yet.** A lowering is kept by the lookups it recorded, and nothing lowers a declaration again against those lookups alone to hold the record complete. The note a mismatch owes a binder that hides a module's name, its last stage, adds a lookup to that record and waits on this.
 
 ## What is missing
 

@@ -1,6 +1,6 @@
 # The second door costs its key's graph
 
-Not refined yet; waits for a consumer. The reduction cache's second door aligns two spellings by a walk that reads a shared subterm once for each path to it. No program at hand gives the door a key that shares universe data, so nothing compiled today pays for it.
+**Not refined yet; waits for a consumer.** [Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) decides that a walk that only reads visits a node once. The reduction cache's second door aligns two spellings by a walk that reads a shared subterm once for each path to it. No program at hand gives the door a key that shares universe data, so nothing compiled today pays for it.
 
 ## What is missing
 

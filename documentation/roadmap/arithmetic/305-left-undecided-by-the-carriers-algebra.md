@@ -1,6 +1,36 @@
 # What the carriers' algebra leaves undecided
 
-**Not refined yet.** This specification preserves what the carriers' algebra does not decide and no consumer has asked for, with the approaches already discussed, and the rows the law grid still refuses, as [the relational layer](205-relational-layer.md) reserves its own. Each opens when a consumer needs what it decides, and refinement establishes its fragment, algorithm contract and acceptance criteria before any implementation. It is not an implementation plan. What a verdict owes to how a term is spelled is decided, in [A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md); the positions that decision leaves unanswered are the last section here.
+**Not refined yet.** This specification preserves what the carriers' algebra does not decide and no consumer has asked for, with the approaches already discussed: the relational layer, the normal forms and solving proposals past today's, and the rows the law grid still refuses. Each opens when a consumer needs what it decides, and refinement establishes its fragment, algorithm contract and acceptance criteria before any implementation. It is not an implementation plan. What a verdict owes to how a term is spelled is decided, in [A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md); the positions that decision leaves unanswered are the last section here. Two refused rows whose consumers are waiting are [A right shift and a remainder state their bounds](300-a-right-shift-and-a-remainder-state-their-bounds.md)'s.
+
+## The relational layer
+
+**Capability wanted.** Conversion deciding a Boolean combination of linear comparisons, or an equation whose truth needs a case split, with no hypothesis in scope — each verdict found outside the certifier and justified by evidence the certifier checks. It opens when a consumer needs such a fact *by conversion*, and until then it records the direction below and the rejection that constrains it.
+
+### The trigger
+
+A consumer states a fact of this kind that must hold by conversion, with the reason a proof does not serve it: `a <= b || b <= a` reducing to `true` where no proposition reaches, or `min(a, b) + max(a, b)` meeting `a + b` inside a type index. A bound over such a fact is not a trigger, since [the elaborator proves it from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md) and [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) decide the semilattice equations, a negation or a literal factor under `abs` and `sign`, and a sum in an exponent. The first example's disjunction is what `/std/Int/Trichotomy` hands back with its evidence, and no consumer needs it by conversion.
+
+### The direction to preserve
+
+- **Hypothesis-free.** Validity of a quantifier-free linear formula over atoms, with the context's hypotheses out of conversion. This is Coq Modulo Theory's fragment, whose metatheory with strong elimination is Jouannaud and Strub's (2017).
+- **Search outside, checking inside.** The search is [the elaborator's](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), `curios-elab`'s `entailment`. A verdict carries a certificate keyed by the canonical linear view of the formula, which `curios-core`'s `linear` module publishes ([the carriers' algebra](../../design/arithmetic/the-carriers-algebra-stays-in-conversion.md)) and is checked by a certifier-grade checker in `curios-algebra`. The evidence travels with the module, and missing evidence is a refusal, never an acceptance (*The evidence's transport*, below).
+- **Integer completeness stated.** Farkas certificates decide rational validity; a consequence that holds only over the integers needs cuts or the omega test's shadows, and the certificate language states which it admits. A proposed certificate family is not a complete integer decision procedure until it says so.
+- **The audit extended.** Symmetry, transitivity and substitution with the layer in conversion, and freeness as inversion reads it. A relational clash becomes an impossibility inversion may use only where a certificate proves one; the truth table's disagreement over opaque atoms remains no counterexample.
+
+### The evidence's transport
+
+Reserved with the layer it serves, and refined with it when the trigger is met:
+
+- **Evidence is keyed by what it is about.** A certificate is found under the canonical form of the formula it justifies, so the certifier's relation is a function of the question and never of where it was asked.
+- **It travels with the module.** A unit carries a table of the evidence its verdicts rest on, stored and validated as the unit is, and a later walk reads it there.
+- **Missing or failing evidence is a refusal**, never an acceptance, and a certificate is checked each time it is read.
+- **The checker is certifier-grade.** It meets the six clauses of [the kernel's design decision](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), lives inside the certifier's closure, and is held against certificates corrupted one step at a time, each corruption refused. The search that found a certificate is not trusted.
+- **The certifier's time is measured** before and after the layer opens, and reported with it.
+
+### Rejected
+
+- **Hypotheses in conversion.** [A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)'s rejections give the Calculus of Congruent Inductive Constructions' own account of why its metatheory holds for the weak recursor only. This layer stays hypothesis-free.
+- **A trusted decision procedure in the kernel.** The certificate is checked; the search that found it is not trusted.
 
 ## Boolean and bitwise normal forms
 
@@ -36,17 +66,7 @@ The cap is also a place conversion is not transitive, by design: with `A` the co
 
 ## Rows the law grid refuses
 
-`tests::laws::written` holds rows no rule decides yet, each a candidate for a family of its own. Parity read as a clash: the gcd test decides `x * 2 + 1 == y * 2` false as a fold, and read by the `Nat` peel as `Impossible` it would let `match h end` close `Eq()(x * 2 + 1, y * 2)`, so it needs its own row and its own evidence before inversion may rely on it. Map fusion, `map(map(xs, f), g) = map(xs, (x) => g(f(x)))`. Boolean agreement past the truth table's cap, above.
-
-Two of them leave an operation with no meaning the logic can read, and each has a consumer waiting.
-
-**A right shift's quotient.** Conversion holds of `shr` its zero laws, a count's literal floor taken in two steps and `shr(x, y) <= x`, and ties it to no division: a fold may not build a division node, whose proof that the divisor is nonzero it would invent. So `shr(2 * x, 1)` is not `x` by conversion, by [the elaborator's procedure](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), which reads a shift as a free atom, or by a lemma, since nothing a proof could split on reduces it. Its consumers: [the binary64 conversion proofs](204-binary64-conversion-proofs.md), whose subject, `/std/Flt/exact`'s `round_in`, computes what it keeps as `Nat/shr(m, s)` and what it drops as `m - Nat/shl(kept, s)`; and the lemmas `/std/Nat` and `/std/Int` wait on it for, a right shift undoing a left one, `Int`'s right shift as a floor, and its agreement with `Nat`'s on a widened natural. To refine: the form the law takes — the two bounds `pow(2, k) * shr(x, k) <= x < pow(2, k) * shr(x, k) + pow(2, k)` in the comparison, which hold at `Int` as at `Nat` and pin the shift, or a peel that holds `shr(x, k)` and `x / pow(2, k)` one stuck value at `Nat`, which builds no node — and which of the two the elaborator's procedure reads a quotient's bounds from.
-
-**The bound on `Int`'s remainder.** Of `Int`'s truncated division conversion decides Euclid's identity and an exact multiple, which pin neither half: the grid's candidate `i % 3 < +3` is refused, a remainder's magnitude below its divisor's being a bound through `abs` that nothing declares. `abs` and `sign` are declared operations, so the law has its vocabulary: the magnitude of `i % d` is below `d`'s, and its sign is its dividend's or zero. Its consumer is parity through the sign, that an integer's remainder by two is zero exactly when its magnitude's is, which `/std/Int` waits on it for, its signed scale (`/std/Int/shl`) stated on the magnitude meanwhile.
-
-## Retirement
-
-Each section leaves for a working specification of its own when its consumer arrives; this file is deleted with its roadmap entry once none is left.
+`tests::laws::written` holds rows no rule decides yet, each a candidate for a family of its own. Parity read as a clash: the gcd test decides `x * 2 + 1 == y * 2` false as a fold, and read by the `Nat` peel as `Impossible` it would let `match h end` close `Eq()(x * 2 + 1, y * 2)`, so it needs its own row and its own evidence before inversion may rely on it. Map fusion, `map(map(xs, f), g) = map(xs, (x) => g(f(x)))`. Boolean agreement past the truth table's cap, above. Two more leave an operation with no meaning the logic can read, each with a consumer waiting: [A right shift and a remainder state their bounds](300-a-right-shift-and-a-remainder-state-their-bounds.md).
 
 ## What an arm's equation leaves unanswered
 
@@ -57,3 +77,7 @@ An arm's equation answers the terms conversion holds equal to its scrutinee ([A 
 **A form naming a binder the scrutinee does not.** Which equations a stuck form is put to is a cost filter, `curios-analysis`'s `could_reduce_to`: it keeps a scrutinee's reduced spelling from being settled for every stuck form in its arm. It passes over a binder that is itself a proof and counts every other, one that stands where reduction would erase it included. Under `match f(b) < 10`, `f(b + 0 * c) < 10` converts with the guard outside the arm and is not `true` inside it, the row `curios`'s `tests::respelling` states refused; so is a form whose other binder stands inside a proof term that is no variable.
 
 **An index read by plain reduction.** Index inversion forces an index through `Env::force`, which is plain reduction, so an index that is its arm's scrutinee only up to conversion is not inverted. No cell of the grid reaches it.
+
+## Retirement
+
+Each section leaves for a working specification of its own when its consumer arrives, the relational layer when its trigger is met, or is deleted if a later decision rules it out; this file is deleted once none is left.

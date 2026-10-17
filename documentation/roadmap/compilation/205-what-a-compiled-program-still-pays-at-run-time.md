@@ -1,0 +1,14 @@
+# What a compiled program still pays at run time
+
+**Partly refined.** This specification reserves costs a compiled program pays that its source does not ask for, each taken alone and given a specification of its own when it is refined, as [a list built under a cons](201-a-list-built-under-a-cons-is-built-by-a-loop.md), [a float a reference seeds](202-a-float-a-reference-seeds-stays-a-float.md) and [a chain of `Nat` or `Int` steps](203-a-chain-of-nat-or-int-steps-runs-in-a-word.md) are. Reconstruction recovery has landed within the envelope in [curios-ersd](../../../curios-ersd/README.md#reconstruction-recovers-the-existing-value); the other costs and conservative reconstruction cases remain open.
+
+## What is missing
+
+**A function with several return contexts stays a function.** `curios-cont`'s `contify_calls` turns a function into a continuation where every call returns to one context. A function with two external return contexts stays a function, and nothing downstream contifies it: `curios-emit`'s machine lowering performs no contification.
+
+**Reconstruction whose source fields remain opaque can still take a frame a level.** The erased optimizer forwards exact product and constructor reconstruction and retained unit fields established by immutable return-and-field flow. An unknown callback's answer, a mutable read or a computed recursive member supplies no such field facts, so `match found(t) | some(hit) => Option/some((at = hit.at, seen = hit.seen, low = True/proved())) | none() => Option/none() end` can still rebuild a product around that opaque answer. Extending the envelope needs a consumer and a sound source of the missing facts; an anonymous schema states width, never that a slot holds unit, and a callable proof placeholder is a function. The direct recursive anonymous-record walk and its nested `Option` form are covered by `curios`'s `tests::codegen::reconstruction`, which checks erased tail position, Cont backedges or tail calls, raw Wasm and raw/optimized execution.
+
+## Refinement
+
+- **Contification across several contexts.** Common-dominator placement for a function returned to from several contexts, which analysis owns it — the continuation IR or the machine CFG — and which programs it moves, measured.
+- **Reconstruction past an opaque source.** Refine only for a consumer the current immutable analysis declines. Result or callback facts must preserve structural layout, effects, traps and recursive-member forcing; a precision limit may decline an optimization but never establish equality. Check beside the existing reconstruction controls, including ordinary numeric fields, changed layouts, opaque callbacks and callable proof slots.

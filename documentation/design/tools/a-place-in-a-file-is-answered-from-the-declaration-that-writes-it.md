@@ -9,7 +9,7 @@
 - **A declaration's head and prose are read off its own text**, the one its unit read and its record holds, parsed alone where it is asked for and printed by the printers a documentation page prints by, through one reading of what an item states of its definitions (`stated`, `curios-text/src/into_core/document.rs`). A declaration is stated whether or not a page shows it, and whether or not a file holds it.
 - **A declaration is placed where a file holds the text its unit read**: always for a unit compiled from the disk or from an editor's text, and for the units a compiler was built with where their file still holds that text, which under an installed release none does.
 
-What has no answer is [the roadmap's](../../roadmap/tools/201-the-editor-is-answered-at-a-position.md): a name no term holds at its own place, a segment of a path, and the type of a term.
+What has no answer is [the roadmap's](../../roadmap/tools/300-the-editor-is-answered-at-a-position.md): a name no term holds at its own place, a segment of a path, and the type of a term.
 
 **Rationale.**
 

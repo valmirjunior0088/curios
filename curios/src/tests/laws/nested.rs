@@ -99,7 +99,7 @@ const SHAPES: [Shape; 2] = [
 /// | summed | 64 | 0.94 s [0.65–1.40] |
 /// | summed | 256 | 14.80 s [12.99–17.06] |
 ///
-/// **A nested term costs its depth and no doubling of it.** **A long sum's cost is mostly the reducers' own**: every stuck sum walks the sum beneath it, whether or not a summand is respelled, which `documentation/roadmap/arithmetic/207-a-stuck-fold-keeps-what-its-walk-found.md` holds with the readings of the same sum unrespelled.
+/// **A nested term costs its depth and no doubling of it.** **A long sum's cost is mostly the reducers' own**: every stuck sum walks the sum beneath it, whether or not a summand is respelled, which `documentation/roadmap/arithmetic/200-a-stuck-fold-keeps-what-its-walk-found.md` holds with the readings of the same sum unrespelled.
 #[test]
 #[ignore = "measurement, timed: reports what a size costs rather than asserting"]
 fn nested_operation_measurements() {
