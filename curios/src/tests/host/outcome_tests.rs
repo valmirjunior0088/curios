@@ -74,16 +74,16 @@ fn each_fails(cases: Vec<(&str, Replies)>) {
 fn a_stream_row_s_failure_is_the_error_it_names() {
     each_fails(vec![
         (
-            "let c = Io/read(Io/stdin, 8)!;
-                 match c | error(e) => Try/raise(e) | _ => Try/pure(()) end",
+            "let _ = Io/read(Io/stdin, 8)!;
+                 Try/pure(())",
             vec![(HostOp::HandleRead, denied(vec![bytes(b"")]))],
         ),
         (
-            "Try/attempt(Io/Write/write(Handle/stdout, x[1]))",
+            "Io/write(Io/stdout, x[1])",
             vec![(HostOp::HandleWrite, denied(vec![nat(0)]))],
         ),
         (
-            "Try/attempt(Io/Write/flush(Handle/stdout))",
+            "Io/flush(Io/stdout)",
             vec![(HostOp::HandleFlush, denied(vec![]))],
         ),
     ]);
@@ -243,7 +243,7 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             vec![(HostOp::TlsServerConfig, denied(vec![bytes(b"")]))],
         ),
         (
-            "Try/attempt(Handle/finish(Handle/stdout))",
+            "Handle/finish(Handle/stdout)",
             vec![(HostOp::HandleFinish, denied(vec![]))],
         ),
     ]);
@@ -348,7 +348,7 @@ fn a_bytes_payload_arrives_whole() {
         use /std/{Io, Path, Try, fs};
         let main() -> Io({}) =
         let r = Try/run(fs/cwd())!;
-        match r | success(p) => Io/bind(Io/Write/write(Io/stdout, Path/to_bytes(p)), (_) => Io/pure(())) | failure(_) => Io/pure(()) end;
+        match r | success(p) => Io/bind(Try/run(Io/write(Io/stdout, Path/to_bytes(p))), (_) => Io/pure(())) | failure(_) => Io/pure(()) end;
         main()
         "#,
     )

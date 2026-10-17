@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Bytes, Nat, Bool, List, Option, Result, Cell, Handle, Channel, Program, Try};
+use /std/{Monad, Bytes, Nat, Bool, List, Option, Cell, Handle, Channel, Program, Try};
 use /std/Bool/{Holds};
 use /std/time/{Duration, Instant};
 
@@ -88,16 +88,14 @@ pub let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
                 bind(cancel, (_) => release(Ended/cancelled())),
                 using(release, rest)));
 
---- One read's answer: bytes, the end of the stream, or a failure.
+--- One read's answer: bytes, or the end of the stream. A read that fails says so in its `Try`.
 ---
---- A chunk holds at least one byte, and says so: a read asks for a positive count, and a stream with nothing more to give has ended, which is `eof`. So a reader takes a chunk's first byte by its proof rather than by a default, and a loop over chunks advances with every one.
+--- A chunk holds at least one byte, and says so: a read asks for a positive count, and a stream with nothing more to give has ended. So a reader takes a chunk's first byte by its proof rather than by a default, and a loop over chunks advances with every one.
 pub induct Chunk: pub Type
 --- Bytes were read: at least one.
-| chunk(bytes: Bytes, @some: Holds(0 < Bytes/len(bytes)))
+| bytes(bytes: Bytes, @some: Holds(0 < Bytes/len(bytes)))
 --- The stream is finished.
-| eof()
---- The read failed.
-| error(Error)
+| ended()
 end
 
 --- An input stream of this process.
@@ -122,65 +120,51 @@ pub let stdout: Output =
 pub let stderr: Output =
     Output { Handle/stderr };
 
---- What a stream is read through. A read asks for a positive count and answers a chunk of between one byte and that count, the end of the stream, or a failure; a read the host cannot answer yet waits until it can, by suspending, so it holds only the branch that reads.
+--- What a stream is read through. A read asks for a positive count and answers a chunk of between one byte and that count or the end of the stream, or fails; a read the host cannot answer yet waits until it can, by suspending, so it holds only the branch that reads.
 ---
 --- The lower bound is the chunk's own, stated in its type, so a witness for a stream of its own proves every chunk it hands out holds a byte — `Nat/lt/try` decides it of a length the witness cannot see. The upper bound is the witness's promise, which the host's rows hold `Handle` to.
 pub concept Read(S: Type): pub Type {
-    read(s: S, n: Nat, @positive: Holds(0 < n)) -> Io(Chunk),
+    read(s: S, n: Nat, @positive: Holds(0 < n)) -> Try(Io, Error, Chunk),
 }
+
+pub use Read/*;
 
 --- What a stream is written through: the whole of the bytes, a short write resent, and what the stream holds of the writes it accepted handed on.
 pub concept Write(S: Type): pub Type {
-    write(S, Bytes) -> Io(Result(Error, {})),
+    write(S, Bytes) -> Try(Io, Error, {}),
     --- Hand on what the stream holds of the writes it accepted: a TLS stream's records, which a write can accept before the socket takes them. Every other stream holds nothing.
-    flush(S) -> Io(Result(Error, {})),
+    flush(S) -> Try(Io, Error, {}),
 }
 
---- Everything `read` yields up to the end of the stream; a failure before the end drops what was read. Every chunk holds a byte, so every read short of the end is progress.
-pub let drain(read: (n: Nat, @positive: Holds(0 < n)) -> Io(Chunk)) -> Io(Result(Error, Bytes)) =
-    let go(acc: Bytes) -> Io(Result(Error, Bytes)) =
+pub use Write/*;
+
+-- Everything `read` yields up to the end of the stream; a failure before the end drops what was read. Every chunk holds a byte, so every read short of the end is progress.
+let drain(
+    read: (n: Nat, @positive: Holds(0 < n)) -> Try(Io, Error, Chunk),
+) -> Try(Io, Error, Bytes) =
+    let go(acc: Bytes) -> Try(Io, Error, Bytes) =
         let r = read(4096)!;
-        match r
-        | chunk(bytes) => go(x[..acc, ..bytes])
-        | eof() => pure(Result/success(acc))
-        | error(e) => pure(Result/failure(e))
-        end;
+        match r | bytes(b) => go(x[..acc, ..b]) | ended() => Try/pure(acc) end;
     go(x[]);
 
 --- Everything up to the end of the stream; a failure before the end drops what was read.
-pub let read_all(@S: Type, use Read(S), s: S) -> Io(Result(Error, Bytes)) =
+pub let read_all(@S: Type, use Read(S), s: S) -> Try(Io, Error, Bytes) =
     drain((n, @positive) => Read/read(@S, s, n, @positive));
 
 --- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer.
-pub let copy(
-    @S: Type,
-    @T: Type,
-    use Read(S),
-    use Write(T),
-    from: S,
-    to: T,
-) -> Io(Result(Error, {})) =
-    let go() -> Io(Result(Error, {})) =
+pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> Try(Io, Error, {}) =
+    let go() -> Try(Io, Error, {}) =
         let c = Read/read(from, 4096)!;
         match c
-        | chunk(b) =>
-            let w = Write/write(to, b)!;
-            match w | success(_) => go() | failure(e) => pure(Result/failure(e)) end
-        | eof() => pure(Result/success(()))
-        | error(e) => pure(Result/failure(e))
+        | bytes(b) =>
+            let _ = Write/write(to, b)!;
+            go()
+        | ended() => Try/pure(())
         end;
     go();
 
---- Up to `n` bytes of this process's input, and at least one until the input ends.
-pub let read(i: Input, n: Nat, @positive: Holds(0 < n)) -> Io(Chunk) =
-    Read/read(@Handle, i.0, n, @positive);
-
---- The whole of `b`, a short write resent; the first failure is the answer.
-pub let write(o: Output, b: Bytes) -> Try(Io, Error, {}) =
-    Try/attempt(Write/write(o.0, b));
-
 satisfy Read(Input) {
-    read(i, n, @positive) = read(i, n, @positive),
+    read(i, n, @positive) = Read/read(@Handle, i.0, n, @positive),
 }
 
 satisfy Write(Output) {

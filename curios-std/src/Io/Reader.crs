@@ -122,19 +122,19 @@ pub let take(
                 | false => now.cuts + 1
                 end;
             let _ = kept(r, Held { cuts = cuts, bytes = bytes })!;
-            let arrived = Io/Read/read(@S, r.stream, 65536)!;
+            let arrived = Try/run(Io/read(@S, r.stream, 65536))!;
             match arrived
-            | chunk(fresh) =>
+            | success(bytes(fresh)) =>
                 let then = taken(r)!;
                 let _ = kept(r, Held { cuts = then.cuts, bytes = x[..then.bytes, ..fresh] })!;
                 go(next, cuts)
-            | eof() =>
+            | success(ended()) =>
                 let moved = touched(r, cuts, bytes)!;
                 match moved
                 | true => go(next, cuts)
                 | false => Io/pure(Result/failure(Stop/ended(next)))
                 end
-            | error(e) =>
+            | failure(e) =>
                 let moved = touched(r, cuts, bytes)!;
                 match moved
                 | true => go(next, cuts)

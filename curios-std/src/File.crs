@@ -40,20 +40,20 @@ pub let close(f: File) -> Io({}) =
     Handle/close(f.0);
 
 --- Up to `n` bytes, and at least one until the file ends.
-pub let read(f: File, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
-    Io/Read/read(@Handle, f.0, n, @positive);
+pub let read(f: File, n: Nat, @positive: Holds(0 < n)) -> Try(Io, Io/Error, Io/Chunk) =
+    Io/read(@Handle, f.0, n, @positive);
 
 --- The whole of `b`, a short write resent.
 pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
-    Try/attempt(Io/Write/write(f.0, b));
+    Io/write(f.0, b);
 
 satisfy Io/Read(File) {
     read(f, n, @positive) = read(f, n, @positive),
 }
 
 satisfy Io/Write(File) {
-    write(f, b) = Try/run(write(f, b)),
-    flush(f) = Io/Write/flush(f.0),
+    write(f, b) = write(f, b),
+    flush(f) = Io/flush(f.0),
 }
 
 --- `body` over the file at `path`, closed whichever way the body ends — finished, failed, or cancelled while it waits; the body's own failure is the answer after the close.
@@ -71,11 +71,7 @@ pub let with(
 let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
     let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =
         let c = read(f, 4096)!;
-        match c
-        | chunk(b) => go(x[..acc, ..b])
-        | eof() => Try/pure(acc)
-        | error(e) => Try/raise(e)
-        end;
+        match c | bytes(b) => go(x[..acc, ..b]) | ended() => Try/pure(acc) end;
     go(x[]);
 
 --- The whole file at `path`.

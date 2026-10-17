@@ -160,7 +160,7 @@ pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
     | success(_) => Try/pure(())
     | failure(e) =>
         match e
-        | exists() => Try/pure(())
+        | already_exists() => Try/pure(())
         | not_found() =>
             match Path/parent(path)
             | some(parent) =>

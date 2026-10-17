@@ -15,7 +15,7 @@ const CALL: &str = r#"
     let program() -> Io({}) =
         let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
         match r
-        | success(response) => Io/bind(Io/Write/write(Io/stdout, response), (_) => Io/pure(()))
+        | success(response) => Io/bind(Try/run(Io/write(Io/stdout, response)), (_) => Io/pure(()))
         | failure(e) => /std/print(Show/show(e))
         end;
     program()
@@ -30,13 +30,13 @@ fn call_round_trips_a_scripted_endpoint() {
     assert_eq!(io.output(), b"HTTP/1.0 200 OK\r\n\r\nhello");
 }
 
-// Connecting to an endpoint that was never scripted is refused, and the status decodes to `refused()`.
+// Connecting to an endpoint that was never scripted is refused, and the status decodes to `connection_refused()`.
 #[test]
 fn call_to_an_unscripted_endpoint_is_refused() {
-    assert_eq!(run(CALL), b"refused");
+    assert_eq!(run(CALL), b"connection_refused");
 }
 
-// A connect to a remote peer goes pending: the connect suspends on a watch of the socket's writability, `finish_connect` reads the outcome once the host's wait has reported it, and only then is the request sent. A refusal arrives the same way, deferred to the settle, and decodes to `refused()` as a synchronous one does.
+// A connect to a remote peer goes pending: the connect suspends on a watch of the socket's writability, `finish_connect` reads the outcome once the host's wait has reported it, and only then is the request sent. A refusal arrives the same way, deferred to the settle, and decodes to `connection_refused()` as a synchronous one does.
 #[test]
 fn a_pending_connect_is_awaited_before_the_request_is_sent() {
     let (system, io) = MockHost::builder()
@@ -48,7 +48,7 @@ fn a_pending_connect_is_awaited_before_the_request_is_sent() {
 
     let (system, io) = MockHost::builder().connect_pending().build();
     run_text(CALL, system).expect("expected result");
-    assert_eq!(io.output(), b"refused");
+    assert_eq!(io.output(), b"connection_refused");
 }
 
 // The one case that needs the network: an HTTPS request against a public host, driven end to end over the real host — the resolution answered later, the pending connect and the handshake each suspend between the program's reads and writes. Ignored by default; run by hand on a networked machine with `cargo test -p curios --lib -- --ignored https_perform`. The real host's output cannot be captured, so the program reports through a file.
@@ -101,12 +101,12 @@ fn with_finishes_its_socket_before_it_closes_it() {
 
 // A peer that resets the connection is a failure with a name, the same on every system, where its errno is not.
 #[test]
-fn a_peer_that_resets_reads_as_reset() {
+fn a_peer_that_resets_reads_as_connection_reset() {
     let (system, io) = MockHost::builder()
         .net_reset([("example.com:80", vec!["par"])])
         .build();
     run_text(CALL, system).expect("expected result");
-    assert_eq!(io.output(), b"reset");
+    assert_eq!(io.output(), b"connection_reset");
 }
 
 /// `with` over the connector `open`, the body reading one chunk off the socket it is handed and answering it.
@@ -117,10 +117,10 @@ fn read_one_chunk(open: &str) -> String {
         use /std/tcp/{{Socket}};
         let program() -> Io({{}}) =
             let r = Try/run(Socket/with({open}, (s) =>
-                let c = Socket/read(s, 64)!;
-                Try/pure(match c | chunk(b, @_) => b | _ => x[] end)))!;
+                let c = Io/read(s, 64)!;
+                Try/pure(match c | bytes(b, @_) => b | _ => x[] end)))!;
             match r
-            | success(bytes) => Io/bind(Io/Write/write(Io/stdout, bytes), (_) => Io/pure(()))
+            | success(bytes) => Io/bind(Try/run(Io/write(Io/stdout, bytes)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program()
@@ -159,10 +159,10 @@ fn echo_server(listener: &str, prefix: &str) -> String {
         use /std/{{Str, Bytes, Show, Try, Io}};
         use /std/tcp/{{Listener, Socket}};
         let handler(c: Socket) -> Io({{}}) =
-            let r = Socket/read(c, 64)!;
+            let r = Try/run(Io/read(c, 64))!;
             match r
-            | chunk(bytes, @_) =>
-                let _ = Socket/write(c, x[..Str/to_bytes("{prefix}"), ..bytes])!;
+            | success(bytes(bytes, @_)) =>
+                let _ = Try/run(Io/write(c, x[..Str/to_bytes("{prefix}"), ..bytes]))!;
                 Io/pure(())
             | _ => Io/pure(())
             end;
@@ -226,13 +226,13 @@ fn listen_and_accept_serve_one_connection_by_hand() {
         let session() -> Try(Io, Io/Error, {}) =
             let l = Listener/listen("0.0.0.0", 8080)!;
             let c = Listener/accept(l)!;
-            let r = Socket/read(c, 64)!;
+            let r = Io/read(c, 64)!;
             let reply =
                 match r
-                | chunk(bytes, @_) => Socket/write(c, x[..Str/to_bytes("one: "), ..bytes])
-                | _ => Io/pure(Result/success(()))
+                | bytes(bytes, @_) => Io/write(c, x[..Str/to_bytes("one: "), ..bytes])
+                | _ => Try/pure(())
                 end;
-            let _ = Try/attempt(reply)!;
+            let _ = reply!;
             let _ = Socket/close(c)!;
             Listener/close(l);
         let program() -> Io({}) =

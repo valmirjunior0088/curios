@@ -434,7 +434,7 @@ fn empty_bin_literal_is_the_empty_sequence() {
     assert_eq!(
         run(r#"
 let entry() -> /std/Io({}) =
-    let _ = std/Io/Write/write(std/Io/stdout, x[../std/Str/to_bytes("ok")])!;
+    let _ = /std/Try/run(std/Io/write(std/Io/stdout, x[../std/Str/to_bytes("ok")]))!;
     /std/Io/pure(());
 entry()
 "#),

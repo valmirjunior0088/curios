@@ -1,15 +1,15 @@
-use /std/{Bytes, Str, Nat, Bool, Result, Try, Io, Handle};
+use /std/{Bytes, Str, Nat, Bool, Try, Io, Handle};
 use /std/tcp/{resolve, Socket};
 use /std/Handle/{Interest};
 use /std/Bool/{Holds};
 
 --- Up to `n` bytes, waiting until some arrive.
-pub let read(c: Socket, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
-    Io/Read/read(@Handle, c.0, n, @positive);
+pub let read(c: Socket, n: Nat, @positive: Holds(0 < n)) -> Try(Io, Io/Error, Io/Chunk) =
+    Io/read(@Handle, c.0, n, @positive);
 
 --- The whole of `b`, waiting while the peer cannot take more.
-pub let write(c: Socket, b: Bytes) -> Io(Result(Io/Error, {})) =
-    Io/Write/write(c.0, b);
+pub let write(c: Socket, b: Bytes) -> Try(Io, Io/Error, {}) =
+    Io/write(c.0, b);
 
 satisfy Io/Read(Socket) {
     read(c, n, @positive) = read(c, n, @positive),
@@ -17,11 +17,11 @@ satisfy Io/Read(Socket) {
 
 satisfy Io/Write(Socket) {
     write(c, b) = write(c, b),
-    flush(c) = Io/Write/flush(c.0),
+    flush(c) = Io/flush(c.0),
 }
 
 --- `c`'s sending half ended, with `c` still reading: the peer reads the end of the stream — a TLS peer its closure alert first — and whatever it sends after is still `c`'s to read. It is how a connection says it has finished, where `close` says nothing and resets a connection that holds unread bytes.
-pub let finish(c: Socket) -> Io(Result(Io/Error, {})) =
+pub let finish(c: Socket) -> Try(Io, Io/Error, {}) =
     Handle/finish(c.0);
 
 --- Close `c`.
@@ -116,12 +116,12 @@ pub let with(
 --- `body`, then what `c` holds of the writes it accepted handed on, so a TLS stream has sent its records before `with` closes it; a failure to hand them on is the task's. `c`'s sending half is ended after, a courtesy to a peer that may already be gone, so its failure is not.
 let flushed(@A: Type, c: Socket, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
     let a = body!;
-    let _ = Try/attempt(Io/Write/flush(c))!;
-    let _ = finish(c)!;
+    let _ = Io/flush(c)!;
+    let _ = Try/run(finish(c))!;
     Try/pure(a);
 
 --- `request` written whole and the reply read to its end, over the socket `open` connects, closed after. One exchange with a peer that closes when it has answered.
 pub let call(open: Try(Io, Io/Error, Socket), request: Bytes) -> Try(Io, Io/Error, Bytes) =
     with(open, (c) =>
-        let _ = Try/attempt(write(c, request))!;
-        Try/attempt(Io/read_all(c)));
+        let _ = write(c, request)!;
+        Io/read_all(c));

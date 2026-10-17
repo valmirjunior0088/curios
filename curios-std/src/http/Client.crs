@@ -74,7 +74,7 @@ let exchange(c: Client, request: Request) -> Try(Io, Error, Response) =
     let read =
         Try/map_failure(
             Socket/with(open, (s) =>
-                let wrote = Socket/write(s, Request/render(request))!;
+                let wrote = Try/run(Socket/write(s, Request/render(request)))!;
                 let r = Reader/new(s)!;
                 let answered = reply(c.limits, request.method, r)!;
                 match wrote

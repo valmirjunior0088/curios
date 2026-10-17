@@ -39,13 +39,13 @@ const WIRE: &str = r#"
     use /std/{Nat, Str, Bytes, Option, Result, Show, Try, Io, print, Channel};
     use /std/time/{Duration};
     struct Wire: Type { Channel/Receiver(Bytes) }
-    let next(w: Wire) -> Io(Io/Chunk) =
+    let next(w: Wire) -> Try(Io, Io/Error, Io/Chunk) =
         let got = Channel/recv(w.0)!;
         match got
-        | none() => Io/pure(Io/Chunk/eof())
+        | none() => Try/pure(Io/Chunk/ended())
         | some(bytes) =>
             match Nat/lt/try(0, Bytes/len(bytes))
-            | some(held) => Io/pure(Io/Chunk/chunk(bytes, @held))
+            | some(held) => Try/pure(Io/Chunk/bytes(bytes, @held))
             | none() => next(w)
             end
         end;

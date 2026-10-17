@@ -11,7 +11,7 @@ fn read_all_reads_a_seeded_file() {
         use /std/{File, Path, Try, Io};
         let entry() -> /std/Io({}) =
             match Try/run(File/read_all(Path/of_str("data.txt")))!
-            | success(contents) => Io/bind(Io/Write/write(Io/stdout, contents), (_) => Io/pure(()))
+            | success(contents) => Io/bind(Try/run(Io/write(Io/stdout, contents)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
         entry()
@@ -35,14 +35,13 @@ fn read_all_of_a_missing_path_is_not_found() {
                 match e : (_) => /std/Io({})
                 | not_found() => /std/print("not found")
                 | permission_denied() => /std/print("denied")
-                | exists() => /std/print("exists")
-                | refused() => /std/print("refused")
+                | already_exists() => /std/print("already exists")
+                | connection_refused() => /std/print("connection refused")
                 | tls() => /std/print("tls")
-                | would_block() => /std/print("would block")
                 | not_empty() => /std/print("not empty")
                 | is_directory() => /std/print("is a directory")
                 | not_directory() => /std/print("not a directory")
-                | reset() => /std/print("reset")
+                | connection_reset() => /std/print("connection reset")
                 | broken_pipe() => /std/print("broken pipe")
                 | too_long() => /std/print("too long")
                 | not_text(_) => /std/print("not text")
@@ -103,10 +102,10 @@ fn read_pulls_bytes_inside_the_bracket() {
         use /std/{File, Path, Str, Bytes, Try, Io};
         let entry() -> /std/Io({}) =
             let bytes = Try/run(File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
-                let c = File/read(f, 1024)!;
-                Try/pure(match c | chunk(b, @_) => b | eof() => x[] | error(_) => x[] end)))!;
+                let c = Io/read(f, 1024)!;
+                Try/pure(match c | bytes(b, @_) => b | ended() => x[] end)))!;
             match bytes
-            | success(b) => Io/bind(Io/Write/write(Io/stdout, b), (_) => Io/pure(()))
+            | success(b) => Io/bind(Try/run(Io/write(Io/stdout, b)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
         entry()
@@ -124,16 +123,15 @@ fn read_pulls_bytes_inside_the_bracket() {
 fn a_bracketed_file_reads_through_its_stream_witness_across_a_suspension() {
     let source = r#"
         use /std/{File, Path, Str, Bytes, Try, Io};
-        use /std/Monad/{Lift};
         let program: Try(Io, Io/Error, Bytes) =
             File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
                 let _ = Io/yield()!;
-                let c = Lift/lift(Io/Read/read(f, 1024))!;
-                Try/pure(match c | chunk(b, @_) => b | _ => x[] end));
+                let c = Io/read(f, 1024)!;
+                Try/pure(match c | bytes(b, @_) => b | _ => x[] end));
         let main() -> Io({}) =
             let r = Try/run(program)!;
             match r
-            | success(b) => Io/bind(Io/Write/write(Io/stdout, b), (_) => Io/pure(()))
+            | success(b) => Io/bind(Try/run(Io/write(Io/stdout, b)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
         main()

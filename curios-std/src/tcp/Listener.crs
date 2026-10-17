@@ -61,8 +61,8 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Io({})) -> Io({}) =
 --- `handler` over the connection, then what the connection holds of the writes it accepted handed on and its sending half ended, so a TLS stream has sent its records and its closure alert before it is closed.
 let served(h: Handle, handler: (Socket) -> Io({})) -> Io({}) =
     let _ = handler(Socket { h })!;
-    let _ = Io/Write/flush(h)!;
-    let _ = Handle/finish(h)!;
+    let _ = Try/run(Io/flush(h))!;
+    let _ = Try/run(Handle/finish(h))!;
     Io/pure(());
 
 -- The connection `h` served by `handler` beside the accept loop, a child of `s`, closed however it ends.

@@ -69,7 +69,7 @@ fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
     let source = r#"
         use /std/{Nat, Show, Try, Io, Tty};
         let body: Try(Io, Io/Error, Nat) =
-            Try/raise(Io/Error/refused());
+            Try/raise(Io/Error/connection_refused());
         let entry() -> /std/Io({}) =
             match Try/run(Tty/with_raw(Tty/stdin, body))!
             | success(n) => /std/print(Nat/to_str(n))
@@ -80,7 +80,7 @@ fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
 
     let (system, io) = MockHost::builder().tty_size(80, 24).build();
     run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"refused");
+    assert_eq!(io.output(), b"connection_refused");
     assert_eq!(io.raw_modes(), vec![true, false]);
 
     let (system, io) = MockHost::builder().build();

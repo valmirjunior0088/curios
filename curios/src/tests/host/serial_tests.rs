@@ -53,14 +53,14 @@ fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
     let source = r#"
         use /std/{Str, Bytes, Option, Show, Try, Io, Path, Serial};
         let exchange(s: Serial) -> Try(Io, Io/Error, Bytes) =
-            let _ = Try/attempt(Serial/write(s, Str/to_bytes("AT\r\n")))!;
+            let _ = Io/write(s, Str/to_bytes("AT\r\n"))!;
             let input = Io/Reader/new(s)!;
             let line = Io/Reader/line(input)!;
             Try/pure(Option/unwrap_or(line, x[]));
         let program() -> Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), exchange))!;
             match r
-            | success(line) => Io/bind(Io/Write/write(Io/stdout, line), (_) => Io/pure(()))
+            | success(line) => Io/bind(Try/run(Io/write(Io/stdout, line)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program()
@@ -81,7 +81,7 @@ fn with_does_not_drain_after_a_body_that_fails() {
     let source = r#"
         use /std/{Str, Show, Try, Io, Path, Serial};
         let failing(s: Serial) -> Try(Io, Io/Error, {}) =
-            let _ = Try/attempt(Serial/write(s, Str/to_bytes("AT\r\n")))!;
+            let _ = Io/write(s, Str/to_bytes("AT\r\n"))!;
             Try/raise(Io/Error/not_found());
         let program() -> Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), failing))!;
@@ -117,7 +117,7 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
         let program() -> Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), reset))!;
             match r
-            | success(line) => Io/bind(Io/Write/write(Io/stdout, line), (_) => Io/pure(()))
+            | success(line) => Io/bind(Try/run(Io/write(Io/stdout, line)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program()

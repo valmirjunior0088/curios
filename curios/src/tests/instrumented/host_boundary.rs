@@ -15,14 +15,14 @@ use {
 
 /// Standard input copied to standard output a chunk at a time, through the `Io` read and write the standard streams serve.
 const STREAM_COPY: &str = r#"
-    use /std/{Io};
+    use /std/{Io, Try};
     use /std/Io/{Chunk};
 
     let copy() -> Io({}) =
-        let c = Io/read(Io/stdin, 4096)!;
+        let c = Try/run(Io/read(Io/stdin, 4096))!;
         match c
-        | chunk(bytes, @_) =>
-            let _ = Io/Write/write(Io/stdout, bytes)!;
+        | success(bytes(bytes, @_)) =>
+            let _ = Try/run(Io/write(Io/stdout, bytes))!;
             copy()
         | _ => Io/pure(())
         end;

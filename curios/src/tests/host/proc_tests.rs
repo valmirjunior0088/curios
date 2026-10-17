@@ -15,7 +15,7 @@ fn args_indexes_the_argv_snapshot() {
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     run_text(r#"
 let entry() -> /std/Io({}) =
-    let _ = std/Io/Write/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args()!, 1), x[]))!;
+    let _ = /std/Try/run(std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args()!, 1), x[])))!;
     /std/Io/pure(());
 entry()
 "#,
@@ -31,10 +31,10 @@ fn env_found_unwraps_to_some() {
     let (system, io) = MockHost::builder().env([("HOME", "/root")]).build();
     run_text(
         r#"
-        use /std/{Io};
+        use /std/{Io, Try};
         let entry() -> /std/Io({}) =
             match /std/proc/env("HOME")! : (_) => Io({})
-            | some(v) => let _ = std/Io/Write/write(std/Io/stdout, v)!; /std/Io/pure(())
+            | some(v) => let _ = Try/run(std/Io/write(std/Io/stdout, v))!; /std/Io/pure(())
             | none() => let _ = /std/print("missing")!; /std/Io/pure(())
             end;
         entry()
@@ -50,10 +50,10 @@ fn env_found_unwraps_to_some() {
 fn env_absent_is_none() {
     assert_eq!(
         run(r#"
-        use /std/{Io};
+        use /std/{Io, Try};
         let entry() -> /std/Io({}) =
             match /std/proc/env("NOPE")! : (_) => Io({})
-            | some(v) => let _ = std/Io/Write/write(std/Io/stdout, v)!; /std/Io/pure(())
+            | some(v) => let _ = Try/run(std/Io/write(std/Io/stdout, v))!; /std/Io/pure(())
             | none() => let _ = /std/print("missing")!; /std/Io/pure(())
             end;
         entry()
@@ -307,10 +307,9 @@ fn a_piped_output_is_read_through_the_stream_witness() {
             let read =
                 match Child/stdout(child)
                 | some(p) => /std/Io/read_all(p)
-                | none() => Io/pure(Result/success(x[]))
+                | none() => Try/pure(x[])
                 end;
-            let out = read!;
-            let bytes = out!;
+            let bytes = read!;
             let exit = Child/wait(child)!;
             Try/pure(Str/flatten([text(bytes), "|", Show/show(exit)]))
         "#,

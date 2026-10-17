@@ -377,12 +377,12 @@ fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     run_text(
         r#"
-        use /std/{Byte, Bytes, Nat, Str, Option, Io};
+        use /std/{Byte, Bytes, Nat, Str, Option, Io, Try};
         let entry() -> /std/Io({}) =
-            let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-                | chunk(b, @_) => b
-                | eof() => x[]
-                | error(_) => x[]
+            let bytes = match Try/run(Io/read(Io/stdin, 16))! : (_) => Bytes
+                | success(bytes(b, @_)) => b
+                | success(ended()) => x[]
+                | failure(_) => x[]
                 end;
             let n = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
             match n < 256

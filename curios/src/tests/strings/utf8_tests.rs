@@ -6,7 +6,7 @@ use crate::tests::run;
 fn slice_proof_aligns_with_byte_walk() {
     // A relevant byte walk (`to_lead_bytes`) and a proof walk mirroring it (`to_lead_proof : Valid(to_lead_bytes(s, b))`), over a local inductive validity family. The proof peels the derivation while the byte function reduces in lockstep, which rests on the `Bytes` eliminator decoding a *symbolic* cons: the `cont`/`bad` arms reduce `to_lead_bytes(cont, x[c, ..t])` to `to_lead_bytes(step(c, cont), t)`, matching the recursive proof's index.
     let source = r#"
-        use /std/{Byte, Bytes, Nat, Bool, Io};
+        use /std/{Byte, Bytes, Nat, Bool, Io, Try};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/ge(c, lo)
@@ -83,7 +83,7 @@ fn slice_proof_aligns_with_byte_walk() {
                 end;
             go(d);
         let entry() -> /std/Io({}) =
-            let _ = Io/Write/write(Io/stdout, x[0x6F, 0x6B])!;
+            let _ = Try/run(Io/write(Io/stdout, x[0x6F, 0x6B]))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -109,13 +109,13 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
         0x0, 0x7f, 0x80, 0x3bb, 0x7ff, 0x800, 0xd7ff, 0xe000, 0xffff, 0x10000, 0x1f600, 0x10ffff,
     ];
     let source = r#"
-        use /std/{Char, Nat, Bytes, Option, List, Io};
+        use /std/{Char, Nat, Bytes, Option, List, Io, Try};
         let encode(n : Nat) -> Bytes =
             Char/to_utf8(Option/unwrap_or(Char/of_nat(n), '?'));
         let entry() -> /std/Io({}) =
-            let _ = Io/Write/write(Io/stdout, Bytes/flatten(List/map(
+            let _ = Try/run(Io/write(Io/stdout, Bytes/flatten(List/map(
                 [0, 0x7F, 0x80, 0x3BB, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFFFF,
-                 0x10000, 0x1F600, 0x10FFFF], encode)))!;
+                 0x10000, 0x1F600, 0x10FFFF], encode))))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -282,7 +282,7 @@ fn concat_closed_holds_for_the_real_automaton() {
 fn utf8_of_bytes_checker_decides_and_builds_derivations() {
     // A decision procedure that both decides validity at run time and builds a `Utf8` derivation in the `some` case. The native `Bytes` eliminator is a fold (its `ih` is the fold of the tail at fixed parameters), but the checker threads a changing `Scan` state — so `b` is folded into a function `(s) -> Option(Utf8(s, b))`, a foldl-as-foldr convoy in which each step receives its state from the caller, and `of_bytes_valid(b)` is `check(b)(lead)`. `decide` shows the automaton runs: "hi" (ASCII) is accepted and a lone `x[0x80]` continuation byte is rejected, printing "yesno".
     let source = r#"
-        use /std/{Str, Nat, Bytes, Bool, Option, Io};
+        use /std/{Str, Nat, Bytes, Bool, Option, Io, Try};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/ge(c, lo)
@@ -367,7 +367,7 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
             | none() => Str/to_bytes("no")
             end;
         let entry() -> /std/Io({}) =
-            let _ = Io/Write/write(Io/stdout, x[..decide(x[0x68, 0x69]), ..decide(x[0x80])])!;
+            let _ = Try/run(Io/write(Io/stdout, x[..decide(x[0x68, 0x69]), ..decide(x[0x80])]))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -378,7 +378,7 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
 fn decimal_is_ascii_carries_its_proof() {
     // A producer yields a `Valid` value with no bridge lemma and no `Nat` comparison arithmetic: `digit` emits each decimal digit as a concrete byte literal per branch, so `step(byte, lead)` *reduces* to `lead` and the per-digit proof is `refl`. `single` wraps one ASCII byte into a `Valid` by `subst` over that proof, and `decimal` recurses, combining the high digits with the low one through `concat_closed`. `decimal` returns the dependent pair `{ b : Bytes, v : Valid(b) }`, which is what `decimal_is_ascii` states. At run time `decimal(255).b` prints "255", so the bytes are real digits.
     let source = r#"
-        use /std/{Str, Nat, Bytes, Bool, Eq, Io};
+        use /std/{Str, Nat, Bytes, Bool, Eq, Io, Try};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/ge(c, lo)
@@ -486,7 +486,7 @@ fn decimal_is_ascii_carries_its_proof() {
         let decimal_is_ascii(n : Nat) -> Valid(decimal(n).b) =
             decimal(n).v;
         let entry() -> /std/Io({}) =
-            let _ = Io/Write/write(Io/stdout, decimal(255).b)!;
+            let _ = Try/run(Io/write(Io/stdout, decimal(255).b))!;
             /std/Io/pure(());
         entry()
         "#;

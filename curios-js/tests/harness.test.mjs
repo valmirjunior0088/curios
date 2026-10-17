@@ -103,7 +103,7 @@ let main() -> /std/Try(Io, Io/Error, {}) =
     let b = x[0x61, 0x62, 0x63];
     let r = keep(b)!;
     let _ = poke()!;
-    let _ = Io/Write/write(Io/stdout, b)!;
+    let _ = Io/write(Io/stdout, b)!;
     Io/write(Io/stdout, r);
 main()
 `;
@@ -114,11 +114,11 @@ abort(3)
 `;
 
 const WRITE = `
-use /std/{Handle, Io, Show, print};
+use /std/{Handle, Io, Show, Try, print};
 foreign token() -> Handle;
 let main() -> /std/Io({}) =
     let h = token()!;
-    let r = Io/Write/write(h, x[0x68, 0x69])!;
+    let r = Try/run(Io/write(h, x[0x68, 0x69]))!;
     match r
     | success(_) => print(" wrote")
     | failure(e) => print(Show/show(e))
@@ -127,16 +127,16 @@ main()
 `;
 
 const DIRECTION = `
-use /std/{Handle, Io, Show, Str, print};
+use /std/{Handle, Io, Show, Str, Try, Result, print};
 foreign token() -> Handle;
 let main() -> /std/Io({}) =
-    let said(c: Io/Chunk) -> Str =
-        match c | chunk(_, @_) => "chunk" | eof() => "eof" | error(e) => Show/show(e) end;
-    let w = Io/Write/write(Handle/stdin, x[1])!;
-    let out = Io/Read/read(Handle/stdout, 4)!;
-    let rest = Io/Read/read(Handle/stdin, 4)!;
+    let said(r: Result(Io/Error, Io/Chunk)) -> Str =
+        match r | success(bytes(_, @_)) => "chunk" | success(ended()) => "eof" | failure(e) => Show/show(e) end;
+    let w = Try/run(Io/write(Handle/stdin, x[1]))!;
+    let out = Try/run(Io/read(Handle/stdout, 4))!;
+    let rest = Try/run(Io/read(Handle/stdin, 4))!;
     let h = token()!;
-    let unknown = Io/Read/read(h, 4)!;
+    let unknown = Try/run(Io/read(h, 4))!;
     print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f) end, said(out), said(rest), said(unknown)]));
 main()
 `;

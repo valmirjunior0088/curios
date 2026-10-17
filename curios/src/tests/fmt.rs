@@ -20,17 +20,17 @@ fn names_parse_code(ersd: &str) -> bool {
 fn print_partial_evaluation_reduces_residual() {
     // End-to-end residue guard for the staging stack on `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The ersd `evaluate` pass folds the closed prefix — the format-string parse (Parse combinators and the segment UTF-8 revalidation included) runs at compile time and `Fmt/print(lit)` reifies as the curried hole-filling closure over a constant `Fmt` spine. What stays runtime is exactly the runtime work: specialized `go_with` over the spine, the runtime `Str` slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s digit producer). The single-entry `go_with` spine is then contified into the entry, so the boundary is pinned by the surviving `Nat/to_str` digit producer together with the absence of the generic `Fmt/print` driver and the compile-time `Parse` combinators.
     let source = r#"
-        use /std/{Str, Bytes, Fmt, Io};
+        use /std/{Str, Bytes, Fmt, Io, Try};
 
         let entry() -> /std/Io({}) =
-            match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
-            | chunk(bytes, @_) =>
+            match Try/run(Io/read(Io/stdin, 1024))! : (_) => /std/Io({})
+            | success(bytes(bytes, @_)) =>
                 match Str/of_bytes(bytes) : (_) => /std/Io({})
                 | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
                 | failure(_) => /std/print("invalid input")
                 end
-            | eof() => /std/print("invalid input")
-            | error(_) => /std/print("invalid input")
+            | success(ended()) => /std/print("invalid input")
+            | failure(_) => /std/print("invalid input")
             end;
         entry()
         "#;
@@ -71,17 +71,17 @@ fn print_partial_evaluation_reduces_residual() {
 fn print_runtime_args_specializes_spine() {
     // The mixed case: a literal format string with runtime hole arguments. The ersd `evaluate` pass folds the parse to a constant `Fmt` spine, and `specialize` unrolls `go_with` over it — the ersd-optm module carries the minted spine items and neither the format-string parser nor the generic fold survives to codegen.
     let source = r#"
-        use /std/{Str, Bytes, Fmt, Io};
+        use /std/{Str, Bytes, Fmt, Io, Try};
 
         let entry() -> /std/Io({}) =
-            match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
-            | chunk(bytes, @_) =>
+            match Try/run(Io/read(Io/stdin, 1024))! : (_) => /std/Io({})
+            | success(bytes(bytes, @_)) =>
                 match Str/of_bytes(bytes) : (_) => /std/Io({})
                 | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
                 | failure(_) => /std/print("invalid input")
                 end
-            | eof() => /std/print("invalid input")
-            | error(_) => /std/print("invalid input")
+            | success(ended()) => /std/print("invalid input")
+            | failure(_) => /std/print("invalid input")
             end;
         entry()
         "#;
@@ -268,17 +268,17 @@ fn runtime_args_leave_no_formatter_in_cont() {
 fn a_runtime_format_string_is_refused_by_its_written_type() {
     let refused = super::error(
         r#"
-        use /std/{Str, Fmt, Io};
+        use /std/{Str, Fmt, Io, Try};
 
         let entry() -> /std/Io({}) =
-            match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
-            | chunk(bytes, @_) =>
+            match Try/run(Io/read(Io/stdin, 1024))! : (_) => /std/Io({})
+            | success(bytes(bytes, @_)) =>
                 match Str/of_bytes(bytes) : (_) => /std/Io({})
                 | success(s) => Fmt/print(s)(3)
                 | failure(_) => /std/print("invalid input")
                 end
-            | eof() => /std/print("invalid input")
-            | error(_) => /std/print("invalid input")
+            | success(ended()) => /std/print("invalid input")
+            | failure(_) => /std/print("invalid input")
             end;
         entry()
         "#,

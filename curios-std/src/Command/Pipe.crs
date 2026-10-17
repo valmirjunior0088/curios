@@ -6,10 +6,10 @@ pub let close(p: Pipe) -> Io({}) =
     Handle/close(p.0);
 
 satisfy Io/Read(Pipe) {
-    read(p, n, @positive) = Io/Read/read(@Handle, p.0, n, @positive),
+    read(p, n, @positive) = Io/read(@Handle, p.0, n, @positive),
 }
 
 satisfy Io/Write(Pipe) {
-    write(p, b) = Io/Write/write(p.0, b),
-    flush(p) = Io/Write/flush(p.0),
+    write(p, b) = Io/write(p.0, b),
+    flush(p) = Io/flush(p.0),
 }

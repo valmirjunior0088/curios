@@ -78,7 +78,7 @@ let invite(limits: Limits, c: Socket, r: Reader(Socket), o: Opened) -> Io(Result
     | true =>
         let held = Reader/held(r)!;
         match read/body(limits, o.framing, x[], held)
-        | more(_, _) => Socket/write(c, Str/to_bytes("HTTP/1.1 100 Continue\r\n\r\n"))
+        | more(_, _) => Try/run(Socket/write(c, Str/to_bytes("HTTP/1.1 100 Continue\r\n\r\n")))
         | _ => Io/pure(Result/success(()))
         end
     end;
@@ -141,14 +141,14 @@ let drain(c: Socket, quiet: Duration, left: Nat) -> Io({}) =
     match left
     | 0 => Io/pure(())
     | _ =>
-        let arrived = Io/timeout(quiet, Socket/read(c, 65536))!;
+        let arrived = Io/timeout(quiet, Try/run(Socket/read(c, 65536)))!;
         match arrived
         | none() => Io/pure(())
         | some(read) =>
             match read
-            | chunk(bytes) => drain(c, quiet, left - Nat/min(left, Bytes/len(bytes)))
-            | eof() => Io/pure(())
-            | error(_) => Io/pure(())
+            | success(bytes(b)) => drain(c, quiet, left - Nat/min(left, Bytes/len(b)))
+            | success(ended()) => Io/pure(())
+            | failure(_) => Io/pure(())
             end
         end
     end;
@@ -172,12 +172,12 @@ let send(s: Server, c: Socket, method: Method, reply: Response) -> Io({}) =
         | head() => Response/render_head(stamped, stamped.body)
         | _ => Response/render(stamped)
         end;
-    let wrote = Socket/write(c, bytes)!;
+    let wrote = Try/run(Socket/write(c, bytes))!;
     match wrote
     | failure(_) => Io/pure(())
     | success(_) =>
-        let _ = Io/Write/flush(c)!;
-        let _ = Socket/finish(c)!;
+        let _ = Try/run(Io/flush(c))!;
+        let _ = Try/run(Socket/finish(c))!;
         drain(c, s.quiet, s.limits.head + s.limits.content)
     end;
 

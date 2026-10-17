@@ -558,7 +558,7 @@ fn program() -> String {
         .join("\n        ");
     format!(
         r##"
-        use /std/{{Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt, Bool, rand, Io}};
+        use /std/{{Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt, Bool, rand, Io, Try}};
         use /std/Toml/{{flt}};
         let entry() -> /std/Io({{}}) =
         let taint = Bytes/len(rand/bytes(0)!);
@@ -612,10 +612,10 @@ fn program() -> String {
                 | none() => "missing"
                 end
             end;
-        let line = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b, @_) => b
-            | eof() => x[]
-            | error(_) => x[]
+        let line = match Try/run(Io/read(Io/stdin, 16))! : (_) => Bytes
+            | success(bytes(b, @_)) => b
+            | success(ended()) => x[]
+            | failure(_) => x[]
             end;
         let row = Option/unwrap_or(Nat/of_str(Str/trim(Result/unwrap_or(Str/of_bytes(line), ""))), 999);
         match row

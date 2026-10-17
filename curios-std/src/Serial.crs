@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Bool, List, Result, Path, Try, Io, Handle};
+use /std/{Bytes, Nat, Bool, List, Path, Try, Io, Handle};
 use /std/Bool/{Holds};
 
 --- An open serial port.
@@ -77,12 +77,12 @@ pub let close(s: Serial) -> Io({}) =
     Handle/close(s.0);
 
 --- Up to `n` bytes, waiting until some arrive.
-pub let read(s: Serial, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
-    Io/Read/read(@Handle, s.0, n, @positive);
+pub let read(s: Serial, n: Nat, @positive: Holds(0 < n)) -> Try(Io, Io/Error, Io/Chunk) =
+    Io/read(@Handle, s.0, n, @positive);
 
 --- The whole of `b`, waiting while the device cannot take more.
-pub let write(s: Serial, b: Bytes) -> Io(Result(Io/Error, {})) =
-    Io/Write/write(s.0, b);
+pub let write(s: Serial, b: Bytes) -> Try(Io, Io/Error, {}) =
+    Io/write(s.0, b);
 
 satisfy Io/Read(Serial) {
     read(s, n, @positive) = read(s, n, @positive),
@@ -101,7 +101,7 @@ pub let drain(s: Serial) -> Try(Io, Io/Error, {}) =
 
 satisfy Io/Write(Serial) {
     write(s, b) = write(s, b),
-    flush(s) = Try/run(drain(s)),
+    flush(s) = drain(s),
 }
 
 --- Drive this port by one of `/sys/serial_op`'s codes, at this level: `ok`, or the status of the failure.

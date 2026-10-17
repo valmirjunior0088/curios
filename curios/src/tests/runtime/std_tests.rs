@@ -10,7 +10,7 @@ use {
 fn random_bin_returns_requested_length() {
     let output = run(r#"
 let entry() -> /std/Io({}) =
-    let _ = std/Io/Write/write(std/Io/stdout, /std/rand/bytes(8)!)!;
+    let _ = /std/Try/run(std/Io/write(std/Io/stdout, /std/rand/bytes(8)!))!;
     /std/Io/pure(());
 entry()
 "#);

@@ -54,9 +54,12 @@ fn a_status_a_row_is_not_expected_to_answer_is_the_failure_it_names() {
         written(
             OPEN,
             HostOp::FileOpen,
-            vec![RawValue::Nat(status::WOULD_BLOCK), RawValue::Bytes(vec![])],
+            vec![
+                RawValue::Nat(status::CONNECTION_RESET),
+                RawValue::Bytes(vec![])
+            ],
         ),
-        b"would_block"
+        b"connection_reset"
     );
 }
 
@@ -110,9 +113,9 @@ fn a_file_kind_no_code_names_fails_the_stat() {
 fn a_write_that_accepts_nothing_is_a_failure() {
     let code = answering(
         r#"
-        use /std/{Io, Handle, proc};
+        use /std/{Io, Handle, Try, proc};
         let entry() -> /std/Io({}) =
-            let r = Io/Write/write(@Handle, Handle/stdout, x[0x41])!;
+            let r = Try/run(Io/write(@Handle, Handle/stdout, x[0x41]))!;
             match r | success(_) => proc/exit(@{}, 0) | failure(_) => proc/exit(@{}, 7) end;
         entry()
         "#,

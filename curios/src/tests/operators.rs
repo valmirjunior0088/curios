@@ -60,12 +60,12 @@ fn nat_bitwise_ops_execute() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     run_text(
         r#"
-        use /std/{Byte, Bytes, Nat, Str, Option, Io};
+        use /std/{Byte, Bytes, Nat, Str, Option, Io, Try};
         let entry() -> /std/Io({}) =
-            let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-                | chunk(b, @_) => b
-                | eof() => x[]
-                | error(_) => x[]
+            let bytes = match Try/run(Io/read(Io/stdin, 16))! : (_) => Bytes
+                | success(bytes(b, @_)) => b
+                | success(ended()) => x[]
+                | failure(_) => x[]
                 end;
             let x = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
             let r = Str/flatten([
@@ -92,12 +92,12 @@ fn int_bitwise_ops_execute() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     run_text(
         r#"
-        use /std/{Byte, Bytes, Nat, Int, Str, Option, Io};
+        use /std/{Byte, Bytes, Nat, Int, Str, Option, Io, Try};
         let entry() -> /std/Io({}) =
-            let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-                | chunk(b, @_) => b
-                | eof() => x[]
-                | error(_) => x[]
+            let bytes = match Try/run(Io/read(Io/stdin, 16))! : (_) => Bytes
+                | success(bytes(b, @_)) => b
+                | success(ended()) => x[]
+                | failure(_) => x[]
                 end;
             let x = Nat/to_int(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)));
             let neg = Int/sub(+0, x);

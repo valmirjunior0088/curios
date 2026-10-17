@@ -59,7 +59,7 @@ const SERVER: &str = r#"
                 200,
                 Str/flatten([Show/show(r.method), " ", r.url.path, " ", Nat/to_str(Bytes/len(r.body))]));
         choose
-        | r.url.path == "/fail" => Try/raise(Io/Error/refused())
+        | r.url.path == "/fail" => Try/raise(Io/Error/connection_refused())
         | r.url.path == "/dated" =>
             Try/pure(Response/with_header(said, "Date", "Tue, 15 Nov 1994 08:12:31 GMT"))
         | _ => Try/pure(said)
@@ -494,8 +494,8 @@ fn a_reply_that_is_not_read_says_why(client: &Compiled) {
         vec!["HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nhel"],
     )]);
 
-    assert_eq!(got(client, reset), "net reset");
-    assert_eq!(got(client, MockHost::builder()), "net refused");
+    assert_eq!(got(client, reset), "net connection_reset");
+    assert_eq!(got(client, MockHost::builder()), "net connection_refused");
 }
 
 // A peer that answers before it has read the request and then stops reading is still heard: the client's write fails, and the reply that had arrived is its answer. Where none had, the failed write is what the exchange reports.

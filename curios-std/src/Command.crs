@@ -115,7 +115,7 @@ pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
             stderr = end_of(cmd.stderr, spawned.stderr) });
 
 let drain(p: Option(Pipe)) -> Io(Result(Io/Error, Bytes)) =
-    match p | some(p) => Io/read_all(p) | none() => Io/pure(Result/success(x[])) end;
+    match p | some(p) => Try/run(Io/read_all(p)) | none() => Io/pure(Result/success(x[])) end;
 
 let capture(child: Child) -> Try(Io, Io/Error, {exit: Exit, stdout: Bytes, stderr: Bytes}) =
     let (o, e) = Io/both(drain(Child/stdout(child)), drain(Child/stderr(child)))!;

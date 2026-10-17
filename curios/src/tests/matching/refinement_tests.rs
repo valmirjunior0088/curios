@@ -120,7 +120,7 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     run_text(
         r#"
-        use /std/{Byte, Bytes, Nat, Option, Str, Io};
+        use /std/{Byte, Bytes, Nat, Option, Str, Io, Try};
 
         induct L : Type
         | stop(Nat)
@@ -140,10 +140,10 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
             end;
 
         let entry() -> /std/Io({}) =
-            let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-                | chunk(b, @_) => b
-                | eof() => x[]
-                | error(_) => x[]
+            let bytes = match Try/run(Io/read(Io/stdin, 16))! : (_) => Bytes
+                | success(bytes(b, @_)) => b
+                | success(ended()) => x[]
+                | failure(_) => x[]
                 end;
             let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)), 60);
             /std/print(Nat/to_str(total(build(n, L/stop(n)), 0)));

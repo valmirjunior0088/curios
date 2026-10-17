@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr};
-use /std/{Bool, Byte, Bytes, Nat, List, Option, Result, Io};
+use /std/{Bool, Byte, Bytes, Nat, List, Option, Result, Io, Try};
 use /std/Bool/{Holds};
 
 --- Close this handle.
@@ -41,7 +41,7 @@ pub let ready_now(on: List(Handle)) -> Io(List(Bool)) =
 
 --- A successful read's bytes as the chunk they are, or the end of the stream where there are none: a read of a positive count that answers nothing is the end, as a zero-byte `read(2)` is.
 let answered(b: Bytes) -> Io/Chunk =
-    match b | x[] => Io/Chunk/eof() | x[_, .._] => Io/Chunk/chunk(b) end;
+    match b | x[] => Io/Chunk/ended() | x[_, .._] => Io/Chunk/bytes(b) end;
 
 --- Read up to so many bytes: `ok` beside them, `eof` at the end of the stream, or the status of the failure.
 foreign handle_read(Handle, Nat) -> {status: Nat, bytes: Bytes};
@@ -98,17 +98,17 @@ pub let wait(h: Handle, interest: Interest) -> Io({}) =
     Io/wait_minted(watch(h, interest));
 
 --- Up to `n` bytes, waiting while the host would block.
-let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
+let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Result(Io/Error, Io/Chunk)) =
     let r = reading(h, n)!;
     match r
-    | success(some(b)) => Io/pure(answered(b))
-    | success(none()) => Io/pure(Io/Chunk/eof())
+    | success(some(b)) => Io/pure(Result/success(answered(b)))
+    | success(none()) => Io/pure(Result/success(Io/Chunk/ended()))
     | failure(s) =>
         choose
         | s == /sys/status/would_block =>
             let _ = wait(h, Interest/readable)!;
             read_waiting(h, n, @positive)
-        | _ => Io/pure(Io/Chunk/error(Io/Error/of(s)))
+        | _ => Io/pure(Result/failure(Io/Error/of(s)))
         end
     end;
 
@@ -144,8 +144,8 @@ let flush_waiting(h: Handle) -> Io(Result(Io/Error, {})) =
         end
     end;
 
---- `h`'s sending half ended and its receiving half left as it is, waiting while the host would block: the peer reads the end of the stream, a TLS stream's closure alert ahead of it, and `h` still reads what the peer sends. Only a connected socket has a sending half of its own to end, and any other handle is `not_found`.
-pub let finish(h: Handle) -> Io(Result(Io/Error, {})) =
+--- `h`'s sending half ended, waiting while the host would block.
+let finish_waiting(h: Handle) -> Io(Result(Io/Error, {})) =
     let r = finishing(h)!;
     match r
     | success(_) => Io/pure(Result/success(()))
@@ -153,16 +153,21 @@ pub let finish(h: Handle) -> Io(Result(Io/Error, {})) =
         choose
         | s == /sys/status/would_block =>
             let _ = wait(h, Interest/writable)!;
-            finish(h)
+            finish_waiting(h)
         | _ => Io/pure(Result/failure(Io/Error/of(s)))
         end
     end;
 
+-- The loops above are plain `Io` over a `Result`, each wrapped once where it is public, so the description a constant `print` copies stays under the evaluator's cap.
+--- `h`'s sending half ended and its receiving half left as it is, waiting while the host would block: the peer reads the end of the stream, a TLS stream's closure alert ahead of it, and `h` still reads what the peer sends. Only a connected socket has a sending half of its own to end, and any other handle is `not_found`.
+pub let finish(h: Handle) -> Try(Io, Io/Error, {}) =
+    Try/attempt(finish_waiting(h));
+
 satisfy Io/Read(Handle) {
-    read(h, n, @positive) = read_waiting(h, n, @positive),
+    read(h, n, @positive) = Try/attempt(read_waiting(h, n, @positive)),
 }
 
 satisfy Io/Write(Handle) {
-    write(h, b) = write_waiting(h, b),
-    flush(h) = flush_waiting(h),
+    write(h, b) = Try/attempt(write_waiting(h, b)),
+    flush(h) = Try/attempt(flush_waiting(h)),
 }

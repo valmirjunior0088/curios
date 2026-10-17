@@ -37,10 +37,10 @@ fn io_read() {
     run_text(
         r#"
         let entry() -> /std/Io({}) =
-            match std/Io/read(std/Io/stdin, 1024)! : (_) => /std/Io({})
-            | chunk(b, @_) => let w = std/Io/Write/write(std/Io/stdout, b)!; /std/Io/pure(())
-            | eof() => /std/Io/pure(())
-            | error(_) => /std/Io/pure(())
+            match /std/Try/run(std/Io/read(std/Io/stdin, 1024))! : (_) => /std/Io({})
+            | success(bytes(b, @_)) => let w = /std/Try/run(std/Io/write(std/Io/stdout, b))!; /std/Io/pure(())
+            | success(ended()) => /std/Io/pure(())
+            | failure(_) => /std/Io/pure(())
             end;
         entry()
         "#,
@@ -50,21 +50,21 @@ fn io_read() {
     assert_eq!(io.output(), b"hello\n");
 }
 
-// `Handle/read(h, n)` is the typed blocking read: each call yields a `chunk` of 1..n available bytes (here one injected line per refill, served in `n`-byte slices), and the third read past the data yields `eof`.
+// `Io/read(h, n)` is the typed read: each call yields a chunk of 1..n available bytes (here one injected line per refill, served in `n`-byte slices), and the third read past the data yields the end of the stream.
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"
-        use /std/{Io};
-        let show(r : Io/Chunk) -> Io({}) =
+        use /std/{Io, Try, Result};
+        let show(r : Result(Io/Error, Io/Chunk)) -> Io({}) =
             match r : (_) => Io({})
-            | chunk(b, @_) => let _ = Io/Write/write(Io/stdout, b)!; /std/Io/pure(())
-            | eof() => /std/print("1")
-            | error(_) => /std/print("e")
+            | success(bytes(b, @_)) => let _ = Try/run(Io/write(Io/stdout, b))!; /std/Io/pure(())
+            | success(ended()) => /std/print("1")
+            | failure(_) => /std/print("e")
             end;
         let entry() -> /std/Io({}) =
-            let _ = show(Io/read(Io/stdin, 2)!)!;
-            let _ = show(Io/read(Io/stdin, 2)!)!;
-            show(Io/read(Io/stdin, 2)!);
+            let _ = show(Try/run(Io/read(Io/stdin, 2))!)!;
+            let _ = show(Try/run(Io/read(Io/stdin, 2))!)!;
+            show(Try/run(Io/read(Io/stdin, 2))!);
         entry()
         "#;
 
@@ -73,41 +73,44 @@ fn io_read_short_reads_and_eof() {
     assert_eq!(io.output(), b"abc\n1");
 }
 
-// `drain` treats `eof` as the stream's only orderly terminator. The load-bearing script is chunk-then-error: the accumulated prefix must not be passed off as complete content, so the verdict is a failure and the prefix's length leaks nowhere. Chunk-then-eof is the control that accumulation itself still works.
+// `read_all` takes the end of the stream as its only orderly terminator. The load-bearing script is bytes-then-failure: the accumulated prefix must not be passed off as complete content, so the verdict is a failure and the prefix's length leaks nowhere. Bytes-then-end is the control that accumulation itself still works.
 #[test]
-fn drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
+fn read_all_surfaces_a_read_failure_instead_of_a_partial_prefix() {
     let source = r#"
-        use /std/{Nat, Bytes, Result, Cell, Str, Io, print};
-        use /std/Bool/{Holds};
+        use /std/{Nat, Bytes, Bool, Result, Cell, Str, Try, Io, print};
         let show(r : Result(Io/Error, Bytes)) -> Str =
             match r
             | success(bytes) => Str/concat("ok:", Nat/to_str(Bytes/len(bytes)))
             | failure(_) => "error"
             end;
-        let error_first(n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk) =
-            Io/pure(Io/Chunk/error(Io/Error/other(247)));
-        let chunk_then_error() -> Io((n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk)) =
-            let calls = Cell/new(@{})!;
-            Io/pure((n) =>
-                let first = Cell/fill(calls, ())!;
+        struct Failing: Type { code: Nat }
+        satisfy Io/Read(Failing) {
+            read(s, _) = Try/raise(Io/Error/other(s.code)),
+        }
+        struct Twice: Type { calls: Cell({}), fails: Bool }
+        satisfy Io/Read(Twice) {
+            read(s, _) =
+                let first = Cell/fill(s.calls, ())!;
                 match first
-                | true => Io/pure(Io/Chunk/chunk(x[0x41, 0x42]))
-                | _ => Io/pure(Io/Chunk/error(Io/Error/other(247)))
-                end);
-        let chunk_then_eof() -> Io((n : Nat, @positive : Holds(0 < n)) -> Io(Io/Chunk)) =
+                | true => Try/pure(Io/Chunk/bytes(x[0x41, 0x42, 0x43]))
+                | false =>
+                    match s.fails
+                    | true => Try/raise(Io/Error/other(247))
+                    | false => Try/pure(Io/Chunk/ended())
+                    end
+                end,
+        }
+        let twice(fails: Bool) -> Io(Twice) =
             let calls = Cell/new(@{})!;
-            Io/pure((n) =>
-                let first = Cell/fill(calls, ())!;
-                match first
-                | true => Io/pure(Io/Chunk/chunk(x[0x41, 0x42, 0x43]))
-                | _ => Io/pure(Io/Chunk/eof())
-                end);
+            Io/pure(Twice { calls = calls, fails = fails });
         let entry() -> /std/Io({}) =
-            let _ = print(show(Io/drain(error_first)!))!;
+            let _ = print(show(Try/run(Io/read_all(Failing { code = 247 }))!))!;
             let _ = print(" / ")!;
-            let _ = print(show(Io/drain(chunk_then_error()!)!))!;
+            let failing = twice(true)!;
+            let _ = print(show(Try/run(Io/read_all(failing))!))!;
             let _ = print(" / ")!;
-            print(show(Io/drain(chunk_then_eof()!)!));
+            let ending = twice(false)!;
+            print(show(Try/run(Io/read_all(ending))!));
         entry()
         "#;
 
@@ -122,9 +125,9 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
             r#"
             use /std/{{Nat, Bytes, Str, List, Result, Cell, Try, Io, print}};
             struct Pieces: Type {{ List({{Cell({{}}), Bytes}}) }}
-            let next(ps: List({{Cell({{}}), Bytes}})) -> Io(Io/Chunk) =
+            let next(ps: List({{Cell({{}}), Bytes}})) -> Try(Io, Io/Error, Io/Chunk) =
                 match ps
-                | [] => Io/pure(Io/Chunk/eof())
+                | [] => Try/pure(Io/Chunk/ended())
                 | [p, ..more] =>
                     let fresh = Cell/fill(p.0, ())!;
                     match fresh
@@ -154,12 +157,12 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
         )
     };
 
-    let refused = typecheck(&stream("Io/pure(Io/Chunk/chunk(p.1))"))
+    let refused = typecheck(&stream("Try/pure(Io/Chunk/bytes(p.1))"))
         .expect_err("a chunk of unseen bytes is refused");
     assert!(refused.contains("nothing discharged"), "{refused}");
 
     let decided = stream(
-        "match Nat/lt/try(0, Bytes/len(p.1)) | some(q) => Io/pure(Io/Chunk/chunk(p.1, @q)) | none() => next(more) end",
+        "match Nat/lt/try(0, Bytes/len(p.1)) | some(q) => Try/pure(Io/Chunk/bytes(p.1, @q)) | none() => next(more) end",
     );
     assert_eq!(run(&decided), b"a");
 }

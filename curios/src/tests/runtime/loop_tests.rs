@@ -20,7 +20,7 @@ fn accumulation_loops_are_linear_by_construction() {
     // The design this follows from is `documentation/design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md`.
     assert_eq!(
         run(r#"
-        use /std/{Bytes, Nat, Str, Io};
+        use /std/{Bytes, Nat, Str, Io, Try};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
@@ -29,7 +29,7 @@ fn accumulation_loops_are_linear_by_construction() {
         let entry() -> /std/Io({}) =
             let built = go(25000, x[]);
             let head = Bytes/slice(built, 0, 10);
-            let _ = Io/Write/write(Io/stdout, head)!;
+            let _ = Try/run(Io/write(Io/stdout, head))!;
             let _ = /std/print(Nat/to_str(Bytes/len(built)))!;
             /std/Io/pure(());
         entry()

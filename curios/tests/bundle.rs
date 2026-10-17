@@ -439,7 +439,7 @@ fn a_branch_ticks_while_another_reads_standard_input() {
     .expect("write the manifest");
     fs::write(
         package.join("exe.crs"),
-        r#"use /std/{Io, Nat, Str, Bytes};
+        r#"use /std/{Io, Nat, Str, Bytes, Try};
 use /std/time/{Duration};
 let ticks(n: Nat) -> Io({}) =
     match n
@@ -450,7 +450,7 @@ let ticks(n: Nat) -> Io({}) =
         ticks(m)
     end;
 let reading() -> Io({}) =
-    let read = Io/read_all(Io/stdin)!;
+    let read = Try/run(Io/read_all(Io/stdin))!;
     match read
     | success(bytes) => /std/print(Str/concat("read ", Nat/to_str(Bytes/len(bytes))))
     | failure(_) => /std/print("failed")

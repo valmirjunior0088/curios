@@ -364,9 +364,9 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
             match v : (_, _) => T
             | cons(@j, x, xs) => x
             end;
-        /std/Io/bind(/std/Io/read(/std/Io/stdin, 16), (arrived) =>
+        /std/Io/bind(/std/Try/run(/std/Io/read(/std/Io/stdin, 16)), (arrived) =>
             match arrived
-            | chunk(b) => /std/Io/bind(/std/Io/Write/write(/std/Io/stdout, first(Vec/cons(b, Vec/nil()))), (_) => /std/Io/pure(()))
+            | success(bytes(b)) => /std/Io/bind(/std/Try/run(/std/Io/write(/std/Io/stdout, first(Vec/cons(b, Vec/nil())))), (_) => /std/Io/pure(()))
             | _ => /std/Io/pure(())
             end)
     "#;

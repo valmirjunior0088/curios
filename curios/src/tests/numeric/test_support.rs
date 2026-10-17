@@ -24,12 +24,12 @@ pub(super) fn table(rows: &[&str], taint: bool) -> String {
         .join("\n        ");
     format!(
         r#"
-        use /std/{{Nat, Int, Flt, Byte, Bytes, Str, Option, Io}};
+        use /std/{{Nat, Int, Flt, Byte, Bytes, Str, Option, Io, Try}};
         let entry() -> /std/Io({{}}) =
-        let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b, @_) => b
-            | eof() => x[]
-            | error(_) => x[]
+        let bytes = match Try/run(Io/read(Io/stdin, 16))! : (_) => Bytes
+            | success(bytes(b, @_)) => b
+            | success(ended()) => x[]
+            | failure(_) => x[]
             end;
         let n = {zero};
         let i = Nat/to_int(n);

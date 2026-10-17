@@ -255,15 +255,15 @@ let answered(name: Str, r: Result(Io/Error, {})) -> Io({}) =
         | broken_pipe() => proc/exit(141)
         | _ =>
             let why = Str/flatten([name, " could not be written: ", Show/show(e), "\n"]);
-            let _ = Io/Write/write(Io/stderr, Str/to_bytes(why))!;
+            let _ = Try/run(Io/write(Io/stderr, Str/to_bytes(why)))!;
             proc/exit(1)
         end
     end;
 
 --- `s` to standard output. A failed write ends the program: 141 where the reader has gone, 1 otherwise.
 pub let print(s: Str) -> Io({}) =
-    answered("standard output", Io/Write/write(Io/stdout, Str/to_bytes(s))!);
+    answered("standard output", Try/run(Io/write(Io/stdout, Str/to_bytes(s)))!);
 
 --- `s` to standard error. A failed write ends the program as `print`'s does.
 pub let print_err(s: Str) -> Io({}) =
-    answered("standard error", Io/Write/write(Io/stderr, Str/to_bytes(s))!);
+    answered("standard error", Try/run(Io/write(Io/stderr, Str/to_bytes(s)))!);

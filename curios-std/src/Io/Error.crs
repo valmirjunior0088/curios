@@ -8,13 +8,11 @@ pub induct Error: pub Type
 --- The host refused the access.
 | permission_denied()
 --- Something is there already.
-| exists()
+| already_exists()
 --- The peer refused the connection.
-| refused()
+| connection_refused()
 --- The secure channel failed.
 | tls()
---- Not ready yet — waiting for it is the caller's to do.
-| would_block()
 --- The directory still holds entries.
 | not_empty()
 --- A directory was given where a file was wanted.
@@ -22,7 +20,7 @@ pub induct Error: pub Type
 --- A file was given where a directory was wanted.
 | not_directory()
 --- The peer reset the connection.
-| reset()
+| connection_reset()
 --- The reader has gone: a write to a pipe or socket nobody reads.
 | broken_pipe()
 --- What was read is past the bound its reader states.
@@ -39,14 +37,13 @@ let errors: List({Nat, Error}) =
     [
         (/sys/status/not_found, Error/not_found()),
         (/sys/status/permission_denied, Error/permission_denied()),
-        (/sys/status/exists, Error/exists()),
-        (/sys/status/refused, Error/refused()),
+        (/sys/status/exists, Error/already_exists()),
+        (/sys/status/refused, Error/connection_refused()),
         (/sys/status/tls, Error/tls()),
-        (/sys/status/would_block, Error/would_block()),
         (/sys/status/not_empty, Error/not_empty()),
         (/sys/status/is_directory, Error/is_directory()),
         (/sys/status/not_directory, Error/not_directory()),
-        (/sys/status/reset, Error/reset()),
+        (/sys/status/reset, Error/connection_reset()),
         (/sys/status/broken_pipe, Error/broken_pipe())];
 
 satisfy Show(Error) {
@@ -54,14 +51,13 @@ satisfy Show(Error) {
         match e
         | not_found() => "not_found"
         | permission_denied() => "permission_denied"
-        | exists() => "exists"
-        | refused() => "refused"
+        | already_exists() => "already_exists"
+        | connection_refused() => "connection_refused"
         | tls() => "tls"
-        | would_block() => "would_block"
         | not_empty() => "not_empty"
         | is_directory() => "is_directory"
         | not_directory() => "not_directory"
-        | reset() => "reset"
+        | connection_reset() => "connection_reset"
         | broken_pipe() => "broken_pipe"
         | too_long() => "too_long"
         | not_text(valid) => Str/flatten(["not_text(", Nat/to_str(valid), ")"])
@@ -76,8 +72,9 @@ pub let of(status: Nat) -> Error =
         Error/other(status - /sys/status/other_base),
         (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end);
 
--- Every failure the wire names is a case here: a status the wire's list gains is refused until `errors` names it.
+-- Every failure the wire names is a case here, but `would_block`, which every reading retries on and so never reaches a program: a status the wire's list gains is refused until `errors` names it.
 let _every_failure_the_wire_names_is_a_case: Holds(
     List/all(/sys/status/failures, (status: Nat) =>
-        match of(status) | other(_) => false | _ => true end)) =
+        status == /sys/status/would_block
+            || match of(status) | other(_) => false | _ => true end)) =
     True/qed();
