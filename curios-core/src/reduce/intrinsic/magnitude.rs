@@ -2,7 +2,7 @@
 //!
 //! **An operand is read through what no substitution undoes.** A literal factor of every coefficient and the sign of the one that leads (`curios-algebra`'s `Scale`), and a power of a literal base at least two that every monomial holds, each leave an absolute value as a factor of it and a sign unchanged or flipped: `abs(8 * n)` is `8 * abs(n)`, `abs(+0 - n)` is `abs(n)`, `sign(shl(n, k))` is `sign(n)`. What is left shares no literal factor, leads with a coefficient above zero and holds no power in every monomial, so it is read once and reading it again changes nothing.
 //!
-//! **A combination is read from one end.** Its monomials are put in one order, by their factors' ranks as a product orders its factors, and the first of them leads: so `i - j` and `j - i` leave one operand under opposite signs, `abs` of either is one term, and `sign(+0 - n)` is `+0 - sign(n)` at every `n`, a difference among them.
+//! **A combination is read from one end.** Its monomials are put in one order, by their factors' ranks as a product orders its factors, and the first of them leads: so `i - j` and `j - i` leave one operand under opposite signs, `abs` of either is one term, and `sign(+0 - n)` is `+0 - sign(n)` at every `n`, a difference among them. Two spellings of one factor rank apart, so two magnitudes over them may lead apart; conversion takes this fold again over the classes it reads a pair in (`curios-analysis`'s `classify`), and leads both alike.
 //!
 //! **What is left is a natural outright, or is compared, or stands.** `abs` of a non-negative combination of widened naturals is its preimage; `sign` of what the plain comparison holds above, at or below zero is `+1`, `+0` or `-1`; and anything else is the stuck node over what is left. Both compute from the operand as a term and read no arm, so `abs(i)` under a guard on `+0 <= i` is the node it was and a `/std` lemma converts it.
 //!
@@ -33,6 +33,11 @@ impl Reading {
     /// Whether the operand is read as it stands.
     fn is_plain(&self) -> bool {
         self.scale.is_unit() && self.powers.is_empty()
+    }
+
+    /// Whether the operand's magnitude is what is left of it, nothing standing outside: a negation leaves the magnitude as it is, so a unit factor leading below zero leaves no product for a reducer to fold. A fold taken over operands no reducer reduces again, as a classing takes one, builds its own normal form.
+    fn is_plain_magnitude(&self) -> bool {
+        self.scale.factor.is_one() && self.powers.is_empty()
     }
 }
 
@@ -137,7 +142,7 @@ pub(super) fn reduce_int_abs(
         return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)));
     };
 
-    let plain = reading.is_plain();
+    let plain = reading.is_plain_magnitude();
     // What is left is written back as its preimage where it has one, a monomial for each of its own.
     reducer.spend(image_bound(&int_footprint(&reading.rest)))?;
     let left = match int_preimage(&reading.rest) {

@@ -361,6 +361,21 @@ const ATOMS: &[Atoms] = &[
         nat: false,
         refused: &[],
     },
+    // A magnitude over two spellings of one call, which hash apart: its fold leads its operand by the order of its atoms, and is taken again over the classes.
+    Atoms {
+        left: "Int/abs(Nat/to_int(f(a + b)) - Nat/to_int(c))",
+        right: "Int/abs(Nat/to_int(c) - Nat/to_int(f(b + a)))",
+        zero: "0",
+        nat: true,
+        refused: &[],
+    },
+    Atoms {
+        left: "Int/sign(v(i + j) - i)",
+        right: "Int/sign(v(j + i) - i)",
+        zero: "+0",
+        nat: false,
+        refused: &[],
+    },
     // One call written twice: two instances of a universe-polymorphic definition, which a number's readers hold one atom.
     Atoms {
         left: "count(xs)",

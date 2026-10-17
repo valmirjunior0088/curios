@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Intrinsic, Nat, Term},
+    crate::{Intrinsic, Nat, Term, reduce_intrinsic},
     curios_num::{Integer, Natural},
 };
 
@@ -69,4 +69,21 @@ fn a_sum_of_both_signs_is_read_from_one_end() {
     );
     assert_eq!(fold(sign(i.clone())), sign(i.clone()));
     assert_eq!(fold(abs(i.clone())), abs(i));
+}
+
+// A magnitude reads no sign, so an operand that leads below zero leaves no product outside its `abs` for a reducer to fold: over a reduced operand, the fold through a reducer that reduces nothing is the term the folding reducer reaches. A classing takes the fold over operands no reducer reduces again (`curios-analysis`'s `classify`), and reads what it builds as it stands.
+//
+// Mutation-checked: with a negated unit scale read as no unit, the inert fold of the operand that leads below zero is `1 * abs(…)`.
+#[test]
+fn a_magnitude_leading_below_zero_builds_its_own_normal_form() {
+    let (i, j) = (sym(0, "i"), sym(1, "j"));
+    let minus =
+        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::IntSub(left.clone(), right.clone()));
+    for operand in [minus(&i, &j), minus(&j, &i)] {
+        let reduced = fold(operand.clone());
+        let inert: Term = reduce_intrinsic(&mut Inert, &Intrinsic::IntAbs(reduced))
+            .expect("the inert reducer spends nothing")
+            .into();
+        assert_eq!(inert, fold(abs(operand)));
+    }
 }

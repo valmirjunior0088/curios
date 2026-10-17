@@ -371,9 +371,9 @@ fn an_operation_is_held_only_to_operations_of_its_kind() {
     assert_eq!(layered(&mut Inert, &this, &that), None);
 }
 
-/// A walk spells an operation over its operands and folds none: `Nat/and(f(a + b) - f(b + a), c)` is read as `Nat/and(f(a + b) - f(a + b), c)`, the difference standing. Its fold is a reducer's to take again, where it takes one (`a_fold_over_atoms_classed_as_one_is_taken_again`), and a question, answered by plain reduction, takes none, which both checkers' `a_fold_inside_a_question_is_not_taken_again` hold.
+/// A walk spells an operation over its operands and folds none but a magnitude: `Nat/and(f(a + b) - f(b + a), c)` is read as `Nat/and(f(a + b) - f(a + b), c)`, the difference standing. Its fold is a reducer's to take again, where it takes one (`a_fold_over_atoms_classed_as_one_is_taken_again`), and a question, answered by plain reduction, takes none, which both checkers' `a_fold_inside_a_question_is_not_taken_again` hold. A magnitude's fold chooses by its atoms' order, which no reader chooses again (`a_magnitude_is_spelled_by_its_fold_over_its_classed_operand`).
 #[test]
-fn a_walk_spells_an_operation_and_folds_none() {
+fn a_walk_spells_an_operation_and_folds_none_but_a_magnitude() {
     let (a, b, c) = (sym(1, "a"), sym(2, "b"), sym(3, "c"));
     let first = applied(10, "f", add(a.clone(), b.clone()));
     let second = applied(10, "f", add(b, a));
@@ -389,6 +389,50 @@ fn a_walk_spells_an_operation_and_folds_none() {
         .expect("the inert reducer spends nothing")
         .expect("the second call is spelled as the first");
     assert_eq!(classed_this, nat_and(difference(&first, &first), c));
+}
+
+fn int_sub(left: Term, right: Term) -> Term {
+    Term::intrinsic(Intrinsic::IntSub(left, right))
+}
+
+/// `operation` as its fold leaves it, through the reducer that folds every intrinsic: what a converter is handed.
+fn folded(operation: Intrinsic) -> Term {
+    reduce_intrinsic(&mut Folding, &operation)
+        .expect("the folding reducer spends nothing")
+        .into()
+}
+
+/// A magnitude is spelled by its own fold over its classed operand. `h(i + j)` and `h(j + i)` are two spellings of one call, and `e` is picked so that they hash on the two sides of `e(k)`: `sign(h(i + j) - e(k))` folds to a `sign`, `sign(h(j + i) - e(k))` to the negation of one, and each `abs` leads its operand the way its `sign` does. Classed, the second call is spelled as the first, and the fold taken again over it leads both sides alike.
+///
+/// Mutation-checked: with no magnitude's fold taken again, the second `sign` stays the negation of a `sign` over the other orientation, and the second `abs` stays oriented apart.
+#[test]
+fn a_magnitude_is_spelled_by_its_fold_over_its_classed_operand() {
+    let (i, j, k) = (sym(1, "i"), sym(2, "j"), sym(3, "k"));
+    let first = applied(10, "h", int_add(i.clone(), j.clone()));
+    let second = applied(10, "h", int_add(j, i));
+    let leads = |term: &Term| matches!(&**term, Subterm::Intrinsic(Intrinsic::IntSign(_)));
+    let sign = |call: &Term, other: &Term| {
+        folded(Intrinsic::IntSign(int_sub(call.clone(), other.clone())))
+    };
+    let other = (11..64)
+        .map(|head| applied(head, "e", k.clone()))
+        .find(|other| leads(&sign(&first, other)) != leads(&sign(&second, other)))
+        .expect("some head stands between the two spellings of the call");
+
+    let classed_pair = |this: &Term, that: &Term| {
+        let Ok(mut classes) =
+            Classes::of(&atoms(this, that), None, |_, _| Ok::<_, Infallible>(true));
+        classed(&mut Inert, this, that, &mut classes)
+            .expect("the inert reducer spends nothing")
+            .expect("the second call is spelled as the first")
+    };
+
+    let (this, that) = classed_pair(&sign(&first, &other), &sign(&second, &other));
+    assert!(int_same(&this, &that), "{this} against {that}");
+
+    let magnitude = |call: &Term| folded(Intrinsic::IntAbs(int_sub(call.clone(), other.clone())));
+    let (this, that) = classed_pair(&magnitude(&first), &magnitude(&second));
+    assert_eq!(this, that);
 }
 
 /// An operation the table leaves an operand out of is its checker's: a quotient is handed out as an atom after its dividend and its divisor, and two quotients a judge holds one are spelled as the first is, over the first's operands.

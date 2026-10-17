@@ -1069,11 +1069,8 @@ const UNREACHED: [&str; 11] = [
     "/std/Tui/border/edge",
 ];
 
-/// The `let`s of the library that are refused as a report prints them, each named where its cause is filed.
-const REFUSED: [&str; 1] = [
-    // Its printed body holds a bound's proof elaboration infers under one order of its atoms and checks under another (`documentation/roadmap/arithmetic/100-a-magnitude-is-oriented-over-the-classes.md`).
-    "/std/Flt/of_decimal_in",
-];
+/// The `let`s of the library that are refused as a report prints them: none.
+const REFUSED: [&str; 0] = [];
 
 /// The `let`s of the library whose printed form elaborates and is not proved to be the `let`: none.
 const UNPROVED: [&str; 0] = [];

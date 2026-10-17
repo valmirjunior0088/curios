@@ -4,7 +4,7 @@
 //!
 //! **An opaque atom is classed by its checker.** [`atoms_of`] hands out the atoms of a pair, a checker says of two of them whether they convert ([`Classes::of`]), and each is spelled as its class's representative. Nothing here asks a judgment: the question is the caller's closure, asked by the checker that holds the answer. A reader that reads its terms one at a time and compares none of them with another asks the same of each ([`atoms_in`], [`Classes::join`], [`classed_in`]).
 //!
-//! **A node is classed by the readers.** A node's operands are spelled first, and the node over them is held to the nodes of its operation spelled before it, by the chain's readers alone ([`agree`]), and takes the first one's spelling. So an operation one reader reads and the reader above it takes whole is one atom of the reader above wherever its own reader holds it one, and no checker is asked what a node's operands are. The walk folds nothing: a fold over operands spelled alike is a reducer's to take again, where it takes one ([`refold`]).
+//! **A node is classed by the readers.** A node's operands are spelled first, and the node over them is held to the nodes of its operation spelled before it, by the chain's readers alone ([`agree`]), and takes the first one's spelling. So an operation one reader reads and the reader above it takes whole is one atom of the reader above wherever its own reader holds it one, and no checker is asked what a node's operands are. The walk folds nothing but a choice a fold made by its atoms' order: a magnitude is spelled by its own fold over its spelled operand ([`Operation::oriented`]), since which monomial leads it is the order of its operand's atoms, and the representatives may stand in another. It is Shostak's combined canonizer, the theory's canonizer taken once a term's subterms are replaced by their representatives (Rueß and Shankar, [*Combining Shostak Theories*](https://www.csl.sri.com/people/shankar/rta02.pdf)), for the operations whose canonizer is their fold. Any other fold over operands spelled alike is a reducer's to take again, where it takes one ([`refold`]).
 //!
 //! **A node is read against the nodes that stand over its atoms, and no others.** Holding a node asks a reading against each earlier node of its operation, and a term holds many of one: a long sum of operations would be read pair by pair, at every fold above it. The readers that pair operands hold two operations one where their operands pair off, and the linear ones where their normal forms agree, each over one set of atoms, so the earlier nodes are kept by the atoms each stands over (`bucket`) and two nodes over two sets are told apart with nothing read. A cost filter failing toward refusal, as the one on two atoms' heads is.
 //!
@@ -536,11 +536,28 @@ impl<'r, 'c, R: Reducer> Walk<'r, 'c, R> {
         if matches!(self.reading, Reading::Collected(_)) {
             return Ok((key.clone(), key));
         }
-        let spelled = match held {
+        let spelled = match kind.1.oriented() && spelled != *forced {
+            true => self.oriented(spelled)?,
+            false => spelled,
+        };
+        // A magnitude whose fold drew a negation out of it is a node of another operation, which the reader above reads.
+        let still = matches!(
+            &*spelled,
+            Subterm::Intrinsic(spelled) if layer(spelled).is_some_and(|(of, _)| of == kind)
+        );
+        let spelled = match held && still {
             true => self.held(spelled, kind)?,
             false => spelled,
         };
         Ok((key, spelled))
+    }
+
+    /// `node`, a magnitude spelled over operands that moved, as its own fold spells it: which monomial of its operand leads is the order of that operand's atoms, so the fold is taken again over the atoms as they are now spelled, and two spellings of one class are led alike.
+    fn oriented(&mut self, node: Term) -> Result<Term, ReduceError> {
+        let Subterm::Intrinsic(intrinsic) = &*node else {
+            return Ok(node);
+        };
+        Ok(reduce_intrinsic(self.reducer, intrinsic)?.into())
     }
 
     /// `node`, of `kind`, a node the table leaves an operand out of, spelled as the first of its kind whose first `read` operands are spelled as its are, and itself where there is none; as it is where the walk spells nothing.

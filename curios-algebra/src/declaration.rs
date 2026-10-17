@@ -195,6 +195,11 @@ impl Operation {
         )
     }
 
+    /// Whether this operation's fold reads its operand from one end, the order of its atoms deciding which end leads: an absolute value and a sign hold an operand and its negation one by orienting it, a choice no reader makes again, so a reading over atoms spelled anew takes the fold again.
+    pub fn oriented(self) -> bool {
+        matches!(self, Operation::Absolute | Operation::Signum)
+    }
+
     /// The comparison true exactly when this one is false, and whether its operands are swapped — on a total order `a < b` is false exactly when `b <= a`, and `==` and `!=` negate each other in place; on `Bool`, where `!=` is `xor`, an equality's negation is that `xor` and a `xor`'s is the equality, operands in place. `None` for anything that is no comparison of these carriers: a floating-point comparison is none, since against a NaN both directions of an ordered comparison are false and its negation is not the mirror.
     pub fn negation(self, carrier: Carrier) -> Option<(Operation, bool)> {
         match (carrier, self) {

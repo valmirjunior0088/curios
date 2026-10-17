@@ -264,6 +264,71 @@ fn every_law_holds_at_every_operand_written_two_ways() {
     held_at_two_spellings(|_| true);
 }
 
+/// Every law with each variable a stuck `match` spelled two ways: `match xc | true => x0 | false => x1 end` on the claim's left, and on its right the same `match` with its motive written, `match xc: (_) => Nat | …`. The two convert without being one term and hash apart, so the row holds only where each checker classes them, and, where a fold orients a magnitude by the order of its atoms, only where that fold is taken again over the classes. It is stated at several orders of its binders, since the order atoms are put in follows them.
+#[test]
+fn every_law_holds_over_atoms_spelled_two_ways() {
+    const ORDERS: usize = 6;
+    let spelled = rows(&declared())
+        .iter()
+        .map(|row| {
+            let stated = variables(&row.law).len();
+            let (binders, claim) = spell_sides(&row.law, |side, index, carrier| {
+                let name = name(index, carrier);
+                let of = type_name(carrier);
+                let motive = match side {
+                    Side::Left => String::new(),
+                    Side::Right => format!(": (_) => {of}"),
+                };
+                (
+                    format!("(match {name}c{motive} | true => {name}0 | false => {name}1 end)"),
+                    format!("{name}c: Bool, {name}0: {of}, {name}1: {of}"),
+                )
+            });
+            // Each variable's three binders lead, and the proofs of the law's narrowings, which name them, follow.
+            let parts = top_level(&binders);
+            let (written, proofs) = parts.split_at(3 * stated);
+            let written = written
+                .iter()
+                .map(|part| {
+                    let (name, type_) = part
+                        .split_once(": ")
+                        .expect("a binder is a name and a type");
+                    (name.to_owned(), type_.to_owned())
+                })
+                .collect::<Vec<_>>();
+            (written, proofs.join(", "), claim)
+        })
+        .collect::<Vec<_>>();
+    assert!(!spelled.is_empty());
+
+    let mut failures = Vec::new();
+    for order in 0..ORDERS {
+        let rows = spelled
+            .iter()
+            .map(|(written, proofs, claim)| {
+                let binders = written
+                    .iter()
+                    .map(|(name, type_)| Binder {
+                        name,
+                        type_,
+                        needs: &[],
+                    })
+                    .collect::<Vec<_>>();
+                let telescope = orders(&binders, ORDERS).swap_remove(order);
+                let telescope = match proofs.is_empty() {
+                    true => telescope,
+                    false => format!("{telescope}, {proofs}"),
+                };
+                (telescope, claim.clone())
+            })
+            .collect::<Vec<_>>();
+        if let Err(found) = closes(IMPORTS, &rows) {
+            failures.push(format!("at order {order}:\n{}", found.join("\n")));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
 /// A fresh variable of `carrier` and one: `a + 1`.
 fn successor(carrier: Carrier, fresh: usize) -> Expr {
     Expr::Apply {
