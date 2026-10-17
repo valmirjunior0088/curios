@@ -563,6 +563,24 @@ fn a_module_reaches_its_own_declarations_by_their_labels() {
 }
 
 #[test]
+fn an_answer_naming_another_modules_own_declaration_is_declined() {
+    // Unification unfolds `shown(n)` to `hidden(n) + 1` and solves the goal to `hidden(n)`, which only `Inner` names.
+    let source = r#"
+        mod Inner
+            use /std/{Nat};
+            let hidden(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => hidden(k) end;
+            pub let shown(n: Nat) -> Nat = hidden(n) + 1;
+        end
+        use /std/{Nat, Eq};
+        let below(@m: Nat, _e: Eq()(m + 1, m + 1)) -> Nat = m;
+        pub let t(n: Nat) -> Nat = below(@?, Eq/refl(@Nat, @/Inner/shown(n)));
+        /std/print("")
+    "#;
+
+    assert!(declined(source));
+}
+
+#[test]
 fn a_built_in_operation_reads_back() {
     // A built-in operation is spelled as the `/std` declaration that re-exports it resolves from the reader, like any other name.
     let source = r#"

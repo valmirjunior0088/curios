@@ -19,7 +19,7 @@ use {
     curios_std::std_directory,
     curios_text::{
         Label, LetSignature, Overlay, PreparedText, RootSource, SYNTAX, TopItem, TopLet, TopMod,
-        Translation, UnitSource, into_core_unit, into_core_unit_over, spell,
+        Translation, UnitSource, into_core_unit, into_core_unit_over,
     },
     curios_unit::{Predecessors, Unit, apart_parts, halves},
     curios_utilities::{Qualifier, RootKind, digest, test_support::Temporary},
@@ -1078,15 +1078,12 @@ fn clipped(said: &str) -> String {
     said.chars().take(4000).collect()
 }
 
-/// The `let`s of the library the translation declines, each holding a form no program spells, in the order of their names. A report raised in one shows the term as the compiler holds it.
-const DECLINED: [&str; 2] = [
+/// The `let`s of the library the translation declines, each holding a form its module cannot write, under their reason and in the order of their names. A report raised in one shows the term as the compiler holds it.
+const DECLINED: [&str; 13] = [
     // Each holds a string past the length a report prints one whole.
     "/std/http/Url/part",
     "/std/http/syntax/status_line",
-];
-
-/// The `let`s of the library whose elaborated term names a declaration their module cannot: another module's own, reached by unfolding. No name writes it from there, and a report shows it by its full path.
-const UNREACHED: [&str; 11] = [
+    // Each names a declaration its module cannot: another module's own, reached by unfolding.
     "/std/Nat/Coprime/cancel",
     "/std/Nat/Coprime/common",
     "/std/Nat/Coprime/quotients",
@@ -1165,7 +1162,7 @@ fn parts_of(files: &[(PathBuf, Qualifier, String)]) -> Vec<usize> {
 
 /// **A report's term reads back.** Beside every `let` of the library two declarations are written: its type and its body as a report raised in it prints them, and a proof by `Eq/refl()` that what those declare is the `let`. The files are lowered and elaborated as the library, over the archive, and the kernel walks what comes of it. So each printed term is accepted where its reader stands, and is the term it was printed from by the conversion of each checker, at the universe levels that checker is handed: a printed term states none, and elaboration solves for them. A `let` not known to terminate is named by no type, so what is written for one is that it has its printed type.
 ///
-/// A `let` the translation declines and one naming what its module cannot have nothing written beside them, and each is listed ([`DECLINED`], [`UNREACHED`]). One refused as printed, or whose proof is, is found by leaving it out and compiling again, so every `let` that does not read back is named, and not the first alone ([`REFUSED`], [`UNPROVED`]); and the proofs the kernel refuses are listed with the `let`s they are of ([`UNCERTIFIED`]).
+/// A `let` the translation declines, one naming what its module cannot among them, has nothing written beside it, and each is listed ([`DECLINED`]). One refused as printed, or whose proof is, is found by leaving it out and compiling again, so every `let` that does not read back is named, and not the first alone ([`REFUSED`], [`UNPROVED`]); and the proofs the kernel refuses are listed with the `let`s they are of ([`UNCERTIFIED`]).
 ///
 /// **In parts, and once.** Read back whole the library is one test several times the length of any other, so it is read back a part at a time, a `#[test]` each ([`read_back_in_parts`]), and the parts run side by side; what a part writes beside the `let`s of its files is elaborated over the archive, which keeps every declaration the source wrote. And a `let` listed as refused or as unproved is left out before the first compile, so a library nothing has changed in is elaborated once: the listed ones are then written alone, where what is refused of them is what is still to be listed.
 fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
@@ -1265,7 +1262,6 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             // The `let` each added declaration stands beside, and whether it is the proof.
             let mut beside = BTreeMap::<Global, (Global, bool)>::new();
             let mut declined = BTreeSet::new();
-            let mut unreached = BTreeSet::new();
             let overlay = trees
                 .iter()
                 .map(|(path, module, tree)| {
@@ -1280,22 +1276,6 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                             )
                         });
                         if !taken(&name) {
-                            return Vec::new();
-                        }
-                        // A term elaboration built may name a declaration its reader cannot: another module's own, reached by unfolding.
-                        let reaches = |term: &Term| {
-                            term.free_vars()
-                                .into_iter()
-                                .filter_map(|free| free.as_global().copied())
-                                .chain(term.construction_names())
-                                .filter(|global| matches!(global, Global::Authored(_)))
-                                .all(|global| {
-                                    spell(&spellings, &definition.island, Some(&name), &global)
-                                        .is_some()
-                                })
-                        };
-                        if !(reaches(&definition.type_) && reaches(&definition.body)) {
-                            unreached.insert(name);
                             return Vec::new();
                         }
                         let (Some(type_), Some(body)) = (
@@ -1355,7 +1335,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             let kept = lowered.kept_from(std.text());
             let elaborated = elaborated_over(predecessors, std, &lowered, &kept);
 
-            (elaborated, beside, declined, unreached)
+            (elaborated, beside, declined)
         };
 
         let mut refusals = Vec::new();
@@ -1399,11 +1379,9 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
 
         // The listed `let`s are left out from the first round, and each round after it leaves out what the one before it was refused for, so the rounds end.
         let mut left_out = seeded.clone();
-        let (recompiled, beside, declined, unreached) = loop {
+        let (recompiled, beside, declined) = loop {
             match round(&|name| !left_out.contains(name)) {
-                (Ok(recompiled), beside, declined, unreached) => {
-                    break (recompiled, beside, declined, unreached);
-                }
+                (Ok(recompiled), beside, declined) => break (recompiled, beside, declined),
                 (Err(error), beside, ..) => left_out.extend(refused_of(&error, &beside)),
             }
         };
@@ -1443,11 +1421,10 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             .collect::<BTreeSet<_>>();
         // Everything the sweep found is said at once: a run costs the library over again.
         let mut found = Vec::new();
-        let (known_refused, known_unproved, known_declined, known_unreached, known_uncertified) = (
+        let (known_refused, known_unproved, known_declined, known_uncertified) = (
             listed(&REFUSED),
             listed(&UNPROVED),
             listed(&DECLINED),
-            listed(&UNREACHED),
             listed(&UNCERTIFIED),
         );
         if refused_as_printed != known_refused || unlike != known_unproved {
@@ -1465,13 +1442,6 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                 "the translation declines {:?}, and {:?} are the `let`s of this part it is known to",
                 names(&declined),
                 names(&known_declined)
-            ));
-        }
-        if unreached != known_unreached {
-            found.push(format!(
-                "{:?} name what their module cannot, and {:?} are the `let`s of this part known to",
-                names(&unreached),
-                names(&known_unreached)
             ));
         }
         if uncertified != known_uncertified || uncertified.len() != judged.verdicts.len() {

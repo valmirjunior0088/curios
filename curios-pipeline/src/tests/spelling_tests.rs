@@ -4,7 +4,9 @@
 
 use {
     super::test_support::*,
-    curios_core::{Global, Item, Subterm, Term},
+    curios_core::{
+        Enter, Global, IntrinsicForm, Item, Subterm, Term, intrinsic_form, intrinsic_global,
+    },
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, into_core_with_prelude, spell},
     curios_unit::Predecessors,
@@ -233,6 +235,107 @@ fn a_re_export_of_the_readers_own_module_is_spelled_bare_only_below_its_use() {
         assert_eq!(at("above").as_deref(), Some("Inner/x"));
         assert_eq!(at("below").as_deref(), Some("x"));
     });
+}
+
+/// Every declaration of `/sys` the intrinsic table writes a node by ([`intrinsic_form`]) that a reader at a program's root reaches by no name, read off the nodes `/sys`'s own declarations are built of, each as a report prints it and as it prints it keeping a concatenation's grouping. A program names `/sys` by no path, so it reaches one through what `/std` re-exports of it, and a report showing a node whose declaration it reaches by none declines its term.
+fn intrinsics_unreached_from_the_root() -> Vec<String> {
+    with_prelude(|prelude| {
+        let system = prelude.first().expect("`/sys` is the prelude's first root");
+        let mut written = BTreeSet::new();
+        for item in &system.core().items {
+            item.each_term(|term| {
+                term.walk(
+                    &mut written,
+                    |written, term| {
+                        if let Subterm::Intrinsic(node) = &**term {
+                            for grouped in [false, true] {
+                                match intrinsic_form(node.clone(), grouped) {
+                                    IntrinsicForm::Named(path) => {
+                                        written.insert(intrinsic_global(path));
+                                    }
+                                    IntrinsicForm::Call { path, .. } => {
+                                        written.insert(intrinsic_global(&path));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        Enter::Descend
+                    },
+                    |_, _, _| (),
+                );
+            });
+        }
+
+        let text = Predecessors::over(prelude).text();
+        let reader = Reader::at_the_root("");
+        let source = reader.program("let probe: Type = Type;\n");
+        let lowered =
+            into_core_with_prelude(&entrypoint_of(&source), &RootSource::none(), &text, &SYNTAX)
+                .unwrap_or_else(|error| panic!("the reader's program lowers: {}", error.format()));
+        let spellings = lowered.names.spellings(&text);
+        let (island, owner) = (reader.island(), reader.declared("probe"));
+
+        written
+            .into_iter()
+            .filter(|global| spell(&spellings, &island, Some(&owner), global).is_none())
+            .map(|global| global.faithful().to_string())
+            .collect()
+    })
+}
+
+/// The declarations of `/sys` a report writes an intrinsic by and a reader at a program's root reaches by no name: `/std` calls each only inside a declaration of its own that does more than name it (`documentation/roadmap/tools/000-findings.md`).
+const UNREACHED_INTRINSICS: [&str; 45] = [
+    "/sys/Channel/capacity",
+    "/sys/Channel/close",
+    "/sys/Channel/closed",
+    "/sys/Channel/count",
+    "/sys/Channel/new",
+    "/sys/Channel/push",
+    "/sys/Channel/take",
+    "/sys/Flt/ties_to_away/add",
+    "/sys/Flt/ties_to_away/div",
+    "/sys/Flt/ties_to_away/fma",
+    "/sys/Flt/ties_to_away/mul",
+    "/sys/Flt/ties_to_away/of_int",
+    "/sys/Flt/ties_to_away/of_nat",
+    "/sys/Flt/ties_to_away/sqrt",
+    "/sys/Flt/ties_to_away/sub",
+    "/sys/Flt/toward_negative/add",
+    "/sys/Flt/toward_negative/div",
+    "/sys/Flt/toward_negative/fma",
+    "/sys/Flt/toward_negative/mul",
+    "/sys/Flt/toward_negative/of_int",
+    "/sys/Flt/toward_negative/of_nat",
+    "/sys/Flt/toward_negative/sqrt",
+    "/sys/Flt/toward_negative/sub",
+    "/sys/Flt/toward_positive/add",
+    "/sys/Flt/toward_positive/div",
+    "/sys/Flt/toward_positive/fma",
+    "/sys/Flt/toward_positive/mul",
+    "/sys/Flt/toward_positive/of_int",
+    "/sys/Flt/toward_positive/of_nat",
+    "/sys/Flt/toward_positive/sqrt",
+    "/sys/Flt/toward_positive/sub",
+    "/sys/Flt/toward_zero/add",
+    "/sys/Flt/toward_zero/div",
+    "/sys/Flt/toward_zero/fma",
+    "/sys/Flt/toward_zero/mul",
+    "/sys/Flt/toward_zero/of_int",
+    "/sys/Flt/toward_zero/of_nat",
+    "/sys/Flt/toward_zero/sqrt",
+    "/sys/Flt/toward_zero/sub",
+    "/sys/Handle/Handle",
+    "/sys/Handle/stderr",
+    "/sys/Handle/stdin",
+    "/sys/Handle/stdout",
+    "/sys/Io/advance",
+    "/sys/Io/suspend",
+];
+
+#[test]
+fn every_intrinsic_a_report_names_but_the_listed_is_written_from_the_root() {
+    assert_eq!(intrinsics_unreached_from_the_root(), UNREACHED_INTRINSICS);
 }
 
 #[test]

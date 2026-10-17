@@ -2,11 +2,11 @@
 //!
 //! The inverse of lowering and elaboration, for a reader standing at one place. A term a report shows is translated here and printed by [`print_term`], the printer that formats source, so what a reader is shown is a form the grammar produces: a match as its patterns, a projection by its label, a witness as resolution would restore it. `curios-core`'s own printer prints what is read about the compiler, a dump and a kernel's refusal, and the term a translation declines.
 //!
-//! **A translation is whole or it is none.** [`from_core`] hands back a surface term, or `None`: the term is past what a report prints ([`curios_core::Minting::elides`]), or holds a form no program spells — a witness resolution would not put back, a hidden member with no label read off a value, a handle the host minted. The surface tree gains no node for what is left out, and a report that is handed `None` shows the term as the compiler holds it and says so.
+//! **A translation is whole or it is none.** [`from_core`] hands back a surface term, or `None`: the term is past what a report prints ([`curios_core::Minting::elides`]), or holds a form no program spells where its reader stands — a declaration the reader reaches by no name, a witness resolution would not put back, a hidden member with no label read off a value, a handle the host minted. The surface tree gains no node for what is left out, and a report that is handed `None` shows the term as the compiler holds it and says so.
 //!
 //! **Which witnesses a term leaves out is settled before it reaches here.** The elaborator writes a report's term as a program writes it where the reader stands (`curios-elab`'s `written`): a witness resolution puts back there becomes an open slot, and a method projected off one becomes its operator or its wrapper's call. This walk leaves an open slot out, and declines a witness still standing — a global one, a binder's reference, the reader's own binders among them — since the grammar spells neither. Whether resolution restores a witness is resolution's to say, under the binders, the arms and the definitions it answers by, so nothing here models it.
 //!
-//! **It reads what the Core printer reads**: the reader's [`curios_core::Spelling`], which names each global as resolution finds it from where the reader stands and each binder as the report's rename spells it, and the lexicons of the units in scope, for a nominal family's marks, a structure's fields and a constructor's payload. Binders are labelled through the render's [`curios_core::Minting`] in the order this walk opens them, which is the order its dry run opened them in.
+//! **It reads what the Core printer reads**: the reader's [`curios_core::Spelling`], which names each global as resolution finds it from where the reader stands ([`curios_core::Spelling::reached`]) and each binder as the report's rename spells it, and the lexicons of the units in scope, for a nominal family's marks, a structure's fields and a constructor's payload. Binders are labelled through the render's [`curios_core::Minting`] in the order this walk opens them, which is the order its dry run opened them in.
 
 use {
     crate::{
@@ -188,10 +188,10 @@ fn name_of(spelled: &str) -> Name {
     Name::new(absolute, Qualifier::from(path.split('/')))
 }
 
-/// A declaration as the reader writes it. A witness has no name a program writes, so one reaching here is one resolution would not put back.
+/// A declaration as the reader writes it, or `None` where they write it by no name: one their module cannot reach, or a witness, which has no name a program writes, so one reaching here is one resolution would not put back.
 fn global(name: &curios_core::Global, frame: Frame) -> Option<Term> {
     match name {
-        curios_core::Global::Authored(_) => Some(named(&frame.spelling.symbol(name))),
+        curios_core::Global::Authored(_) => Some(named(&frame.spelling.reached(name)?)),
         _ => None,
     }
 }
