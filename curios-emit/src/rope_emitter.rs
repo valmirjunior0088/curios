@@ -105,8 +105,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                     set(&walk.payload),
                     curios_wasm::Instr::I32Const { value: 0 },
                     set(&walk.src_off),
-                    get(&walk.payload),
-                    curios_wasm::Instr::ArrayLen,
+                    get(&walk.cur),
+                    field_get(&rope.base, &rope.len_field),
                     set(&walk.count),
                     curios_wasm::Instr::Br {
                         label_name: curios_wasm::LabelName::from("emit"),
@@ -116,7 +116,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             },
         ];
         descend.extend(walk.resolve_view_chunk());
-        // Cached node: the whole cache.
+        // Cached node: its run, the first `len` slots of its cache.
         descend.extend([
             get(&walk.cur),
             cast(&rope.node),
@@ -133,8 +133,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                     set(&walk.payload),
                     curios_wasm::Instr::I32Const { value: 0 },
                     set(&walk.src_off),
-                    get(&walk.payload),
-                    curios_wasm::Instr::ArrayLen,
+                    get(&walk.cur),
+                    field_get(&rope.base, &rope.len_field),
                     set(&walk.count),
                     curios_wasm::Instr::Br {
                         label_name: curios_wasm::LabelName::from("emit"),
@@ -958,13 +958,14 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$list/<grain>/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then force every element through the grain's own force into a *fresh* payload (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
+    /// `$list/<grain>/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then force every element through the grain's own force into a *fresh* payload of the run's length (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
     pub(crate) fn emit_list_bin_force_func(
         &mut self,
         grain: Grain,
         func_name: curios_wasm::FuncName,
     ) {
         let elems = self.table.elems_type();
+        let list = self.table.list_rope();
 
         let box_func = match grain {
             Grain::X => self.table.bytes_box_func(),
@@ -998,8 +999,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 func_name: self.table.list_force_func(),
             },
             set(&flat),
-            get(&flat),
-            curios_wasm::Instr::ArrayLen,
+            get(&r),
+            field_get(&list.base, &list.len_field),
             set(&count),
             get(&count),
             curios_wasm::Instr::ArrayNewDefault {
@@ -1065,7 +1066,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// if l.len != r.len → 0            ;; rope lengths answer without forcing
     /// lb := force(l); rb := force(r)
     /// loop:
-    ///   if i ≥ lb.len → 1              ;; every byte matched
+    ///   if i ≥ l.len → 1               ;; every byte of the run matched
     ///   if lb[i] != rb[i] → 0
     ///   i += 1
     /// ```
@@ -1094,10 +1095,10 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let bytes = curios_wasm::LabelName::from("bytes");
 
         let loop_instrs = vec![
-            // Every byte matched: eq = 1, exit.
+            // Every byte of the run matched: eq = 1, exit.
             get(&i),
-            get(&lb),
-            curios_wasm::Instr::ArrayLen,
+            get(&l),
+            field_get(&rope.base, &rope.len_field),
             curios_wasm::Instr::I32GeU,
             curios_wasm::Instr::If {
                 label_name: curios_wasm::LabelName::from("hit"),
@@ -1266,13 +1267,13 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bin/and` / `/or` / `/xor (ref $payload) (ref $payload) (i32 len) -> (ref $rope/bin)`: two forced payloads combined byte for byte, sealed at `len`.
+    /// `$bin/and` / `/or` / `/xor (ref $payload) (ref $payload) (i32 len) (i32 count) -> (ref $rope/bin)`: the first `count` bytes of two forced payloads combined byte for byte, sealed at `len`.
     ///
-    /// **Three helpers rather than six, because a payload does not know its grain.** The operands arrive already forced, so what is left is a walk over two byte arrays — the same walk whether the generators are bits or bytes — and the grain survives only in which `force` the caller reached for and which length it hands over. The `eql` pair above is two functions for the opposite reason: equality compares *logical* lengths, and a bit grain's final byte carries padding a comparison must not read.
+    /// **Three helpers rather than six, because a payload does not know its grain.** The operands arrive already forced, so what is left is a walk over two byte arrays — the same walk whether the generators are bits or bytes — and the grain survives only in which `force` the caller reached for and which lengths it hands over. The `eql` pair above is two functions for the opposite reason: equality compares *logical* lengths, and a bit grain's final byte carries padding a comparison must not read.
     ///
     /// **The padding needs no mask**, which is `Binary::pointwise`'s argument one rung down: `force` fills a zeroed payload and copies only the logical run, so every padding bit enters as zero, and `and`, `or` and `xor` each take `(0, 0)` to `0`.
     ///
-    /// `len` is the run's own rather than the payload's extent: at the byte grain the two agree, while at the bit grain the payload is `ceil(len/8)` bytes and the leaf has to carry the bit count. Forcing at the call site is what keeps this grain-free, and it is allowed there because a pair of calls is a straight-line sequence — the loop, which is not, stays here. Equal operand lengths are the type's to guarantee; the bound is discharged above erasure and nothing here re-checks it.
+    /// Both lengths are the run's own rather than the payloads' extent, which may be longer: `len` in the grain's units, for the leaf to carry, and `count` in bytes, the payload the run occupies, which at the byte grain is `len` and at the bit grain `ceil(len/8)`. Forcing at the call site is what keeps this grain-free, and it is allowed there because a pair of calls is a straight-line sequence — the loop, which is not, stays here. Equal operand lengths are the type's to guarantee; the bound is discharged above erasure and nothing here re-checks it.
     pub(crate) fn emit_pointwise_func(
         &mut self,
         func_name: curios_wasm::FuncName,
@@ -1290,7 +1291,6 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
         let locals = vec![
             (out.clone(), concrete_val(rope.payload.clone(), true)),
-            (count.clone(), i32_val.clone()),
             (i.clone(), i32_val.clone()),
         ];
 
@@ -1325,9 +1325,6 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         ];
 
         let instrs = vec![
-            get(&lb),
-            curios_wasm::Instr::ArrayLen,
-            set(&count),
             get(&count),
             curios_wasm::Instr::ArrayNewDefault {
                 type_name: rope.payload.clone(),
@@ -1363,7 +1360,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             vec![
                 (lb, concrete_val(rope.payload.clone(), true)),
                 (rb, concrete_val(rope.payload, true)),
-                (len, i32_val),
+                (len, i32_val.clone()),
+                (count, i32_val),
             ],
             concrete_val(rope.base, false),
             locals,
@@ -1531,7 +1529,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$list/map (ref $rope/list, ref $envr/1) -> (ref $rope/list)`.
     ///
     /// ```wat
-    /// selems := force(src); count := selems.len
+    /// selems := force(src); count := src.len
     /// out    := array.new_default <payload> count
     /// loop: while i < count, out[i] := f(selems[i]), i += 1
     /// leaf { tag 0, count, out }
@@ -1601,8 +1599,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 func_name: force_func,
             },
             set(&selems),
-            get(&selems),
-            curios_wasm::Instr::ArrayLen,
+            get(&src),
+            field_get(&rope.base, &rope.len_field),
             set(&count),
             get(&count),
             curios_wasm::Instr::ArrayNewDefault {
@@ -1947,21 +1945,19 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         }])
         .collect();
 
-        let instrs = [
-            get(&r),
-            call(&self.table.list_force_func()),
-            set(&elems),
-            get(&elems),
-            curios_wasm::Instr::ArrayLen,
-            curios_wasm::Instr::ArrayNewDefault {
-                type_name: payload.clone(),
-            },
-            set(&out),
-        ]
-        .into_iter()
-        .chain(each(&i, &elems, body))
-        .chain([get(&out), curios_wasm::Instr::RefAsNonNull])
-        .collect();
+        let length = vec![get(&r), field_get(&rope.base, &rope.len_field)];
+        let instrs = [get(&r), call(&self.table.list_force_func()), set(&elems)]
+            .into_iter()
+            .chain(length.clone())
+            .chain([
+                curios_wasm::Instr::ArrayNewDefault {
+                    type_name: payload.clone(),
+                },
+                set(&out),
+            ])
+            .chain(each(&i, length, body))
+            .chain([get(&out), curios_wasm::Instr::RefAsNonNull])
+            .collect();
 
         self.add_helper(
             func_name,
@@ -2014,7 +2010,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             set(&elems),
         ]
         .into_iter()
-        .chain(each(&i, &w, body))
+        .chain(each(&i, vec![get(&w), curios_wasm::Instr::ArrayLen], body))
         .chain([
             get(&elems),
             curios_wasm::Instr::RefAsNonNull,
@@ -2190,29 +2186,25 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     }
 }
 
-/// Run `body` once for every index `i` below the length of the array in `over`.
+/// Run `body` once for every index `i` below the count `bound` pushes, which is re-read each turn.
 fn each(
     i: &curios_wasm::LocalName,
-    over: &curios_wasm::LocalName,
+    bound: Vec<curios_wasm::Instr>,
     body: Vec<curios_wasm::Instr>,
 ) -> Vec<curios_wasm::Instr> {
-    let step = [
-        get(i),
-        get(over),
-        curios_wasm::Instr::ArrayLen,
-        curios_wasm::Instr::I32GeU,
-        br_if("done"),
-    ]
-    .into_iter()
-    .chain(body)
-    .chain([
-        get(i),
-        i32_const(1),
-        curios_wasm::Instr::I32Add,
-        set(i),
-        br("each"),
-    ])
-    .collect();
+    let step = [get(i)]
+        .into_iter()
+        .chain(bound)
+        .chain([curios_wasm::Instr::I32GeU, br_if("done")])
+        .chain(body)
+        .chain([
+            get(i),
+            i32_const(1),
+            curios_wasm::Instr::I32Add,
+            set(i),
+            br("each"),
+        ])
+        .collect();
 
     vec![
         i32_const(0),

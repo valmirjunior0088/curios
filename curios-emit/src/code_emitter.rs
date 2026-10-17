@@ -1372,9 +1372,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Force both operands and hand their payloads, with the run's own length, to the shared combiner.
+    /// Force both operands and hand their payloads, with the run's own length and the bytes it occupies, to the shared combiner.
     ///
-    /// **The forcing is here rather than inside the helper**, which is what lets one grain-free helper serve both grains: a pair of calls is a straight-line sequence, and straight-line is exactly what a call site may inline. The loop, which it may not, stays in `rope_emitter`. The length comes off the left operand because a payload's extent is not the run's at the bit grain, where `ceil(len/8)` bytes hold `len` bits.
+    /// **The forcing is here rather than inside the helper**, which is what lets one grain-free helper serve both grains: a pair of calls is a straight-line sequence, and straight-line is exactly what a call site may inline. The loop, which it may not, stays in `rope_emitter`. Both lengths come off the left operand's run because a payload's extent is not the run's: at the bit grain `ceil(len/8)` bytes hold `len` bits, and at either grain a payload may hold room past the run.
     fn emit_bin_pointwise(
         &mut self,
         grain: Grain,
@@ -1394,7 +1394,16 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
         let left_instrs = self.context.load_value_instrs(left, LoadAs::Bin(grain));
         let right_instrs = self.context.load_value_instrs(right, LoadAs::Bin(grain));
-        let length_instrs = self.context.load_value_instrs(left, LoadAs::Bin(grain));
+        let length_instrs: Vec<_> = self
+            .context
+            .load_value_instrs(left, LoadAs::Bin(grain))
+            .into_iter()
+            .chain([Self::rope_get(&rope, &rope.len_field)])
+            .collect();
+        let count_instrs = match grain {
+            Grain::X => length_instrs.clone(),
+            Grain::B => Table::bits_payload_len_instrs(length_instrs.clone()),
+        };
 
         self.emit_instrs(left_instrs);
         self.emit_instr(curios_wasm::Instr::Call {
@@ -1403,10 +1412,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instrs(right_instrs);
         self.emit_instr(curios_wasm::Instr::Call { func_name: force });
         self.emit_instrs(length_instrs);
-        self.emit_instr(curios_wasm::Instr::StructGet {
-            type_name: rope.base.clone(),
-            field_name: rope.len_field.clone(),
-        });
+        self.emit_instrs(count_instrs);
         self.emit_instr(curios_wasm::Instr::Call { func_name: combine });
         // Back to canonical form. Every other packed producer norms — `BinConcat` and `BinSlice` through their own lowering, `BinChunk` by building the immediate outright — so a short run left as a rope is a shape nothing else in the program hands out, and the equality fast path is entitled to have assumed it away.
         self.emit_instr(curios_wasm::Instr::Call { func_name: norm });

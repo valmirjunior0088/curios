@@ -1,6 +1,10 @@
 //! The shared rope helpers a `Bin` or `List` operation calls, and the chain depth they lower on.
 
-use {super::test_support::*, curios_num::Grain};
+use {
+    super::test_support::*,
+    curios_abi::{WireLeaf, WireResults, WireType},
+    curios_num::Grain,
+};
 
 #[test]
 fn bin_slice_calls_the_shared_slice_helper() {
@@ -78,6 +82,51 @@ fn a_read_of_an_unflattened_node_looks_in_its_children_before_it_forces() {
             .expect("the helper still forces");
 
         assert!(left < right && right < force, "{read}");
+    }
+}
+
+/// A consumer of a forced payload bounds its walk by the run's `len` and never by its array's length, which a flattened payload may hold room past: equality, the pointwise combiners, a map, and the host's deep and scalar forms read no `array.len` at all, and a force reads one, its worklist's.
+#[test]
+fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
+    let packed = |op: fn(Grain) -> curios_cont::Intrinsic, grain| {
+        let operand = |bytes: Vec<u8>| {
+            curios_cont::Atom::Literal(curios_cont::Literal::Bin(
+                grain,
+                curios_num::Binary::from_bytes(bytes),
+            ))
+        };
+        wat(&intrinsic_main(
+            op(grain),
+            vec![operand(vec![1, 2, 3, 4]), operand(vec![5, 6, 7, 8])],
+        ))
+    };
+    let host = wat(&foreign_call_to(row(
+        "both",
+        vec![
+            WireType::List(WireLeaf::Bytes),
+            WireType::List(WireLeaf::Nat),
+        ],
+        WireResults::single(WireType::Nat),
+    )));
+    let eql = packed(curios_cont::Intrinsic::BinEql, Grain::X);
+    let and = packed(curios_cont::Intrinsic::BinAnd, Grain::B);
+    let map = wat(&list_map());
+
+    for (wat, helper) in [
+        (&eql, "$bytes/eql"),
+        (&and, "$bin/and"),
+        (&map, "$list/map"),
+        (&host, "$list/bytes/force"),
+        (&host, "$list/nat/to_longs"),
+    ] {
+        assert_absent(func(wat, helper), "array.len");
+    }
+    for (wat, force) in [
+        (&eql, "$bytes/force"),
+        (&and, "$bits/force"),
+        (&map, "$list/force"),
+    ] {
+        assert_eq!(count(func(wat, force), "array.len"), 1, "{force}");
     }
 }
 
