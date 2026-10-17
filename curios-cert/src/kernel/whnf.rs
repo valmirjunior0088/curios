@@ -20,12 +20,12 @@ mod rules_tests;
 mod test_support;
 
 use {
-    super::{Kernel, asked_classes, stated_payload, unread_payload},
+    super::{Kernel, asked_classes, asked_within, stated_payload, unread_payload},
     crate::{
-        accelerable, answers, answers_classed, atoms_within, classable,
-        instantiate_universes_scoped, probe_spellings, reduce_closed, reduce_intrinsic, refold,
+        accelerable, answers, answers_classed, atoms_within, instantiate_universes_scoped,
+        probe_spellings, reduce_closed, reduce_intrinsic, refold,
     },
-    curios_analysis::{Answered, Classes, RESOLVED_SPELLING_LAYERS},
+    curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
         FreeMonoid, Func, Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat,
@@ -350,15 +350,18 @@ fn refolded(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceErr
     let Subterm::Intrinsic(operation) = &**value else {
         return Ok(None);
     };
-    let atoms = atoms_within(kernel, operation)?;
-    if !classable(&atoms) {
+    let mut within = atoms_within(kernel, operation, &[])?;
+    match within.classable() {
+        true => {
+            // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
+            curios_profile::sample!("whnf::classable_fold", within.atoms());
+            asked_within(kernel, &mut within)?;
+        }
         // Nothing is put to conversion, and the readers still class the operation's nodes.
-        return refold(kernel, operation, &mut Classes::default());
+        false => within.open(),
     }
-    // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
-    curios_profile::sample!("whnf::classable_fold", atoms.len());
-    let mut classes = asked_classes(kernel, &atoms)?;
-    refold(kernel, operation, &mut classes)
+    let (folded, _) = refold(kernel, operation, within, &[])?;
+    Ok(folded)
 }
 
 /// `term` with each operand in weak-head normal form, where it is a tagged intrinsic — the form a refinement's reduced spelling and the value probed against it are both held in. Anything else is its own canonical form.

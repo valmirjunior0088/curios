@@ -242,8 +242,12 @@ fn taken_again(operation: Intrinsic) -> Option<Term> {
     let Subterm::Intrinsic(stuck) = &*stuck else {
         panic!("the fold left no operation to take again: {stuck}");
     };
-    let atoms = atoms_within(&mut Inert, stuck).expect("the inert reducer spends nothing");
-    refold(&mut Folding, stuck, &mut classes(&atoms)).expect("the folding reducer spends nothing")
+    let mut within =
+        atoms_within(&mut Inert, stuck, &[]).expect("the inert reducer spends nothing");
+    let Ok(()) = within.class(commuted);
+    let (folded, _) =
+        refold(&mut Folding, stuck, within, &[]).expect("the folding reducer spends nothing");
+    folded
 }
 
 /// An equality, an ordering and a truncated difference over two calls a judge holds one are each stuck to a fold that pairs atoms by identity, and each is decided once the fold is taken again over one spelling to the class. A difference's fold cancels what its two operands share, which no reader of a pair reads, so it is here by name.

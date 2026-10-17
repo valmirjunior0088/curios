@@ -39,7 +39,7 @@ mod variance_tests;
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
     crate::{case_target_indices, instantiate_universes_scoped, pinned_instance},
-    curios_analysis::Classes,
+    curios_analysis::{Classes, Within},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Func, FuncType, Global, InductType,
         Instance, InstanceHead, Lockstep, Many, Match, MatchResult, Probe, Proj, Quality,
@@ -1575,10 +1575,16 @@ pub(super) fn grounded(kernel: &mut Kernel, this: &Term, that: &Term) -> Result<
         .unwrap_or(false))
 }
 
-/// Which of `atoms` are one, as reduction asks of the atoms of a stuck fold and of a stuck form beside an equation's scrutinee: each compared with the representative of every class opened before it, by plain reduction ([`Kernel::plainly`]).
+/// Which of `atoms` are one, as reduction asks of a stuck form beside an equation's scrutinee: each compared with the representative of every class opened before it, by plain reduction ([`Kernel::plainly`]).
 pub(crate) fn asked_classes(kernel: &mut Kernel, atoms: &[Term]) -> Result<Classes, ReduceError> {
     curios_profile::profile!("convert::asked_classes");
     kernel.plainly(|kernel| Classes::of(atoms, |this, that| grounded(kernel, this, that)))
+}
+
+/// The atoms a stuck fold still has to class, classed among what its operands' classifications kept, as [`asked_classes`] classes a stuck fold's atoms.
+pub(crate) fn asked_within(kernel: &mut Kernel, within: &mut Within) -> Result<(), ReduceError> {
+    curios_profile::profile!("convert::asked_classes");
+    kernel.plainly(|kernel| within.class(|this, that| grounded(kernel, this, that)))
 }
 
 /// What the instance a match states says of a match with one arm: the instance, the one the arm's constructor builds at the payload its indices state, and that payload.

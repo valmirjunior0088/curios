@@ -54,11 +54,13 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
         ("a term's atoms", atoms_in(&mut Inert, &this).is_ok()),
         (
             "a stuck operation's atoms",
-            atoms_within(&mut Inert, operation).is_ok(),
+            atoms_within(&mut Inert, operation, &[]).is_ok(),
         ),
         (
             "a stuck operation's fold taken again",
-            refold(&mut Inert, operation, &mut Classes::default()).is_ok(),
+            atoms_within(&mut Inert, operation, &[])
+                .and_then(|within| refold(&mut Inert, operation, within, &[]))
+                .is_ok(),
         ),
         (
             "a pair as its classes spell it",

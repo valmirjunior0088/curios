@@ -17,8 +17,8 @@ use {
     },
     crate::{Error, classing, convert_at, is_prop, reduce_with, same_uncommitted},
     curios_analysis::{
-        Answered, Classes, Driver, answers, answers_classed, atoms_within, case_target_indices,
-        classable, could_reduce_to, pinned_instance, refold,
+        Answered, Classes, Driver, Within, answers, answers_classed, atoms_within,
+        case_target_indices, could_reduce_to, pinned_instance, refold,
     },
     curios_core::{
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
@@ -920,15 +920,18 @@ fn refolded(context: &mut Context, folded: &Term) -> Result<Option<Term>, Reduce
     let Subterm::Intrinsic(operation) = &**folded else {
         return Ok(None);
     };
-    let atoms = atoms_within(context, operation)?;
-    if !classable(&atoms) {
+    let mut within = atoms_within(context, operation, &[])?;
+    match within.classable() {
+        true => {
+            // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
+            curios_profile::sample!("reduce::classable_fold", within.atoms());
+            asked_within(context, &mut within)?;
+        }
         // Nothing is put to conversion, and the readers still class the operation's nodes.
-        return refold(context, operation, &mut Classes::default());
+        false => within.open(),
     }
-    // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
-    curios_profile::sample!("reduce::classable_fold", atoms.len());
-    let mut classes = asked_classes(context, &atoms)?;
-    refold(context, operation, &mut classes)
+    let (folded, _) = refold(context, operation, within, &[])?;
+    Ok(folded)
 }
 
 /// What the shared rule says of a stuck reduct against each settled entry it could be a reduct of, innermost first: a term the carriers' readers hold equal to an entry's reduced spelling, or to that spelling negated, is the entry's term (`curios_analysis::answers`). The kernel asks the same function at the same point.
@@ -1050,7 +1053,7 @@ fn proofs_named(context: &mut Context, probe: &Term) -> Result<Vec<Free>, Reduce
     Ok(proofs)
 }
 
-/// Which of `atoms` are one, as reduction asks of the atoms of a stuck fold and of a stuck form beside an equation's scrutinee: each pair put to the elaborator's conversion with nothing committed (`same_uncommitted`), by plain reduction ([`Context::plainly`]). A comparison with no value at the type level is that the two are not known to be one.
+/// Which of `atoms` are one, as reduction asks of a stuck form beside an equation's scrutinee: each pair put to the elaborator's conversion with nothing committed (`same_uncommitted`), by plain reduction ([`Context::plainly`]). A comparison with no value at the type level is that the two are not known to be one.
 fn asked_classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, ReduceError> {
     curios_profile::profile!("reduce::asked_classes");
     context.note_question();
@@ -1059,6 +1062,21 @@ fn asked_classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, Reduc
             Ok(same_uncommitted(context, this, that)
                 .probed()?
                 .unwrap_or(false))
+        })
+    })
+}
+
+/// The atoms a stuck fold still has to class, classed among what its operands' classifications kept, each pair put to the elaborator's conversion as [`asked_classes`] puts it.
+fn asked_within(context: &mut Context, within: &mut Within) -> Result<(), ReduceError> {
+    curios_profile::profile!("reduce::asked_classes");
+    context.note_question();
+    context.plainly(|context| {
+        within.class(|this, that| {
+            recurse(|| {
+                Ok(same_uncommitted(context, this, that)
+                    .probed()?
+                    .unwrap_or(false))
+            })
         })
     })
 }
