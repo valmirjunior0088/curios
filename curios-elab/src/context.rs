@@ -805,6 +805,25 @@ impl<'s> Context<'s> {
         }
     }
 
+    /// What `term` was forced to, under the reduction in progress ([`Caches::forced`]).
+    pub(crate) fn cached_forced(&self, term: &Term) -> Option<Term> {
+        self.typing
+            .caches
+            .forced_get(term, self.typing.asking.plain())
+    }
+
+    /// Record that `term` is forced to `value`: [`Context::reduce`] for the forced demand, under the same gate.
+    pub(crate) fn remember_forced(&mut self, term: Term, value: &Term) {
+        let cacheable =
+            term.closed() && !value.any_metavar(&mut |id| self.metavar_solution(id).is_none());
+
+        if cacheable {
+            self.typing
+                .caches
+                .forced_insert(term, value.clone(), self.typing.asking.plain());
+        }
+    }
+
     /// The remembered sort of `type_`, where the context stands as it did when it was filed. [`Caches::sorts`] carries how long that is.
     pub(crate) fn cached_sort(&mut self, type_: &Term) -> Option<Sort> {
         self.typing

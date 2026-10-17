@@ -70,6 +70,9 @@ pub(crate) struct Caches {
     lasting: [HashMap<Term, Term>; 2],
     /// The second door into [`Caches::lasting`], as [`Caches::reduction_erased`] is into [`Caches::reduction`]: it lives with the table it indexes.
     lasting_erased: [HashMap<Term, Term>; 2],
+    /// What a closed term is forced to (`reduce`'s `force_rec`), kept apart from its reduct as the kernel's memos and the closed machine's keep the two demands apart: forced, a recursive call is the value its fold computes, and plain, it is the folded call itself. Served to a plain probe, a forced value would answer a term the plain reduction leaves folded with its unfolding, as a forced reduction happened to have run first. Of the two lives as the reducts are, the scoped one first.
+    forced: [HashMap<Term, Term>; 2],
+    lasting_forced: [HashMap<Term, Term>; 2],
     /// The reduction table's second door, for the terms mentioning no local binder: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it and whatever sorts its instances state, so two spellings differing only in those — two occurrences of one term, each at universe metavariables of its own, or one written with metavariables and read with them solved — are one computation; the exact table cannot see that, and every one of them re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`AcrossUniverses`], which rewrites the stored reduct's levels and sorts to the asking spelling's where the asking spelling is the stored one carried, or declines.
     reduction_erased: [HashMap<Term, Term>; 2],
     /// What the closed machine's runs have answered ([`ClosedMemo`]), one for each of the two reductions as the reducts have: each answer discarded and kept wherever a reduct of its life is.
@@ -237,6 +240,25 @@ impl Caches {
         table.insert(term, reduct);
     }
 
+    /// What `term` was forced to, as plain reduction forced it where `plain` and as a judgment's did otherwise ([`Caches::forced`]).
+    pub(crate) fn forced_get(&self, term: &Term, plain: bool) -> Option<Term> {
+        let plain = usize::from(plain);
+
+        self.lasting_forced[plain]
+            .get(term)
+            .or_else(|| self.forced[plain].get(term))
+            .cloned()
+    }
+
+    pub(crate) fn forced_insert(&mut self, term: Term, value: Term, plain: bool) {
+        let plain = usize::from(plain);
+        let table = match lasting(&term) && lasting(&value) {
+            true => &mut self.lasting_forced[plain],
+            false => &mut self.forced[plain],
+        };
+        table.insert(term, value);
+    }
+
     /// What classifying the stuck operation `term` found, where it is remembered.
     pub(crate) fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
         self.classifications
@@ -254,9 +276,14 @@ impl Caches {
         table.insert(term, Rc::new(classification));
     }
 
-    /// Every reduct of both reductions and both lives, the second doors indexing them, the classifications the elaborator's conversion classed, the sorts read through them, and the scrutinees remembered as the kernel spells them.
+    /// Every reduct and forced value of both reductions and both lives, the second doors indexing the reducts, the classifications the elaborator's conversion classed, the sorts read through them, and the scrutinees remembered as the kernel spells them.
     fn clear_reductions(&mut self) {
-        for table in self.lasting.iter_mut().chain(&mut self.lasting_erased) {
+        let tables = self
+            .lasting
+            .iter_mut()
+            .chain(&mut self.lasting_erased)
+            .chain(&mut self.lasting_forced);
+        for table in tables {
             table.clear();
         }
         for closed in &mut self.closed {
@@ -265,9 +292,14 @@ impl Caches {
         self.clear_scoped_reductions();
     }
 
-    /// What a boundary of the scope can reach: the reducts that may read it, with their second doors and the closed runs' answers of that life, the classifications the elaborator's conversion classed, the sorts, and the scrutinees remembered as the kernel spells them. The lasting reducts stay.
+    /// What a boundary of the scope can reach: the reducts and forced values that may read it, with their second doors and the closed runs' answers of that life, the classifications the elaborator's conversion classed, the sorts, and the scrutinees remembered as the kernel spells them. The lasting reducts stay.
     fn clear_scoped_reductions(&mut self) {
-        for table in self.reduction.iter_mut().chain(&mut self.reduction_erased) {
+        let tables = self
+            .reduction
+            .iter_mut()
+            .chain(&mut self.reduction_erased)
+            .chain(&mut self.forced);
+        for table in tables {
             table.clear();
         }
         for closed in &mut self.closed {
@@ -494,6 +526,9 @@ impl Caches {
             // The second door indexes exact keys, so it keeps exactly the ones the exact table kept.
             erased.retain(|_, key| reduction.contains_key(key));
         }
+        for forced in self.forced.iter_mut().chain(&mut self.lasting_forced) {
+            forced.retain(|_, value| !value.mentions_free(name));
+        }
         for closed in &mut self.closed {
             closed.retain_without(name);
         }
@@ -531,6 +566,7 @@ impl Caches {
             true => {
                 self.reduction[1].clear();
                 self.reduction_erased[1].clear();
+                self.forced[1].clear();
                 self.closed[1].clear_scoped();
                 self.sorts[1].clear();
                 self.same[1].clear();

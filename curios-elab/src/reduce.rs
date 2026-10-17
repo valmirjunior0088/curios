@@ -287,19 +287,20 @@ fn is_folded(term: &Term) -> bool {
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
     //
-    // The forced value is stored in the declaration's reduction cache unless it is a folded recursive spelling — a `reduce` probe must never be served a fold it expects to keep folded, but any other forced value is a weak-head form like any cached reduct. Without this store the elaborator would re-run the machine for every position that demands the same closed value — checking, conversion and re-validation each paying a `Str` literal's full scan while the kernel replays its memo.
+    // The forced value is remembered apart from the reducts ([`Context::remember_forced`]) unless it is a folded recursive spelling. Plain reduction leaves a recursive call folded where forcing unfolds it, so a plain probe served a forced value would answer by whether a forced demand had run first. Without this store the elaborator would re-run the machine for every position that demands the same closed value — checking, conversion and re-validation each paying a `Str` literal's full scan while the kernel replays its memo.
     if accelerable(&term) {
-        // The store below is what a later demand for the same value hits, and this is where it hits: a probe that finds an unfolded value answers without a run, while one that finds the folded spelling — a plain reduct stored under itself — has nothing to serve and runs.
-        if let Some(cached) = context.cached_reduced(&term)
-            && !is_folded(&cached)
-        {
+        // A forced value answers first. A reduct that is no folded spelling is its own forced form and answers too; one that is has nothing to serve, and the machine runs.
+        if let Some(cached) = context.cached_forced(&term).or_else(|| {
+            context
+                .cached_reduced(&term)
+                .filter(|cached| !is_folded(cached))
+        }) {
             return Ok(cached);
         }
         let entry = term.clone();
         let result = reduce_closed(context, term, Demand::Forced)?;
-        let folded = is_folded(&result);
-        if !folded {
-            context.reduce(entry, &result);
+        if !is_folded(&result) {
+            context.remember_forced(entry, &result);
         }
 
         return Ok(result);
