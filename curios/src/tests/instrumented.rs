@@ -4,6 +4,7 @@
 
 mod coordination;
 mod fixpoint;
+mod growth;
 mod host_boundary;
 mod runaways;
 mod test_support;

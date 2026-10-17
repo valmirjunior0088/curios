@@ -21,6 +21,12 @@ mod document;
 mod effects;
 mod erasure;
 mod fmt;
+
+mod growth;
+// Only the growth measurement writes the programs at the sizes it counts.
+#[cfg(feature = "profile")]
+use growth::*;
+
 mod harness;
 mod host;
 mod inference;

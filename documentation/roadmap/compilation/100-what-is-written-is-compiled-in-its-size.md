@@ -70,9 +70,18 @@ A Binaryen `version_130` replay of the module `curios` hands `BinaryenModuleRead
 
 - **`precompute-propagate`.** After `simplify-locals` has sunk a dependent chain of n `+` into one expression, it takes 10.0 s at 150 and 62.9 s at 300, while either pass alone takes milliseconds. The whole default pipeline with that one pass skipped (`BinaryenAddPassToSkip`) takes 2.25 s and 4.74 s, on a module whose baseline is 0.34 s.
 - **`simplify-locals-nostructure`.** On a 2 000-element list built from a run-time value, it takes 6.8 s of a 10 s pipeline the skip above does not shorten.
-- **A back end not yet attributed.** A match of 2 000 literal arms spends 1.3 s of a 6.7 s compile in Binaryen; the rest is elsewhere in the back end.
+- **A match's arms are not Binaryen's.** A match of 2 000 literal arms spends 1.3 s of a 6.7 s compile in Binaryen; the counted slopes below place the rest in the Cont lowering and its optimizer.
 
 [Precompute-propagate's introduction](https://github.com/WebAssembly/binaryen/pull/1179) already kept it to higher levels for its compile time. The [LLVM WebAssembly backend](https://android.googlesource.com/platform/external/opencl/llvm-project/+/cd46354dbd10) counts excess locals among what makes it "easy to hit engine limitations of 50K locals" and code "slower to compile to native code".
+
+### The counted slopes reach every stage
+
+`growth_slopes`' first reading, over the compiler of `b45135353` and printed in its documentation, holds seven growths linear in every stage: definitions, strings, a list literal, calls, parentheses, an arrow and a string literal. The others reach a stage that grows as its square or steeper. Besides the elaboration, erasure and Binaryen costs above:
+
+- **Lowering**: a structure's fields, a telescope's parameters, and nested matches, `let`s and lambdas (slopes 3.4 to 4.0 in `lower`).
+- **The Cont lowering**: a list built at run time, a match's arms and a left-leaning chain (3.4 to 4.0 in `cont`).
+- **The Cont optimizer**: a match's arms, a telescope's parameters, a tuple, a structure's fields, an `Io` block and nested lambdas (3.3 to 4.6 in `cont-optm`).
+- **Cranelift**: a long function's bytes (3.1 to 4.1 in `cranelift`).
 
 ## Goal
 
@@ -82,7 +91,7 @@ Doubling a program along any axis an author can grow it at most doubles what eve
 
 - **The instrument is a growth suite, beside the towers.**
   - *Plain fixtures* (`curios`'s `tests::growth`) compile each shape at a size past today's cliff, as `tests::towers` compiles each tower at sixty lines.
-  - *Counted slopes* (`growth_slopes`, among the instrumented tests) compile each shape of the protocol's grid at n and 2n through the whole pipeline. Per stage they count node looks (`take_looks`), allocations and bytes (`curios-profile`'s counting allocator), budget units and instructions, and hold each ratio under 2.5.
+  - *Counted slopes* (`growth_slopes`, among the instrumented tests) compile each shape of the protocol's grid at n, 2n and 4n through the whole pipeline, parse to Cranelift. Per stage they count instructions, node looks (`take_looks`), and allocations and bytes (`curios-profile`'s counting allocator). A slope is the second difference over the first, so what every compile pays whatever its size cancels: two is linear and four quadratic, and a held growth's every slope stays under three.
   - This is Swift's [scale-test](https://forums.swift.org/t/ongoing-work-related-to-compilation-performance/7085), which fits the growth of compiler counters across sizes, and GHC's [allocation-counted performance tests](https://gitlab.haskell.org/ghc/ghc/issues/12758), read through counters Curios keeps.
 - **Instructions are a fourth instrument.** `curios-profile` counts the user-space instructions of the thread that opens its counter and of the threads it starts afterwards (`perf_event_open`), reading none where the kernel refuses. Looks and bytes cannot see a walk that allocates nothing, or Binaryen, which is C++. The system call is the one `unsafe` it adds, behind one safe type, with `libc` named in `curios-profile`'s manifest alone.
 - **A judgment does not pay its scope.**
@@ -105,14 +114,18 @@ Doubling a program along any axis an author can grow it at most doubles what eve
 
 ## Stages
 
-1. **The instrument.** The instruction count in `curios-profile`; `tests::growth` with the shapes that hold today; `growth_slopes` over the grid, asserting the shapes that hold and printing the rest; the 2 000-arm back end attributed. Check: `growth_slopes` by hand; `curios-profile`'s tests.
+Each stage begins by attributing the growths its slopes name, by a debugger's samples of the stage, and ends with those rows held in `growth_slopes`.
+
+1. **The instrument.** The instruction count in `curios-profile`; `tests::growth`'s programs; `growth_slopes` over the grid, holding the seven growths linear today. Check: `growth_slopes` by hand; `curios-profile`'s tests.
 2. **Depth.** The parser's and erasure's brackets, the surface tree's drop if a fixture needs it, and each further overflow the depth fixtures meet. Check: nested calls, parentheses, `let`s, matches and arrows at 10 000 levels on a test thread.
 3. **One rebuild per pass.** The settle's `Zonk`, the totality obligations' memo, the spine read where it is used, solved metavariables substituted before a close, and the universe zonk's memo. Check: deep and right-nested `+` at 10 000 and nested lists at 2 000 in `tests::growth`; their rows held.
 4. **A fact read alone.** The facet reader, through every caller of a declaration's instantiation, the kernel's included where it does the same. Check: 4 000 constructors; the row held.
-5. **Locals by liveness.** The coloring pass over each emitted function. Check: 10 100 `+` in one function compiles and runs; `curios-std`'s corpus.
-6. **Wide shapes.** The envelope fixtures, then the spill. Check: each crossing runs.
-7. **Binaryen.** The long-function shapes retaken after stage 5; each pass still refused skipped, stated in `curios-binaryen`'s README, and its report prepared. Check: the long-function rows held; `wasm-optm` sizes over `programs/` before and after.
-8. **The scope by reference**, once `curios-utilities`' persistent maps have landed. The persistent frames first, then the spine, prototyped on a scratch copy and measured before it lands. Check: a 6 000-binding `let` chain, a 2 000-statement `Io` block, 1 000 parameters summed and 2 000 nested lambdas in `tests::growth`; every row held.
+5. **The scope by reference.** The persistent frames first, then the spine, prototyped on a scratch copy and measured before it lands. Check: a 6 000-binding `let` chain, a 2 000-statement `Io` block, 1 000 parameters summed and 2 000 nested lambdas in `tests::growth`; their rows held.
+6. **Lowering.** A telescope, a structure's fields and nested matches, `let`s and lambdas lowered in their size. Check: their rows held.
+7. **The Cont lowering and its optimizer.** A match's arms, a list built at run time, a tuple, a structure's fields, a telescope and a chain lowered and optimized in their size. Check: their rows held.
+8. **Locals by liveness.** The coloring pass over each emitted function. Check: 10 100 `+` in one function compiles and runs; `curios-std`'s corpus.
+9. **Wide shapes.** The envelope fixtures, then the spill. Check: each crossing runs.
+10. **Binaryen and Cranelift.** The long-function shapes retaken after stage 8; each Binaryen pass still refused skipped, stated in `curios-binaryen`'s README, and its report prepared; what Cranelift pays for a long function attributed, and taken where `curios-cranelift` configures it or the emitted function shapes it. Check: every row held; `wasm-optm` sizes over `programs/` before and after.
 
 ## Protocol
 

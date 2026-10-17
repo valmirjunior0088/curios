@@ -9,13 +9,17 @@ description = "Programmatic profiling for the Curios workspace: span macros, the
 workspace = true
 
 [features]
-enabled = ["dep:tracing"]
+enabled = ["dep:tracing", "dep:libc"]
 
 # The one place in the workspace `tracing` is named, so the pin lives here
 # rather than in the workspace table. No `attributes` feature: the workspace
 # instruments through `profile!`, never the proc macro.
 [dependencies]
 tracing = { version = "0.1.44", default-features = false, features = ["std"], optional = true }
+
+# The one place in the workspace `libc` is named, for the one system call the instruction count makes, `perf_event_open`, which only Linux has.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { version = "0.2.186", default-features = false, optional = true }
 
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.

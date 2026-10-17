@@ -8,8 +8,9 @@
 //! - `trace` and `install` — present under `enabled`, so they carry no link here — are the two scopings of the subscriber that writes one row per span and event as it happens. `trace` runs one closure under it and leaves the process-global default alone; `install` *is* that default, for a binary whose scope is the whole invocation because it has no closure to wrap. Both take the destination from their caller: this crate names no path, so nothing here decides where a stream lands. They are the only producers, and profiling is configured where it is used, in code.
 //! - `fold` — beside it — recomputes timings, allocation figures and distributions from those rows. Aggregation is a consumer of the stream rather than what a capture returns, so a run that never terminates still leaves everything it did on disk, and a question the summaries do not answer is asked of the file.
 //! - The counting allocator, under `enabled` beside them, adds the memory half of a report: this crate installs it as the `#[global_allocator]` of every binary it is linked into with `enabled` on, so every boundary row carries what the process held and had taken, and no binary has to opt in.
+//! - [`Instructions`], under `enabled` too, counts what a measurement's thread and the threads it starts retire, which neither a look nor a byte sees of a walk that allocates nothing or of code that is not Rust.
 //!
-//! Why the dependency is named here and nowhere else, why profiling is configured in code and never from the environment, why a third instrument measures magnitude beside time and bytes, why the allocator counts process-wide and is installed by this crate, and why the library emits records rather than summaries are `README.md`'s decisions.
+//! Why the dependency is named here and nowhere else, why profiling is configured in code and never from the environment, why a third instrument measures magnitude beside time and bytes and a fourth counts instructions, why the allocator counts process-wide and is installed by this crate, and why the library emits records rather than summaries are `README.md`'s decisions.
 //!
 //! Each macro above is a token template gated on the *invoking* crate's `profile` feature, so a disabled build strips the guard and pays nothing.
 
@@ -109,6 +110,11 @@ macro_rules! note {
 mod count;
 #[cfg(feature = "enabled")]
 pub use count::*;
+
+#[cfg(feature = "enabled")]
+mod instructions;
+#[cfg(feature = "enabled")]
+pub use instructions::*;
 
 #[cfg(feature = "enabled")]
 mod fold;
