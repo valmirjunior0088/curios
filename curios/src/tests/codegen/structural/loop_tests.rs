@@ -195,6 +195,25 @@ fn a_captured_float_seeds_loops_on_both_sides_of_the_capture_unboxed() {
     }
 }
 
+/// A loop seeded by an escaping function's parameter, and one seeded by a closure call's result: each seed is a reference whose type erasure read as a float, so each loop holds its float in a register and unboxes the seed once, where each once boxed every round.
+#[test]
+fn a_loop_a_stated_float_seeds_boxes_no_round() {
+    let wat = wat(STATED_SEEDS);
+    assert!(
+        wat.lines()
+            .any(|line| line.contains("(func $clsr/") && line.contains("$/warp ")),
+        "the premise: warp escapes, entered through its closure wrapper"
+    );
+    for needle in ["i32.const 7919", "i32.const 6007"] {
+        for kernel in loops_containing(&wat, needle) {
+            assert!(
+                !boxes_a_round(kernel),
+                "no round boxes the float a stated reference seeded: {kernel}"
+            );
+        }
+    }
+}
+
 /// Whether some float box in `kernel` is on the way round: its straight run of instructions ends at the loop's back edge rather than leaving it.
 fn boxes_a_round(kernel: &str) -> bool {
     let lines = kernel.lines().map(str::trim).collect::<Vec<_>>();
@@ -212,9 +231,9 @@ fn boxes_a_round(kernel: &str) -> bool {
     })
 }
 
-/// What the programs whose floats now cross known calls in registers print, worked independently in IEEE doubles with ties to even.
+/// What the programs whose floats now cross a function boundary in registers print, worked independently in IEEE doubles with ties to even.
 #[test]
-fn floats_across_known_calls_answer_as_computed() {
+fn floats_across_function_boundaries_answer_as_computed() {
     let args = ["prog", "a", "b", "c"];
     for (source, expected) in [
         (
@@ -227,6 +246,7 @@ fn floats_across_known_calls_answer_as_computed() {
             "+0.00175099278948419 | +0.00175099290668634 | +0.01425",
         ),
         (CAPTURED_FLOAT, "+1608.2786484375 | +8057.660031863108"),
+        (STATED_SEEDS, "+3355645.0365754715 | +710593533.1304455"),
     ] {
         assert_eq!(String::from_utf8(run_raw(source, &args)).unwrap(), expected);
     }

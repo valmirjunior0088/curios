@@ -10,9 +10,9 @@
 //!
 //! **A boundary the analysis sees whole is a join like any other.** A function that neither escapes nor is the entry is called only by `Known` calls, each naming its arguments, so each of its parameters is a join whose edges are its call sites. Its results are handed back at slots `return_call` requires every member of its tail-call class to agree on ([`TailClasses`]), so each slot is a join whose edges are the class's return edges and whose uses are the resume parameters of every call into the class. Both are decided with the same lattice as a continuation parameter, and the emitter declares the function's type at what they settle to, loads a call's arguments as an edge loads its own, and coerces a result to a resume parameter held otherwise.
 //!
-//! **A word holds only what a word was handed.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a parameter coerced to a word loses what a bigger argument said. A parameter or a result slot is therefore offered the word only when every argument reaching it is itself one — a small literal, a filler, a word-producing definition, or another such position — which [`word_params`] decides before any demand is read.
+//! **A word holds only what a word was handed.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a parameter coerced to a word loses what a bigger argument said. A parameter or a result slot is therefore offered the word only when every argument reaching it is itself one — a small literal, a filler, a word-producing definition, a reference whose type erasure read as a word, or another such position — which [`word_params`] decides before any demand is read.
 //!
-//! **A float register holds only what a float was handed.** A parameter has one type only where no type computes one. A variant's constructors share a payload slot, and scalar replacement makes that slot a parameter, `success`'s float and `failure`'s error in the one; and a value whose type is a match on another is a float on one edge and a string on the next. What its uses read under one tag or one branch says nothing of what arrives under another, and an edge coerces its argument to the parameter's carrier before anything is consulted, so a float register there casts the reference, and loses it where it does not trap. Nothing here says which reference is a float, so a position is offered the float only when every argument reaching it is one already: a float literal, a filler, a definition producing a float, or another such position, which [`float_params`] decides beside the word.
+//! **A float register holds only what a float was handed.** A parameter has one type only where no type computes one. A variant's constructors share a payload slot, and scalar replacement makes that slot a parameter, `success`'s float and `failure`'s error in the one; and a value whose type is a match on another is a float on one edge and a string on the next. What its uses read under one tag or one branch says nothing of what arrives under another, and an edge coerces its argument to the parameter's carrier before anything is consulted, so a float register there casts the reference, and loses it where it does not trap. Only a type says which reference is a float, and erasure, the one walk holding it, states it on a binder whose producer names no carrier ([`Register`]): so a position is offered the float only when every argument reaching it is one already, a float literal, a filler, a definition producing a float, a reference stating a float, or another such position, which [`float_params`] decides beside the word. A stated reference feeds the register by one unbox on the edge or the call, and keeps its own storage: the statement is what lets it feed, never what decides how it is held.
 //!
 //! **A use can only take what the definition can give**, which is what [`Offer`] states. What arrives through a position no single party controls is a reference by declaration: an escaping function's parameters, which its closure wrapper passes at the shared `clsr/N` type, and the entry's, which the host passes; the results of a class whose results something else fixes; and what a cell, a channel, a call-shaped intrinsic or a host import hands back, a host's `Flt` aside. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
 //!
@@ -20,8 +20,8 @@
 
 use {
     super::{
-        Atom, Callee, ContinuationId, Edge, FunctionId, Lattice, Literal, Module, Node, Repr,
-        Solver, TailClasses, ValueExpr, ValueId, nat_is_small,
+        Atom, Callee, ContinuationId, Edge, FunctionId, Lattice, Literal, Module, Node, Register,
+        Repr, Solver, TailClasses, ValueExpr, ValueId, nat_is_small,
     },
     curios_abi::WireType,
     std::collections::{BTreeMap, BTreeSet},
@@ -311,8 +311,8 @@ fn offers(
         offers.insert(Site::Value(value), Offer::Never);
     }
 
-    let words = word_params(&offers, flows);
-    let floats = float_params(&offers, flows);
+    let words = word_params(module, &offers, flows);
+    let floats = float_params(module, &offers, flows);
     for (site, offer) in &mut offers {
         if let Offer::Open {
             words: word,
@@ -397,24 +397,45 @@ fn flows<'m>(module: &'m Module, boundaries: &Boundaries) -> Vec<(Source<'m>, Si
     flows
 }
 
-/// The open sites a machine word may hold: those every argument reaching them is a word already — a small literal, a filler, a definition producing a word, or another such site.
-fn word_params(offers: &BTreeMap<Site, Offer>, flows: &[(Source, Site)]) -> BTreeSet<Site> {
+/// The open sites a machine word may hold: those every argument reaching them is a word already — a small literal, a filler, a definition producing a word, a reference stating one, or another such site.
+fn word_params(
+    module: &Module,
+    offers: &BTreeMap<Site, Offer>,
+    flows: &[(Source, Site)],
+) -> BTreeSet<Site> {
     fed_only_by(offers, flows, |arg| match arg {
-        Atom::Value(value) => offers.get(&Site::Value(*value)) == Some(&Offer::Fixed(Repr::Nat)),
+        Atom::Value(value) => {
+            offers.get(&Site::Value(*value)) == Some(&Offer::Fixed(Repr::Nat))
+                || states(module, *value, Register::Word)
+        }
         Atom::Literal(literal) => literal_repr(literal) == Repr::Nat,
         Atom::Filler => true,
         Atom::Fun(_) => false,
     })
 }
 
-/// The open sites a float register may hold: those every argument reaching them is a float already — a float literal, a filler, a definition producing a float, or another such site.
-fn float_params(offers: &BTreeMap<Site, Offer>, flows: &[(Source, Site)]) -> BTreeSet<Site> {
+/// The open sites a float register may hold: those every argument reaching them is a float already — a float literal, a filler, a definition producing a float, a reference stating one, or another such site.
+fn float_params(
+    module: &Module,
+    offers: &BTreeMap<Site, Offer>,
+    flows: &[(Source, Site)],
+) -> BTreeSet<Site> {
     fed_only_by(offers, flows, |arg| match arg {
-        Atom::Value(value) => offers.get(&Site::Value(*value)) == Some(&Offer::Fixed(Repr::Flt)),
+        Atom::Value(value) => {
+            offers.get(&Site::Value(*value)) == Some(&Offer::Fixed(Repr::Flt))
+                || states(module, *value, Register::Float)
+        }
         Atom::Literal(literal) => literal_repr(literal) == Repr::Flt,
         Atom::Filler => true,
         Atom::Fun(_) => false,
     })
+}
+
+/// Whether `value` states `register`: its type, read by erasure, says every value it holds is one ([`Register`]).
+fn states(module: &Module, value: ValueId, register: Register) -> bool {
+    module
+        .value(value)
+        .is_some_and(|definition| definition.register == Some(register))
 }
 
 /// The open sites every argument reaching them either `feeds` or is another such site.
@@ -436,9 +457,10 @@ fn fed_only_by(
             Source::Atom(Atom::Value(value)) => Some(Site::Value(*value)),
             Source::Atom(_) => None,
         };
+        // An argument that feeds the carrier itself is asked first: a stated value feeds it by its statement, whatever the fixpoint decides of its own storage.
         match (from, source) {
-            (Some(site), _) if open(&site) => reaches.entry(site).or_default().push(target),
             (_, Source::Atom(arg)) if feeds(arg) => {}
+            (Some(site), _) if open(&site) => reaches.entry(site).or_default().push(target),
             _ => dropped.push(target),
         }
     }

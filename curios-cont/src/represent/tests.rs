@@ -2,7 +2,7 @@ use {
     super::{Storage, representation},
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
-        Module, Node, NodeId, Repr, ValueExpr, ValueId,
+        Module, Node, NodeId, Register, Repr, ValueDef, ValueExpr, ValueId,
     },
     curios_num::{Floating, Natural, Rounding},
 };
@@ -512,6 +512,40 @@ fn a_parameter_every_edge_hands_a_float_is_held_in_a_register() {
     );
 }
 
+/// A reference whose type named a float states it, and feeds the register by one unbox on the edge: the stated half of the float rule, which the unstated reference above is the other side of.
+#[test]
+fn a_parameter_a_stated_float_reaches_is_held_in_a_register() {
+    let mut module = Module::new();
+    let flag = module.add_value(Some("flag".into()));
+    let stated = module.add_value_def(ValueDef {
+        debug_name: Some("stated".into()),
+        register: Some(Register::Float),
+    });
+    let joined = float_join(&mut module, vec![flag, stated], flag, Atom::Value(stated));
+
+    let representation = representation(&module);
+    assert_eq!(representation.values[&joined], Storage::Raw(Repr::Flt));
+    assert_eq!(
+        representation.values[&stated],
+        Storage::Boxed,
+        "the stated value keeps the reference it arrives as"
+    );
+}
+
+/// A stated word feeds a float register no more than an unstated reference does.
+#[test]
+fn a_parameter_a_stated_word_reaches_is_never_held_in_a_float_register() {
+    let mut module = Module::new();
+    let flag = module.add_value(Some("flag".into()));
+    let stated = module.add_value_def(ValueDef {
+        debug_name: Some("stated".into()),
+        register: Some(Register::Word),
+    });
+    let joined = float_join(&mut module, vec![flag, stated], flag, Atom::Value(stated));
+
+    assert_eq!(representation(&module).values[&joined], Storage::Boxed);
+}
+
 /// Read `value` as a float into `result`, then go on to `next`.
 fn float_read(module: &mut Module, result: ValueId, value: ValueId, next: NodeId) -> NodeId {
     module.add_node(Node::LetIntrinsic {
@@ -775,5 +809,57 @@ fn a_known_parameter_every_call_hands_a_word_is_held_in_a_word() {
     assert_eq!(
         representation(&module).values[&param],
         Storage::Raw(Repr::Nat)
+    );
+}
+
+/// The word beside the stated float: the entry's parameter arrives as a reference the host passes, and stating a word lets the known parameter it reaches ride one.
+#[test]
+fn a_known_parameter_a_stated_word_reaches_is_held_in_a_word() {
+    let mut module = Module::new();
+    let callee = module.reserve_function();
+    let param = module.add_value(Some("n".into()));
+    let sum = module.add_value(Some("sum".into()));
+    define(
+        &mut module,
+        callee,
+        "counter",
+        vec![param],
+        |module, sentinel| {
+            let done = module.add_node(Node::ApplyCont(Edge {
+                target: sentinel,
+                args: vec![Atom::Value(sum)],
+            }));
+            module.add_node(Node::LetIntrinsic {
+                result: sum,
+                op: Intrinsic::NatAdd,
+                args: vec![
+                    Atom::Value(param),
+                    Atom::Literal(Literal::Nat(Natural::from(1u32))),
+                ],
+                next: done,
+            })
+        },
+    );
+    let flag = module.add_value_def(ValueDef {
+        debug_name: Some("flag".into()),
+        register: Some(Register::Word),
+    });
+    let after = module.reserve_continuation();
+    let returned = module.add_value(Some("returned".into()));
+    let done = finish(&mut module, vec![Atom::Value(returned)]);
+    resume(&mut module, after, vec![returned], done);
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(flag)],
+        return_to: after,
+    });
+    entry(&mut module, vec![flag], call);
+
+    let decided = representation(&module).values;
+    assert_eq!(decided[&param], Storage::Raw(Repr::Nat));
+    assert_eq!(
+        decided[&flag],
+        Storage::Boxed,
+        "the entry's parameter stays the reference the host passes"
     );
 }

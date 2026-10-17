@@ -165,6 +165,7 @@ fn raw_wasm_validates_and_executes_without_binaryen() {
         ("call-result-seed", CALL_RESULT_SEED),
         ("pair-step", PAIR_STEP),
         ("captured-float", CAPTURED_FLOAT),
+        ("stated-seeds", STATED_SEEDS),
     ] {
         let args = ["prog", "a", "b", "c"];
         let raw = run_raw(source, &args);
