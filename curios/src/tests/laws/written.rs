@@ -1501,7 +1501,7 @@ const RECURSIVE: &str = "use /std/{Nat, Eq, Io};\nlet twice(c: Nat, n: Nat) -> N
 
 #[test]
 fn two_calls_of_a_recursive_function_that_differ_are_refused() {
-    // Each row compares two calls that differ in an argument, and the last two are each a candidate for the other's goal, which compares them through an implicit. A classing asked for inside a classing leaves apart what stands inside neither atom being compared, so no comparison follows the function down its own unfolding, in either checker.
+    // Each row compares two calls that differ in an argument, and the last two are each a candidate for the other's goal, which compares them through an implicit. A pair of calls is unfolded against itself once, inside a classing as anywhere, so no comparison follows the function down its own unfolding, in either checker.
     let name = "two calls of a recursive function";
     let rows = [
         "Eq()(twice(x, y), twice(2, y))",
@@ -1519,6 +1519,94 @@ fn two_calls_of_a_recursive_function_that_differ_are_refused() {
         "{RECURSIVE}\nlet solved(x: Nat, y: Nat, lemma: (@b: Nat, n: Nat, e: Eq()(n, twice(2, b))) -> Nat) -> Nat = lemma(twice(x, y), Eq/refl());\nIo/pure(())"
     );
     assert!(typecheck(&solved).is_err());
+}
+
+/// What the rows over calls met unfolded are stated under: `g`, `k` and `step` unfold to stuck `match`es, `k` and `step` holding their argument in an arm, `weigh` folds a list of a family, and two pairs of functions differ in the order of a sum and in whether `List/map`'s result type is written or solved for, which a family's name and the type it unfolds to spell two ways.
+const UNFOLDED: &str = "use /std/{Nat, Int, Bool, List, Eq, Io};
+induct T: Type | b(n: Nat) end
+induct Mode: Type | near() | far() end
+let g(n: Nat) -> Nat = match n == 3 | true => 7 | false => n end;
+let k(n: Nat, s: Bool) -> Nat = match s | true => n + 1 | false => 0 end;
+let weigh(ts: List(T)) -> Nat = List/fold(ts, 0, (t, acc) => match t | b(n) => acc + n end);
+let step(m: Nat, mode: Mode) -> Int = let up = match mode | near() => m * m > 5 | far() => false end; Nat/to_int(match up | true => 1 | false => 0 end);
+let summed(a: Nat, c: Nat, mode: Mode) -> Int = step(g(a + c), mode);
+let commuted(a: Nat, c: Nat, mode: Mode) -> Int = step(g(c + a), mode);
+let given(ps: List(Nat), mode: Mode) -> Int = step(weigh(List/map(@_, @T, ps, (n) => T/b(n))), mode);
+let solved(ps: List(Nat), mode: Mode) -> Int = step(weigh(List/map(ps, (n) => T/b(n))), mode);";
+
+/// The binders the rows over calls met unfolded are stated over, swept.
+const UNFOLDED_BINDERS: &[Binder] = &[
+    Binder {
+        name: "a",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "b",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "c",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "d",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "s",
+        type_: "Bool",
+        needs: &[],
+    },
+    Binder {
+        name: "mode",
+        type_: "Mode",
+        needs: &[],
+    },
+    Binder {
+        name: "ps",
+        type_: "List(Nat)",
+        needs: &[],
+    },
+];
+
+/// The rows over calls met unfolded, each one value spelled two ways under calls the walk unfolds before it hands them out as atoms.
+const UNFOLDED_HELD: &[&str] = &[
+    // Compared through the congruence of `Nat/to_int`, which the kernel reaches again outside the classing that compared the two stuck `match`es under it.
+    "Eq()(summed(a, c, mode), commuted(a, c, mode))",
+    "Eq()(given(ps, mode), solved(ps, mode))",
+    // Under a sum nothing pairs: the classing compares the two calls of `step`, and inside that comparison classes the calls standing in their arms, met unfolded in turn.
+    "Eq()(step(g(a + c), mode) + step(g(a + c) + 1, mode), step(g(c + a), mode) + step(g(c + a) + 1, mode))",
+    "Eq()(step(weigh(List/map(@_, @T, ps, (n) => T/b(n))), mode) + step(weigh(List/map(@_, @T, ps, (n) => T/b(n))) + 1, mode), step(weigh(List/map(ps, (n) => T/b(n))), mode) + step(weigh(List/map(ps, (n) => T/b(n))) + 1, mode))",
+    // A classing at every level of a product of products, three deep.
+    "Eq()(k(k(k(a + b, s) * k(c + d, s), s) * k(k(c + d, s) * k(a + b, s), s), s) * k(k(k(c + d, s) * k(a + b, s), s) * k(k(a + b, s) * k(c + d, s), s), s), k(k(k(d + c, s) * k(b + a, s), s) * k(k(b + a, s) * k(d + c, s), s), s) * k(k(k(b + a, s) * k(d + c, s), s) * k(k(d + c, s) * k(b + a, s), s), s))",
+];
+
+#[test]
+fn a_call_met_unfolded_inside_a_classing_is_classed() {
+    // A classing asked for inside a classing is a comparison like any other, so what it asks is no matter of where an atom stands: each row closes by `Eq/refl()` through both checkers at every order of its binders swept, and is held as a written goal and by the kernel asked alone.
+    let stated = |binders: &String| {
+        UNFOLDED_HELD
+            .iter()
+            .map(|claim| (binders.clone(), (*claim).to_owned()))
+            .collect::<Vec<_>>()
+    };
+    for binders in orders(UNFOLDED_BINDERS, 8) {
+        if let Err(failures) = closes(UNFOLDED, &stated(&binders)) {
+            panic!(
+                "a row over calls met unfolded no longer closes under `{binders}`:\n{}",
+                failures.join("\n")
+            );
+        }
+    }
+    let rows = stated(&orders(UNFOLDED_BINDERS, 1).remove(0));
+    let name = "calls met unfolded";
+    let mut found = misplaced(UNFOLDED, name, &rows, rows.len());
+    found.extend(misplaced_by_the_kernel(UNFOLDED, name, &rows, rows.len()));
+    assert!(found.is_empty(), "{}", found.join("\n"));
 }
 
 #[test]

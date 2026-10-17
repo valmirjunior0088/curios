@@ -78,9 +78,7 @@ pub(crate) struct Caches {
     /// What two terms were answered to be, asked with nothing committed (`same_uncommitted`), for the quiet stretch the sorts stand for and filed as they are, by the reduction that asked: a verdict is read through reducts, and reads the types locals are assumed at, the solutions, the levels and the equations in force, as a sort does. It is cleared wherever the sorts are, since nothing clears one and may leave the other.
     ///
     /// **Only a question that wrote nothing is filed** ([`Caches::same_insert`]'s caller holds it to that), so answering one from here leaves the context as asking it again would: no name is minted that the comparison would have minted.
-    ///
-    /// **A verdict is filed with whether a classing was asking it.** A classing made inside a question is held inside the pair a classing in progress is asking about, so a pair one is asking about and the same pair asked with none asking are two questions, and each is answered by its own.
-    same: [HashMap<(Term, Term, bool), bool>; 2],
+    same: [HashMap<(Term, Term), bool>; 2],
     /// The stamps `sorts` and `same` were filled under.
     sorts_at: ElaborationStamp,
     /// Each instance of a universe-polymorphic `rec` group reduction has opened in the declaration in progress, beside the group it instantiates and the levels it was opened at. An instance holds its levels substituted through every member, so the pair is what says which instance of which group a copy is without reading the levels back off it. It lives one declaration, as the levels' metavariables do.
@@ -251,35 +249,22 @@ impl Caches {
         self.sorts[usize::from(plain)].insert(type_, sort);
     }
 
-    /// What `this` and `that` were answered to be, in either order, where nothing was written since: as plain reduction asked where `plain`, and as a judgment's did otherwise, of a classing where `classing` and of none otherwise.
-    pub(crate) fn same_get(
-        &mut self,
-        this: &Term,
-        that: &Term,
-        classing: bool,
-        plain: bool,
-    ) -> Option<bool> {
+    /// What `this` and `that` were answered to be, in either order, where nothing was written since: as plain reduction asked where `plain`, and as a judgment's did otherwise.
+    pub(crate) fn same_get(&mut self, this: &Term, that: &Term, plain: bool) -> Option<bool> {
         self.settle_sorts();
 
         let same = &self.same[usize::from(plain)];
         if same.is_empty() {
             return None;
         }
-        same.get(&(this.clone(), that.clone(), classing))
-            .or_else(|| same.get(&(that.clone(), this.clone(), classing)))
+        same.get(&(this.clone(), that.clone()))
+            .or_else(|| same.get(&(that.clone(), this.clone())))
             .copied()
     }
 
-    pub(crate) fn same_insert(
-        &mut self,
-        this: Term,
-        that: Term,
-        classing: bool,
-        plain: bool,
-        same: bool,
-    ) {
+    pub(crate) fn same_insert(&mut self, this: Term, that: Term, plain: bool, same: bool) {
         self.settle_sorts();
-        self.same[usize::from(plain)].insert((this, that, classing), same);
+        self.same[usize::from(plain)].insert((this, that), same);
     }
 
     /// Empty the sorts and the verdicts where either stamp has moved since they were filed, and file what follows under the stamps as they stand.

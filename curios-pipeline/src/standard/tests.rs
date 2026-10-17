@@ -1107,14 +1107,8 @@ const REFUSED: [&str; 0] = [];
 /// The `let`s of the library whose printed form elaborates and is not proved to be the `let`: none.
 const UNPROVED: [&str; 0] = [];
 
-/// The `let`s of the library whose printed form or whose proof elaboration accepts and the kernel refuses, each named where its cause is filed.
-const UNCERTIFIED: [&str; 4] = [
-    // The kernel's conversion stops short of elaboration's between the body and its printed form (`documentation/roadmap/arithmetic/102-a-classing-reads-an-atom-as-its-reader-meets-it.md`).
-    "/std/Flt/signals/scaled_prod_diff",
-    "/std/Flt/signals/scaled_prod_sum",
-    "/std/Flt/significant",
-    "/std/Flt/to_str",
-];
+/// The `let`s of the library whose printed form or whose proof elaboration accepts and the kernel refuses: none.
+const UNCERTIFIED: [&str; 0] = [];
 
 /// One `#[test]` per part the library is read back in, and the number of parts [`parts_of`] deals its files into, declared from one list so the two cannot disagree.
 macro_rules! read_back_in_parts {

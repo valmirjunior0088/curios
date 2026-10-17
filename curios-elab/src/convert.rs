@@ -186,7 +186,7 @@ pub(crate) fn same_uncommitted_inside(
     Ok(same)
 }
 
-/// Which of `atoms` are one by `same`, as a classing asks of them (`curios-analysis`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about. The comparison is one conversion inside another, so it buys its depth with stack.
+/// Which of `atoms` are one by `same`, as a classing asks of them (`curios-analysis`'s `Classes::of`). The comparison is one conversion inside another, so it buys its depth with stack.
 pub(crate) fn classing(
     context: &mut Context,
     atoms: &[Term],
@@ -204,13 +204,7 @@ pub(crate) fn classing_among(
     atoms: &[Term],
     mut same: impl FnMut(&mut Context, &Term, &Term) -> Result<bool, ReduceError>,
 ) -> Result<(), ReduceError> {
-    let within = context.asked().cloned();
-    classes.join(atoms, within.as_ref(), |this, that| {
-        let stood = context.ask(Some((this.clone(), that.clone())));
-        let same = recurse(|| same(context, this, that));
-        context.ask(stood);
-        same
-    })
+    classes.join(atoms, |this, that| recurse(|| same(context, this, that)))
 }
 
 pub(crate) fn convert_outcome(

@@ -1,16 +1,12 @@
 //! The questions a judgment's reduction puts to conversion.
 //!
-//! Reduction is plain or it asks. At a stuck fold or a missed equation it may put a question to the elaborator's conversion, whose answer rests on the solutions and the level constraints that stand; a question reduction puts to conversion is itself answered by plain reduction, which is what ends the regress, and a shared analysis reads a term plainly too, since totality may rest on no verdict of conversion's. [`Asking`] is the state of that protocol: whether reduction is plain now, the two atoms a classing is asking about, whether conversion is answering a question with nothing committed, and the counts a remembered reduct is held against.
-
-use curios_core::Term;
+//! Reduction is plain or it asks. At a stuck fold or a missed equation it may put a question to the elaborator's conversion, whose answer rests on the solutions and the level constraints that stand; a question reduction puts to conversion is itself answered by plain reduction, which is what ends the regress, and a shared analysis reads a term plainly too, since totality may rest on no verdict of conversion's. [`Asking`] is the state of that protocol: whether reduction is plain now, whether conversion is answering a question with nothing committed, and the counts a remembered reduct is held against.
 
 /// Where a context stands in the protocol by which reduction asks conversion.
 #[derive(Debug, Default)]
 pub(crate) struct Asking {
     /// Whether reduction is plain: it asks the elaborator's conversion nothing.
     plain: bool,
-    /// The two atoms a classing is asking conversion about; `None` where no classing is asking.
-    asked: Option<(Term, Term)>,
     /// How many questions a judgment's reduction has put to conversion.
     questions: u64,
     /// How many of every question asked with nothing committed were declined for a commit — what a remembered reduct is held against.
@@ -77,15 +73,5 @@ impl Asking {
         if let Some(withheld) = &mut self.withheld {
             *withheld = true;
         }
-    }
-
-    /// The two atoms a classing is asking conversion about, which a classing made meanwhile is held inside (`curios_analysis::Classes::of`).
-    pub(crate) fn asked(&self) -> Option<&(Term, Term)> {
-        self.asked.as_ref()
-    }
-
-    /// Enter or leave a classing's question about two atoms, answering what stood before.
-    pub(crate) fn ask(&mut self, asked: Option<(Term, Term)>) -> Option<(Term, Term)> {
-        std::mem::replace(&mut self.asked, asked)
     }
 }

@@ -64,7 +64,7 @@ fn summands(term: &Term) -> Vec<Term> {
 }
 
 fn classes(atoms: &[Term]) -> Classes {
-    let Ok(classes) = Classes::of(atoms, None, commuted);
+    let Ok(classes) = Classes::of(atoms, commuted);
     classes
 }
 
@@ -121,36 +121,12 @@ fn a_judge_is_asked_only_about_pairs_that_may_be_one() {
         a,
     ];
     let mut asked = Vec::new();
-    let Ok(classes) = Classes::of(&atoms, None, |this, that| {
+    let Ok(classes) = Classes::of(&atoms, |this, that| {
         asked.push((this.clone(), that.clone()));
         commuted(this, that)
     });
     assert_eq!(asked, vec![(atoms[0].clone(), atoms[2].clone())]);
     assert!(joined(&classes));
-}
-
-/// A classing made while another is asking is held inside the two atoms that one asked about: a call standing inside one of them is classed, and one that stands inside neither is left an atom of its own whatever the judge would say of it, which is where the two calls of a recursive function land one unfolding on.
-///
-/// Mutation-checked: a `Classes::of` that reads no `asked` joins the two calls that stand inside nothing asked.
-#[test]
-fn a_classing_inside_another_asks_only_about_what_stands_inside_the_pair_asked() {
-    let (a, b, c) = (sym(1, "a"), sym(2, "b"), sym(3, "c"));
-    let call = |left: &Term, right: &Term| applied(10, "f", add(left.clone(), right.clone()));
-    let asked = (
-        applied(11, "g", call(&a, &b)),
-        applied(11, "g", call(&b, &a)),
-    );
-    let every = |_: &Term, _: &Term| Ok::<_, Infallible>(true);
-
-    let Ok(inside) = Classes::of(&[call(&a, &b), call(&b, &a)], Some(&asked), every);
-    assert!(joined(&inside));
-
-    let Ok(outside) = Classes::of(&[call(&a, &c), call(&c, &a)], Some(&asked), every);
-    assert!(!joined(&outside));
-
-    // The two asked about are not classed inside their own comparison.
-    let Ok(themselves) = Classes::of(&[asked.0.clone(), asked.1.clone()], Some(&asked), every);
-    assert!(!joined(&themselves));
 }
 
 #[test]
@@ -178,7 +154,7 @@ fn commuted_sums_inside_the_factors_of_an_int_product_meet_once_classed() {
     let that = int_mul(applied(11, "e", k), call(&j, &i));
     assert!(!int_same(&this, &that));
 
-    let Ok(mut classes) = Classes::of(&atoms(&this, &that), None, |_, _| Ok::<_, Infallible>(true));
+    let Ok(mut classes) = Classes::of(&atoms(&this, &that), |_, _| Ok::<_, Infallible>(true));
     let (this, that) = classed(&mut Inert, &this, &that, &mut classes)
         .expect("the inert reducer spends nothing")
         .expect("one atom joined another's class");
@@ -219,14 +195,14 @@ fn an_atom_read_later_joins_the_class_an_earlier_reading_opened() {
     };
 
     let mut classes = Classes::default();
-    let Ok(()) = classes.join(&alone(&add(first.clone(), c.clone())), None, commuted);
+    let Ok(()) = classes.join(&alone(&add(first.clone(), c.clone())), commuted);
     assert!(!joined(&classes));
     assert_eq!(
         read(&add(first.clone(), c.clone()), &mut classes),
         add(first.clone(), c.clone())
     );
 
-    let Ok(()) = classes.join(&alone(&second), None, commuted);
+    let Ok(()) = classes.join(&alone(&second), commuted);
     assert!(joined(&classes));
     assert_eq!(read(&second, &mut classes), first);
     // The sum over it is the sum the first reading met, commuted, which its own reader holds one with it.
@@ -253,8 +229,8 @@ fn an_atom_already_classed_is_asked_about_no_more() {
         commuted(this, that)
     };
     let mut classes = Classes::default();
-    let Ok(()) = classes.join(&[first.clone(), second.clone()], None, &mut counted);
-    let Ok(()) = classes.join(&[second, first], None, &mut counted);
+    let Ok(()) = classes.join(&[first.clone(), second.clone()], &mut counted);
+    let Ok(()) = classes.join(&[second, first], &mut counted);
     assert_eq!(asked, 1);
 }
 
@@ -421,8 +397,7 @@ fn a_magnitude_is_spelled_by_its_fold_over_its_classed_operand() {
         .expect("some literal ranks a call of it between the two spellings of the call");
 
     let classed_pair = |this: &Term, that: &Term| {
-        let Ok(mut classes) =
-            Classes::of(&atoms(this, that), None, |_, _| Ok::<_, Infallible>(true));
+        let Ok(mut classes) = Classes::of(&atoms(this, that), |_, _| Ok::<_, Infallible>(true));
         classed(&mut Inert, this, that, &mut classes)
             .expect("the inert reducer spends nothing")
             .expect("the second call is spelled as the first")
@@ -450,7 +425,7 @@ fn an_operation_holding_a_proof_is_handed_out_once_its_operands_are_walked() {
     let handed = atoms(&pair.0, &pair.1);
     assert_eq!(handed, vec![first, c, this.clone(), d, second, that]);
 
-    let Ok(mut classes) = Classes::of(&handed, None, |_, _| Ok::<_, Infallible>(true));
+    let Ok(mut classes) = Classes::of(&handed, |_, _| Ok::<_, Infallible>(true));
     let (classed_this, classed_that) = classed(&mut Inert, &pair.0, &pair.1, &mut classes)
         .expect("the inert reducer spends nothing")
         .expect("the second quotient joined the first's class");
@@ -556,7 +531,6 @@ fn two_calls_apart_in_a_universe_instance_are_asked_about_by_their_arguments() {
     let mut asked = Vec::new();
     let Ok(mut classes) = Classes::of(
         &[this.clone(), that.clone(), other.clone()],
-        None,
         |left, right| {
             asked.push((left.clone(), right.clone()));
             let (left, mut right) = (summands(left), summands(right));

@@ -5,7 +5,7 @@
 //! The rule is stated *generically* rather than as one arm per operation, and it is stated once for both checkers: `curios-analysis`'s `convert_intrinsics` runs the carriers' algebra and reads the congruence off the traversal that defines an intrinsic's operands, so a new operation is covered the moment it is representable. What this module keeps is the kernel's own discharge.
 
 use {
-    super::{Pairs, classing, compare, ground},
+    super::{Pairs, compare, ground},
     crate::{
         Error, Kernel, connectives_agree, connectives_agree_classed, convert_classed,
         convert_intrinsics, foreign_congruence,
@@ -103,9 +103,7 @@ pub(super) fn connectives_convert(
 /// Which of `atoms` are one: each compared at `Type` with the representative of every class opened before it, inside the pairs of the goal the pair belongs to, as an operand of the congruence is. A comparison that fails leaves nothing behind, a pair being released where the comparison of its unfoldings returns.
 fn classes(kernel: &mut Kernel, pairs: &mut Pairs, atoms: &[Term]) -> Result<Classes, Error> {
     curios_profile::profile!("convert::classes");
-    classing(kernel, atoms, |kernel, this, that| {
-        ground(kernel, pairs, this, that)
-    })
+    Classes::of(atoms, |this, that| ground(kernel, pairs, this, that))
 }
 
 /// The kernel is handed finished terms, so it prepares nothing, and it has no solving view: the elaborator's views only propose solutions, and once they are committed the two spellings agree by reduction.

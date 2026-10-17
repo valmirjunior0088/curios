@@ -59,7 +59,7 @@ use {
         Variance,
     },
     curios_utilities::{Plicity, SyntaxRegistry},
-    std::{collections::BTreeMap, fmt, mem, rc::Rc},
+    std::{collections::BTreeMap, fmt, rc::Rc},
 };
 
 /// Why the kernel refused a term.
@@ -604,8 +604,6 @@ pub struct Kernel<'s> {
     machine: bool,
     /// Whether the terms in hand are already by value: set where reduction or conversion is entered from typing, so the entries beneath read what they are handed, and put back where typing binds a `let`. See [`Kernel::by_value`].
     reading: bool,
-    /// The two atoms a classing is having compared ([`Kernel::ask`]); `None` where no classing is asking.
-    asked: Option<(Term, Term)>,
 }
 
 impl<'s> Kernel<'s> {
@@ -623,7 +621,6 @@ impl<'s> Kernel<'s> {
             assumed: Vec::new(),
             machine: true,
             reading: false,
-            asked: None,
         }
     }
 
@@ -1031,16 +1028,6 @@ impl<'s> Kernel<'s> {
     /// Whether the terms in hand are already by value.
     pub(crate) fn reads_by_value(&self) -> bool {
         self.reading
-    }
-
-    /// The two atoms a classing is having compared, which a classing made meanwhile is held inside (`curios_analysis::Classes::of`).
-    pub(crate) fn asked(&self) -> Option<&(Term, Term)> {
-        self.asked.as_ref()
-    }
-
-    /// Enter or leave a classing's question about two atoms, answering what stood before.
-    pub(crate) fn ask(&mut self, asked: Option<(Term, Term)>) -> Option<(Term, Term)> {
-        mem::replace(&mut self.asked, asked)
     }
 
     /// Run `walk` over terms that may name a `let`-bound local: the bracket typing a `let`'s tail runs in, wherever it is reached from.

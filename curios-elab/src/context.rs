@@ -1989,36 +1989,22 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Whether a classing is asking about `this` and `that`, where the pair is one a table of verdicts may answer: `Some(true)` where the pair a classing is asking about is this one, `Some(false)` where none is asking, and `None` where one is asking about another pair, inside which this question is held and its answer is that pair's as much as its own.
-    fn asked_of(&self, this: &Term, that: &Term) -> Option<bool> {
-        match self.typing.asking.asked() {
-            None => Some(false),
-            Some((left, right)) => {
-                ((left == this && right == that) || (left == that && right == this)).then_some(true)
-            }
-        }
-    }
-
     /// What `this` and `that` were answered to be, asked with nothing committed, where the context stands as it did then ([`Caches::same`]).
     pub(crate) fn remembered_same(&mut self, this: &Term, that: &Term) -> Option<bool> {
-        let classing = self.asked_of(this, that)?;
-
         self.typing
             .caches
-            .same_get(this, that, classing, self.typing.asking.plain())
+            .same_get(this, that, self.typing.asking.plain())
     }
 
-    /// Remember what the question asked at `asked` answered, where it is a verdict of the two terms alone: it wrote nothing, so answering it again from the table leaves the context as asking it again would; no question inside it was declined for a commit, which the solver's next move could answer otherwise; no pair was left apart inside its own unfolding, a verdict of that path, which is the rule the kernel files its own by; and it was held inside no other pair a classing is asking about ([`Context::asked_of`]).
+    /// Remember what the question asked at `asked` answered, where it is a verdict of the two terms alone: it wrote nothing, so answering it again from the table leaves the context as asking it again would; no question inside it was declined for a commit, which the solver's next move could answer otherwise; and no pair was left apart inside its own unfolding, a verdict of that path, which is the rule the kernel files its own by.
     pub(crate) fn remember_same(&mut self, asked: &AskedAt, this: &Term, that: &Term, same: bool) {
         if self.typing.caches.stamps_unchanged(&asked.stamps)
             && self.typing.asking.declined() == asked.declined
             && self.typing.asking.apart() == asked.apart
-            && let Some(classing) = self.asked_of(this, that)
         {
             self.typing.caches.same_insert(
                 this.clone(),
                 that.clone(),
-                classing,
                 self.typing.asking.plain(),
                 same,
             );
@@ -2043,16 +2029,6 @@ impl<'s> Context<'s> {
         self.typing.asking.note_withheld();
 
         Ok(true)
-    }
-
-    /// The two atoms a classing is asking conversion about, which a classing made meanwhile is held inside (`curios_analysis::Classes::of`).
-    pub(crate) fn asked(&self) -> Option<&(Term, Term)> {
-        self.typing.asking.asked()
-    }
-
-    /// Enter or leave a classing's question about two atoms, answering what stood before.
-    pub(crate) fn ask(&mut self, asked: Option<(Term, Term)>) -> Option<(Term, Term)> {
-        self.typing.asking.ask(asked)
     }
 
     /// The universe solver's state now, which a settlement made across a declined question is filed beside.

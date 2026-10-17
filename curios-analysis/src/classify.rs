@@ -70,14 +70,13 @@ impl Classes {
     ///
     /// **Two applications apart in their heads' universe instances are asked about by their arguments.** Each written call of a universe-polymorphic definition takes a level of its own, so `size(f(a + b))` written twice is two heads, and a checker handed the two whole compares the levels first, which no value of the two reads: an atom the walks hand out is a value of a carrier that holds no type, an operand of an operation the table declares at one or a term its reader reads at one, and a universe instance is no part of such a value ([`curios_core::same_atom`]). So `same` is asked of each pair of arguments in turn, the heads being one head already, and the two are one where every pair is.
     ///
-    /// **A classing made while another is asking is held inside what that one asked.** `asked` is the two atoms a classing in progress is having compared, where this one is made inside that comparison, and an atom is then classed only where it stands inside one of the two and is neither: every pair asked about is smaller than the pair it is asked for, so classings nest no deeper than a term does. Without it they nest without end: the two calls of a recursive function unfold to two stuck `match`es whose arms hold the calls one step on, each pair the atoms of a product nothing pairs, and comparing one pair classes the next. Those atoms come of an unfolding and stand inside nothing that was asked, so they stay two atoms, which is the refusing direction.
+    /// **A classing made inside another's question is bounded as every comparison is.** `same` is the checker's conversion, asked inside the pairs of the goal the atoms belong to, so two calls of a recursive function met one unfolding on are unfolded against each other once and are apart met again (`documentation/design/soundness/conversion-recurrence.md`). Nothing here limits what is asked, so what `same` answers of two atoms is a function of the two.
     pub fn of<E>(
         atoms: &[Term],
-        asked: Option<&(Term, Term)>,
         same: impl FnMut(&Term, &Term) -> Result<bool, E>,
     ) -> Result<Self, E> {
         let mut classes = Classes::default();
-        classes.join(atoms, asked, same)?;
+        classes.join(atoms, same)?;
         Ok(classes)
     }
 
@@ -85,13 +84,9 @@ impl Classes {
     pub fn join<E>(
         &mut self,
         atoms: &[Term],
-        asked: Option<&(Term, Term)>,
         mut same: impl FnMut(&Term, &Term) -> Result<bool, E>,
     ) -> Result<(), E> {
         for atom in atoms {
-            if asked.is_some_and(|asked| !stands_inside(atom, asked)) {
-                continue;
-            }
             if self.representatives.contains_key(atom) || self.opened.contains(atom) {
                 continue;
             }
@@ -268,12 +263,6 @@ fn one<E>(
         }
         _ => same(this, that),
     }
-}
-
-/// Whether `atom` stands inside one of the two atoms `asked` about and is neither of them.
-fn stands_inside(atom: &Term, asked: &(Term, Term)) -> bool {
-    let within = |outer: &Term| outer != atom && outer.mentions_term(atom);
-    within(&asked.0) || within(&asked.1)
 }
 
 /// Whether two atoms could convert without being identical, read off their heads once forced. A variable converts with nothing but itself, and a metavariable with nothing a comparison that solves nothing can say. Two applications are asked about where they are of one head, up to its universe instances, to as many arguments, two stuck operations where they are of one kind, and a stuck operation converts with nothing else. Any other two — a call beside a stuck `match`, which a folded recursive call and its own unfolding are — are asked about.
