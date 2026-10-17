@@ -256,6 +256,17 @@ const ROWS: &[Row] = &[
         "{}",
         "let n = m + 0; match Nat/in_range(n, 0xF0, 0xF4) | true => let _: Holds(0xF0 <= m) = True/proved(); () | false => () end",
     ),
+    // A conjunction's guard in its true arm, as each of its conjuncts: two comparisons, the bounds a point inside a box needs, and a comparison beside a range check, nested.
+    body(
+        "x: Nat, y: Nat, w: Nat, h: Nat",
+        "{}",
+        "match x < w && y < h | true => let _: Holds(x < w) = True/proved(); let _: Holds(y + 1 <= h) = True/proved(); () | false => () end",
+    ),
+    body(
+        "a: Nat, b: Nat, n: Nat",
+        "{}",
+        "match a < b && (Nat/in_range(n, 2, 9) && b <= n) | true => let _: Holds(a + 1 <= n) = True/proved(); let _: Holds(n < 10) = True/proved(); () | false => () end",
+    ),
     // A guard respelled: the goal commutes the guard's sum, and the guard's own equation answers it.
     body(
         "a: Nat, b: Nat",
@@ -612,6 +623,12 @@ const CONTROLS: &[Row] = &[
         "Holds(f(m))",
     ),
     claim("b: Bool, c: Bool, p: Holds(b && c)", "Holds(c)"),
+    // A conjunction's guard in its false arm, which is a disjunction of the conjuncts' failures.
+    body(
+        "x: Nat, w: Nat, y: Nat, h: Nat",
+        "{}",
+        "match x < w && y < h | true => () | false => let _: Holds(w <= x) = True/proved(); () end",
+    ),
     // An equation no fact states, and one only symmetry would reach.
     claim("a: Nat, b: Nat", "Eq()(a, b)"),
     claim("a: Nat, b: Nat, p: Eq()(b, a)", "Eq()(a, b)"),

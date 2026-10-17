@@ -369,6 +369,10 @@ pub struct EntailmentSyntax {
     pub range: SyntaxName,
     /// The range check `range` reads, which a guard's written spelling is opened to: its bounds are proved over the arguments the guard's key spells, the one spelling both checkers record.
     pub in_range: SyntaxName,
+    /// A conjunction's first conjunct, from a proof of the whole: how a conjunction's guard is read in its true arm, where a split on the first conjunct would meet the guard's own key.
+    pub and_first: SyntaxName,
+    /// Its second conjunct, read the same way.
+    pub and_second: SyntaxName,
     /// The order vocabulary at `Nat`.
     pub nat: OrderSyntax,
     /// The order vocabulary at `Int`.
@@ -389,18 +393,29 @@ impl EntailmentSyntax {
             sym,
             range,
             in_range,
+            and_first,
+            and_second,
             nat,
             int,
             natural,
             integer,
         } = self;
 
-        [holds_of_eq, refl, equality, sym, range, in_range]
-            .into_iter()
-            .chain(nat.targets())
-            .chain(int.targets())
-            .chain(natural.targets())
-            .chain(integer.targets())
+        [
+            holds_of_eq,
+            refl,
+            equality,
+            sym,
+            range,
+            in_range,
+            and_first,
+            and_second,
+        ]
+        .into_iter()
+        .chain(nat.targets())
+        .chain(int.targets())
+        .chain(natural.targets())
+        .chain(integer.targets())
     }
 }
 

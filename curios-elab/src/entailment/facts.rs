@@ -5,7 +5,7 @@
 //! - A hypothesis in scope whose type reduces to a decided comparison, a conjunction of comparisons — `&&`, and any `Bool` function unfolding to one as `in_range` and `Char/is_upper` do — or an equation at `Nat` or `Int`.
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
-//! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
+//! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, a range check's true arm, through `le/of_in_range`, and a conjunction's true arm, each conjunct through `and/first` or `and/second`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
 //! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]). A subtraction, a `min` and a `max` are read too through what both of their cases state and conversion decides — `a - b <= a`, a `min` at most each operand, a `max` at least each — and an `abs` and a `sign` through what every case states and a lemma of their module proves — a magnitude at least its operand and its negation, a sign within one of zero — asked where the facts alone leave an assignment and before any case is opened, so a bound the facts prove is proved as it was and one that turns on no case opens none.
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs. A product of two sums, which the fold leaves standing, is read distributed ([`Reader::side`]).
 //! - Where their products leave an assignment too, a disequality the scope states — an `==` guard's false arm, a `!=` guard's true one, a hypothesis or a field stating either, `Bool/not` of an equality among them — as the strict bound conversion holds it to be, `n != 0` being `0 < n`, proved by what states it, and otherwise through the two cases the order of its sides makes ([`Reader::distinct`]); and a `!=` guard's false arm as the equation it is ([`disequalities`]). Read last and by a reader of its own, so what the scope kept hands out no atom, class or spelling a search before it reads ([`Kept`]).
@@ -528,7 +528,7 @@ impl<'a> Reader<'a> {
 
     /// The guards live now — the arm's at insertion, the birth's at a retry, since the caller installed those.
     ///
-    /// **A guard's fact is proved at the spelling reduction gives the guard.** `qed` checks against a guard wherever the arm's equation answers the statement it is given, and an equation answers every term conversion holds equal to its key (`reduce`'s `refined_reduct`), so the fact is written over the guard's reduct, taken with the guard's own refinement withheld so that the arm does not answer `true` for it: `i < m` written through `Cmp` is read as the `Nat/lt` comparison it reduces to. A range check in its true arm is the one guard read from its written spelling, opened by its heads alone ([`opened`]) — `Char/is_upper(c)` to the `in_range` call it makes — because its two bounds are `le/of_in_range`'s to give and no reduct of it. In its false arm it is read by its reduct like any other guard: a comparison where the check is from zero, its lower bound folding away.
+    /// **A guard's fact is proved at the spelling reduction gives the guard.** `qed` checks against a guard wherever the arm's equation answers the statement it is given, and an equation answers every term conversion holds equal to its key (`reduce`'s `refined_reduct`), so the fact is written over the guard's reduct, taken with the guard's own refinement withheld so that the arm does not answer `true` for it: `i < m` written through `Cmp` is read as the `Nat/lt` comparison it reduces to. A range check and a conjunction in their true arms are the guards read from their written spellings, opened by their heads alone ([`opened`]) — `Char/is_upper(c)` to the `in_range` call it makes — because a range check's two bounds are `le/of_in_range`'s to give and a conjunction's conjuncts `and/first`'s and `and/second`'s, and no reduct of either. A range check in its false arm is read by its reduct like any other guard: a comparison where the check is from zero, its lower bound folding away.
     ///
     /// A guard written through a concept is recorded as written and as the dispatch resolves, two spellings of one fact, and is read once.
     fn guards(&mut self, context: &mut Context) -> Result<(), Error> {
@@ -556,6 +556,9 @@ impl<'a> Reader<'a> {
                     let qed = qed(context);
                     self.range(context, range, qed, origin, &written)?;
                 }
+                (Some(Opened::Conjunction(first, second)), _) if case => {
+                    self.conjuncts(context, &first, &second, origin, &written)?;
+                }
                 (_, Subterm::Intrinsic(comparison)) => {
                     self.guard(context, comparison, case, &written, origin)?;
                 }
@@ -563,6 +566,28 @@ impl<'a> Reader<'a> {
             }
         }
         Ok(())
+    }
+
+    /// The conjuncts of a conjunction's guard in its true arm, each through `and/first` or `and/second` over the guard's `qed`: a split on the first conjunct, which [`Reader::conjunction`] makes for a hypothesis, would meet the guard's own key, which answers `true` for the whole conjunction and never unfolds it. Each conjunct is then read as a decision a hypothesis holds, so a conjunction of comparisons, range checks and conjunctions is read to its comparisons.
+    fn conjuncts(
+        &mut self,
+        context: &mut Context,
+        first: &Term,
+        second: &Term,
+        origin: Origin,
+        written: &Term,
+    ) -> Result<(), Error> {
+        let entailment = context.syntax().entailment;
+        let (and_first, and_second) = (entailment.and_first, entailment.and_second);
+        if !in_scope(context, &[and_first, and_second]) {
+            self.read.unread.push((origin, written.clone()));
+            return Ok(());
+        }
+        let qed = qed(context);
+        let conjunct =
+            |lemma| Term::apply(global(lemma), [first.clone(), second.clone(), qed.clone()]);
+        self.decision(context, first, first, conjunct(and_first), origin.clone())?;
+        self.decision(context, second, second, conjunct(and_second), origin)
     }
 
     /// One comparison guard, by the case it took.
