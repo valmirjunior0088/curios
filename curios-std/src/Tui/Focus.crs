@@ -1,0 +1,44 @@
+use /std/{Nat, Bool, List};
+use /std/ops/{Eql};
+use /std/Tui/{Key};
+use /std/Bool/{Holds};
+
+--- The one of a program's parts that holds the keys, by its label: a ring over the labels a program names, which Tab moves on and Shift with Tab back, from either end round to the other.
+pub struct Focus(P: Type): pub Type {
+    labels: List(P),
+    at: Nat,
+    @inside: Holds(at < List/len(labels)),
+}
+
+--- `first` holding the keys, and `rest` after it in the ring.
+pub let new(@P: Type, first: P, rest: List(P)) -> Focus(P) =
+    Focus { labels = [first, ..rest], at = 0 };
+
+--- The label holding the keys.
+pub let current(@P: Type, f: Focus(P)) -> P =
+    List/get(f.labels, f.at);
+
+--- Whether `p` holds the keys.
+pub let holds(@P: Type, use Eql(P), f: Focus(P), p: P) -> Bool =
+    current(f) == p;
+
+--- The keys on to the next label, and from the last to the first.
+pub let next(@P: Type, f: Focus(P)) -> Focus(P) =
+    match f.at + 1 < List/len(f.labels)
+    | true => Focus { labels = f.labels, at = f.at + 1 }
+    | false => Focus { labels = f.labels, at = 0 }
+    end;
+
+--- The keys back to the label before, and from the first to the last.
+pub let prev(@P: Type, f: Focus(P)) -> Focus(P) =
+    match f.at
+    | 0 => Focus { labels = f.labels, at = List/len(f.labels) - 1 }
+    | k + 1 => Focus { labels = f.labels, at = k }
+    end;
+
+--- Tab moves the keys on and Shift with Tab back; any other key leaves them where they are.
+pub let handle(@P: Type, f: Focus(P), k: Key) -> Focus(P) =
+    match k.code
+    | tab() => match k.shift | true => prev(f) | false => next(f) end
+    | _ => f
+    end;

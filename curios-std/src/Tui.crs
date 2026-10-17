@@ -63,13 +63,17 @@ pub use render/{let render};
 pub mod Session;
 pub use Session/{let Session};
 
---- A list with one selected entry.
+--- Items of any type, one of them selected, and the rows they are shown from.
 pub mod Listing;
 pub use Listing/{let Listing};
 
 --- A single line of text being edited.
 pub mod Field;
 pub use Field/{let Field};
+
+--- Which of a program's parts holds the keys.
+pub mod Focus;
+pub use Focus/{let Focus};
 
 --- What an `update` asks the loop to do beside the new model.
 pub mod Directive;

@@ -358,7 +358,7 @@ fn a_program_outlives_the_end_of_its_input() {
 pub(super) const LISTING_PROGRAM: &str = r#"
         use /std/{Nat, Str, Bool, List, Option, Try, Io, Show, Tui};
         use /std/Tui/{Style, Pane, Key, Event, Directive, Listing};
-        let app: Tui(Listing, Nat) =
+        let app: Tui(Listing(Str), Nat) =
             Tui {
                 init = (Listing/new(["one", "two", "three"]), Directive/none()),
                 update(model, event) =
@@ -366,11 +366,11 @@ pub(super) const LISTING_PROGRAM: &str = r#"
                     | input(key(k)) =>
                         match k.code
                         | char(c) => match c == 'q' | true => (model, Directive/quit()) | false => (model, Directive/none()) end
-                        | _ => (Listing/move(model, k.code), Directive/none())
+                        | _ => (Listing/handle(model, k, 3), Directive/none())
                         end
                     | _ => (model, Directive/none())
                     end,
-                view(model) = Pane/border(Style/plain, "pick", Listing/view(model, Style/plain, Style { ..Style/plain, reverse = true })),
+                view(model) = Pane/border(Style/plain, "pick", Listing/view(model, (s: Str) => s, Style/plain, Style { ..Style/plain, reverse = true })),
             };
         let program() -> Io({}) =
             let outcome = Try/run(Tui/run(app))!;
@@ -519,4 +519,89 @@ fn a_size_the_terminal_reports_reaches_update_as_an_input() {
     let output = String::from_utf8_lossy(&io.output()).into_owned();
     assert!(output.contains("\x1b[?2048h"), "{output:?}");
     assert!(output.ends_with("\x1b[?1049l8"), "{output:?}");
+}
+
+// A whole program of the widgets: a field that filters a listing, each in a bordered pane under `Pane/rows`, the keys going to whichever the focus holds. It types a letter, sits through a resize, moves the focus to the listing and down it, and saves the selection and quits in one update.
+const PICKER_PROGRAM: &str = r#"
+        use /std/{Nat, Str, List, Option, Try, Tui, Io, print};
+        use /std/ops/{Eql};
+        use /std/Tui/{Style, View, Pane, Key, Input, Event, Directive, Listing, Field, Focus};
+
+        induct Part: Type
+        | filter()
+        | items()
+        end
+
+        satisfy Eql(Part) {
+            ..
+        }
+
+        struct Model: Type {
+            field: Field,
+            listing: Listing(Str),
+            focus: Focus(Part),
+        }
+
+        let fruit: List(Str) = ["apple", "banana", "blueberry", "cherry"];
+
+        let matching(f: Field) -> Listing(Str) =
+            Listing/new(List/filter(fruit, (s: Str) => Str/starts_with(s, f.text)));
+
+        let save(chosen: Option(Str)) -> Io(Nat) =
+            let _ = print(Str/concat("saved ", Option/unwrap_or(chosen, "nothing")))!;
+            Io/pure(0);
+
+        let reacted(m: Model, k: Key) -> {Model, Directive(Nat)} =
+            choose
+            | k.code == Key/Code/tab() => (Model { ..m, focus = Focus/handle(m.focus, k) }, Directive/none())
+            | k.ctrl && k.code == Key/Code/char('s') =>
+                (m, Directive/batch([Directive/perform(save(Listing/selected(m.listing))), Directive/quit()]))
+            | Focus/holds(m.focus, Part/filter()) =>
+                let field = Field/handle(m.field, k);
+                (Model { ..m, field = field, listing = matching(field) }, Directive/none())
+            | _ => (Model { ..m, listing = Listing/handle(m.listing, k, 3) }, Directive/none())
+            end;
+
+        let marked: Style = Style { ..Style/plain, reverse = true };
+
+        let app: Tui(Model, Nat) =
+            Tui {
+                init = (
+                    Model { field = Field/empty, listing = matching(Field/empty), focus = Focus/new(Part/filter(), [Part/items()]) },
+                    Directive/none()),
+                update(model, event) =
+                    match event
+                    | input(key(k)) => reacted(model, k)
+                    | _ => (model, Directive/none())
+                    end,
+                view(model) =
+                    Pane/rows([
+                        (Pane/Constraint/length(3), Pane/border(Style/plain, "find", Field/view(model.field, Style/plain))),
+                        (Pane/Constraint/fill(1), Pane/border(Style/plain, "fruit", Listing/view(model.listing, (s: Str) => s, Style/plain, marked)))]),
+            };
+
+        let program() -> Io({}) =
+            let result = Try/run(Tui/run(app))!;
+            print(match result | success(m) => Str/concat(" with ", m.field.text) | failure(_) => " failed" end);
+        program()
+    "#;
+
+// The program's frames, its cursor and its answer: the first frame whole and the resize's whole again, the terminal's cursor in the field past the letter typed, the save run with the selection the keys moved to, and the field's text answered.
+#[test]
+fn a_whole_program_of_widgets_runs_against_the_scripted_terminal() {
+    let (host, io) = MockHost::builder()
+        .tty_sizes([(20, 10), (24, 10)])
+        .stdin_chunks(vec![SYNCHRONIZED.to_vec(), b"b".to_vec()])
+        .stdin_pause()
+        .stdin_chunks(vec![b"\t".to_vec(), b"\x1b[B".to_vec(), b"\x13".to_vec()])
+        .mono((0..1_000).map(|millis| (millis / 1_000, millis % 1_000 * 1_000_000)))
+        .build();
+    run_text(PICKER_PROGRAM, host).expect("the run ends");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert_eq!(output.matches("\x1b[2J").count(), 2, "{output:?}");
+    assert!(output.contains("┌\x1b[1;2Hfind"), "{output:?}");
+    assert!(output.contains("\x1b[2;3H\x1b[?25h"), "{output:?}");
+    assert!(output.contains("saved blueberry"), "{output:?}");
+    assert!(output.ends_with("\x1b[?1049l with b"), "{output:?}");
+    assert_eq!(io.raw_modes(), vec![true, false]);
 }

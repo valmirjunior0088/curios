@@ -2,67 +2,79 @@ use /std/{Nat, Str, List, Option};
 use /std/Tui/{Style, View, Pane, Key};
 use /std/Bool/{Holds};
 
---- Items with one selected, or none when there are no items.
-pub struct Listing: pub Type {
-    items: List(Str),
+--- Items of any type, one of them selected where there are any, and the first of them shown: a selection that leaves the rows shown scrolls them as little as brings it back, and one that moves within them leaves them where they are.
+pub struct Listing(A: Type): pub Type {
+    items: List(A),
     cursor: Option({i: Nat, ok: Holds(i < List/len(items))}),
+    first: Nat,
 }
 
-let at(items: List(Str), i: Nat) -> Option({i: Nat, ok: Holds(i < List/len(items))}) =
+let at(@A: Type, items: List(A), i: Nat) -> Option({i: Nat, ok: Holds(i < List/len(items))}) =
     match Nat/lt/try(i, List/len(items))
     | none() => Option/none()
     | some(ok) => Option/some((i = i, ok = ok))
     end;
 
---- `items` with the first selected.
-pub let new(items: List(Str)) -> Listing =
-    Listing { items = items, cursor = at(items, 0) };
+--- `items` with the first selected and shown first.
+pub let new(@A: Type, items: List(A)) -> Listing(A) =
+    Listing { items = items, cursor = at(items, 0), first = 0 };
 
 --- The selected index, or `none`.
-pub let index(l: Listing) -> Option(Nat) =
+pub let index(@A: Type, l: Listing(A)) -> Option(Nat) =
     Option/map(l.cursor, (c) => c.i);
 
 --- The selected item, or `none`.
-pub let selected(l: Listing) -> Option(Str) =
-    Option/map(l.cursor, (c) => List/get(@Str, l.items, c.i, @c.ok));
+pub let selected(@A: Type, l: Listing(A)) -> Option(A) =
+    Option/map(l.cursor, (c) => List/get(@A, l.items, c.i, @c.ok));
 
---- Up, down, home and end move the selection; any other key leaves it. A move past either end is not taken.
-pub let move(l: Listing, code: Key/Code) -> Listing =
+-- The first row shown once `i` is selected among `rows` of them: `first`, moved as little as keeps `i` among them.
+let kept(first: Nat, i: Nat, rows: Nat) -> Nat =
+    choose | i < first => i | first + rows <= i => i + 1 - rows | _ => first end;
+
+--- What `k` does to the listing shown `rows` high: up and down move the selection an item, page up and page down a page, home and end to either end, and the rows shown scroll so the selection stays among them. A move past either end goes no further than the end; a key with a modifier, and any other, leaves the listing.
+pub let handle(@A: Type, l: Listing(A), k: Key, rows: Nat) -> Listing(A) =
     match l.cursor
     | none() => l
     | some(c) =>
-        let to(i: Nat) -> Listing =
+        let last = List/len(l.items) - 1;
+        let to(i: Nat) -> Listing(A) =
             match at(l.items, i)
             | none() => l
-            | some(next) => Listing { ..l, cursor = Option/some(next) }
+            | some(next) =>
+                Listing {
+                    items = l.items,
+                    cursor = Option/some(next),
+                    first = kept(l.first, i, rows) }
             end;
-        match code
-        | up() => match c.i | 0 => l | p + 1 => to(p) end
-        | down() => to(c.i + 1)
-        | home() => to(0)
-        | end_key() => to(List/len(l.items) - 1)
-        | _ => l
+        choose
+        | k.shift || k.alt || k.ctrl || k.super => l
+        | _ =>
+            match k.code
+            | up() => match c.i | 0 => l | p + 1 => to(p) end
+            | down() => to(c.i + 1)
+            | page_up() => to(c.i - rows)
+            | page_down() => to(Nat/min(c.i + rows, last))
+            | home() => to(0)
+            | end_key() => to(last)
+            | _ => l
+            end
         end
     end;
 
---- The items as rows, the selected one in `highlight`, scrolled so the selection is in view. A listing with nothing selected highlights no row and draws from the top.
-pub let view(l: Listing, style: Style, highlight: Style) -> Pane =
+--- The items as rows, each as `show` writes it, the selected one in `highlight`: from the first row the listing keeps, moved as little as keeps the selection among the rows at the height it is given. A listing with nothing selected highlights no row.
+pub let view(@A: Type, l: Listing(A), show: (A) -> Str, style: Style, highlight: Style) -> Pane =
     (w, h) =>
         let chosen = index(l);
-        let first =
-            match chosen
-            | some(i) => match i < h | true => 0 | false => i + 1 - h end
-            | none() => 0
-            end;
+        let first = match chosen | some(i) => kept(l.first, i, h) | none() => l.first end;
         let shown =
             List/take(
                 List/drop_while(
                     List/zip(List/range(0, List/len(l.items)), l.items),
                     (e) => e.0 < first),
                 h);
-        let row(entry: {Nat, Str}) -> View(w, 1) =
+        let row(entry: {Nat, A}) -> View(w, 1) =
             let s = match chosen == Option/some(entry.0) | true => highlight | false => style end;
-            View/fit(View/text(s, entry.1), w, 1);
+            View/fit(View/text(s, show(entry.1)), w, 1);
         let none: {h: Nat, view: View(w, h)} = (h = 0, view = View/blank(w, 0));
         let stacked =
             List/fold(
