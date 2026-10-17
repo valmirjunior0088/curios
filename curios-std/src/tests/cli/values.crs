@@ -1,0 +1,100 @@
+-- What each kind of argument reads into, read back by name at the type the declaration decides, and what stands for one the line leaves out.
+use /std/{Cli, Str, Nat, Int, Bool, Option, List, Map, Test};
+
+induct Format: Type
+| json()
+| text()
+end
+
+let tool: Cli =
+    Cli/declare(
+        Cli/leaf(
+            "tool",
+            "Exercise every kind",
+            [
+                Cli/Field { ..Cli/flag("verbose", "Log more"), short = Option/some('v') },
+                Cli/Field { ..Cli/count("quiet", "Log less"), short = Option/some('q') },
+                Cli/toggle("color", true, "Color the output"),
+                Cli/Field {
+                    ..Cli/default("port", Cli/nat, 8080, "Port"),
+                    env = Option/some("PORT") },
+                Cli/optional("tag", Cli/str, "A tag"),
+                Cli/many("header", Cli/str, "Repeatable"),
+                Cli/choice(
+                    "format",
+                    [
+                        Cli/Alternative { long = "json", help = "As JSON", value = Format/json() },
+                        Cli/Alternative { long = "text", help = "As text", value = Format/text() }],
+                    Cli/Presence/default(Format/text()),
+                    "How to write it")],
+            Cli/Positionals {
+                required = [Cli/positional("root", Cli/str, "Where")],
+                optional = [Cli/positional("shift", Cli/int, "By how much")],
+                rest = Option/some(Cli/positional("extra", Cli/str, "Anything after")) }),
+        Option/none());
+
+let format(f: Format) -> Str =
+    match f | json() => "json" | text() => "text" end;
+
+let listed(items: List(Str)) -> Str =
+    match items | [] => "-" | _ => Str/join(",", items) end;
+
+-- Every slot of a parse, one word each.
+let read(argv: List(Str), env: Map(Str, Str)) -> Str =
+    match Cli/parse(tool, argv, env)
+    | parsed(p) =>
+        Str/join(" ", [
+            Bool/to_str(Cli/get(p, "verbose")),
+            Nat/to_str(Cli/get(p, "quiet")),
+            Bool/to_str(Cli/get(p, "color")),
+            Nat/to_str(Cli/get(p, "port")),
+            Option/unwrap_or(Cli/get(p, "tag"), "-"),
+            listed(Cli/get(p, "header")),
+            format(Cli/get(p, "format")),
+            Cli/get(p, "root"),
+            match Cli/get(p, "shift") | some(n) => Int/to_str(n) | none() => "-" end,
+            listed(Cli/get(p, "extra"))])
+    | refused(_, f) =>
+        match f
+        | conflict(names) => Str/concat("conflict ", Str/join(" ", names))
+        | _ => "refused"
+        end
+    | _ => "asked"
+    end;
+
+-- Nothing given: a flag is false, a count zero, a toggle its fallback, a default its value, an optional absent, a repeated option empty, and a choice its default.
+test an_argument_the_line_leaves_out_reads_as_its_kind_says =
+    Test/equal(read(["/srv"], Map/empty()), "false 0 true 8080 - - text /srv - -");
+
+-- Each kind given: a cluster sets the flag and counts the count, the last switch stands, the last value of an option stands, a repeated option keeps every value in order, a choice its alternative, and the positionals fill in their order.
+test each_kind_reads_what_the_line_gives_it =
+    Test/equal(
+        read(
+            ["-vqq", "--no-color", "--color", "--no-color", "--port", "1", "--port=2", "--tag", "x",
+                "--header", "a", "--header", "b", "--json", "/srv", "-3", "c", "--", "-d"],
+            Map/empty()),
+        "true 2 false 2 x a,b json /srv -3 c,-d");
+
+-- A declared variable stands for an option the line leaves out, and the line wins where it gives one.
+test a_variable_stands_for_an_option_the_line_leaves_out =
+    Test/all([
+        Test/equal(
+            read(["/srv"], Map/of_list([("PORT", "7070")])),
+            "false 0 true 7070 - - text /srv - -"),
+        Test/equal(
+            read(["--port", "1", "/srv"], Map/of_list([("PORT", "7070")])),
+            "false 0 true 1 - - text /srv - -")]);
+
+-- Two alternatives of one choice are refused together, by their names.
+test alternatives_of_one_choice_are_refused_together =
+    Test/equal(read(["--json", "--text", "/srv"], Map/empty()), "conflict --json --text");
+
+-- A closed set reads a value by its name and refuses any other with the names there are.
+test a_closed_set_reads_by_name_and_refuses_the_rest =
+    let level: Cli/Value = Cli/one_of("L", [("low", 1), ("high", 9)]);
+    Test/all([
+        Test/equal(match level.read("high") | success(_) => "read" | failure(r) => r end, "read"),
+        Test/equal(
+            match level.read("mid") | success(_) => "read" | failure(r) => r end,
+            "expected one of low, high, found 'mid'"),
+        Test/equal(level.choices, ["low", "high"])]);

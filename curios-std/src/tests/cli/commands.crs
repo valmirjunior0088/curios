@@ -1,0 +1,91 @@
+-- How a group chooses its command: its own options before the word, the command the word names after it, and the parse of the command read back through `command`.
+use /std/{Cli, Str, Bool, Option, List, Map, Test};
+
+let deps: Cli =
+    Cli/declare(
+        Cli/group(
+            "deps",
+            "Manage dependencies",
+            [Cli/flag("dry", "Change nothing")],
+            [
+                Cli/leaf(
+                    "add",
+                    "Add a dependency",
+                    [Cli/flag("dev", "Only to develop")],
+                    Cli/positionals([Cli/positional("name", Cli/str, "What to add")])),
+                Cli/group(
+                    "registry",
+                    "Manage registries",
+                    [],
+                    [Cli/leaf("list", "List them", [], Cli/positionals([]))])]),
+        Option/some("1.0.0"));
+
+let read(argv: List(Str)) -> Str =
+    match Cli/parse(deps, argv, Map/empty())
+    | parsed(p) =>
+        let dry = Bool/to_str(Cli/get(p, "dry"));
+        match Cli/command(p, "add")
+        | some(a) => Str/join(" ", [dry, "add", Bool/to_str(Cli/get(a, "dev")), Cli/get(a, "name")])
+        | none() =>
+            match Cli/command(p, "registry")
+            | some(r) =>
+                match Cli/command(r, "list")
+                | some(_) => Str/concat(dry, " registry list")
+                | none() => "none"
+                end
+            | none() => "none"
+            end
+        end
+    | help(path) => Str/concat("help ", Str/join(" ", path))
+    | version(text) => Str/concat("version ", text)
+    | refused(path, f) =>
+        Str/flatten([
+            "refused in ",
+            Str/join(" ", path),
+            ": ",
+            match f
+            | unknown_command(w, near, known) =>
+                Str/flatten([
+                    "unknown ", w,
+                    match near | some(n) => Str/concat(" near ", n) | none() => "" end,
+                    " of ",
+                    Str/join(",", known)])
+            | missing_command(known) => Str/concat("missing of ", Str/join(",", known))
+            | unknown_option(t, _) => Str/concat("unknown option ", t)
+            | _ => "other"
+            end])
+    end;
+
+-- A group's options come before the word that names its command, and the command's after it, to any depth.
+test a_group_reads_its_options_then_hands_the_rest_to_its_command =
+    Test/all([
+        Test/equal(read(["--dry", "add", "--dev", "curios"]), "true add true curios"),
+        Test/equal(read(["add", "curios"]), "false add false curios"),
+        Test/equal(read(["registry", "list"]), "false registry list")]);
+
+-- A group's option after the word is the command's to read, and the command has none of that name.
+test an_option_after_the_word_is_the_commands =
+    Test/equal(read(["add", "--dry", "curios"]), "refused in deps add: unknown option --dry");
+
+-- Help is the help of the command the line reached, named by its path.
+test help_names_the_path_that_reached_it =
+    Test/all([
+        Test/equal(read(["--help"]), "help deps"),
+        Test/equal(read(["registry", "--help"]), "help deps registry"),
+        Test/equal(read(["registry", "list", "-h"]), "help deps registry list"),
+        Test/equal(read(["registry", "list", "--version"]), "version 1.0.0")]);
+
+test a_word_that_names_no_command_is_refused_with_the_commands_there_are =
+    Test/all([
+        Test/equal(read(["ad", "curios"]), "refused in deps: unknown ad near add of add,registry"),
+        Test/equal(read([]), "refused in deps: missing of add,registry"),
+        Test/equal(read(["registry"]), "refused in deps registry: missing of list")]);
+
+-- A group's help lists its commands.
+test a_groups_help_lists_its_commands =
+    Test/equal(
+        Cli/help(deps, ["deps"]),
+        Str/flatten(["Manage dependencies\n\n", "Usage: deps [--dry] <COMMAND>\n\n", "Options:\n",
+            "      --dry      Change nothing\n", "  -h, --help     Print help\n",
+            "      --version  Print version\n\n", "Commands:\n", "  add       Add a dependency\n",
+            "  registry  Manage registries\n\n"]));

@@ -6,7 +6,7 @@
 
 - **A bare `unreachable` for every trap makes an overflow, a bad index and a compiler bug one engine message with no Curios in it**, under a backtrace inlining collapses to `func/main`. A call to an import is a side effect no optimizer removes, so the message survives Binaryen, shows in `wonder stage wasm`, and reaches both runtimes by construction.
 - **Classes are grouped by what a reader can act on.** A code per site is knowable and not actionable and would pin the emitter's layout into a public table; the operation is never named, since by emission `x * 2` may be a shift and a folded literal no operation at all. The IR carries the class, so a sentence is spelled once.
-- **There is no user-level `panic`.** A pure `(@A: Type, message: Str) -> A` is an axiom inhabiting every type, and an `Io` one is an exit with a message, which a program writes as a write and an exit, as `/std/Cli`'s `fail_with` does.
+- **There is no user-level `panic`.** A pure `(@A: Type, message: Str) -> A` is an axiom inhabiting every type, and an `Io` one is an exit with a message, which a program writes as a write and an exit, as `/std/Cli`'s `refuse` does.
 
 **Rejected.**
 

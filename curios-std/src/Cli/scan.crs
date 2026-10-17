@@ -1,0 +1,261 @@
+use /std/{Str, Nat, Bool, Char, List, Option, Map};
+use /std/Cli/{Failure, Field};
+
+--- What one occurrence of an option on the line was.
+pub induct Seen: pub Type
+--- A name given alone.
+| given()
+--- A switch's `--no-` name.
+| negated()
+--- A name given with this value.
+| value(text: Str)
+--- The alternative of a choice at this index.
+| picked(index: Nat)
+end
+
+-- How a name on the line reads: a built-in, or one of the options at its index.
+induct Claim: Type
+| help()
+| version()
+| switch(field: Nat)
+| negation(field: Nat)
+| valued(field: Nat)
+| alternative(field: Nat, index: Nat)
+end
+
+--- What a scan of a command's tokens found: each option's occurrences by its index, newest first, the positionals in order, what a group hands its command, and what was asked or refused.
+pub struct Raw: pub Type {
+    seen: Map(Nat, List(Seen)),
+    positionals: List(Str),
+    rest: List(Str),
+    help: Bool,
+    version: Bool,
+    failure: Option(Failure),
+}
+
+-- Every name the option `f` at `i` answers to, with how each reads.
+let claims_of(f: Field, i: Nat) -> List({Str, Claim}) =
+    let names = [f.long, ..f.aliases];
+    let short = match f.short | none() => [] | some(c) => [Str/concat("-", Str/of_char(c))] end;
+    let as(spelled: List(Str), claim: Claim) -> List({Str, Claim}) =
+        List/map(spelled, (s) => (s, claim));
+    match f.kind
+    | flag() => as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/switch(i))
+    | count() => as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/switch(i))
+    | toggle(_) =>
+        [
+            ..as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/switch(i)),
+            ..as(List/map(names, (n) => Str/concat("--no-", n)), Claim/negation(i))]
+    | option(_, _) => as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/valued(i))
+    | many(_) => as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/valued(i))
+    | choice(_, alternatives, _) =>
+        List/map(
+            List/zip(List/range(0, List/len(alternatives)), alternatives),
+            (entry) => (Str/concat("--", entry.1.long), Claim/alternative(i, entry.0)))
+    end;
+
+let claims(fields: List(Field), version: Option(Str)) -> Map(Str, Claim) =
+    Map/of_list([
+        ("--help", Claim/help()),
+        ("-h", Claim/help()),
+        ..match version | none() => [] | some(_) => [("--version", Claim/version())] end,
+        ..List/concat_map(
+            List/zip(List/range(0, List/len(fields)), fields),
+            (entry) => claims_of(entry.1, entry.0))]);
+
+-- `s` recorded against the option at `i`.
+let seen(raw: Raw, i: Nat, s: Seen) -> Raw =
+    Raw {
+        ..raw,
+        seen = Map/update(raw.seen, i, (old) => Option/some([s, ..Option/unwrap_or(old, [])])) };
+
+-- The line refused by `failure`, unless it already was: the first refusal is the one reported, and help asked later still answers.
+let refuse(raw: Raw, failure: Failure) -> Raw =
+    Raw {
+        ..raw,
+        failure = match raw.failure | some(_) => raw.failure | none() => Option/some(failure) end };
+
+let flagged(raw: Raw, claim: Claim) -> Raw =
+    match claim
+    | help() => Raw { ..raw, help = true }
+    | version() => Raw { ..raw, version = true }
+    | switch(i) => seen(raw, i, Seen/given())
+    | negation(i) => seen(raw, i, Seen/negated())
+    | alternative(i, k) => seen(raw, i, Seen/picked(k))
+    | valued(_) => raw
+    end;
+
+-- A name read off the line with what it claims: a value-taking option takes the value glued to it, or the next token whatever it looks like.
+let take(
+    raw: Raw,
+    claim: Claim,
+    spelled: Str,
+    attached: Option(Str),
+    more: List(Str),
+) -> {Raw, List(Str)} =
+    match claim
+    | valued(i) =>
+        match attached
+        | some(text) => (seen(raw, i, Seen/value(text)), more)
+        | none() =>
+            match more
+            | [] => (refuse(raw, Failure/missing_value(spelled)), [])
+            | [text, ..rest] => (seen(raw, i, Seen/value(text)), rest)
+            end
+        end
+    | _ =>
+        match attached
+        | some(_) => (refuse(raw, Failure/bad_value(spelled, "this flag takes no value")), more)
+        | none() => (flagged(raw, claim), more)
+        end
+    end;
+
+let cluster(
+    lookup: Map(Str, Claim),
+    raw: Raw,
+    chars: List(Char),
+    whole: Str,
+    more: List(Str),
+) -> {Raw, List(Str)} =
+    match chars
+    | [] => (raw, more)
+    | [c, ..rest] =>
+        let spelled = Str/concat("-", Str/of_char(c));
+        match Map/try_get(lookup, spelled)
+        | none() =>
+            cluster(
+                lookup,
+                refuse(raw, Failure/unknown_option(whole, Option/none())),
+                rest,
+                whole,
+                more)
+        | some(claim) =>
+            match claim
+            | valued(_) =>
+                let attached =
+                    match rest
+                    | [] => Option/none()
+                    | [_, .._] => Option/some(Str/flatten(List/map(rest, Str/of_char)))
+                    end;
+                take(raw, claim, spelled, attached, more)
+            | _ => cluster(lookup, flagged(raw, claim), rest, whole, more)
+            end
+        end
+    end;
+
+-- A token read as a value rather than a cluster: a dash and a digit, as a negative number is, which no short name can be.
+let numeric(token: Str) -> Bool =
+    match Str/strip_prefix(token, "-")
+    | some(body) => match Str/to_list(body) | [d, .._] => Char/is_digit(d) | [] => false end
+    | none() => false
+    end;
+
+let step(lookup: Map(Str, Claim), raw: Raw, literal: Bool, tokens: List(Str), group: Bool) -> Raw =
+    match tokens
+    | [] => Raw { ..raw, positionals = List/reverse(raw.positionals) }
+    | [token, ..more] =>
+        let positional() -> Raw =
+            match group
+            | true => Raw { ..raw, positionals = List/reverse(raw.positionals), rest = tokens }
+            | false =>
+                step(
+                    lookup,
+                    Raw { ..raw, positionals = [token, ..raw.positionals] },
+                    literal,
+                    more,
+                    group)
+            end;
+        choose
+        | literal || token == "-" || numeric(token) => positional()
+        | token == "--" => step(lookup, raw, true, more, group)
+        | some(body) = Str/strip_prefix(token, "--") =>
+            let (name, attached) =
+                match Str/split_once(body, "=")
+                | none() => (body, Option/none())
+                | some((n, v)) => (n, Option/some(v))
+                end;
+            let spelled = Str/concat("--", name);
+            match Map/try_get(lookup, spelled)
+            | none() =>
+                let known =
+                    List/filter(
+                        List/map(Map/to_list(lookup), (entry: {Str, Claim}) => entry.0),
+                        (s) => Str/starts_with(s, "--"));
+                step(
+                    lookup,
+                    refuse(raw, Failure/unknown_option(token, closest(spelled, known))),
+                    false,
+                    more,
+                    group)
+            | some(claim) =>
+                let (next, remaining) = take(raw, claim, spelled, attached, more);
+                step(lookup, next, false, remaining, group)
+            end
+        | some(body) = Str/strip_prefix(token, "-") =>
+            let (next, remaining) = cluster(lookup, raw, Str/to_list(body), token, more);
+            step(lookup, next, false, remaining, group)
+        | _ => positional()
+        end
+    end;
+
+--- `tokens` read against `fields` and the built-ins. A group stops at its first positional, the word that names its command, and hands it and what follows to the command.
+pub let scan(fields: List(Field), version: Option(Str), tokens: List(Str), group: Bool) -> Raw =
+    step(
+        claims(fields, version),
+        Raw {
+            seen = Map/empty(),
+            positionals = [],
+            rest = [],
+            help = false,
+            version = false,
+            failure = Option/none() },
+        false,
+        tokens,
+        group);
+
+-- How many single-character edits turn `a` into `b`: each row the distances of a longer prefix of `a` to every prefix of `b`.
+let distance(a: Str, b: Str) -> Nat =
+    let bs = Str/to_list(b);
+    let advance(prev: List(Nat), rest: List(Char), c: Char, left: Nat) -> List(Nat) =
+        match prev
+        | [diagonal, ..above] =>
+            match (above, rest)
+            | ([up, .._], [d, ..more]) =>
+                let here =
+                    Nat/min(
+                        Nat/min(up + 1, left + 1),
+                        diagonal + match c == d | true => 0 | false => 1 end);
+                [here, ..advance(above, more, c, here)]
+            | _ => []
+            end
+        | [] => []
+        end;
+    let last =
+        List/fold(
+            Str/to_list(a),
+            (List/range(0, List/len(bs) + 1), 1),
+            (c, state: {List(Nat), Nat}) =>
+                ([state.1, ..advance(state.0, bs, c, state.1)], state.1 + 1));
+    Option/unwrap_or(List/last(last.0), 0);
+
+--- The name of `known` nearest to `word`, where one is within two edits and closer than the word is long.
+pub let closest(word: Str, known: List(Str)) -> Option(Str) =
+    let near =
+        List/fold(
+            known,
+            Option/none(),
+            (candidate, best: Option({Str, Nat})) =>
+                let d = distance(word, candidate);
+                match best
+                | some(held) =>
+                    match d < held.1 | true => Option/some((candidate, d)) | false => best end
+                | none() => Option/some((candidate, d))
+                end);
+    match near
+    | some(found) =>
+        match found.1 <= 2 && found.1 < Str/len(word)
+        | true => Option/some(found.0)
+        | false => Option/none()
+        end
+    | none() => Option/none()
+    end;

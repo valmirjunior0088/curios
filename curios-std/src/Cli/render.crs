@@ -1,10 +1,5 @@
-use /std/{Str, Char, Nat, List, Option};
-use /std/Cli/{Prepared};
-use /std/Cli/Grammar/{Node};
-use /std/Cli/Prepared/{NamedEntry, PositionalEntry};
-
-let shout(s: Str) -> Str =
-    Str/flatten(List/map(Str/to_list(s), (c) => Str/of_char(Char/to_ascii_upper(c))));
+use /std/{Str, Nat, Bool, List, Option, Cli};
+use /std/Cli/{Command, Field, Positional, Positionals, Failure, shouted};
 
 let words(parts: List(Str)) -> Str =
     Str/join(" ", List/filter(parts, (part) => part != ""));
@@ -12,27 +7,66 @@ let words(parts: List(Str)) -> Str =
 let bracket(s: Str) -> Str =
     match s == "" | true => "" | false => Str/flatten(["[", s, "]"]) end;
 
---- The syntax follows the grammar's groups, including exclusive alternatives and nullable suffixes.
-pub let synopsis(@A: Type, tree: Node(A)) -> Str =
-    match tree
-    | pure(_) => ""
-    | flag(names) => Str/concat("--", names.long)
-    | option(names, reader, _) => Str/flatten(["--", names.long, " <", reader.metavar, ">"])
-    | positional(names, _) => Str/flatten(["<", shout(names.name), ">"])
-    | rest(names, _) => Str/flatten(["[", shout(names.name), "]..."])
-    | map(inner, _) => synopsis(inner)
-    | validate(inner, _) => synopsis(inner)
-    | product(left, right) => words([synopsis(left), synopsis(right)])
-    | choice(left, right) => Str/flatten(["(", synopsis(left), " | ", synopsis(right), ")"])
-    | optional(inner) => bracket(synopsis(inner))
-    | default(inner, _) => bracket(synopsis(inner))
-    | repeat(inner) => Str/concat(bracket(synopsis(inner)), "...")
+-- The command `path` names, the root's own name first: the deepest one the path reaches.
+let at(c: Command, path: List(Str)) -> Command =
+    let descend(c: Command, path: List(Str)) -> Command =
+        match path
+        | [] => c
+        | [next, ..more] =>
+            match c
+            | group(_, _, _, commands) =>
+                match List/find(commands, (child) => Cli/name(child) == next)
+                | some(child) => descend(child, more)
+                | none() => c
+                end
+            | leaf(_, _, _, _) => c
+            end
+        end;
+    match path | [_, ..beneath] => descend(c, beneath) | [] => c end;
+
+let visible(options: List(Field)) -> List(Field) =
+    List/filter(options, (f) => Bool/not(f.hidden));
+
+let field_synopsis(f: Field) -> Str =
+    let long = Str/concat("--", f.long);
+    match f.kind
+    | flag() => bracket(long)
+    | count() => Str/concat(bracket(long), "...")
+    | toggle(_) => bracket(Str/concat("--[no-]", f.long))
+    | option(v, presence) =>
+        let given = Str/flatten([long, " <", v.metavar, ">"]);
+        match presence | required() => given | _ => bracket(given) end
+    | many(v) => Str/concat(bracket(Str/flatten([long, " <", v.metavar, ">"])), "...")
+    | choice(_, alternatives, presence) =>
+        let spelled = Str/join(" | ", List/map(alternatives, (a) => Str/concat("--", a.long)));
+        match presence | required() => Str/flatten(["(", spelled, ")"]) | _ => bracket(spelled) end
     end;
 
-pub let usage(@A: Type, invoked: List(Str), prepared: Prepared(A)) -> Str =
-    Str/concat("Usage: ", words([Str/join(" ", invoked), synopsis(prepared.grammar.tree)]));
+let required_synopsis(p: Positional) -> Str =
+    Str/flatten(["<", shouted(p.name), ">"]);
 
-pub let section(heading: Str, rows: List({Str, Str})) -> Str =
+let optional_synopsis(p: Positional) -> Str =
+    bracket(shouted(p.name));
+
+let rest_synopsis(p: Positional) -> Str =
+    Str/concat(bracket(shouted(p.name)), "...");
+
+let synopsis(c: Command) -> List(Str) =
+    match c
+    | leaf(_, _, options, ps) =>
+        [
+            ..List/map(visible(options), field_synopsis),
+            ..List/map(ps.required, required_synopsis),
+            ..List/map(ps.optional, optional_synopsis),
+            ..match ps.rest | none() => [] | some(p) => [rest_synopsis(p)] end]
+    | group(_, _, options, _) => [..List/map(visible(options), field_synopsis), "<COMMAND>"]
+    end;
+
+--- The usage line of the command `path` names.
+pub let usage(c: Command, path: List(Str)) -> Str =
+    Str/concat("Usage: ", words([Str/join(" ", path), ..synopsis(at(c, path))]));
+
+let section(heading: Str, rows: List({Str, Str})) -> Str =
     match rows
     | [] => ""
     | [_, .._] =>
@@ -44,30 +78,116 @@ pub let section(heading: Str, rows: List({Str, Str})) -> Str =
             "\n"])
     end;
 
-let named_row(@limit: Nat, entry: NamedEntry(limit)) -> {Str, Str} =
-    let short =
-        match entry.names.short
-        | none() => "    "
-        | some(c) => Str/flatten(["-", Str/of_char(c), ", "])
-        end;
-    let value =
-        match entry.metavar | none() => "" | some(name) => Str/flatten([" <", name, ">"]) end;
-    (Str/flatten([short, "--", entry.names.long, value]), entry.names.help);
-
-let positional_row(@limit: Nat, entry: PositionalEntry(limit)) -> {Str, Str} =
-    (
-        match entry.rest
-        | true => Str/flatten(["[", shout(entry.names.name), "]..."])
-        | false => Str/flatten(["<", shout(entry.names.name), ">"])
+-- What help adds after an option's own: its default, the values it takes, the variable that stands for it, and its other names.
+let notes(f: Field) -> List(Str) =
+    [
+        ..match f.kind
+        | option(v, presence) =>
+            [
+                ..match presence
+                | default(a) => [Str/flatten(["[default: ", v.show(a), "]"])]
+                | _ => []
+                end,
+                ..match v.choices
+                | [] => []
+                | _ => [Str/flatten(["[possible values: ", Str/join(", ", v.choices), "]"])]
+                end]
+        | many(v) =>
+            match v.choices
+            | [] => []
+            | _ => [Str/flatten(["[possible values: ", Str/join(", ", v.choices), "]"])]
+            end
+        | _ => []
         end,
-        entry.names.help);
+        ..match f.env | none() => [] | some(n) => [Str/flatten(["[env: ", n, "]"])] end,
+        ..match f.aliases
+        | [] => []
+        | _ =>
+            [
+                Str/flatten([
+                    "[aliases: ",
+                    Str/join(", ", List/map(f.aliases, (n) => Str/concat("--", n))),
+                    "]"])]
+        end];
 
-pub let builtins(version: Option(Str)) -> List({Str, Str}) =
+let field_rows(f: Field) -> List({Str, Str}) =
+    let short =
+        match f.short | none() => "    " | some(c) => Str/flatten(["-", Str/of_char(c), ", "]) end;
+    let described = words([f.help, ..notes(f)]);
+    match f.kind
+    | option(v, _) => [(Str/flatten([short, "--", f.long, " <", v.metavar, ">"]), described)]
+    | many(v) => [(Str/flatten([short, "--", f.long, " <", v.metavar, ">"]), described)]
+    | toggle(_) => [(Str/flatten([short, "--[no-]", f.long]), described)]
+    | choice(_, alternatives, _) =>
+        List/map(alternatives, (a) => (Str/concat("    --", a.long), a.help))
+    | _ => [(Str/flatten([short, "--", f.long]), described)]
+    end;
+
+let builtin_rows(version: Option(Str)) -> List({Str, Str}) =
     [
         ("-h, --help", "Print help"),
         ..match version | none() => [] | some(_) => [("    --version", "Print version")] end];
 
-pub let sections(@A: Type, prepared: Prepared(A), version: Option(Str)) -> Str =
-    Str/concat(
-        section("Arguments:", List/map(prepared.metadata.positional, positional_row)),
-        section("Options:", [..List/map(prepared.metadata.named, named_row), ..builtins(version)]));
+let positional_rows(ps: Positionals) -> List({Str, Str}) =
+    [
+        ..List/map(ps.required, (p) => (required_synopsis(p), p.help)),
+        ..List/map(ps.optional, (p) => (optional_synopsis(p), p.help)),
+        ..match ps.rest | none() => [] | some(p) => [(rest_synopsis(p), p.help)] end];
+
+--- The help of the command `path` names: what it does, its usage line, and its arguments, its options and its commands.
+pub let help(c: Command, version: Option(Str), path: List(Str)) -> Str =
+    let target = at(c, path);
+    let options(fields: List(Field)) -> Str =
+        section("Options:", [
+            ..List/concat_map(visible(fields), field_rows),
+            ..builtin_rows(version)]);
+    let sections =
+        match target
+        | leaf(_, _, fields, ps) =>
+            Str/concat(section("Arguments:", positional_rows(ps)), options(fields))
+        | group(_, _, fields, commands) =>
+            Str/concat(
+                options(fields),
+                section(
+                    "Commands:",
+                    List/map(commands, (child) =>
+                        (
+                            Cli/name(child),
+                            match child | leaf(_, a, _, _) => a | group(_, a, _, _) => a end))))
+        end;
+    let about = match target | leaf(_, a, _, _) => a | group(_, a, _, _) => a end;
+    Str/flatten([about, "\n\n", usage(c, path), "\n\n", sections]);
+
+let tip(near: Option(Str), what: Str) -> Str =
+    match near
+    | none() => ""
+    | some(n) => Str/flatten(["\n\n  tip: a similar ", what, " exists: '", n, "'"])
+    end;
+
+let complaint(f: Failure) -> Str =
+    match f
+    | unknown_option(t, near) =>
+        Str/flatten(["unexpected argument '", t, "'", tip(near, "argument")])
+    | missing_value(n) => Str/flatten(["a value is required for '", n, "'"])
+    | missing_required(n) => Str/flatten(["the argument '", n, "' is required"])
+    | unexpected(t) => Str/flatten(["unexpected argument '", t, "'"])
+    | bad_value(n, r) => Str/flatten(["invalid value for '", n, "': ", r])
+    | conflict(names) => Str/concat("conflicting arguments: ", Str/join(", ", names))
+    | unknown_command(n, near, known) =>
+        Str/flatten([
+            "unrecognized subcommand '", n, "'",
+            tip(near, "subcommand"),
+            "\n  available: ",
+            Str/join(", ", known)])
+    | missing_command(known) =>
+        Str/flatten(["a subcommand is required\n  available: ", Str/join(", ", known)])
+    end;
+
+--- A refusal: what the line got wrong, the usage line of the command `path` names, and where help is.
+pub let report(c: Command, path: List(Str), f: Failure) -> Str =
+    Str/flatten([
+        "error: ",
+        complaint(f),
+        "\n\n",
+        usage(c, path),
+        "\n\nFor more information, try '--help'.\n"]);

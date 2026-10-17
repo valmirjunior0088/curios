@@ -385,36 +385,34 @@ fn a_type_valued_definitions_body_level_is_its_callers() {
     assert_eq!(typecheck(&program(large)), Ok(()));
 }
 
-// **The library's instances.** `/std/Cli` describes and parses a spec at any level: `help` prints a spec whose reader answers a type, and `parse` walks it, its private `Claim` alias keeping the levels of the `Arg` its body names. The stock readers keep their level, a `Value` being invariant in it, so a spec holds `nat` beside a reader of a type.
+// **The library's instances.** `/std/Cli` describes and parses a declaration at any level: `help` prints one whose reader answers a type, and `parse` walks it. The stock readers keep their level, a `Value` being invariant in it, so a declaration holds `nat` beside a reader of a type.
 #[test]
 fn the_command_line_parser_takes_a_spec_at_any_universe_instance() {
     let program = |body: &str| {
         format!(
             r#"
-            use /std/{{Cli, Str, Nat, List, Result, Option, Io}};
-            use /std/Cli/{{Value, Arg, Outcome, reader, option, nat, parse, help}};
-            let large: Value = reader(@Type, "T", (_) => Result/success(Nat));
-            let spec: List(Arg) = [option("t", large, "a type")];
+            use /std/{{Cli, Str, Nat, List, Result, Option, Map}};
+            use /std/Cli/{{Value, Field, reader, option, nat, parse, help}};
+            let large: Value = reader(@Type, "T", (_) => Result/success(Nat), (_) => "a type");
+            let spec: List(Field) = [option("t", large, "a type")];
+            let cli: Cli = Cli/declare(Cli/leaf("probe", "a probe", spec, Cli/positionals([])), Option/none());
             {body}
             "#
         )
     };
 
-    let described = program(
-        r#"let cli: Cli = Cli/Declaration/declare(Cli/leaf("probe", "a probe", Option/none(), Cli/record(spec), (_) => Io/pure(())));
-        /std/print(help([], cli))"#,
-    );
+    let described = program(r#"/std/print(help(cli, ["probe"]))"#);
     let printed = String::from_utf8(run(&described)).expect("help prints text");
     assert!(printed.contains("--t <T>"), "got: {printed}");
 
     let mixed = program(
-        r#"pub let mixed: List(Arg) = [option("n", nat, "a number"), option("t", large, "a type")];
+        r#"pub let mixed: List(Field) = [option("n", nat, "a number"), option("t", large, "a type")];
         /std/print("mixed")"#,
     );
     assert_eq!(typecheck(&mixed), Ok(()));
 
     let parsed = program(
-        r#"pub let parsed: Outcome(spec) = parse(spec, [], Option/none());
+        r#"pub let parsed: Cli/Reading(Cli/Parsed(cli.command)) = parse(cli, [], Map/empty());
         /std/print("parsed")"#,
     );
     assert_eq!(typecheck(&parsed), Ok(()));

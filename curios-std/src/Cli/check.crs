@@ -1,0 +1,128 @@
+use /std/{Str, Char, Bool, List, Option, Cli};
+use /std/Cli/{Command, Field, Positional, Positionals, Problem, Spelled, text_of};
+
+-- A character a name may hold: printable, and no space.
+let printable(c: Char) -> Bool =
+    let n = Char/to_nat(c);
+    Bool/not(Char/is_whitespace(c)) && 0x20 < n && (n < 0x7F || 0x9F < n);
+
+-- A name a line can write after `--`, as a command's word: something, not led by `-`, and no `=`, which would end it early.
+let writable(name: Str) -> Bool =
+    Bool/not(Str/is_empty(name)) && Bool/not(Str/starts_with(name, "-"))
+        && Str/fold(name, true, (c, held) => held && printable(c) && c != '=');
+
+-- A name help shows a positional or a choice by.
+let shown(name: Str) -> Bool =
+    Bool/not(Str/is_empty(name)) && Str/fold(name, true, (c, held) => held && printable(c));
+
+-- A variable a host can set: something, and no `=`, which would end its name early in the `NAME=VALUE` entry it crosses as.
+let variable(name: Str) -> Bool =
+    shown(name) && Bool/not(Str/contains(name, '='));
+
+-- A short name a cluster can hold, and no digit, so a negative number reads as a value.
+let clusterable(c: Char) -> Bool =
+    printable(c) && c != '-' && c != '=' && Bool/not(Char/is_digit(c));
+
+-- The names an option answers to.
+let spellings(f: Field) -> List(Spelled) =
+    let longs = List/map([f.long, ..f.aliases], Spelled/long);
+    let short = match f.short | none() => [] | some(c) => [Spelled/short(c)] end;
+    match f.kind
+    | toggle(_) => [..longs, ..List/map([f.long, ..f.aliases], Spelled/negated), ..short]
+    | choice(_, alternatives, _) => List/map(alternatives, (a) => Spelled/long(a.long))
+    | _ => [..longs, ..short]
+    end;
+
+-- The names every command answers to whatever it declares.
+let builtins(version: Option(Str)) -> List(Spelled) =
+    [
+        Spelled/long("help"),
+        Spelled/short('h'),
+        ..match version | none() => [] | some(_) => [Spelled/long("version")] end];
+
+-- Each name of `names` a line spells as another before it does, once: a switch's `--no-x` meets an option named `no-x`.
+let clashes(names: List(Spelled)) -> List(Spelled) =
+    match names
+    | [] => []
+    | [n, ..rest] =>
+        let later = clashes(rest);
+        let text = text_of(n);
+        let same = (m: Spelled) => text_of(m) == text;
+        match List/any(rest, same) && Bool/not(List/any(later, same))
+        | true => [n, ..later]
+        | false => later
+        end
+    end;
+
+-- Each name of `names` written more than once, once.
+let duplicates(names: List(Str)) -> List(Str) =
+    match names
+    | [] => []
+    | [n, ..rest] =>
+        let later = duplicates(rest);
+        match List/contains(rest, n) && Bool/not(List/contains(later, n))
+        | true => [n, ..later]
+        | false => later
+        end
+    end;
+
+-- What is wrong with one option's own names.
+let field_problems(f: Field) -> List(Problem) =
+    let longs =
+        match f.kind
+        | choice(_, alternatives, _) => List/map(alternatives, (a) => a.long)
+        | _ => [f.long, ..f.aliases]
+        end;
+    [
+        ..List/map(List/filter(longs, (n) => Bool/not(writable(n))), Problem/invalid_name),
+        ..match shown(f.long) | true => [] | false => [Problem/invalid_name(f.long)] end,
+        ..match f.short
+        | some(c) => match clusterable(c) | true => [] | false => [Problem/invalid_short(c)] end
+        | none() => []
+        end,
+        ..match f.env
+        | some(n) => match variable(n) | true => [] | false => [Problem/invalid_name(n)] end
+        | none() => []
+        end];
+
+let every(ps: Positionals) -> List(Positional) =
+    [..ps.required, ..ps.optional, ..match ps.rest | none() => [] | some(p) => [p] end];
+
+-- What is wrong with a command's own name, options and positionals, beside the built-ins.
+let own(
+    name: Str,
+    options: List(Field),
+    ps: List(Positional),
+    version: Option(Str),
+) -> List(Problem) =
+    [
+        ..match writable(name) | true => [] | false => [Problem/invalid_name(name)] end,
+        ..List/concat_map(options, field_problems),
+        ..List/map(
+            List/filter(List/map(ps, (p) => p.name), (n) => Bool/not(shown(n))),
+            Problem/invalid_name),
+        ..List/map(
+            clashes([..builtins(version), ..List/concat_map(options, spellings)]),
+            Problem/duplicate_name),
+        ..List/map(
+            duplicates([..List/map(options, (f) => f.long), ..List/map(ps, (p) => p.name)]),
+            Problem/duplicate_slot)];
+
+--- Every problem of `c` and of the commands beneath it, each beneath reported within its command.
+pub let problems(c: Command, version: Option(Str)) -> List(Problem) =
+    match c
+    | leaf(name, _, options, ps) => own(name, options, every(ps), version)
+    | group(name, _, options, commands) =>
+        [
+            ..own(name, options, [], version),
+            ..List/map(duplicates(List/map(commands, Cli/name)), Problem/duplicate_command),
+            ..beneath(commands, version)]
+    end
+and beneath(commands: List(Command), version: Option(Str)) -> List(Problem) =
+    match commands
+    | [] => []
+    | [c, ..more] =>
+        [
+            ..List/map(problems(c, version), (p) => Problem/within(Cli/name(c), p)),
+            ..beneath(more, version)]
+    end;

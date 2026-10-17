@@ -1,44 +1,51 @@
--- The two screens a command answers with: the help the specification renders into, and the refusal a bad line prints. Both are `Str`, so what they are is what a test can compare.
+-- The screens a command answers with: the help its declaration renders into, and the refusal a bad line prints. Both are `Str`, so what they are is what a test can compare.
 use /std/{Cli, Str, Option, Test};
 
 let serve: Cli =
-    Cli/Declaration/declare(
+    Cli/declare(
         Cli/leaf(
             "serve",
             "Serve a directory over HTTP",
-            Option/some("0.1.0"),
-            Cli/record([
-                Cli/Arg { ..Cli/flag("verbose", "Log every request"), short = Option/some('v') },
-                Cli/default("port", Cli/nat, 8080, "Port to listen on"),
-                Cli/positional("root", Cli/str, "Directory to serve")]),
-            (_) => /std/print("never")));
+            [
+                Cli/Field { ..Cli/flag("verbose", "Log every request"), short = Option/some('v') },
+                Cli/Field {
+                    ..Cli/default("port", Cli/nat, 8080, "Port to listen on"),
+                    env = Option/some("PORT") },
+                Cli/Field { ..Cli/flag("trace", "Log everything"), hidden = true }],
+            Cli/positionals([Cli/positional("root", Cli/str, "Directory to serve")])),
+        Option/some("0.1.0"));
 
--- The layout the specification fixes, to the space: one description, a usage line naming the options bundle and every positional, then the sections, each padded to its own widest left column. `-h` and `--version` are rows because the entry answers them, not because the program declared them.
-test help_renders_the_layout_the_specification_fixes =
+-- The layout the declaration fixes, to the space: one description, a usage line naming every option and positional, then the sections, each padded to its own widest left column. A default and a variable are said beside the option's help; a hidden option is in neither; `-h` and `--version` are rows because every command answers them.
+test help_renders_the_layout_the_declaration_fixes =
     Test/equal(
-        Cli/help([], serve),
+        Cli/help(serve, ["serve"]),
         Str/flatten(["Serve a directory over HTTP\n\n",
             "Usage: serve [--verbose] [--port <N>] <ROOT>\n\n", "Arguments:\n",
             "  <ROOT>  Directory to serve\n\n", "Options:\n",
-            "  -v, --verbose   Log every request\n", "      --port <N>  Port to listen on\n",
+            "  -v, --verbose   Log every request\n",
+            "      --port <N>  Port to listen on [default: 8080] [env: PORT]\n",
             "  -h, --help      Print help\n", "      --version   Print version\n\n"]));
 
--- A refusal names what went wrong, repeats the usage line, and points at `--help`; it never prints the whole help, which is what separates a mistake from a request.
+-- A refusal names what went wrong, the nearest name where there is one, repeats the usage line, and points at `--help`; it never prints the whole help, which is what separates a mistake from a request.
 test a_refusal_names_the_offender_and_points_at_help =
     Test/equal(
-        Cli/report([], serve, Cli/Failure/unknown_option("--prot")),
+        Cli/report(serve, ["serve"], Cli/Failure/unknown_option("--prot", Option/some("--port"))),
         Str/flatten(["error: unexpected argument '--prot'\n\n",
+            "  tip: a similar argument exists: '--port'\n\n",
             "Usage: serve [--verbose] [--port <N>] <ROOT>\n\n",
             "For more information, try '--help'.\n"]));
 
--- A command declaring no options gets no `[OPTIONS]`, and a `rest` entry is bracketed to say it collects rather than requires.
-test the_usage_line_says_only_what_the_specification_declares =
-    let bare: Cli =
-        Cli/Declaration/declare(
+-- A command that declares no options says none, and each kind of positional says how many it takes.
+test the_usage_line_says_only_what_the_declaration_declares =
+    let cat: Cli =
+        Cli/declare(
             Cli/leaf(
                 "cat",
                 "Concatenate",
-                Option/none(),
-                Cli/record([Cli/rest("files", Cli/str, "The files")]),
-                (_) => /std/print("never")));
-    Test/equal(Cli/usage([], bare), "Usage: cat [FILES]...");
+                [],
+                Cli/Positionals {
+                    required = [],
+                    optional = [Cli/positional("first", Cli/str, "One file")],
+                    rest = Option/some(Cli/positional("files", Cli/str, "The files")) }),
+            Option/none());
+    Test/equal(Cli/usage(cat, ["cat"]), "Usage: cat [FIRST] [FILES]...");

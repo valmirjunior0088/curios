@@ -1,0 +1,85 @@
+-- What a declaration is refused for, as `checked` reports it at run time: the same problems `declare` is refused by where it is written.
+use /std/{Cli, Str, Option, List, Show, Test};
+
+let problems(command: Cli/Command, version: Option(Str)) -> Str =
+    match Cli/checked(command, version)
+    | success(_) => "well formed"
+    | failure(ps) => Str/join("; ", List/map(ps, Show/show))
+    end;
+
+let leaf(options: List(Cli/Field), ps: List(Cli/Positional)) -> Cli/Command =
+    Cli/leaf("tool", "A tool", options, Cli/positionals(ps));
+
+-- Two options answering to one name, an option answering to a built-in, and a switch's negation meeting an option of that name are each refused by the name.
+test a_name_two_options_answer_to_is_refused_by_it =
+    Test/all([
+        Test/equal(
+            problems(
+                leaf(
+                    [
+                        Cli/Field { ..Cli/flag("verbose", "Loud"), short = Option/some('p') },
+                        Cli/Field {
+                            ..Cli/default("port", Cli/nat, 1, "Port"),
+                            short = Option/some('p') }],
+                    []),
+                Option/none()),
+            "duplicate name -p"),
+        Test/equal(
+            problems(leaf([Cli/flag("help", "Mine")], []), Option/none()),
+            "duplicate name --help"),
+        Test/equal(
+            problems(leaf([Cli/flag("version", "Mine")], []), Option/some("1.0.0")),
+            "duplicate name --version"),
+        Test/equal(problems(leaf([Cli/flag("version", "Mine")], []), Option/none()), "well formed"),
+        Test/equal(
+            problems(
+                leaf([Cli/toggle("color", true, "Color"), Cli/flag("no-color", "Plain")], []),
+                Option/none()),
+            "duplicate name --no-color")]);
+
+-- An option and a positional read by one name are refused, since `get` could reach only one of them.
+test two_arguments_read_by_one_name_are_refused =
+    Test/equal(
+        problems(
+            leaf([Cli/flag("root", "Root")], [Cli/positional("root", Cli/str, "Root")]),
+            Option/none()),
+        "two arguments read by \"root\"");
+
+-- A name no line can write, a digit as a short name, and a variable no host can set are refused.
+test a_name_no_line_can_write_is_refused =
+    Test/all([
+        Test/equal(
+            problems(leaf([Cli/flag("-v", "Dash")], []), Option/none()),
+            "invalid name \"-v\""),
+        Test/equal(
+            problems(leaf([Cli/flag("a=b", "Equals")], []), Option/none()),
+            "invalid name \"a=b\""),
+        Test/equal(
+            problems(
+                leaf([Cli/Field { ..Cli/flag("five", "Five"), short = Option/some('5') }], []),
+                Option/none()),
+            "invalid short name '5'"),
+        Test/equal(
+            problems(
+                leaf([Cli/Field { ..Cli/flag("x", "X"), env = Option/some("A=B") }], []),
+                Option/none()),
+            "invalid name \"A=B\"")]);
+
+-- A group refuses two commands of one name and an invalid command beneath it, which is reported within the command that holds it.
+test a_group_is_refused_for_what_is_beneath_it =
+    Test/all([
+        Test/equal(
+            problems(Cli/group("deps", "D", [], [leaf([], []), leaf([], [])]), Option/none()),
+            "duplicate command \"tool\""),
+        Test/equal(
+            problems(
+                Cli/group(
+                    "deps",
+                    "D",
+                    [],
+                    [Cli/leaf("add", "A", [Cli/flag("help", "Mine")], Cli/positionals([]))]),
+                Option/none()),
+            "in command \"add\": duplicate name --help"),
+        Test/equal(
+            problems(Cli/group("deps", "D", [], [leaf([], [])]), Option/none()),
+            "well formed")]);
