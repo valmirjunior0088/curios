@@ -1,6 +1,5 @@
 use /std/{Bytes, Result, Io};
 use /std/Io/{Reader};
-use /std/Io/Reader/{Stop};
 use /std/tcp/{Socket};
 use /std/http/{Limits, Refusal, Framing, read};
 
@@ -9,7 +8,7 @@ pub let body(
     limits: Limits,
     r: Reader(Socket),
     framing: Framing,
-) -> Io(Result(Stop(Bytes, Refusal), Bytes)) =
+) -> Io(Result(Reader/Stop(Bytes, Refusal), Bytes)) =
     let read =
         Reader/take(
             r,
@@ -19,15 +18,15 @@ pub let body(
     | success(taken) => Io/pure(Result/success(taken))
     | failure(stop) =>
         match stop
-        | refused(why) => Io/pure(Result/failure(Stop/refused(why)))
-        | failed(decoded, e) => Io/pure(Result/failure(Stop/failed(decoded.content, e)))
+        | refused(why) => Io/pure(Result/failure(Reader/Stop/refused(why)))
+        | failed(decoded, e) => Io/pure(Result/failure(Reader/Stop/failed(decoded.content, e)))
         | ended(decoded) =>
             let held = Reader/held(r)!;
             Io/pure(
                 match framing
                 | close() => Result/success(held)
-                | chunked() => Result/failure(Stop/ended(decoded.content))
-                | _ => Result/failure(Stop/ended(held))
+                | chunked() => Result/failure(Reader/Stop/ended(decoded.content))
+                | _ => Result/failure(Reader/Stop/ended(held))
                 end)
         end
     end;

@@ -2,7 +2,7 @@ use /std/{Bytes, Byte, Nat, Bool, Option, Result};
 use /std/Bool/{True, Holds};
 use /std/http/{Limits, Refusal, Framing};
 use /std/http/Field/{Value};
-use /std/Io/Reader/{Step};
+use /std/Io/{Reader};
 
 let is(b: Bytes, i: Nat, byte: Nat) -> Bool =
     match Bytes/try_get(b, i) | some(x) => Byte/to_nat(x) == byte | none() => false end;
@@ -50,13 +50,13 @@ let head_from(
     lenient: Bool,
     s: Searched,
     held: Bytes,
-) -> Step(Searched, Refusal, Bytes) =
+) -> Reader/Step(Searched, Refusal, Bytes) =
     let i = s.through;
     let next(
         ending: Nat,
         lined: Bool,
         @ok: Holds(s.start + ending <= i + 1),
-    ) -> Step(Searched, Refusal, Bytes) =
+    ) -> Reader/Step(Searched, Refusal, Bytes) =
         head_from(
             limits,
             lenient,
@@ -67,9 +67,9 @@ let head_from(
         let known = Bytes/len(held) - s.ending;
         choose
         | Bool/not(s.lined) && known - s.start > limits.line =>
-            Step/refused(Refusal/line_too_long())
-        | known > limits.head => Step/refused(Refusal/head_too_large())
-        | _ => Step/more(s, held)
+            Reader/Step/refused(Refusal/line_too_long())
+        | known > limits.head => Reader/Step/refused(Refusal/head_too_large())
+        | _ => Reader/Step/more(s, held)
         end
     | some(inside) =>
         let byte = Byte/to_nat(Bytes/get(held, i));
@@ -81,8 +81,10 @@ let head_from(
                 let at = i - 3;
                 match at <= limits.head
                 | true =>
-                    Step/took(Bytes/slice(held, s.start, at - s.start), Bytes/drop(held, i + 1))
-                | false => Step/refused(Refusal/head_too_large())
+                    Reader/Step/took(
+                        Bytes/slice(held, s.start, at - s.start),
+                        Bytes/drop(held, i + 1))
+                | false => Reader/Step/refused(Refusal/head_too_large())
                 end
             | (true, false, true) =>
                 match s.lined
@@ -96,7 +98,7 @@ let head_from(
                             Searched { start = i + 1, through = i + 1, ending = 0, lined = false },
                             held)
                     | i - 1 - s.start <= limits.line => next(2, true)
-                    | _ => Step/refused(Refusal/line_too_long())
+                    | _ => Reader/Step/refused(Refusal/line_too_long())
                     end
                 end
             | _ => next(0, s.lined)
@@ -110,17 +112,17 @@ pub let head(
     lenient: Bool,
     searched: Searched,
     held: Bytes,
-) -> Step(Searched, Refusal, Bytes) =
+) -> Reader/Step(Searched, Refusal, Bytes) =
     head_from(limits, lenient, searched, held);
 
 --- A body of `n` bytes: the bytes held once there are that many. One longer than `limits.content` is refused before any of it is read.
-pub let length(limits: Limits, n: Nat, held: Bytes) -> Step({}, Refusal, Bytes) =
+pub let length(limits: Limits, n: Nat, held: Bytes) -> Reader/Step({}, Refusal, Bytes) =
     match n <= limits.content
-    | false => Step/refused(Refusal/content_too_large())
+    | false => Reader/Step/refused(Refusal/content_too_large())
     | true =>
         match n <= Bytes/len(held)
-        | true => Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
-        | false => Step/more((), held)
+        | true => Reader/Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
+        | false => Reader/Step/more((), held)
         end
     end;
 
@@ -183,12 +185,15 @@ let size_from(
     i: Nat,
     ending: Bool,
     held: Bytes,
-) -> Step(Decoded, Refusal, Bytes) =
+) -> Reader/Step(Decoded, Refusal, Bytes) =
     match Nat/lt/try(i, Bytes/len(held))
     | none() =>
         match Bytes/len(held) - carried(ending) <= limits.chunk_line
-        | true => Step/more(Decoded { content = content, at = Chunking/size_line(i, ending) }, held)
-        | false => Step/refused(Refusal/malformed("a chunk's size line is too long"))
+        | true =>
+            Reader/Step/more(
+                Decoded { content = content, at = Chunking/size_line(i, ending) },
+                held)
+        | false => Reader/Step/refused(Refusal/malformed("a chunk's size line is too long"))
         end
     | some(inside) =>
         let byte = Byte/to_nat(Bytes/get(held, i));
@@ -197,15 +202,17 @@ let size_from(
         | true =>
             let at = i - 1;
             match (at <= limits.chunk_line, chunk_size(Bytes/slice(held, 0, at)))
-            | (false, _) => Step/refused(Refusal/malformed("a chunk's size line is too long"))
+            | (false, _) =>
+                Reader/Step/refused(Refusal/malformed("a chunk's size line is too long"))
             | (true, none()) =>
-                Step/refused(Refusal/malformed("a chunk states its size in hexadecimal digits"))
+                Reader/Step/refused(
+                    Refusal/malformed("a chunk states its size in hexadecimal digits"))
             | (true, some(size)) =>
                 match size
                 | 0 => trailers_from(limits, content, at, i + 1, i + 1, false, held)
                 | _ =>
                     match Bytes/len(content) + size <= limits.content
-                    | false => Step/refused(Refusal/content_too_large())
+                    | false => Reader/Step/refused(Refusal/content_too_large())
                     | true => data_from(limits, content, at, size, held)
                     end
                 end
@@ -219,12 +226,12 @@ and data_from(
     at: Nat,
     size: Nat,
     held: Bytes,
-) -> Step(Decoded, Refusal, Bytes) =
+) -> Reader/Step(Decoded, Refusal, Bytes) =
     match at + 2 + size + 2 <= Bytes/len(held)
-    | false => Step/more(Decoded { content = content, at = Chunking/data(at, size) }, held)
+    | false => Reader/Step/more(Decoded { content = content, at = Chunking/data(at, size) }, held)
     | true =>
         match is(held, at + 2 + size, '\r') && is(held, at + 3 + size, '\n')
-        | false => Step/refused(Refusal/malformed("a chunk is followed by a line end"))
+        | false => Reader/Step/refused(Refusal/malformed("a chunk is followed by a line end"))
         | true =>
             size_from(
                 limits,
@@ -244,15 +251,15 @@ let trailers_from(
     i: Nat,
     ending: Bool,
     held: Bytes,
-) -> Step(Decoded, Refusal, Bytes) =
+) -> Reader/Step(Decoded, Refusal, Bytes) =
     match Nat/lt/try(i, Bytes/len(held))
     | none() =>
         match Bytes/len(held) - carried(ending) - at <= limits.head
         | true =>
-            Step/more(
+            Reader/Step/more(
                 Decoded { content = content, at = Chunking/trailers(at, line, i, ending) },
                 held)
-        | false => Step/refused(Refusal/head_too_large())
+        | false => Reader/Step/refused(Refusal/head_too_large())
         end
     | some(inside) =>
         let byte = Byte/to_nat(Bytes/get(held, i));
@@ -261,14 +268,18 @@ let trailers_from(
         | (true, false) => trailers_from(limits, content, at, i + 1, i + 1, false, held)
         | (true, true) =>
             match i - 1 - at <= limits.head
-            | true => Step/took(content, Bytes/drop(held, i + 1))
-            | false => Step/refused(Refusal/head_too_large())
+            | true => Reader/Step/took(content, Bytes/drop(held, i + 1))
+            | false => Reader/Step/refused(Refusal/head_too_large())
             end
         end
     end;
 
 --- A chunked body (RFC 9112 §7.1): the content its chunks hold, the trailer section read past and dropped. The state is what the reading has decoded and where it resumes, so a look reads the octets that arrived since the last, and a size line it completes once more, for the size the line states. A size line that is none, a chunk not followed by a line end, a size line past `limits.chunk_line`, a trailer section past `limits.head` and content past `limits.content` are refused.
-pub let chunked(limits: Limits, decoded: Decoded, held: Bytes) -> Step(Decoded, Refusal, Bytes) =
+pub let chunked(
+    limits: Limits,
+    decoded: Decoded,
+    held: Bytes,
+) -> Reader/Step(Decoded, Refusal, Bytes) =
     match decoded.at
     | size_line(searched, ending) => size_from(limits, decoded.content, searched, ending, held)
     | data(at, size) => data_from(limits, decoded.content, at, size, held)
@@ -282,20 +293,20 @@ pub let body(
     framing: Framing,
     decoded: Decoded,
     held: Bytes,
-) -> Step(Decoded, Refusal, Bytes) =
+) -> Reader/Step(Decoded, Refusal, Bytes) =
     match framing
-    | none() => Step/took(x[], held)
+    | none() => Reader/Step/took(x[], held)
     | length(n) =>
         match length(limits, n, held)
-        | took(taken, rest) => Step/took(taken, rest)
-        | more(_, kept) => Step/more(decoded, kept)
-        | refused(why) => Step/refused(why)
+        | took(taken, rest) => Reader/Step/took(taken, rest)
+        | more(_, kept) => Reader/Step/more(decoded, kept)
+        | refused(why) => Reader/Step/refused(why)
         end
     | chunked() => chunked(limits, decoded, held)
     | close() =>
         match Bytes/len(held) <= limits.content
-        | true => Step/more(decoded, held)
-        | false => Step/refused(Refusal/content_too_large())
+        | true => Reader/Step/more(decoded, held)
+        | false => Reader/Step/refused(Refusal/content_too_large())
         end
     end;
 

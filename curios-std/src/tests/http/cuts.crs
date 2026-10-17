@@ -2,7 +2,7 @@
 use /std/{Str, Bytes, Nat, Bool, List, Spell, Test};
 use /std/ops/{Eql};
 use /std/http/{Limits, Refusal, Framing, read};
-use /std/Io/Reader/{Step};
+use /std/Io/{Reader};
 
 -- What a reader made of a piece once its segments ran out: the piece and what followed it, a refusal, or still wanting more.
 induct Fed(A: Type): pub Type
@@ -23,7 +23,7 @@ satisfy (@A: Type, use Spell(A)) => Spell(Fed(A)) {
 let fed(
     @S: Type,
     @A: Type,
-    piece: (S, Bytes) -> Step(S, Refusal, A),
+    piece: (S, Bytes) -> Reader/Step(S, Refusal, A),
     state: S,
     held: Bytes,
     segments: List(Bytes),
@@ -55,7 +55,7 @@ let whole_at_every_cut(
     @S: Type,
     @A: Type,
     use Eql(A),
-    piece: (S, Bytes) -> Step(S, Refusal, A),
+    piece: (S, Bytes) -> Reader/Step(S, Refusal, A),
     start: S,
     wire: Bytes,
     expected: Fed(A),
@@ -69,7 +69,7 @@ let wanting_at_every_stop(
     @S: Type,
     @A: Type,
     use Eql(A),
-    piece: (S, Bytes) -> Step(S, Refusal, A),
+    piece: (S, Bytes) -> Reader/Step(S, Refusal, A),
     start: S,
     wire: Bytes,
     whole: Nat,
@@ -78,13 +78,13 @@ let wanting_at_every_stop(
         List/range(0, whole),
         (k) => fed(piece, start, x[], [front(wire, k)]) == Fed/wanting());
 
-let head: (read/Searched, Bytes) -> Step(read/Searched, Refusal, Bytes) =
+let head: (read/Searched, Bytes) -> Reader/Step(read/Searched, Refusal, Bytes) =
     (searched, held) => read/head(Limits/server, true, searched, held);
 
-let chunked: (read/Decoded, Bytes) -> Step(read/Decoded, Refusal, Bytes) =
+let chunked: (read/Decoded, Bytes) -> Reader/Step(read/Decoded, Refusal, Bytes) =
     (decoded, held) => read/chunked(Limits/server, decoded, held);
 
-let stated(n: Nat) -> ({}, Bytes) -> Step({}, Refusal, Bytes) =
+let stated(n: Nat) -> ({}, Bytes) -> Reader/Step({}, Refusal, Bytes) =
     (_, held) => read/length(Limits/server, n, held);
 
 -- A head is its lines without the empty one that ends them, and what follows is left for the body, wherever the bytes are cut; short of its empty line it wants more.
@@ -152,10 +152,10 @@ test the_pieces_read_whole_an_octet_at_a_time =
 let small: Limits =
     Limits { line = 16, head = 40, content = 32, chunk_line = 4 };
 
-let small_head: (read/Searched, Bytes) -> Step(read/Searched, Refusal, Bytes) =
+let small_head: (read/Searched, Bytes) -> Reader/Step(read/Searched, Refusal, Bytes) =
     (searched, held) => read/head(small, true, searched, held);
 
-let small_chunked: (read/Decoded, Bytes) -> Step(read/Decoded, Refusal, Bytes) =
+let small_chunked: (read/Decoded, Bytes) -> Reader/Step(read/Decoded, Refusal, Bytes) =
     (decoded, held) => read/chunked(small, decoded, held);
 
 let bees(n: Nat) -> Str =
@@ -225,7 +225,7 @@ test a_bound_is_met_alike_at_every_cut =
                 trailers_of(bees(34)),
                 Fed/refused(Refusal/head_too_large())))]);
 
-let framed(framing: Framing) -> (read/Decoded, Bytes) -> Step(read/Decoded, Refusal, Bytes) =
+let framed(framing: Framing) -> (read/Decoded, Bytes) -> Reader/Step(read/Decoded, Refusal, Bytes) =
     (decoded, held) => read/body(Limits/server, framing, decoded, held);
 
 -- A body is read as its framing delimits it, wherever the bytes are cut: nothing where there is none, its octets where a length is stated, its chunks' content where it is chunked. One framed by the close wants more however much has arrived, since only its stream's end says it is whole.
