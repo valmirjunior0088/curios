@@ -195,8 +195,13 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     value: clsr_data.index(),
                 });
 
-                for field in fields {
-                    self.emit_instrs(self.context.load_value_instrs(field, LoadAs::Null));
+                // Each capture is stored as its field is declared, at the carrier the representation decided for the value the field holds — a hoisted capture is renamed to its const, so the field, not the operand, names the value.
+                for (field, value_name) in fields.iter().zip(clsr_data.field_values()) {
+                    let load = match self.context.table().raw_carrier(value_name) {
+                        Some(carrier) => LoadAs::of(&carrier),
+                        None => LoadAs::Null,
+                    };
+                    self.emit_instrs(self.context.load_value_instrs(field, load));
                 }
 
                 self.emit_instr(curios_wasm::Instr::StructNew {

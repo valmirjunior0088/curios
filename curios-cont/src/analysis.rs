@@ -386,7 +386,7 @@ pub(crate) fn continuation_entries(
     output
 }
 
-/// Every node in `function`'s own body, stopping at each nested function's boundary — see [`free_values`] for which callers that suits and which it does not.
+/// Every node in `function`'s own body, stopping at each nested function's boundary: [`nodes_from`] enters a `LetFun`'s body and not its members. That suits a caller asking about this body alone, and is wrong for one about to *remove* a binding, which must cover the whole region that loses it — a value referenced only inside a function defined within this one is not among what these nodes read.
 pub(crate) fn function_nodes(module: &Module, function: FunctionId) -> Vec<NodeId> {
     nodes_from(module, module.function(function).unwrap().body)
 }
@@ -426,60 +426,6 @@ pub(crate) fn nodes_from(module: &Module, body: NodeId) -> Vec<NodeId> {
     }
     found.into_iter().collect()
 }
-/// The values `function` mentions without binding — what lowering must carry into it.
-///
-/// **The walk stops at a nested function.** [`function_nodes`] enters a `LetFun`'s body and not its members, so a value referenced only inside a function defined *within* this one is not reported here. That is correct for a caller asking what to carry into a call or a closure — a nested function's own captures are answered when the sweep reaches that function, which is the shape `represent`'s `offers` sweep over every live function relies on. It is wrong for a caller about to *remove* a binding, which must cover the whole region that loses it — asked for that purpose, it would drop a binding a nested function still references.
-///
-/// What this is *not* for is admitting a call's inline or contification: a site names its callee, so the callee's `LetFun` encloses the site and every value reported here is bound before it — in scope at the site by construction. Checking it against the values the owner's body happens to mention would refuse a move whenever the owner does not name the captured binding itself.
-pub(crate) fn free_values(module: &Module, function: FunctionId) -> BTreeSet<ValueId> {
-    let mut owned = module
-        .function(function)
-        .unwrap()
-        .params
-        .iter()
-        .copied()
-        .collect::<BTreeSet<_>>();
-    let mut used = BTreeSet::new();
-
-    for node_id in function_nodes(module, function) {
-        let node = module.node(node_id).unwrap();
-
-        match node {
-            Node::LetValue { result, .. } | Node::LetIntrinsic { result, .. } => {
-                owned.insert(*result);
-            }
-            Node::LetCont { continuations, .. } => {
-                for continuation in continuations {
-                    owned.extend(
-                        module
-                            .continuation(*continuation)
-                            .unwrap()
-                            .params
-                            .iter()
-                            .copied(),
-                    );
-                }
-            }
-            // A closure callee is a value the body reads, and it is the one such read that is not an operand atom.
-            Node::ApplyFun {
-                callee: Callee::Closure(value),
-                ..
-            } => {
-                used.insert(*value);
-            }
-            _ => {}
-        }
-
-        for atom in atoms(node) {
-            if let Atom::Value(value) = atom {
-                used.insert(*value);
-            }
-        }
-    }
-
-    used.difference(&owned).copied().collect()
-}
-
 pub(crate) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     let mut known = BTreeMap::new();
 

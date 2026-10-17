@@ -141,6 +141,11 @@ impl<'a> ClsrData<'a> {
         self.fields.iter().map(|(_, field_name)| field_name.clone())
     }
 
+    /// The value each field holds, in environment order: the captured value's own name, which the representation decided a carrier for.
+    pub(crate) fn field_values(&self) -> impl Iterator<Item = &'a EmissionValueName> + '_ {
+        self.fields.iter().map(|(value_name, _)| *value_name)
+    }
+
     pub(crate) fn find_field(&self, value_name: &EmissionValueName) -> Option<FieldData> {
         self.fields
             .iter()

@@ -14,12 +14,14 @@
 //!
 //! **A float register holds only what a float was handed.** A parameter has one type only where no type computes one. A variant's constructors share a payload slot, and scalar replacement makes that slot a parameter, `success`'s float and `failure`'s error in the one; and a value whose type is a match on another is a float on one edge and a string on the next. What its uses read under one tag or one branch says nothing of what arrives under another, and an edge coerces its argument to the parameter's carrier before anything is consulted, so a float register there casts the reference, and loses it where it does not trap. Nothing here says which reference is a float, so a position is offered the float only when every argument reaching it is one already: a float literal, a filler, a definition producing a float, or another such position, which [`float_params`] decides beside the word.
 //!
-//! **A use can only take what the definition can give**, which is what [`Offer`] states. What arrives through a position no single party controls is a reference by declaration: an escaping function's parameters, which its closure wrapper passes at the shared `clsr/N` type, and the entry's, which the host passes; the results of a class whose results something else fixes; a value free in another function's body; and what a cell, a channel, a call-shaped intrinsic or a host import hands back, a host's `Flt` aside. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
+//! **A use can only take what the definition can give**, which is what [`Offer`] states. What arrives through a position no single party controls is a reference by declaration: an escaping function's parameters, which its closure wrapper passes at the shared `clsr/N` type, and the entry's, which the host passes; the results of a class whose results something else fixes; and what a cell, a channel, a call-shaped intrinsic or a host import hands back, a host's `Flt` aside. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
+//!
+//! **A captured value crosses at its own carrier.** A value free in a function's body is one value wherever it is read: lowering carries it in under its own name, lambda-lifted as a leading parameter of a directly called function or captured into a field of a closure's environment, and the emitter declares the parameter and the field at the carrier decided for the value. Its uses in every body it reaches demand of the one value, so the decision is the same wherever it stands; a closure's environment is a struct of its own, so declaring a field re-keys nothing shared.
 
 use {
     super::{
         Atom, Callee, ContinuationId, Edge, FunctionId, Lattice, Literal, Module, Node, Repr,
-        Solver, TailClasses, ValueExpr, ValueId, free_values, nat_is_small,
+        Solver, TailClasses, ValueExpr, ValueId, nat_is_small,
     },
     curios_abi::WireType,
     std::collections::{BTreeMap, BTreeSet},
@@ -298,14 +300,11 @@ fn offers(
         }
     }
 
+    // A function nobody calls by name alone is entered through a position that is a reference by declaration: an escaping one through its closure wrapper's `clsr/N` signature, the entry by the host. A value free in a body is not withdrawn: lowering carries it in under its own name, lambda-lifted as a parameter or captured into an environment field, and the emitter declares either at the value's own carrier.
     for (function, definition) in module.live_functions() {
-        // A function nobody calls by name alone is entered through a position that is a reference by declaration: an escaping one through its closure wrapper's `clsr/N` signature, the entry by the host.
         if !boundaries.known.contains(&function) {
             withdrawn.extend(&definition.params);
         }
-
-        // A value free in this body is bound outside it, and lowering carries it in: lambda-lifted onto a directly-called function as an extra `anyref` parameter, or captured into a closure's environment as an `anyref` field. Neither survives a register, and *this* is where the scope is enforced rather than merely intended — without it a counter decided raw where it is bound is read as a register where it is used, and a `(ref any)` reaches an `i32.sub`.
-        withdrawn.extend(free_values(module, function));
     }
 
     for value in withdrawn {

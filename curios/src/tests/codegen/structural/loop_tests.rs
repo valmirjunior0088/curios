@@ -175,6 +175,43 @@ fn a_step_over_floats_called_from_a_loop_allocates_no_float() {
     }
 }
 
+/// A float a closure captures stays a float on both sides of the capture: the closure's environment holds it in a field declared `f64`, the closure's body reads it there, and the loop that defines it holds it in a register too, where a capture once withdrew it everywhere.
+#[test]
+fn a_captured_float_seeds_loops_on_both_sides_of_the_capture_unboxed() {
+    let wat = wat(CAPTURED_FLOAT);
+    assert!(
+        wat.lines()
+            .any(|line| line.contains("(type $envr/") && line.contains("f64")),
+        "the premise: the escaping closure's environment declares the captured float a field of its own"
+    );
+    // Each loop's exit boxes its answer once, where it leaves: the closure hands it back at its arity's uniform signature, and the entry's loop into a join a reference reads. What must not happen is a box on the way round.
+    for needle in ["i32.const 7919", "i32.const 6007"] {
+        for kernel in loops_containing(&wat, needle) {
+            assert!(
+                !boxes_a_round(kernel),
+                "no round boxes the float the capture seeded: {kernel}"
+            );
+        }
+    }
+}
+
+/// Whether some float box in `kernel` is on the way round: its straight run of instructions ends at the loop's back edge rather than leaving it.
+fn boxes_a_round(kernel: &str) -> bool {
+    let lines = kernel.lines().map(str::trim).collect::<Vec<_>>();
+    lines.iter().enumerate().any(|(index, line)| {
+        *line == "struct.new $flt"
+            && lines[index + 1..]
+                .iter()
+                .find(|next| {
+                    next.starts_with("br ")
+                        || next.starts_with("return")
+                        || next.starts_with("else")
+                        || next.starts_with("end")
+                })
+                .is_some_and(|transfer| transfer.starts_with("br $$loop"))
+    })
+}
+
 /// What the programs whose floats now cross known calls in registers print, worked independently in IEEE doubles with ties to even.
 #[test]
 fn floats_across_known_calls_answer_as_computed() {
@@ -189,6 +226,7 @@ fn floats_across_known_calls_answer_as_computed() {
             PAIR_STEP,
             "+0.00175099278948419 | +0.00175099290668634 | +0.01425",
         ),
+        (CAPTURED_FLOAT, "+1608.2786484375 | +8057.660031863108"),
     ] {
         assert_eq!(String::from_utf8(run_raw(source, &args)).unwrap(), expected);
     }

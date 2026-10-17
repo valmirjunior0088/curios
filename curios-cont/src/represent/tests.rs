@@ -329,9 +329,9 @@ fn the_entrys_parameter_stays_boxed_however_its_body_reads_it() {
     assert_eq!(representation(&module).values[&param], Storage::Boxed);
 }
 
-/// `escaping` is bound in the entry function and read arithmetically inside *another* function's body, so `curios-emit`'s `machine::lower` lambda-lifts it onto that function as an extra `anyref` parameter. Deciding it from its binding scope alone would answer `Raw(Nat)` — and the callee, which holds it as a parameter, would load it with no unboxing and hand a `(ref any)` to an `i32.sub`.
+/// `escaping` is bound in the entry function and read arithmetically inside *another* function's body, so `curios-emit`'s `machine::lower` lambda-lifts it onto that function as a parameter of the same name. It is one value wherever it is read, so it is decided once, at the word its definition produces and its use in the callee demands, and the emitter declares the lifted parameter at that carrier.
 #[test]
-fn a_value_free_in_another_function_stays_boxed() {
+fn a_value_free_in_another_function_is_held_at_its_own_carrier() {
     let mut module = Module::new();
     let escaping = module.add_value(Some("escaping".into()));
     let result = module.add_value(Some("r".into()));
@@ -361,7 +361,7 @@ fn a_value_free_in_another_function_stays_boxed() {
         },
     );
 
-    // The entry binds it, and binds it at the very carrier the callee wants.
+    // The entry binds it to a remainder its literal divisor bounds, so its definition produces the very word the callee wants.
     let call = module.add_node(Node::ApplyFun {
         callee: Callee::Known(callee),
         args: vec![],
@@ -369,16 +369,19 @@ fn a_value_free_in_another_function_stays_boxed() {
     });
     let body = module.add_node(Node::LetIntrinsic {
         result: escaping,
-        op: Intrinsic::NatAdd,
+        op: Intrinsic::NatRem,
         args: vec![
-            Atom::Literal(Literal::Nat(Natural::from(1u32))),
-            Atom::Literal(Literal::Nat(Natural::from(2u32))),
+            Atom::Literal(Literal::Nat(Natural::from(9u32))),
+            Atom::Literal(Literal::Nat(Natural::from(7u32))),
         ],
         next: call,
     });
     entry(&mut module, vec![], body);
 
-    assert_eq!(representation(&module).values[&escaping], Storage::Boxed);
+    assert_eq!(
+        representation(&module).values[&escaping],
+        Storage::Raw(Repr::Nat)
+    );
 }
 
 /// A call's result reaches its continuation's parameter as a reference where the callee's results are fixed by something other than its own return edges: here a tail call through a closure, which returns at the closure type's one uniform result. The parameter is open to its uses in general, and this is what withdraws it.

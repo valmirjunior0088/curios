@@ -300,17 +300,22 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                 mutability: curios_wasm::Mutability::Const,
                             },
                         ))
-                        .chain(data.fields().map(|field_name| {
-                            (
-                                field_name,
-                                curios_wasm::FieldType {
-                                    storage_type: curios_wasm::StorageType::Val(Table::top_type(
-                                        true,
-                                    )),
-                                    mutability: curios_wasm::Mutability::Const,
+                        // A captured value is held in its field as it is held everywhere it is read: in a register where the representation decided one, and as a reference otherwise.
+                        .chain(
+                            data.fields().zip(data.field_values()).map(
+                                |(field_name, value_name)| {
+                                    (
+                                        field_name,
+                                        curios_wasm::FieldType {
+                                            storage_type: curios_wasm::StorageType::Val(
+                                                self.table.local_type(value_name),
+                                            ),
+                                            mutability: curios_wasm::Mutability::Const,
+                                        },
+                                    )
                                 },
-                            )
-                        })),
+                            ),
+                        ),
                     )),
                 },
             );

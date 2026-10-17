@@ -501,13 +501,17 @@ impl<'a, 'b> Context<'a, 'b> {
                 },
             ];
 
-            self.load_as_instrs(producer, load_as, true)
+            // A captured value is held in its field as it is held wherever it is read, so a field the representation holds in a register is read as that register is.
+            match self.table().raw_carrier(value_name) {
+                Some(carrier) => self.raw_as_instrs(producer, carrier, load_as),
+                None => self.load_as_instrs(producer, load_as, true),
+            }
         } else if let Some(local_data) = self.find_local(value_name) {
             let producer = vec![curios_wasm::Instr::LocalGet {
                 local_name: local_data.local_name,
             }];
 
-            // Only a local can be held in a register, a function's parameters among them, each declared as its function's type holds it. A closure field and a module const each arrive through a position that is a reference by declaration, which is what the representation analysis withholds its offer on.
+            // A local is held as the representation decided, a function's parameters among them, each declared as its function's type holds it.
             match self.table().raw_carrier(value_name) {
                 Some(carrier) => self.raw_as_instrs(producer, carrier, load_as),
                 None => self.load_as_instrs(producer, load_as, local_data.is_nullable),

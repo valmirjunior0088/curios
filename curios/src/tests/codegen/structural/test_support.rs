@@ -326,6 +326,29 @@ pub(super) const PAIR_STEP: &str = r#"
     entry()
     "#;
 
+/// A float computed in the entry seeds a loop there and is captured by a closure that escapes into a list, whose loop it seeds too. `inner` and `outer` are each called once, so each is contified where it is called: `outer` into the entry, `inner` into the closure's body, which reads `seed` as a value free in it. `j % 7919` and `j % 6007` put a small `Nat` each loop alone holds into it.
+pub(super) const CAPTURED_FLOAT: &str = r#"
+    use /std/{Flt, Nat, List, Str, Process, Option};
+    let inner(acc : Flt, k : Nat) -> Flt =
+        match k
+        | 0 => acc
+        | j + 1 => inner(acc * +1.5 + Nat/to_flt(j % 7919) * +0.25, j)
+        end;
+    let outer(acc : Flt, k : Nat) -> Flt =
+        match k
+        | 0 => acc
+        | j + 1 => outer(acc * +1.25 + Nat/to_flt(j % 6007) * +0.5, j)
+        end;
+    let entry() -> /std/Io({}) =
+        let taint = List/len(Process/args()!);
+        let seed = Nat/to_flt(taint) * +0.001;
+        let warp = (n : Nat) => inner(seed, n);
+        let fs : List((Nat) -> Flt) = [warp, (m : Nat) => seed * Nat/to_flt(m)];
+        let f = match List/try_get(fs, taint % 2) | some(g) => g | none() => warp end;
+        /std/print(Str/join(" | ", [Flt/to_str(f(taint + 10)), Flt/to_str(outer(seed, taint + 20))]));
+    entry()
+    "#;
+
 /// A variant whose two constructors share a payload slot, joined from both: `success` hands the slot a float and `failure` an error. The join reads the payload as a float under one tag and as the error under the other.
 ///
 /// **The error has to arrive from a call.** `judged` recurses, so it is not inlined and `doubled` forwards a `failure` whose payload no edge shows being built: the emitter has no aggregate to refuse, and a payload held in a float register casts the error where the `failure` edge is taken. `taint + 1` and `taint + 3` take it and `taint` does not, so both constructors reach the join.

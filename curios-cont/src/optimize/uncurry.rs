@@ -156,7 +156,7 @@ fn admit_site(
 
 /// The one application of `value` beneath `body`, with its arguments, when that application is the value's only use — or `None` when any use does anything else: a second application, an ordinary operand, which would dangle once the callee returns the answer instead of the closure, or any mention inside a function defined beneath `body`, which captures the closure and outlives the site.
 ///
-/// The capture rule is what [`free_values`](crate::free_values) warns a pass about to remove a binding of: [`nodes_from`] enters a `LetFun`'s continuation and not its members, so a lambda defined below the application that applies the closure again would be invisible to it: the site would be admitted on its one visible application, the callee would absorb it, and the lambda would go on applying what is by then the applied answer — a trap where the program prints a number.
+/// The capture rule is what [`function_nodes`] warns a pass about to remove a binding of: [`nodes_from`] enters a `LetFun`'s continuation and not its members, so a lambda defined below the application that applies the closure again would be invisible to it: the site would be admitted on its one visible application, the callee would absorb it, and the lambda would go on applying what is by then the applied answer — a trap where the program prints a number.
 fn sole_application(module: &Module, body: NodeId, value: ValueId) -> Option<(NodeId, Vec<Atom>)> {
     let mut found = None;
     for node_id in nodes_from(module, body) {
