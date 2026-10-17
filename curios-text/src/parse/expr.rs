@@ -16,7 +16,7 @@ use {
         mark, memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, shown, spanned,
         take_eof, take_exact, take_n, take_while, unseen,
     },
-    curios_utilities::{InfixOp, Plicity, Span, is_identifier_char, is_keyword},
+    curios_utilities::{InfixOp, Plicity, Span, is_identifier_char, is_keyword, recurse},
     std::iter,
 };
 
@@ -352,7 +352,8 @@ pub(super) fn parse_goal<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
 }
 
 pub(super) fn parse_atomic_term<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
-    memoize(MEMO_ATOMIC_TERM, parse_atomic_term_inner).parse(state)
+    // With room to recurse: every nesting of the grammar re-enters one of its memoized nonterminals.
+    recurse(|| memoize(MEMO_ATOMIC_TERM, parse_atomic_term_inner).parse(state))
 }
 
 pub(super) fn parse_atomic_term_inner<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
@@ -602,12 +603,12 @@ fn written_instead_of(word: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn parse_term<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
-    memoize(MEMO_TERM, term(true)).parse(state)
+    recurse(|| memoize(MEMO_TERM, term(true)).parse(state))
 }
 
 /// [`parse_term`] where the form around the term owes an arrow before the term that follows it: a `choose` arm's condition, a bind arm's value. A term standing where that arrow belongs is the arm's missing `=>`, which the arm reports, so the term is read without [`refuse_juxtaposed_term`]'s probe.
 pub(super) fn parse_term_before_arrow<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
-    memoize(MEMO_TERM_BEFORE_ARROW, term(false)).parse(state)
+    recurse(|| memoize(MEMO_TERM_BEFORE_ARROW, term(false)).parse(state))
 }
 
 /// A term, with the probe for a second one on its line where `probed`.

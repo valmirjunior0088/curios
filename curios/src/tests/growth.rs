@@ -308,6 +308,14 @@ fn compiles(source: &str) -> Result<(), String> {
     compile(source).map(|_| ())
 }
 
+/// Nesting ten thousand deep compiles on a test thread's stack: parentheses, each a nonterminal the parser re-enters, and an arrow, each parameter a term the lowering lowers inside the one before. The depth is bought with stack where it is spent, so no stage's acceptance follows the thread it runs on.
+#[test]
+fn nesting_ten_thousand_deep_compiles_on_a_test_thread() {
+    for growth in [Growth::Parentheses, Growth::Arrow] {
+        assert_eq!(compiles(&grown(growth, 10_000)), Ok(()), "{growth:?}");
+    }
+}
+
 /// Every growth compiles and runs at a small size: what `growth_slopes` measures is a program, and one a stage refuses measures nothing.
 #[test]
 fn every_growth_is_a_program_at_its_smallest() {

@@ -16,7 +16,7 @@ use {
         Certification, Entrypoint, Extent, Free, Global, Item, Module, Operand, Program, Trace,
         Zonked, foreign_operands, project_erased_universes,
     },
-    curios_utilities::{SyntaxRegistry, grown},
+    curios_utilities::{SyntaxRegistry, grown, recurse},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -318,8 +318,9 @@ impl<'s> Lowering<'s> {
         expected: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
+        // With room to recurse: an operand is walked inside the expression that holds it, so a nesting of calls is a nesting of walks.
+        let result = recurse(|| self.walk_subterm(context, term, expected, hint));
         // Attach this term's extent to any error from erasing it.
-        let result = self.walk_subterm(context, term, expected, hint);
         match term.extent() {
             Some(extent) => result.map_err(|error| error.at(extent)),
             None => result,

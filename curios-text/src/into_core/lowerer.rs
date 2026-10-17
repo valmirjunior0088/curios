@@ -318,6 +318,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     pub(super) fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
+        // With room to recurse: every child a term holds is lowered through here, so a nesting is a nesting of these.
+        recurse(|| self.term_within(term))
+    }
+
+    fn term_within(&self, term: &Term) -> Result<curios_core::Term, Error> {
         let span = term.span().cloned();
         let elaborated = match span.as_ref() {
             Some(s) => self

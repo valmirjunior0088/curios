@@ -1,6 +1,6 @@
 use {
     super::{IntoParser, Parser, ParserError, ParserState},
-    curios_utilities::Source,
+    curios_utilities::{Source, grown},
     std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc},
 };
 
@@ -59,7 +59,8 @@ pub fn run_parser<'a, A>(
     // One span per parse, named by what is being parsed: a test that parses several sources otherwise reads as one undifferentiated stream of choices.
     curios_profile::profile!("run_parser", group = %source.path.as_deref().unwrap_or(std::path::Path::new("<text>")).display());
 
-    let result = parser.parse(ParserState::new(source)).map(|(item, _)| item);
+    // On a segment of its own, as every other stage enters: the grammar's nonterminals recurse per nesting, beneath `recurse`.
+    let result = grown(|| parser.parse(ParserState::new(source)).map(|(item, _)| item));
 
     // Clear on the way out too, not only on the next entry: cached entries share the parsed tree (`Rc`-backed values), and leaving them alive until the thread-local's own destructor would drop a deep tree at thread teardown, where the guard page is all the stack that's left.
     MEMO.with(|memo| memo.borrow_mut().clear());

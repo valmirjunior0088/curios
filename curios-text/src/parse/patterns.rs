@@ -15,7 +15,7 @@ use {
         Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, mark, memoize,
         not_ahead, preceded_by_space, pure, sep_by0_trailing, take_exact, take_while, uncommit,
     },
-    curios_utilities::Plicity,
+    curios_utilities::{Plicity, recurse},
     std::iter,
 };
 
@@ -182,7 +182,7 @@ pub(super) fn parse_let_binder<'a>(state: ParserState<'a>) -> Parsed<'a, Pattern
 
 // A binder pattern at `let`, lambda-parameter, and function-definition-sugar-parameter position (see `Pattern`): a plain name, a tuple pattern, a struct pattern, or a parenthesized pattern (pure grouping, mirroring `parse_parens`). Struct and tuple forms are tried before the bare-name case — not after, as a plain identifier prefix (e.g. `Point` in `Point { z, w = ww }`) would otherwise be consumed by the binder case before the disambiguating `{`/`,`/`=` is ever seen, exactly like `parse_struct_lit` is tried before a bare name at the term level.
 pub(super) fn parse_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, Pattern> {
-    memoize(MEMO_PATTERN, parse_pattern_inner).parse(state)
+    recurse(|| memoize(MEMO_PATTERN, parse_pattern_inner).parse(state))
 }
 
 fn parse_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, Pattern> {
@@ -441,7 +441,7 @@ fn parse_bin_cons_match_pattern<'a>(
 
 // A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat`/`List`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `b[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for the successor leaf (`parse_nat_succ_match_pattern`) specifically, before `Binder` (see its own doc comment). The packed cons leaf is tried before the packed empty leaf so `b[` commits to the longer form and backtracks to `b[]` only when no binder follows. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
 pub(super) fn parse_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {
-    memoize(MEMO_MATCH_PATTERN, parse_match_pattern_inner).parse(state)
+    recurse(|| memoize(MEMO_MATCH_PATTERN, parse_match_pattern_inner).parse(state))
 }
 
 fn parse_match_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {

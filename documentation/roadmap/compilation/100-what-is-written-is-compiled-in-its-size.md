@@ -46,7 +46,7 @@ Nothing under `curios-text/src/parse/` or `curios-parse` grows the stack, so a p
 - right-nested `+` overflows between 1 000 and 1 500;
 - nested parentheses overflow between 1 750 and 2 000 on release, and between 2 000 and 3 000 on debug, both at `opt-level = 3`.
 
-With the main stack raised to 256 MiB, erasure overflows next, at about 8 250 levels. `Lowering::walk` → `erase_apply` → `slots` recurses with no `recurse`, about 4 KB a level, inside the one 32 MiB segment `erase_unit` takes through `grown`, and dies as a bare `SIGSEGV`. The surface tree has no iterative `Drop`, where `curios-core`'s `Term` has one (`impl Drop for Node`).
+With the main stack raised to 256 MiB, erasure overflows next, at about 8 250 levels. `Lowering::walk` → `erase_apply` → `slots` recurses with no `recurse`, about 4 KB a level, inside the one 32 MiB segment `erase_unit` takes through `grown`, and dies as a bare `SIGSEGV`. The surface tree has no iterative `Drop`, where `curios-core`'s `Term` has one (`impl Drop for Node`). Lowering's own walk (`Lowerer::term` → `subterm`) brackets nothing either, inside its one segment, so a curried arrow ten thousand parameters long overflows it.
 
 ### The emitted module leaves the engine's envelope
 
@@ -117,12 +117,12 @@ Doubling a program along any axis an author can grow it at most doubles what eve
 Each stage begins by attributing the growths its slopes name, by a debugger's samples of the stage, and ends with those rows held in `growth_slopes`.
 
 1. **The instrument.** The instruction count in `curios-profile`; `tests::growth`'s programs; `growth_slopes` over the grid, holding the seven growths linear today. Check: `growth_slopes` by hand; `curios-profile`'s tests.
-2. **Depth.** The parser's and erasure's brackets, the surface tree's drop if a fixture needs it, and each further overflow the depth fixtures meet. Check: nested calls, parentheses, `let`s, matches and arrows at 10 000 levels on a test thread.
+2. **Depth.** The parser's, lowering's and erasure's brackets, the surface tree's drop if a fixture needs it, and each further overflow the depth fixtures meet. Check: parentheses and an arrow at 10 000 levels on a test thread; nested calls join them with stage 7, whose lexical scopes make them quadratic in their depth (59 s at 10 000, every sample in `curios-cont`'s `lexical_scopes`).
 3. **One rebuild per pass.** The settle's `Zonk`, the totality obligations' memo, the spine read where it is used, solved metavariables substituted before a close, and the universe zonk's memo. Check: deep and right-nested `+` at 10 000 and nested lists at 2 000 in `tests::growth`; their rows held.
 4. **A fact read alone.** The facet reader, through every caller of a declaration's instantiation, the kernel's included where it does the same. Check: 4 000 constructors; the row held.
 5. **The scope by reference.** The persistent frames first, then the spine, prototyped on a scratch copy and measured before it lands. Check: a 6 000-binding `let` chain, a 2 000-statement `Io` block, 1 000 parameters summed and 2 000 nested lambdas in `tests::growth`; their rows held.
 6. **Lowering.** A telescope, a structure's fields and nested matches, `let`s and lambdas lowered in their size. Check: their rows held.
-7. **The Cont lowering and its optimizer.** A match's arms, a list built at run time, a tuple, a structure's fields, a telescope and a chain lowered and optimized in their size. Check: their rows held.
+7. **The Cont lowering and its optimizer.** A function's lexical scope shared with the one it is nested in, where `lexical_scopes` (`curios-cont/src/verify.rs`) copies it, so every function holds the set of every function above it; a match's arms, a list built at run time, a tuple, a structure's fields, a telescope and a chain lowered and optimized in their size. Check: their rows held; nested calls at 10 000 levels join the depth fixture.
 8. **Locals by liveness.** The coloring pass over each emitted function. Check: 10 100 `+` in one function compiles and runs; `curios-std`'s corpus.
 9. **Wide shapes.** The envelope fixtures, then the spill. Check: each crossing runs.
 10. **Binaryen and Cranelift.** The long-function shapes retaken after stage 8; each Binaryen pass still refused skipped, stated in `curios-binaryen`'s README, and its report prepared; what Cranelift pays for a long function attributed, and taken where `curios-cranelift` configures it or the emitted function shapes it. Check: every row held; `wasm-optm` sizes over `programs/` before and after.
