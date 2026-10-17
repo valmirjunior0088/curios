@@ -1,4 +1,4 @@
-//! The monoid worker/wrapper: a recursion whose answer is its own call's answer combined under a monoid becomes a loop over accumulators — tail recursion modulo a monoid context, as Leijen and Lorenzen derive it (*Tail Recursion Modulo Context*, POPL 2023, §4.4–4.5).
+//! The monoid worker/wrapper: a recursion whose answer is its own call's answer combined under a monoid becomes a loop over accumulators — tail recursion modulo a monoid context, as Leijen and Lorenzen derive it (*Tail Recursion Modulo Context*, POPL 2023, §4.4–4.5). Why, and what it rejects, is [`curios-ersd`'s README](../../README.md#a-recursion-closed-by-a-monoid-is-a-loop).
 //!
 //! A recursion whose result feeds a monoid combine (`count(t) + 1`, `x == y && eql(xs, ys)`, `[h, ..take(t, k)]`) is no tail call: the combine runs after the recursion returns, so every level keeps a frame and pays a return. But a worker that folds the combine's other operands into an accumulator ahead of the call is a loop:
 //!
