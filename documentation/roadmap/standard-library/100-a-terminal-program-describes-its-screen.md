@@ -1,0 +1,71 @@
+# A terminal program describes its screen
+
+Working specification for rebuilding `/std/Tui` and `/std/Tty` around one terminal device the host restores, a screen described as a size-indexed value every reading folds over, and a loop that owns its session alone. Three rules the tree states are broken today. [A piece of a stream is cut from the bytes its reader holds](../../../curios-std/README.md#a-piece-of-a-stream-is-cut-from-the-bytes-its-reader-holds) rejects "a branch that reads the stream and pushes its pieces onto a channel", and `Tui/run` reads its keys so. [A fallible operation returns `Try`](../../design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md) declares an operation that can fail as a `Try`, and `Tui/Session/draw` is an `Io(Session)` that drops the failure of its write. [`/std` is laid out by tier, subject and kind](../../../curios-std/README.md#std-is-laid-out-by-tier-subject-and-kind) gives one meaning one spelling, and `draw` and `render` each mean two things in `/std/Tui`.
+
+## What is wrong
+
+- **Text reaches the terminal as it is written.** `tiles_of` (`curios-std/src/Tui/Frame.crs`) glues a character of width zero to the tile before it, and `char_width` (`curios-std/src/Tui/text.crs`) answers zero for every C0 and C1 control, so a string holding an Escape, a BEL or a newline is written raw by `paint` (`curios-std/src/Tui/render.crs`). Drawing `"a\u{1B}]0;pwned\u{7}\nb"` writes `61 1b 5d 30 3b 70 77 6e 65 64 07 0a 62`: a window title set and a raw newline, at `34f5e7600`. Any label a program shows — a file name, a log line, a paste — can drive the terminal.
+- **The width table misses wide characters.** `wide_ranges` (`curios-std/src/Tui/text.crs`) is twelve hand-written ranges: U+1F680, U+231B and U+1FA77 measure one column where terminals draw two, so every tile after one on its row is written a column short.
+- **Saving and quitting drops the save.** `Directive` (`curios-std/src/Tui/Directive.crs`) says a directive that stops and carries work "runs the work and then stops"; `Tui/run` spawns that work into its scope and returns, and the scope cancels it. `Directive/batch([Directive/perform(save), Directive/quit()])` ran no part of `save` under a pseudo-terminal, a `save` that waits on nothing included.
+- **A failed frame is dropped.** `Session/draw` discards its write's failure, on the ground that ending the program would skip the scope's releases; a failure raised in `Try/scope` releases them. The session reads the size of the terminal behind standard input and writes standard output, which may be another file or one the program closed.
+- **The cursor is a second function of the model.** `Tui.cursor` answers an unbounded `{x, y}` beside `view`, and `Layout`'s `Sizes` holds sizes and no positions, so a field inside a pane inside a border is placed by arithmetic the program repeats from the layout.
+- **Panes are named by text.** `Layout/draw`'s `paint` matches a `Str`, so a misspelled pane paints the fallback and every painter needs a wildcard arm; `Sizes`, `Column` and `Row` export eight constructors for what is an intermediate.
+- **The session is half handle, half value.** Its reader is a handle; its previous frame and size are values `draw` and `size` hand back, and `Tui/run`'s reader, ticker and loop each hold a copy that drifts from the others. A stale copy diffs against the wrong frame. `Session/last_size` is an `Io` that reads a field.
+- **The decoder takes the program's type.** `input/decode(@E, …)`, `input/flush(@E, …)` and `Session/read(@E, …)` take the program's message type because they answer `Event(E)`.
+- **Spellings.** `draw` makes a frame (`Listing`, `Field`, `Layout`) and writes a terminal (`Session`); `render` writes bytes (`Tui/render`, as `http` and `Html` render) and paints panes (`Layout/render`). `Field/handle(f, Key)` and `Listing/move(l, Code)` are two shapes for one reaction. A size is `w, h` in frames and `cols, rows` in `Tty/Size` and `Event/resize`. Six widgets come in three shapes.
+
+## What this builds on
+
+- **The host restores what it switched.** `OsHost` records the termios of every descriptor `tty_raw` switched and restores it on `Drop`, which runs after a trap or an `exit` (`curios-runtime/src/os_host.rs`). It installs no signal handler, so a terminating signal leaves the terminal raw, and nothing undoes the alternate screen, the cursor or the keyboard modes a program set.
+- **A device opened by path is a non-blocking descriptor.** `file_open` files a character device as `OsResource::Descriptor` and `with_fd` reaches it, so `/dev/tty` opened through it answers both terminal rows with no row of its own.
+- **A wait is a suspension.** `Io/race` cancels the losers where they wait, and a read through `Io/Reader` puts back what it took before every suspension, so a read under a race loses nothing ([A wait is a suspension, and only the host waits](../../design/standard-library/a-wait-is-a-suspension-and-only-the-host-waits.md)). State a branch keeps lives in a channel of one slot, as `Io/Reader` keeps its bytes.
+- **`/std` holds no Unicode property.** `Char` has no width, no grapheme break class, no emoji property; `Str` steps by scalar, so a field's cursor crosses a combining mark as a character.
+- **A frame costs milliseconds.** At 200 by 50 tiles, building a frame from lines takes 9 ms (8 to 9), a first render 20 ms (20 to 21) and a diff of one changed row 13 ms (13 to 13): timed, the median of three runs of `Frame/of_lines` and `Tui/render` read through `time/Instant` in one release-compiled program at `34f5e7600`. So the raster stays a `Vec` of `Vec`s and the description is rasterized once a frame.
+- **Prior art.** vty's `Picture`, brick's `showCursor` and Bubble Tea's v2 `View` carry the cursor with the drawing; Notty's `I.string` refuses control characters; the kitty keyboard protocol is detected by `CSI ? u` with a primary device attributes query as sentinel, as libvaxis detects every feature; mode 2048 reports a resize in the input stream; terminals that cluster graphemes under mode 2027 still disagree on widths, so a library cannot be exact everywhere.
+
+## Decisions
+
+Settled with the user on 2026-10-17.
+
+- **The terminal is the controlling terminal.** `Tty/open(s)` opens `/dev/tty` read and write into a scope, and is the one constructor: what a session sizes is what it reads and writes, and standard input and output stay the program's.
+- **The host undoes the terminal.** `tty_raw` gives way to `tty_take(h, leave)` and `tty_give(h)`: the host records the settings and the bytes that undo the program's modes, and at a give, a trap, an `exit` or a terminating signal writes the bytes and restores the settings.
+- **A screen is a description.** `View(w, h)` is an inductive indexed by its size, read three ways: its raster, a `Frame(w, h)`; its cursor, a point bounded by the size; its lines, for a test. A cursor request is a node of the view, so composition places it.
+- **A layout's children are functions of their size.** `View/rows` and `View/cols` share an axis among `(Constraint, Pane)` pairs, a pane being `(w: Nat, h: Nat) -> View(w, h)`, in the deterministic pass `Layout/distribute` makes today; no tree of names.
+- **A glyph is printable by construction.** A tile holds a `Glyph`, one grapheme cluster, printable and one or two columns wide by proof. Text becomes glyphs totally: a C0 control and DEL become their Control Pictures (U+2400 to U+2421), a C1 control U+FFFD, a cluster of no width nothing.
+- **One width policy, and a renderer that re-anchors.** A cluster is two columns where it holds an East Asian Wide or Fullwidth scalar, an Emoji_Presentation scalar or VS16, and one otherwise; after any glyph that is not ASCII the renderer moves the cursor absolutely, so a terminal that disagrees damages one tile.
+- **Unicode's properties are core's.** `Char` answers the properties a segmentation and a width read, from tables generated out of the Unicode Character Database files vendored in the tree, and `Str` finds extended grapheme cluster boundaries (UAX #29). A test regenerates the tables and refuses drift.
+- **The terminal is asked, not guessed.** A session queries the kitty keyboard flags and modes 2026, 2027 and 2048 with a primary device attributes query behind them, and turns on what the terminal confirmed: with kitty keys, Escape needs no timeout; with mode 2048, the size is never polled.
+- **A key is the kitty protocol's.** A code and its modifiers, decoded from either encoding to the same key for the same keystroke; a function key is bounded from 1 to 35.
+- **The loop owns its session alone.** `Tui/run` is one task racing a read of the session, the answers of its directives and, where the terminal has no mode 2048, a deadline for the size; the session keeps its state in a channel of one slot.
+- **A directive is data.** `none`, `perform`, `batch`, `redraw`, `release` and `quit`; `quit` ends the program once the work its update issued has answered, and cancels older work still running. `release` gives the terminal back around an action and takes it again.
+- **A widget with state is a type module; one without is a `View` operation.** `Listing(A)`, `Field` and `Focus(P)` each have `handle` and `view`; `text`, `paragraph`, `border`, `window` and `wave` are `View`'s.
+- **What waits for a consumer.** The mouse and named regions, kitty release events and report-all keys, subscriptions, an inline mode, images, a stop and continue on `SIGTSTP`, and a terminal in the browser harness are not part of this specification.
+
+## Stages
+
+Each stage lands as its own commits and rewrites this specification to the work left.
+
+1. **The terminal is a device.** `curios-abi` gains `open_mode`'s read-and-write code and `tty_take` and `tty_give` in place of `tty_raw`, and `file_open` is declared by `internal/Handle`; the native host records and writes the leave bytes, the scripted host answers a terminal at `/dev/tty`, the browser harness denies both rows; `/std/Tty` opens the controlling terminal, is a stream, and takes it with the bytes that undo it. Check: the host suites, the session tests over the scripted terminal, and the launcher's ceiling.
+2. **A terminating signal restores the terminal.** The native host restores every terminal it took when SIGTERM, SIGHUP, SIGQUIT or SIGINT arrives, then dies by the signal. Check: a child that took a pseudo-terminal and was sent SIGTERM leaves it as it found it; the launcher's ceiling.
+3. **Unicode in core.** The vendored database, its generator and the drift test; `Char`'s properties and `Str`'s grapheme boundaries. Check: every case of `GraphemeBreakTest.txt`, and the prelude's elaboration named where it may have moved.
+4. **Glyphs and lines.** `Glyph`, `Line` and the width policy replace `Tui/text`; the renderer re-anchors. Check: the hostile text writes only printable bytes, the three wide characters measure two.
+5. **Views and layout.** `View`, its readings, `rows` and `cols`, and the stateless drawings replace `Layout`, the frame algebra's public builders and `Tui.cursor`. Check: a replay of what the renderer writes over a model terminal yields the frame.
+6. **The protocol and its input.** The modes as data, the key model, `Input` and `Event(E)`, and the decoder reading the terminal's replies. Check: every cut of every input decodes as the whole, and a key decodes alike under both encodings.
+7. **The session and the loop.** The handshake, the session as a handle, `Tui/run` as one task, the directives, and `drive` following a resize. Check: save and quit runs the save, a failed draw ends the run with its error, a resize arrives by either path.
+8. **Widgets, and a whole program.** `Listing(A)`, `Field` over graphemes, `Focus(P)`; a program of a field and a listing in bordered panes run against the scripted terminal. Check: the program's frames, its cursor and its answer.
+
+## Verification
+
+`cargo xtask workspace format` and `cargo xtask workspace lint` between stages, with each stage's check by name; `cargo xtask workspace test`, `cargo xtask instrumented lint` and `cargo xtask docs build` once the last stage lands. The figures the stages may move are named, not retaken: the prelude's elaboration, the `tui` workloads of `curios/src/tests/instrumented/coordination.rs`, `host_boundary.rs` and `fixpoint.rs`, and the launcher's size.
+
+## Rejected
+
+- **A tree of named panes**, labelled by text or by a type of the program's: a pane's painter already names it, and a tree beside its painters is a second statement of one layout.
+- **A frame paired with a cursor** in place of a description: every combinator transforms both, and the next reading, the regions a mouse needs, is a third field.
+- **A signal handler beside the host's restore**, or a reset the host spells itself: the bytes that undo the modes are the library's, written once.
+- **A reader branch feeding a channel**, which the reader's decision rejects; **polling the size** where the terminal reports it.
+- **A width table per terminal**, chosen by the terminal's version: a measurement the library would have to keep, where a re-anchoring renderer bounds the damage of any disagreement.
+
+## Completion and retirement
+
+The contracts go to the doc comments of `/std/Tui`, `/std/Tty`, `/std/Char` and `/std/Str`, the host rows' to `curios-abi`, and the rationale to `curios-std/README.md`'s decision on the screen, which replaces "A screen is a size-indexed frame and a layout is a typed pane tree"; the sentence about `Tui/Session` in "A loose printer that cannot write ends the program" goes. Once no reference to this specification remains, this file is deleted.
