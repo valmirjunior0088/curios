@@ -12,15 +12,17 @@ use {
     crate::Sort,
     curios_analysis::Classification,
     curios_core::{
-        Bound, ClosedMemo, Enter, Families, Free, Global, InductDecl, Level, LevelHead, Quality,
-        QualityMetaId, Rec, RecGroup, StructDecl, Subterm, Term, UniverseError, UniverseMetaId,
-        Universes, lasting, rewrite_universe_qualities, substitute_universe_metas_scoped,
+        AsideAnswers, Bound, ClosedMemo, Enter, Families, Free, Global, InductDecl, Level,
+        LevelHead, Quality, QualityMetaId, Rec, RecGroup, StructDecl, Subterm, Term, UniverseError,
+        UniverseMetaId, Universes, lasting, rewrite_universe_qualities,
+        substitute_universe_metas_scoped,
     },
     curios_utilities::{Entropy, Keyed},
     std::{
         cell::RefCell,
         collections::{HashMap, HashSet},
         convert::Infallible,
+        mem,
         rc::Rc,
     },
 };
@@ -103,12 +105,83 @@ pub(crate) struct Caches {
     proofs: HashMap<Free, bool>,
     /// One tick per *write* to any kernel store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `Context::get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
     mutation_stamp: Entropy,
-    /// A recorded scrutinee against itself as the kernel spells it — solved metavariables materialized, local definitions substituted, refined variables as their values — kept where no metavariable in it is left unsolved: what the filter in front of an entry reads (`reduce`'s `could_settle`), which would otherwise rebuild the scrutinee at every stuck form. It rests on the solutions, the definitions and the refinements in the window, so it goes wherever the reducts do, and at a settlement's boundary whichever reduction crosses it. Behind a cell because the filter runs while the entries are borrowed.
+    /// A recorded scrutinee against itself as the kernel spells it — solved metavariables materialized, local definitions substituted, refined variables as their values — kept where no metavariable in it is left unsolved: what the filter in front of an entry reads (`reduce`'s `could_settle`), which would otherwise rebuild the scrutinee at every stuck form. It rests on the solutions, the definitions and the refinements in the window, so it goes wherever the reducts do, and a bracket sets it aside with them ([`Caches::enter_window`]). Behind a cell because the filter runs while the entries are borrowed.
     kernel_spellings: RefCell<HashMap<Term, Term>>,
     /// Monotonic universe-solver writes are tracked separately. Elaboration entries may survive them only when their keys and results contain no transitively unresolved universe meta; reducts survive them outright, being parametric in levels (see `Context::cached_reduced`); rollback/finalization clears every cache at the non-monotonic boundaries.
     universe_mutation_stamp: Entropy,
     /// Whether every boundary clears every table, as each did before an answer was kept for as long as what it read stands ([`Caches::wholesale`]).
     wholesale: bool,
+    /// The windows of the scope the brackets in progress set aside, innermost last ([`Caches::enter_window`]).
+    windows: Vec<Window>,
+}
+
+/// A bracket of the scope: a span in which the frames in view are not the ones around it, after which they are again.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Bracket {
+    /// A settlement, made by plain reduction where `plain`: the frames from its entry inwards are withheld and restored, and nothing but its reduction runs between.
+    Settlement { plain: bool },
+    /// A judgment standing on held frames: the live frames are set aside and the held ones stand in their place.
+    Stand,
+}
+
+impl Bracket {
+    /// The reductions whose tables the bracket reaches: plain reduction's alone inside a span of it, since nothing else runs there, and both otherwise.
+    fn reductions(self) -> &'static [usize] {
+        match self {
+            Bracket::Settlement { plain: true } => &[1],
+            Bracket::Settlement { plain: false } | Bracket::Stand => &[0, 1],
+        }
+    }
+
+    /// Whether the sorts and the verdicts are handed back with the reducts. A settlement runs reduction alone, which writes nothing a sort or a verdict reads; a stand runs a judgment, which may.
+    fn keeps_judgments(self) -> bool {
+        matches!(self, Bracket::Settlement { .. })
+    }
+}
+
+/// What a window of the scope had remembered when a bracket set it aside, of the reductions the bracket reaches.
+#[derive(Debug)]
+struct Window {
+    bracket: Bracket,
+    scoped: [Scoped; 2],
+    kernel_spellings: HashMap<Term, Term>,
+    /// The classifications the elaborator's conversion classed, a judgment's alone, set aside where the bracket reaches a judgment's reduction.
+    classified: HashMap<Term, Rc<Classification>>,
+}
+
+/// One reduction's scoped answers.
+#[derive(Debug, Default)]
+struct Scoped {
+    reduction: HashMap<Term, Term>,
+    reduction_erased: HashMap<Term, Term>,
+    forced: HashMap<Term, Term>,
+    closed: AsideAnswers,
+    sorts: HashMap<Term, Sort>,
+    same: HashMap<(Term, Term), bool>,
+}
+
+impl Scoped {
+    fn clear(&mut self) {
+        self.reduction.clear();
+        self.reduction_erased.clear();
+        self.forced.clear();
+        self.closed.clear();
+        self.sorts.clear();
+        self.same.clear();
+    }
+
+    /// What [`Caches::retain_reductions_without`] keeps of the live window, kept of this one.
+    fn retain_without(&mut self, name: &Free) {
+        self.reduction
+            .retain(|_, reduct| !reduct.mentions_free(name));
+        let reduction = &self.reduction;
+        self.reduction_erased
+            .retain(|_, key| reduction.contains_key(key));
+        self.forced.retain(|_, value| !value.mentions_free(name));
+        self.closed.retain_without(name);
+        self.sorts.clear();
+        self.same.clear();
+    }
 }
 
 impl Caches {
@@ -407,6 +480,13 @@ impl Caches {
         self.classifications.clear();
         self.clear_reductions();
         self.clear_elaborations();
+        // A bracket in progress hands back what its window held under the state replaced, which answers for nothing here.
+        for window in &mut self.windows {
+            for scoped in &mut window.scoped {
+                scoped.clear();
+            }
+            window.kernel_spellings.clear();
+        }
     }
 
     /// `group` at `universes`, remembered as that instance of it: the one way an instance is opened, so that every one a term comes to hold is known for the instance it is.
@@ -552,6 +632,12 @@ impl Caches {
         for forced in self.forced.iter_mut().chain(&mut self.lasting_forced) {
             forced.retain(|_, value| !value.mentions_free(name));
         }
+        // A window set aside is handed back after the definition, which may outlive the bracket.
+        for window in &mut self.windows {
+            for scoped in &mut window.scoped {
+                scoped.retain_without(name);
+            }
+        }
         for closed in &mut self.closed {
             closed.retain_without(name);
         }
@@ -581,43 +667,71 @@ impl Caches {
         }
     }
 
-    /// A settlement is withholding, or has stopped withholding, the refinements from the entry it settles inwards: the reason a judgment standing on held frames has ([`Caches::invalidate_stand_boundary`]), facing the other way — what was reduced on one side of that line must not answer on the other — so the scoped reduction tables clear on both sides as they do there.
-    ///
-    /// **Inside a span of plain reduction only what plain reduction remembered goes.** Nothing but plain reduction runs between the two sides of a settlement made there, so what a judgment's reduction remembered is as true when the refinements are restored as it was before they were withheld.
-    pub(crate) fn invalidate_settlement_boundary(&mut self, plain: bool) {
-        match plain {
-            true => {
-                self.reduction[1].clear();
-                self.reduction_erased[1].clear();
-                self.forced[1].clear();
-                match self.wholesale {
-                    true => {
-                        self.lasting[1].clear();
-                        self.lasting_erased[1].clear();
-                        self.lasting_forced[1].clear();
-                        self.closed[1].clear();
-                    }
-                    false => self.closed[1].clear_scoped(),
+    /// A bracket of the scope begins: the live window's scoped answers, of the reductions `bracket` reaches, are set aside, and the bracket starts from none of its own, as a boundary would leave it. What the live window remembered is what asking again gives once the bracket closes — a settlement commits nothing and files a stuck form only once every entry it could match has been settled, and a stand writes nothing to the frames it sets aside — so [`Caches::leave_window`] hands it back. What a bracket clears inside it is its own: a rollback there unwinds what it committed, a rewrite of levels pins the levels it minted, and a redefinition rebinds a label of its frame. Under [`Caches::wholesale`] each side of a bracket is a boundary that clears.
+    pub(crate) fn enter_window(&mut self, bracket: Bracket) {
+        if self.wholesale {
+            self.clear_reductions();
+            return;
+        }
+        // A sort or a verdict set aside answers again once the bracket closes, so it is one that answers now.
+        self.settle_sorts();
+        let mut window = Window {
+            bracket,
+            scoped: Default::default(),
+            kernel_spellings: mem::take(self.kernel_spellings.get_mut()),
+            classified: HashMap::new(),
+        };
+        for &index in bracket.reductions() {
+            let scoped = &mut window.scoped[index];
+            scoped.reduction = mem::take(&mut self.reduction[index]);
+            scoped.reduction_erased = mem::take(&mut self.reduction_erased[index]);
+            scoped.forced = mem::take(&mut self.forced[index]);
+            scoped.closed = self.closed[index].set_aside();
+            scoped.sorts = mem::take(&mut self.sorts[index]);
+            scoped.same = mem::take(&mut self.same[index]);
+        }
+        if bracket.reductions().contains(&0) {
+            window.classified = mem::take(&mut self.classified);
+        }
+        self.windows.push(window);
+    }
+
+    /// The bracket [`Caches::enter_window`] began closes: what it remembered was read under its own window and goes, and the window it set aside is handed back. A settlement's sorts and verdicts come back with its reducts and answer under the stamps as they stand, since reduction alone ran in between; a stand's go.
+    pub(crate) fn leave_window(&mut self) {
+        if self.wholesale {
+            self.clear_reductions();
+            return;
+        }
+        let mut window = self.windows.pop().expect("a bracket left was entered");
+        let keeps_judgments = window.bracket.keeps_judgments();
+        for &index in window.bracket.reductions() {
+            let scoped = mem::take(&mut window.scoped[index]);
+            self.reduction[index] = scoped.reduction;
+            self.reduction_erased[index] = scoped.reduction_erased;
+            self.forced[index] = scoped.forced;
+            self.closed[index].hand_back(scoped.closed);
+            match keeps_judgments {
+                true => {
+                    self.sorts[index] = scoped.sorts;
+                    self.same[index] = scoped.same;
                 }
-                self.sorts[1].clear();
-                self.same[1].clear();
-                // A scrutinee's spelling reads the refinements in the window, which this boundary moves.
-                self.kernel_spellings.get_mut().clear();
+                false => {
+                    self.sorts[index].clear();
+                    self.same[index].clear();
+                }
             }
-            false => {
-                self.clear_scoped_reductions();
-            }
+        }
+        *self.kernel_spellings.get_mut() = window.kernel_spellings;
+        if window.bracket.reductions().contains(&0) {
+            self.classified = window.classified;
+        }
+        if keeps_judgments {
+            self.sorts_at = self.stamps();
         }
     }
 
-    /// A judgment is standing on held frames, or leaving them, and the frames it sets aside register a refinement: a reduct taken with one in view must not answer where it is not, nor the other way round, so the scoped reducts and the elaborations clear — on both sides of the stand, unstamped (setting frames aside writes nothing).
-    pub(crate) fn invalidate_stand_boundary(&mut self) {
-        // How many reducts the clear throws away.
-        curios_profile::sample!(
-            "caches::stand_dropped",
-            (self.reduction[0].len() + self.reduction[1].len()) as u64
-        );
-        self.clear_scoped_reductions();
+    /// A judgment stands on held frames, or leaves them, across a refinement in either set of frames or a definition they state otherwise: an elaboration taken on one side must not answer on the other, so the elaborations clear. The reducts go into the window the stand sets aside ([`Caches::enter_window`]).
+    pub(crate) fn invalidate_for_stand(&mut self) {
         self.clear_elaborations();
     }
 

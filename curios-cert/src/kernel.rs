@@ -1199,13 +1199,13 @@ impl<'s> Kernel<'s> {
     ///
     /// Withholding is [`Scope::hide_refinements_from`]'s to justify. An error settles the equation as having no reduced spelling, so the attempt is paid once rather than repeated at every later probe; the settlement is a [`Probe`], so exhaustion settles it the same way and propagates besides.
     pub(crate) fn settle_refinement(&mut self, index: usize, key: Term) -> Result<(), ReduceError> {
-        // Withholding equations is a change to the set in force, and so is restoring them: the local-bearing reducts remembered on either side of the settlement must not answer on the other.
+        // Withholding equations is a change to the set in force, and so is restoring them: what was read off the scope under the equations in force is set aside while the settlement runs and handed back where it restores them, and what the settlement reads under the narrowed ones goes ([`Memos::set_aside`]).
         let outer = self.scope.hide_refinements_from(index);
-        self.narrowed();
+        let aside = self.memos.set_aside(self.scope.plain());
         // The reduced spelling is held operand-canonical, the form `refined_reduct` brings a probed value to before comparing — see `canonical_operands`.
         let reduct = whnf(self, key).and_then(|reduct| whnf::canonical_operands(self, &reduct));
         self.scope.show_refinements(outer);
-        self.narrowed();
+        self.memos.hand_back(aside);
 
         match reduct.probed() {
             Ok(settled) => {
@@ -1216,14 +1216,6 @@ impl<'s> Kernel<'s> {
                 self.scope.settle_refinement(index, None);
                 Err(spent)
             }
-        }
-    }
-
-    /// The equations in force were narrowed, or restored, for the reduction running now: what it read off the scope on the other side of that line goes. Only plain reduction runs inside a span of it ([`Kernel::plainly`]), so there what plain reduction remembered goes alone, and what a judgment's reduction remembered stands when the span ends.
-    fn narrowed(&mut self) {
-        match self.scope.plain() {
-            true => self.memos.begin_plain(),
-            false => self.memos.begin_equations(),
         }
     }
 
@@ -1259,10 +1251,10 @@ impl<'s> Kernel<'s> {
         curios_profile::profile!("kernel::asked_scrutinee");
         self.plainly(|kernel| {
             let outer = kernel.scope.hide_refinements_from(index);
-            kernel.narrowed();
+            let aside = kernel.memos.set_aside(kernel.scope.plain());
             let same = convert::grounded(kernel, term, key);
             kernel.scope.show_refinements(outer);
-            kernel.narrowed();
+            kernel.memos.hand_back(aside);
 
             same
         })

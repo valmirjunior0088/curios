@@ -1691,21 +1691,20 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule and [`Caches::invalidate_settlement_boundary`] the cache protocol at each side.
+    /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule, and the caches set the live window's scoped answers aside for the bracket and hand them back where it ends ([`Caches::enter_window`]).
     pub(crate) fn with_refinements_withheld_from<R>(
         &mut self,
         frame: usize,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
+        let plain = self.typing.asking.plain();
         self.typing
             .caches
-            .invalidate_settlement_boundary(self.typing.asking.plain());
+            .enter_window(Bracket::Settlement { plain });
         let previous = self.typing.frames.withhold_refinements_from(frame);
         let result = f(self);
         self.typing.frames.restore_withheld_refinements(previous);
-        self.typing
-            .caches
-            .invalidate_settlement_boundary(self.typing.asking.plain());
+        self.typing.caches.leave_window();
 
         result
     }
@@ -2890,7 +2889,7 @@ impl<'s> Context<'s> {
     ///
     /// **Nothing is assumed, defined or registered again**, so the frame an entry stands in is the frame it was registered in: two guards, one read under the other, stand one under the other, and a guard's reduced spelling is the one its frame settled. What `work` writes is written to its own frame and goes with it, and what parks or is born meanwhile holds the frames stood on and that frame.
     ///
-    /// **The caches are told what a context rebuilt told them.** A reduct taken with a refinement in view must not answer where it is not, nor the other way round, so the reducts and the elaborations clear at both ends where the frames set aside or stood on hold one, whether or not they are the same frames; a definition the frames held bring into view is a fresh one to the reducts stuck on its absence, or a redefinition where the live context defines the name otherwise, and goes at the end as a frame's definitions go; and the binders in view are a write.
+    /// **The caches are told what a context rebuilt told them.** A reduct taken with a refinement in view must not answer where it is not, nor the other way round, and neither must one taken under a definition the frames held state otherwise than the live context does. So where the frames set aside or stood on hold a refinement, whether or not they are the same frames, or define a name otherwise, the stand is a bracket: the live window's reducts are set aside and handed back where it ends ([`Caches::enter_window`]), what is reduced standing on the held frames is its own, and the elaborations clear at both ends. A definition the held frames bring into view that the live context lacks is a fresh one to the reducts stuck on its absence, and goes at the end as a frame's definitions go; and the binders in view are a write.
     pub(crate) fn standing_on<R>(
         &mut self,
         held: &HeldFrames,
@@ -2910,34 +2909,36 @@ impl<'s> Context<'s> {
             }
         }
 
-        if set_aside_refined {
-            self.typing.caches.invalidate_stand_boundary();
+        let windowed = set_aside_refined || stood_on_refined || redefined;
+        if windowed {
+            self.typing.caches.enter_window(Bracket::Stand);
+            self.typing.caches.invalidate_for_stand();
         }
-        if held.binds() {
+        if held.binds() || stood_on_refined || redefined {
             self.typing.caches.note_write();
         }
         if redefined {
-            self.typing.caches.invalidate_for_redefinition();
             self.typing.frames.forget_spellings();
         }
         for name in &fresh {
             self.typing.caches.retain_reductions_without(name);
             self.typing.frames.forget_spellings_naming(name);
         }
-        if stood_on_refined {
-            self.typing.caches.invalidate_for_refinement();
-        }
 
         let aside = self.typing.frames.stand_on(held);
         let result = self.with_frame(work);
         self.typing.frames.stand_back(aside);
 
-        if set_aside_refined {
-            self.typing.caches.invalidate_stand_boundary();
+        match windowed {
+            true => {
+                self.typing.caches.leave_window();
+                self.typing.caches.invalidate_for_stand();
+            }
+            false => self
+                .typing
+                .caches
+                .invalidate_frame_exit(false, !fresh.is_empty()),
         }
-        self.typing
-            .caches
-            .invalidate_frame_exit(stood_on_refined, redefined || !fresh.is_empty());
 
         result
     }

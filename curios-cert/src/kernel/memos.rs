@@ -4,7 +4,7 @@
 //!
 //! Five invariants make it an evaluation strategy rather than a second source of truth, and all five live here.
 //!
-//! **Keys are valid by construction.** The definition store is written once: no entry point of the kernel rewrites a name it holds, each refusing one as `Error::Redeclared`, so what a remembered reduct read of a definition is what the definition still is. A whnf entry for a *local-free* term — every free variable a definition name — has a scope-independent key: whnf reads no local (locals carry no values by design) and no case equation, so the reduct is a function of the definition store alone and no key can dangle a retracted binder. A whnf entry for a *local-bearing* term is a function of two things more, the case equations in force and the type each local it names stands at — a question reduction puts to conversion is answered at it, where a lookup types the two sides — and its key can say neither; so those entries live in tables of their own that [`Memos::begin_equations`] clears wherever either changes — an equation assumed, a bracket retracting one, a settlement withholding and restoring them, an arm re-typing a local, the bracket that closes the arm and puts the local back — and within one such span the reduct is as fixed as a closed term's is within a declaration. The binders a walk of the kernel's opens are minted once and never recur, so an entry that outlives them is unreachable rather than wrong. Which table a term belongs to is decided here, on both the store and the lookup, rather than at the call sites that would have to remember it.
+//! **Keys are valid by construction.** The definition store is written once: no entry point of the kernel rewrites a name it holds, each refusing one as `Error::Redeclared`, so what a remembered reduct read of a definition is what the definition still is. A whnf entry for a *local-free* term — every free variable a definition name — has a scope-independent key: whnf reads no local (locals carry no values by design) and no case equation, so the reduct is a function of the definition store alone and no key can dangle a retracted binder. A whnf entry for a *local-bearing* term is a function of two things more, the case equations in force and the type each local it names stands at — a question reduction puts to conversion is answered at it, where a lookup types the two sides — and its key can say neither; so those entries live in tables of their own that [`Memos::begin_equations`] clears wherever either changes — an equation assumed, a bracket retracting one, an arm re-typing a local, the bracket that closes the arm and puts the local back — and within one such span the reduct is as fixed as a closed term's is within a declaration. A settlement withholds the equations from its own inwards and restores them, and what was read under them is set aside while it runs and handed back where it ends ([`Memos::set_aside`]). The binders a walk of the kernel's opens are minted once and never recur, so an entry that outlives them is unreachable rather than wrong. Which table a term belongs to is decided here, on both the store and the lookup, rather than at the call sites that would have to remember it.
 //!
 //! **A judgment that reads the scope lives as long as what it read.** A sort rests on what a reduct does: on the equations in force, which decide what a type reduces to, and on the type each local stands at, since a neutral's sort is read off its binder. So the scoped sorts are cleared where the local-bearing reducts are; and each is filed besides with the binders in scope when it was read — a [`Prefix`] — and answers only while they stand: a name handed in from outside can be assumed again, at another type, once its first binder is closed. A local-free type's sort is the declaration's only where no case equation is in force. Classifying one opens binders and reduces what stands beneath them, and an equation answers a term the kernel's conversion holds equal to its scrutinee, which a term naming only a proof the classification opened can be: `g(x)` under the equation of `g(p)`, two proofs of one proposition. So a sort read under an equation is filed with the scope's answers, whatever its type names.
 //!
@@ -82,6 +82,24 @@ impl<K: Eq + Hash, V: Clone> Lives<K, V> {
     fn begin_equations(&mut self) {
         self.scope.clear();
     }
+
+    /// The answers read off the scope, taken out and none left in their place.
+    fn take_scope(&mut self) -> HashMap<K, (Prefix, V)> {
+        mem::take(&mut self.scope)
+    }
+}
+
+/// What the answers read off the scope were when a settlement narrowed the equations in force, of the reductions it reaches: set aside while it runs, and handed back where it restores them ([`Memos::set_aside`]).
+pub(super) struct Aside {
+    plain: bool,
+    local: [HashMap<Term, Term>; 2],
+    local_forced: [HashMap<Term, Term>; 2],
+    sorts: [HashMap<Term, (Prefix, Sort)>; 2],
+    halves: HashMap<Term, (Prefix, Option<Erased>)>,
+    types: HashMap<Term, (Prefix, (Term, bool))>,
+    checked: HashMap<Checked, (Prefix, bool)>,
+    converted: [HashMap<Compared, (Prefix, bool)>; 2],
+    classified: HashMap<Term, Rc<Classification>>,
 }
 
 /// A term beside the type it was checked at, as the table of checks is keyed: told apart from another by its hash, so a probe compares no pair but the one it asks for.
@@ -96,7 +114,7 @@ pub(super) struct Memos {
     /// Weak-head reducts of local-free terms, per entry point: plain, and rec-forced. Free on a hit, and cleared at every declaration boundary — see the module documentation for why those two go together, and for why `whnf` reaches this at every level rather than only at the crate's edge.
     whnf: HashMap<Term, Term>,
     forced: HashMap<Term, Term>,
-    /// The same two tables for *local-bearing* terms, whose reducts are a function of the definition store **and the case equations in force**. The key cannot carry the second, so the tables live only as long as that set does: [`Memos::begin_equations`] clears them wherever an equation is assumed, retracted, withheld or restored, and [`Memos::begin_declaration`] with the rest. Within one such span a term's reduct is as fixed as a closed term's is within a declaration, and the web of definitions the index inversion forces at `Eq()(top(n), 0)` — each naming the one before it twice, a local in every one — would be re-derived `2^n` times without exactly this.
+    /// The same two tables for *local-bearing* terms, whose reducts are a function of the definition store **and the case equations in force**. The key cannot carry the second, so the tables live only as long as that set does: [`Memos::begin_equations`] clears them wherever an equation is assumed or retracted, a settlement sets them aside while it withholds some ([`Memos::set_aside`]), and [`Memos::begin_declaration`] clears them with the rest. Within one such span a term's reduct is as fixed as a closed term's is within a declaration, and the web of definitions the index inversion forces at `Eq()(top(n), 0)` — each naming the one before it twice, a local in every one — would be re-derived `2^n` times without exactly this.
     ///
     /// **One pair for each of the two reductions**: the first for a judgment's, which may ask the kernel's conversion which terms are one, and the second for plain reduction, which asks nothing (`Kernel::plainly`). A local-bearing term's reduct under one is not its reduct under the other, and neither table may answer for the other. The reducts of local-free terms need no second table: nothing is asked of a term that names no local, so they are one function of the definition store under both.
     local: [HashMap<Term, Term>; 2],
@@ -386,17 +404,64 @@ impl Memos {
         }
     }
 
-    /// Discard what plain reduction read off the scope: its local-bearing reducts, and its scoped sorts and verdicts. Called where the equations in force are narrowed, or restored, inside a span of plain reduction: only plain reduction runs between the two, so what a judgment's reduction remembered still stands when they are restored.
-    pub(super) fn begin_plain(&mut self) {
-        self.local[1].clear();
-        self.local_forced[1].clear();
-        self.sorts[1].begin_equations();
-        self.converted[1].begin_equations();
+    /// A settlement narrows the equations in force: the answers read off the scope under the ones it withholds are set aside, of the reductions it reaches — plain reduction's alone inside a span of it, since nothing else runs there, and every scoped table otherwise, as [`Memos::begin_equations`] reaches them — and the settlement starts from none.
+    ///
+    /// **What was set aside is what asking again gives once the equations are restored.** A settlement reduces, and a question it puts to conversion opens binders and assumes no equation, so nothing it does reaches what the answers set aside read; [`Memos::hand_back`] puts them back where it restores the equations, and what the settlement remembered under the narrowed ones goes.
+    pub(super) fn set_aside(&mut self, plain: bool) -> Aside {
+        let mut aside = Aside {
+            plain,
+            local: Default::default(),
+            local_forced: Default::default(),
+            sorts: Default::default(),
+            halves: HashMap::new(),
+            types: HashMap::new(),
+            checked: HashMap::new(),
+            converted: Default::default(),
+            classified: HashMap::new(),
+        };
+        for index in reached(plain) {
+            aside.local[index] = mem::take(&mut self.local[index]);
+            aside.local_forced[index] = mem::take(&mut self.local_forced[index]);
+            aside.sorts[index] = self.sorts[index].take_scope();
+            aside.converted[index] = self.converted[index].take_scope();
+        }
+        if !plain {
+            aside.halves = self.halves.take_scope();
+            aside.types = self.types.take_scope();
+            aside.checked = self.checked.take_scope();
+            aside.classified = mem::take(&mut self.classified);
+        }
+
+        aside
+    }
+
+    /// Put back what [`Memos::set_aside`] set aside, where the settlement restores the equations it narrowed: what was remembered under the narrowed ones goes.
+    pub(super) fn hand_back(&mut self, mut aside: Aside) {
+        for index in reached(aside.plain) {
+            self.local[index] = mem::take(&mut aside.local[index]);
+            self.local_forced[index] = mem::take(&mut aside.local_forced[index]);
+            self.sorts[index].scope = mem::take(&mut aside.sorts[index]);
+            self.converted[index].scope = mem::take(&mut aside.converted[index]);
+        }
+        if !aside.plain {
+            self.halves.scope = aside.halves;
+            self.types.scope = aside.types;
+            self.checked.scope = aside.checked;
+            self.classified = aside.classified;
+        }
     }
 
     /// Discard the typings read off the scope, and nothing else. Called wherever what the enclosing arms established for the call recorder changes: a group typed inside a term closes under it, so a type or a check remembered on one side of that change does not answer on the other. A reduct and a sort read none of it. Called too where an arm binds a `let`-bound local again: a typing of a term naming it read what it stood for, and a reduct, a sort and a verdict are keyed by value and name none.
     pub(super) fn begin_sizes(&mut self) {
         self.types.begin_equations();
         self.checked.begin_equations();
+    }
+}
+
+/// The reductions whose scoped tables a narrowing reaches: plain reduction's alone inside a span of it, and both otherwise.
+fn reached(plain: bool) -> std::ops::Range<usize> {
+    match plain {
+        true => 1..2,
+        false => 0..2,
     }
 }

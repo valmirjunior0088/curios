@@ -41,7 +41,7 @@ use {
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
-    std::{collections::HashMap, sync::Arc},
+    std::{collections::HashMap, mem, sync::Arc},
 };
 
 /// What one machine frame costs when it deepens the stack past its previous peak: a [`Frame`] is a few slots of reducer-owned storage, priced on the buffer row. The native-frame analogue is [`Cost::FRAME`], three orders of magnitude larger, and the gap between the two is what this module exists to stop spending.
@@ -92,6 +92,22 @@ pub struct ClosedMemo {
     scoped: Answers,
 }
 
+/// A host's scoped answers, set aside while a bracket of its scope runs and handed back where the bracket closes ([`ClosedMemo::set_aside`]).
+#[derive(Debug, Default)]
+pub struct AsideAnswers(Answers);
+
+impl AsideAnswers {
+    /// Forget every answer set aside.
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    /// Forget every answer set aside that names `name`, as [`ClosedMemo::retain_without`] does.
+    pub fn retain_without(&mut self, name: &Free) {
+        self.0.retain_without(name);
+    }
+}
+
 /// One life's answers, a table for each demand.
 #[derive(Debug, Default)]
 struct Answers {
@@ -131,6 +147,16 @@ impl ClosedMemo {
     /// Forget every answer that does not stand for the declaration.
     pub fn clear_scoped(&mut self) {
         self.scoped.clear();
+    }
+
+    /// Set the scoped answers aside for a bracket of the host's scope, leaving none in their place: what the bracket's runs answer is its own.
+    pub fn set_aside(&mut self) -> AsideAnswers {
+        AsideAnswers(mem::take(&mut self.scoped))
+    }
+
+    /// Hand back what [`ClosedMemo::set_aside`] set aside, where the bracket closes, the bracket's own scoped answers discarded.
+    pub fn hand_back(&mut self, aside: AsideAnswers) {
+        self.scoped = aside.0;
     }
 
     /// Forget every answer that names `name`: a name defined since can only move a value that read its absence, and a value that did holds the name.
