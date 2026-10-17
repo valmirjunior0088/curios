@@ -408,7 +408,7 @@ fn collapsed(
     Ok(children(respelled).contains(&folded).then_some(folded))
 }
 
-/// A reducer that takes every term as reduced already, for a walk over a stuck operation a reducer has just left: its operands are as the fold reduced them, and forcing them again is work the kernel's memo replays the identities of on every read, which a walk made at every stuck fold would compound. What the walk builds is still charged to the reducer this one stands before.
+/// A reducer that takes every term as reduced already, for a walk over a stuck operation a reducer has just left: its operands are as the fold reduced them, and forcing them again is a lookup at least, and a reduction where the memo has none, at every operand of every stuck fold. What the walk builds is still charged to the reducer this one stands before.
 struct Standing<'a, R>(&'a mut R);
 
 impl<R: Reducer> Reducer for Standing<'_, R> {

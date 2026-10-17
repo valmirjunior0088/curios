@@ -106,7 +106,7 @@ pub enum Answered {
 ///
 /// **It calls no judgment**, since it runs inside reduction.
 ///
-/// **Nothing is reduced.** Both terms are reduced already, so the readers are handed a driver that takes every term as it stands (`Reduced`): forcing the term would ask the reducer for the stuck form it is in the middle of probing, forcing the key would meet the key's own equation and read the case value in its place, and forcing an operand again is work the kernel's memo replays the identities of on every read, which a lookup made at every stuck form would compound. A node the fold left as written below an operand — a connective's right operand behind a stuck left — is read as the atom it spells, which declines where reducing it might have answered.
+/// **Nothing is reduced.** Both terms are reduced already, so the readers are handed a driver that takes every term as it stands (`Reduced`): forcing the term would ask the reducer for the stuck form it is in the middle of probing, forcing the key would meet the key's own equation and read the case value in its place, and forcing an operand again is a lookup at least, and a reduction where the memo has none, at every operand of every stuck form a lookup is made at. A node the fold left as written below an operand — a connective's right operand behind a stuck left — is read as the atom it spells, which declines where reducing it might have answered.
 ///
 /// **Only two terms of one kind are put to the readers.** The chain is written for the two sides of one comparison, which have one type, and a lookup presents whatever stuck form reduction reached: a pair is read only where both produce a `Bool` or both produce a value of one carrier.
 pub fn answers(
