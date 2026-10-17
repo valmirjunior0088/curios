@@ -813,3 +813,24 @@ fn a_clock_answers_the_nanoseconds_within_a_second() {
     assert!(host.clock_wall().nanos < 1_000_000_000);
     assert!(host.clock_mono().nanos < 1_000_000_000);
 }
+
+/// A standard stream the program closed names nothing, as a closed handle does: a read, a write and a flush answer `NotFound`, a watch of it is ready so a waiter wakes into the call that says why, and the streams left open answer as before.
+#[test]
+fn a_closed_standard_stream_names_nothing() {
+    let (host, io) = MockHost::builder().stdin_lines(["unread"]).build();
+
+    host.handle_close(Handle::Stdin);
+    host.handle_close(Handle::Stdout);
+
+    assert_eq!(host.handle_read(Handle::Stdin, 8), Err(Failure::NotFound));
+    assert_eq!(
+        host.handle_write(Handle::Stdout, b"lost".to_vec()),
+        Err(Failure::NotFound)
+    );
+    assert_eq!(host.handle_flush(Handle::Stdout), Err(Failure::NotFound));
+    let watch = host.handle_watch(Handle::Stdin, true, false);
+    assert_eq!(host.handle_ready(vec![watch]), [event::READY]);
+
+    assert_eq!(host.handle_write(Handle::Stderr, b"kept".to_vec()), Ok(4));
+    assert_eq!(io.output(), b"kept");
+}

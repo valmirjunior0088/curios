@@ -178,7 +178,7 @@ code_sets! {
         DISCARD_INPUT = 2 => discard_input;
     }
 
-    /// The well-known stdio handle tokens minted by the `/sys/Handle` prelude. A handle's wire encoding is the little-endian `Natural` bytes of its token (see `Handle::encode`), which mints one zero byte for zero — so STDIN encodes as `[0]`, never the empty byte string.
+    /// The well-known stdio handle tokens minted by the `/sys/Handle` prelude. A handle's wire encoding is the little-endian `Natural` bytes of its token (see `Handle::encode`), which mints one zero byte for zero — so STDIN encodes as `[0]`, never the empty byte string. A program may close one, and its token then names nothing, as any closed handle's does.
     stdio: u32 as Nat {
         /// Standard input — the token whose wire encoding is the single zero byte `[0]`.
         STDIN = 0;

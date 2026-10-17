@@ -12,9 +12,10 @@ use {
             FdSetElement, FdSetIter, PollFd, PollFlags, Timespec, fd_set_insert,
             fd_set_num_elements, poll, select,
         },
-        fs::{OFlags, fcntl_getfl, fcntl_setfl},
+        fs::{OFlags, fcntl_getfl, fcntl_setfl, open},
         io::Errno,
         pipe::PIPE_BUF,
+        stdio::{dup2_stderr, dup2_stdin, dup2_stdout},
         termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
     },
     rustls::{
@@ -112,10 +113,20 @@ enum OsResource {
     Timer(Option<Instant>),
 }
 
-/// The standard streams' owners, kept alive while a poll borrows their descriptors.
-type Streams = (io::Stdin, io::Stdout, io::Stderr);
+/// The standard streams' owners, kept alive while a poll borrows their descriptors: none for one the program closed.
+type Streams = (Option<io::Stdin>, Option<io::Stdout>, Option<io::Stderr>);
 
-/// The descriptor a wait on `handle` polls, and the flags polled on its behalf for `asked`: a standard stream's own, a filed resource's, and none for a handle that names nothing a poll can watch — closed, a config token, a watch or a timer — so its waiter wakes at once into the call that says why.
+/// A standard stream's place among input, output and error, or none for any other handle.
+fn standard(handle: &Handle) -> Option<usize> {
+    match handle {
+        Handle::Stdin => Some(0),
+        Handle::Stdout => Some(1),
+        Handle::Stderr => Some(2),
+        Handle::Other(_) => None,
+    }
+}
+
+/// The descriptor a wait on `handle` polls, and the flags polled on its behalf for `asked`: a standard stream's own, a filed resource's, and none for a handle that names nothing a poll can watch — closed, a standard stream included, a config token, a watch or a timer — so its waiter wakes at once into the call that says why.
 fn descriptor<'a>(
     table: &'a Table<OsResource>,
     streams: &'a Streams,
@@ -123,9 +134,9 @@ fn descriptor<'a>(
     asked: PollFlags,
 ) -> Option<(BorrowedFd<'a>, PollFlags)> {
     match handle {
-        Handle::Stdin => Some((streams.0.as_fd(), asked)),
-        Handle::Stdout => Some((streams.1.as_fd(), asked)),
-        Handle::Stderr => Some((streams.2.as_fd(), asked)),
+        Handle::Stdin => streams.0.as_ref().map(|stream| (stream.as_fd(), asked)),
+        Handle::Stdout => streams.1.as_ref().map(|stream| (stream.as_fd(), asked)),
+        Handle::Stderr => streams.2.as_ref().map(|stream| (stream.as_fd(), asked)),
         Handle::Other(_) => table.get(handle).and_then(|resource| match resource {
             OsResource::File(file) => Some((file.as_fd(), asked)),
             // A connecting socket is ready to write once the connect has settled either way, which is what the kernel reports.
@@ -425,6 +436,8 @@ pub struct OsHost {
     termios: Mutex<Vec<(Vec<u8>, Termios)>>,
     /// Whether standard output and standard error are a pipe or a socket, read on the first write to each: a gated write to one is bounded by what it takes without blocking. See [`OsHost::write_standard`].
     bounded: [OnceLock<bool>; 2],
+    /// Which standard streams the program closed, by their place among input, output and error: a closed one's token names nothing, as any closed handle's does. See [`OsHost::close_standard`].
+    closed: [AtomicBool; 3],
 }
 
 impl OsHost {
@@ -441,6 +454,59 @@ impl OsHost {
             wake: OnceLock::new(),
             termios: Mutex::new(Vec::new()),
             bounded: [OnceLock::new(), OnceLock::new()],
+            closed: [
+                AtomicBool::new(false),
+                AtomicBool::new(false),
+                AtomicBool::new(false),
+            ],
+        }
+    }
+
+    /// Whether `handle` is a standard stream the program closed.
+    fn closed(&self, handle: &Handle) -> bool {
+        standard(handle).is_some_and(|place| self.closed[place].load(Ordering::Acquire))
+    }
+
+    /// The standard streams a wait may poll: each the program has not closed.
+    fn streams(&self) -> Streams {
+        let open = |place: usize| !self.closed[place].load(Ordering::Acquire);
+
+        (
+            open(0).then(stdin),
+            open(1).then(stdout),
+            open(2).then(stderr),
+        )
+    }
+
+    /// Close the standard stream at `place`, which `io` names. A terminal the program switched raw is restored first, while the descriptor still reaches it. The null device then takes the descriptor's number, which lets go of the stream — its reader reads the end, its writer meets a broken pipe, once nothing else holds it — and keeps the number from whatever is opened next, so nothing is ever read or written through it by mistake. A null device the system refuses leaves the stream held until the process exits, its token naming nothing all the same.
+    fn close_standard(&self, io: &Handle, place: usize) {
+        if self.closed[place].swap(true, Ordering::AcqRel) {
+            return;
+        }
+
+        let token = io.bytes();
+        let mut records = self.termios.lock().unwrap();
+        if let Some(index) = records.iter().position(|(saved, _)| *saved == token) {
+            let (_, saved) = records.remove(index);
+            let input = stdin();
+            let _ = tcsetattr(input.as_fd(), OptionalActions::Now, &saved);
+        }
+        drop(records);
+
+        let access = match place {
+            0 => OFlags::RDONLY,
+            _ => OFlags::WRONLY,
+        };
+        if let Ok(null) = open(
+            "/dev/null",
+            access | OFlags::CLOEXEC,
+            rustix::fs::Mode::empty(),
+        ) {
+            let _ = match place {
+                0 => dup2_stdin(&null),
+                1 => dup2_stdout(&null),
+                _ => dup2_stderr(&null),
+            };
         }
     }
 
@@ -467,6 +533,10 @@ impl OsHost {
 
     /// Run `apply` over the descriptor behind `handle` — a standard stream's, or an open file's, pipe's or serial port's out of the table. `None` for a handle with no descriptor a terminal `ioctl` could address, which the callers report as `NotFound`.
     fn with_fd<R>(&self, handle: &Handle, apply: impl FnOnce(BorrowedFd<'_>) -> R) -> Option<R> {
+        if self.closed(handle) {
+            return None;
+        }
+
         match handle {
             Handle::Stdin => Some(apply(stdin().as_fd())),
             Handle::Stdout => Some(apply(stdout().as_fd())),
@@ -482,6 +552,10 @@ impl OsHost {
 
     /// Whether `handle` names a stream that moves bytes in `direction` — the answer to a request of nothing, given without I/O. The standard streams are open one way each, and using one the other way is `EBADF`, as it is for a descriptor opened one way; anything that is not a stream at all is `NotFound`.
     fn stream(&self, handle: &Handle, direction: Direction) -> Result<(), Failure> {
+        if self.closed(handle) {
+            return Err(Failure::NotFound);
+        }
+
         match (handle, direction) {
             (Handle::Stdin, Direction::Read)
             | (Handle::Stdout | Handle::Stderr, Direction::Write) => Ok(()),
@@ -825,7 +899,7 @@ impl HostOps for OsHost {
 
     fn handle_ready(&self, on: Vec<Handle>) -> Vec<u8> {
         let mut table = self.table.lock().unwrap();
-        let streams = (stdin(), stdout(), stderr());
+        let streams = self.streams();
         let wake = self.looked();
         settle_woken(&mut table, &on);
         let (waits, mut reports) = Waits::of(
@@ -849,7 +923,7 @@ impl HostOps for OsHost {
 
     fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal> {
         let mut table = self.table.lock().unwrap();
-        let streams = (stdin(), stdout(), stderr());
+        let streams = self.streams();
 
         // A poll ends at a watch's event, at the soonest timer's instant or where a reply to come wakes; one that ends with nothing of `on` ready looks again.
         loop {
@@ -890,7 +964,12 @@ impl HostOps for OsHost {
     }
 
     fn handle_close(&self, io: Handle) {
-        self.table.lock().unwrap().remove(&io);
+        match standard(&io) {
+            Some(place) => self.close_standard(&io, place),
+            None => {
+                self.table.lock().unwrap().remove(&io);
+            }
+        }
     }
 
     fn later(&self, mut answer: Answer) -> Result<Settled, Handle> {
@@ -938,6 +1017,10 @@ impl HostOps for OsHost {
     }
 
     fn handle_read(&self, io: Handle, count: u64) -> Result<Option<Vec<u8>>, Failure> {
+        if self.closed(&io) {
+            return Err(Failure::NotFound);
+        }
+
         // A request for nothing reads nothing: it only asks whether the handle could be read, and never answers the end of a stream it did not look at.
         if count == 0 {
             return self.stream(&io, Direction::Read).map(|()| Some(Vec::new()));
@@ -1006,6 +1089,10 @@ impl HostOps for OsHost {
     }
 
     fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<u64, Failure> {
+        if self.closed(&io) {
+            return Err(Failure::NotFound);
+        }
+
         // An empty write writes nothing: it only asks whether the handle could be written.
         if bytes.is_empty() {
             return self.stream(&io, Direction::Write).map(|()| 0);
@@ -1039,8 +1126,11 @@ impl HostOps for OsHost {
     }
 
     fn handle_flush(&self, io: Handle) -> Result<(), Failure> {
-        if matches!(io, Handle::Stdin | Handle::Stdout | Handle::Stderr) {
-            return Ok(());
+        if standard(&io).is_some() {
+            return match self.closed(&io) {
+                true => Err(Failure::NotFound),
+                false => Ok(()),
+            };
         }
 
         // Only a TLS stream holds anything of what a write accepted: its records, which `rustls` pushes to the socket as far as the socket takes them. Every other kind wrote straight through.

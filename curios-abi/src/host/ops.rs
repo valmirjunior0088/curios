@@ -77,7 +77,7 @@ macro_rules! for_each_host_op {
             /// Whether each handle of `on` is ready now, without waiting: one byte for each, in the list's order, [`event::READY`](crate::event::READY) or nothing. A watch is ready as its handle is, a timer once its instant has passed, and any other handle at once, since nothing would hold a wait on it.
             HandleReady: fn handle_ready(on: Vec<Handle>) -> Vec<u8> { module: internal/Handle }
 
-            /// Close `h`. Closing an unknown handle is a no-op.
+            /// Close `h`. Closing an unknown handle is a no-op. A standard stream closes too: the process lets go of it, so the reader of an output reads its end, and the writer of an input meets a broken pipe, once nothing else holds the stream — a child that inherited it holds it until it ends — while its descriptor is kept by the null device, so nothing opened later is read or written through that number, and a child started afterwards inherits the null device. The standard handle then names nothing, as any closed handle does.
             HandleClose: fn handle_close(h: Handle) -> () { module: internal/Handle }
 
             /// Read the wall clock. `(secs, nanos)`: seconds since the Unix epoch, and the nanoseconds within the second.

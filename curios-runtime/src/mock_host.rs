@@ -478,6 +478,16 @@ enum MockResource {
     },
 }
 
+/// A standard stream's place among input, output and error, or none for any other handle.
+fn standard(handle: &Handle) -> Option<usize> {
+    match handle {
+        Handle::Stdin => Some(0),
+        Handle::Stdout => Some(1),
+        Handle::Stderr => Some(2),
+        Handle::Other(_) => None,
+    }
+}
+
 /// The scripted, in-memory `Host` used by the test suite — the mirror of `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
     /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `handle_read(Handle::Stdin, …)` drains the front chunk, answers `Failure::WouldBlock` until a watch of it arms the next one, and reports the end of the stream once the script is spent. A script of lines is one chunk, armed from the start; a multi-chunk script is what puts a reader's wait-and-resume path over standard input under test, which a host that is always ready never could.
@@ -512,6 +522,8 @@ pub struct MockHost {
     clock_mono_seq: Mutex<VecDeque<(u64, u64)>>,
     /// The instant the waits have slept until: a timer at or before it is due.
     slept_until: Mutex<(u64, u64)>,
+    /// Which standard streams the program closed, by their place among input, output and error: a closed one's token names nothing, as the native host answers it.
+    closed: Mutex<[bool; 3]>,
     /// Deterministic xorshift64 state backing `rand_bytes`.
     rng: Mutex<u64>,
     /// Scripted process arguments served by `proc_args`.
@@ -622,9 +634,18 @@ impl MockHost {
         MockHostBuilder::default()
     }
 
-    /// Whether `handle` names a stream that moves bytes in `direction`, as the native host answers it: a stream open only the other way — a standard stream, a file opened for the other, a child's pipe — is `EBADF`, and anything that is not a stream at all is `NotFound`.
+    /// Whether `handle` is a standard stream the program closed.
+    fn closed(&self, handle: &Handle) -> bool {
+        standard(handle).is_some_and(|place| self.closed.lock().unwrap()[place])
+    }
+
+    /// Whether `handle` names a stream that moves bytes in `direction`, as the native host answers it: a stream open only the other way — a standard stream, a file opened for the other, a child's pipe — is `EBADF`, and anything that is not a stream at all, a closed standard stream among them, is `NotFound`.
     fn stream(&self, handle: &Handle, direction: Direction) -> Result<(), Failure> {
         let wrong_way = Err(Failure::Other(errno::EBADF));
+
+        if self.closed(handle) {
+            return Err(Failure::NotFound);
+        }
 
         match (handle, direction) {
             (Handle::Stdin, Direction::Read)
@@ -679,6 +700,11 @@ impl MockHost {
 
     /// Whether a watch of `handle` asking to read is ready.
     fn read_ready(&self, table: &mut Table<MockResource>, handle: &Handle) -> bool {
+        // A closed standard stream is ready, as an unknown handle is, so a waiter wakes into the call that reports why.
+        if self.closed(handle) {
+            return true;
+        }
+
         match handle {
             // Standard input is armed like a scripted stream, so one look of a watch is one chunk of progress and a reader waiting on `WouldBlock` resumes into the next chunk.
             Handle::Stdin => {
@@ -954,7 +980,10 @@ impl HostOps for MockHost {
 
     fn handle_flush(&self, io: Handle) -> Result<(), Failure> {
         if matches!(io, Handle::Stdin | Handle::Stdout | Handle::Stderr) {
-            return Ok(());
+            return match self.closed(&io) {
+                true => Err(Failure::NotFound),
+                false => Ok(()),
+            };
         }
 
         if self.table.lock().unwrap().get(&io).is_none() {
@@ -1089,6 +1118,12 @@ impl HostOps for MockHost {
     }
 
     fn handle_close(&self, io: Handle) {
+        if let Some(place) = standard(&io) {
+            self.closed.lock().unwrap()[place] = true;
+
+            return;
+        }
+
         let closed = self.table.lock().unwrap().remove(&io);
 
         if matches!(
@@ -1945,6 +1980,7 @@ impl MockHostBuilder {
             clock_wall_seq: Mutex::new(self.clock_wall_seq),
             clock_mono_seq: Mutex::new(self.clock_mono_seq),
             slept_until: Mutex::new((0, 0)),
+            closed: Mutex::new([false; 3]),
             // A fixed non-zero xorshift64 seed: deterministic across runs.
             rng: Mutex::new(0x2545_F491_4F6C_DD1D),
             args: self.args,

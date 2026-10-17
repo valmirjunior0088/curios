@@ -102,6 +102,8 @@ export async function run(config) {
   const { status, event } = config;
   const { STDIN, STDOUT, STDERR } = config.stdio;
   const standard = new Set([STDIN, STDOUT, STDERR]);
+  // The standard streams the program closed: each names nothing after, as a closed handle does on every host.
+  const closed = new Set();
 
   // The handles this host mints — watches and timers — keyed as every token is, each beside whether it is ready now and, for a timer, the instant it is ready at. A token is the minimal little-endian bytes of a count from `seed` up, as every host mints them, so it collides with no constant token.
   const minted = new Map();
@@ -130,8 +132,13 @@ export async function run(config) {
   // The output streams take every write whole, and hand each hook a copy of it, so a hook that keeps and changes what it was given changes nothing the run reports. Standard input is not open for writing, as on every host.
   const write = (handle, ref) => {
     const bytes = decodeBytes(ref);
+    const key = keyOf(handle);
 
-    switch (keyOf(handle)) {
+    if (closed.has(key)) {
+      return [status.NOT_FOUND, 0n];
+    }
+
+    switch (key) {
       case STDOUT:
         output.stdout.push(bytes);
         hooks.onStdout?.(bytes.slice());
@@ -159,7 +166,13 @@ export async function run(config) {
   const host = {
     // Standard input is at its end, so a read of it answers `EOF` — or, asked for nothing, succeeds with nothing, since a request for nothing only asks whether the handle could be read. The output streams are not open for reading.
     handle_read: (handle, count) => {
-      switch (keyOf(handle)) {
+      const key = keyOf(handle);
+
+      if (closed.has(key)) {
+        return [status.NOT_FOUND, emptyBytes()];
+      }
+
+      switch (key) {
         case STDIN:
           return [count === 0n ? status.OK : status.EOF, emptyBytes()];
         case STDOUT:
@@ -193,16 +206,27 @@ export async function run(config) {
 
       return encodeBytes(reports);
     },
-    // Closing a watch, a timer or a reply to come forgets it, aborting the hook's signal for the last; closing anything else does nothing, as closing an unknown handle does on every host.
+    // Closing a standard stream leaves it naming nothing; closing a watch, a timer or a reply to come forgets it, aborting the hook's signal for the last; closing anything else does nothing, as closing an unknown handle does on every host.
     handle_close: (handle) => {
       const key = keyOf(handle);
+
+      if (standard.has(key)) {
+        closed.add(key);
+
+        return;
+      }
 
       minted.get(key)?.close?.();
       minted.delete(key);
     },
     // Nothing is held back in the playground — every write is delivered as it is made — so a standard stream's flush has nothing to drain, and no other handle exists here.
-    handle_flush: (handle) =>
-      standard.has(keyOf(handle)) ? status.OK : status.NOT_FOUND,
+    handle_flush: (handle) => {
+      const key = keyOf(handle);
+
+      return standard.has(key) && !closed.has(key)
+        ? status.OK
+        : status.NOT_FOUND;
+    },
     // No stream here has a sending half of its own to end: the standard streams are not sockets, and no other handle exists.
     handle_finish: () => status.NOT_FOUND,
     clock_wall: () => {

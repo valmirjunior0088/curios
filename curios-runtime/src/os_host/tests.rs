@@ -1180,3 +1180,15 @@ fn the_null_device_reads_its_end_and_takes_every_write() {
     host.handle_close(reader);
     host.handle_close(writer);
 }
+
+/// A standard stream the program closed names nothing, as a closed handle does: a read answers `NotFound`, and a watch of it is ready at once, with no descriptor left for a poll to watch. Only standard input is closed here, since closing standard output or error would close the test runner's own; the end its reader reads is held through a program of its own.
+#[test]
+fn a_closed_standard_input_names_nothing() {
+    let host = OsHost::with_args(vec![]);
+
+    host.handle_close(Handle::Stdin);
+
+    assert_eq!(host.handle_read(Handle::Stdin, 8), Err(Failure::NotFound));
+    let watch = host.handle_watch(Handle::Stdin, true, false);
+    assert_eq!(host.handle_ready(vec![watch]), [event::READY]);
+}
