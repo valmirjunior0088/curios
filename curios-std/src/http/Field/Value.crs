@@ -1,7 +1,7 @@
 use /std/{Str, Bytes, Byte, Nat, Bool, List, Option, Result, Spell};
 use /std/Bool/{True, Holds};
-use /std/time/Timestamp/{Utc};
-use /std/time/Timestamp/Utc/{Month, Weekday};
+use /std/time/{DateTime};
+use /std/time/DateTime/{Month, Weekday};
 use /std/ops/{Eql};
 
 --- Whether `b` may stand in a field value: the tab, the space, and every octet past them but DEL, obs-text included (RFC 9110 §5.5). No other control octet may, a line's end least of all.
@@ -107,7 +107,9 @@ let year_digits(n: Nat, rest: Value) -> Value =
     end;
 
 -- A weekday's and a month's three letters may each stand in a value: by cases, a literal's reason at each.
-let weekday_admitted(d: Weekday) -> Holds(Bytes/all(Str/to_bytes(Utc/weekday_name(d)), admits)) =
+let weekday_admitted(
+    d: Weekday,
+) -> Holds(Bytes/all(Str/to_bytes(DateTime/weekday_name(d)), admits)) =
     match d
     | sunday() => True/qed()
     | monday() => True/qed()
@@ -118,7 +120,7 @@ let weekday_admitted(d: Weekday) -> Holds(Bytes/all(Str/to_bytes(Utc/weekday_nam
     | saturday() => True/qed()
     end;
 
-let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(Utc/month_name(m)), admits)) =
+let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(DateTime/month_name(m)), admits)) =
     match m
     | january() => True/qed()
     | february() => True/qed()
@@ -134,8 +136,8 @@ let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(Utc/month_name(m)),
     | december() => True/qed()
     end;
 
---- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7): the octets of `Utc/to_imf_fixdate`, each built as one a value may hold, so a message is dated with no check that could refuse.
-pub let of_utc(d: Utc) -> Value =
+--- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7): the octets of `DateTime/to_imf_fixdate`, each built as one a value may hold, so a message is dated with no check that could refuse.
+pub let of_date_time(d: DateTime) -> Value =
     let clock =
         two_digits(
             d.hour,
@@ -143,7 +145,7 @@ pub let of_utc(d: Utc) -> Value =
                 lit(":"),
                 two_digits(d.minute, append(lit(":"), two_digits(d.second, lit(" GMT"))))));
     append(
-        lit(Utc/weekday_name(d.weekday), @weekday_admitted(d.weekday)),
+        lit(DateTime/weekday_name(d.weekday), @weekday_admitted(d.weekday)),
         append(
             lit(", "),
             two_digits(
@@ -151,5 +153,5 @@ pub let of_utc(d: Utc) -> Value =
                 append(
                     lit(" "),
                     append(
-                        lit(Utc/month_name(d.month), @month_admitted(d.month)),
+                        lit(DateTime/month_name(d.month), @month_admitted(d.month)),
                         append(lit(" "), year_digits(d.year, append(lit(" "), clock))))))));

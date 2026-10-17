@@ -117,5 +117,5 @@ let date_led() -> Parse(Str, Toml) =
     Parse/or(date_time_tail(date), Parse/pure(Toml/local_date(date)));
 
 --- A date, a time, or the two together, with or without an offset.
-pub let datetime_value: Parse(Str, Toml) =
+pub let date_time_value: Parse(Str, Toml) =
     Parse/or(date_led(), Parse/map(time_parse(), (time) => Toml/local_time(time)));

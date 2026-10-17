@@ -8,7 +8,7 @@
 
 ## What is known
 
-- **Shown once.** With `Reader::subtractions` and `Reader::extrema` (`curios-elab/src/entailment/facts.rs`) extending `self.read.facts` where they extend `self.read.common`, so that what both cases of a split state is read among the scope's facts, the library elaborates and certifies (`cargo xtask workspace lint`), the two bound proofs of `/std/time/Timestamp/Utc/of_timestamp` are written another way, and `curios-pipeline`'s `standard::tests::the_first_part_of_the_library_reads_back` panics in `fresh` while the kernel checks `of_timestamp_as_printed`, that `let`'s printed form, under a budget of 30,000,000 steps; taken on the commit over `d36bb8a58`.
+- **Shown once.** With `Reader::subtractions` and `Reader::extrema` (`curios-elab/src/entailment/facts.rs`) extending `self.read.facts` where they extend `self.read.common`, so that what both cases of a split state is read among the scope's facts, the library elaborates and certifies (`cargo xtask workspace lint`), the two bound proofs of `/std/time/DateTime/of_timestamp` are written another way, and `curios-pipeline`'s `standard::tests::the_first_part_of_the_library_reads_back` panics in `fresh` while the kernel checks `of_timestamp_as_printed`, that `let`'s printed form, under a budget of 30,000,000 steps; taken on the commit over `d36bb8a58`.
 - **Not known**: which reduct's replay carries the count, and whether a program a reader would write reaches it; the test's build is optimized and a debugger reads no local of it.
 
 ## Refinement

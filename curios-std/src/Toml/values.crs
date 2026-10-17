@@ -5,7 +5,7 @@ use /std/Toml/scan/{trivia, ws};
 use /std/Toml/strings/{str_basic, str_literal, str_ml_basic, str_ml_literal};
 use /std/Toml/keys/{key_dotted};
 use /std/Toml/numbers/{flt_number, flt_special, int_value};
-use /std/Toml/datetime/{datetime_value};
+use /std/Toml/date_time/{date_time_value};
 
 let val_str_basic: Parse(Str, Toml) =
     Parse/map(Parse/or(str_ml_basic(), str_basic), (s) => Toml/str(s));
@@ -26,7 +26,7 @@ let val_special: Parse(Str, Toml) =
     Parse/label(flt_special(), "expected value");
 
 let val_number_digit: Parse(Str, Toml) =
-    Parse/or(datetime_value, Parse/or(flt_number(), int_value()));
+    Parse/or(date_time_value, Parse/or(flt_number(), int_value()));
 
 let inline_comma() -> Parse(Str, {}) =
     let _ = Parse/text/expect(',')!;

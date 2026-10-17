@@ -1,7 +1,7 @@
 use /std/{Bytes, Str, Nat, Bool, List, Result, Try, Io};
 use /std/Io/{Reader};
 use /std/time/{Duration, Timestamp};
-use /std/time/Timestamp/{Utc};
+use /std/time/{DateTime};
 use /std/tcp/{Socket, Listener};
 use /std/http/{Method, Url, Field, Status, Request, Response, Version, Limits, Refusal, Framing,
     read, stream};
@@ -160,7 +160,9 @@ let dated(reply: Response) -> Io(Response) =
     | none() =>
         let now = Timestamp/now()!;
         let date =
-            Field { name = Name { text = "Date" }, value = Value/of_utc(Utc/of_timestamp(now)) };
+            Field {
+                name = Name { text = "Date" },
+                value = Value/of_date_time(DateTime/of_timestamp(now)) };
         Io/pure(Response { ..reply, headers = [date, ..reply.headers], @bodied = reply.bodied })
     end;
 

@@ -46,8 +46,8 @@ satisfy Spell(Month) {
     ..
 }
 
---- A moment as the calendar and the clock name it, in UTC by the Gregorian calendar: what a protocol that writes a date out spells.
-pub struct Utc: pub Type {
+--- A date and a time of day: a moment as the Gregorian calendar and the clock name it in UTC, what a protocol that writes a date out spells.
+pub struct DateTime: pub Type {
     year: Nat,
     month: Month,
     --- The day of the month, from 1.
@@ -59,11 +59,11 @@ pub struct Utc: pub Type {
     second: Nat,
 }
 
-satisfy Eql(Utc) {
+satisfy Eql(DateTime) {
     ..
 }
 
-satisfy Spell(Utc) {
+satisfy Spell(DateTime) {
     ..
 }
 
@@ -95,11 +95,8 @@ let weekday_from_sunday(n: Nat) -> Weekday =
     | _ => Weekday/saturday()
     end;
 
---- The date and the time of day `t` is, to the second. The days since the epoch are counted in eras of 400 years, each of 146 097 days, and in years that begin on the first of March, so that a leap day is its year's last and a month's first day falls where a line through the months puts it; the first of January 1970 was a Thursday.
----
---- An era is taken apart into its centuries, a century into its cycles of four years and a cycle into its years, each by a remainder, so the day of the year is at most the 365 a leap year's last day is and the month it falls in is one of twelve by its bound. An era's last day is the 36 525th of its fourth century and a cycle's last the 366th of its fourth year, which is why each count stops at three.
-pub let of_timestamp(t: Timestamp) -> Utc =
-    let secs = Timestamp/to_unix(t).secs;
+--- The date and the time of day `secs` seconds after the epoch, counted as `of_timestamp` says.
+let of_seconds(secs: Nat) -> DateTime =
     let days = secs / 86400;
     let within = secs % 86400;
     let shifted = days + 719468;
@@ -113,7 +110,7 @@ pub let of_timestamp(t: Timestamp) -> Utc =
     let year_of_era = century * 100 + cycle * 4 + year_of_cycle;
     let within_year: Holds(day_of_year <= 365) = True/proved();
     let months = (5 * day_of_year + 2) / 153;
-    Utc {
+    DateTime {
         year =
             year_of_era + shifted / 146097 * 400 + match months < 10 | true => 0 | false => 1 end,
         month = List/get(months_from_march, months),
@@ -122,6 +119,12 @@ pub let of_timestamp(t: Timestamp) -> Utc =
         hour = within / 3600,
         minute = within % 3600 / 60,
         second = within % 60 };
+
+--- The date and the time of day `t` is, to the second. The days since the epoch are counted in eras of 400 years, each of 146 097 days, and in years that begin on the first of March, so that a leap day is its year's last and a month's first day falls where a line through the months puts it; the first of January 1970 was a Thursday.
+---
+--- An era is taken apart into its centuries, a century into its cycles of four years and a cycle into its years, each by a remainder, so the day of the year is at most the 365 a leap year's last day is and the month it falls in is one of twelve by its bound. An era's last day is the 36 525th of its fourth century and a cycle's last the 366th of its fourth year, which is why each count stops at three.
+pub let of_timestamp(t: Timestamp) -> DateTime =
+    of_seconds(Timestamp/to_unix(t).secs);
 
 --- The weekday in the three letters the Internet message format writes it in.
 pub let weekday_name(d: Weekday) -> Str =
@@ -156,7 +159,7 @@ let digits(n: Nat, width: Nat) -> Str =
     Str/pad_start(Nat/to_str(n), width, '0');
 
 --- The date as the Internet message format's fixed-length form spells it, `Sun, 06 Nov 1994 08:49:37 GMT`: the form HTTP sends a date in (RFC 9110 §5.6.7). A year past 9999 takes the digits it needs.
-pub let to_imf_fixdate(d: Utc) -> Str =
+pub let to_imf_fixdate(d: DateTime) -> Str =
     Str/flatten([
         weekday_name(d.weekday),
         ", ",
