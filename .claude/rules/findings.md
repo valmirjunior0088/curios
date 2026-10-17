@@ -4,11 +4,11 @@ paths:
   - "documentation/roadmap/**/000-findings.md"
 ---
 
-# Findings: what a find is, where it goes, how an entry is kept
+# Findings: what a finding is, where it goes, how an entry is kept
 
 Whoever writes a findings file is held to this: a hunt, a fix run, a campaign filing what it noticed on the way. The form of an entry and a spec is [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md)'s; this file restates none of it.
 
-## What a find is
+## What a finding is
 
 A defect with a consequence for someone — the user, the next reader, the next editor — shown rather than told: a wrong behaviour by a probe or a test, or a departure from a rule the tree states, by the rule and the code that departs from it. Each kind names the document that states its standard, where the tree has one:
 
@@ -22,13 +22,13 @@ A defect with a consequence for someone — the user, the next reader, the next 
 
 A change whose only case is taste — no rule the tree states, no consequence beyond reading better — is held, not found.
 
-**Weigh stated reasoning three times.** Where the tree argues for what you are about to call a find — a decision's rationale, a **Rejected** paragraph, a comment saying why — consider it three times over before judging against it: what it claims, whether the code is still what it argues about, and whether its premise still holds. A defended shape is a find only where its defence fails, and the find names the sentence that fails.
+**Weigh stated reasoning three times.** Where the tree argues for what you are about to call a finding — a decision's rationale, a **Rejected** paragraph, a comment saying why — consider it three times over before judging against it: what it claims, whether the code is still what it argues about, and whether its premise still holds. A defended shape is a finding only where its defence fails, and the finding names the sentence that fails.
 
 What is written down already is known: an entry in a findings file, a specification under `documentation/roadmap/`, a ticket on the board, a decision's **Rejected** paragraph.
 
-## Where a find goes
+## Where a finding goes
 
-A find whose fix is stated and takes one pass is an entry in the findings file of its area, or in the workspace's for what belongs to no area. One whose fix is not one pass is a specification not yet refined, filed and numbered as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states, among its area's specifications or loose in `documentation/roadmap/` for what belongs to the workspace as a whole.
+A finding goes into its area's findings file as an entry or among its area's specifications, as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) draws the line between the two and numbers a specification; what belongs to no area goes into the workspace's findings file, or loose in `documentation/roadmap/`. A point seen and not yet shown goes in as an entry marked uncertain, as the same decision states one.
 
 A closed term the checkers admit at `/std/Bool/False` is never set aside: it is an open ticket on the soundness board, filed as **The open ticket** of `.claude/commands/hunt-unsoundness.md` files one, in a commit of its own. A term admitted that should be refused, from which no `False` is built, is a finding, in soundness's findings file.
 
@@ -36,7 +36,7 @@ A closed term the checkers admit at `/std/Bool/False` is never set aside: it is 
 
 A cause is what one change settles, and a findings file holds one entry for each, standing while the code bears it out. Every write follows from that:
 
-- **Add** an entry where a cause is shown and nothing written down holds it.
+- **Add** an entry where a cause is shown and nothing written down holds it, marked uncertain where it is seen and not yet shown.
 - **Restate** the entry that holds a cause where the hunt has shown what its text does not say, or no longer says truly: another site, code that moved, a figure taken at an older commit, a narrower unknown.
 - **Merge** two entries that one change settles, and split one that two changes settle.
 - **Drop** an entry the code no longer bears out, or one that a spec or a ticket now holds.
