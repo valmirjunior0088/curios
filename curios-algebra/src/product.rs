@@ -28,7 +28,7 @@ pub fn distribute<C: Coefficient + Mul<Output = C>>(
                 .atoms()
                 .iter()
                 .chain(right_monomial.atoms())
-                .copied()
+                .cloned()
                 .collect::<Vec<_>>();
             if atoms.is_empty() {
                 constant = constant + coefficient;
@@ -42,7 +42,7 @@ pub fn distribute<C: Coefficient + Mul<Output = C>>(
 
 /// Two monomials of one carrier with their factors paired by identity before anything reads them in order: one coefficient and one multiset of atoms is `Equal`, and one atom left on each side is `Sufficient` over their positions — `left`'s first, then `right`'s. `None` where the coefficients differ, or more than one atom is left on a side, so the caller's shape congruence decides instead.
 ///
-/// **A monomial's factor order is a hash, and a hash is not a value.** An unsolved metavariable ranks as itself and not as the term it is solved to, so `c · ?d · k` against `d · c · k` would pair `c` with `d` read in order, where pairing by identity leaves `?d` against `d` and solves it.
+/// **A monomial's factor order is a rank, and a rank is not a value.** An unsolved metavariable ranks as itself and not as the term it is solved to, so `c · ?d · k` against `d · c · k` would pair `c` with `d` read in order, where pairing by identity leaves `?d` against `d` and solves it.
 ///
 /// **Sufficient, never equivalent.** Equal leftovers make equal monomials, and at a zero factor any leftovers do: `x · f = x · g` does not give `f = g`. Two coefficients are two monomials unless a factor is zero, so they decline rather than clash.
 pub fn pair_factors<C: PartialEq>(
@@ -52,7 +52,7 @@ pub fn pair_factors<C: PartialEq>(
     if left.0 != right.0 {
         return None;
     }
-    let mut unmatched = right.1.iter().copied().enumerate().collect::<Vec<_>>();
+    let mut unmatched = right.1.iter().cloned().enumerate().collect::<Vec<_>>();
     let mut residual = Vec::new();
     for (at, atom) in left.1.iter().enumerate() {
         match unmatched

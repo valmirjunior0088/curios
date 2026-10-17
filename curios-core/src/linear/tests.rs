@@ -152,12 +152,7 @@ fn a_reader_reports_the_carrier_and_spells_each_atom() {
         .form()
         .terms
         .iter()
-        .flat_map(|(_, monomial)| {
-            monomial
-                .atoms()
-                .iter()
-                .map(|atom| views.term(*atom).clone())
-        })
+        .flat_map(|(_, monomial)| monomial.atoms().iter().map(|atom| views.term(atom).clone()))
         .collect::<Vec<_>>();
     assert_eq!(spelled.len(), 2);
     assert!(spelled.contains(&x) && spelled.contains(&y));

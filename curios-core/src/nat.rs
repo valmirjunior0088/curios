@@ -196,7 +196,7 @@ impl Nat {
         (coefficient, factors)
     }
 
-    /// The bare monomial over `factors`, which the caller has already put in canonical order: nested to the left, so `x · y` and `y · x` are one term once sorted. The order is the factors' structural hash, which is deterministic; the sort is stable, so two distinct factors that happen to hash alike keep their written order and simply fail to canonicalize against each other — incompleteness, never a wrong equation. `None` for no factors, since a monomial with none is its coefficient and not a term; [`Nat::multiply`] keys its canonical table on the sorted list and applies the coefficient through [`Nat::scaled`].
+    /// The bare monomial over `factors`, which the caller has already put in canonical order: nested to the left, so `x · y` and `y · x` are one term once sorted. The order is the factors' rank, which is deterministic; the sort is stable, so two distinct factors of one rank keep their written order and simply fail to canonicalize against each other — incompleteness, never a wrong equation. `None` for no factors, since a monomial with none is its coefficient and not a term; [`Nat::multiply`] keys its canonical table on the sorted list and applies the coefficient through [`Nat::scaled`].
     fn spine(factors: &[Term]) -> Option<Term> {
         factors
             .iter()
@@ -223,7 +223,7 @@ impl Nat {
                         let factors = monomial
                             .atoms()
                             .iter()
-                            .map(|atom| atoms.term(*atom).clone())
+                            .map(|atom| atoms.term(atom).clone())
                             .collect::<Vec<_>>();
                         Self::spine(&factors).expect("a monomial with a factor")
                     })
@@ -305,7 +305,7 @@ impl Nat {
         let ordered = monomial
             .atoms()
             .iter()
-            .map(|atom| atoms.term(*atom).clone())
+            .map(|atom| atoms.term(atom).clone())
             .collect::<Vec<_>>();
         Self::spine(&ordered).unwrap_or_else(one)
     }
@@ -338,7 +338,7 @@ impl Nat {
 
     /// A reduced summand as `curios-algebra` reads it: its literal coefficient, and its factor's product spine as a monomial of atoms, the factor itself the origin a rebuild restores.
     ///
-    /// **The atoms are put in their own order, not the spine's.** The product fold orders a spine's factors by the structural hash of each as written, levels included, so two instances of one polymorphic factor can sort to opposite sides of another and spell one number two ways. An atom's rank is the hash of its projected term, which no level moves, so [`Monomial::product`] puts `g<0> · x` and `g<8> · x` in one order. A factor still holding a literal inside its spine — a term no fold left that way — is read whole, as one atom, so its literal is never dropped from the coefficient.
+    /// **The atoms are put in their own order, not the spine's.** The product fold orders a spine's factors by the rank of each as written, levels included, so two instances of one polymorphic factor can sort to opposite sides of another and spell one number two ways. An atom's rank is its projected term's, which no level moves, so [`Monomial::product`] puts `g<0> · x` and `g<8> · x` in one order. A factor still holding a literal inside its spine — a term no fold left that way — is read whole, as one atom, so its literal is never dropped from the coefficient.
     fn summand(atoms: &mut Atoms, summand: &Term) -> Summand<Natural, Term> {
         let (coefficient, factor) = Self::literal_factor(summand);
         let (inner, factors) = Self::monomial(&factor);

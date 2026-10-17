@@ -222,6 +222,30 @@ pub(super) fn unit_of(source: &str) -> Unit {
     compile_modules(&mounted("lib", source)).expect("the unit compiles")
 }
 
+/// `source` lowered once over `predecessors` and elaborated with each declaration's binders counted from `floor` above what its lowering minted: the elaborated module, which no floor may move, since an order the elaborator puts atoms in reads an identity by its age and never by its value. Each declaration's elaboration counts its binders from above its lowering's count, so a count raised starts every binder elaboration opens that much higher, the order among them kept.
+pub(crate) fn elaborated_above(
+    source: &UnitSource<'_>,
+    predecessors: Predecessors<'_>,
+    floor: u64,
+) -> Module {
+    let lowered = curios_text::into_core_unit(source, &predecessors.text(), &SYNTAX)
+        .expect("the unit lowers");
+    let mut minted = lowered.minted().clone();
+    for declaration in &mut minted.declarations {
+        declaration.binders += floor;
+    }
+    minted.entry.binders += floor;
+
+    let placed = predecessors.placed();
+    let fixed = predecessors.fixed();
+    let established = curios_elab::Established::placed(&placed).fixed(&fixed);
+    let mut context = curios_elab::Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
+    context.set_imports(lowered.imports().clone());
+    curios_elab::elaborate_and_zonk_unit(&mut context, &established, lowered.core(), &minted)
+        .map(|(module, _)| module)
+        .expect("the unit elaborates")
+}
+
 /// The binders a unit's `unused-binder` lints name, once elaboration has credited them.
 pub(super) fn unused_binders(unit: &Unit) -> Vec<String> {
     unit.text()

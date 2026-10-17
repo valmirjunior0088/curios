@@ -21,7 +21,7 @@ use {
         Proj, Rec, Row, Scope, Struct, StructEntry, StructType, Subterm, Telescope, Term, Three,
         Totality, Transient, Tuple, Two, UniverseContext, Universes, Var, Variant,
     },
-    curios_num::{Grain, Natural, Rounding},
+    curios_num::{Grain, Integer, Natural, Rounding},
     curios_utilities::{InfixOp, Plicity, Qualifier},
     std::{collections::BTreeMap, rc::Rc, slice, sync::Arc},
 };
@@ -1663,59 +1663,55 @@ fn atoms_equal_up_to_their_arguments_convert_in_whichever_order_their_sum_holds_
     }
 }
 
-/// A magnitude orients its operand by the order of its atoms, and two spellings of one call hash apart: `abs(h(i + j) - e(k))` leads with the call or with `e(k)` as its hash falls, and `abs(h(j + i) - e(k))` as the other spelling's does, so wherever the two fall on two sides of `e(k)` the folds lead apart and the congruence compares a difference with its negation. Classed, the pair is read with the fold taken again over one spelling of the call, and both checkers' magnitudes are led alike; `sign` the same, its fold drawing a negation out. The heads of `e` sweep the orders the hashes fall in. The control holds one argument genuinely different, and stays apart.
+/// A magnitude orients its operand by the order of its atoms, and two spellings of one call of two shapes rank apart: `abs(h(i + j) - e(n))` leads with the call or with `e(n)` as their ranks fall, and `abs(h((j + i) + 0) - e(n))` as the other spelling's does, so wherever the two fall on two sides of `e(n)` the folds lead apart and the congruence compares a difference with its negation. Classed, the pair is read with the fold taken again over one spelling of the call, and both checkers' magnitudes are led alike; `sign` the same, its fold drawing a negation out. The literals `n` sweep the places `e(n)` ranks at. The control holds one argument genuinely different, and stays apart.
 ///
-/// Mutation-checked: with no magnitude's fold taken again by the classification, the kernel refuses the two `abs`es with `e` at 12.
+/// Mutation-checked: with no magnitude's fold taken again by the classification, the kernel refuses the two `abs`es at some `n` of the sweep.
 #[test]
-fn a_magnitude_over_two_spellings_of_its_atoms_converts_whichever_way_they_hash() {
+fn a_magnitude_over_two_spellings_of_its_atoms_converts_whichever_way_they_rank() {
     let int = || Term::intrinsic(Intrinsic::IntType);
-    let [i, j, k] = [1, 2, 3].map(|index| Free::local(index, None));
-    let h = Free::local(10, Some("h"));
-    let sum = |left: &Free, right: &Free| {
-        Term::intrinsic(Intrinsic::IntAdd(
-            Term::free_var(left),
-            Term::free_var(right),
-        ))
-    };
+    let literal = |n: i32| Term::intrinsic(Intrinsic::Int(Integer::from(n)));
+    let [i, j] = [1, 2].map(|index| Free::local(index, None));
+    let [h, e] = [(10, "h"), (11, "e")].map(|(index, hint)| Free::local(index, Some(hint)));
+    let mut kernel = kernel();
+    for name in [i, j] {
+        kernel.assume(&name, &int());
+    }
+    let function = Term::func_type([(Free::local(99, None), int())], int());
+    kernel.assume(&h, &function);
+    kernel.assume(&e, &function);
+    let sum = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let (i, j) = (Term::free_var(&i), Term::free_var(&j));
+    let arguments = [
+        sum(i.clone(), j.clone()),
+        sum(sum(j, i.clone()), literal(0)),
+        sum(i.clone(), i),
+    ];
 
-    for e_index in 11..41 {
-        let mut kernel = kernel();
-        let e = Free::local(e_index, Some("e"));
-        for name in [i, j, k] {
-            kernel.assume(&name, &int());
-        }
-        let function = Term::func_type([(Free::local(99, None), int())], int());
-        kernel.assume(&h, &function);
-        kernel.assume(&e, &function);
-        let difference = |argument: Term| {
+    for n in 0..30 {
+        let [first, second, apart] = arguments.clone().map(|argument| {
             Term::intrinsic(Intrinsic::IntSub(
                 Term::apply(Term::free_var(&h), [argument]),
-                Term::apply(Term::free_var(&e), [Term::free_var(&k)]),
+                Term::apply(Term::free_var(&e), [literal(n)]),
             ))
-        };
-        let (first, second, apart) = (
-            difference(sum(&i, &j)),
-            difference(sum(&j, &i)),
-            difference(sum(&i, &i)),
-        );
+        });
 
         let nat = Term::intrinsic(Intrinsic::NatType);
         let abs = |operand: &Term| Term::intrinsic(Intrinsic::IntAbs(operand.clone()));
         assert_eq!(
             kernel.convert_at(&nat, &abs(&first), &abs(&second)),
             Ok(true),
-            "abs, e at {e_index}"
+            "abs, e({n})"
         );
         assert_eq!(
             kernel.convert_at(&nat, &abs(&first), &abs(&apart)),
             Ok(false),
-            "abs, e at {e_index}"
+            "abs, e({n})"
         );
         let sign = |operand: &Term| Term::intrinsic(Intrinsic::IntSign(operand.clone()));
         assert_eq!(
             kernel.convert_at(&int(), &sign(&first), &sign(&second)),
             Ok(true),
-            "sign, e at {e_index}"
+            "sign, e({n})"
         );
     }
 }

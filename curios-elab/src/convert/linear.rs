@@ -60,7 +60,7 @@ pub(super) fn solved_linearly(
     let Some(unknown) = unknown(context, &views, form) else {
         return Ok(false);
     };
-    let Some((coefficient, rest)) = split(form, unknown) else {
+    let Some((coefficient, rest)) = split(form, &unknown) else {
         return Ok(false);
     };
     let numerator = rest
@@ -93,7 +93,7 @@ pub(super) fn solved_linearly(
     let solved = convert(
         context,
         &Term::intrinsic(type_),
-        views.term(unknown),
+        views.term(&unknown),
         &solution,
     );
     if !matches!(solved, Ok(true)) {
@@ -148,25 +148,27 @@ fn unknown(context: &Context, views: &LinearViews, form: &LinearForm) -> Option<
     let mut unknown = None;
     for (_, monomial) in &form.terms {
         for atom in monomial.atoms() {
-            let term = views.term(*atom);
+            let term = views.term(atom);
             if !unsolved(term) {
                 continue;
             }
             if !matches!(&**term, Subterm::Metavar(_)) {
                 return None;
             }
-            match unknown {
-                None => unknown = Some(*atom),
-                Some(known) if known == *atom => {}
-                Some(_) => return None,
+            if let Some(known) = &unknown {
+                if known != atom {
+                    return None;
+                }
+                continue;
             }
+            unknown = Some(atom.clone());
         }
     }
     unknown
 }
 
 /// `form` as `coefficient · unknown + rest`, where `unknown` stands in each of its monomials once; `None` where it stands at a power.
-fn split(form: &LinearForm, unknown: Atom) -> Option<(Polynomial, Polynomial)> {
+fn split(form: &LinearForm, unknown: &Atom) -> Option<(Polynomial, Polynomial)> {
     let mut coefficient = Polynomial::new();
     let mut rest = Polynomial::new();
     if !form.constant.is_zero() {
@@ -174,11 +176,11 @@ fn split(form: &LinearForm, unknown: Atom) -> Option<(Polynomial, Polynomial)> {
     }
     for (scale, monomial) in &form.terms {
         let mut atoms = monomial.atoms().to_vec();
-        atoms.sort_by(|left, right| atom_order(*left, *right));
-        match atoms.iter().filter(|atom| **atom == unknown).count() {
+        atoms.sort_by(atom_order);
+        match atoms.iter().filter(|atom| *atom == unknown).count() {
             0 => rest.push((scale.clone(), atoms)),
             1 => {
-                atoms.retain(|atom| *atom != unknown);
+                atoms.retain(|atom| atom != unknown);
                 coefficient.push((scale.clone(), atoms));
             }
             _ => return None,
@@ -234,7 +236,7 @@ fn without(monomial: &[Atom], divisor: &[Atom]) -> Option<Vec<Atom>> {
 /// The product of two monomials, its atoms in order.
 fn times(left: &[Atom], right: &[Atom]) -> Vec<Atom> {
     let mut atoms = [left, right].concat();
-    atoms.sort_by(|left, right| atom_order(*left, *right));
+    atoms.sort_by(atom_order);
     atoms
 }
 
@@ -255,9 +257,9 @@ fn subtract(polynomial: &mut Polynomial, scale: Integer, monomial: Vec<Atom>) {
 }
 
 /// Atoms by rank, then by the order their reader handed them out in: the view's own order.
-fn atom_order(left: Atom, right: Atom) -> Ordering {
+fn atom_order(left: &Atom, right: &Atom) -> Ordering {
     left.rank()
-        .cmp(&right.rank())
+        .cmp(right.rank())
         .then(left.index().cmp(&right.index()))
 }
 
@@ -266,7 +268,7 @@ fn monomial_order(left: &[Atom], right: &[Atom]) -> Ordering {
     left.len().cmp(&right.len()).then_with(|| {
         left.iter()
             .zip(right)
-            .map(|(left, right)| atom_order(*left, *right))
+            .map(|(left, right)| atom_order(left, right))
             .find(|ordering| ordering.is_ne())
             .unwrap_or(Ordering::Equal)
     })

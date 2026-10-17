@@ -9,7 +9,7 @@
 //! **Deterministic, and capped in its own units.** The monomial eliminated next is the one whose elimination derives the fewest rows beyond those it removes, ties broken by the view's canonical order, and rows keep the order they were derived in — so one program gets one certificate on every machine. The cap counts derived rows across every case ([`DERIVED_ROWS`]); exhausting it refuses, as the reduction budget does, and never selects anything. Which monomial goes first changes what a search costs, not what it can find: elimination is complete over the rationals in any order.
 
 use {
-    curios_algebra::{Atom, LinearForm, Monomial},
+    curios_algebra::{LinearForm, Monomial},
     curios_num::{Integer, Natural},
     std::{cmp::Ordering, fmt},
 };
@@ -309,11 +309,10 @@ fn coefficient(row: &Row, unknown: &Monomial) -> Option<Integer> {
 
 /// Monomials by their atoms, lexicographically by rank and then by the order they were handed out — the view's own order.
 fn canonical(left: &Monomial, right: &Monomial) -> Ordering {
-    let key = |atom: &Atom| (atom.rank(), atom.index());
     left.atoms()
         .iter()
-        .map(key)
-        .cmp(right.atoms().iter().map(key))
+        .map(|atom| (atom.rank(), atom.index()))
+        .cmp(right.atoms().iter().map(|atom| (atom.rank(), atom.index())))
 }
 
 /// A value for every unknown, the last eliminated first: each is bounded only by unknowns eliminated after it, which are assigned by then.

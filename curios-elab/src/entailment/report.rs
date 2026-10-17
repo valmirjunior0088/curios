@@ -135,11 +135,11 @@ fn counterexample(
     // In the order the atoms were read — the goal's first — rather than the order they were eliminated in.
     let mut values = assignment
         .iter()
-        .map(|(monomial, value)| (monomial.atoms()[0], value))
+        .map(|(monomial, value)| (monomial.atoms()[0].clone(), value))
         .collect::<Vec<_>>();
     values.sort_by_key(|(atom, _)| atom.index());
     values
         .into_iter()
-        .map(|(atom, value)| (facts.respell(views.term(atom)), value.to_string()))
+        .map(|(atom, value)| (facts.respell(views.term(&atom)), value.to_string()))
         .collect()
 }

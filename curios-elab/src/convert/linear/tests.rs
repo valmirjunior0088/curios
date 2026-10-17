@@ -12,7 +12,7 @@ fn polynomial(terms: &[(i64, &[u32])]) -> Polynomial {
         .iter()
         .map(|(scale, atoms)| {
             let mut atoms = atoms.iter().map(|index| atom(*index)).collect::<Vec<_>>();
-            atoms.sort_by(|left, right| atom_order(*left, *right));
+            atoms.sort_by(atom_order);
             (Integer::from(*scale), atoms)
         })
         .collect()

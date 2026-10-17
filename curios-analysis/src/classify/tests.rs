@@ -402,22 +402,23 @@ fn folded(operation: Intrinsic) -> Term {
         .into()
 }
 
-/// A magnitude is spelled by its own fold over its classed operand. `h(i + j)` and `h(j + i)` are two spellings of one call, and `e` is picked so that they hash on the two sides of `e(k)`: `sign(h(i + j) - e(k))` folds to a `sign`, `sign(h(j + i) - e(k))` to the negation of one, and each `abs` leads its operand the way its `sign` does. Classed, the second call is spelled as the first, and the fold taken again over it leads both sides alike.
+/// A magnitude is spelled by its own fold over its classed operand. `h(i + j)` and `h((j + i) + 0)` are two spellings of one call of two shapes, which rank apart, and `e(n)` is picked so that they rank on the two sides of it: `sign(h(i + j) - e(n))` folds to a `sign`, `sign(h((j + i) + 0) - e(n))` to the negation of one, and each `abs` leads its operand the way its `sign` does. Classed, the second call is spelled as the first, and the fold taken again over it leads both sides alike.
 ///
 /// Mutation-checked: with no magnitude's fold taken again, the second `sign` stays the negation of a `sign` over the other orientation, and the second `abs` stays oriented apart.
 #[test]
 fn a_magnitude_is_spelled_by_its_fold_over_its_classed_operand() {
-    let (i, j, k) = (sym(1, "i"), sym(2, "j"), sym(3, "k"));
+    let (i, j) = (sym(1, "i"), sym(2, "j"));
+    let zero = Term::intrinsic(Intrinsic::Int(0i32.into()));
     let first = applied(10, "h", int_add(i.clone(), j.clone()));
-    let second = applied(10, "h", int_add(j, i));
+    let second = applied(10, "h", int_add(int_add(j, i), zero));
     let leads = |term: &Term| matches!(&**term, Subterm::Intrinsic(Intrinsic::IntSign(_)));
     let sign = |call: &Term, other: &Term| {
         folded(Intrinsic::IntSign(int_sub(call.clone(), other.clone())))
     };
-    let other = (11..64)
-        .map(|head| applied(head, "e", k.clone()))
+    let other = (0..64)
+        .map(|n| applied(11, "e", lit(n)))
         .find(|other| leads(&sign(&first, other)) != leads(&sign(&second, other)))
-        .expect("some head stands between the two spellings of the call");
+        .expect("some literal ranks a call of it between the two spellings of the call");
 
     let classed_pair = |this: &Term, that: &Term| {
         let Ok(mut classes) =

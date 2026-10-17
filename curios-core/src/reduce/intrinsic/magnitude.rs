@@ -13,7 +13,6 @@ use {
     crate::{
         Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, int_footprint, int_from_linear,
         int_has_stuck_product, int_linear, int_negate, int_normalize, int_preimage, int_terms,
-        project_erased_universes,
     },
     curios_algebra::{Comparison, Scale, signed_cofactor},
     curios_num::Integer,
@@ -63,7 +62,7 @@ fn read(reducer: &mut impl Reducer, operand: &Term) -> Result<Option<Reading>, R
     monomials.sort_by_cached_key(|(_, factors)| {
         factors
             .iter()
-            .map(|factor| project_erased_universes(factor).structural_hash())
+            .map(|factor| factor.erased_universes().rank())
             .collect::<Vec<_>>()
     });
 

@@ -4,7 +4,7 @@ use {
     super::{granted, withheld},
     crate::{
         Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over, recheck_over,
-        tests::test_support::{assert_stored_alike, compile_with_units},
+        tests::test_support::{assert_stored_alike, compile_with_units, elaborated_above},
     },
     curios_core::{
         Anchors, Certification, Definition, DefinitionKind, Global, Imports, Item, Module, Nominal,
@@ -233,6 +233,37 @@ fn std_unit_reproduction() {
                 == second.stored().expect("a unit serializes")
                 && stored!(&first) == stored!(&second),
             "two compilations of the standard library store two units, differing in {differing:?}"
+        );
+    });
+}
+
+/// Whether the standard library elaborates to one module however far its declarations' binder counters had run: its tree lowered once and elaborated with every declaration's binders counted from its lowering's count and from a thousand above it, the two modules compared by value, and where they differ, the items that do. A measurement, since each elaboration is the whole library; counted, and it asserts, since a module that moves is the fault it is here to name: an order the elaborator puts atoms in reading an identity by its value.
+#[test]
+#[ignore = "measurement, counted: elaborates the standard library from two floors of its binder counters and compares the two modules item by item"]
+fn std_identity_census() {
+    with_prelude(|prelude| {
+        let [sys, _] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let source = std_from_its_tree();
+        let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+        let elaborated = |floor| elaborated_above(&unit, Predecessors::over(&roots), floor);
+        let (first, second) = (elaborated(0), elaborated(1_000));
+
+        let differing = first
+            .items
+            .iter()
+            .zip(second.items.iter())
+            .filter(|(one, other)| one != other)
+            .map(|(one, _)| one.describe())
+            .collect::<Vec<_>>();
+        println!("\n=== /std elaborated from two floors ===");
+        println!("  items       {}", first.items.len());
+        println!("  differing   {differing:?}");
+        assert!(
+            first == second,
+            "two floors elaborate two modules, differing in {differing:?}"
         );
     });
 }

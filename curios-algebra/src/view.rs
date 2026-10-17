@@ -48,7 +48,7 @@ impl LinearForm {
                 .iter()
                 .any(|(_, monomial)| monomial.atoms().contains(atom))
         });
-        nonnegative.sort_by(|left, right| atom_order(*left, *right));
+        nonnegative.sort_by(atom_order);
         nonnegative.dedup();
         LinearForm {
             constant,
@@ -154,9 +154,9 @@ pub struct Part {
 }
 
 /// Atoms by rank, then by the order they were handed out in.
-fn atom_order(left: Atom, right: Atom) -> Ordering {
+fn atom_order(left: &Atom, right: &Atom) -> Ordering {
     left.rank()
-        .cmp(&right.rank())
+        .cmp(right.rank())
         .then(left.index().cmp(&right.index()))
 }
 
@@ -165,7 +165,7 @@ fn canonical(left: &Monomial, right: &Monomial) -> Ordering {
     left.atoms()
         .iter()
         .zip(right.atoms())
-        .map(|(left, right)| atom_order(*left, *right))
+        .map(|(left, right)| atom_order(left, right))
         .find(|ordering| ordering.is_ne())
         .unwrap_or_else(|| left.atoms().len().cmp(&right.atoms().len()))
 }

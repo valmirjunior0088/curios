@@ -772,7 +772,7 @@ impl<'a> Reader<'a> {
     fn extrema(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
         let mut pending: Vec<(Extremum, Term, Term)> = Vec::new();
         for atom in self.atoms(target) {
-            let Subterm::Intrinsic(intrinsic) = &**self.views.term(atom) else {
+            let Subterm::Intrinsic(intrinsic) = &**self.views.term(&atom) else {
                 continue;
             };
             let Some((extremum, a, b)) = Extremum::of(intrinsic) else {
@@ -910,7 +910,7 @@ impl<'a> Reader<'a> {
 
         let mut pending: Vec<Term> = Vec::new();
         for atom in self.atoms(target) {
-            let node = self.views.term(atom).clone();
+            let node = self.views.term(&atom).clone();
             let signed = matches!(
                 &*node,
                 Subterm::Intrinsic(Intrinsic::IntAbs(_) | Intrinsic::IntSign(_))
@@ -1096,7 +1096,7 @@ impl<'a> Reader<'a> {
         let one = literal(Carrier::Natural, 1u32);
         let mut read = false;
         for atom in self.atoms(target) {
-            let power = self.views.term(atom).clone();
+            let power = self.views.term(&atom).clone();
             let powered = matches!(&*power, Subterm::Intrinsic(Intrinsic::NatPow(..)));
             if !powered || self.powered.contains(&power) {
                 continue;
@@ -1127,7 +1127,7 @@ impl<'a> Reader<'a> {
         loop {
             let mut pending: Vec<Division> = Vec::new();
             for atom in self.atoms(target) {
-                if let Some(division) = Division::of(self.views.term(atom))
+                if let Some(division) = Division::of(self.views.term(&atom))
                     && !self.divided.contains(&division)
                     && !pending.contains(&division)
                 {
@@ -1228,7 +1228,7 @@ impl<'a> Reader<'a> {
         }
         let mut pending: Vec<(Term, Term)> = Vec::new();
         for atom in self.atoms(target) {
-            if let Subterm::Intrinsic(Intrinsic::NatSub(a, b)) = &**self.views.term(atom) {
+            if let Subterm::Intrinsic(Intrinsic::NatSub(a, b)) = &**self.views.term(&atom) {
                 let operands = (a.clone(), b.clone());
                 if !self.subtracted.contains(&operands) && !pending.contains(&operands) {
                     pending.push(operands);
@@ -1357,7 +1357,7 @@ impl<'a> Reader<'a> {
             for (_, monomial) in &form.terms {
                 for atom in monomial.atoms() {
                     if !atoms.contains(atom) {
-                        atoms.push(*atom);
+                        atoms.push(atom.clone());
                     }
                 }
             }
@@ -1416,7 +1416,7 @@ impl<'a> Reader<'a> {
             let term = monomial
                 .atoms()
                 .iter()
-                .map(|atom| self.views.term(*atom).clone())
+                .map(|atom| self.views.term(atom).clone())
                 .reduce(|left, right| Term::intrinsic(Intrinsic::NatMul(left, right)))
                 .expect("a monomial stands on an atom");
             let statement = Intrinsic::NatLe(literal(Carrier::Natural, 0u32), term);
@@ -1957,7 +1957,7 @@ impl Lift {
         let mut nonnegative = form.nonnegative.clone();
         for atom in &self.denotes.nonnegative {
             if !nonnegative.contains(atom) {
-                nonnegative.push(*atom);
+                nonnegative.push(atom.clone());
             }
         }
         LinearForm {

@@ -20,6 +20,8 @@ use scalars::*;
 mod frees;
 use frees::*;
 
+mod rank;
+
 mod shape;
 pub use shape::*;
 
@@ -37,6 +39,7 @@ use {
         project_erased_universes, stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
+    curios_algebra::Rank,
     curios_num::{Grain, Natural},
     curios_print::{run_printer, run_printer_within},
     curios_utilities::{Plicity, recurse},
@@ -81,6 +84,9 @@ struct Node {
     /// The node's universe-erased projection, filled on first demand and only for a node that carries universe data — a node that carries none projects to itself and stores nothing. What the elaborator's reduction cache keys on beside the exact term, so that two spellings of one term differing in nothing but their levels — the one checking wrote with metavariables and the one totality reads with them solved — reach one entry.
     #[archived_with(curios_archive::Skip)]
     erased: std::cell::OnceCell<Term>,
+    /// The node's rank among the atoms of a reading, filled on first demand and only for a node that holds a minted identity — a node that holds none is ranked by its structural hash, which the scalars keep. Boxed, since a minority of nodes are ever ranked.
+    #[archived_with(curios_archive::Skip)]
+    rank: std::cell::OnceCell<Box<Rank>>,
     subterm: Subterm,
 }
 
@@ -90,6 +96,7 @@ impl Node {
             scalars: ScalarCache::default(),
             frees: FreeCache::default(),
             erased: std::cell::OnceCell::new(),
+            rank: std::cell::OnceCell::new(),
             subterm,
         }
     }
@@ -139,9 +146,21 @@ impl Term {
         self.scalars().hash
     }
 
-    /// The cached structural hash, for a consumer that needs a deterministic total preorder on terms rather than equality — `Nat::product` orders a monomial's factors by it. Deterministic because the hasher is seeded with fixed keys; two distinct terms hashing alike are not distinguished, which a consumer must treat as "no order", never as "equal".
+    /// The cached structural hash: what a hash table keys a term by, and the rank of a term that holds no minted identity. It reads each identity by its value, so no order is taken from it but through [`Term::rank`]. Deterministic because the hasher is seeded with fixed keys; two distinct terms hashing alike are not distinguished.
     pub(crate) fn structural_hash(&self) -> u64 {
         self.get_or_init_hash()
+    }
+
+    /// What this term is ordered by among the atoms of one reading, and among the factors a fold puts in order: its shape, then the age of each identity it holds, compared and never read as a value (`term/rank.rs`). A term that holds no binder, metavariable or universe metavariable is ranked by its structural hash; any other's rank is memoized on its node.
+    pub(crate) fn rank(&self) -> Rank {
+        if !self.has_local_free() && !self.has_metavar() && !self.has_universe_meta() {
+            return Rank::from(self.structural_hash());
+        }
+        self.inner
+            .rank
+            .get_or_init(|| Box::new(rank::ranked(self)))
+            .as_ref()
+            .clone()
     }
 
     /// Whether any *free* variable in this term is a binder some scope opened ([`Free::Local`]) rather than a top-level definition — the cached spelling of `Subterm::has_local_free`, which records why this is a discriminant test and not a spelling probe. Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.

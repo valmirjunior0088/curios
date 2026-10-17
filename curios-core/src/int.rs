@@ -93,7 +93,7 @@ pub(crate) fn int_monomial(summand: &Term) -> Monomial {
             },
         }
     }
-    factors.sort_by_key(Term::structural_hash);
+    factors.sort_by_cached_key(Term::rank);
     (coefficient, factors)
 }
 
@@ -106,7 +106,7 @@ pub(crate) fn int_linear(summands: impl IntoIterator<Item = Term>) -> Vec<Monomi
 
 /// A reduced summand as `curios-algebra` reads it: its coefficient, its factors as atoms, and those factors as the origin a rebuild restores. `None` for a summand whose coefficient is zero, which is no summand.
 ///
-/// The atoms are put in their own order, as `Nat`'s are: [`int_monomial`] orders factors by the structural hash of each as written, levels included, so two instances of one polymorphic factor can sort apart, while an atom's rank is its projected term's hash, which no level moves.
+/// The atoms are put in their own order, as `Nat`'s are: [`int_monomial`] orders factors by the rank of each as written, levels included, so two instances of one polymorphic factor can sort apart, while an atom's rank is its projected term's, which no level moves.
 fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, IntOrigin>> {
     let (coefficient, factors) = int_monomial(summand);
     (!coefficient.is_zero()).then(|| Summand {
@@ -368,7 +368,7 @@ fn int_of_summand(reducer: &mut impl Reducer, summand: &Term) -> Result<Term, Re
         .into_iter()
         .map(|factor| Term::intrinsic(Intrinsic::NatToInt(factor)))
         .collect::<Vec<_>>();
-    images.sort_by_key(Term::structural_hash);
+    images.sort_by_cached_key(Term::rank);
 
     Ok(int_scaled(Integer::from(coefficient), &images))
 }
@@ -458,7 +458,7 @@ pub(crate) fn int_multiply(left: &Term, right: &Term) -> Term {
             let factors = monomial
                 .atoms()
                 .iter()
-                .map(|atom| atoms.term(*atom).clone())
+                .map(|atom| atoms.term(atom).clone())
                 .collect::<Vec<_>>();
             int_scaled(coefficient, &factors)
         })

@@ -4,7 +4,7 @@
 //!
 //! A view is over atoms as [`crate::atoms`] identifies them for the numeric carriers: **one atom per term up to universe instances**, a level never being part of which number a term is. A product is read as the product of its factors, each an atom; a sum's summands are the monomials. Two terms that are one atom only up to conversion — `f(x + y)` and `f(y + x)` — are two atoms here, which is the declining direction: a caller that holds them one hands the view operands whose atoms it has classed (`curios_analysis::Classes`), one spelling to a class.
 //!
-//! **The order is total.** Atoms are ordered by the structural hash of their projected term, and two atoms of one hash by the order the view read them in; a monomial's atoms are put in that order, and a view's monomials are ordered lexicographically by their atoms. The second key is the only way a view can depend on how its sums were written, and it is reached only on a hash collision, where it can order two atoms but never merge them.
+//! **The order is total.** Atoms are ordered by the rank of their projected term — its shape, then the age of each identity it holds — and two atoms of one rank by the order the view read them in; a monomial's atoms are put in that order, and a view's monomials are ordered lexicographically by their atoms. The second key is the only way a view can depend on how its sums were written, and it is reached only where two atoms share a rank, where it can order them but never merge them.
 //!
 //! # The view
 //!
@@ -104,7 +104,7 @@ impl LinearViews {
     }
 
     /// The first term `atom` was handed out for by this reader: how a caller spells an atom of a view it read.
-    pub fn term(&self, atom: Atom) -> &Term {
+    pub fn term(&self, atom: &Atom) -> &Term {
         self.atoms.term(atom)
     }
 
@@ -164,7 +164,7 @@ impl LinearViews {
                 let factor = monomial
                     .atoms()
                     .iter()
-                    .map(|atom| self.atoms.term(*atom).clone())
+                    .map(|atom| self.atoms.term(atom).clone())
                     .reduce(|left, right| Nat::multiply(&left, &right))
                     .expect("a monomial of a view stands on an atom");
                 (
@@ -187,7 +187,7 @@ impl LinearViews {
                     .atoms()
                     .iter()
                     .map(|atom| {
-                        let term = self.atoms.term(*atom).clone();
+                        let term = self.atoms.term(atom).clone();
                         match nonnegative.contains(atom) {
                             true => Term::intrinsic(Intrinsic::NatToInt(term)),
                             false => term,
@@ -249,7 +249,7 @@ fn side(
                         .iter()
                         .map(|factor| {
                             let atom = atoms.handle(Carrier::Natural, factor);
-                            nonnegative.push(atom);
+                            nonnegative.push(atom.clone());
                             atom
                         })
                         .collect();
@@ -273,7 +273,7 @@ fn side(
                         .map(|factor| match &**factor {
                             Subterm::Intrinsic(Intrinsic::NatToInt(natural)) => {
                                 let atom = atoms.handle(Carrier::Natural, natural);
-                                nonnegative.push(atom);
+                                nonnegative.push(atom.clone());
                                 atom
                             }
                             _ => atoms.handle(Carrier::Integer, factor),

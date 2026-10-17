@@ -150,6 +150,9 @@ fn the_table_declines_past_its_cap_and_states_its_cost() {
 #[test]
 fn leaf_sets_agree_as_sets() {
     let (a, b, c) = (Atom::new(0, 0), Atom::new(1, 1), Atom::new(2, 2));
-    assert!(same_leaves(&[a, b, a], &[b, a]));
-    assert!(!same_leaves(&[a, b], &[a, b, c]));
+    assert!(same_leaves(
+        &[a.clone(), b.clone(), a.clone()],
+        &[b.clone(), a.clone()]
+    ));
+    assert!(!same_leaves(&[a.clone(), b.clone()], &[a, b, c]));
 }

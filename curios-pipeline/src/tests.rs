@@ -11,6 +11,7 @@ mod diagnostic_tests;
 mod erasure_tests;
 mod foreign_tests;
 mod goal_tests;
+mod identity_tests;
 mod implicit_tests;
 mod incremental_tests;
 mod inductive_tests;

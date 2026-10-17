@@ -40,7 +40,7 @@ impl Mint {
 
     /// What this binder was called where it was written, if anything — a rendering aid with no bearing on identity.
     ///
-    /// Crate-private, so no path leads from a `Free` to a spelling outside the stage that renders it. The variant itself stays public — downstream code holds and compares binders — but it cannot look inside one. The index has no accessor at all: nothing ever needed to read it, only to compare it.
+    /// Crate-private, so no path leads from a `Free` to a spelling outside the stage that renders it. The variant itself stays public — downstream code holds and compares binders — but it cannot look inside one. The index has no accessor at all: nothing ever needed to read it, only to compare it. An order among terms reads it so too, by which of two identities was minted first, and never by its value, which counts every binder minted before it: a structural hash reads the value, and serves hash tables alone.
     pub(crate) fn hint(&self) -> Option<&'static str> {
         self.hint.map(|hint| hint.as_str())
     }
