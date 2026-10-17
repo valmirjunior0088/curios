@@ -852,15 +852,15 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`, and into `$longs` or `$words` for a list of scalars, each element narrowed as a lone argument is.
+    /// The rope→wire step for one host argument: a reference param crosses as a flat payload exactly its run, since a host lifts the whole array, so the loaded rope is taken exact first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`, and into `$longs` or `$words` for a list of scalars, each element narrowed as a lone argument is.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
             // No rope to force: a scalar reaches the wire from a register carrier, and `Flt`'s is the `f64` its box already holds.
             WireType::Nat | WireType::Bool | WireType::Byte | WireType::Int | WireType::Flt => {
                 return vec![];
             }
-            WireType::Bytes | WireType::Handle => self.table().bytes_force_func(),
-            WireType::Bits => self.table().bits_force_func(),
+            WireType::Bytes | WireType::Handle => self.table().bytes_exact_func(),
+            WireType::Bits => self.table().bits_exact_func(),
             WireType::List(inner) | WireType::Option(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_force_func(),
                 WireLeaf::Bits => self.table().list_bits_force_func(),

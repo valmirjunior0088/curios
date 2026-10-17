@@ -13,7 +13,7 @@
 //!
 //! Naive accumulation loops are therefore O(n) by construction, and so are head/tail peel loops (`get` head + `slice` tail): the first peel forces once, every later peel is an O(1) window over the settled payload. There is no compile-time recognition anywhere.
 //!
-//! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are forced before the call, results are embedded into fresh leaves after it), so curios-runtime and the curios-js bridge only ever see flat arrays.
+//! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are taken exact before the call, a payload exactly its run, and results are embedded into fresh leaves after it), so curios-runtime and the curios-js bridge only ever see flat arrays, each read by its own length.
 
 use super::{ChannelData, concrete_val};
 

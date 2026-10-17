@@ -2562,7 +2562,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             curios_cont::Intrinsic::ListSettle => {
                 let rope = self.context.table().list_rope();
-                let force = self.context.table().list_force_func();
+                let exact = self.context.table().list_exact_func();
                 let base_ref = curios_wasm::ValType::Ref(curios_wasm::RefType {
                     is_nullable: false,
                     heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
@@ -2570,13 +2570,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::List));
                 self.emit_instr(Self::rope_get(&rope, &rope.tag_field));
                 self.emit_instr(curios_wasm::Instr::I32Eqz);
-                // A leaf answers itself; anything else answers a fresh leaf over its forced payload — an O(1) wrap, since payload arrays are filled once and never rewritten.
+                // A leaf answers itself; anything else answers a fresh leaf over its exact payload — an O(1) wrap where the forced payload is the run, since a run's slots are written once and never rewritten.
                 let leaf_arm = self.context.load_value_instrs(&args[0], LoadAs::List);
                 let mut build_arm = vec![curios_wasm::Instr::I32Const { value: 0 }];
                 build_arm.extend(self.context.load_value_instrs(&args[0], LoadAs::List));
                 build_arm.push(Self::rope_get(&rope, &rope.len_field));
                 build_arm.extend(self.context.load_value_instrs(&args[0], LoadAs::List));
-                build_arm.push(curios_wasm::Instr::Call { func_name: force });
+                build_arm.push(curios_wasm::Instr::Call { func_name: exact });
                 build_arm.push(curios_wasm::Instr::StructNew {
                     type_name: rope.leaf.clone(),
                 });

@@ -124,7 +124,7 @@ fn a_byte_to_bit_scale_is_checked_before_forcing_the_payload() {
         false,
     );
     assert_contains(&wat, "i64.shl");
-    assert!(wat.find("call $refuse/capacity").unwrap() < wat.find("call $bytes/force").unwrap());
+    assert!(wat.find("call $refuse/capacity").unwrap() < wat.find("call $bytes/exact").unwrap());
 }
 
 #[test]

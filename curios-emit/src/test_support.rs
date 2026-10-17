@@ -530,6 +530,46 @@ pub(super) fn list_read() -> curios_cont::Module {
     module
 }
 
+/// A list literal settled and its length read — the settle's build arm, which seals a leaf over the run's exact payload.
+pub(super) fn list_settle() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let list = module.add_value(Some("list".into()));
+    let settled = module.add_value(Some("settled".into()));
+    let length = module.add_value(Some("length".into()));
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(length)]));
+    let measure = module.add_node(curios_cont::Node::LetIntrinsic {
+        result: length,
+        op: curios_cont::Intrinsic::ListLen,
+        args: vec![curios_cont::Atom::Value(settled)],
+        next: exit,
+    });
+    let settle = module.add_node(curios_cont::Node::LetIntrinsic {
+        result: settled,
+        op: curios_cont::Intrinsic::ListSettle,
+        args: vec![curios_cont::Atom::Value(list)],
+        next: measure,
+    });
+    let build = module.add_node(curios_cont::Node::LetValue {
+        result: list,
+        value: curios_cont::ValueExpr::List(vec![nat(7), nat(8)]),
+        next: settle,
+    });
+    module.define_function(
+        main,
+        curios_cont::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body: build,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module
+}
+
 /// Map a closure over a list literal — the `list/map` intrinsic, which threads the mapping function through as a closure and services the fill via the shared helper.
 pub(super) fn list_map() -> curios_cont::Module {
     let mut module = curios_cont::Module::new();

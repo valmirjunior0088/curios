@@ -130,6 +130,42 @@ fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
     }
 }
 
+/// What leaves the rope as a flat array takes the run exact: a settle and a reinterpretation seal their leaf over `exact`'s payload, and a host operand, a host list's elements among them, crosses as it — which answers the forced payload where its array is the run's length, and a copy of the run otherwise.
+#[test]
+fn what_leaves_the_rope_is_its_exact_payload() {
+    let settle = wat(&list_settle());
+    let reinterp = wat(&intrinsic_main(
+        curios_cont::Intrinsic::BinReinterp(Grain::X),
+        vec![bin_lit(vec![1, 2, 3, 4])],
+    ));
+    let host = wat(&foreign_call_to(row(
+        "send",
+        vec![
+            WireType::Bytes,
+            WireType::Bits,
+            WireType::List(WireLeaf::Bytes),
+        ],
+        WireResults::single(WireType::Nat),
+    )));
+
+    assert_contains(func(&settle, "$func/main"), "call $list/exact");
+    assert_contains(func(&reinterp, "$bytes/to_bits"), "call $bytes/exact");
+    assert_contains(func(&host, "$func/main"), "call $bytes/exact");
+    assert_contains(func(&host, "$func/main"), "call $bits/exact");
+    assert_contains(func(&host, "$list/bytes/force"), "call $bytes/exact");
+
+    for (wat, exact, force) in [
+        (&settle, "$list/exact", "call $list/force"),
+        (&host, "$bytes/exact", "call $bytes/force"),
+        (&host, "$bits/exact", "call $bits/force"),
+    ] {
+        let exact = func(wat, exact);
+        assert_contains(exact, force);
+        assert_contains(exact, "array.len");
+        assert_contains(exact, "array.copy");
+    }
+}
+
 #[test]
 fn bin_eql_calls_the_equality_helper() {
     let wat = wat(&intrinsic_main(

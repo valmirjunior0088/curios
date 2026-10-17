@@ -284,6 +284,9 @@ pub(crate) struct Table<'a> {
     bytes_force: OnceCell<curios_wasm::FuncName>,
     bits_force: OnceCell<curios_wasm::FuncName>,
     list_force: OnceCell<curios_wasm::FuncName>,
+    bytes_exact: OnceCell<curios_wasm::FuncName>,
+    bits_exact: OnceCell<curios_wasm::FuncName>,
+    list_exact: OnceCell<curios_wasm::FuncName>,
     list_bytes_force: OnceCell<curios_wasm::FuncName>,
     list_bits_force: OnceCell<curios_wasm::FuncName>,
     list_empty: OnceCell<curios_wasm::GlobalName>,
@@ -378,6 +381,9 @@ impl<'a> Table<'a> {
             bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
             list_force: OnceCell::new(),
+            bytes_exact: OnceCell::new(),
+            bits_exact: OnceCell::new(),
+            list_exact: OnceCell::new(),
             list_bytes_force: OnceCell::new(),
             list_bits_force: OnceCell::new(),
             list_empty: OnceCell::new(),
@@ -835,6 +841,39 @@ impl<'a> Table<'a> {
 
     pub(crate) fn list_force_used(&self) -> bool {
         self.list_force.get().is_some()
+    }
+
+    /// `$bytes/exact (ref $rope/bin) -> (ref $bytes)`: a `Bytes` run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run where it holds room past it. What leaves the rope as a flat array takes this: a leaf made of a forced payload, and a host operand.
+    pub(crate) fn bytes_exact_func(&self) -> curios_wasm::FuncName {
+        self.bytes_exact
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/exact"))
+            .clone()
+    }
+
+    pub(crate) fn bytes_exact_used(&self) -> bool {
+        self.bytes_exact.get().is_some()
+    }
+
+    /// `$bits/exact (ref $rope/bin) -> (ref $bytes)`: the bit-grain mirror of [`bytes_exact_func`](Self::bytes_exact_func), exact at the `ceil(len/8)` bytes the run occupies.
+    pub(crate) fn bits_exact_func(&self) -> curios_wasm::FuncName {
+        self.bits_exact
+            .get_or_init(|| curios_wasm::FuncName::from("bits/exact"))
+            .clone()
+    }
+
+    pub(crate) fn bits_exact_used(&self) -> bool {
+        self.bits_exact.get().is_some()
+    }
+
+    /// `$list/exact (ref $rope/list) -> (ref $elems)`: the `List` mirror of [`bytes_exact_func`](Self::bytes_exact_func).
+    pub(crate) fn list_exact_func(&self) -> curios_wasm::FuncName {
+        self.list_exact
+            .get_or_init(|| curios_wasm::FuncName::from("list/exact"))
+            .clone()
+    }
+
+    pub(crate) fn list_exact_used(&self) -> bool {
+        self.list_exact.get().is_some()
     }
 
     /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force a `List(Bytes)` / `List(Handle)` host argument *deeply* — the outer rope to a fresh payload whose every element is itself forced to `$bytes`, the element shape the host lifts.

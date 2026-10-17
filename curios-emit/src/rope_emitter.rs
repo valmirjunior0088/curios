@@ -1,6 +1,7 @@
 //! The shared rope helper functions. Straight-line sequences are inlined at their use site; anything the emitter lowers to a *loop* is a helper here instead, so its mutable scratch locals are zeroed by the fresh activation rather than leaking across executions of one call site. Among them:
 //!
 //! - `$<carrier>/force` flattens a byte- or element-grain rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else fills a fresh payload by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
+//! - `$<carrier>/exact` answers a run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run otherwise — for what leaves the rope as a flat array: a leaf sealed over a forced payload, and a host operand.
 //! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on re-entry.
 //! - `$<carrier>/slice` builds the O(1) window: bounds-check, the trivial windows answer an empty leaf or the rope itself, a view collapses (so windows never stack), and an uncached node base is forced first — which memoizes — so every `view` in existence has a *flat-available* base (a leaf or a cached node).
 //! - `$<carrier>/read` answers one element: off a leaf payload, *through* a view's window without forcing (the invariant above makes that O(1)), off a flattened node's cache, and at a node never flattened from the child that holds the element where that child is flat-available — so a read of what was just appended copies nothing — with `force` only where the child is not.
@@ -377,6 +378,104 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             vec![(walk.r.clone(), concrete_val(rope.base.clone(), false))],
             concrete_val(rope.payload.clone(), false),
             locals,
+            instrs,
+        );
+    }
+
+    /// `$<carrier>/exact (ref <base>) -> (ref <payload>)`: a run as a payload exactly its length.
+    ///
+    /// ```wat
+    /// p := force(r)
+    /// if p.len == r.len → p                  ;; the payload is the run
+    /// out := array.new_default <payload> r.len
+    /// array.copy out[0..] <- p[0..r.len]
+    /// ```
+    ///
+    /// A flattened node's payload may hold room past its run, which a reader of the rope never sees, since every read is bounded by a `len`. What leaves the rope as a flat array is read by its array's length instead — a leaf, whose inline read leaves its bounds to the engine's trap on the array, and a host, which lifts the whole array — so it takes the run exactly.
+    pub(crate) fn emit_exact_func(
+        &mut self,
+        rope: &RopeData,
+        func_name: curios_wasm::FuncName,
+        force_func: curios_wasm::FuncName,
+    ) {
+        let r = curios_wasm::LocalName::from("r");
+        let occupied = vec![get(&r), field_get(&rope.base, &rope.len_field)];
+        self.emit_exact(rope, r, occupied, func_name, force_func);
+    }
+
+    /// `$bits/exact (ref $rope/bin) -> (ref $bytes)`: [`Self::emit_exact_func`] at the bit grain, whose run occupies `ceil(len/8)` bytes of its payload.
+    pub(crate) fn emit_bits_exact_func(
+        &mut self,
+        func_name: curios_wasm::FuncName,
+        force_func: curios_wasm::FuncName,
+    ) {
+        let rope = self.table.bin_rope();
+        let r = curios_wasm::LocalName::from("r");
+        let occupied =
+            Table::bits_payload_len_instrs(vec![get(&r), field_get(&rope.base, &rope.len_field)]);
+        self.emit_exact(&rope, r, occupied, func_name, force_func);
+    }
+
+    /// The body both exact helpers share, `occupied` pushing how many slots of the payload the run `r` holds.
+    fn emit_exact(
+        &mut self,
+        rope: &RopeData,
+        r: curios_wasm::LocalName,
+        occupied: Vec<curios_wasm::Instr>,
+        func_name: curios_wasm::FuncName,
+        force_func: curios_wasm::FuncName,
+    ) {
+        let p = curios_wasm::LocalName::from("p");
+        let n = curios_wasm::LocalName::from("n");
+        let out = curios_wasm::LocalName::from("out");
+
+        let instrs = wasm![
+            get(&r),
+            call(&force_func),
+            set(&p),
+            occupied,
+            set(&n),
+            get(&p),
+            curios_wasm::Instr::ArrayLen,
+            get(&n),
+            curios_wasm::Instr::I32Eq,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("exact"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(&p),
+                    curios_wasm::Instr::RefAsNonNull,
+                    curios_wasm::Instr::Return,
+                ],
+                else_instructions: vec![],
+            },
+            get(&n),
+            curios_wasm::Instr::ArrayNewDefault {
+                type_name: rope.payload.clone(),
+            },
+            set(&out),
+            get(&out),
+            i32_const(0),
+            get(&p),
+            i32_const(0),
+            get(&n),
+            curios_wasm::Instr::ArrayCopy {
+                target_name: rope.payload.clone(),
+                source_name: rope.payload.clone(),
+            },
+            get(&out),
+            curios_wasm::Instr::RefAsNonNull,
+        ];
+
+        self.add_helper(
+            func_name,
+            vec![(r, concrete_val(rope.base.clone(), false))],
+            concrete_val(rope.payload.clone(), false),
+            vec![
+                (p, concrete_val(rope.payload.clone(), true)),
+                (n, i32_type()),
+                (out, concrete_val(rope.payload.clone(), true)),
+            ],
             instrs,
         );
     }
@@ -958,7 +1057,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$list/<grain>/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then force every element through the grain's own force into a *fresh* payload of the run's length (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
+    /// `$list/<grain>/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then take every element exact through the grain's own `exact` into a *fresh* payload of the run's length (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
     pub(crate) fn emit_list_bin_force_func(
         &mut self,
         grain: Grain,
@@ -971,9 +1070,9 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             Grain::X => self.table.bytes_box_func(),
             Grain::B => self.table.bits_box_func(),
         };
-        let force_func = match grain {
-            Grain::X => self.table.bytes_force_func(),
-            Grain::B => self.table.bits_force_func(),
+        let exact_func = match grain {
+            Grain::X => self.table.bytes_exact_func(),
+            Grain::B => self.table.bits_exact_func(),
         };
 
         let r = curios_wasm::LocalName::from("r");
@@ -1032,7 +1131,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                             func_name: box_func,
                         },
                         curios_wasm::Instr::Call {
-                            func_name: force_func,
+                            func_name: exact_func,
                         },
                         curios_wasm::Instr::ArraySet {
                             type_name: elems.clone(),
@@ -1373,12 +1472,12 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///
     /// **The payload crosses untouched and the length does not.** Eight bits are a byte in the stored bytes either way, so there is nothing to repack — but a rope carries its length in the grain's *own* units at every node, so the one number that has to change is the one the leaf is sealed at: eight times going to bits, an eighth going back. That is the whole of the conversion, and the whole of why it is not the identity.
     ///
-    /// The force is what makes it one number rather than a walk. A node tree holds a length per node, and rescaling each would be a rewrite of the spine; flattening first leaves exactly one to scale. The alignment the bit-to-byte direction needs is the caller's, proved above erasure and gone by here.
+    /// The force is what makes it one number rather than a walk. A node tree holds a length per node, and rescaling each would be a rewrite of the spine; flattening first leaves exactly one to scale. It is the run's exact payload the leaf is sealed over, as every leaf's is, since a flattened payload may hold room past its run. The alignment the bit-to-byte direction needs is the caller's, proved above erasure and gone by here.
     pub(crate) fn emit_reinterp_func(
         &mut self,
         grain: Grain,
         func_name: curios_wasm::FuncName,
-        force_func: curios_wasm::FuncName,
+        exact_func: curios_wasm::FuncName,
     ) {
         let rope = self.table.bin_rope();
 
@@ -1415,7 +1514,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             set(&len),
             get(&r),
             curios_wasm::Instr::Call {
-                func_name: force_func,
+                func_name: exact_func,
             },
             set(&out),
             curios_wasm::Instr::I32Const { value: 0 },
