@@ -282,7 +282,7 @@ fn int_chains(chain: &Term, summands: &[Term]) -> bool {
 
 /// The sum of two reduced terms, in normal form: constants added, like monomials merged.
 ///
-/// **A sum is written over the chain it extends**, as `Nat::sum` is: where the merged summands begin with the left operand's own, unchanged and in their order, the rest are folded onto the left operand's spine itself, and the term is the one [`int_merged`] writes.
+/// **A sum is written over the chain it extends**, as `Nat::sum` is: where the merged summands begin with the left operand's own, unchanged and in their order, the rest are folded onto the left operand's spine itself, and the term is the one `int_merged` writes.
 pub fn int_sum(left: &Term, right: &Term) -> Term {
     let (constant_left, mut summands) = int_terms(left);
     let held = summands.len();

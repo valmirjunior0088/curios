@@ -165,7 +165,7 @@ pub struct Classes {
 impl Classes {
     /// `atoms` classed by `same`, in the order they were handed out: an atom joins the first class whose representative `same` says it converts with, and otherwise opens one.
     ///
-    /// **A pair is asked only where it may be one**, read off the two atoms' keys ([`Pairing`]). It is a cost filter failing toward refusal: a pair it skips stays two atoms, as every pair was before any was classed.
+    /// **A pair is asked only where it may be one**, read off the two atoms' keys (`Pairing`). It is a cost filter failing toward refusal: a pair it skips stays two atoms, as every pair was before any was classed.
     ///
     /// **Two applications apart in their heads' universe instances are asked about by their arguments.** Each written call of a universe-polymorphic definition takes a level of its own, so `size(f(a + b))` written twice is two heads, and a checker handed the two whole compares the levels first, which no value of the two reads: an atom the walks hand out is a value of a carrier that holds no type, an operand of an operation the table declares at one or a term its reader reads at one, and a universe instance is no part of such a value ([`curios_core::same_atom`]). So `same` is asked of each pair of arguments in turn, the heads being one head already, and the two are one where every pair is.
     ///
